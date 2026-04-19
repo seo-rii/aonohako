@@ -9,12 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/security"
 	"aonohako/internal/util"
 )
 
@@ -25,6 +27,7 @@ const (
 	maxDecodedSourceTotalBytes = 48 << 20
 	maxArtifactBytes           = 16 << 20
 	maxArtifactTotalBytes      = 48 << 20
+	elixirERLAFlags            = "+MIscs 128 +S 1:1 +A 1"
 )
 
 type Service struct{}
@@ -50,6 +53,11 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "mkdtemp failed: " + err.Error()}
 	}
 	defer os.RemoveAll(workDir)
+	for _, dir := range security.WorkspaceScopedDirs(workDir) {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace prep failed: " + err.Error()}
+		}
+	}
 
 	if err := materializeSources(workDir, req.Sources); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
@@ -164,6 +172,12 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileTypeScript(ctx, workDir, req.Sources)
 	case "kotlin":
 		return compileKotlinNative(ctx, workDir, target, req.Sources)
+	case "haskell":
+		return compileHaskell(ctx, workDir, target, req.Sources)
+	case "ocaml":
+		return compileOCaml(ctx, workDir, target, req.Sources)
+	case "elixir":
+		return compileElixir(ctx, workDir, req.Sources)
 	case "csharp":
 		return compileCSharp(ctx, workDir, req.Sources)
 	case "none":
@@ -396,6 +410,111 @@ func compileKotlinNative(ctx context.Context, workDir, target string, sources []
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+func compileHaskell(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	var hs []string
+	for _, src := range sources {
+		if strings.HasSuffix(strings.ToLower(src.Name), ".hs") {
+			hs = append(hs, filepath.Join(workDir, filepath.Clean(src.Name)))
+		}
+	}
+	if len(hs) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no haskell sources"}
+	}
+	args := []string{"-O2", "-o", target}
+	args = append(args, hs...)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "ghc", args, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileOCaml(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	ordered := make([]string, 0, len(sources))
+	hasML := false
+	for _, src := range sources {
+		name := strings.ToLower(src.Name)
+		if strings.HasSuffix(name, ".ml") || strings.HasSuffix(name, ".mli") {
+			ordered = append(ordered, filepath.Clean(src.Name))
+		}
+		if strings.HasSuffix(name, ".ml") {
+			hasML = true
+		}
+	}
+	if !hasML {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no ocaml sources"}
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		left := filepath.Base(ordered[i])
+		right := filepath.Base(ordered[j])
+		leftIsMain := strings.EqualFold(left, "Main.ml")
+		rightIsMain := strings.EqualFold(right, "Main.ml")
+		if leftIsMain != rightIsMain {
+			return !leftIsMain
+		}
+		leftIsInterface := strings.HasSuffix(strings.ToLower(left), ".mli")
+		rightIsInterface := strings.HasSuffix(strings.ToLower(right), ".mli")
+		if leftIsInterface != rightIsInterface {
+			return leftIsInterface
+		}
+		return left < right
+	})
+	args := []string{"-o", target}
+	for _, rel := range ordered {
+		args = append(args, filepath.Join(workDir, rel))
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "ocamlopt", args, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileElixir(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+	var fullOut bytes.Buffer
+	var fullErr bytes.Buffer
+	var checked int
+	for _, src := range sources {
+		clean, err := util.ValidateRelativePath(src.Name)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		lower := strings.ToLower(clean)
+		if !strings.HasSuffix(lower, ".ex") && !strings.HasSuffix(lower, ".exs") {
+			continue
+		}
+		checked++
+		stdout, stderr, status, reason := runCommand(
+			ctx,
+			workDir,
+			"elixir",
+			[]string{"-e", "Code.string_to_quoted!(File.read!(hd(System.argv())), file: hd(System.argv()))", filepath.Join(workDir, clean)},
+			[]string{"ERL_AFLAGS=" + elixirERLAFlags},
+		)
+		fullOut.WriteString(stdout)
+		fullErr.WriteString(stderr)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+		}
+	}
+	if checked == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no elixir sources"}
+	}
+	artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+}
+
 func compileCSharp(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
 	projectDir := filepath.Join(workDir, "csproj")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
@@ -455,11 +574,30 @@ func passThroughArtifacts(workDir string, sources []model.Source) model.CompileR
 func runCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = workDir
-	if len(env) > 0 {
-		cmd.Env = env
-	} else {
-		cmd.Env = util.BaseEnv()
+	finalEnv := make(map[string]string, len(util.BaseEnv())+len(security.WorkspaceScopedEnv(workDir))+len(env))
+	for _, item := range util.BaseEnv() {
+		parts := strings.SplitN(item, "=", 2)
+		if len(parts) == 2 {
+			finalEnv[parts[0]] = parts[1]
+		}
 	}
+	for _, item := range security.WorkspaceScopedEnv(workDir) {
+		parts := strings.SplitN(item, "=", 2)
+		if len(parts) == 2 {
+			finalEnv[parts[0]] = parts[1]
+		}
+	}
+	for _, item := range env {
+		parts := strings.SplitN(item, "=", 2)
+		if len(parts) == 2 {
+			finalEnv[parts[0]] = parts[1]
+		}
+	}
+	cmd.Env = make([]string, 0, len(finalEnv))
+	for key, value := range finalEnv {
+		cmd.Env = append(cmd.Env, key+"="+value)
+	}
+	sort.Strings(cmd.Env)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf

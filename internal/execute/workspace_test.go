@@ -29,6 +29,37 @@ func TestPrepareWorkspaceDirsCreatesWritableBox(t *testing.T) {
 	}
 }
 
+func TestPrepareWorkspaceDirsCreatesToolchainStateDirs(t *testing.T) {
+	workDir := t.TempDir()
+	_, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	for _, rel := range []string{
+		".home",
+		".tmp",
+		".cache",
+		".mpl",
+		".pip-cache",
+		".dotnet-home",
+		".nuget",
+		".konan-home",
+		".konan",
+		".mix",
+		".hex",
+		"__img__",
+	} {
+		info, statErr := os.Stat(filepath.Join(workDir, rel))
+		if statErr != nil {
+			t.Fatalf("expected %s to exist: %v", rel, statErr)
+		}
+		if !info.IsDir() {
+			t.Fatalf("%s should be a directory", rel)
+		}
+	}
+}
+
 func TestMaterializeFilesStoresProgramsInsideBoxWithImmutableModes(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

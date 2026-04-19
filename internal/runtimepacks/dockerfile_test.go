@@ -55,3 +55,37 @@ func TestRuntimeDockerfilePATHIncludesSbin(t *testing.T) {
 		t.Fatalf("runtime.Dockerfile PATH must include /usr/sbin and /sbin for sandbox tools")
 	}
 }
+
+func TestRuntimeDockerfileSupportsInstallScriptBuildArg(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	if !strings.Contains(body, "ARG INSTALL_SCRIPT=") {
+		t.Fatalf("runtime.Dockerfile must declare INSTALL_SCRIPT build arg")
+	}
+	if !strings.Contains(body, "if [[ -n \"${INSTALL_SCRIPT}\" ]]") {
+		t.Fatalf("runtime.Dockerfile must execute INSTALL_SCRIPT when provided")
+	}
+}
+
+func TestRuntimeDockerfileCopiesGoBeforeStrictInstallScript(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	goCopyIndex := strings.Index(body, "COPY --from=builder /usr/local/go /usr/local/go")
+	installRunIndex := strings.Index(body, "/bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"")
+	if goCopyIndex == -1 || installRunIndex == -1 {
+		t.Fatalf("runtime.Dockerfile is missing go toolchain copy or strict install script execution")
+	}
+	if goCopyIndex > installRunIndex {
+		t.Fatalf("runtime.Dockerfile must copy /usr/local/go before INSTALL_SCRIPT so go-based installers work")
+	}
+}

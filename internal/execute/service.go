@@ -32,6 +32,8 @@ const (
 	maxBinaryTotalBytes          = 48 << 20
 	maxCapturedFileBytes         = 8 << 20
 	maxCapturedSidecarTotalBytes = 16 << 20
+	ocamlRunParam                = "s=32k"
+	elixirERLAFlags              = "+MIscs 128 +S 1:1 +A 1"
 )
 
 type Hooks struct {
@@ -192,7 +194,7 @@ func prepareWorkspaceDirs(workDir string) (Workspace, error) {
 		RootDir: workDir,
 		BoxDir:  filepath.Join(workDir, "box"),
 	}
-	dirs := []string{filepath.Join(workDir, ".home"), filepath.Join(workDir, ".tmp"), filepath.Join(workDir, ".cache"), filepath.Join(workDir, ".mpl"), filepath.Join(workDir, ".pip-cache"), filepath.Join(workDir, "__img__")}
+	dirs := security.WorkspaceScopedDirs(workDir)
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return Workspace{}, err
@@ -258,7 +260,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "text":
+	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "text", "ocaml", "elixir":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
@@ -369,6 +371,10 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"lua5.4", primaryPath}
 	case "perl":
 		return []string{"perl", primaryPath}
+	case "ocaml":
+		return []string{"env", "OCAMLRUNPARAM=" + ocamlRunParam, primaryPath}
+	case "elixir":
+		return []string{"env", "ERL_AFLAGS=" + elixirERLAFlags, "elixir", primaryPath}
 	case "uhmlang":
 		return []string{"/usr/bin/umjunsik-lang-go", primaryPath}
 	case "csharp":
@@ -460,15 +466,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			if err := os.Chmod(ws.RootDir, 0o755); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
 			}
-			for _, dir := range []string{
-				ws.BoxDir,
-				filepath.Join(ws.RootDir, ".home"),
-				filepath.Join(ws.RootDir, ".tmp"),
-				filepath.Join(ws.RootDir, ".cache"),
-				filepath.Join(ws.RootDir, ".mpl"),
-				filepath.Join(ws.RootDir, ".pip-cache"),
-				filepath.Join(ws.RootDir, "__img__"),
-			} {
+			chownTargets := append([]string{ws.BoxDir}, security.WorkspaceScopedDirs(ws.RootDir)...)
+			for _, dir := range chownTargets {
 				if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
 					return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
 				}
@@ -476,14 +475,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			if err := os.Chmod(ws.BoxDir, 0o777|os.ModeSticky); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
 			}
-			for _, dir := range []string{
-				filepath.Join(ws.RootDir, ".home"),
-				filepath.Join(ws.RootDir, ".tmp"),
-				filepath.Join(ws.RootDir, ".cache"),
-				filepath.Join(ws.RootDir, ".mpl"),
-				filepath.Join(ws.RootDir, ".pip-cache"),
-				filepath.Join(ws.RootDir, "__img__"),
-			} {
+			for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
 				if err := os.Chmod(dir, 0o700); err != nil {
 					return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
 				}
@@ -663,6 +655,18 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		"XDG_CACHE_HOME=/cache",
 		"MPLCONFIGDIR=/mpl",
 		"PIP_CACHE_DIR=/pip-cache",
+		"DOTNET_CLI_HOME=/dotnet-home",
+		"NUGET_PACKAGES=/nuget",
+		"DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
+		"DOTNET_CLI_TELEMETRY_OPTOUT=1",
+		"DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",
+		"DOTNET_GENERATE_ASPNET_CERTIFICATE=false",
+		"DOTNET_NOLOGO=1",
+		"MSBuildEnableWorkloadResolver=false",
+		"KONAN_USER_HOME=/konan-home",
+		"KONAN_DATA_DIR=/konan",
+		"MIX_HOME=/mix",
+		"HEX_HOME=/hex",
 		"IMG_OUT_DIR=/img",
 	}, security.ThreadLimitEnv()...)
 	if !req.EnableNetwork {
@@ -711,7 +715,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	launcher.WriteString("  run mount -o remount,ro,bind \"$dst\"\n")
 	launcher.WriteString("}\n")
 	launcher.WriteString("run mount --make-rprivate /\n")
-	launcher.WriteString("run mkdir -p " + shellQuote(filepath.Join(sandboxRoot, "work", "root")) + " " + shellQuote(filepath.Join(sandboxRoot, "work", "box")) + " " + shellQuote(filepath.Join(sandboxRoot, "dev")) + " " + shellQuote(filepath.Join(sandboxRoot, "dev", "shm")) + " " + shellQuote(filepath.Join(sandboxRoot, "home", "sandbox")) + " " + shellQuote(filepath.Join(sandboxRoot, "tmp")) + " " + shellQuote(filepath.Join(sandboxRoot, "cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "mpl")) + " " + shellQuote(filepath.Join(sandboxRoot, "pip-cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "img")) + "\n")
+	launcher.WriteString("run mkdir -p " + shellQuote(filepath.Join(sandboxRoot, "work", "root")) + " " + shellQuote(filepath.Join(sandboxRoot, "work", "box")) + " " + shellQuote(filepath.Join(sandboxRoot, "dev")) + " " + shellQuote(filepath.Join(sandboxRoot, "dev", "shm")) + " " + shellQuote(filepath.Join(sandboxRoot, "home", "sandbox")) + " " + shellQuote(filepath.Join(sandboxRoot, "tmp")) + " " + shellQuote(filepath.Join(sandboxRoot, "cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "mpl")) + " " + shellQuote(filepath.Join(sandboxRoot, "pip-cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "dotnet-home")) + " " + shellQuote(filepath.Join(sandboxRoot, "nuget")) + " " + shellQuote(filepath.Join(sandboxRoot, "konan-home")) + " " + shellQuote(filepath.Join(sandboxRoot, "konan")) + " " + shellQuote(filepath.Join(sandboxRoot, "mix")) + " " + shellQuote(filepath.Join(sandboxRoot, "hex")) + " " + shellQuote(filepath.Join(sandboxRoot, "img")) + "\n")
 	launcher.WriteString("mirror_path /usr\n")
 	launcher.WriteString("mirror_path /bin\n")
 	launcher.WriteString("mirror_path /sbin\n")
@@ -727,6 +731,12 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "cache")) + "\n")
 	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".mpl")) + " " + shellQuote(filepath.Join(sandboxRoot, "mpl")) + "\n")
 	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".pip-cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "pip-cache")) + "\n")
+	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".dotnet-home")) + " " + shellQuote(filepath.Join(sandboxRoot, "dotnet-home")) + "\n")
+	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".nuget")) + " " + shellQuote(filepath.Join(sandboxRoot, "nuget")) + "\n")
+	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".konan-home")) + " " + shellQuote(filepath.Join(sandboxRoot, "konan-home")) + "\n")
+	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".konan")) + " " + shellQuote(filepath.Join(sandboxRoot, "konan")) + "\n")
+	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".mix")) + " " + shellQuote(filepath.Join(sandboxRoot, "mix")) + "\n")
+	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".hex")) + " " + shellQuote(filepath.Join(sandboxRoot, "hex")) + "\n")
 	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, "__img__")) + " " + shellQuote(filepath.Join(sandboxRoot, "img")) + "\n")
 	launcher.WriteString("run mount -t tmpfs tmpfs " + shellQuote(filepath.Join(sandboxRoot, "dev")) + "\n")
 	launcher.WriteString("run mkdir -p " + shellQuote(filepath.Join(sandboxRoot, "dev", "shm")) + "\n")

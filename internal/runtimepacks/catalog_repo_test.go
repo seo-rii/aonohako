@@ -16,15 +16,27 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 2 {
-		t.Fatalf("expected 2 production images, got %d", len(production))
+	if len(production) != 6 {
+		t.Fatalf("expected 6 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"plain", "python"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"elixir", "haskell", "lua", "ocaml", "perl", "php", "plain", "pypy", "python", "ruby"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"java"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"java", "javascript", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
+	}
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"go", "rust"}) {
+		t.Fatalf("type-c production image = %+v", production[2])
+	}
+	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin"}) {
+		t.Fatalf("type-d production image = %+v", production[3])
+	}
+	if production[4].Name != "type-e" || !reflect.DeepEqual(production[4].Languages, []string{"csharp"}) {
+		t.Fatalf("type-e production image = %+v", production[4])
+	}
+	if production[5].Name != "type-f" || !reflect.DeepEqual(production[5].Languages, []string{"uhmlang"}) {
+		t.Fatalf("type-f production image = %+v", production[5])
 	}
 
 	ci, err := catalog.CILanguageImages()
@@ -35,7 +47,26 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	for _, spec := range ci {
 		names = append(names, spec.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"ci-java", "ci-plain", "ci-python"}) {
+	if !reflect.DeepEqual(names, []string{
+		"ci-csharp",
+		"ci-elixir",
+		"ci-go",
+		"ci-haskell",
+		"ci-java",
+		"ci-javascript",
+		"ci-kotlin",
+		"ci-lua",
+		"ci-ocaml",
+		"ci-perl",
+		"ci-php",
+		"ci-plain",
+		"ci-pypy",
+		"ci-python",
+		"ci-ruby",
+		"ci-rust",
+		"ci-typescript",
+		"ci-uhmlang",
+	}) {
 		t.Fatalf("ci image names = %v", names)
 	}
 }

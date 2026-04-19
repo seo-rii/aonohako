@@ -12,9 +12,10 @@ import (
 )
 
 type InstallSpec struct {
-	Apt []string `yaml:"apt"`
-	Pip []string `yaml:"pip"`
-	NPM []string `yaml:"npm"`
+	Apt    []string `yaml:"apt"`
+	Pip    []string `yaml:"pip"`
+	NPM    []string `yaml:"npm"`
+	Script []string `yaml:"script"`
 }
 
 type SmokeSpec struct {
@@ -37,13 +38,14 @@ type Catalog struct {
 }
 
 type ImageSpec struct {
-	Name         string
-	BaseImage    string
-	Languages    []string
-	AptPackages  []string
-	PipPackages  []string
-	NPMPackages  []string
-	SmokeCommand []string
+	Name          string
+	BaseImage     string
+	Languages     []string
+	AptPackages   []string
+	PipPackages   []string
+	NPMPackages   []string
+	InstallScript []string
+	SmokeCommand  []string
 }
 
 type DockerBuildSpec struct {
@@ -113,10 +115,12 @@ func (c Catalog) buildImage(name, baseImage string, languages []string, smoke []
 		spec.AptPackages = append(spec.AptPackages, langSpec.Install.Apt...)
 		spec.PipPackages = append(spec.PipPackages, langSpec.Install.Pip...)
 		spec.NPMPackages = append(spec.NPMPackages, langSpec.Install.NPM...)
+		spec.InstallScript = append(spec.InstallScript, langSpec.Install.Script...)
 	}
 	spec.AptPackages = dedupeSorted(spec.AptPackages)
 	spec.PipPackages = dedupeSorted(spec.PipPackages)
 	spec.NPMPackages = dedupeSorted(spec.NPMPackages)
+	spec.InstallScript = dedupeStable(spec.InstallScript)
 	if len(smoke) > 0 {
 		spec.SmokeCommand = slices.Clone(smoke)
 	}
@@ -129,13 +133,14 @@ func (s ImageSpec) DockerBuild(contextDir, tagPrefix string) DockerBuildSpec {
 		File:    filepath.ToSlash(filepath.Join("docker", "runtime.Dockerfile")),
 		Context: contextDir,
 		BuildArgs: map[string]string{
-			"IMAGE_NAME":    s.Name,
-			"LANGUAGES":     strings.Join(s.Languages, ","),
-			"RUNTIME_BASE":  s.BaseImage,
-			"APT_PACKAGES":  strings.Join(s.AptPackages, " "),
-			"PIP_PACKAGES":  strings.Join(s.PipPackages, " "),
-			"NPM_PACKAGES":  strings.Join(s.NPMPackages, " "),
-			"SMOKE_COMMAND": strings.Join(s.SmokeCommand, "\t"),
+			"IMAGE_NAME":     s.Name,
+			"LANGUAGES":      strings.Join(s.Languages, ","),
+			"RUNTIME_BASE":   s.BaseImage,
+			"APT_PACKAGES":   strings.Join(s.AptPackages, " "),
+			"PIP_PACKAGES":   strings.Join(s.PipPackages, " "),
+			"NPM_PACKAGES":   strings.Join(s.NPMPackages, " "),
+			"INSTALL_SCRIPT": strings.Join(s.InstallScript, "\n"),
+			"SMOKE_COMMAND":  strings.Join(s.SmokeCommand, "\t"),
 		},
 	}
 }
@@ -169,6 +174,25 @@ func dedupeSorted(values []string) []string {
 		out = append(out, value)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func dedupeStable(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
 	return out
 }
 

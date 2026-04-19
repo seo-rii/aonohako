@@ -40,6 +40,9 @@ var profiles = map[string]Profile{
 	"JAVA11":     {SourceLang: "JAVA11", Extension: "java", CompileKind: "java", JavaRelease: "11", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"JAVA15":     {SourceLang: "JAVA15", Extension: "java", CompileKind: "java", JavaRelease: "15", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"KOTLIN":     {SourceLang: "KOTLIN", Extension: "kt", DefaultTarget: "Main", CompileKind: "kotlin", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
+	"HASKELL":    {SourceLang: "HASKELL", Extension: "hs", DefaultTarget: "Main", CompileKind: "haskell", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"OCAML":      {SourceLang: "OCAML", Extension: "ml", DefaultTarget: "Main", CompileKind: "ocaml", RunLang: "ocaml", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
+	"ELIXIR":     {SourceLang: "ELIXIR", Extension: "exs", CompileKind: "elixir", RunLang: "elixir", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1536},
 	"CSHARP":     {SourceLang: "CSHARP", Extension: "cs", CompileKind: "csharp", RunLang: "csharp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 16},
 	"PYTHON3":    {SourceLang: "PYTHON3", Extension: "py", CompileKind: "python", RunLang: "python", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 32},
 	"PYPY3":      {SourceLang: "PYPY3", Extension: "py", CompileKind: "pypy", RunLang: "pypy", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 128},
@@ -62,7 +65,7 @@ func Resolve(language string) (Profile, bool) {
 func NormalizeRunLang(language string) string {
 	key := strings.ToLower(strings.TrimSpace(language))
 	switch key {
-	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp":
+	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir":
 		return key
 	}
 	if p, ok := Resolve(language); ok {
