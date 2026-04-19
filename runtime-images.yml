@@ -1,36 +1,13 @@
 languages:
-  c:
-    install:
-      apt:
-        - bash
-        - build-essential
+  plain:
     smoke:
       command:
-        - bash
-        - -lc
+        - /bin/sh
+        - -c
         - |
-          cat <<'EOF' > Main.c
-          #include <stdio.h>
-          int main(void) { puts("ok"); return 0; }
-          EOF
-          gcc Main.c -O2 -o Main
-          ./Main | grep '^ok$'
-  cpp:
-    install:
-      apt:
-        - bash
-        - build-essential
-    smoke:
-      command:
-        - bash
-        - -lc
-        - |
-          cat <<'EOF' > Main.cpp
-          #include <iostream>
-          int main() { std::cout << "ok\n"; }
-          EOF
-          g++ Main.cpp -O2 -std=c++17 -o Main
-          ./Main | grep '^ok$'
+          printf '#!/bin/sh\necho ok\n' > Main
+          chmod +x Main
+          [ "$(./Main)" = ok ]
   python:
     install:
       apt:
@@ -69,8 +46,7 @@ profiles:
   type-a:
     base_image: debian:bookworm-slim
     languages:
-      - c
-      - cpp
+      - plain
       - python
   type-b:
     base_image: debian:bookworm-slim

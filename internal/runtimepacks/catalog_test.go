@@ -20,28 +20,26 @@ func writeCatalogFixture(t *testing.T, body string) string {
 func TestLoadCatalogBuildsProductionAndCIMatrices(t *testing.T) {
 	path := writeCatalogFixture(t, `
 languages:
-  c:
-    install:
-      apt: [build-essential]
+  plain:
     smoke:
-      command: ["gcc", "--version"]
-  cpp:
-    install:
-      apt: [build-essential]
-    smoke:
-      command: ["g++", "--version"]
+      command: ["/bin/sh", "-c", "printf '#!/bin/sh\necho ok\n' > Main && chmod +x Main && [ \"$(./Main)\" = ok ]"]
   python:
     install:
       apt: [python3, python3-numpy]
     smoke:
       command: ["python3", "-c", "import numpy; print(numpy.arange(3).sum())"]
+  java:
+    install:
+      apt: [openjdk-17-jdk-headless]
+    smoke:
+      command: ["java", "-version"]
 profiles:
   type-a:
     base_image: debian:bookworm-slim
-    languages: [c, cpp, python]
+    languages: [plain, python]
   type-b:
-    base_image: eclipse-temurin:17-jre
-    languages: []
+    base_image: debian:bookworm-slim
+    languages: [java]
 `)
 
 	catalog, err := LoadCatalog(path)
@@ -61,10 +59,10 @@ profiles:
 	if typeA.Name != "type-a" {
 		t.Fatalf("first production image name = %q, want type-a", typeA.Name)
 	}
-	if !reflect.DeepEqual(typeA.Languages, []string{"c", "cpp", "python"}) {
+	if !reflect.DeepEqual(typeA.Languages, []string{"plain", "python"}) {
 		t.Fatalf("type-a languages = %v", typeA.Languages)
 	}
-	if !reflect.DeepEqual(typeA.AptPackages, []string{"build-essential", "python3", "python3-numpy"}) {
+	if !reflect.DeepEqual(typeA.AptPackages, []string{"python3", "python3-numpy"}) {
 		t.Fatalf("type-a apt packages = %v", typeA.AptPackages)
 	}
 
@@ -76,11 +74,15 @@ profiles:
 		t.Fatalf("expected 3 CI images, got %d", len(ci))
 	}
 
-	if ci[0].Name != "ci-c" || !reflect.DeepEqual(ci[0].Languages, []string{"c"}) {
+	if ci[0].Name != "ci-java" || !reflect.DeepEqual(ci[0].Languages, []string{"java"}) {
 		t.Fatalf("ci[0] = %+v", ci[0])
 	}
-	if !reflect.DeepEqual(ci[0].AptPackages, []string{"build-essential"}) {
+	if !reflect.DeepEqual(ci[0].AptPackages, []string{"openjdk-17-jdk-headless"}) {
 		t.Fatalf("ci[0] apt packages = %v", ci[0].AptPackages)
+	}
+
+	if ci[1].Name != "ci-plain" || !reflect.DeepEqual(ci[1].Languages, []string{"plain"}) {
+		t.Fatalf("ci[1] = %+v", ci[1])
 	}
 
 	if ci[2].Name != "ci-python" || !reflect.DeepEqual(ci[2].SmokeCommand, []string{"python3", "-c", "import numpy; print(numpy.arange(3).sum())"}) {
@@ -109,8 +111,8 @@ func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 	spec := ImageSpec{
 		Name:         "type-a",
 		BaseImage:    "debian:bookworm-slim",
-		Languages:    []string{"c", "cpp", "python"},
-		AptPackages:  []string{"build-essential", "python3", "python3-numpy"},
+		Languages:    []string{"plain", "python"},
+		AptPackages:  []string{"python3", "python3-numpy"},
 		PipPackages:  []string{"requests"},
 		NPMPackages:  []string{"typescript"},
 		SmokeCommand: []string{"python3", "-c", "print('ok')"},
@@ -126,7 +128,7 @@ func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 	if build.BuildArgs["RUNTIME_BASE"] != "debian:bookworm-slim" {
 		t.Fatalf("build args = %#v", build.BuildArgs)
 	}
-	if build.BuildArgs["APT_PACKAGES"] != "build-essential python3 python3-numpy" {
+	if build.BuildArgs["APT_PACKAGES"] != "python3 python3-numpy" {
 		t.Fatalf("apt args = %q", build.BuildArgs["APT_PACKAGES"])
 	}
 	if build.BuildArgs["PIP_PACKAGES"] != "requests" {
