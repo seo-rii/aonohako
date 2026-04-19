@@ -20,10 +20,10 @@ func TestExecuteQueueOverflowReturns429(t *testing.T) {
 	ts := httptest.NewServer(h)
 	defer ts.Close()
 
-	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nsleep 2\n"))
+	script := base64.StdEncoding.EncodeToString([]byte("import time\ntime.sleep(2)\n"))
 	payload := map[string]any{
-		"lang":     "binary",
-		"binaries": []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"lang":     "python",
+		"binaries": []map[string]any{{"name": "main.py", "data_b64": script}},
 		"limits":   map[string]any{"time_ms": 5000, "memory_mb": 64},
 	}
 	body, _ := json.Marshal(payload)
@@ -196,14 +196,14 @@ func TestCompileQueueOverflowReturns429(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
-	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nsleep 2\n"))
+	script := base64.StdEncoding.EncodeToString([]byte("import time\ntime.sleep(2)\n"))
 	compilePayload := map[string]any{
 		"lang":    "CPP17",
 		"sources": []map[string]any{{"name": "Main.cpp", "data_b64": base64.StdEncoding.EncodeToString([]byte("int main(){}"))}},
 	}
 	execPayload := map[string]any{
-		"lang":     "binary",
-		"binaries": []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"lang":     "python",
+		"binaries": []map[string]any{{"name": "main.py", "data_b64": script}},
 		"limits":   map[string]any{"time_ms": 5000, "memory_mb": 64},
 	}
 

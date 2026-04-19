@@ -3,7 +3,6 @@ package execute
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,17 +12,11 @@ import (
 
 func forceDirectMode(t *testing.T) {
 	t.Helper()
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
-	t.Setenv("AONOHAKO_NETWORK_POLICY", "blocked")
+	requireSandboxSupport(t)
 }
 
 func requireSandboxSupport(t *testing.T) {
 	t.Helper()
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "1")
-
-	if _, err := exec.LookPath("unshare"); err != nil {
-		t.Skipf("sandbox tests require unshare: %v", err)
-	}
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
@@ -39,7 +32,7 @@ func requireSandboxSupport(t *testing.T) {
 	if resp.Status == model.RunStatusAccepted {
 		return
 	}
-	if strings.Contains(resp.Stderr, "unshare:") || strings.Contains(resp.Stderr, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox requires unshare") {
+	if strings.Contains(resp.Stderr, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox-init:") {
 		t.Skipf("sandbox isolation is unavailable on this runner: %+v", resp)
 	}
 }

@@ -28,6 +28,17 @@ jobs:
       - run: go test ./...
       - run: ./scripts/build_runtime_images.sh -mode production -dry-run -tag-prefix local/aonohako
 
+  sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: >
+          go test ./internal/execute -count=1 -run
+          'TestRunBlocksNetworkWhenDisabled|TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback|TestRunCannotReadHostPathOutsideSandbox|TestRunBlocksReadingGlobalFilesystemOutsideSandbox|TestRunExposesOnlySafeDevices|TestRunBlocksForkAttempts|TestRunBlocksProcFDBrowsingOutsideSandbox'
+
   runtime-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -47,6 +58,7 @@ jobs:
     needs:
       - policy
       - unit
+      - sandbox
       - runtime-matrix
     strategy:
       fail-fast: false
