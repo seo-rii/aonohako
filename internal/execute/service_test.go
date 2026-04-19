@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,9 +184,6 @@ func b64Raw(v []byte) string {
 }
 
 func TestRunSignalTerminationIsRuntimeError(t *testing.T) {
-	t.Setenv("PATH", "/nonexistent")
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
-
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "binary",
@@ -203,59 +201,86 @@ func TestRunSignalTerminationIsRuntimeError(t *testing.T) {
 	}
 }
 
-func TestRunFallsBackWhenUnshareFails(t *testing.T) {
-	binDir := t.TempDir()
-	unsharePath := filepath.Join(binDir, "unshare")
-	script := "#!/bin/sh\necho 'unshare: cannot open /proc/self/uid_map: Permission denied' >&2\nexit 1\n"
-	if err := os.WriteFile(unsharePath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write unshare shim: %v", err)
-	}
-
-	t.Setenv("PATH", binDir)
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "1")
-
+func TestRunBlocksNetworkWhenDisabled(t *testing.T) {
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "binary",
+		Lang: "python",
 		Binaries: []model.Binary{{
-			Name:    "run.sh",
-			DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho ok\n")),
-			Mode:    "exec",
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"import socket\ns = socket.socket()\ns.settimeout(0.5)\ntry:\n    s.connect(('1.1.1.1', 53))\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
+			)),
 		}},
-		ExpectedStdout: "ok\n",
-		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
 	}, Hooks{})
 
 	if resp.Status != model.RunStatusAccepted {
-		t.Fatalf("status=%q want=%q (stderr=%q reason=%q)", resp.Status, model.RunStatusAccepted, resp.Stderr, resp.Reason)
+		t.Fatalf("expected Accepted, got %+v", resp)
 	}
 }
 
-func TestRunSkipsUnshareWhenDisabled(t *testing.T) {
-	binDir := t.TempDir()
-	unsharePath := filepath.Join(binDir, "unshare")
-	script := "#!/bin/sh\necho 'unshare: should not run' >&2\nexit 1\n"
-	if err := os.WriteFile(unsharePath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write unshare shim: %v", err)
+func TestRunCannotReadHostPathOutsideSandbox(t *testing.T) {
+	secretDir := t.TempDir()
+	secretPath := filepath.Join(secretDir, "secret.txt")
+	if err := os.WriteFile(secretPath, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
 	}
 
-	t.Setenv("PATH", binDir)
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
-
+	script := fmt.Sprintf("#!/bin/sh\nif cat %q >/dev/null 2>&1; then echo leaked; else echo blocked; fi\n", secretPath)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "binary",
 		Binaries: []model.Binary{{
 			Name:    "run.sh",
-			DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho ok\n")),
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
 			Mode:    "exec",
 		}},
-		ExpectedStdout: "ok\n",
-		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
 	}, Hooks{})
 
 	if resp.Status != model.RunStatusAccepted {
-		t.Fatalf("status=%q want=%q (stderr=%q reason=%q)", resp.Status, model.RunStatusAccepted, resp.Stderr, resp.Reason)
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunExposesOnlySafeDevices(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name: "run.sh",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"#!/bin/sh\nif [ -c /dev/null ] && [ ! -e /dev/kmsg ]; then echo blocked; else echo leaked; fi\n",
+			)),
+			Mode: "exec",
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"from pathlib import Path\ntry:\n    Path('main.py').write_text('mutated')\n    print('overwrote')\nexcept OSError:\n    print('blocked')\nPath('note.txt').write_text('new')\nprint(Path('note.txt').read_text())\n",
+			)),
+		}},
+		ExpectedStdout: "blocked\nnew\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
 	}
 }
 
@@ -292,5 +317,82 @@ func TestCaptureSidecarOutputsSkipsOversizedFile(t *testing.T) {
 	outputs := captureSidecarOutputs(ws, []model.OutputFile{{Path: "large.txt"}})
 	if len(outputs) != 0 {
 		t.Fatalf("expected oversized sidecar to be ignored, got %d outputs", len(outputs))
+	}
+}
+
+func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {
+	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nsleep 0.2\n")),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+	if resp.WallTimeMs < 150 {
+		t.Fatalf("expected wall time to include sleep, got %+v", resp)
+	}
+	if resp.CPUTimeMs > 50 {
+		t.Fatalf("expected cpu time to stay low for sleep, got %+v", resp)
+	}
+	if resp.TimeMs != resp.WallTimeMs {
+		t.Fatalf("time_ms should match wall_time_ms, got %+v", resp)
+	}
+}
+
+func TestRunReportsMemoryUsageForPythonAllocation(t *testing.T) {
+	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"buf = bytearray(32 * 1024 * 1024)\nprint(len(buf))\n",
+			)),
+		}},
+		ExpectedStdout: "33554432\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+	if resp.MemoryKB < 20*1024 {
+		t.Fatalf("expected noticeable rss after allocation, got %+v", resp)
+	}
+}
+
+func TestRunMarksMemoryLimitExceededEvenIfProgramHandlesAllocationFailure(t *testing.T) {
+	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"try:\n    buf = bytearray(96 * 1024 * 1024)\n    print('allocated')\nexcept MemoryError:\n    print('memoryerror')\n",
+			)),
+		}},
+		ExpectedStdout: "memoryerror\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 32},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusMLE {
+		t.Fatalf("expected MLE, got %+v", resp)
+	}
+	if resp.MemoryKB <= 32*1024 {
+		t.Fatalf("expected rss to exceed configured limit, got %+v", resp)
 	}
 }

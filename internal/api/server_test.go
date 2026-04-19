@@ -1,6 +1,7 @@
 package api
 
 import (
+	"aonohako/internal/config"
 	"bufio"
 	"bytes"
 	"encoding/base64"
@@ -8,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"aonohako/internal/config"
 	"strings"
 	"testing"
 	"time"
@@ -121,6 +121,15 @@ func TestExecuteSSESequence(t *testing.T) {
 	}
 	if last.JSON["status"] != "Accepted" {
 		t.Fatalf("unexpected run status in result: %#v", last.JSON)
+	}
+	if _, ok := last.JSON["wall_time_ms"]; !ok {
+		t.Fatalf("result missing wall_time_ms: %#v", last.JSON)
+	}
+	if _, ok := last.JSON["cpu_time_ms"]; !ok {
+		t.Fatalf("result missing cpu_time_ms: %#v", last.JSON)
+	}
+	if last.JSON["time_ms"] != last.JSON["wall_time_ms"] {
+		t.Fatalf("time_ms should mirror wall_time_ms for compatibility: %#v", last.JSON)
 	}
 }
 

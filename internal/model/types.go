@@ -69,6 +69,8 @@ type RunRequest struct {
 type RunResponse struct {
 	Status         string          `json:"status"`
 	TimeMs         int64           `json:"time_ms"`
+	WallTimeMs     int64           `json:"wall_time_ms"`
+	CPUTimeMs      int64           `json:"cpu_time_ms"`
 	MemoryKB       int64           `json:"memory_kb"`
 	ExitCode       *int            `json:"exit_code,omitempty"`
 	Stdout         string          `json:"stdout,omitempty"`

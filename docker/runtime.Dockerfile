@@ -23,7 +23,7 @@ ARG NPM_PACKAGES=
 ARG SMOKE_COMMAND=
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates tini && \
+    apt-get install -y --no-install-recommends ca-certificates tini util-linux && \
     if [[ -n "${APT_PACKAGES}" ]]; then \
       apt-get install -y --no-install-recommends ${APT_PACKAGES}; \
     fi && \
