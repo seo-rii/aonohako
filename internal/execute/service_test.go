@@ -203,6 +203,90 @@ func TestRunSignalTerminationIsRuntimeError(t *testing.T) {
 	}
 }
 
+func TestRunDefaultOutputLimitExceedsLegacyCap(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	output := strings.Repeat("a", 4096)
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\ni=0\nwhile [ \"$i\" -lt 4096 ]; do\n  printf a\n  i=$((i+1))\ndone\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusWA {
+		t.Fatalf("expected WA, got %+v", resp)
+	}
+	if resp.Stdout != output {
+		t.Fatalf("unexpected stdout length=%d", len(resp.Stdout))
+	}
+}
+
+func TestRunOutputLimitUsesConfiguredUnifiedCap(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	var stdoutLog string
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\ni=0\nwhile [ \"$i\" -lt 9000 ]; do\n  printf a\n  i=$((i+1))\ndone\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 8192},
+	}, Hooks{
+		OnLog: func(stream, msg string) {
+			if stream == "stdout" {
+				stdoutLog = msg
+			}
+		},
+	})
+
+	want := strings.Repeat("a", 8192)
+	if resp.Status != model.RunStatusWA {
+		t.Fatalf("expected WA, got %+v", resp)
+	}
+	if resp.Stdout != want {
+		t.Fatalf("unexpected stdout length=%d", len(resp.Stdout))
+	}
+	if stdoutLog != want {
+		t.Fatalf("unexpected stdout log length=%d", len(stdoutLog))
+	}
+}
+
+func TestRunRequestOutputLimitOverridesLegacyEnv(t *testing.T) {
+	forceDirectMode(t)
+	t.Setenv("AONOHAKO_MAX_OUTPUT_BYTES", "2048")
+	t.Setenv("GO_MAX_OUTPUT_BYTES", "1024")
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\ni=0\nwhile [ \"$i\" -lt 9000 ]; do\n  printf a\n  i=$((i+1))\ndone\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 8192},
+	}, Hooks{})
+
+	want := strings.Repeat("a", 8192)
+	if resp.Status != model.RunStatusWA {
+		t.Fatalf("expected WA, got %+v", resp)
+	}
+	if resp.Stdout != want {
+		t.Fatalf("unexpected stdout length=%d", len(resp.Stdout))
+	}
+}
+
 func TestRunBlocksNetworkWhenDisabled(t *testing.T) {
 	requireSandboxSupport(t)
 	svc := New()
@@ -357,31 +441,7 @@ func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
 	}
 }
 
-func TestRunLegacyDirectModeFlagsDoNotDisableSandbox(t *testing.T) {
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
-	t.Setenv("AONOHAKO_NETWORK_POLICY", "")
-
-	svc := New()
-	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "python",
-		Binaries: []model.Binary{{
-			Name: "main.py",
-			DataB64: base64.StdEncoding.EncodeToString([]byte(
-				"import socket\ntry:\n    socket.socket()\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
-			)),
-		}},
-		ExpectedStdout: "blocked\n",
-		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
-	}, Hooks{})
-
-	if resp.Status != model.RunStatusAccepted {
-		t.Fatalf("expected Accepted with legacy flags ignored, got %+v", resp)
-	}
-}
-
 func TestRunDirectModeDoesNotRequireUnshareBinary(t *testing.T) {
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
-	t.Setenv("AONOHAKO_NETWORK_POLICY", "blocked")
 	t.Setenv("PATH", t.TempDir())
 
 	svc := New()
@@ -398,6 +458,26 @@ func TestRunDirectModeDoesNotRequireUnshareBinary(t *testing.T) {
 
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted without unshare in direct mode, got %+v", resp)
+	}
+}
+
+func TestRunBlocksThreadStorms(t *testing.T) {
+	requireSandboxSupport(t)
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"import threading\nimport time\nthreading.stack_size(65536)\nthreads=[]\ntry:\n    for _ in range(2000):\n        t = threading.Thread(target=time.sleep, args=(0.2,))\n        t.start()\n        threads.append(t)\n    print('spawned')\nexcept Exception:\n    print('blocked')\nfinally:\n    for t in threads:\n        t.join()\n",
+			)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 4000, MemoryMB: 512},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
 	}
 }
 

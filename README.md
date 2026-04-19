@@ -69,14 +69,17 @@ Repository policy check:
 ## Configuration
 
 - `PORT` defaults to `8080`
-- `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `max(1, cpu-2)`
+- `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` on Cloud Run, otherwise `max(1, cpu-2)`
 - `AONOHAKO_MAX_PENDING_QUEUE` defaults to `0` for unlimited queue depth
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
-- `AONOHAKO_UNSHARE_ENABLED` controls `unshare` usage in the local execution
-  path
+- `AONOHAKO_WORK_ROOT` points temp compile/run directories at a dedicated work root
 
-Legacy `GO_*` environment variables are still accepted as fallbacks for
-backward compatibility.
+Per-request execution limits are part of the `/execute` payload:
+
+- `limits.time_ms`
+- `limits.memory_mb`
+- `limits.output_bytes`
+  Defaults to `64 KiB` when omitted and is capped internally at `8 MiB`
 
 ## Security notes
 
@@ -93,8 +96,35 @@ The local execution path now enforces these invariants:
   their own sources or binaries
 - captured outputs reject symlinks to avoid read-through escapes
 
-For stronger isolation, pair `aonohako` with a dedicated runner environment
-that supports mount namespaces, pid limits, and cgroup enforcement.
+The runtime sandbox uses helper-process hardening rather than child cgroups or
+mount-based filesystem isolation. It applies `setrlimit`, `PR_SET_NO_NEW_PRIVS`,
+seccomp, fd cleanup, immutable submitted files, a writable per-run workspace,
+and process-group cleanup.
+
+Security posture depends on where it runs:
+
+- Cloud Run deployment mode is the supported security target. This is where the
+  runtime image permissions, service account scoping, and deployment-level
+  egress controls form the expected boundary.
+- Local non-root execution is development mode. It still applies process-level
+  limits and seccomp, but it does not promise the same filesystem isolation as a
+  root-owned runtime container on Cloud Run.
+
+For Cloud Run deployments, use this baseline:
+
+- second-generation execution environment
+- service concurrency `1`
+- a bounded in-memory volume mounted at a path such as `/work`, with
+  `AONOHAKO_WORK_ROOT=/work`
+- Direct VPC egress with `all-traffic` routing and firewall-denied outbound
+  traffic except for explicitly allowed targets
+- a dedicated service account with no unnecessary IAM permissions and no baked
+  secrets in the image
+
+Cloud Run's own documentation states that volumes must be configured through
+Cloud Run volume mounts and that arbitrary in-container mounting is not
+supported, so `aonohako` does not depend on cgroup creation or mount-based
+filesystem isolation when running there.
 
 ## License
 

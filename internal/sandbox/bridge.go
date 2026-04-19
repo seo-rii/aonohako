@@ -13,5 +13,6 @@ type ExecRequest struct {
 	Dir           string       `json:"dir"`
 	Env           []string     `json:"env"`
 	Limits        model.Limits `json:"limits"`
+	ThreadLimit   int          `json:"thread_limit"`
 	EnableNetwork bool         `json:"enable_network"`
 }

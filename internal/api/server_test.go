@@ -184,8 +184,6 @@ func readSSEEvents(r io.Reader, t *testing.T) []sseEvent {
 
 func configForTest(t *testing.T) config.Config {
 	t.Helper()
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
-	t.Setenv("AONOHAKO_NETWORK_POLICY", "blocked")
 	return config.Config{Port: "0", MaxActiveRuns: 1, MaxPendingQueue: 1, HeartbeatInterval: 100 * time.Millisecond}
 }
 

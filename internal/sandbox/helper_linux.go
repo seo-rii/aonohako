@@ -68,6 +68,10 @@ func MaybeRunFromEnv() bool {
 	if asMB < 256 {
 		asMB = 256
 	}
+	threadLimit := req.ThreadLimit
+	if threadLimit < 32 {
+		threadLimit = 32
+	}
 	limits := []struct {
 		resource int
 		value    uint64
@@ -75,6 +79,7 @@ func MaybeRunFromEnv() bool {
 		{unix.RLIMIT_CPU, uint64(cpuSec)},
 		{unix.RLIMIT_AS, uint64(asMB) * 1024 * 1024},
 		{unix.RLIMIT_NOFILE, 64},
+		{unix.RLIMIT_NPROC, uint64(threadLimit)},
 		{unix.RLIMIT_FSIZE, 32 * 1024 * 1024},
 		{unix.RLIMIT_CORE, 0},
 	}

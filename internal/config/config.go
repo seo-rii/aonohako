@@ -18,9 +18,9 @@ type Config struct {
 
 func Load() Config {
 	port := getenv("PORT", "8080")
-	maxActive := parsePositiveInt(getenvAny([]string{"AONOHAKO_MAX_ACTIVE_RUNS", "GO_MAX_ACTIVE_RUNS"}, ""), defaultMaxActiveRuns())
-	maxPending := parseNonNegativeInt(getenvAny([]string{"AONOHAKO_MAX_PENDING_QUEUE", "GO_MAX_PENDING_QUEUE"}, "0"), 0)
-	heartbeatSec := parsePositiveInt(getenvAny([]string{"AONOHAKO_HEARTBEAT_INTERVAL_SEC", "GO_HEARTBEAT_INTERVAL_SEC"}, "10"), 10)
+	maxActive := parsePositiveInt(getenv("AONOHAKO_MAX_ACTIVE_RUNS", ""), defaultMaxActiveRuns())
+	maxPending := parseNonNegativeInt(getenv("AONOHAKO_MAX_PENDING_QUEUE", "0"), 0)
+	heartbeatSec := parsePositiveInt(getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "10"), 10)
 	return Config{
 		Port:              port,
 		MaxActiveRuns:     maxActive,
@@ -47,15 +47,6 @@ func defaultMaxActiveRuns() int {
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
-	}
-	return fallback
-}
-
-func getenvAny(keys []string, fallback string) string {
-	for _, key := range keys {
-		if v := os.Getenv(key); v != "" {
-			return v
-		}
 	}
 	return fallback
 }

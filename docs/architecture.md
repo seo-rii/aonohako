@@ -4,7 +4,9 @@
 
 `aonohako` is the low-level compile and execute sandbox. It runs untrusted
 code in isolated temporary directories with resource limits. It exposes two
-SSE endpoints and a healthcheck.
+SSE endpoints and a healthcheck. The supported production security target is a
+Cloud Run deployment using the hardened runtime images. Local non-root runs are
+kept as a development path and do not claim the same filesystem isolation.
 
 ```
                 ┌────────────────────────────────────────┐
@@ -17,11 +19,11 @@ SSE endpoints and a healthcheck.
                 │                                        │
   POST /execute │  ┌──────────┐     ┌────────────────────────────┐  │
  ──────────────>│  │  Queue   │────>│ Execute Service             │  │
- <── SSE ──────│  │  Manager │     │  prlimit+taskset+unshare    │  │
+ <── SSE ──────│  │  Manager │     │  prlimit+taskset+runner     │  │
                 │  └──────────┘     │  ┌────────────┐  │  │
-                │                   │  │  chroot    │  │  │
-                │                   │  │  ro bind   │  │  │
-                │                   │  │  safe /dev │  │  │
+                │                   │  │ helper     │  │  │
+                │                   │  │ hardening  │  │  │
+                │                   │  │ cleanup    │  │  │
                 │                   │  └────────────┘  │  │
                 │                   │  ┌────────────┐  │  │
                 │                   │  │ Comparator │  │  │
@@ -63,19 +65,17 @@ SSE endpoints and a healthcheck.
 1. Decode `RunRequest` → acquire queue permit (429 on overflow)
 2. Create temp workdir with sandbox subdirectories
 3. Write binaries and set permissions
-4. Build a fail-closed sandbox launcher
+4. Build helper request with command, env, limits, network flag, and thread cap
 5. Start process with:
-   - `unshare` mount/user namespace isolation
-   - `chroot` into a minimal runtime root
-   - Read-only binds for runtime directories (`/usr`, `/etc`, `/opt`)
-   - Writable binds only for sandbox workspace dirs
-   - File-level read-only binds for submitted files
-   - Safe `/dev` population (`null`, `zero`, `random`, `urandom`, `shm`)
-   - Optional `--net` namespace when `enable_network: false`
+   - `prlimit` CPU / address-space / open-file / file-size limits
+   - `RLIMIT_NPROC` thread/process cap
    - Thread limit environment variables
    - Process group isolation (`Setpgid: true`)
+   - Immutable submitted files plus writable workspace directories
+   - A low-privilege child credential when the parent runs as root
+   - `PR_SET_NO_NEW_PRIVS`, seccomp, and fd cleanup in the helper
 6. Stream image events from sidecar files during execution
-7. Wait for process completion or timeout (SIGKILL on TLE)
+7. Wait for process completion or timeout, then kill the whole process group
 8. Compare output (built-in diff or SPJ)
 9. Capture file outputs and sidecar outputs
 10. Return `RunResponse` with verdict and metrics
@@ -113,17 +113,44 @@ The queue provides bounded concurrency for `/execute`:
 | CPU time | `prlimit --cpu` | `ceil(time_ms/1000) + 1` seconds |
 | Address space | `prlimit --as` | `memory_mb + 64` MB (min 256 MB) |
 | Open files | `prlimit --nofile` | 64 |
+| Threads / processes | `prlimit --nproc` | 512 |
 | File size | `prlimit --fsize` | 32 MB |
-| CPU affinity | `taskset -c 0` | Single core |
-| Filesystem view | `unshare` + `chroot` + bind mounts | No host repo paths inside sandbox |
-| Existing submission files | File-level read-only bind mounts | Cannot overwrite or unlink original files |
-| Writable paths | Dedicated workspace binds | New files only in sandbox work/cache/tmp dirs |
-| Devices | tmpfs `/dev` + selected binds | No host device nodes such as `/dev/kmsg` |
-| Network | `unshare --net` | Disabled unless `enable_network: true` |
+| Filesystem view | Runtime image permissions + workspace root | Cloud Run image is the trusted boundary |
+| Existing submission files | Read-only file mode | Cannot overwrite original files |
+| Writable paths | Per-run workspace dirs | New files only in `box/` and cache/tmp/home sidecars |
+| Devices | Cloud Run device restrictions + runtime image permissions | No host device nodes such as `/dev/kmsg` |
+| Network | Seccomp socket filtering + deployment-level egress policy | Disabled unless explicitly allowed |
 | Wall clock | `CLOCK_MONOTONIC` + Go context | Exact `time_ms` timeout and `wall_time_ms` reporting |
 | Reported CPU time | Linux process CPU clock | `cpu_time_ms` |
-| Threads | Environment | GOMAXPROCS=1, OMP/MKL/OpenBLAS=1 |
+| Output capture | In-memory capped buffers | `limits.output_bytes`, default 64 KiB, hard cap 8 MiB |
+| Threads | Environment + `RLIMIT_NPROC` | GOMAXPROCS=1, OMP/MKL/OpenBLAS=1, max 512 tasks |
 | Process group | `Setpgid` + SIGKILL | Kills entire group on timeout |
+
+## Cloud Run Notes
+
+Cloud Run cannot rely on arbitrary in-container mount operations for sandboxing,
+so `aonohako` does not attempt child cgroup creation or in-container bind-mount
+management there.
+
+- Use Cloud Run second generation.
+- Set service concurrency to `1`.
+- Mount a bounded in-memory volume and point `AONOHAKO_WORK_ROOT` at it.
+- Keep the service account minimal because untrusted code can access the Cloud
+  Run metadata server if deployment networking allows it.
+- Force outbound traffic through Direct VPC egress with `all-traffic` and deny
+  outbound access by firewall policy except for explicitly allowed targets.
+- Treat the runtime image plus Cloud Run instance boundary as the filesystem
+  trust boundary for production.
+
+## Local Development Mode
+
+When `aonohako` runs outside a root-owned runtime container, it still applies
+CPU, memory, output, file-size, fd, seccomp, and process-group controls, but it
+does not claim the same filesystem isolation as the Cloud Run deployment mode.
+
+- Use local non-root runs for development and smoke tests.
+- Use the runtime image on Cloud Run when you need the intended security
+  boundary.
 
 ## Runtime Images
 

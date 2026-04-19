@@ -32,7 +32,7 @@ func requireSandboxSupport(t *testing.T) {
 	if resp.Status == model.RunStatusAccepted {
 		return
 	}
-	if strings.Contains(resp.Stderr, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox-init:") {
+	if strings.Contains(resp.Stderr, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox requires root") {
 		t.Skipf("sandbox isolation is unavailable on this runner: %+v", resp)
 	}
 }
