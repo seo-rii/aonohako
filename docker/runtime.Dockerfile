@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-ARG GO_IMAGE=golang:1.22-bookworm
+ARG GO_IMAGE=golang:1.23-bookworm
+ARG RUNTIME_BASE=debian:bookworm-slim
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -10,7 +11,6 @@ ARG TARGETOS TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako ./cmd/server
 
-ARG RUNTIME_BASE=debian:bookworm-slim
 FROM ${RUNTIME_BASE} AS runtime
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -23,7 +23,7 @@ ARG NPM_PACKAGES=
 ARG SMOKE_COMMAND=
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates tini util-linux && \
+    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux && \
     if [[ -n "${APT_PACKAGES}" ]]; then \
       apt-get install -y --no-install-recommends ${APT_PACKAGES}; \
     fi && \
@@ -40,7 +40,7 @@ RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 
-ENV PATH=/usr/local/bin:/usr/bin:/bin \
+ENV PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     AONOHAKO_IMAGE_NAME=${IMAGE_NAME} \
