@@ -7,9 +7,14 @@ import (
 
 	"aonohako/internal/api"
 	"aonohako/internal/config"
+	"aonohako/internal/sandbox"
 )
 
 func main() {
+	if sandbox.MaybeRunFromEnv() {
+		return
+	}
+
 	cfg := config.Load()
 	server := api.New(cfg)
 

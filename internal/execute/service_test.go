@@ -135,11 +135,10 @@ func TestRunReturnsTLEOnParentCancel(t *testing.T) {
 	}()
 
 	req := &model.RunRequest{
-		Lang: "binary",
+		Lang: "python",
 		Binaries: []model.Binary{{
-			Name:    "run.sh",
-			DataB64: b64("#!/bin/sh\nsleep 5\n"),
-			Mode:    "exec",
+			Name:    "main.py",
+			DataB64: b64("import time\ntime.sleep(5)\n"),
 		}},
 		Limits: model.Limits{TimeMs: 10000, MemoryMB: 128},
 	}
@@ -212,7 +211,7 @@ func TestRunBlocksNetworkWhenDisabled(t *testing.T) {
 		Binaries: []model.Binary{{
 			Name: "main.py",
 			DataB64: base64.StdEncoding.EncodeToString([]byte(
-				"import socket\ns = socket.socket()\ns.settimeout(0.5)\ntry:\n    s.connect(('1.1.1.1', 53))\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
+				"import socket\ntry:\n    s = socket.socket()\n    s.settimeout(0.5)\n    s.connect(('1.1.1.1', 53))\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
 			)),
 		}},
 		ExpectedStdout: "blocked\n",
@@ -224,6 +223,27 @@ func TestRunBlocksNetworkWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback(t *testing.T) {
+	t.Setenv("K_SERVICE", "aonohako-runner")
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"import socket\ntry:\n    s = socket.socket()\n    s.settimeout(0.5)\n    s.connect(('1.1.1.1', 53))\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
+			)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted on Cloud Run path, got %+v", resp)
+	}
+}
+
 func TestRunCannotReadHostPathOutsideSandbox(t *testing.T) {
 	requireSandboxSupport(t)
 	secretDir := t.TempDir()
@@ -232,14 +252,34 @@ func TestRunCannotReadHostPathOutsideSandbox(t *testing.T) {
 		t.Fatalf("write secret file: %v", err)
 	}
 
-	script := fmt.Sprintf("#!/bin/sh\nif cat %q >/dev/null 2>&1; then echo leaked; else echo blocked; fi\n", secretPath)
+	script := fmt.Sprintf("from pathlib import Path\ntry:\n    Path(%q).read_text()\n    print('leaked')\nexcept Exception:\n    print('blocked')\n", secretPath)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "binary",
+		Lang: "python",
 		Binaries: []model.Binary{{
-			Name:    "run.sh",
+			Name:    "main.py",
 			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
-			Mode:    "exec",
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunBlocksReadingGlobalFilesystemOutsideSandbox(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"from pathlib import Path\ntry:\n    Path('/etc/passwd').read_text()\n    print('leaked')\nexcept Exception:\n    print('blocked')\n",
+			)),
 		}},
 		ExpectedStdout: "blocked\n",
 		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
@@ -254,13 +294,54 @@ func TestRunExposesOnlySafeDevices(t *testing.T) {
 	requireSandboxSupport(t)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "binary",
+		Lang: "python",
 		Binaries: []model.Binary{{
-			Name: "run.sh",
+			Name: "main.py",
 			DataB64: base64.StdEncoding.EncodeToString([]byte(
-				"#!/bin/sh\nif [ -c /dev/null ] && [ ! -e /dev/kmsg ]; then echo blocked; else echo leaked; fi\n",
+				"try:\n    open('/dev/kmsg', 'rb')\n    print('leaked')\nexcept Exception:\n    print('blocked')\n",
 			)),
-			Mode: "exec",
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunBlocksForkAttempts(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"import subprocess\ntry:\n    subprocess.run(['sh', '-c', 'exit 0'], check=True)\n    print('forked')\nexcept Exception:\n    print('blocked')\n",
+			)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunBlocksProcFDBrowsingOutsideSandbox(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"import os\ntry:\n    os.readlink('/proc/1/fd/1')\n    print('leaked')\nexcept Exception:\n    print('blocked')\n",
+			)),
 		}},
 		ExpectedStdout: "blocked\n",
 		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
@@ -291,27 +372,25 @@ func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
 	}
 }
 
-func TestRunDirectModeRequiresDeclaredNetworkPolicy(t *testing.T) {
+func TestRunLegacyDirectModeFlagsDoNotDisableSandbox(t *testing.T) {
 	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
 	t.Setenv("AONOHAKO_NETWORK_POLICY", "")
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "binary",
+		Lang: "python",
 		Binaries: []model.Binary{{
-			Name:    "run.sh",
-			DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho ok\n")),
-			Mode:    "exec",
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"import socket\ntry:\n    socket.socket()\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
+			)),
 		}},
-		ExpectedStdout: "ok\n",
+		ExpectedStdout: "blocked\n",
 		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
 	}, Hooks{})
 
-	if resp.Status != model.RunStatusInitFail {
-		t.Fatalf("expected init failure without declared network policy, got %+v", resp)
-	}
-	if !strings.Contains(strings.ToLower(resp.Reason), "network") {
-		t.Fatalf("expected network-related reason, got %+v", resp)
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted with legacy flags ignored, got %+v", resp)
 	}
 }
 
@@ -378,11 +457,10 @@ func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "binary",
+		Lang: "python",
 		Binaries: []model.Binary{{
-			Name:    "run.sh",
-			DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nsleep 0.2\n")),
-			Mode:    "exec",
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("import time\ntime.sleep(0.2)\n")),
 		}},
 		ExpectedStdout: "",
 		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},

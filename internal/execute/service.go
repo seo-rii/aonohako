@@ -19,8 +19,8 @@ import (
 	"unicode/utf8"
 
 	"aonohako/internal/model"
-	"aonohako/internal/platform"
 	"aonohako/internal/profiles"
+	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
 	"aonohako/internal/util"
@@ -403,31 +403,6 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
 
-	useDirectMode := platform.IsCloudRun()
-	for _, key := range []string{"AONOHAKO_UNSHARE_ENABLED", "GO_UNSHARE_ENABLED"} {
-		raw := strings.TrimSpace(os.Getenv(key))
-		if raw == "" {
-			continue
-		}
-		switch strings.ToLower(raw) {
-		case "0", "false", "no", "off":
-			useDirectMode = true
-		}
-		break
-	}
-	if useDirectMode && !req.EnableNetwork {
-		networkPolicy := strings.ToLower(strings.TrimSpace(os.Getenv("AONOHAKO_NETWORK_POLICY")))
-		if networkPolicy == "" {
-			networkPolicy = strings.ToLower(strings.TrimSpace(os.Getenv("GO_NETWORK_POLICY")))
-		}
-		if networkPolicy != "blocked" {
-			return execResult{
-				Status: model.RunStatusInitFail,
-				Reason: "direct execution requires AONOHAKO_NETWORK_POLICY=blocked when enable_network is false",
-			}
-		}
-	}
-
 	baseEnv := []string{
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"LANG=C.UTF-8",
@@ -439,352 +414,155 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
 	}
 
-	if useDirectMode {
-		finalArgs := append([]string(nil), command...)
-		if _, err := exec.LookPath("taskset"); err == nil {
-			finalArgs = append([]string{"taskset", "-c", "0"}, finalArgs...)
-		}
-		if _, err := exec.LookPath("prlimit"); err == nil {
-			timeMs := max(1, req.Limits.TimeMs)
-			cpuSec := max(1, (timeMs+999)/1000) + 1
-			asBytes := int64(addressSpaceLimitBytes(max(16, req.Limits.MemoryMB)))
-			prlimitArgs := []string{
-				"prlimit",
-				fmt.Sprintf("--cpu=%d:%d", cpuSec, cpuSec),
-				fmt.Sprintf("--as=%d:%d", asBytes, asBytes),
-				"--stack=unlimited:unlimited",
-				"--nofile=64:64",
-				"--fsize=33554432:33554432",
-				"--",
-			}
-			finalArgs = append(prlimitArgs, finalArgs...)
-		}
+	switch profiles.NormalizeRunLang(req.Lang) {
+	case "ocaml":
+		innerEnv = append(innerEnv, "OCAMLRUNPARAM="+ocamlRunParam)
+	case "elixir":
+		innerEnv = append(innerEnv, "ERL_AFLAGS="+elixirERLAFlags)
+	}
 
-		if os.Geteuid() == 0 {
-			const sandboxUID = 65532
-			const sandboxGID = 65532
-			if err := os.Chmod(ws.RootDir, 0o755); err != nil {
-				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
-			}
-			chownTargets := append([]string{ws.BoxDir}, security.WorkspaceScopedDirs(ws.RootDir)...)
-			for _, dir := range chownTargets {
-				if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
-					return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
-				}
-			}
-			if err := os.Chmod(ws.BoxDir, 0o777|os.ModeSticky); err != nil {
-				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
-			}
-			for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
-				if err := os.Chmod(dir, 0o700); err != nil {
-					return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
-				}
-			}
-		}
-
-		cmd := exec.CommandContext(ctx, finalArgs[0], finalArgs[1:]...)
-		cmd.Dir = ws.BoxDir
-		cmd.Stdin = strings.NewReader(req.Stdin)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		if os.Geteuid() == 0 {
-			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
-		}
-		cmd.Env = innerEnv
-
-		var stdoutBuf, stderrBuf bytes.Buffer
-		stdoutPipe, err := cmd.StdoutPipe()
+	finalCommand := append([]string(nil), command...)
+	resolveRealPath := func(name string) (string, error) {
+		path, err := exec.LookPath(name)
 		if err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "stdout pipe failed: " + err.Error()}
+			return "", err
 		}
-		stderrPipe, err := cmd.StderrPipe()
+		if real, err := filepath.EvalSymlinks(path); err == nil && real != "" {
+			path = real
+		}
+		return path, nil
+	}
+	if !filepath.IsAbs(finalCommand[0]) {
+		path, err := resolveRealPath(finalCommand[0])
 		if err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "stderr pipe failed: " + err.Error()}
+			return execResult{Status: model.RunStatusInitFail, Reason: "resolve command failed: " + err.Error()}
 		}
-		if err := cmd.Start(); err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
-		}
-
-		imageDone := make(chan struct{})
-		if imgPath := firstImagePath(req.SidecarOutputs); imgPath != "" {
-			go func() {
-				streamImageEvents(ctx, ws, imgPath, hooks.OnImage)
-				close(imageDone)
-			}()
-		} else {
-			close(imageDone)
-		}
-
-		doneOut := make(chan struct{})
-		doneErr := make(chan struct{})
-		go func() {
-			_, _ = ioCopy(&stdoutBuf, stdoutPipe)
-			close(doneOut)
-		}()
-		go func() {
-			_, _ = ioCopy(&stderrBuf, stderrPipe)
-			close(doneErr)
-		}()
-
-		wallStart := timing.MonotonicNow()
-		waitCh := make(chan error, 1)
-		go func() {
-			waitCh <- cmd.Wait()
-		}()
-		cpuSampler := timing.StartProcessCPUSampler(cmd.Process.Pid)
-		cpuBaselineNs, _ := timing.ProcessCPUTimeNs(cmd.Process.Pid)
-
-		result := execResult{Status: "OK"}
-		select {
-		case <-ctx.Done():
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			<-waitCh
-			result.Status = model.RunStatusTLE
-		case err := <-waitCh:
+		finalCommand[0] = path
+	}
+	if filepath.Base(finalCommand[0]) == "env" {
+		for i := 1; i < len(finalCommand); i++ {
+			if strings.Contains(finalCommand[i], "=") {
+				continue
+			}
+			if filepath.IsAbs(finalCommand[i]) {
+				break
+			}
+			path, err := resolveRealPath(finalCommand[i])
 			if err != nil {
-				result.Status = model.RunStatusRE
+				return execResult{Status: model.RunStatusInitFail, Reason: "resolve env command failed: " + err.Error()}
 			}
+			finalCommand[i] = path
+			break
 		}
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-
-		<-doneOut
-		<-doneErr
-		<-imageDone
-
-		result.WallTimeMs = timing.SinceMillis(wallStart)
-		cpuEndNs := cpuSampler.Stop()
-		if cpuBaselineNs > 0 && cpuEndNs > cpuBaselineNs {
-			result.CPUTimeMs = timing.MilliFromNanoseconds(cpuEndNs - cpuBaselineNs)
-		} else {
-			result.CPUTimeMs = timing.MilliFromNanoseconds(cpuEndNs)
-		}
-		result.Stdout = stdoutBuf.Bytes()
-		result.Stderr = stderrBuf.Bytes()
-
-		if ps := cmd.ProcessState; ps != nil {
-			if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
-				if ws.Exited() {
-					c := ws.ExitStatus()
-					result.ExitCode = &c
-				}
-				if ws.Signaled() {
-					if result.Status == "OK" {
-						result.Status = model.RunStatusRE
-					}
-					if ws.Signal() == syscall.SIGKILL || ws.Signal() == syscall.SIGXCPU {
-						result.Status = model.RunStatusTLE
-					}
-				}
-			}
-			if sysu, ok := ps.SysUsage().(*syscall.Rusage); ok {
-				result.MemoryKB = sysu.Maxrss
-			}
-			if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > result.CPUTimeMs {
-				result.CPUTimeMs = usageCPU
-			}
-		}
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			result.Status = model.RunStatusTLE
-		}
-		return result
 	}
 
-	unsharePath, err := exec.LookPath("unshare")
+	if os.Geteuid() == 0 {
+		const sandboxUID = 65532
+		const sandboxGID = 65532
+		if err := os.Chmod(ws.RootDir, 0o755); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+		}
+		chownTargets := append([]string{ws.BoxDir}, security.WorkspaceScopedDirs(ws.RootDir)...)
+		for _, dir := range chownTargets {
+			if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
+			}
+		}
+		if err := os.Chmod(ws.BoxDir, 0o777|os.ModeSticky); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+		}
+		for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+			if err := os.Chmod(dir, 0o700); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+			}
+		}
+	}
+
+	policies := make([]sandbox.PathPolicy, 0, 32)
+	seenPolicies := make(map[string]struct{}, 32)
+	addPolicy := func(path, access string) {
+		if path == "" {
+			return
+		}
+		if _, err := os.Lstat(path); err != nil {
+			return
+		}
+		key := access + "\x00" + path
+		if _, ok := seenPolicies[key]; ok {
+			return
+		}
+		seenPolicies[key] = struct{}{}
+		policies = append(policies, sandbox.PathPolicy{Path: path, Access: access})
+	}
+	for _, path := range []string{"/usr", "/bin", "/sbin", "/lib", "/lib64", "/opt"} {
+		addPolicy(path, "runtime")
+	}
+	for _, path := range []string{"/etc/ssl", "/etc/pki", "/etc/ca-certificates", "/etc/java-17-openjdk", "/etc/dotnet", "/etc/fonts", "/etc/xml"} {
+		addPolicy(path, "readonly")
+	}
+	addPolicy(ws.BoxDir, "box")
+	for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+		addPolicy(dir, "scratch")
+	}
+	addPolicy("/dev/null", "devrw")
+	addPolicy("/dev/zero", "devread")
+	addPolicy("/dev/random", "devread")
+	addPolicy("/dev/urandom", "devread")
+
+	reqPath := filepath.Join(ws.RootDir, ".tmp", "sandbox-request.json")
+	helperReq := sandbox.ExecRequest{
+		Command:       finalCommand,
+		Dir:           ws.BoxDir,
+		Env:           innerEnv,
+		Limits:        req.Limits,
+		EnableNetwork: req.EnableNetwork,
+		Paths:         policies,
+	}
+	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires unshare: " + err.Error()}
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request failed: " + err.Error()}
 	}
-	chrootPath := "/usr/sbin/chroot"
-	if _, err := os.Stat(chrootPath); err != nil {
-		alt, lookErr := exec.LookPath("chroot")
-		if lookErr != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires chroot: " + lookErr.Error()}
-		}
-		chrootPath = alt
+	if err := os.WriteFile(reqPath, rawReq, 0o644); err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
 	}
 
-	shellQuote := func(v string) string {
-		if v == "" {
-			return "''"
-		}
-		return "'" + strings.ReplaceAll(v, "'", `'"'"'`) + "'"
-	}
-	isUnder := func(root, target string) (string, bool) {
-		rel, relErr := filepath.Rel(root, target)
-		if relErr != nil {
-			return "", false
-		}
-		if rel == "." {
-			return "", false
-		}
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", false
-		}
-		return rel, true
+	helperPath, err := os.Executable()
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "resolve helper failed: " + err.Error()}
 	}
 
-	sandboxRoot := filepath.Join(ws.RootDir, "sandbox-root")
-	if err := os.MkdirAll(sandboxRoot, 0o755); err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox root failed: " + err.Error()}
-	}
-
-	sandboxArgs := make([]string, 0, len(command))
-	for _, arg := range command {
-		if rel, ok := isUnder(ws.BoxDir, arg); ok {
-			sandboxArgs = append(sandboxArgs, filepath.ToSlash(filepath.Join("/work/box", rel)))
-			continue
-		}
-		if rel, ok := isUnder(ws.RootDir, arg); ok {
-			sandboxArgs = append(sandboxArgs, filepath.ToSlash(filepath.Join("/work/root", rel)))
-			continue
-		}
-		sandboxArgs = append(sandboxArgs, arg)
-	}
-
-	commandLine := make([]string, 0, len(sandboxArgs))
-	for _, arg := range sandboxArgs {
-		commandLine = append(commandLine, shellQuote(arg))
-	}
-	cpuReadyPath := filepath.Join(ws.RootDir, ".tmp", "cpu-start.ready")
-	innerCommand := ": > " + shellQuote("/tmp/cpu-start.ready") + "; cd /work/box && exec " + strings.Join(commandLine, " ")
-
-	innerEnv = append([]string{
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"LANG=C.UTF-8",
-		"LC_ALL=C.UTF-8",
-		"HOME=/home/sandbox",
-		"TMPDIR=/tmp",
-		"XDG_CACHE_HOME=/cache",
-		"MPLCONFIGDIR=/mpl",
-		"PIP_CACHE_DIR=/pip-cache",
-		"DOTNET_CLI_HOME=/dotnet-home",
-		"NUGET_PACKAGES=/nuget",
-		"DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
-		"DOTNET_CLI_TELEMETRY_OPTOUT=1",
-		"DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",
-		"DOTNET_GENERATE_ASPNET_CERTIFICATE=false",
-		"DOTNET_NOLOGO=1",
-		"MSBuildEnableWorkloadResolver=false",
-		"KONAN_USER_HOME=/konan-home",
-		"KONAN_DATA_DIR=/konan",
-		"MIX_HOME=/mix",
-		"HEX_HOME=/hex",
-		"IMG_OUT_DIR=/img",
-	}, security.ThreadLimitEnv()...)
+	cloneFlags := uintptr(syscall.CLONE_NEWUSER | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUTS)
 	if !req.EnableNetwork {
-		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
+		cloneFlags |= syscall.CLONE_NEWNET
 	}
-	innerEnvLine := make([]string, 0, len(innerEnv))
-	for _, item := range innerEnv {
-		innerEnvLine = append(innerEnvLine, shellQuote(item))
-	}
-
-	readonlyTargets := make([]string, 0, len(req.Binaries))
-	for _, b := range req.Binaries {
-		clean, err := util.ValidateRelativePath(b.Name)
-		if err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "sandbox path validation failed: " + err.Error()}
-		}
-		readonlyTargets = append(readonlyTargets, filepath.Join(sandboxRoot, "work", "box", filepath.FromSlash(clean)))
+	hostUID := os.Geteuid()
+	hostGID := os.Getegid()
+	if hostUID == 0 {
+		hostUID = 65532
+		hostGID = 65532
 	}
 
-	launcherPath := filepath.Join(ws.RootDir, "sandbox-launcher.sh")
-	var launcher strings.Builder
-	launcher.WriteString("#!/bin/sh\n")
-	launcher.WriteString("set -eu\n")
-	launcher.WriteString("run() {\n")
-	launcher.WriteString("  if \"$@\"; then\n")
-	launcher.WriteString("    return 0\n")
-	launcher.WriteString("  else\n")
-	launcher.WriteString("    code=$?\n")
-	launcher.WriteString("    printf 'sandbox-init:%s failed with %s\\n' \"$1\" \"$code\" >&2\n")
-	launcher.WriteString("    exit 120\n")
-	launcher.WriteString("  fi\n")
-	launcher.WriteString("}\n")
-	launcher.WriteString("mirror_path() {\n")
-	launcher.WriteString("  src=\"$1\"\n")
-	launcher.WriteString("  dst=" + shellQuote(sandboxRoot) + "$1\n")
-	launcher.WriteString("  if [ ! -e \"$src\" ] && [ ! -L \"$src\" ]; then\n")
-	launcher.WriteString("    return 0\n")
-	launcher.WriteString("  fi\n")
-	launcher.WriteString("  run mkdir -p \"$(dirname \"$dst\")\"\n")
-	launcher.WriteString("  if [ -L \"$src\" ]; then\n")
-	launcher.WriteString("    run ln -sfn \"$(readlink \"$src\")\" \"$dst\"\n")
-	launcher.WriteString("    return 0\n")
-	launcher.WriteString("  fi\n")
-	launcher.WriteString("  run mkdir -p \"$dst\"\n")
-	launcher.WriteString("  run mount --bind \"$src\" \"$dst\"\n")
-	launcher.WriteString("  run mount -o remount,ro,bind \"$dst\"\n")
-	launcher.WriteString("}\n")
-	launcher.WriteString("run mount --make-rprivate /\n")
-	launcher.WriteString("run mkdir -p " + shellQuote(filepath.Join(sandboxRoot, "work", "root")) + " " + shellQuote(filepath.Join(sandboxRoot, "work", "box")) + " " + shellQuote(filepath.Join(sandboxRoot, "dev")) + " " + shellQuote(filepath.Join(sandboxRoot, "dev", "shm")) + " " + shellQuote(filepath.Join(sandboxRoot, "home", "sandbox")) + " " + shellQuote(filepath.Join(sandboxRoot, "tmp")) + " " + shellQuote(filepath.Join(sandboxRoot, "cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "mpl")) + " " + shellQuote(filepath.Join(sandboxRoot, "pip-cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "dotnet-home")) + " " + shellQuote(filepath.Join(sandboxRoot, "nuget")) + " " + shellQuote(filepath.Join(sandboxRoot, "konan-home")) + " " + shellQuote(filepath.Join(sandboxRoot, "konan")) + " " + shellQuote(filepath.Join(sandboxRoot, "mix")) + " " + shellQuote(filepath.Join(sandboxRoot, "hex")) + " " + shellQuote(filepath.Join(sandboxRoot, "img")) + "\n")
-	launcher.WriteString("mirror_path /usr\n")
-	launcher.WriteString("mirror_path /bin\n")
-	launcher.WriteString("mirror_path /sbin\n")
-	launcher.WriteString("mirror_path /lib\n")
-	launcher.WriteString("mirror_path /lib64\n")
-	launcher.WriteString("mirror_path /etc\n")
-	launcher.WriteString("mirror_path /opt\n")
-	launcher.WriteString("run mount --bind " + shellQuote(ws.RootDir) + " " + shellQuote(filepath.Join(sandboxRoot, "work", "root")) + "\n")
-	launcher.WriteString("run mount -o remount,ro,bind " + shellQuote(filepath.Join(sandboxRoot, "work", "root")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(ws.BoxDir) + " " + shellQuote(filepath.Join(sandboxRoot, "work", "box")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".home")) + " " + shellQuote(filepath.Join(sandboxRoot, "home", "sandbox")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".tmp")) + " " + shellQuote(filepath.Join(sandboxRoot, "tmp")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "cache")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".mpl")) + " " + shellQuote(filepath.Join(sandboxRoot, "mpl")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".pip-cache")) + " " + shellQuote(filepath.Join(sandboxRoot, "pip-cache")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".dotnet-home")) + " " + shellQuote(filepath.Join(sandboxRoot, "dotnet-home")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".nuget")) + " " + shellQuote(filepath.Join(sandboxRoot, "nuget")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".konan-home")) + " " + shellQuote(filepath.Join(sandboxRoot, "konan-home")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".konan")) + " " + shellQuote(filepath.Join(sandboxRoot, "konan")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".mix")) + " " + shellQuote(filepath.Join(sandboxRoot, "mix")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, ".hex")) + " " + shellQuote(filepath.Join(sandboxRoot, "hex")) + "\n")
-	launcher.WriteString("run mount --bind " + shellQuote(filepath.Join(ws.RootDir, "__img__")) + " " + shellQuote(filepath.Join(sandboxRoot, "img")) + "\n")
-	launcher.WriteString("run mount -t tmpfs tmpfs " + shellQuote(filepath.Join(sandboxRoot, "dev")) + "\n")
-	launcher.WriteString("run mkdir -p " + shellQuote(filepath.Join(sandboxRoot, "dev", "shm")) + "\n")
-	launcher.WriteString("run mount -t tmpfs tmpfs " + shellQuote(filepath.Join(sandboxRoot, "dev", "shm")) + "\n")
-	for _, devName := range []string{"null", "zero", "random", "urandom"} {
-		target := filepath.Join(sandboxRoot, "dev", devName)
-		launcher.WriteString("run touch " + shellQuote(target) + "\n")
-		launcher.WriteString("run mount --bind " + shellQuote(filepath.Join("/dev", devName)) + " " + shellQuote(target) + "\n")
-	}
-	for _, target := range readonlyTargets {
-		launcher.WriteString("run mount --bind " + shellQuote(target) + " " + shellQuote(target) + "\n")
-		launcher.WriteString("run mount -o remount,ro,bind " + shellQuote(target) + "\n")
-	}
-	launcher.WriteString("exec " + shellQuote(chrootPath) + " " + shellQuote(sandboxRoot) + " /usr/bin/env -i " + strings.Join(innerEnvLine, " ") + " /bin/sh -lc " + shellQuote(innerCommand) + "\n")
-
-	if err := os.WriteFile(launcherPath, []byte(launcher.String()), 0o500); err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox launcher failed: " + err.Error()}
-	}
-
-	finalArgs := []string{unsharePath, "--mount", "--user", "--map-root-user", "--ipc", "--uts"}
-	if !req.EnableNetwork {
-		finalArgs = append(finalArgs, "--net")
-	}
-	finalArgs = append(finalArgs, "/bin/sh", launcherPath)
-	if _, err := exec.LookPath("taskset"); err == nil {
-		finalArgs = append([]string{"taskset", "-c", "0"}, finalArgs...)
-	}
-	if _, err := exec.LookPath("prlimit"); err == nil {
-		timeMs := max(1, req.Limits.TimeMs)
-		cpuSec := max(1, (timeMs+999)/1000) + 1
-		asBytes := int64(addressSpaceLimitBytes(max(16, req.Limits.MemoryMB)))
-		prlimitArgs := []string{
-			"prlimit",
-			fmt.Sprintf("--cpu=%d:%d", cpuSec, cpuSec),
-			fmt.Sprintf("--as=%d:%d", asBytes, asBytes),
-			"--stack=unlimited:unlimited",
-			"--nofile=64:64",
-			"--fsize=33554432:33554432",
-			"--",
-		}
-		finalArgs = append(prlimitArgs, finalArgs...)
-	}
-
-	cmd := exec.CommandContext(ctx, finalArgs[0], finalArgs[1:]...)
+	cmd := exec.CommandContext(ctx, helperPath)
 	cmd.Dir = ws.BoxDir
 	cmd.Stdin = strings.NewReader(req.Stdin)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Env = baseEnv
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid:    true,
+		Pdeathsig:  syscall.SIGKILL,
+		Cloneflags: cloneFlags,
+		Credential: &syscall.Credential{Uid: 65532, Gid: 65532},
+		UidMappings: []syscall.SysProcIDMap{{
+			ContainerID: 65532,
+			HostID:      hostUID,
+			Size:        1,
+		}},
+		GidMappings: []syscall.SysProcIDMap{{
+			ContainerID: 65532,
+			HostID:      hostGID,
+			Size:        1,
+		}},
+		GidMappingsEnableSetgroups: false,
+	}
+	cmd.Env = append(append(baseEnv[:0:0], baseEnv...), sandbox.HelperModeEnv+"="+sandbox.HelperModeExec, sandbox.RequestPathEnv+"="+reqPath)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -795,7 +573,6 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "stderr pipe failed: " + err.Error()}
 	}
-
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
 	}
@@ -823,34 +600,11 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 
 	wallStart := timing.MonotonicNow()
 	waitCh := make(chan error, 1)
-	processDone := make(chan struct{})
 	go func() {
 		waitCh <- cmd.Wait()
-		close(processDone)
 	}()
 	cpuSampler := timing.StartProcessCPUSampler(cmd.Process.Pid)
-	cpuBaselineCh := make(chan uint64, 1)
-	go func() {
-		ticker := time.NewTicker(2 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			if _, err := os.Stat(cpuReadyPath); err == nil {
-				if baseline, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
-					cpuBaselineCh <- baseline
-					return
-				}
-			}
-			select {
-			case <-processDone:
-				cpuBaselineCh <- 0
-				return
-			case <-ctx.Done():
-				cpuBaselineCh <- 0
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
+	cpuBaselineNs, _ := timing.ProcessCPUTimeNs(cmd.Process.Pid)
 
 	result := execResult{Status: "OK"}
 	select {
@@ -871,7 +625,6 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 
 	result.WallTimeMs = timing.SinceMillis(wallStart)
 	cpuEndNs := cpuSampler.Stop()
-	cpuBaselineNs := <-cpuBaselineCh
 	if cpuBaselineNs > 0 && cpuEndNs > cpuBaselineNs {
 		result.CPUTimeMs = timing.MilliFromNanoseconds(cpuEndNs - cpuBaselineNs)
 	} else {
@@ -898,7 +651,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		if sysu, ok := ps.SysUsage().(*syscall.Rusage); ok {
 			result.MemoryKB = sysu.Maxrss
 		}
-		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); cpuBaselineNs == 0 && usageCPU > result.CPUTimeMs {
+		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > result.CPUTimeMs {
 			result.CPUTimeMs = usageCPU
 		}
 	}
@@ -1049,18 +802,21 @@ func ioReadAll(r *bufio.Reader) ([]byte, error) {
 }
 
 func captureFileOutput(ws Workspace, spec model.OutputFile) ([]byte, error) {
-	full, st, err := validateCapturedOutput(ws, spec.Path)
+	output, err := openCapturedOutput(ws, spec.Path)
 	if err != nil {
 		return nil, err
 	}
-	if st.Size() > maxCapturedFileBytes {
+	defer output.cleanup()
+	if output.info.Size() > maxCapturedFileBytes {
 		return nil, fmt.Errorf("captured output too large")
 	}
-	data, err := os.ReadFile(full)
+	if _, err := output.file.Seek(0, 0); err != nil {
+		return nil, err
+	}
+	data, err := ioReadAll(bufio.NewReader(output.file))
 	if err != nil {
 		return nil, err
 	}
-	_ = os.Remove(full)
 	return data, nil
 }
 
@@ -1068,23 +824,29 @@ func captureSidecarOutputs(ws Workspace, specs []model.OutputFile) []model.Sidec
 	outputs := make([]model.SidecarOutput, 0, len(specs))
 	var totalBytes int64
 	for _, spec := range specs {
-		full, st, err := validateCapturedOutput(ws, spec.Path)
+		output, err := openCapturedOutput(ws, spec.Path)
 		if err != nil {
 			continue
 		}
-		if st.Size() > maxCapturedFileBytes {
+		if output.info.Size() > maxCapturedFileBytes {
+			output.cleanup()
 			continue
 		}
-		totalBytes += st.Size()
+		totalBytes += output.info.Size()
 		if totalBytes > maxCapturedSidecarTotalBytes {
+			output.cleanup()
 			continue
 		}
-		data, err := os.ReadFile(full)
+		if _, err := output.file.Seek(0, 0); err != nil {
+			output.cleanup()
+			continue
+		}
+		data, err := ioReadAll(bufio.NewReader(output.file))
+		output.cleanup()
 		if err != nil {
 			continue
 		}
 		outputs = append(outputs, model.SidecarOutput{Path: spec.Path, DataB64: util.EncodeB64(data)})
-		_ = os.Remove(full)
 	}
 	return outputs
 }
@@ -1107,19 +869,19 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	}
 	defer os.Remove(spjPath)
 
-	inputPath, err := writeTempFile(ws.RootDir, "spj-input-*", req.Stdin)
+	inputPath, err := writeTempFile(filepath.Join(ws.RootDir, ".tmp"), "spj-input-*", req.Stdin)
 	if err != nil {
 		return false, nil, err
 	}
 	defer os.Remove(inputPath)
 
-	solutionPath, err := writeTempFile(ws.RootDir, "spj-solution-*", req.ExpectedStdout)
+	solutionPath, err := writeTempFile(filepath.Join(ws.RootDir, ".tmp"), "spj-solution-*", req.ExpectedStdout)
 	if err != nil {
 		return false, nil, err
 	}
 	defer os.Remove(solutionPath)
 
-	outputPath, err := writeTempFile(ws.RootDir, "spj-output-*", userStdout)
+	outputPath, err := writeTempFile(filepath.Join(ws.RootDir, ".tmp"), "spj-output-*", userStdout)
 	if err != nil {
 		return false, nil, err
 	}
