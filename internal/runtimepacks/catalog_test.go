@@ -141,3 +141,17 @@ func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 		t.Fatalf("smoke arg = %q", build.BuildArgs["SMOKE_COMMAND"])
 	}
 }
+
+func TestImageSpecDockerBuildCarriesInstallScript(t *testing.T) {
+	spec := ImageSpec{
+		Name:          "type-z",
+		BaseImage:     "debian:bookworm-slim",
+		Languages:     []string{"kotlin"},
+		InstallScript: []string{"echo installing", "echo done"},
+	}
+
+	build := spec.DockerBuild("/workspace/aonohako", "ghcr.io/seo-rii/aonohako")
+	if build.BuildArgs["INSTALL_SCRIPT"] != "echo installing\necho done" {
+		t.Fatalf("install script arg = %q", build.BuildArgs["INSTALL_SCRIPT"])
+	}
+}

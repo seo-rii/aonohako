@@ -47,8 +47,11 @@ func MaterializeBase64Files(root string, files map[string]string, mode os.FileMo
 
 func BaseEnv() []string {
 	return []string{
-		"PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin",
+		"PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
 		"LANG=C.UTF-8",
 		"LC_ALL=C.UTF-8",
+		"RUSTUP_HOME=/usr/local/rustup",
+		"CARGO_HOME=/usr/local/cargo",
+		"DOTNET_ROOT=/opt/dotnet",
 	}
 }

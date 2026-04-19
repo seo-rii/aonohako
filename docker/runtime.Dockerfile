@@ -20,6 +20,7 @@ ARG LANGUAGES=
 ARG APT_PACKAGES=
 ARG PIP_PACKAGES=
 ARG NPM_PACKAGES=
+ARG INSTALL_SCRIPT=
 ARG SMOKE_COMMAND=
 
 RUN apt-get update && \
@@ -35,6 +36,12 @@ RUN if [[ -n "${PIP_PACKAGES}" ]]; then \
 
 RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
       npm install --global ${NPM_PACKAGES}; \
+    fi
+
+COPY --from=builder /usr/local/go /usr/local/go
+
+RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
+      /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
     fi
 
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako

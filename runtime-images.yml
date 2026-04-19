@@ -1,17 +1,24 @@
 languages:
   plain:
+    install:
+      apt:
+        - gcc
+        - g++
+        - make
     smoke:
       command:
         - /bin/sh
         - -c
         - |
-          printf '#!/bin/sh\necho ok\n' > Main
-          chmod +x Main
+          printf '%s\n' '#include <stdio.h>' 'int main(void) {' '  puts("ok");' '  return 0;' '}' > Main.c
+          gcc -O2 -pipe --static Main.c -o Main
           [ "$(./Main)" = ok ]
+
   python:
     install:
       apt:
         - python3
+        - python3-pip
         - python3-numpy
     smoke:
       command:
@@ -23,6 +30,20 @@ languages:
           total = int(np.arange(5).sum())
           pathlib.Path("same-folder.txt").write_text(str(total), encoding="utf-8")
           assert pathlib.Path("same-folder.txt").read_text(encoding="utf-8") == "10"
+
+  pypy:
+    install:
+      apt:
+        - pypy3
+    smoke:
+      command:
+        - pypy3
+        - -c
+        - |
+          from pathlib import Path
+          Path("same-folder.txt").write_text("ok", encoding="utf-8")
+          print(Path("same-folder.txt").read_text(encoding="utf-8"))
+
   java:
     install:
       apt:
@@ -33,22 +54,271 @@ languages:
         - bash
         - -lc
         - |
-          cat <<'EOF' > Main.java
-          public class Main {
-            public static void main(String[] args) {
-              System.out.println("ok");
-            }
-          }
-          EOF
-          javac Main.java
+          printf '%s\n' 'public class Main {' '  public static void main(String[] args) {' '    System.out.println("ok");' '  }' '}' > Main.java
+          javac --release 11 Main.java
           java Main | grep '^ok$'
+
+  javascript:
+    install:
+      apt:
+        - nodejs
+        - npm
+    smoke:
+      command:
+        - node
+        - -e
+        - |
+          const fs = require('fs');
+          fs.writeFileSync('same-folder.txt', 'ok');
+          console.log(fs.readFileSync('same-folder.txt', 'utf8'));
+
+  typescript:
+    install:
+      apt:
+        - nodejs
+        - npm
+      npm:
+        - typescript
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' "import { writeFileSync, readFileSync } from 'fs';" "writeFileSync('same-folder.txt', 'ok');" "console.log(readFileSync('same-folder.txt', 'utf8'));" > Main.ts
+          tsc Main.ts --module commonjs --target es2019 --outDir dist
+          node dist/Main.js | grep '^ok$'
+
+  ruby:
+    install:
+      apt:
+        - ruby-full
+    smoke:
+      command:
+        - ruby
+        - -e
+        - |
+          File.write("same-folder.txt", "ok")
+          puts File.read("same-folder.txt")
+
+  php:
+    install:
+      apt:
+        - php
+    smoke:
+      command:
+        - php
+        - -r
+        - |
+          file_put_contents("same-folder.txt", "ok");
+          echo file_get_contents("same-folder.txt"), PHP_EOL;
+
+  lua:
+    install:
+      apt:
+        - lua5.4
+    smoke:
+      command:
+        - lua5.4
+        - -e
+        - |
+          local f = assert(io.open("same-folder.txt", "w"))
+          f:write("ok")
+          f:close()
+          local r = assert(io.open("same-folder.txt", "r"))
+          print(r:read("*a"))
+          r:close()
+
+  perl:
+    install:
+      apt:
+        - perl
+    smoke:
+      command:
+        - perl
+        - -e
+        - |
+          open my $fh, '>', 'same-folder.txt' or die $!;
+          print {$fh} "ok";
+          close $fh;
+          open my $rfh, '<', 'same-folder.txt' or die $!;
+          print scalar <$rfh>;
+          close $rfh;
+
+  elixir:
+    install:
+      apt:
+        - elixir
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'File.write!("same-folder.txt", "ok")' 'IO.puts(File.read!("same-folder.txt"))' > Main.exs
+          env ERL_AFLAGS='+MIscs 128 +S 1:1 +A 1' elixir Main.exs | grep '^ok$'
+
+  haskell:
+    install:
+      apt:
+        - ghc
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'main :: IO ()' 'main = putStrLn "ok"' > Main.hs
+          ghc -O2 -o Main Main.hs
+          ./Main | grep '^ok$'
+
+  ocaml:
+    install:
+      apt:
+        - ocaml-nox
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'print_endline "ok"' > Main.ml
+          ocamlopt -o Main Main.ml
+          env OCAMLRUNPARAM='s=32k' ./Main | grep '^ok$'
+
+  go:
+    install:
+      apt:
+        - gcc
+      script:
+        - ln -sfn /usr/local/go/bin/go /usr/local/bin/go
+        - ln -sfn /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'package main' 'import "fmt"' 'func main() { fmt.Println("ok") }' > main.go
+          env -u GOROOT GOENV=off go build -o Main main.go
+          ./Main | grep '^ok$'
+
+  rust:
+    install:
+      apt:
+        - curl
+        - gcc
+        - g++
+      script:
+        - export RUSTUP_HOME=/usr/local/rustup
+        - export CARGO_HOME=/usr/local/cargo
+        - export PATH=/usr/local/cargo/bin:$PATH
+        - mkdir -p "$RUSTUP_HOME" "$CARGO_HOME"
+        - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
+        - ln -sfn /usr/local/cargo/bin/rustc /usr/local/bin/rustc
+        - ln -sfn /usr/local/cargo/bin/cargo /usr/local/bin/cargo
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'fn main() {' '    println!("ok");' '}' > main.rs
+          rustc --edition 2024 -O -o Main main.rs
+          ./Main | grep '^ok$'
+
+  kotlin:
+    install:
+      apt:
+        - curl
+        - xz-utils
+      script:
+        - export KONAN_VERSION=1.8.10
+        - curl -fsSL "https://github.com/JetBrains/kotlin/releases/download/v${KONAN_VERSION}/kotlin-native-linux-x86_64-${KONAN_VERSION}.tar.gz" -o /tmp/kotlin-native.tar.gz
+        - mkdir -p /opt
+        - tar -xzf /tmp/kotlin-native.tar.gz -C /opt
+        - ln -sfn "/opt/kotlin-native-linux-x86_64-${KONAN_VERSION}/bin/kotlinc-native" /usr/local/bin/kotlinc-native
+        - ln -sfn "/opt/kotlin-native-linux-x86_64-${KONAN_VERSION}/bin/run_konan" /usr/local/bin/run_konan
+        - rm -f /tmp/kotlin-native.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          mkdir -p /tmp/.konan /tmp/.konan.home
+          printf '%s\n' 'fun main() {' '  println("ok")' '}' > Main.kt
+          env KONAN_DATA_DIR=/tmp/.konan KONAN_USER_HOME=/tmp/.konan.home kotlinc-native Main.kt -o Main
+          ./Main.kexe | grep '^ok$'
+
+  csharp:
+    install:
+      apt:
+        - curl
+        - libicu72
+      script:
+        - mkdir -p /opt/dotnet
+        - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+        - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
+        - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
+        - rm -f /tmp/dotnet-install.sh
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          mkdir -p /tmp/csharp-home /tmp/csharp-packages
+          env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet new console --force --no-restore --verbosity quiet -n App -o app
+          printf '%s\n' 'Console.WriteLine("ok");' > app/Program.cs
+          env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish app --configuration Release -o publish
+          dotnet ./publish/App.dll | grep '^ok$'
+
+  uhmlang:
+    install:
+      apt:
+        - git
+      script:
+        - ln -sfn /usr/local/go/bin/go /usr/local/bin/go
+        - ln -sfn /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+        - git clone --depth=1 https://github.com/rycont/umjunsik-lang.git /tmp/umjunsik-lang
+        - cd /tmp/umjunsik-lang/umjunsik-lang-go && env -u GOROOT GOENV=off go build -o /usr/local/bin/umjunsik-lang-go .
+        - ln -sfn /usr/local/bin/umjunsik-lang-go /usr/bin/umjunsik-lang-go
+        - rm -rf /tmp/umjunsik-lang
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' '어떻게' '식........... ........ㅋ' '이 사람이름이냐ㅋㅋ' > Main.uhm
+          /usr/bin/umjunsik-lang-go Main.uhm | grep '^X$'
+
 profiles:
   type-a:
     base_image: debian:bookworm-slim
     languages:
       - plain
       - python
+      - pypy
+      - ruby
+      - php
+      - lua
+      - perl
+      - elixir
+      - haskell
+      - ocaml
   type-b:
     base_image: debian:bookworm-slim
     languages:
       - java
+      - javascript
+      - typescript
+  type-c:
+    base_image: debian:bookworm-slim
+    languages:
+      - go
+      - rust
+  type-d:
+    base_image: debian:bookworm-slim
+    languages:
+      - kotlin
+  type-e:
+    base_image: debian:bookworm-slim
+    languages:
+      - csharp
+  type-f:
+    base_image: debian:bookworm-slim
+    languages:
+      - uhmlang

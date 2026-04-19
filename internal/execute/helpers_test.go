@@ -105,6 +105,8 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		wantFirst string
 	}{
 		{"binary", "/tmp/a.out", "/tmp/a.out"},
+		{"ocaml", "/tmp/sol", "env"},
+		{"elixir", "/tmp/sol.exs", "env"},
 		{"python", "/tmp/sol.py", "python3"},
 		{"pypy", "/tmp/sol.py", "pypy3"},
 		{"javascript", "/tmp/sol.js", "node"},
@@ -136,8 +138,23 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			if !found {
 				t.Errorf("buildCommand(%s) missing path %q in %v", tc.lang, tc.path, args)
 			}
+			if tc.lang == "ocaml" && !containsArg(args, "OCAMLRUNPARAM=s=32k") {
+				t.Errorf("buildCommand(%s) missing OCAMLRUNPARAM in %v", tc.lang, args)
+			}
+			if tc.lang == "elixir" && !containsArg(args, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1") {
+				t.Errorf("buildCommand(%s) missing ERL_AFLAGS in %v", tc.lang, args)
+			}
 		})
 	}
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildCommandCSharpDLL(t *testing.T) {
