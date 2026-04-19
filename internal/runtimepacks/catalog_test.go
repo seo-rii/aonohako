@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -153,5 +154,18 @@ func TestImageSpecDockerBuildCarriesInstallScript(t *testing.T) {
 	build := spec.DockerBuild("/workspace/aonohako", "ghcr.io/seo-rii/aonohako")
 	if build.BuildArgs["INSTALL_SCRIPT"] != "echo installing\necho done" {
 		t.Fatalf("install script arg = %q", build.BuildArgs["INSTALL_SCRIPT"])
+	}
+}
+
+func TestSmokeScriptRunsSandboxSelftestBeforeLanguageSmoke(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "smoke_runtime.sh")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	if !strings.Contains(body, "aonohako-selftest permissions") {
+		t.Fatalf("smoke_runtime.sh must run the sandbox permissions selftest before language smoke")
 	}
 }

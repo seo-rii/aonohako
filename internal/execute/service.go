@@ -478,37 +478,6 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		}
 	}
 
-	policies := make([]sandbox.PathPolicy, 0, 32)
-	seenPolicies := make(map[string]struct{}, 32)
-	addPolicy := func(path, access string) {
-		if path == "" {
-			return
-		}
-		if _, err := os.Lstat(path); err != nil {
-			return
-		}
-		key := access + "\x00" + path
-		if _, ok := seenPolicies[key]; ok {
-			return
-		}
-		seenPolicies[key] = struct{}{}
-		policies = append(policies, sandbox.PathPolicy{Path: path, Access: access})
-	}
-	for _, path := range []string{"/usr", "/bin", "/sbin", "/lib", "/lib64", "/opt"} {
-		addPolicy(path, "runtime")
-	}
-	for _, path := range []string{"/etc/ssl", "/etc/pki", "/etc/ca-certificates", "/etc/java-17-openjdk", "/etc/dotnet", "/etc/fonts", "/etc/xml"} {
-		addPolicy(path, "readonly")
-	}
-	addPolicy(ws.BoxDir, "box")
-	for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
-		addPolicy(dir, "scratch")
-	}
-	addPolicy("/dev/null", "devrw")
-	addPolicy("/dev/zero", "devread")
-	addPolicy("/dev/random", "devread")
-	addPolicy("/dev/urandom", "devread")
-
 	reqPath := filepath.Join(ws.RootDir, ".tmp", "sandbox-request.json")
 	helperReq := sandbox.ExecRequest{
 		Command:       finalCommand,
@@ -516,7 +485,6 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		Env:           innerEnv,
 		Limits:        req.Limits,
 		EnableNetwork: req.EnableNetwork,
-		Paths:         policies,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
@@ -531,36 +499,15 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		return execResult{Status: model.RunStatusInitFail, Reason: "resolve helper failed: " + err.Error()}
 	}
 
-	cloneFlags := uintptr(syscall.CLONE_NEWUSER | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUTS)
-	if !req.EnableNetwork {
-		cloneFlags |= syscall.CLONE_NEWNET
-	}
-	hostUID := os.Geteuid()
-	hostGID := os.Getegid()
-	if hostUID == 0 {
-		hostUID = 65532
-		hostGID = 65532
-	}
-
 	cmd := exec.CommandContext(ctx, helperPath)
 	cmd.Dir = ws.BoxDir
 	cmd.Stdin = strings.NewReader(req.Stdin)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid:    true,
-		Pdeathsig:  syscall.SIGKILL,
-		Cloneflags: cloneFlags,
-		Credential: &syscall.Credential{Uid: 65532, Gid: 65532},
-		UidMappings: []syscall.SysProcIDMap{{
-			ContainerID: 65532,
-			HostID:      hostUID,
-			Size:        1,
-		}},
-		GidMappings: []syscall.SysProcIDMap{{
-			ContainerID: 65532,
-			HostID:      hostGID,
-			Size:        1,
-		}},
-		GidMappingsEnableSetgroups: false,
+		Setpgid:   true,
+		Pdeathsig: syscall.SIGKILL,
+	}
+	if os.Geteuid() == 0 {
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
 	}
 	cmd.Env = append(append(baseEnv[:0:0], baseEnv...), sandbox.HelperModeEnv+"="+sandbox.HelperModeExec, sandbox.RequestPathEnv+"="+reqPath)
 

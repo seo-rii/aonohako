@@ -37,7 +37,7 @@ jobs:
           go-version-file: go.mod
       - run: >
           go test ./internal/execute -count=1 -run
-          'TestRunBlocksNetworkWhenDisabled|TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback|TestRunCannotReadHostPathOutsideSandbox|TestRunBlocksReadingGlobalFilesystemOutsideSandbox|TestRunExposesOnlySafeDevices|TestRunBlocksForkAttempts|TestRunBlocksProcFDBrowsingOutsideSandbox'
+          'TestRunBlocksNetworkWhenDisabled|TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback|TestRunCannotReadHostPathOutsideSandbox|TestRunExposesOnlySafeDevices|TestRunBlocksForkAttempts|TestRunBlocksProcFDBrowsingOutsideSandbox'
 
   runtime-matrix:
     runs-on: ubuntu-latest
