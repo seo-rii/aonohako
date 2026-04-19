@@ -27,7 +27,9 @@ import (
 )
 
 const (
-	maxReturnBytes               = 3000
+	defaultMaxOutputBytes        = 64 << 10
+	hardMaxOutputBytes           = 8 << 20
+	sandboxThreadLimit           = 512
 	maxBinaryFileBytes           = 16 << 20
 	maxBinaryTotalBytes          = 48 << 20
 	maxCapturedFileBytes         = 8 << 20
@@ -41,6 +43,27 @@ type Hooks struct {
 	OnLog   func(stream, msg string)
 }
 
+type cappedBuffer struct {
+	limit int
+	buf   bytes.Buffer
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if remaining := b.limit - b.buf.Len(); remaining > 0 {
+		if len(p) > remaining {
+			p = p[:remaining]
+		}
+		if _, err := b.buf.Write(p); err != nil {
+			return 0, err
+		}
+	}
+	return len(p), nil
+}
+
+func (b *cappedBuffer) Bytes() []byte {
+	return b.buf.Bytes()
+}
+
 type Service struct{}
 
 func New() *Service {
@@ -52,6 +75,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	capturedOutputLimit := outputLimitBytes(req)
 	if len(req.Binaries) == 0 {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "no binaries"}
 	}
@@ -77,7 +101,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "empty command"}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks)
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit)
 
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
@@ -143,18 +167,18 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 
 	var outResp, errResp string
 	if status == model.RunStatusWA || status == model.RunStatusRE || (status == model.RunStatusTLE && req.IgnoreTLE) {
-		outResp = clipUTF8(fullOut, maxReturnBytes)
+		outResp = clipUTF8(fullOut, capturedOutputLimit)
 	}
 	if res.ExitCode != nil && *res.ExitCode != 0 {
-		errResp = clipUTF8(fullErr, maxReturnBytes)
+		errResp = clipUTF8(fullErr, capturedOutputLimit)
 	}
 
 	if hooks.OnLog != nil {
 		if len(fullOut) > 0 {
-			hooks.OnLog("stdout", clipUTF8(fullOut, 4096))
+			hooks.OnLog("stdout", clipUTF8(fullOut, capturedOutputLimit))
 		}
 		if len(fullErr) > 0 {
-			hooks.OnLog("stderr", clipUTF8(fullErr, 4096))
+			hooks.OnLog("stderr", clipUTF8(fullErr, capturedOutputLimit))
 		}
 	}
 
@@ -389,16 +413,16 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	}
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int) execResult {
 	limits := req.Limits
 	timeMs := max(1, limits.TimeMs)
 	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
 	defer cancel()
 
-	return executeSandboxCommand(ctx, ws, command, req, hooks)
+	return executeSandboxCommand(ctx, ws, command, req, hooks, outputLimitBytes)
 }
 
-func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks) execResult {
+func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int) execResult {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
@@ -484,6 +508,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		Dir:           ws.BoxDir,
 		Env:           innerEnv,
 		Limits:        req.Limits,
+		ThreadLimit:   sandboxThreadLimit,
 		EnableNetwork: req.EnableNetwork,
 	}
 	rawReq, err := json.Marshal(helperReq)
@@ -511,7 +536,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 	cmd.Env = append(append(baseEnv[:0:0], baseEnv...), sandbox.HelperModeEnv+"="+sandbox.HelperModeExec, sandbox.RequestPathEnv+"="+reqPath)
 
-	var stdoutBuf, stderrBuf bytes.Buffer
+	stdoutBuf := cappedBuffer{limit: outputLimitBytes}
+	stderrBuf := cappedBuffer{limit: outputLimitBytes}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "stdout pipe failed: " + err.Error()}
@@ -604,7 +630,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
 		result.Status = model.RunStatusInitFail
-		result.Reason = clipUTF8(result.Stderr, maxReturnBytes)
+		result.Reason = clipUTF8(result.Stderr, outputLimitBytes)
 	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		result.Status = model.RunStatusTLE
@@ -612,10 +638,27 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	return result
 }
 
-func ioCopy(dst *bytes.Buffer, src any) (int64, error) {
+func ioCopy(dst interface{ Write([]byte) (int, error) }, src any) (int64, error) {
 	switch r := src.(type) {
 	case *os.File:
-		return dst.ReadFrom(r)
+		var n int64
+		buf := make([]byte, 16*1024)
+		for {
+			k, err := r.Read(buf)
+			if k > 0 {
+				nn, _ := dst.Write(buf[:k])
+				n += int64(nn)
+			}
+			if err != nil {
+				if errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "file already closed") {
+					return n, nil
+				}
+				if err.Error() == "EOF" {
+					return n, nil
+				}
+				return n, nil
+			}
+		}
 	case interface{ Read([]byte) (int, error) }:
 		var n int64
 		buf := make([]byte, 16*1024)
@@ -641,6 +684,16 @@ func ioCopy(dst *bytes.Buffer, src any) (int64, error) {
 	default:
 		return 0, nil
 	}
+}
+
+func outputLimitBytes(req *model.RunRequest) int {
+	if req == nil || req.Limits.OutputBytes <= 0 {
+		return defaultMaxOutputBytes
+	}
+	if req.Limits.OutputBytes > hardMaxOutputBytes {
+		return hardMaxOutputBytes
+	}
+	return req.Limits.OutputBytes
 }
 
 func firstImagePath(paths []model.OutputFile) string {
@@ -841,7 +894,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	spjReq := &model.RunRequest{Lang: spjLang, Limits: req.Limits, EnableNetwork: false}
 	args := buildCommand(spjPath, spjLang, spjReq)
 	args = append(args, inputPath, solutionPath, outputPath)
-	res := runCommandWithSandbox(ctx, ws, args, &model.RunRequest{Limits: req.Limits, EnableNetwork: false, Stdin: userStdout}, Hooks{})
+	res := runCommandWithSandbox(ctx, ws, args, &model.RunRequest{Limits: req.Limits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(req))
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
