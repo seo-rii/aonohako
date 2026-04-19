@@ -6,5 +6,7 @@ if [[ -z "${AONOHAKO_SMOKE_COMMAND:-}" ]]; then
   exit 1
 fi
 
+aonohako-selftest permissions
+
 IFS=$'\t' read -r -a smoke_parts <<< "${AONOHAKO_SMOKE_COMMAND}"
 exec "${smoke_parts[@]}"

@@ -10,6 +10,8 @@ COPY . .
 ARG TARGETOS TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako ./cmd/server
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako-selftest ./cmd/selftest
 
 FROM ${RUNTIME_BASE} AS runtime
 
@@ -45,7 +47,18 @@ RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
     fi
 
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
+COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
+
+RUN install -d -m 0700 /var/aonohako /var/aonohako/protected && \
+    printf 'runtime-owned\n' > /var/aonohako/protected/probe.txt && \
+    chmod 0700 /var/aonohako /var/aonohako/protected && \
+    chmod 0600 /var/aonohako/protected/probe.txt && \
+    chmod 0700 /root && \
+    if [[ -d /var/log ]]; then chmod 0700 /var/log; fi && \
+    if [[ -d /var/spool ]]; then chmod 0700 /var/spool; fi && \
+    if [[ -d /var/mail ]]; then chmod 0700 /var/mail; fi && \
+    if [[ -d /etc/ssl/private ]]; then chmod 0700 /etc/ssl/private; fi
 
 ENV PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
     LANG=C.UTF-8 \

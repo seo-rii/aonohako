@@ -89,3 +89,35 @@ func TestRuntimeDockerfileCopiesGoBeforeStrictInstallScript(t *testing.T) {
 		t.Fatalf("runtime.Dockerfile must copy /usr/local/go before INSTALL_SCRIPT so go-based installers work")
 	}
 }
+
+func TestRuntimeDockerfileCopiesSandboxSelftestBinary(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	if !strings.Contains(body, "go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako-selftest ./cmd/selftest") {
+		t.Fatalf("runtime.Dockerfile must build the sandbox selftest binary")
+	}
+	if !strings.Contains(body, "COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest") {
+		t.Fatalf("runtime.Dockerfile must copy the sandbox selftest binary into runtime images")
+	}
+}
+
+func TestRuntimeDockerfileCreatesProtectedRootOwnedSandboxPath(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	if !strings.Contains(body, "/var/aonohako/protected") {
+		t.Fatalf("runtime.Dockerfile must create a protected runtime-owned path for sandbox permission checks")
+	}
+	if !strings.Contains(body, "chmod 0700 /var/aonohako /var/aonohako/protected") {
+		t.Fatalf("runtime.Dockerfile must restrict the protected runtime path to root")
+	}
+}
