@@ -24,6 +24,13 @@ func TestDefaultMaxActiveRuns(t *testing.T) {
 	}
 }
 
+func TestDefaultMaxActiveRunsCloudRunIsOne(t *testing.T) {
+	t.Setenv("K_SERVICE", "aonohako")
+	if got := defaultMaxActiveRuns(); got != 1 {
+		t.Fatalf("expected Cloud Run default max active runs to be 1, got %d", got)
+	}
+}
+
 func TestLoadUsesEnvAndFallbacks(t *testing.T) {
 	prevPort := os.Getenv("PORT")
 	prevActive := os.Getenv("AONOHAKO_MAX_ACTIVE_RUNS")

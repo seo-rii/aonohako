@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"aonohako/internal/model"
+	"aonohako/internal/platform"
 	"aonohako/internal/profiles"
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
@@ -53,7 +54,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "no binaries"}
 	}
 
-	workDir, err := os.MkdirTemp("", "aonohako-run-*")
+	workDir, err := util.CreateWorkDir("aonohako-run-*")
 	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "mkdtemp failed: " + err.Error()}
 	}
@@ -396,6 +397,205 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
 
+	useDirectMode := platform.IsCloudRun()
+	for _, key := range []string{"AONOHAKO_UNSHARE_ENABLED", "GO_UNSHARE_ENABLED"} {
+		raw := strings.TrimSpace(os.Getenv(key))
+		if raw == "" {
+			continue
+		}
+		switch strings.ToLower(raw) {
+		case "0", "false", "no", "off":
+			useDirectMode = true
+		}
+		break
+	}
+	if useDirectMode && !req.EnableNetwork {
+		networkPolicy := strings.ToLower(strings.TrimSpace(os.Getenv("AONOHAKO_NETWORK_POLICY")))
+		if networkPolicy == "" {
+			networkPolicy = strings.ToLower(strings.TrimSpace(os.Getenv("GO_NETWORK_POLICY")))
+		}
+		if networkPolicy != "blocked" {
+			return execResult{
+				Status: model.RunStatusInitFail,
+				Reason: "direct execution requires AONOHAKO_NETWORK_POLICY=blocked when enable_network is false",
+			}
+		}
+	}
+
+	baseEnv := []string{
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"LANG=C.UTF-8",
+		"LC_ALL=C.UTF-8",
+	}
+	innerEnv := append(append(baseEnv[:0:0], baseEnv...), security.ThreadLimitEnv()...)
+	innerEnv = append(innerEnv, security.WorkspaceScopedEnv(ws.RootDir)...)
+	if !req.EnableNetwork {
+		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
+	}
+
+	if useDirectMode {
+		finalArgs := append([]string(nil), command...)
+		if _, err := exec.LookPath("taskset"); err == nil {
+			finalArgs = append([]string{"taskset", "-c", "0"}, finalArgs...)
+		}
+		if _, err := exec.LookPath("prlimit"); err == nil {
+			timeMs := max(1, req.Limits.TimeMs)
+			cpuSec := max(1, (timeMs+999)/1000) + 1
+			asBytes := int64(addressSpaceLimitBytes(max(16, req.Limits.MemoryMB)))
+			prlimitArgs := []string{
+				"prlimit",
+				fmt.Sprintf("--cpu=%d:%d", cpuSec, cpuSec),
+				fmt.Sprintf("--as=%d:%d", asBytes, asBytes),
+				"--stack=unlimited:unlimited",
+				"--nofile=64:64",
+				"--fsize=33554432:33554432",
+				"--",
+			}
+			finalArgs = append(prlimitArgs, finalArgs...)
+		}
+
+		if os.Geteuid() == 0 {
+			const sandboxUID = 65532
+			const sandboxGID = 65532
+			if err := os.Chmod(ws.RootDir, 0o755); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+			}
+			for _, dir := range []string{
+				ws.BoxDir,
+				filepath.Join(ws.RootDir, ".home"),
+				filepath.Join(ws.RootDir, ".tmp"),
+				filepath.Join(ws.RootDir, ".cache"),
+				filepath.Join(ws.RootDir, ".mpl"),
+				filepath.Join(ws.RootDir, ".pip-cache"),
+				filepath.Join(ws.RootDir, "__img__"),
+			} {
+				if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
+					return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
+				}
+			}
+			if err := os.Chmod(ws.BoxDir, 0o777|os.ModeSticky); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+			}
+			for _, dir := range []string{
+				filepath.Join(ws.RootDir, ".home"),
+				filepath.Join(ws.RootDir, ".tmp"),
+				filepath.Join(ws.RootDir, ".cache"),
+				filepath.Join(ws.RootDir, ".mpl"),
+				filepath.Join(ws.RootDir, ".pip-cache"),
+				filepath.Join(ws.RootDir, "__img__"),
+			} {
+				if err := os.Chmod(dir, 0o700); err != nil {
+					return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+				}
+			}
+		}
+
+		cmd := exec.CommandContext(ctx, finalArgs[0], finalArgs[1:]...)
+		cmd.Dir = ws.BoxDir
+		cmd.Stdin = strings.NewReader(req.Stdin)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if os.Geteuid() == 0 {
+			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
+		}
+		cmd.Env = innerEnv
+
+		var stdoutBuf, stderrBuf bytes.Buffer
+		stdoutPipe, err := cmd.StdoutPipe()
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stdout pipe failed: " + err.Error()}
+		}
+		stderrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stderr pipe failed: " + err.Error()}
+		}
+		if err := cmd.Start(); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
+		}
+
+		imageDone := make(chan struct{})
+		if imgPath := firstImagePath(req.SidecarOutputs); imgPath != "" {
+			go func() {
+				streamImageEvents(ctx, ws, imgPath, hooks.OnImage)
+				close(imageDone)
+			}()
+		} else {
+			close(imageDone)
+		}
+
+		doneOut := make(chan struct{})
+		doneErr := make(chan struct{})
+		go func() {
+			_, _ = ioCopy(&stdoutBuf, stdoutPipe)
+			close(doneOut)
+		}()
+		go func() {
+			_, _ = ioCopy(&stderrBuf, stderrPipe)
+			close(doneErr)
+		}()
+
+		wallStart := timing.MonotonicNow()
+		waitCh := make(chan error, 1)
+		go func() {
+			waitCh <- cmd.Wait()
+		}()
+		cpuSampler := timing.StartProcessCPUSampler(cmd.Process.Pid)
+		cpuBaselineNs, _ := timing.ProcessCPUTimeNs(cmd.Process.Pid)
+
+		result := execResult{Status: "OK"}
+		select {
+		case <-ctx.Done():
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			<-waitCh
+			result.Status = model.RunStatusTLE
+		case err := <-waitCh:
+			if err != nil {
+				result.Status = model.RunStatusRE
+			}
+		}
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+
+		<-doneOut
+		<-doneErr
+		<-imageDone
+
+		result.WallTimeMs = timing.SinceMillis(wallStart)
+		cpuEndNs := cpuSampler.Stop()
+		if cpuBaselineNs > 0 && cpuEndNs > cpuBaselineNs {
+			result.CPUTimeMs = timing.MilliFromNanoseconds(cpuEndNs - cpuBaselineNs)
+		} else {
+			result.CPUTimeMs = timing.MilliFromNanoseconds(cpuEndNs)
+		}
+		result.Stdout = stdoutBuf.Bytes()
+		result.Stderr = stderrBuf.Bytes()
+
+		if ps := cmd.ProcessState; ps != nil {
+			if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
+				if ws.Exited() {
+					c := ws.ExitStatus()
+					result.ExitCode = &c
+				}
+				if ws.Signaled() {
+					if result.Status == "OK" {
+						result.Status = model.RunStatusRE
+					}
+					if ws.Signal() == syscall.SIGKILL || ws.Signal() == syscall.SIGXCPU {
+						result.Status = model.RunStatusTLE
+					}
+				}
+			}
+			if sysu, ok := ps.SysUsage().(*syscall.Rusage); ok {
+				result.MemoryKB = sysu.Maxrss
+			}
+			if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > result.CPUTimeMs {
+				result.CPUTimeMs = usageCPU
+			}
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			result.Status = model.RunStatusTLE
+		}
+		return result
+	}
+
 	unsharePath, err := exec.LookPath("unshare")
 	if err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires unshare: " + err.Error()}
@@ -454,7 +654,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	cpuReadyPath := filepath.Join(ws.RootDir, ".tmp", "cpu-start.ready")
 	innerCommand := ": > " + shellQuote("/tmp/cpu-start.ready") + "; cd /work/box && exec " + strings.Join(commandLine, " ")
 
-	innerEnv := append([]string{
+	innerEnv = append([]string{
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"LANG=C.UTF-8",
 		"LC_ALL=C.UTF-8",
@@ -574,11 +774,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	cmd.Dir = ws.BoxDir
 	cmd.Stdin = strings.NewReader(req.Stdin)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Env = []string{
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"LANG=C.UTF-8",
-		"LC_ALL=C.UTF-8",
-	}
+	cmd.Env = baseEnv
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -657,6 +853,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			result.Status = model.RunStatusRE
 		}
 	}
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 
 	<-doneOut
 	<-doneErr
