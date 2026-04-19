@@ -115,6 +115,6 @@ Runtime images are generated from [`runtime-images.yml`](../runtime-images.yml):
 
 | Image | Languages | Purpose |
 |---|---|---|
-| `type-a` | `c`, `cpp`, `python` | Production runtime group with Python `numpy` support |
+| `type-a` | `plain`, `python` | Production runtime group for native binaries plus Python `numpy` support |
 | `type-b` | `java` | Production Java 17 runtime group |
 | `ci-<lang>` | one language each | CI-only smoke validation image |
