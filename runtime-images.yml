@@ -1,0 +1,78 @@
+languages:
+  c:
+    install:
+      apt:
+        - bash
+        - build-essential
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat <<'EOF' > Main.c
+          #include <stdio.h>
+          int main(void) { puts("ok"); return 0; }
+          EOF
+          gcc Main.c -O2 -o Main
+          ./Main | grep '^ok$'
+  cpp:
+    install:
+      apt:
+        - bash
+        - build-essential
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat <<'EOF' > Main.cpp
+          #include <iostream>
+          int main() { std::cout << "ok\n"; }
+          EOF
+          g++ Main.cpp -O2 -std=c++17 -o Main
+          ./Main | grep '^ok$'
+  python:
+    install:
+      apt:
+        - python3
+        - python3-numpy
+    smoke:
+      command:
+        - python3
+        - -c
+        - |
+          import pathlib
+          import numpy as np
+          total = int(np.arange(5).sum())
+          pathlib.Path("same-folder.txt").write_text(str(total), encoding="utf-8")
+          assert pathlib.Path("same-folder.txt").read_text(encoding="utf-8") == "10"
+  java:
+    install:
+      apt:
+        - bash
+        - openjdk-17-jdk-headless
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat <<'EOF' > Main.java
+          public class Main {
+            public static void main(String[] args) {
+              System.out.println("ok");
+            }
+          }
+          EOF
+          javac Main.java
+          java Main | grep '^ok$'
+profiles:
+  type-a:
+    base_image: debian:bookworm-slim
+    languages:
+      - c
+      - cpp
+      - python
+  type-b:
+    base_image: debian:bookworm-slim
+    languages:
+      - java

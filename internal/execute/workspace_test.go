@@ -1,0 +1,91 @@
+package execute
+
+import (
+	"os"
+	"path/filepath"
+	"syscall"
+	"testing"
+
+	"aonohako/internal/model"
+)
+
+func TestPrepareWorkspaceDirsCreatesWritableBox(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	info, err := os.Stat(ws.BoxDir)
+	if err != nil {
+		t.Fatalf("stat box dir: %v", err)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatalf("stat sys payload has unexpected type %T", info.Sys())
+	}
+	if info.Mode().Perm() != 0o777 || stat.Mode&0o1000 == 0 {
+		t.Fatalf("box dir mode = %v, want sticky writable directory", info.Mode())
+	}
+}
+
+func TestMaterializeFilesStoresProgramsInsideBoxWithImmutableModes(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	req := &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{
+			{Name: "Main", DataB64: b64("#!/bin/sh\necho ok\n"), Mode: "exec"},
+			{Name: "input.txt", DataB64: b64("sample"), Mode: ""},
+		},
+	}
+
+	primary, _, err := materializeFiles(ws, req)
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+
+	if filepath.Dir(primary) != ws.BoxDir {
+		t.Fatalf("primary path dir = %q, want %q", filepath.Dir(primary), ws.BoxDir)
+	}
+
+	mainInfo, err := os.Stat(filepath.Join(ws.BoxDir, "Main"))
+	if err != nil {
+		t.Fatalf("stat Main: %v", err)
+	}
+	if mainInfo.Mode().Perm() != 0o555 {
+		t.Fatalf("Main mode = %v, want 0555", mainInfo.Mode())
+	}
+
+	dataInfo, err := os.Stat(filepath.Join(ws.BoxDir, "input.txt"))
+	if err != nil {
+		t.Fatalf("stat input.txt: %v", err)
+	}
+	if dataInfo.Mode().Perm() != 0o444 {
+		t.Fatalf("input.txt mode = %v, want 0444", dataInfo.Mode())
+	}
+}
+
+func TestCaptureFileOutputRejectsSymlink(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	target := filepath.Join(workDir, "outside.txt")
+	if err := os.WriteFile(target, []byte("secret"), 0o644); err != nil {
+		t.Fatalf("write outside target: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(ws.BoxDir, "result.txt")); err != nil {
+		t.Fatalf("symlink result.txt: %v", err)
+	}
+
+	if _, err := captureFileOutput(ws, model.OutputFile{Path: "result.txt"}); err == nil {
+		t.Fatalf("expected symlink output rejection")
+	}
+}
