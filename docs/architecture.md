@@ -15,10 +15,15 @@ SSE endpoints and a healthcheck.
  <── SSE ──────│  │ Resolver │     │  (gcc/rustc/...) │  │
                 │  └──────────┘     └─────────────────┘  │
                 │                                        │
-  POST /execute │  ┌──────────┐     ┌─────────────────┐  │
- ──────────────>│  │  Queue   │────>│ Execute Service  │  │
- <── SSE ──────│  │  Manager │     │  prlimit+taskset │  │
+  POST /execute │  ┌──────────┐     ┌────────────────────────────┐  │
+ ──────────────>│  │  Queue   │────>│ Execute Service             │  │
+ <── SSE ──────│  │  Manager │     │  prlimit+taskset+unshare    │  │
                 │  └──────────┘     │  ┌────────────┐  │  │
+                │                   │  │  chroot    │  │  │
+                │                   │  │  ro bind   │  │  │
+                │                   │  │  safe /dev │  │  │
+                │                   │  └────────────┘  │  │
+                │                   │  ┌────────────┐  │  │
                 │                   │  │ Comparator │  │  │
                 │                   │  └────────────┘  │  │
                 │                   │  ┌────────────┐  │  │
@@ -58,11 +63,16 @@ SSE endpoints and a healthcheck.
 1. Decode `RunRequest` → acquire queue permit (429 on overflow)
 2. Create temp workdir with sandbox subdirectories
 3. Write binaries and set permissions
-4. Build command with `prlimit` and `taskset` wrappers
+4. Build a fail-closed sandbox launcher
 5. Start process with:
-   - Isolated environment (HOME, TMPDIR scoped to workdir)
+   - `unshare` mount/user namespace isolation
+   - `chroot` into a minimal runtime root
+   - Read-only binds for runtime directories (`/usr`, `/etc`, `/opt`)
+   - Writable binds only for sandbox workspace dirs
+   - File-level read-only binds for submitted files
+   - Safe `/dev` population (`null`, `zero`, `random`, `urandom`, `shm`)
+   - Optional `--net` namespace when `enable_network: false`
    - Thread limit environment variables
-   - Network proxy blocking (if `enable_network: false`)
    - Process group isolation (`Setpgid: true`)
 6. Stream image events from sidecar files during execution
 7. Wait for process completion or timeout (SIGKILL on TLE)
@@ -105,7 +115,13 @@ The queue provides bounded concurrency for `/execute`:
 | Open files | `prlimit --nofile` | 64 |
 | File size | `prlimit --fsize` | 32 MB |
 | CPU affinity | `taskset -c 0` | Single core |
-| Wall clock | Go context | Exact `time_ms` timeout |
+| Filesystem view | `unshare` + `chroot` + bind mounts | No host repo paths inside sandbox |
+| Existing submission files | File-level read-only bind mounts | Cannot overwrite or unlink original files |
+| Writable paths | Dedicated workspace binds | New files only in sandbox work/cache/tmp dirs |
+| Devices | tmpfs `/dev` + selected binds | No host device nodes such as `/dev/kmsg` |
+| Network | `unshare --net` | Disabled unless `enable_network: true` |
+| Wall clock | `CLOCK_MONOTONIC` + Go context | Exact `time_ms` timeout and `wall_time_ms` reporting |
+| Reported CPU time | Linux process CPU clock | `cpu_time_ms` |
 | Threads | Environment | GOMAXPROCS=1, OMP/MKL/OpenBLAS=1 |
 | Process group | `Setpgid` + SIGKILL | Kills entire group on timeout |
 

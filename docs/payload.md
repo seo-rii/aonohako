@@ -78,7 +78,9 @@
 ```jsonc
 {
   "status": "Accepted",                     // Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Runtime Error|Container Initialization Failed
-  "time_ms": 42,                            // wall-clock time (ms)
+  "time_ms": 42,                            // compatibility alias for wall_time_ms
+  "wall_time_ms": 42,                       // wall-clock time from CLOCK_MONOTONIC (ms)
+  "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
   "memory_kb": 8192,                        // peak RSS from getrusage (KB)
   "exit_code": 0,                           // nullable; process exit code
   "stdout": "",                             // truncated stdout (max 3000 bytes, on WA/RE only)
@@ -162,3 +164,9 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `prlimit --fsize` | Max file size (32 MB) |
 | `taskset -c 0` | Pin to single CPU core |
 | Context timeout | Wall-clock kill via SIGKILL to process group |
+
+### Runtime Measurements
+
+- `wall_time_ms` uses `CLOCK_MONOTONIC`
+- `cpu_time_ms` samples the Linux process CPU clock while the submission is running
+- `time_ms` is retained as a compatibility alias for `wall_time_ms`

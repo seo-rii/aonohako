@@ -91,7 +91,9 @@ Client                        aonohako
 ```jsonc
 {
   "status": "Accepted",                 // see Status Codes below
-  "time_ms": 42,                        // wall-clock execution time (ms)
+  "time_ms": 42,                        // compatibility alias for wall_time_ms
+  "wall_time_ms": 42,                   // wall-clock execution time (ms)
+  "cpu_time_ms": 17,                    // CPU time from process CPU clock (ms)
   "memory_kb": 8192,                    // peak RSS (KB, from getrusage)
   "exit_code": 0,                       // nullable; process exit code
   "stdout": "",                         // truncated stdout (on WA/RE only, max 3000 bytes)
