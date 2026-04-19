@@ -126,6 +126,7 @@ func TestStreamImageEventsSkipsInvalidLines(t *testing.T) {
 }
 
 func TestRunReturnsTLEOnParentCancel(t *testing.T) {
+	forceDirectMode(t)
 	svc := New()
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -150,6 +151,7 @@ func TestRunReturnsTLEOnParentCancel(t *testing.T) {
 }
 
 func TestRunCapturesSidecarOutput(t *testing.T) {
+	forceDirectMode(t)
 	svc := New()
 	req := &model.RunRequest{
 		Lang: "binary",
@@ -184,6 +186,7 @@ func b64Raw(v []byte) string {
 }
 
 func TestRunSignalTerminationIsRuntimeError(t *testing.T) {
+	forceDirectMode(t)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "binary",
@@ -202,6 +205,7 @@ func TestRunSignalTerminationIsRuntimeError(t *testing.T) {
 }
 
 func TestRunBlocksNetworkWhenDisabled(t *testing.T) {
+	requireSandboxSupport(t)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "python",
@@ -221,6 +225,7 @@ func TestRunBlocksNetworkWhenDisabled(t *testing.T) {
 }
 
 func TestRunCannotReadHostPathOutsideSandbox(t *testing.T) {
+	requireSandboxSupport(t)
 	secretDir := t.TempDir()
 	secretPath := filepath.Join(secretDir, "secret.txt")
 	if err := os.WriteFile(secretPath, []byte("top-secret"), 0o600); err != nil {
@@ -246,6 +251,7 @@ func TestRunCannotReadHostPathOutsideSandbox(t *testing.T) {
 }
 
 func TestRunExposesOnlySafeDevices(t *testing.T) {
+	requireSandboxSupport(t)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "binary",
@@ -266,6 +272,7 @@ func TestRunExposesOnlySafeDevices(t *testing.T) {
 }
 
 func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
+	forceDirectMode(t)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "python",
@@ -281,6 +288,52 @@ func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
 
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunDirectModeRequiresDeclaredNetworkPolicy(t *testing.T) {
+	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+	t.Setenv("AONOHAKO_NETWORK_POLICY", "")
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho ok\n")),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "ok\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusInitFail {
+		t.Fatalf("expected init failure without declared network policy, got %+v", resp)
+	}
+	if !strings.Contains(strings.ToLower(resp.Reason), "network") {
+		t.Fatalf("expected network-related reason, got %+v", resp)
+	}
+}
+
+func TestRunDirectModeDoesNotRequireUnshareBinary(t *testing.T) {
+	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+	t.Setenv("AONOHAKO_NETWORK_POLICY", "blocked")
+	t.Setenv("PATH", t.TempDir())
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho ok\n")),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "ok\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted without unshare in direct mode, got %+v", resp)
 	}
 }
 
@@ -321,7 +374,7 @@ func TestCaptureSidecarOutputsSkipsOversizedFile(t *testing.T) {
 }
 
 func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+	forceDirectMode(t)
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
@@ -350,7 +403,7 @@ func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {
 }
 
 func TestRunReportsMemoryUsageForPythonAllocation(t *testing.T) {
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+	forceDirectMode(t)
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
@@ -374,7 +427,7 @@ func TestRunReportsMemoryUsageForPythonAllocation(t *testing.T) {
 }
 
 func TestRunMarksMemoryLimitExceededEvenIfProgramHandlesAllocationFailure(t *testing.T) {
-	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+	forceDirectMode(t)
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{

@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"aonohako/internal/platform"
 )
 
 type Config struct {
@@ -28,6 +30,9 @@ func Load() Config {
 }
 
 func defaultMaxActiveRuns() int {
+	if platform.IsCloudRun() {
+		return 1
+	}
 	cpu := runtime.NumCPU()
 	if cpu <= 1 {
 		return 1

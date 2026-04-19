@@ -45,7 +45,7 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unsupported lang: " + req.Lang}
 	}
 
-	workDir, err := os.MkdirTemp("", "aonohako-compile-*")
+	workDir, err := util.CreateWorkDir("aonohako-compile-*")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "mkdtemp failed: " + err.Error()}
 	}

@@ -3,11 +3,46 @@ package execute
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"aonohako/internal/model"
 )
+
+func forceDirectMode(t *testing.T) {
+	t.Helper()
+	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+	t.Setenv("AONOHAKO_NETWORK_POLICY", "blocked")
+}
+
+func requireSandboxSupport(t *testing.T) {
+	t.Helper()
+	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "1")
+
+	if _, err := exec.LookPath("unshare"); err != nil {
+		t.Skipf("sandbox tests require unshare: %v", err)
+	}
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "probe.sh",
+			DataB64: b64("#!/bin/sh\nexit 0\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status == model.RunStatusAccepted {
+		return
+	}
+	if strings.Contains(resp.Stderr, "unshare:") || strings.Contains(resp.Stderr, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox requires unshare") {
+		t.Skipf("sandbox isolation is unavailable on this runner: %+v", resp)
+	}
+}
 
 // --------------- #8: buildCommand Java -Xmx dynamic ---------------
 

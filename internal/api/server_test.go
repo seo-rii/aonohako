@@ -15,7 +15,7 @@ import (
 )
 
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	h := s.Handler()
 	ts := httptest.NewServer(h)
 	defer ts.Close()
@@ -59,7 +59,7 @@ func TestExecuteQueueOverflowReturns429(t *testing.T) {
 }
 
 func TestHealthz(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -78,7 +78,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestExecuteSSESequence(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -182,14 +182,17 @@ func readSSEEvents(r io.Reader, t *testing.T) []sseEvent {
 	return events
 }
 
-func configForTest() config.Config {
+func configForTest(t *testing.T) config.Config {
+	t.Helper()
+	t.Setenv("AONOHAKO_UNSHARE_ENABLED", "0")
+	t.Setenv("AONOHAKO_NETWORK_POLICY", "blocked")
 	return config.Config{Port: "0", MaxActiveRuns: 1, MaxPendingQueue: 1, HeartbeatInterval: 100 * time.Millisecond}
 }
 
 // --------------- #3: /compile shares queue with /execute ---------------
 
 func TestCompileQueueOverflowReturns429(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -240,7 +243,7 @@ func TestCompileQueueOverflowReturns429(t *testing.T) {
 }
 
 func TestCompileSSEHasProgressEvents(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -274,7 +277,7 @@ func TestCompileSSEHasProgressEvents(t *testing.T) {
 }
 
 func TestCompileMethodNotAllowed(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -289,7 +292,7 @@ func TestCompileMethodNotAllowed(t *testing.T) {
 }
 
 func TestExecuteMethodNotAllowed(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -304,7 +307,7 @@ func TestExecuteMethodNotAllowed(t *testing.T) {
 }
 
 func TestCompileInvalidJSON(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -321,7 +324,7 @@ func TestCompileInvalidJSON(t *testing.T) {
 }
 
 func TestExecuteInvalidJSON(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -359,7 +362,7 @@ func (w *noFlushResponseWriter) Write(p []byte) (int, error) {
 }
 
 func TestCompileSSEInitFailureReleasesPermit(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	payload := map[string]any{
 		"lang":    "UHMLANG",
 		"sources": []map[string]any{{"name": "Main.uhm", "data_b64": base64.StdEncoding.EncodeToString([]byte("text"))}},
@@ -377,7 +380,7 @@ func TestCompileSSEInitFailureReleasesPermit(t *testing.T) {
 }
 
 func TestExecuteSSEInitFailureReleasesPermit(t *testing.T) {
-	s := New(configForTest())
+	s := New(configForTest(t))
 	payload := map[string]any{
 		"lang":     "binary",
 		"binaries": []map[string]any{{"name": "run.sh", "data_b64": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho ok\n")), "mode": "exec"}},
