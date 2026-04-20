@@ -297,7 +297,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "whitespace", "brainfuck", "wasm":
+	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "r", "whitespace", "brainfuck", "wasm":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
@@ -447,6 +447,8 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"node", "--stack-size=65536", primaryPath}
 	case "julia":
 		return []string{"julia", "--startup-file=no", "--history-file=no", "--color=no", primaryPath}
+	case "r":
+		return []string{"Rscript", "--vanilla", primaryPath}
 	case "ruby":
 		return []string{"ruby", primaryPath}
 	case "php":
