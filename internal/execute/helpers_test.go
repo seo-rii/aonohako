@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -182,6 +183,71 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 				t.Errorf("buildCommand(%s) missing ERL_AFLAGS in %v", tc.lang, args)
 			}
 		})
+	}
+}
+
+func TestBuildCommandErlangEntryPointVariants(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 64}}
+
+	defaultArgs := buildCommand("/tmp/beam", "erlang", req)
+	if !reflect.DeepEqual(defaultArgs, []string{"erl", "+S", "1:1", "+A", "1", "-noshell", "-pa", "/tmp/beam", "-s", "main", "main", "-s", "init", "stop"}) {
+		t.Fatalf("default erlang command = %v", defaultArgs)
+	}
+
+	req.EntryPoint = "judge/main:solve"
+	entryArgs := buildCommand("/tmp/beam", "erlang", req)
+	if !reflect.DeepEqual(entryArgs, []string{"erl", "+S", "1:1", "+A", "1", "-noshell", "-pa", "/tmp/beam", "-s", "main", "solve", "-s", "init", "stop"}) {
+		t.Fatalf("entrypoint erlang command = %v", entryArgs)
+	}
+}
+
+func TestBuildCommandNormalizesManagedRuntimeEntryPoints(t *testing.T) {
+	req := &model.RunRequest{EntryPoint: "pkg/Main", Limits: model.Limits{MemoryMB: 64}}
+
+	groovyArgs := buildCommand("/tmp/classes", "groovy", req)
+	if !reflect.DeepEqual(groovyArgs, []string{"groovy", "-cp", "/tmp/classes", "pkg.Main"}) {
+		t.Fatalf("groovy command = %v", groovyArgs)
+	}
+
+	scalaArgs := buildCommand("/tmp/classes", "scala", req)
+	if !reflect.DeepEqual(scalaArgs, []string{"scala", "-nocompdaemon", "-classpath", "/tmp/classes", "pkg.Main"}) {
+		t.Fatalf("scala command = %v", scalaArgs)
+	}
+}
+
+func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 96}}
+
+	coqArgs := buildCommand("/tmp/Main.v", "coq", req)
+	if !reflect.DeepEqual(coqArgs, []string{"coqc", "-q", "/tmp/Main.v"}) {
+		t.Fatalf("coq command = %v", coqArgs)
+	}
+
+	prologArgs := buildCommand("/tmp/Main.pl", "prolog", req)
+	if !reflect.DeepEqual(prologArgs, []string{"swipl", "-q", "-f", "/tmp/Main.pl", "-g", "main", "-t", "halt"}) {
+		t.Fatalf("prolog command = %v", prologArgs)
+	}
+
+	lispArgs := buildCommand("/tmp/Main.lisp", "lisp", req)
+	if !reflect.DeepEqual(lispArgs, []string{"sbcl", "--noinform", "--script", "/tmp/Main.lisp"}) {
+		t.Fatalf("lisp command = %v", lispArgs)
+	}
+}
+
+func TestBuildCommandUsesRuntimeScopedSQLiteDBAndJavaHeap(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 96}}
+
+	sqliteArgs := buildCommand("/tmp/work/Main.sql", "sqlite", req)
+	if !reflect.DeepEqual(sqliteArgs, []string{"sh", "-c", "exec sqlite3 \"$0\" < \"$1\"", "/tmp/work/.aonohako.sqlite3", "/tmp/work/Main.sql"}) {
+		t.Fatalf("sqlite command = %v", sqliteArgs)
+	}
+
+	javaArgs := buildCommand("/tmp/submission.jar", "java", req)
+	if !containsArg(javaArgs, "-Xmx96m") {
+		t.Fatalf("java command missing -Xmx96m: %v", javaArgs)
+	}
+	if !containsArg(javaArgs, "-jar") || javaArgs[len(javaArgs)-1] != "/tmp/submission.jar" {
+		t.Fatalf("java command should end with jar path: %v", javaArgs)
 	}
 }
 
