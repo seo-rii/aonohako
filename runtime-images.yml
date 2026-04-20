@@ -284,6 +284,31 @@ languages:
           erlc main.erl
           erl +S 1:1 +A 1 -noshell -pa . -s main main -s init stop | grep '^ok$'
 
+  prolog:
+    install:
+      apt:
+        - swi-prolog-nox
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.pl <<'PROLOG'
+          main :-
+              setup_call_cleanup(
+                  open('same-folder.txt', write, Out),
+                  write(Out, ok),
+                  close(Out)
+              ),
+              setup_call_cleanup(
+                  open('same-folder.txt', read, In),
+                  read_string(In, _, Content),
+                  close(In)
+              ),
+              writeln(Content).
+          PROLOG
+          swipl -q -f Main.pl -g main -t halt | grep '^ok$'
+
   whitespace:
     install:
       apt:
@@ -598,19 +623,20 @@ profiles:
     base_image: debian:bookworm-slim
     languages:
       - bf
-      - plain
-      - python
-      - pypy
-      - r
-      - ruby
-      - php
-      - lua
-      - perl
       - elixir
       - erlang
       - haskell
-      - sqlite
+      - lua
       - ocaml
+      - perl
+      - php
+      - plain
+      - prolog
+      - pypy
+      - python
+      - r
+      - ruby
+      - sqlite
       - wasm
       - whitespace
   type-b:
