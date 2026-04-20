@@ -423,6 +423,28 @@ languages:
           gfortran -O2 -pipe Main.f90 -o Main
           ./Main | grep '^ok$'
 
+  d:
+    install:
+      apt:
+        - gcc
+        - libc6-dev
+        - ldc
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.d <<'D'
+          import std.file : write, readText;
+          import std.stdio : writeln;
+          void main() {
+              write("same-folder.txt", "ok");
+              writeln(readText("same-folder.txt"));
+          }
+          D
+          ldc2 Main.d -O3 -release -of=Main
+          ./Main | grep '^ok$'
+
   rust:
     install:
       apt:
@@ -579,6 +601,7 @@ profiles:
   type-c:
     base_image: debian:bookworm-slim
     languages:
+      - d
       - fortran
       - go
       - rust

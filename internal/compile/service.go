@@ -96,6 +96,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "ZIG"
 	case "fortran", "fortan":
 		l = "FORTRAN"
+	case "d":
+		l = "D"
 	case "c", "c11":
 		l = "C11"
 	case "c99":
@@ -242,6 +244,32 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileKotlinNative(ctx, workDir, target, req.Sources)
 	case "fortran":
 		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".f", ".for", ".f90", ".f95", ".f03", ".f08"), "gfortran", []string{"-O2", "-pipe"})
+	case "d":
+		var rootSource string
+		for _, src := range req.Sources {
+			if !strings.HasSuffix(strings.ToLower(src.Name), ".d") {
+				continue
+			}
+			clean := filepath.Clean(src.Name)
+			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.d") {
+				rootSource = filepath.Join(workDir, clean)
+			}
+			if strings.EqualFold(filepath.Base(clean), "Main.d") {
+				break
+			}
+		}
+		if rootSource == "" {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no d sources"}
+		}
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "ldc2", []string{rootSource, "-O3", "-release", "-of=" + filepath.Join(workDir, target)}, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "haskell":
 		return compileHaskell(ctx, workDir, target, req.Sources)
 	case "swift":
