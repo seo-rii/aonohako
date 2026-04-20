@@ -15,24 +15,29 @@ binary, configurable runtime images, and testable build metadata.
 - `runtime-images.yml` as the source of truth for runtime image groups
 - Docker build tooling that can emit production multi-language images and
   single-language CI smoke images from the same YAML catalog
-- GitHub Actions CI that runs Go tests, repository policy checks, and language
-  smoke builds in parallel
+- GitHub Actions CI that runs Go tests, repository policy checks, sandbox
+  regressions, per-language smoke builds in parallel, and an explicit
+  `plain`+`python`+`java` mixin smoke job
 
 ## Runtime image model
 
 The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
 
-- Production mode builds grouped images such as `type-a` (`plain`, `python`)
-  and `type-b` (`java`), plus dedicated profiles where a toolchain needs its
-  own base image such as `swift` or `julia`.
+- Production mode builds grouped images such as `type-a` (`plain`, `python`,
+  `bf`, `whitespace`, `wasm`, and scripting runtimes), `type-b` (`java`,
+  `javascript`, `scala`, `typescript`), `type-e` (`csharp`, `fsharp`), and the
+  mixin validation profile `type-i` (`plain`, `python`, `java`), plus
+  dedicated profiles where a toolchain needs its own base image such as
+  `swift` or `julia`.
 - CI mode expands the same catalog into one image per language so that each
   smoke job validates a single toolchain in isolation.
 - The current catalog covers native binaries, Python with `numpy`, Java,
-  JavaScript/TypeScript, Ruby, PHP, Lua, Perl, Elixir, Haskell, OCaml, SQLite,
-  Go, Rust, Kotlin, C#, Julia, Swift, and UHMLANG. C/C++ submitters compile
-  into binaries and should target the `plain` runtime image rather than
-  dedicated C/C++ runtime images. Add new languages by extending the YAML file
-  instead of editing shell loops or workflow matrices.
+  Scala, JavaScript/TypeScript, Ruby, PHP, Lua, Perl, Elixir, Haskell, OCaml,
+  SQLite, Go, Rust, Kotlin, C#, F#, Julia, Swift, Brainfuck, Whitespace, WASM,
+  and UHMLANG. C/C++ submitters compile into binaries and should target the
+  `plain` runtime image rather than dedicated C/C++ runtime images. Add new
+  languages by extending the YAML file instead of editing shell loops or
+  workflow matrices.
 
 Inspect the generated matrix:
 

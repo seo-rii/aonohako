@@ -248,14 +248,15 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `plain`, `python`, `pypy`, `ruby`, `php`, `lua`, `perl`, `elixir`, `haskell`, `ocaml`, `sqlite` |
-| `type-b` | `java`, `javascript`, `typescript` |
+| `type-a` | `bf`, `plain`, `python`, `pypy`, `ruby`, `php`, `lua`, `perl`, `elixir`, `haskell`, `ocaml`, `sqlite`, `wasm`, `whitespace` |
+| `type-b` | `java`, `javascript`, `scala`, `typescript` |
 | `type-c` | `go`, `rust` |
 | `type-d` | `kotlin` |
-| `type-e` | `csharp` |
+| `type-e` | `csharp`, `fsharp` |
 | `type-f` | `uhmlang` |
 | `type-g` | `julia` |
 | `type-h` | `swift` |
+| `type-i` | `plain`, `python`, `java` |
 
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation.
