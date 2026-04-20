@@ -106,6 +106,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "CPP17"
 	case "java":
 		l = "JAVA11"
+	case "groovy":
+		l = "GROOVY"
 	case "erlang":
 		l = "ERLANG"
 	case "scala":
@@ -200,6 +202,32 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "java":
 		return compileJava(ctx, workDir, req.Sources, profile.JavaRelease)
+	case "groovy":
+		var groovyFiles []string
+		for _, src := range req.Sources {
+			if strings.HasSuffix(strings.ToLower(src.Name), ".groovy") {
+				groovyFiles = append(groovyFiles, filepath.Join(workDir, filepath.Clean(src.Name)))
+			}
+		}
+		if len(groovyFiles) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no groovy sources"}
+		}
+		args := []string{"-d", workDir}
+		args = append(args, groovyFiles...)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "groovyc", args, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		artifacts, err := collectArtifacts(workDir, func(name string) bool {
+			return strings.HasSuffix(strings.ToLower(name), ".class")
+		}, "")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		if len(artifacts) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "groovyc produced no artifacts", Stdout: stdout, Stderr: stderr}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "python":
 		return compilePythonLike(ctx, workDir, req.Sources, "python3")
 	case "pypy":

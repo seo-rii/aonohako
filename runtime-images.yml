@@ -58,6 +58,28 @@ languages:
           javac --release 11 Main.java
           java Main | grep '^ok$'
 
+  groovy:
+    install:
+      apt:
+        - bash
+        - groovy
+        - openjdk-17-jdk-headless
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.groovy <<'GROOVY'
+          class Main {
+              static void main(String[] args) {
+                  new File("same-folder.txt").text = "ok"
+                  println new File("same-folder.txt").text.trim()
+              }
+          }
+          GROOVY
+          groovyc -d . Main.groovy
+          groovy -cp . Main | grep '^ok$'
+
   scala:
     install:
       apt:
@@ -594,6 +616,7 @@ profiles:
   type-b:
     base_image: debian:bookworm-slim
     languages:
+      - groovy
       - java
       - javascript
       - scala
