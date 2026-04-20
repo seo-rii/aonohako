@@ -225,6 +225,28 @@ languages:
           end
           println(read("same-folder.txt", String))
 
+  erlang:
+    install:
+      apt:
+        - erlang-base
+        - erlang-dev
+        - erlang-parsetools
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > main.erl <<'ERL'
+          -module(main).
+          -export([main/0]).
+          main() ->
+              ok = file:write_file("same-folder.txt", <<"ok">>),
+              {ok, Data} = file:read_file("same-folder.txt"),
+              io:format("~s~n", [Data]).
+          ERL
+          erlc main.erl
+          erl +S 1:1 +A 1 -noshell -pa . -s main main -s init stop | grep '^ok$'
+
   whitespace:
     install:
       apt:
@@ -471,6 +493,7 @@ profiles:
       - lua
       - perl
       - elixir
+      - erlang
       - haskell
       - sqlite
       - ocaml

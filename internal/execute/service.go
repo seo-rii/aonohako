@@ -304,6 +304,18 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			pyPath = primaryPath
 		}
 		return pyPath, lang, nil
+	case "erlang":
+		hasBeam := false
+		for _, binary := range req.Binaries {
+			if strings.HasSuffix(strings.ToLower(binary.Name), ".beam") {
+				hasBeam = true
+				break
+			}
+		}
+		if !hasBeam {
+			return "", "", fmt.Errorf("erlang requires .beam files")
+		}
+		return ws.BoxDir, lang, nil
 	case "java":
 		if jarPath != "" {
 			return jarPath, lang, nil
@@ -400,6 +412,27 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"python3", primaryPath}
 	case "pypy":
 		return []string{"pypy3", primaryPath}
+	case "erlang":
+		module := "main"
+		function := "main"
+		entryPoint := strings.TrimSpace(req.EntryPoint)
+		if entryPoint != "" {
+			if left, right, ok := strings.Cut(entryPoint, ":"); ok {
+				module = left
+				function = right
+			} else {
+				module = entryPoint
+			}
+		}
+		module = strings.TrimSuffix(filepath.Base(strings.TrimSpace(module)), filepath.Ext(strings.TrimSpace(module)))
+		function = strings.TrimSpace(function)
+		if module == "" {
+			module = "main"
+		}
+		if function == "" {
+			function = "main"
+		}
+		return []string{"erl", "+S", "1:1", "+A", "1", "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
 	case "scala":
 		mainClass := strings.TrimSpace(req.EntryPoint)
 		if mainClass == "" {
