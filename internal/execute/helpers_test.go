@@ -134,6 +134,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"python", "/tmp/sol.py", "python3"},
 		{"pypy", "/tmp/sol.py", "pypy3"},
 		{"erlang", "/tmp/beam", "erl"},
+		{"groovy", "/tmp/classes", "groovy"},
 		{"scala", "/tmp/classes", "scala"},
 		{"fsharp", "/tmp/App.dll", "dotnet"},
 		{"javascript", "/tmp/sol.js", "node"},

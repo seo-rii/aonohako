@@ -330,6 +330,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", fmt.Errorf("scala requires .class files")
 		}
 		return ws.BoxDir, lang, nil
+	case "groovy":
+		if len(classFiles) == 0 {
+			return "", "", fmt.Errorf("groovy requires .class files")
+		}
+		return ws.BoxDir, lang, nil
 	default:
 		return "", "", fmt.Errorf("unsupported run lang: %s", lang)
 	}
@@ -433,6 +438,13 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 			function = "main"
 		}
 		return []string{"erl", "+S", "1:1", "+A", "1", "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
+	case "groovy":
+		mainClass := strings.TrimSpace(req.EntryPoint)
+		if mainClass == "" {
+			mainClass = "Main"
+		}
+		mainClass = strings.ReplaceAll(mainClass, "/", ".")
+		return []string{"groovy", "-cp", primaryPath, mainClass}
 	case "scala":
 		mainClass := strings.TrimSpace(req.EntryPoint)
 		if mainClass == "" {
