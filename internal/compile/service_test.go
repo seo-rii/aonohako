@@ -68,6 +68,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"fortan":     {compileKind: "fortran", runLang: "binary"},
 		"d":          {compileKind: "d", runLang: "binary"},
 		"zig":        {compileKind: "zig", runLang: "binary"},
+		"lisp":       {compileKind: "lisp", runLang: "lisp"},
 		"scala":      {compileKind: "scala", runLang: "scala"},
 		"fsharp":     {compileKind: "fsharp", runLang: "fsharp"},
 		"whitespace": {compileKind: "whitespace", runLang: "whitespace"},

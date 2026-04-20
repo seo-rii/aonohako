@@ -206,6 +206,26 @@ languages:
           ghc -O2 -o Main Main.hs
           ./Main | grep '^ok$'
 
+  lisp:
+    install:
+      apt:
+        - sbcl
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.lisp <<'LISP'
+          (with-open-file (out "same-folder.txt"
+                               :direction :output
+                               :if-exists :supersede
+                               :if-does-not-exist :create)
+            (write-line "ok" out))
+          (with-open-file (in "same-folder.txt" :direction :input)
+            (format t "~a~%" (read-line in nil "")))
+          LISP
+          sbcl --noinform --script Main.lisp | grep '^ok$'
+
   swift:
     smoke:
       command:
@@ -626,6 +646,7 @@ profiles:
       - elixir
       - erlang
       - haskell
+      - lisp
       - lua
       - ocaml
       - perl
