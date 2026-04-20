@@ -354,6 +354,35 @@ languages:
           env -u GOROOT GOENV=off go build -o Main main.go
           ./Main | grep '^ok$'
 
+  zig:
+    install:
+      apt:
+        - curl
+        - xz-utils
+      script:
+        - export ZIG_VERSION=0.14.0
+        - curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
+        - mkdir -p /opt
+        - tar -xJf /tmp/zig.tar.xz -C /opt
+        - ln -sfn "/opt/zig-linux-x86_64-${ZIG_VERSION}/zig" /usr/local/bin/zig
+        - rm -f /tmp/zig.tar.xz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.zig <<'ZIG'
+          const std = @import("std");
+          pub fn main() !void {
+              try std.fs.cwd().writeFile(.{ .sub_path = "same-folder.txt", .data = "ok" });
+              const data = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, "same-folder.txt", 16);
+              defer std.heap.page_allocator.free(data);
+              try std.io.getStdOut().writer().print("{s}\n", .{data});
+          }
+          ZIG
+          zig build-exe Main.zig -O ReleaseSafe -femit-bin=Main
+          ./Main | grep '^ok$'
+
   rust:
     install:
       apt:
@@ -511,6 +540,7 @@ profiles:
     languages:
       - go
       - rust
+      - zig
   type-d:
     base_image: debian:bookworm-slim
     languages:

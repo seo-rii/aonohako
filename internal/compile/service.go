@@ -90,6 +90,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "PYPY3"
 	case "go", "golang":
 		l = "GO"
+	case "zig":
+		l = "ZIG"
 	case "c", "c11":
 		l = "C11"
 	case "c99":
@@ -164,6 +166,32 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileRust(ctx, workDir, target, req.Sources, profile.RustEdition)
 	case "go":
 		return compileGo(ctx, workDir, target, req.Sources)
+	case "zig":
+		var rootSource string
+		for _, src := range req.Sources {
+			if !strings.HasSuffix(strings.ToLower(src.Name), ".zig") {
+				continue
+			}
+			clean := filepath.Clean(src.Name)
+			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.zig") {
+				rootSource = filepath.Join(workDir, clean)
+			}
+			if strings.EqualFold(filepath.Base(clean), "Main.zig") {
+				break
+			}
+		}
+		if rootSource == "" {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no zig sources"}
+		}
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "zig", []string{"build-exe", rootSource, "-O", "ReleaseSafe", "-femit-bin=" + filepath.Join(workDir, target)}, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "java":
 		return compileJava(ctx, workDir, req.Sources, profile.JavaRelease)
 	case "python":

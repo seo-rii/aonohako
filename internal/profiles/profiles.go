@@ -35,6 +35,7 @@ var profiles = map[string]Profile{
 	"RUST2021":   {SourceLang: "RUST2021", Extension: "rs", DefaultTarget: "Main", CompileKind: "rust", RustEdition: "2021", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"RUST2024":   {SourceLang: "RUST2024", Extension: "rs", DefaultTarget: "Main", CompileKind: "rust", RustEdition: "2024", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"GO":         {SourceLang: "GO", Extension: "go", DefaultTarget: "Main", CompileKind: "go", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 2000, MemoryMultiplier: 1, MemoryOffsetMB: 1024},
+	"ZIG":        {SourceLang: "ZIG", Extension: "zig", DefaultTarget: "Main", CompileKind: "zig", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"JAVA":       {SourceLang: "JAVA", Extension: "java", CompileKind: "java", JavaRelease: "11", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"JAVA8":      {SourceLang: "JAVA8", Extension: "java", CompileKind: "java", JavaRelease: "8", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"JAVA11":     {SourceLang: "JAVA11", Extension: "java", CompileKind: "java", JavaRelease: "11", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
