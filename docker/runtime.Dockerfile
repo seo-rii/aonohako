@@ -54,6 +54,12 @@ RUN install -d -m 0700 /var/aonohako /var/aonohako/protected && \
     printf 'runtime-owned\n' > /var/aonohako/protected/probe.txt && \
     chmod 0700 /var/aonohako /var/aonohako/protected && \
     chmod 0600 /var/aonohako/protected/probe.txt && \
+    for path in /etc/debian_version /etc/os-release /etc/issue /etc/issue.net /etc/motd; do \
+      if [[ -e "${path}" ]]; then chmod 0600 "${path}"; fi; \
+    done && \
+    for path in /usr/share/doc /usr/share/info /usr/share/man /usr/share/lintian /usr/share/bug /var/cache/apt /var/lib/apt /var/lib/dpkg; do \
+      if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
+    done && \
     chmod 0700 /root && \
     if [[ -d /var/log ]]; then chmod 0700 /var/log; fi && \
     if [[ -d /var/spool ]]; then chmod 0700 /var/spool; fi && \

@@ -165,7 +165,13 @@ func TestSmokeScriptRunsSandboxSelftestBeforeLanguageSmoke(t *testing.T) {
 	}
 
 	body := string(data)
-	if !strings.Contains(body, "aonohako-selftest permissions") {
-		t.Fatalf("smoke_runtime.sh must run the sandbox permissions selftest before language smoke")
+	if !strings.Contains(body, "suite=image-permissions") {
+		t.Fatalf("smoke_runtime.sh must default to the image-permissions selftest suite")
+	}
+	if !strings.Contains(body, "*,python,*)") {
+		t.Fatalf("smoke_runtime.sh must upgrade to the full permissions selftest for python images")
+	}
+	if !strings.Contains(body, "aonohako-selftest \"${suite}\"") {
+		t.Fatalf("smoke_runtime.sh must run the selected sandbox selftest before language smoke")
 	}
 }

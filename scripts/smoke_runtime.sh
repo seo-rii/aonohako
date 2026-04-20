@@ -6,7 +6,14 @@ if [[ -z "${AONOHAKO_SMOKE_COMMAND:-}" ]]; then
   exit 1
 fi
 
-aonohako-selftest permissions
+suite=image-permissions
+case ",${AONOHAKO_LANGUAGES:-}," in
+  *,python,*)
+    suite=permissions
+    ;;
+esac
+
+aonohako-selftest "${suite}"
 
 IFS=$'\t' read -r -a smoke_parts <<< "${AONOHAKO_SMOKE_COMMAND}"
 exec "${smoke_parts[@]}"

@@ -14,17 +14,28 @@ import (
 	"aonohako/internal/sandbox"
 )
 
+type suiteCase struct {
+	name  string
+	req   model.RunRequest
+	check func(model.RunResponse) error
+}
+
 func main() {
 	if sandbox.MaybeRunFromEnv() {
 		return
 	}
 
 	if len(os.Args) != 2 {
-		_, _ = fmt.Fprintln(os.Stderr, "usage: aonohako-selftest permissions")
+		_, _ = fmt.Fprintln(os.Stderr, "usage: aonohako-selftest image-permissions|permissions")
 		os.Exit(2)
 	}
 
 	switch os.Args[1] {
+	case "image-permissions":
+		if err := runImagePermissionsSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "permissions":
 		if err := runPermissionsSuite(); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
@@ -34,6 +45,50 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, "unknown selftest suite: %s\n", os.Args[1])
 		os.Exit(2)
 	}
+}
+
+func runImagePermissionsSuite() error {
+	return runSuiteCases([]suiteCase{
+		{
+			name: "protected-paths-are-not-readable",
+			req: model.RunRequest{
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "run.sh",
+					DataB64: encodeScript("#!/bin/sh\nif [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi\nif [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi\nif [ -x /root ]; then echo leaked; else echo blocked; fi\n"),
+					Mode:    "exec",
+				}},
+				ExpectedStdout: "blocked\nblocked\nblocked\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		{
+			name: "image-metadata-paths-are-not-readable",
+			req: model.RunRequest{
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "run.sh",
+					DataB64: encodeScript("#!/bin/sh\nfor p in /etc/debian_version /etc/os-release /var/lib/dpkg/status; do\n  if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi\ndone\nif cd /usr/share/doc 2>/dev/null; then echo leaked; else echo blocked; fi\n"),
+					Mode:    "exec",
+				}},
+				ExpectedStdout: "blocked\nblocked\nblocked\nblocked\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		{
+			name: "workspace-is-writable-but-submission-is-immutable",
+			req: model.RunRequest{
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "run.sh",
+					DataB64: encodeScript("#!/bin/sh\nif echo mutated > run.sh 2>/dev/null; then echo overwrote; else echo blocked; fi\necho ok > note.txt\nread value < note.txt\nprintf '%s\\n' \"$value\"\n"),
+					Mode:    "exec",
+				}},
+				ExpectedStdout: "blocked\nok\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+	})
 }
 
 func runPermissionsSuite() error {
@@ -51,21 +106,30 @@ func runPermissionsSuite() error {
 		return fmt.Errorf("chmod unixgram socket: %w", err)
 	}
 
-	cases := []struct {
-		name  string
-		req   model.RunRequest
-		check func(model.RunResponse) error
-	}{
+	cases := []suiteCase{
 		{
 			name: "protected-paths-are-not-readable",
 			req: model.RunRequest{
 				Lang: "binary",
 				Binaries: []model.Binary{{
 					Name:    "run.sh",
-					DataB64: encodeScript("#!/bin/sh\nif cd /var/aonohako/protected 2>/dev/null; then echo leaked; else echo blocked; fi\nif [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi\nif cd /root 2>/dev/null; then echo leaked; else echo blocked; fi\n"),
+					DataB64: encodeScript("#!/bin/sh\nif [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi\nif [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi\nif [ -x /root ]; then echo leaked; else echo blocked; fi\n"),
 					Mode:    "exec",
 				}},
 				ExpectedStdout: "blocked\nblocked\nblocked\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		{
+			name: "image-metadata-paths-are-not-readable",
+			req: model.RunRequest{
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "run.sh",
+					DataB64: encodeScript("#!/bin/sh\nfor p in /etc/debian_version /etc/os-release /var/lib/dpkg/status; do\n  if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi\ndone\nif cd /usr/share/doc 2>/dev/null; then echo leaked; else echo blocked; fi\n"),
+					Mode:    "exec",
+				}},
+				ExpectedStdout: "blocked\nblocked\nblocked\nblocked\n",
 				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
 			},
 		},
@@ -141,6 +205,15 @@ func runPermissionsSuite() error {
 		},
 	}
 
+	if err := runSuiteCases(cases); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintln(os.Stdout, "sandbox permissions ok")
+	return nil
+}
+
+func runSuiteCases(cases []suiteCase) error {
 	svc := execute.New()
 	for _, tc := range cases {
 		resp := svc.Run(context.Background(), &tc.req, execute.Hooks{})
@@ -153,8 +226,6 @@ func runPermissionsSuite() error {
 			}
 		}
 	}
-
-	_, _ = fmt.Fprintln(os.Stdout, "sandbox permissions ok")
 	return nil
 }
 
