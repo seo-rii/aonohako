@@ -98,6 +98,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "CPP17"
 	case "java":
 		l = "JAVA11"
+	case "erlang":
+		l = "ERLANG"
 	case "scala":
 		l = "SCALA"
 	case "f#", "fsharp":
@@ -190,6 +192,32 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileSQLite(workDir, req.Sources)
 	case "julia":
 		return compileJulia(workDir, req.Sources)
+	case "erlang":
+		var erlangFiles []string
+		for _, src := range req.Sources {
+			if strings.HasSuffix(strings.ToLower(src.Name), ".erl") {
+				erlangFiles = append(erlangFiles, filepath.Join(workDir, filepath.Clean(src.Name)))
+			}
+		}
+		if len(erlangFiles) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no erlang sources"}
+		}
+		args := []string{"-o", workDir}
+		args = append(args, erlangFiles...)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "erlc", args, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		artifacts, err := collectArtifacts(workDir, func(name string) bool {
+			return strings.HasSuffix(strings.ToLower(name), ".beam")
+		}, "")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		if len(artifacts) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "erlc produced no artifacts", Stdout: stdout, Stderr: stderr}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "scala":
 		return compileScala(ctx, workDir, req.Sources)
 	case "fsharp":

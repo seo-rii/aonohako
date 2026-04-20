@@ -133,6 +133,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"elixir", "/tmp/sol.exs", "env"},
 		{"python", "/tmp/sol.py", "python3"},
 		{"pypy", "/tmp/sol.py", "pypy3"},
+		{"erlang", "/tmp/beam", "erl"},
 		{"scala", "/tmp/classes", "scala"},
 		{"fsharp", "/tmp/App.dll", "dotnet"},
 		{"javascript", "/tmp/sol.js", "node"},
