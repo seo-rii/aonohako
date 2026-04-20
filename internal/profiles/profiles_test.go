@@ -32,6 +32,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"RUST2021",
 		"RUST2024",
 		"KOTLIN",
+		"FORTRAN",
 		"HASKELL",
 		"SWIFT",
 		"SQLITE",
@@ -64,6 +65,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	tests := map[string]string{
 		"OCAML":      "ocaml",
 		"ELIXIR":     "elixir",
+		"FORTRAN":    "binary",
 		"HASKELL":    "binary",
 		"ZIG":        "binary",
 		"SWIFT":      "binary",

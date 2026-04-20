@@ -398,6 +398,31 @@ languages:
           zig build-exe Main.zig -O ReleaseSafe -femit-bin=Main
           ./Main | grep '^ok$'
 
+  fortran:
+    install:
+      apt:
+        - gfortran
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.f90 <<'F90'
+          program main
+            implicit none
+            character(len=32) :: line
+            open(unit=10, file='same-folder.txt', status='replace', action='write')
+            write(10, '(A)') 'ok'
+            close(10)
+            open(unit=11, file='same-folder.txt', status='old', action='read')
+            read(11, '(A)') line
+            close(11)
+            print '(A)', trim(line)
+          end program main
+          F90
+          gfortran -O2 -pipe Main.f90 -o Main
+          ./Main | grep '^ok$'
+
   rust:
     install:
       apt:
@@ -554,6 +579,7 @@ profiles:
   type-c:
     base_image: debian:bookworm-slim
     languages:
+      - fortran
       - go
       - rust
       - zig
