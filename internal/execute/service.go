@@ -297,7 +297,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm":
+	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "coq", "whitespace", "brainfuck", "wasm":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
@@ -442,6 +442,8 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"swipl", "-q", "-f", primaryPath, "-g", "main", "-t", "halt"}
 	case "lisp":
 		return []string{"sbcl", "--noinform", "--script", primaryPath}
+	case "coq":
+		return []string{"coqc", "-q", primaryPath}
 	case "groovy":
 		mainClass := strings.TrimSpace(req.EntryPoint)
 		if mainClass == "" {

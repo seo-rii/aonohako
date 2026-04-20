@@ -129,6 +129,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		wantFirst string
 	}{
 		{"binary", "/tmp/a.out", "/tmp/a.out"},
+		{"coq", "/tmp/Main.v", "coqc"},
 		{"ocaml", "/tmp/sol", "env"},
 		{"elixir", "/tmp/sol.exs", "env"},
 		{"python", "/tmp/sol.py", "python3"},
