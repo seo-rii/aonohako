@@ -12,6 +12,10 @@ func TestWorkspaceScopedEnvIncludesWritableToolchainHomes(t *testing.T) {
 	wants := []string{
 		"HOME=" + filepath.Join(root, ".home"),
 		"TMPDIR=" + filepath.Join(root, ".tmp"),
+		"TMP=" + filepath.Join(root, ".tmp"),
+		"TEMP=" + filepath.Join(root, ".tmp"),
+		"TEMPDIR=" + filepath.Join(root, ".tmp"),
+		"JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=" + filepath.Join(root, ".tmp"),
 		"XDG_CACHE_HOME=" + filepath.Join(root, ".cache"),
 		"MPLCONFIGDIR=" + filepath.Join(root, ".mpl"),
 		"PIP_CACHE_DIR=" + filepath.Join(root, ".pip-cache"),

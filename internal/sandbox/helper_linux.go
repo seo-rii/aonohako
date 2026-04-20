@@ -256,20 +256,21 @@ func MaybeRunFromEnv() bool {
 	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 
 	if !req.EnableNetwork {
-		for _, sysno := range []uint32{uint32(unix.SYS_SOCKET), uint32(unix.SYS_SOCKETPAIR)} {
-			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 4)
-			appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
-			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.AF_UNIX, 1, 0)
-			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
-			appendStmt(unix.BPF_RET|unix.BPF_K, allow)
-		}
 		for _, sysno := range []uint32{
+			uint32(unix.SYS_SOCKET),
+			uint32(unix.SYS_SOCKETPAIR),
 			uint32(unix.SYS_CONNECT),
 			uint32(unix.SYS_BIND),
 			uint32(unix.SYS_LISTEN),
 			uint32(unix.SYS_ACCEPT),
 			uint32(unix.SYS_ACCEPT4),
 			uint32(unix.SYS_SHUTDOWN),
+			uint32(unix.SYS_SENDTO),
+			uint32(unix.SYS_SENDMSG),
+			uint32(unix.SYS_SENDMMSG),
+			uint32(unix.SYS_RECVFROM),
+			uint32(unix.SYS_RECVMSG),
+			uint32(unix.SYS_RECVMMSG),
 		} {
 			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 			appendStmt(unix.BPF_RET|unix.BPF_K, deny)

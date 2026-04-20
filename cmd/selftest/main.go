@@ -47,6 +47,9 @@ func runPermissionsSuite() error {
 		_ = listener.Close()
 		_ = os.Remove(socketPath)
 	}()
+	if err := os.Chmod(socketPath, 0o777); err != nil {
+		return fmt.Errorf("chmod unixgram socket: %w", err)
+	}
 
 	cases := []struct {
 		name  string
@@ -120,6 +123,20 @@ func runPermissionsSuite() error {
 				},
 				ExpectedStdout: "blocked-unlink\nblocked-replace\noriginal\n",
 				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		{
+			name: "outside-temp-dirs-are-not-writable",
+			req: model.RunRequest{
+				Lang: "python",
+				Binaries: []model.Binary{{
+					Name: "main.py",
+					DataB64: encodeScript(
+						"from pathlib import Path\nfor target in ['/tmp/aonohako-outside.txt', '/var/tmp/aonohako-outside.txt']:\n    try:\n        Path(target).write_text('escape')\n        print('wrote')\n    except OSError:\n        print('blocked')\n",
+					),
+				}},
+				ExpectedStdout: "blocked\nblocked\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128, WorkspaceBytes: 8 << 10},
 			},
 		},
 	}
