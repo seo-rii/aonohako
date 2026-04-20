@@ -208,3 +208,25 @@ func TestRuntimeEntrypointHardensScratchDirsBeforeExec(t *testing.T) {
 		t.Fatalf("runtime_entrypoint.sh must chmod scratch dirs before exec, got %q", string(out))
 	}
 }
+
+func TestSmokeScriptPreservesMultilineSmokeCommands(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "smoke_runtime.sh")
+	binDir := t.TempDir()
+	selftestPath := filepath.Join(binDir, "aonohako-selftest")
+	if err := os.WriteFile(selftestPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q): %v", selftestPath, err)
+	}
+
+	cmd := exec.Command("/bin/bash", path)
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"AONOHAKO_SMOKE_COMMAND=bash\t-lc\tprintf 'first\\n'\nprintf 'second\\n'",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("smoke_runtime.sh: %v\n%s", err, string(out))
+	}
+	if string(out) != "first\nsecond\n" {
+		t.Fatalf("smoke_runtime.sh must preserve multiline command bodies, got %q", string(out))
+	}
+}

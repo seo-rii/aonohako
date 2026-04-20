@@ -297,7 +297,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "text", "ocaml", "elixir", "sqlite", "julia":
+	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "whitespace", "brainfuck", "wasm":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
@@ -313,6 +313,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", err
 		}
 		return jar, lang, nil
+	case "scala":
+		if len(classFiles) == 0 {
+			return "", "", fmt.Errorf("scala requires .class files")
+		}
+		return ws.BoxDir, lang, nil
 	default:
 		return "", "", fmt.Errorf("unsupported run lang: %s", lang)
 	}
@@ -395,6 +400,13 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"python3", primaryPath}
 	case "pypy":
 		return []string{"pypy3", primaryPath}
+	case "scala":
+		mainClass := strings.TrimSpace(req.EntryPoint)
+		if mainClass == "" {
+			mainClass = "Main"
+		}
+		mainClass = strings.ReplaceAll(mainClass, "/", ".")
+		return []string{"scala", "-nocompdaemon", "-classpath", primaryPath, mainClass}
 	case "java":
 		xmx := max(32, req.Limits.MemoryMB)
 		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss16m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
@@ -419,11 +431,17 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"sh", "-c", "exec sqlite3 \"$0\" < \"$1\"", dbPath, primaryPath}
 	case "uhmlang":
 		return []string{"/usr/bin/umjunsik-lang-go", primaryPath}
-	case "csharp":
+	case "csharp", "fsharp":
 		if strings.HasSuffix(strings.ToLower(primaryPath), ".dll") {
 			return []string{"dotnet", primaryPath}
 		}
 		return []string{primaryPath}
+	case "whitespace":
+		return []string{"python3", "/usr/local/lib/aonohako/whitespace.py", primaryPath}
+	case "brainfuck":
+		return []string{"python3", "/usr/local/lib/aonohako/brainfuck.py", primaryPath}
+	case "wasm":
+		return []string{"wasmtime", "run", "--dir=.", primaryPath}
 	case "text":
 		return []string{"cat", primaryPath}
 	default:

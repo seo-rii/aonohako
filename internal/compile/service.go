@@ -98,6 +98,16 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "CPP17"
 	case "java":
 		l = "JAVA11"
+	case "scala":
+		l = "SCALA"
+	case "f#", "fsharp":
+		l = "FSHARP"
+	case "whitespace":
+		l = "WHITESPACE"
+	case "bf", "brainfuck":
+		l = "BF"
+	case "wasm", "webassembly":
+		l = "WASM"
 	}
 	return profiles.Resolve(l)
 }
@@ -180,6 +190,16 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileSQLite(workDir, req.Sources)
 	case "julia":
 		return compileJulia(workDir, req.Sources)
+	case "scala":
+		return compileScala(ctx, workDir, req.Sources)
+	case "fsharp":
+		return compileFSharp(ctx, workDir, req.Sources)
+	case "whitespace":
+		return compileWhitespace(workDir, req.Sources)
+	case "brainfuck":
+		return compileBrainfuck(workDir, req.Sources)
+	case "wasm":
+		return compileWasm(ctx, workDir, target, req.Sources)
 	case "ocaml":
 		return compileOCaml(ctx, workDir, target, req.Sources)
 	case "elixir":
@@ -502,6 +522,187 @@ func compileJulia(workDir string, sources []model.Source) model.CompileResponse 
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
 }
 
+func compileScala(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+	var scalaFiles []string
+	for _, src := range sources {
+		if strings.HasSuffix(strings.ToLower(src.Name), ".scala") {
+			scalaFiles = append(scalaFiles, filepath.Join(workDir, filepath.Clean(src.Name)))
+		}
+	}
+	if len(scalaFiles) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no scala sources"}
+	}
+	args := []string{"-d", workDir}
+	args = append(args, scalaFiles...)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "scalac", args, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := collectArtifacts(workDir, func(name string) bool {
+		return strings.HasSuffix(strings.ToLower(name), ".class")
+	}, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	if len(artifacts) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "scalac produced no artifacts", Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileFSharp(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+	projectDir := filepath.Join(workDir, "fsproj")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	var projectPath string
+	var fsFiles []string
+	for _, src := range sources {
+		clean, err := util.ValidateRelativePath(src.Name)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		lower := strings.ToLower(clean)
+		if strings.HasSuffix(lower, ".fsproj") && projectPath == "" {
+			projectPath = filepath.Join(projectDir, clean)
+		}
+		if strings.HasSuffix(lower, ".fs") {
+			fsFiles = append(fsFiles, clean)
+		}
+	}
+	if err := materializeSources(projectDir, sources); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+	}
+	if projectPath == "" {
+		if len(fsFiles) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no fsharp sources"}
+		}
+		var builder strings.Builder
+		builder.WriteString("<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net8.0</TargetFramework>\n    <LangVersion>latest</LangVersion>\n  </PropertyGroup>\n  <ItemGroup>\n")
+		for _, file := range fsFiles {
+			builder.WriteString("    <Compile Include=\"")
+			builder.WriteString(file)
+			builder.WriteString("\" />\n")
+		}
+		builder.WriteString("  </ItemGroup>\n</Project>\n")
+		projectPath = filepath.Join(projectDir, "App.fsproj")
+		if err := os.WriteFile(projectPath, []byte(builder.String()), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+	}
+	outDir := filepath.Join(workDir, "publish")
+	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false"}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := collectDotnetPublishArtifacts(outDir, strings.TrimSuffix(filepath.Base(projectPath), filepath.Ext(projectPath)))
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileWhitespace(workDir string, sources []model.Source) model.CompileResponse {
+	var hasSource bool
+	for _, src := range sources {
+		if !strings.HasSuffix(strings.ToLower(src.Name), ".ws") {
+			continue
+		}
+		hasSource = true
+		data, err := util.DecodeB64(src.DataB64)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		for _, b := range data {
+			if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
+				return model.CompileResponse{Status: model.CompileStatusCompileError, Reason: "whitespace source contains non-whitespace characters"}
+			}
+		}
+	}
+	if !hasSource {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no whitespace sources"}
+	}
+	return passThroughArtifacts(workDir, sources)
+}
+
+func compileBrainfuck(workDir string, sources []model.Source) model.CompileResponse {
+	var hasSource bool
+	for _, src := range sources {
+		if !strings.HasSuffix(strings.ToLower(src.Name), ".bf") {
+			continue
+		}
+		hasSource = true
+		data, err := util.DecodeB64(src.DataB64)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		depth := 0
+		for _, b := range data {
+			switch b {
+			case '[':
+				depth++
+			case ']':
+				depth--
+				if depth < 0 {
+					return model.CompileResponse{Status: model.CompileStatusCompileError, Reason: "brainfuck source has unmatched brackets"}
+				}
+			}
+		}
+		if depth != 0 {
+			return model.CompileResponse{Status: model.CompileStatusCompileError, Reason: "brainfuck source has unmatched brackets"}
+		}
+	}
+	if !hasSource {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no brainfuck sources"}
+	}
+	return passThroughArtifacts(workDir, sources)
+}
+
+func compileWasm(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	var watPath string
+	var wasmPath string
+	for _, src := range sources {
+		clean := strings.ToLower(src.Name)
+		switch {
+		case strings.HasSuffix(clean, ".wat") && watPath == "":
+			watPath = filepath.Join(workDir, filepath.Clean(src.Name))
+		case strings.HasSuffix(clean, ".wasm") && wasmPath == "":
+			wasmPath = filepath.Join(workDir, filepath.Clean(src.Name))
+		}
+	}
+	if watPath == "" && wasmPath == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no wasm sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(target), ".wasm") {
+		target += ".wasm"
+	}
+	targetPath := filepath.Join(workDir, target)
+	if watPath != "" {
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "wat2wasm", []string{watPath, "-o", targetPath}, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+	} else {
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "wasm-validate", []string{wasmPath}, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		data, err := os.ReadFile(wasmPath)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+		if err := os.WriteFile(targetPath, data, 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+	}
+	artifacts, err := readSingleArtifact(targetPath, target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
+}
+
 func compileOCaml(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	ordered := make([]string, 0, len(sources))
 	hasML := false
@@ -605,7 +806,7 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 		}
 	}
 	if !hasProject {
-		if _, _, status, reason := runCommand(ctx, workDir, "dotnet", []string{"new", "console", "--force", "-o", projectDir}, nil); status != model.CompileStatusOK {
+		if _, _, status, reason := runCommand(ctx, workDir, "dotnet", []string{"new", "console", "--force", "-o", projectDir}, dotnetBuildEnv()); status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Reason: reason}
 		}
 	}
@@ -617,19 +818,57 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 	if hasProject {
 		publishTarget = projectPath
 	}
-	args := []string{"publish", publishTarget, "--configuration", "Release", "-o", outDir}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, nil)
+	args := []string{"publish", publishTarget, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false"}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
-	artifacts, err := collectArtifacts(outDir, func(name string) bool {
-		l := strings.ToLower(name)
-		return !strings.HasSuffix(l, ".pdb") && !strings.HasSuffix(l, ".xml")
-	}, "publish")
+	assemblyName := filepath.Base(projectDir)
+	if hasProject {
+		assemblyName = strings.TrimSuffix(filepath.Base(projectPath), filepath.Ext(projectPath))
+	}
+	artifacts, err := collectDotnetPublishArtifacts(outDir, assemblyName)
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func dotnetBuildEnv() []string {
+	return []string{
+		"HOME=/tmp/csharp-home",
+		"DOTNET_CLI_HOME=/tmp/csharp-home",
+		"NUGET_PACKAGES=/tmp/csharp-packages",
+		"DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
+		"DOTNET_CLI_TELEMETRY_OPTOUT=1",
+		"DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",
+		"DOTNET_GENERATE_ASPNET_CERTIFICATE=false",
+		"DOTNET_NOLOGO=1",
+		"MSBuildEnableWorkloadResolver=false",
+	}
+}
+
+func collectDotnetPublishArtifacts(root, assemblyName string) ([]model.Artifact, error) {
+	artifacts, err := collectArtifacts(root, func(name string) bool {
+		l := strings.ToLower(name)
+		return !strings.HasSuffix(l, ".pdb") && !strings.HasSuffix(l, ".xml")
+	}, "publish")
+	if err != nil {
+		return nil, err
+	}
+	if assemblyName == "" {
+		return artifacts, nil
+	}
+	mainDLL := "publish/" + assemblyName + ".dll"
+	for i, artifact := range artifacts {
+		if artifact.Name == mainDLL {
+			if i != 0 {
+				artifacts[0], artifacts[i] = artifacts[i], artifacts[0]
+			}
+			break
+		}
+	}
+	return artifacts, nil
 }
 
 func passThroughArtifacts(workDir string, sources []model.Source) model.CompileResponse {

@@ -57,10 +57,15 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{
-		"haskell": {compileKind: "haskell", runLang: "binary"},
-		"swift":   {compileKind: "swift", runLang: "binary"},
-		"sqlite":  {compileKind: "sqlite", runLang: "sqlite"},
-		"julia":   {compileKind: "julia", runLang: "julia"},
+		"haskell":    {compileKind: "haskell", runLang: "binary"},
+		"swift":      {compileKind: "swift", runLang: "binary"},
+		"sqlite":     {compileKind: "sqlite", runLang: "sqlite"},
+		"julia":      {compileKind: "julia", runLang: "julia"},
+		"scala":      {compileKind: "scala", runLang: "scala"},
+		"fsharp":     {compileKind: "fsharp", runLang: "fsharp"},
+		"whitespace": {compileKind: "whitespace", runLang: "whitespace"},
+		"bf":         {compileKind: "brainfuck", runLang: "brainfuck"},
+		"wasm":       {compileKind: "wasm", runLang: "wasm"},
 	}
 
 	for input, want := range tests {
@@ -74,6 +79,34 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		if profile.RunLang != want.runLang {
 			t.Fatalf("resolveProfile(%q) run lang = %q, want %q", input, profile.RunLang, want.runLang)
 		}
+	}
+}
+
+func TestRunRejectsInvalidWhitespaceProgram(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang: "WHITESPACE",
+		Sources: []model.Source{{
+			Name:    "Main.ws",
+			DataB64: b64String("not whitespace"),
+		}},
+	})
+	if resp.Status != model.CompileStatusCompileError {
+		t.Fatalf("status=%q want=%q", resp.Status, model.CompileStatusCompileError)
+	}
+}
+
+func TestRunRejectsInvalidBrainfuckProgram(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang: "BF",
+		Sources: []model.Source{{
+			Name:    "Main.bf",
+			DataB64: b64String("++[>++<-"),
+		}},
+	})
+	if resp.Status != model.CompileStatusCompileError {
+		t.Fatalf("status=%q want=%q", resp.Status, model.CompileStatusCompileError)
 	}
 }
 
