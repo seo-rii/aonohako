@@ -3,6 +3,7 @@ package runtimepacks
 import (
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -97,5 +98,37 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-zig",
 	}) {
 		t.Fatalf("ci image names = %v", names)
+	}
+}
+
+func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	tests := map[string][]string{
+		"erlang":  {"Broken.erl", "erlc"},
+		"zig":     {"Broken.zig", "zig build-exe"},
+		"r":       {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
+		"fortran": {"Broken.f90", "gfortran"},
+		"d":       {"Broken.d", "ldc2"},
+		"groovy":  {"Broken.groovy", "groovyc"},
+		"prolog":  {"Broken.pl", "swipl"},
+		"lisp":    {"Broken.lisp", "sbcl"},
+		"coq":     {"Broken.v", "coqc"},
+	}
+
+	for language, patterns := range tests {
+		spec, ok := catalog.Languages[language]
+		if !ok {
+			t.Fatalf("missing language %q in catalog", language)
+		}
+		body := strings.Join(spec.Smoke.Command, "\n")
+		for _, pattern := range patterns {
+			if !strings.Contains(body, pattern) {
+				t.Fatalf("language %q smoke command must contain %q, got %q", language, pattern, body)
+			}
+		}
 	}
 }
