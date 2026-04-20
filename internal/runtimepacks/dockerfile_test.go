@@ -121,3 +121,25 @@ func TestRuntimeDockerfileCreatesProtectedRootOwnedSandboxPath(t *testing.T) {
 		t.Fatalf("runtime.Dockerfile must restrict the protected runtime path to root")
 	}
 }
+
+func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	for _, marker := range []string{
+		"/etc/debian_version",
+		"/etc/os-release",
+		"/usr/share/doc",
+		"/usr/share/man",
+		"/var/lib/dpkg",
+		"/var/cache/apt",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("runtime.Dockerfile must harden %s to reduce image read surface", marker)
+		}
+	}
+}

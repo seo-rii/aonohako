@@ -11,7 +11,7 @@ languages:
         - -c
         - |
           printf '%s\n' '#include <stdio.h>' 'int main(void) {' '  puts("ok");' '  return 0;' '}' > Main.c
-          gcc -O2 -pipe --static Main.c -o Main
+          gcc -O2 -pipe Main.c -o Main
           [ "$(./Main)" = ok ]
 
   python:
