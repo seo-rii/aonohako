@@ -18,10 +18,18 @@ type capturedOutputFile struct {
 	cleanup func()
 }
 
-func openCapturedOutput(ws Workspace, rel string) (capturedOutputFile, error) {
+type workspaceReadOnlyFile struct {
+	file    *os.File
+	info    os.FileInfo
+	clean   string
+	dirfd   int
+	cleanup func()
+}
+
+func openWorkspaceReadOnly(ws Workspace, rel string) (workspaceReadOnlyFile, error) {
 	clean, err := util.ValidateRelativePath(rel)
 	if err != nil {
-		return capturedOutputFile{}, err
+		return workspaceReadOnlyFile{}, err
 	}
 	how := &unix.OpenHow{
 		Flags:   unix.O_RDONLY | unix.O_CLOEXEC,
@@ -38,29 +46,45 @@ func openCapturedOutput(ws Workspace, rel string) (capturedOutputFile, error) {
 			if err == unix.ENOENT || err == unix.ENOTDIR {
 				continue
 			}
-			return capturedOutputFile{}, err
+			return workspaceReadOnlyFile{}, err
 		}
 		file := os.NewFile(uintptr(fd), filepath.Join(root, clean))
 		info, err := file.Stat()
 		if err != nil {
 			_ = file.Close()
 			_ = unix.Close(dirfd)
-			return capturedOutputFile{}, err
+			return workspaceReadOnlyFile{}, err
 		}
 		if !info.Mode().IsRegular() {
 			_ = file.Close()
 			_ = unix.Close(dirfd)
-			return capturedOutputFile{}, fmt.Errorf("output is not a regular file: %s", rel)
+			return workspaceReadOnlyFile{}, fmt.Errorf("output is not a regular file: %s", rel)
 		}
-		return capturedOutputFile{
-			file: file,
-			info: info,
+		return workspaceReadOnlyFile{
+			file:  file,
+			info:  info,
+			clean: clean,
+			dirfd: dirfd,
 			cleanup: func() {
 				_ = file.Close()
-				_ = unix.Unlinkat(dirfd, clean, 0)
 				_ = unix.Close(dirfd)
 			},
 		}, nil
 	}
-	return capturedOutputFile{}, os.ErrNotExist
+	return workspaceReadOnlyFile{}, os.ErrNotExist
+}
+
+func openCapturedOutput(ws Workspace, rel string) (capturedOutputFile, error) {
+	output, err := openWorkspaceReadOnly(ws, rel)
+	if err != nil {
+		return capturedOutputFile{}, err
+	}
+	return capturedOutputFile{
+		file: output.file,
+		info: output.info,
+		cleanup: func() {
+			_ = unix.Unlinkat(output.dirfd, output.clean, 0)
+			output.cleanup()
+		},
+	}, nil
 }

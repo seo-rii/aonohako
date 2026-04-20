@@ -33,9 +33,10 @@ type Binary struct {
 }
 
 type Limits struct {
-	TimeMs      int `json:"time_ms"`
-	MemoryMB    int `json:"memory_mb"`
-	OutputBytes int `json:"output_bytes,omitempty"`
+	TimeMs         int   `json:"time_ms"`
+	MemoryMB       int   `json:"memory_mb"`
+	OutputBytes    int   `json:"output_bytes,omitempty"`
+	WorkspaceBytes int64 `json:"workspace_bytes,omitempty"`
 }
 
 type SPJSpec struct {
