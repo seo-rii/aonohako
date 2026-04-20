@@ -174,6 +174,12 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileKotlinNative(ctx, workDir, target, req.Sources)
 	case "haskell":
 		return compileHaskell(ctx, workDir, target, req.Sources)
+	case "swift":
+		return compileSwift(ctx, workDir, target, req.Sources)
+	case "sqlite":
+		return compileSQLite(workDir, req.Sources)
+	case "julia":
+		return compileJulia(workDir, req.Sources)
 	case "ocaml":
 		return compileOCaml(ctx, workDir, target, req.Sources)
 	case "elixir":
@@ -431,6 +437,69 @@ func compileHaskell(ctx context.Context, workDir, target string, sources []model
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileSwift(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	var swiftFiles []string
+	for _, src := range sources {
+		if strings.HasSuffix(strings.ToLower(src.Name), ".swift") {
+			swiftFiles = append(swiftFiles, filepath.Join(workDir, filepath.Clean(src.Name)))
+		}
+	}
+	if len(swiftFiles) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no swift sources"}
+	}
+	moduleCacheDir := filepath.Join(workDir, ".swift-module-cache")
+	if err := os.MkdirAll(moduleCacheDir, 0o755); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	args := []string{"-O", "-module-cache-path", moduleCacheDir, "-o", target}
+	args = append(args, swiftFiles...)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "swiftc", args, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileSQLite(workDir string, sources []model.Source) model.CompileResponse {
+	var hasSQL bool
+	for _, src := range sources {
+		if strings.HasSuffix(strings.ToLower(src.Name), ".sql") {
+			hasSQL = true
+			break
+		}
+	}
+	if !hasSQL {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no sqlite sources"}
+	}
+	artifacts, err := collectArtifacts(workDir, func(string) bool { return true }, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
+}
+
+func compileJulia(workDir string, sources []model.Source) model.CompileResponse {
+	var hasJulia bool
+	for _, src := range sources {
+		if strings.HasSuffix(strings.ToLower(src.Name), ".jl") {
+			hasJulia = true
+			break
+		}
+	}
+	if !hasJulia {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no julia sources"}
+	}
+	artifacts, err := collectArtifacts(workDir, func(string) bool { return true }, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
 }
 
 func compileOCaml(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {

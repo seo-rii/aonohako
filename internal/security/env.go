@@ -16,6 +16,7 @@ func ThreadLimitEnv() []string {
 		"BLIS_NUM_THREADS=1",
 		"TF_NUM_INTRAOP_THREADS=1",
 		"TF_NUM_INTEROP_THREADS=1",
+		"JULIA_NUM_THREADS=1",
 		"XLA_FLAGS=--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1",
 	}
 }
@@ -33,6 +34,7 @@ func WorkspaceScopedDirs(workDir string) []string {
 		filepath.Join(workDir, ".konan"),
 		filepath.Join(workDir, ".mix"),
 		filepath.Join(workDir, ".hex"),
+		filepath.Join(workDir, ".julia"),
 		filepath.Join(workDir, "__img__"),
 	}
 }
@@ -49,6 +51,7 @@ func WorkspaceScopedEnv(workDir string) []string {
 	konan := filepath.Join(workDir, ".konan")
 	mix := filepath.Join(workDir, ".mix")
 	hex := filepath.Join(workDir, ".hex")
+	julia := filepath.Join(workDir, ".julia")
 	img := filepath.Join(workDir, "__img__")
 	return []string{
 		fmt.Sprintf("HOME=%s", home),
@@ -72,6 +75,7 @@ func WorkspaceScopedEnv(workDir string) []string {
 		fmt.Sprintf("KONAN_DATA_DIR=%s", konan),
 		fmt.Sprintf("MIX_HOME=%s", mix),
 		fmt.Sprintf("HEX_HOME=%s", hex),
+		fmt.Sprintf("JULIA_DEPOT_PATH=%s", julia),
 		fmt.Sprintf("IMG_OUT_DIR=%s", img),
 	}
 }

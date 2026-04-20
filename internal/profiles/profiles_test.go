@@ -32,6 +32,9 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"RUST2024",
 		"KOTLIN",
 		"HASKELL",
+		"SWIFT",
+		"SQLITE",
+		"JULIA",
 		"OCAML",
 		"ELIXIR",
 		"RUBY",
@@ -54,6 +57,9 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"OCAML":   "ocaml",
 		"ELIXIR":  "elixir",
 		"HASKELL": "binary",
+		"SWIFT":   "binary",
+		"SQLITE":  "sqlite",
+		"JULIA":   "julia",
 	}
 
 	for input, want := range tests {

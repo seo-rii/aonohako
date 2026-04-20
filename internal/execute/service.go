@@ -295,7 +295,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "text", "ocaml", "elixir":
+	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "text", "ocaml", "elixir", "sqlite", "julia":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
@@ -398,6 +398,8 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss16m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
 	case "javascript":
 		return []string{"node", "--stack-size=65536", primaryPath}
+	case "julia":
+		return []string{"julia", "--startup-file=no", "--history-file=no", "--color=no", primaryPath}
 	case "ruby":
 		return []string{"ruby", primaryPath}
 	case "php":
@@ -410,6 +412,9 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"env", "OCAMLRUNPARAM=" + ocamlRunParam, primaryPath}
 	case "elixir":
 		return []string{"env", "ERL_AFLAGS=" + elixirERLAFlags, "elixir", primaryPath}
+	case "sqlite":
+		dbPath := filepath.Join(filepath.Dir(primaryPath), ".aonohako.sqlite3")
+		return []string{"sh", "-c", "exec sqlite3 \"$0\" < \"$1\"", dbPath, primaryPath}
 	case "uhmlang":
 		return []string{"/usr/bin/umjunsik-lang-go", primaryPath}
 	case "csharp":

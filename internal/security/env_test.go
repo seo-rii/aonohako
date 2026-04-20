@@ -25,6 +25,7 @@ func TestWorkspaceScopedEnvIncludesWritableToolchainHomes(t *testing.T) {
 		"KONAN_DATA_DIR=" + filepath.Join(root, ".konan"),
 		"MIX_HOME=" + filepath.Join(root, ".mix"),
 		"HEX_HOME=" + filepath.Join(root, ".hex"),
+		"JULIA_DEPOT_PATH=" + filepath.Join(root, ".julia"),
 	}
 
 	for _, want := range wants {
