@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -46,6 +47,12 @@ type Hooks struct {
 	OnImage func(mime, b64 string, ts int64)
 	OnLog   func(stream, msg string)
 }
+
+var (
+	scratchDirStateMu    sync.Mutex
+	scratchDirRefCount   int
+	scratchDirSavedModes = map[string]os.FileMode{}
+)
 
 type cappedBuffer struct {
 	limit int
@@ -519,6 +526,52 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
 			}
 		}
+
+		scratchDirStateMu.Lock()
+		if scratchDirRefCount == 0 {
+			changed := make([]string, 0, 5)
+			for _, dir := range []string{"/tmp", "/var/tmp", "/run/lock", "/dev/shm", "/dev/mqueue"} {
+				info, err := os.Stat(dir)
+				if err != nil {
+					if errors.Is(err, os.ErrNotExist) {
+						continue
+					}
+					for i := len(changed) - 1; i >= 0; i-- {
+						_ = os.Chmod(changed[i], scratchDirSavedModes[changed[i]])
+						delete(scratchDirSavedModes, changed[i])
+					}
+					scratchDirStateMu.Unlock()
+					return execResult{Status: model.RunStatusInitFail, Reason: "scratch dir stat failed: " + err.Error()}
+				}
+				scratchDirSavedModes[dir] = info.Mode() & (os.ModePerm | os.ModeSticky | os.ModeSetuid | os.ModeSetgid)
+				if err := os.Chmod(dir, 0o755); err != nil {
+					for i := len(changed) - 1; i >= 0; i-- {
+						_ = os.Chmod(changed[i], scratchDirSavedModes[changed[i]])
+						delete(scratchDirSavedModes, changed[i])
+					}
+					delete(scratchDirSavedModes, dir)
+					scratchDirStateMu.Unlock()
+					return execResult{Status: model.RunStatusInitFail, Reason: "scratch dir chmod failed: " + err.Error()}
+				}
+				changed = append(changed, dir)
+			}
+		}
+		scratchDirRefCount++
+		scratchDirStateMu.Unlock()
+		defer func() {
+			scratchDirStateMu.Lock()
+			defer scratchDirStateMu.Unlock()
+			if scratchDirRefCount > 0 {
+				scratchDirRefCount--
+			}
+			if scratchDirRefCount != 0 {
+				return
+			}
+			for dir, mode := range scratchDirSavedModes {
+				_ = os.Chmod(dir, mode)
+				delete(scratchDirSavedModes, dir)
+			}
+		}()
 	}
 
 	reqPath := filepath.Join(ws.RootDir, ".tmp", "sandbox-request.json")

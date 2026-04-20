@@ -391,6 +391,9 @@ func TestRunBlocksUnixDatagramSendWhenNetworkDisabled(t *testing.T) {
 		t.Fatalf("listen unixgram socket: %v", err)
 	}
 	defer listener.Close()
+	if err := os.Chmod(socketPath, 0o777); err != nil {
+		t.Fatalf("chmod unixgram socket: %v", err)
+	}
 
 	svc := New()
 	script := fmt.Sprintf(
@@ -415,6 +418,50 @@ func TestRunBlocksUnixDatagramSendWhenNetworkDisabled(t *testing.T) {
 	buf := make([]byte, 64)
 	if n, _, err := listener.ReadFromUnix(buf); err == nil {
 		t.Fatalf("expected no datagram delivery, got %q", string(buf[:n]))
+	}
+}
+
+func TestRunBlocksUnixDatagramSendToAccessibleSocketWhenNetworkDisabled(t *testing.T) {
+	requireSandboxSupport(t)
+
+	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-open-dgram-%d.sock", time.Now().UnixNano()))
+	_ = os.Remove(socketPath)
+	addr := &net.UnixAddr{Name: socketPath, Net: "unixgram"}
+	listener, err := net.ListenUnixgram("unixgram", addr)
+	if err != nil {
+		t.Fatalf("listen unixgram socket: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
+	}()
+	if err := os.Chmod(socketPath, 0o777); err != nil {
+		t.Fatalf("chmod unixgram socket: %v", err)
+	}
+
+	svc := New()
+	script := fmt.Sprintf(
+		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)\n    s.sendto(b'escape', %q)\n    print('sent')\nexcept OSError:\n    print('blocked')\n",
+		socketPath,
+	)
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+
+	_ = listener.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	buf := make([]byte, 64)
+	if n, _, err := listener.ReadFromUnix(buf); err == nil {
+		t.Fatalf("expected no datagram delivery to accessible socket, got %q", string(buf[:n]))
 	}
 }
 
@@ -484,6 +531,27 @@ func TestRunPreventsRemovingOrReplacingSubmittedFiles(t *testing.T) {
 		},
 		ExpectedStdout: "blocked-unlink\nblocked-replace\noriginal\n",
 		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunBlocksWritesOutsideWorkspaceTempDirs(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"from pathlib import Path\nfor target in ['/tmp/aonohako-outside.txt', '/var/tmp/aonohako-outside.txt']:\n    try:\n        Path(target).write_text('escape')\n        print('wrote')\n    except OSError:\n        print('blocked')\n",
+			)),
+		}},
+		ExpectedStdout: "blocked\nblocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256, WorkspaceBytes: 8 << 10},
 	}, Hooks{})
 
 	if resp.Status != model.RunStatusAccepted {

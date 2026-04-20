@@ -53,6 +53,10 @@ func WorkspaceScopedEnv(workDir string) []string {
 	return []string{
 		fmt.Sprintf("HOME=%s", home),
 		fmt.Sprintf("TMPDIR=%s", tmp),
+		fmt.Sprintf("TMP=%s", tmp),
+		fmt.Sprintf("TEMP=%s", tmp),
+		fmt.Sprintf("TEMPDIR=%s", tmp),
+		fmt.Sprintf("JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=%s", tmp),
 		fmt.Sprintf("XDG_CACHE_HOME=%s", cache),
 		fmt.Sprintf("MPLCONFIGDIR=%s", mpl),
 		fmt.Sprintf("PIP_CACHE_DIR=%s", pip),
