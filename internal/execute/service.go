@@ -506,8 +506,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		if err := os.Chmod(ws.RootDir, 0o755); err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
 		}
-		chownTargets := append([]string{ws.BoxDir}, security.WorkspaceScopedDirs(ws.RootDir)...)
-		for _, dir := range chownTargets {
+		for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
 			if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
 			}
