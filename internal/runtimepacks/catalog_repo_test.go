@@ -3,6 +3,7 @@ package runtimepacks
 import (
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -131,4 +132,28 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	ci, err := catalog.CILanguageImages()
+	if err != nil {
+		t.Fatalf("CILanguageImages returned error: %v", err)
+	}
+
+	for _, spec := range ci {
+		if spec.Name != "ci-kotlin" {
+			continue
+		}
+		if !slices.Contains(spec.AptPackages, "openjdk-17-jre-headless") {
+			t.Fatalf("ci-kotlin apt packages = %v, want openjdk-17-jre-headless for run_konan", spec.AptPackages)
+		}
+		return
+	}
+
+	t.Fatalf("ci-kotlin image not found")
 }

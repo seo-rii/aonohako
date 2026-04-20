@@ -51,8 +51,26 @@ func TestRuntimeDockerfilePATHIncludesSbin(t *testing.T) {
 	}
 
 	body := string(data)
-	if !strings.Contains(body, "PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin") {
-		t.Fatalf("runtime.Dockerfile PATH must include /usr/sbin and /sbin for sandbox tools")
+	if !strings.Contains(body, "PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin") {
+		t.Fatalf("runtime.Dockerfile PATH must include go/cargo bins and /usr/sbin:/sbin for sandbox tools")
+	}
+}
+
+func TestRuntimeDockerfileExportsRustToolchainEnv(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	for _, marker := range []string{
+		"RUSTUP_HOME=/usr/local/rustup",
+		"CARGO_HOME=/usr/local/cargo",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("runtime.Dockerfile must export %s for rust toolchain shims", marker)
+		}
 	}
 }
 

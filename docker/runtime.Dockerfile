@@ -69,9 +69,11 @@ RUN install -d -m 0700 /var/aonohako /var/aonohako/protected && \
     if [[ -d /var/mail ]]; then chmod 0700 /var/mail; fi && \
     if [[ -d /etc/ssl/private ]]; then chmod 0700 /etc/ssl/private; fi
 
-ENV PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
+ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
     AONOHAKO_IMAGE_NAME=${IMAGE_NAME} \
     AONOHAKO_LANGUAGES=${LANGUAGES} \
     AONOHAKO_SMOKE_COMMAND=${SMOKE_COMMAND}
