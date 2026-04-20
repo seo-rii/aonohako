@@ -95,6 +95,7 @@ const (
 	RunStatusWA       = "Wrong Answer"
 	RunStatusTLE      = "Time Limit Exceeded"
 	RunStatusMLE      = "Memory Limit Exceeded"
+	RunStatusWLE      = "Workspace Limit Exceeded"
 	RunStatusRE       = "Runtime Error"
 	RunStatusInitFail = "Container Initialization Failed"
 )

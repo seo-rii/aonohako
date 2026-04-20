@@ -224,6 +224,72 @@ func TestRunCapturesSidecarOutput(t *testing.T) {
 	}
 }
 
+func TestRunUsesRequestedFileOutputForJudging(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\nprintf ignored\\n\nprintf wanted\\n > output.txt\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "wanted\n",
+		FileOutputs:    []model.OutputFile{{Path: "output.txt"}},
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected file output to be judged, got %+v", resp)
+	}
+}
+
+func TestRunMissingRequestedFileOutputFailsExplicitly(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\nprintf fallback\\n\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "fallback\n",
+		FileOutputs:    []model.OutputFile{{Path: "output.txt"}},
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusRE {
+		t.Fatalf("expected runtime error on missing file output, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "file output capture failed") {
+		t.Fatalf("expected explicit file output reason, got %+v", resp)
+	}
+}
+
+func TestRunRejectsMultipleFileOutputs(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\nprintf ok\\n > output.txt\n"),
+			Mode:    "exec",
+		}},
+		FileOutputs: []model.OutputFile{{Path: "output.txt"}, {Path: "extra.txt"}},
+		Limits:      model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusInitFail {
+		t.Fatalf("expected init failure for multiple file outputs, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "at most one file output") {
+		t.Fatalf("expected multiple file outputs reason, got %+v", resp)
+	}
+}
+
 func b64Raw(v []byte) string {
 	return base64.StdEncoding.EncodeToString(v)
 }
@@ -1004,7 +1070,7 @@ func TestRunMarksWorkspaceQuotaExceeded(t *testing.T) {
 		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128, WorkspaceBytes: 16 << 10},
 	}, Hooks{})
 
-	if resp.Status != model.RunStatusMLE {
-		t.Fatalf("expected MLE from workspace quota exhaustion, got %+v", resp)
+	if resp.Status != model.RunStatusWLE {
+		t.Fatalf("expected workspace limit status from workspace quota exhaustion, got %+v", resp)
 	}
 }
