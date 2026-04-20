@@ -2,7 +2,9 @@ package execute
 
 import (
 	"context"
+	"encoding/base64"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,6 +37,35 @@ func requireSandboxSupport(t *testing.T) {
 	if strings.Contains(resp.Stderr, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox requires root") {
 		t.Skipf("sandbox isolation is unavailable on this runner: %+v", resp)
 	}
+}
+
+func buildCTestBinary(t *testing.T, source string, args ...string) string {
+	t.Helper()
+
+	cc, err := exec.LookPath("cc")
+	if err != nil {
+		cc, err = exec.LookPath("gcc")
+	}
+	if err != nil {
+		t.Skip("C compiler is unavailable on this runner")
+	}
+
+	workDir := t.TempDir()
+	binPath := filepath.Join(workDir, "runner")
+	cmdArgs := []string{"-O2", "-x", "c", "-", "-o", binPath}
+	cmdArgs = append(cmdArgs, args...)
+	cmd := exec.Command(cc, cmdArgs...)
+	cmd.Stdin = strings.NewReader(source)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("compile C helper: %v\n%s", err, string(output))
+	}
+
+	data, err := os.ReadFile(binPath)
+	if err != nil {
+		t.Fatalf("read compiled helper: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(data)
 }
 
 // --------------- #8: buildCommand Java -Xmx dynamic ---------------

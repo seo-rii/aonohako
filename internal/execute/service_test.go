@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -123,6 +124,46 @@ func TestStreamImageEventsSkipsInvalidLines(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatalf("expected exactly two valid events, got %v", events)
+}
+
+func TestStreamImageEventsRejectsSymlinkEscape(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	outside := filepath.Join(t.TempDir(), "secret.jsonl")
+	line := "{\"mime\":\"image/png\",\"b64\":\"escaped\",\"ts\":123}\n"
+	if err := os.WriteFile(outside, []byte(line), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	imgPath := filepath.Join(ws.BoxDir, "__img__", "images.jsonl")
+	if err := os.MkdirAll(filepath.Dir(imgPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(outside, imgPath); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	var events []string
+	go streamImageEvents(ctx, ws, "__img__/images.jsonl", func(mime, b64 string, ts int64) {
+		mu.Lock()
+		events = append(events, mime+":"+b64)
+		mu.Unlock()
+	})
+
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(events) != 0 {
+		t.Fatalf("expected no events from symlink escape, got %v", events)
+	}
 }
 
 func TestRunReturnsTLEOnParentCancel(t *testing.T) {
@@ -481,6 +522,72 @@ func TestRunBlocksThreadStorms(t *testing.T) {
 	}
 }
 
+func TestRunEnforcesProcessCPUTimeAcrossThreads(t *testing.T) {
+	if runtime.NumCPU() < 2 {
+		t.Skip("needs at least 2 CPUs to distinguish total cpu time from wall time")
+	}
+	forceDirectMode(t)
+
+	code := `
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <time.h>
+
+static atomic_int stop_flag = 0;
+
+static uint64_t mono_ns(void) {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+static void* spin(void* arg) {
+	volatile uint64_t x = (uintptr_t)arg + 1;
+	while (!atomic_load(&stop_flag)) {
+		x = x * 2862933555777941757ull + 3037000493ull;
+	}
+	return (void*)(uintptr_t)x;
+}
+
+int main(void) {
+	pthread_t threads[4];
+	for (int i = 0; i < 4; ++i) {
+		if (pthread_create(&threads[i], NULL, spin, (void*)(uintptr_t)i) != 0) {
+			puts("thread-error");
+			return 1;
+		}
+	}
+	uint64_t start = mono_ns();
+	while (mono_ns() - start < 60000000ull) {
+	}
+	atomic_store(&stop_flag, 1);
+	for (int i = 0; i < 4; ++i) {
+		pthread_join(threads[i], NULL);
+	}
+	puts("finished");
+	return 0;
+}
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "runner",
+			DataB64: buildCTestBinary(t, code, "-pthread"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "finished\n",
+		Limits:         model.Limits{TimeMs: 100, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusTLE {
+		t.Fatalf("expected TLE from summed process cpu time, got %+v", resp)
+	}
+}
+
 func TestMaterializeRejectsOversizedBinary(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)
@@ -590,5 +697,65 @@ func TestRunMarksMemoryLimitExceededEvenIfProgramHandlesAllocationFailure(t *tes
 	}
 	if resp.MemoryKB <= 32*1024 {
 		t.Fatalf("expected rss to exceed configured limit, got %+v", resp)
+	}
+}
+
+func TestRunMarksMemoryLimitExceededOnAddressSpaceFailureWithoutRSSSpike(t *testing.T) {
+	forceDirectMode(t)
+
+	code := `
+#include <stdio.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+int main(void) {
+	for (int i = 0; i < 64; ++i) {
+		void* p = mmap(NULL, 8 * 1024 * 1024, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (p == MAP_FAILED) {
+			usleep(50000);
+			puts("enomem");
+			return 0;
+		}
+	}
+	usleep(50000);
+	puts("mapped-all");
+	return 0;
+}
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "runner",
+			DataB64: buildCTestBinary(t, code),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "enomem\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 32},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusMLE {
+		t.Fatalf("expected MLE from address-space exhaustion, got %+v", resp)
+	}
+}
+
+func TestRunMarksWorkspaceQuotaExceeded(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\ni=0\nwhile [ \"$i\" -lt 8 ]; do\n  j=0\n  : > \"chunk-$i.bin\"\n  while [ \"$j\" -lt 4096 ]; do\n    printf x >> \"chunk-$i.bin\"\n    j=$((j+1))\n  done\n  i=$((i+1))\ndone\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128, WorkspaceBytes: 16 << 10},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusMLE {
+		t.Fatalf("expected MLE from workspace quota exhaustion, got %+v", resp)
 	}
 }

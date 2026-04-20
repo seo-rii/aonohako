@@ -3,11 +3,13 @@
 package sandbox
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"unsafe"
 
@@ -72,6 +74,51 @@ func MaybeRunFromEnv() bool {
 	if threadLimit < 32 {
 		threadLimit = 32
 	}
+	nprocLimit := uint64(threadLimit)
+	if entries, err := os.ReadDir("/proc"); err == nil {
+		currentUID := fmt.Sprintf("%d", os.Getuid())
+		currentCount := 0
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if name == "" || name[0] < '0' || name[0] > '9' {
+				continue
+			}
+			rawStatus, err := os.ReadFile(filepath.Join("/proc", name, "status"))
+			if err != nil {
+				continue
+			}
+			matchesUID := false
+			threads := 1
+			for _, line := range bytes.Split(rawStatus, []byte{'\n'}) {
+				if !bytes.HasPrefix(line, []byte("Uid:")) {
+					if bytes.HasPrefix(line, []byte("Threads:")) {
+						fields := bytes.Fields(line)
+						if len(fields) >= 2 {
+							if parsed, err := strconv.Atoi(string(fields[1])); err == nil && parsed > 0 {
+								threads = parsed
+							}
+						}
+					}
+					continue
+				}
+				fields := bytes.Fields(line)
+				if len(fields) >= 2 && string(fields[1]) == currentUID {
+					matchesUID = true
+				}
+			}
+			if matchesUID {
+				currentCount += threads
+			}
+		}
+		nprocLimit = uint64(currentCount + threadLimit + 8)
+	}
+	fileSizeLimit := uint64(128 * 1024 * 1024)
+	if req.Limits.WorkspaceBytes > 0 {
+		fileSizeLimit = uint64(req.Limits.WorkspaceBytes)
+	}
 	limits := []struct {
 		resource int
 		value    uint64
@@ -79,8 +126,8 @@ func MaybeRunFromEnv() bool {
 		{unix.RLIMIT_CPU, uint64(cpuSec)},
 		{unix.RLIMIT_AS, uint64(asMB) * 1024 * 1024},
 		{unix.RLIMIT_NOFILE, 64},
-		{unix.RLIMIT_NPROC, uint64(threadLimit)},
-		{unix.RLIMIT_FSIZE, 32 * 1024 * 1024},
+		{unix.RLIMIT_NPROC, nprocLimit},
+		{unix.RLIMIT_FSIZE, fileSizeLimit},
 		{unix.RLIMIT_CORE, 0},
 	}
 	for _, item := range limits {

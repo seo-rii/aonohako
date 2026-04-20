@@ -29,7 +29,10 @@ import (
 const (
 	defaultMaxOutputBytes        = 64 << 10
 	hardMaxOutputBytes           = 8 << 20
-	sandboxThreadLimit           = 512
+	defaultWorkspaceBytes        = 128 << 20
+	hardMaxWorkspaceBytes        = 1 << 30
+	addressSpaceSlackKB          = 8 << 10
+	sandboxThreadLimit           = 128
 	maxBinaryFileBytes           = 16 << 20
 	maxBinaryTotalBytes          = 48 << 20
 	maxCapturedFileBytes         = 8 << 20
@@ -426,6 +429,19 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
+	timeLimitMs := max(1, req.Limits.TimeMs)
+	memoryLimitKB := int64(0)
+	if req.Limits.MemoryMB > 0 {
+		memoryLimitKB = int64(req.Limits.MemoryMB) * 1024
+	}
+	workspaceLimitBytes := req.Limits.WorkspaceBytes
+	if workspaceLimitBytes <= 0 {
+		workspaceLimitBytes = defaultWorkspaceBytes
+	}
+	if workspaceLimitBytes > hardMaxWorkspaceBytes {
+		workspaceLimitBytes = hardMaxWorkspaceBytes
+	}
+	addressSpaceLimitKB := int64(addressSpaceLimitBytes(req.Limits.MemoryMB) / 1024)
 
 	baseEnv := []string{
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -576,20 +592,112 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	go func() {
 		waitCh <- cmd.Wait()
 	}()
-	cpuSampler := timing.StartProcessCPUSampler(cmd.Process.Pid)
-	cpuBaselineNs, _ := timing.ProcessCPUTimeNs(cmd.Process.Pid)
+	resolvedHelperPath := helperPath
+	if realHelperPath, err := filepath.EvalSymlinks(helperPath); err == nil && realHelperPath != "" {
+		resolvedHelperPath = realHelperPath
+	}
+	cpuBaselineNs := uint64(0)
+	targetStarted := false
+	watchdog := time.NewTicker(5 * time.Millisecond)
+	defer watchdog.Stop()
+	lastWorkspaceScan := time.Time{}
+	maxCPUTimeMs := int64(0)
+	maxRSSKB := int64(0)
+	maxVmSizeKB := int64(0)
 
 	result := execResult{Status: "OK"}
-	select {
-	case <-ctx.Done():
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		<-waitCh
-		result.Status = model.RunStatusTLE
-	case err := <-waitCh:
-		if err != nil {
-			result.Status = model.RunStatusRE
+	for {
+		select {
+		case <-ctx.Done():
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			<-waitCh
+			if result.Status == "OK" {
+				result.Status = model.RunStatusTLE
+				result.Reason = "wall time limit exceeded"
+			}
+			goto done
+		case err := <-waitCh:
+			if err != nil && result.Status == "OK" {
+				result.Status = model.RunStatusRE
+			}
+			goto done
+		case <-watchdog.C:
+			if !targetStarted {
+				exePath, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", cmd.Process.Pid))
+				if err != nil {
+					continue
+				}
+				if realExePath, err := filepath.EvalSymlinks(exePath); err == nil && realExePath != "" {
+					exePath = realExePath
+				}
+				if exePath == resolvedHelperPath {
+					continue
+				}
+				targetStarted = true
+				cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
+				lastWorkspaceScan = time.Now()
+				continue
+			}
+			if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
+				cpuTimeMs := timing.MilliFromNanoseconds(cpuNs)
+				if cpuBaselineNs > 0 && cpuNs > cpuBaselineNs {
+					cpuTimeMs = timing.MilliFromNanoseconds(cpuNs - cpuBaselineNs)
+				}
+				if cpuTimeMs > maxCPUTimeMs {
+					maxCPUTimeMs = cpuTimeMs
+				}
+				if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+					result.Status = model.RunStatusTLE
+					result.Reason = "cpu time limit exceeded"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				}
+			}
+
+			if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", cmd.Process.Pid)); err == nil {
+				fields := strings.Fields(string(raw))
+				if len(fields) >= 2 {
+					pageKB := int64(os.Getpagesize() / 1024)
+					if v, err := strconv.ParseInt(fields[0], 10, 64); err == nil {
+						v *= pageKB
+						if v > maxVmSizeKB {
+							maxVmSizeKB = v
+						}
+					}
+					if v, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
+						v *= pageKB
+						if v > maxRSSKB {
+							maxRSSKB = v
+						}
+					}
+				}
+				if result.Status == "OK" && memoryLimitKB > 0 && maxRSSKB > memoryLimitKB {
+					result.Status = model.RunStatusMLE
+					result.Reason = "memory limit exceeded"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				}
+			}
+
+			if result.Status == "OK" && (lastWorkspaceScan.IsZero() || time.Since(lastWorkspaceScan) >= 25*time.Millisecond) {
+				lastWorkspaceScan = time.Now()
+				workspaceBytes := int64(0)
+				_ = filepath.Walk(ws.RootDir, func(path string, info os.FileInfo, err error) error {
+					if err != nil || info == nil {
+						return nil
+					}
+					if info.Mode().IsRegular() {
+						workspaceBytes += info.Size()
+					}
+					return nil
+				})
+				if workspaceBytes > workspaceLimitBytes {
+					result.Status = model.RunStatusMLE
+					result.Reason = "workspace quota exceeded"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				}
+			}
 		}
 	}
+done:
 	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 
 	<-doneOut
@@ -597,14 +705,10 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	<-imageDone
 
 	result.WallTimeMs = timing.SinceMillis(wallStart)
-	cpuEndNs := cpuSampler.Stop()
-	if cpuBaselineNs > 0 && cpuEndNs > cpuBaselineNs {
-		result.CPUTimeMs = timing.MilliFromNanoseconds(cpuEndNs - cpuBaselineNs)
-	} else {
-		result.CPUTimeMs = timing.MilliFromNanoseconds(cpuEndNs)
-	}
+	result.CPUTimeMs = maxCPUTimeMs
 	result.Stdout = stdoutBuf.Bytes()
 	result.Stderr = stderrBuf.Bytes()
+	result.MemoryKB = maxRSSKB
 
 	if ps := cmd.ProcessState; ps != nil {
 		if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
@@ -614,25 +718,32 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			}
 			if ws.Signaled() {
 				if result.Status == "OK" {
-					result.Status = model.RunStatusRE
-				}
-				if ws.Signal() == syscall.SIGKILL || ws.Signal() == syscall.SIGXCPU {
-					result.Status = model.RunStatusTLE
+					if ws.Signal() == syscall.SIGKILL || ws.Signal() == syscall.SIGXCPU {
+						result.Status = model.RunStatusTLE
+					} else {
+						result.Status = model.RunStatusRE
+					}
 				}
 			}
 		}
 		if sysu, ok := ps.SysUsage().(*syscall.Rusage); ok {
-			result.MemoryKB = sysu.Maxrss
+			if sysu.Maxrss > result.MemoryKB {
+				result.MemoryKB = sysu.Maxrss
+			}
 		}
 		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > result.CPUTimeMs {
 			result.CPUTimeMs = usageCPU
 		}
 	}
+	if result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
+		result.Status = model.RunStatusMLE
+		result.Reason = "memory limit exceeded"
+	}
 	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
 		result.Status = model.RunStatusInitFail
 		result.Reason = clipUTF8(result.Stderr, outputLimitBytes)
 	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if result.Status == "OK" && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		result.Status = model.RunStatusTLE
 	}
 	return result
@@ -722,21 +833,18 @@ func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit f
 	var carry string
 
 	readNew := func() {
-		full, err := existingWorkspacePath(ws, clean)
+		output, err := openWorkspaceReadOnly(ws, clean)
 		if err != nil {
 			return
 		}
-		st, err := os.Stat(full)
-		if err != nil || st.Size() <= offset {
+		defer output.cleanup()
+		if output.info.Size() <= offset {
 			return
 		}
-		f, err := os.Open(full)
-		if err != nil {
+		if _, err := output.file.Seek(offset, 0); err != nil {
 			return
 		}
-		defer f.Close()
-		_, _ = f.Seek(offset, 0)
-		reader := bufio.NewReader(f)
+		reader := bufio.NewReader(output.file)
 		chunk, _ := ioReadAll(reader)
 		offset += int64(len(chunk))
 		if len(chunk) == 0 {
