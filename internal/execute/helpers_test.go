@@ -274,11 +274,11 @@ func TestAddressSpaceLimitBytes(t *testing.T) {
 		memMB int
 		want  uint64
 	}{
-		{16, 256 * 1024 * 1024},  // 16+64=80 < 256, floors to 256
-		{128, 256 * 1024 * 1024}, // 128+64=192 < 256, floors to 256
-		{256, 320 * 1024 * 1024}, // 256+64=320
+		{16, 512 * 1024 * 1024},  // 16+64=80 < 512, floors to 512
+		{128, 512 * 1024 * 1024}, // 128+64=192 < 512, floors to 512
+		{256, 512 * 1024 * 1024}, // 256+64=320 < 512, floors to 512
 		{512, 576 * 1024 * 1024}, // 512+64=576
-		{0, 256 * 1024 * 1024},   // 0+64=64 < 256, floors to 256
+		{0, 512 * 1024 * 1024},   // 0+64=64 < 512, floors to 512
 	}
 	for _, tc := range tests {
 		got := addressSpaceLimitBytes(tc.memMB)
@@ -288,8 +288,8 @@ func TestAddressSpaceLimitBytes(t *testing.T) {
 	}
 }
 
-func TestAddressSpaceLimitBytesAlwaysAtLeast256MB(t *testing.T) {
-	minBytes := uint64(256 * 1024 * 1024)
+func TestAddressSpaceLimitBytesAlwaysAtLeast512MB(t *testing.T) {
+	minBytes := uint64(512 * 1024 * 1024)
 	for memMB := 0; memMB <= 200; memMB++ {
 		got := addressSpaceLimitBytes(memMB)
 		if got < minBytes {

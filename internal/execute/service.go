@@ -1165,8 +1165,8 @@ func clipUTF8(b []byte, n int) string {
 
 func addressSpaceLimitBytes(memMB int) uint64 {
 	base := memMB + 64
-	if base < 256 {
-		base = 256
+	if base < 512 {
+		base = 512
 	}
 	return uint64(base) * 1024 * 1024
 }
