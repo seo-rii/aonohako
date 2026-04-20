@@ -52,6 +52,31 @@ func TestRunRejectsOversizedSource(t *testing.T) {
 	}
 }
 
+func TestResolveProfileSupportsNewLanguages(t *testing.T) {
+	tests := map[string]struct {
+		compileKind string
+		runLang     string
+	}{
+		"haskell": {compileKind: "haskell", runLang: "binary"},
+		"swift":   {compileKind: "swift", runLang: "binary"},
+		"sqlite":  {compileKind: "sqlite", runLang: "sqlite"},
+		"julia":   {compileKind: "julia", runLang: "julia"},
+	}
+
+	for input, want := range tests {
+		profile, ok := resolveProfile(input)
+		if !ok {
+			t.Fatalf("resolveProfile(%q) reported unsupported language", input)
+		}
+		if profile.CompileKind != want.compileKind {
+			t.Fatalf("resolveProfile(%q) compile kind = %q, want %q", input, profile.CompileKind, want.compileKind)
+		}
+		if profile.RunLang != want.runLang {
+			t.Fatalf("resolveProfile(%q) run lang = %q, want %q", input, profile.RunLang, want.runLang)
+		}
+	}
+}
+
 func TestCompileCSharpMaterializesProjectSources(t *testing.T) {
 	workDir := t.TempDir()
 	_ = compileCSharp(context.Background(), workDir, []model.Source{

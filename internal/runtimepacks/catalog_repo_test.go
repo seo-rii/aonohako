@@ -16,11 +16,11 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 6 {
-		t.Fatalf("expected 6 production images, got %d", len(production))
+	if len(production) != 8 {
+		t.Fatalf("expected 8 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"elixir", "haskell", "lua", "ocaml", "perl", "php", "plain", "pypy", "python", "ruby"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"elixir", "haskell", "lua", "ocaml", "perl", "php", "plain", "pypy", "python", "ruby", "sqlite"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"java", "javascript", "typescript"}) {
@@ -38,6 +38,12 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[5].Name != "type-f" || !reflect.DeepEqual(production[5].Languages, []string{"uhmlang"}) {
 		t.Fatalf("type-f production image = %+v", production[5])
 	}
+	if production[6].Name != "type-g" || !reflect.DeepEqual(production[6].Languages, []string{"julia"}) {
+		t.Fatalf("type-g production image = %+v", production[6])
+	}
+	if production[7].Name != "type-h" || !reflect.DeepEqual(production[7].Languages, []string{"swift"}) {
+		t.Fatalf("type-h production image = %+v", production[7])
+	}
 
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
@@ -54,6 +60,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-haskell",
 		"ci-java",
 		"ci-javascript",
+		"ci-julia",
 		"ci-kotlin",
 		"ci-lua",
 		"ci-ocaml",
@@ -64,6 +71,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-python",
 		"ci-ruby",
 		"ci-rust",
+		"ci-sqlite",
+		"ci-swift",
 		"ci-typescript",
 		"ci-uhmlang",
 	}) {

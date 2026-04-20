@@ -23,14 +23,16 @@ binary, configurable runtime images, and testable build metadata.
 The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
 
 - Production mode builds grouped images such as `type-a` (`plain`, `python`)
-  and `type-b` (`java`).
+  and `type-b` (`java`), plus dedicated profiles where a toolchain needs its
+  own base image such as `swift` or `julia`.
 - CI mode expands the same catalog into one image per language so that each
   smoke job validates a single toolchain in isolation.
-- The current catalog intentionally stays small: `plain` for native binaries,
-  Python with `numpy`, and Java 17. C/C++ submitters compile into binaries and
-  should target the `plain` runtime image rather than dedicated C/C++ runtime
-  images. Add new languages by extending the YAML file instead of editing shell
-  loops or workflow matrices.
+- The current catalog covers native binaries, Python with `numpy`, Java,
+  JavaScript/TypeScript, Ruby, PHP, Lua, Perl, Elixir, Haskell, OCaml, SQLite,
+  Go, Rust, Kotlin, C#, Julia, Swift, and UHMLANG. C/C++ submitters compile
+  into binaries and should target the `plain` runtime image rather than
+  dedicated C/C++ runtime images. Add new languages by extending the YAML file
+  instead of editing shell loops or workflow matrices.
 
 Inspect the generated matrix:
 

@@ -38,7 +38,7 @@
 
 ```jsonc
 {
-  "lang": "binary",                          // runtime language: binary|python|pypy|java|javascript|ruby|php|lua|perl|uhmlang|csharp|text
+  "lang": "binary",                          // runtime language: binary|python|pypy|java|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|text
   "binaries": [                              // files to place in work directory
     {
       "name": "Main",                       // filename
@@ -83,8 +83,8 @@
   "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
   "memory_kb": 8192,                        // peak RSS from getrusage (KB)
   "exit_code": 0,                           // nullable; process exit code
-  "stdout": "",                             // truncated stdout (max 3000 bytes, on WA/RE only)
-  "stderr": "",                             // truncated stderr (on non-zero exit only)
+  "stdout": "",                             // truncated stdout (up to limits.output_bytes, on WA/RE only)
+  "stderr": "",                             // truncated stderr (up to limits.output_bytes, on non-zero exit only)
   "reason": "",                             // human-readable error
   "score": null,                            // nullable float 0.0–1.0 (SPJ score)
   "sidecar_outputs": [                      // captured sidecar files
@@ -130,6 +130,12 @@ When `spj` is provided, the SPJ binary is invoked as:
 | JAVASCRIPT | `javascript` | `node --check` |
 | TYPESCRIPT | `typescript` | `tsc` |
 | KOTLIN | `kotlin` | `kotlinc-native` |
+| HASKELL | `haskell` | `ghc -O2` |
+| SWIFT | `swift` | `swiftc -O` |
+| SQLITE | `sqlite` | Pass-through artifacts (requires at least one `.sql`) |
+| JULIA | `julia` | Pass-through artifacts (requires at least one `.jl`) |
+| OCAML | `ocaml` | `ocamlopt` |
+| ELIXIR | `elixir` | `elixir` parse check |
 | CSHARP | `csharp` | `dotnet publish` |
 | RUBY | `ruby` | `ruby -c` |
 | PHP | `php` | `php -l` |
@@ -150,6 +156,10 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `php` | `php <file>` |
 | `lua` | `lua5.4 <file>` |
 | `perl` | `perl <file>` |
+| `ocaml` | `env OCAMLRUNPARAM=s=32k <file>` |
+| `elixir` | `env ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 elixir <file>` |
+| `sqlite` | `sqlite3 <workspace-db> < <file>` |
+| `julia` | `julia --startup-file=no --history-file=no <file>` |
 | `uhmlang` | `/usr/bin/umjunsik-lang-go <file>` |
 | `csharp` | `dotnet <file>` or direct |
 | `text` | `cat <file>` |

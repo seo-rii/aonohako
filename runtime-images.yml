@@ -165,9 +165,50 @@ languages:
         - bash
         - -lc
         - |
-          printf '%s\n' 'main :: IO ()' 'main = putStrLn "ok"' > Main.hs
+          printf '%s\n' 'main :: IO ()' 'main = do' '  writeFile "same-folder.txt" "ok"' '  readFile "same-folder.txt" >>= putStrLn' > Main.hs
           ghc -O2 -o Main Main.hs
           ./Main | grep '^ok$'
+
+  swift:
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'import Foundation' 'try! "ok".write(toFile: "same-folder.txt", atomically: true, encoding: .utf8)' 'print(try! String(contentsOfFile: "same-folder.txt").trimmingCharacters(in: .whitespacesAndNewlines))' > Main.swift
+          swiftc -O Main.swift -o Main
+          ./Main | grep '^ok$'
+
+  sqlite:
+    install:
+      apt:
+        - sqlite3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'create table numbers(v integer);' 'insert into numbers(v) values (1),(2),(3);' 'select sum(v) from numbers;' > Main.sql
+          [ "$(sqlite3 same-folder.db < Main.sql)" = 6 ]
+          [ -f same-folder.db ]
+
+  julia:
+    install:
+      script:
+        - ln -sfn /usr/local/julia/bin/julia /usr/local/bin/julia
+    smoke:
+      command:
+        - julia
+        - --startup-file=no
+        - --history-file=no
+        - --color=no
+        - -e
+        - |
+          using Statistics
+          open("same-folder.txt", "w") do io
+              write(io, string(mean([1, 2, 3])))
+          end
+          println(read("same-folder.txt", String))
 
   ocaml:
     install:
@@ -298,6 +339,7 @@ profiles:
       - perl
       - elixir
       - haskell
+      - sqlite
       - ocaml
   type-b:
     base_image: debian:bookworm-slim
@@ -322,3 +364,11 @@ profiles:
     base_image: debian:bookworm-slim
     languages:
       - uhmlang
+  type-g:
+    base_image: julia:1.11.5-bookworm
+    languages:
+      - julia
+  type-h:
+    base_image: swift:6.2.1-bookworm
+    languages:
+      - swift
