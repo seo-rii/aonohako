@@ -532,6 +532,48 @@ func TestRunBlocksUnixDatagramSendToAccessibleSocketWhenNetworkDisabled(t *testi
 	}
 }
 
+func TestRunBlocksSocketPairCreationWhenNetworkDisabled(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"import socket\ntry:\n    socket.socketpair()\n    print('created')\nexcept OSError:\n    print('blocked')\n",
+			)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunBlocksNamespaceEscapeAttempts(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"import ctypes\nlibc = ctypes.CDLL(None, use_errno=True)\ntry:\n    rc = libc.unshare(0x00020000)\n    if rc == 0:\n        print('escaped')\n    else:\n        print('blocked')\nexcept Exception:\n    print('blocked')\n",
+			)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback(t *testing.T) {
 	t.Setenv("K_SERVICE", "aonohako-runner")
 
