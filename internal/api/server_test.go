@@ -184,6 +184,9 @@ func readSSEEvents(r io.Reader, t *testing.T) []sseEvent {
 
 func configForTest(t *testing.T) config.Config {
 	t.Helper()
+	t.Setenv("K_SERVICE", "aonohako-test")
+	t.Setenv("CLOUD_RUN_JOB", "")
+	t.Setenv("CLOUD_RUN_WORKER_POOL", "")
 	return config.Config{Port: "0", MaxActiveRuns: 1, MaxPendingQueue: 1, HeartbeatInterval: 100 * time.Millisecond}
 }
 

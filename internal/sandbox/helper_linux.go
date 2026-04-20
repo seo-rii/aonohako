@@ -51,12 +51,6 @@ func MaybeRunFromEnv() bool {
 		fail("dir must be absolute: %s", req.Dir)
 	}
 
-	if err := unix.CloseRange(3, ^uint(0), 0); err != nil && err != unix.ENOSYS && err != unix.EINVAL {
-		for fd := 3; fd < 1024; fd++ {
-			_ = unix.Close(fd)
-		}
-	}
-
 	timeMs := req.Limits.TimeMs
 	if timeMs < 1 {
 		timeMs = 1
@@ -204,18 +198,40 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_PIDFD_OPEN),
 		uint32(unix.SYS_PIDFD_GETFD),
 		uint32(unix.SYS_PIDFD_SEND_SIGNAL),
+		uint32(unix.SYS_KILL),
+		uint32(unix.SYS_TKILL),
+		uint32(unix.SYS_TGKILL),
+		uint32(unix.SYS_PRLIMIT64),
+		uint32(unix.SYS_SETPRIORITY),
 		uint32(unix.SYS_BPF),
+		uint32(unix.SYS_IO_SETUP),
+		uint32(unix.SYS_IO_DESTROY),
+		uint32(unix.SYS_IO_SUBMIT),
+		uint32(unix.SYS_IO_GETEVENTS),
+		uint32(unix.SYS_IO_URING_SETUP),
+		uint32(unix.SYS_IO_URING_ENTER),
+		uint32(unix.SYS_IO_URING_REGISTER),
 		uint32(unix.SYS_USERFAULTFD),
 		uint32(unix.SYS_PERF_EVENT_OPEN),
 		uint32(unix.SYS_OPEN_BY_HANDLE_AT),
 		uint32(unix.SYS_NAME_TO_HANDLE_AT),
 		uint32(unix.SYS_FANOTIFY_INIT),
 		uint32(unix.SYS_FANOTIFY_MARK),
+		uint32(unix.SYS_ADD_KEY),
+		uint32(unix.SYS_REQUEST_KEY),
+		uint32(unix.SYS_KEYCTL),
 		uint32(unix.SYS_INIT_MODULE),
 		uint32(unix.SYS_FINIT_MODULE),
 		uint32(unix.SYS_DELETE_MODULE),
 		uint32(unix.SYS_KEXEC_LOAD),
 		uint32(unix.SYS_KEXEC_FILE_LOAD),
+		uint32(unix.SYS_ACCT),
+		uint32(unix.SYS_SYSLOG),
+		uint32(unix.SYS_REBOOT),
+		uint32(unix.SYS_SWAPON),
+		uint32(unix.SYS_SWAPOFF),
+		uint32(unix.SYS_SETHOSTNAME),
+		uint32(unix.SYS_SETDOMAINNAME),
 		uint32(unix.SYS_CHMOD),
 		uint32(unix.SYS_FCHMOD),
 		uint32(unix.SYS_FCHMODAT),
@@ -223,6 +239,8 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_FCHOWN),
 		uint32(unix.SYS_LCHOWN),
 		uint32(unix.SYS_FCHOWNAT),
+		uint32(unix.SYS_MKNOD),
+		uint32(unix.SYS_MKNODAT),
 	} {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
@@ -239,11 +257,22 @@ func MaybeRunFromEnv() bool {
 
 	if !req.EnableNetwork {
 		for _, sysno := range []uint32{uint32(unix.SYS_SOCKET), uint32(unix.SYS_SOCKETPAIR)} {
-			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 3)
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 4)
 			appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
 			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.AF_UNIX, 1, 0)
 			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 			appendStmt(unix.BPF_RET|unix.BPF_K, allow)
+		}
+		for _, sysno := range []uint32{
+			uint32(unix.SYS_CONNECT),
+			uint32(unix.SYS_BIND),
+			uint32(unix.SYS_LISTEN),
+			uint32(unix.SYS_ACCEPT),
+			uint32(unix.SYS_ACCEPT4),
+			uint32(unix.SYS_SHUTDOWN),
+		} {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 		}
 	}
 
@@ -256,6 +285,11 @@ func MaybeRunFromEnv() bool {
 
 	if err := os.Chdir(req.Dir); err != nil {
 		fail("chdir %s: %v", req.Dir, err)
+	}
+	if err := unix.CloseRange(3, ^uint(0), 0); err != nil && err != unix.ENOSYS && err != unix.EINVAL {
+		for fd := 3; fd < 1024; fd++ {
+			_ = unix.Close(fd)
+		}
 	}
 	if err := syscall.Exec(req.Command[0], req.Command, req.Env); err != nil {
 		fail("exec %s: %v", req.Command[0], err)
