@@ -138,6 +138,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"fsharp", "/tmp/App.dll", "dotnet"},
 		{"javascript", "/tmp/sol.js", "node"},
 		{"julia", "/tmp/sol.jl", "julia"},
+		{"r", "/tmp/sol.R", "Rscript"},
 		{"whitespace", "/tmp/sol.ws", "python3"},
 		{"brainfuck", "/tmp/sol.bf", "python3"},
 		{"wasm", "/tmp/sol.wasm", "wasmtime"},

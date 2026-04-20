@@ -225,6 +225,21 @@ languages:
           end
           println(read("same-folder.txt", String))
 
+  r:
+    install:
+      apt:
+        - r-base-core
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.R <<'RS'
+          writeLines("ok", "same-folder.txt")
+          cat(readLines("same-folder.txt"), sep = "\n")
+          RS
+          Rscript --vanilla Main.R | grep '^ok$'
+
   erlang:
     install:
       apt:
@@ -517,6 +532,7 @@ profiles:
       - plain
       - python
       - pypy
+      - r
       - ruby
       - php
       - lua

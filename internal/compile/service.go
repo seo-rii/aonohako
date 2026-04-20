@@ -88,6 +88,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "PYTHON3"
 	case "pypy", "pypy3":
 		l = "PYPY3"
+	case "r":
+		l = "R"
 	case "go", "golang":
 		l = "GO"
 	case "zig":
@@ -198,6 +200,30 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compilePythonLike(ctx, workDir, req.Sources, "python3")
 	case "pypy":
 		return compilePythonLike(ctx, workDir, req.Sources, "pypy3")
+	case "r":
+		var checked int
+		var fullOut bytes.Buffer
+		var fullErr bytes.Buffer
+		for _, src := range req.Sources {
+			if !strings.HasSuffix(strings.ToLower(src.Name), ".r") {
+				continue
+			}
+			checked++
+			stdout, stderr, status, reason := runCommand(ctx, workDir, "Rscript", []string{"--vanilla", "-e", "parse(file=commandArgs(TRUE)[1])", filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
+			fullOut.WriteString(stdout)
+			fullErr.WriteString(stderr)
+			if status != model.CompileStatusOK {
+				return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+			}
+		}
+		if checked == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no r sources"}
+		}
+		artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
 	case "javascript":
 		return compileScriptCheck(ctx, workDir, req.Sources, "node", []string{"--check"})
 	case "ruby":
