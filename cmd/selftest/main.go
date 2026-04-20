@@ -102,6 +102,34 @@ func runPermissionsSuite() error {
 			},
 		},
 		{
+			name: "socketpair-creation-is-blocked",
+			req: model.RunRequest{
+				Lang: "python",
+				Binaries: []model.Binary{{
+					Name: "main.py",
+					DataB64: encodeScript(
+						"import socket\ntry:\n    socket.socketpair()\n    print('created')\nexcept OSError:\n    print('blocked')\n",
+					),
+				}},
+				ExpectedStdout: "blocked\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		{
+			name: "namespace-unshare-is-blocked",
+			req: model.RunRequest{
+				Lang: "python",
+				Binaries: []model.Binary{{
+					Name: "main.py",
+					DataB64: encodeScript(
+						"import ctypes\nlibc = ctypes.CDLL(None, use_errno=True)\ntry:\n    rc = libc.unshare(0x00020000)\n    if rc == 0:\n        print('escaped')\n    else:\n        print('blocked')\nexcept Exception:\n    print('blocked')\n",
+					),
+				}},
+				ExpectedStdout: "blocked\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		{
 			name: "submitted-files-cannot-be-replaced",
 			req: model.RunRequest{
 				Lang: "python",
@@ -147,8 +175,8 @@ func runPermissionsSuite() error {
 
 func runDirectImagePermissionChecks() error {
 	protectedOut, protectedErr, err := runAsSandboxUser(
-		"if [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi; " +
-			"if [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi; " +
+		"if [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi; "+
+			"if [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi; "+
 			"if [ -x /root ]; then echo leaked; else echo blocked; fi",
 		"",
 	)
@@ -160,7 +188,7 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	imageOut, imageErr, err := runAsSandboxUser(
-		"for p in /etc/debian_version /etc/os-release /var/lib/dpkg/status; do if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi; done; " +
+		"for p in /etc/debian_version /etc/os-release /var/lib/dpkg/status; do if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi; done; "+
 			"if cd /usr/share/doc 2>/dev/null; then echo leaked; else echo blocked; fi",
 		"",
 	)
@@ -172,10 +200,10 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	scratchOut, scratchErr, err := runAsSandboxUser(
-		"for p in /tmp /var/tmp /run/lock /dev/shm /dev/mqueue; do " +
-			"if [ -e \"$p\" ]; then " +
-			"if [ -w \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; " +
-			"fi; " +
+		"for p in /tmp /var/tmp /run/lock /dev/shm /dev/mqueue; do "+
+			"if [ -e \"$p\" ]; then "+
+			"if [ -w \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
+			"fi; "+
 			"done",
 		"",
 	)

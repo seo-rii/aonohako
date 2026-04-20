@@ -37,7 +37,7 @@ jobs:
           go-version-file: go.mod
       - run: >
           go test ./internal/execute -count=1 -run
-          'TestRunBlocksNetworkWhenDisabled|TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback|TestRunCannotReadHostPathOutsideSandbox|TestRunExposesOnlySafeDevices|TestRunBlocksForkAttempts|TestRunBlocksProcFDBrowsingOutsideSandbox'
+          'TestRunBlocksNetworkWhenDisabled|TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback|TestRunCannotReadHostPathOutsideSandbox|TestRunExposesOnlySafeDevices|TestRunBlocksForkAttempts|TestRunBlocksProcFDBrowsingOutsideSandbox|TestRunBlocksSocketPairCreationWhenNetworkDisabled|TestRunBlocksNamespaceEscapeAttempts'
 
   runtime-matrix:
     runs-on: ubuntu-latest
@@ -73,3 +73,31 @@ jobs:
       - run: chmod +x scripts/build_runtime_images.sh scripts/smoke_runtime.sh
       - run: ./scripts/build_runtime_images.sh -mode ci -only "${{ matrix.name }}" -tag-prefix "aonohako-ci"
       - run: docker run --rm "aonohako-ci:${{ matrix.name }}" aonohako-smoke
+
+  mixin-smoke:
+    runs-on: ubuntu-latest
+    needs:
+      - policy
+      - unit
+      - sandbox
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: docker/setup-buildx-action@v3
+      - run: chmod +x scripts/build_runtime_images.sh
+      - run: ./scripts/build_runtime_images.sh -mode production -only type-i -tag-prefix "aonohako-ci-mix"
+      - run: >
+          docker run --rm "aonohako-ci-mix:type-i" bash -lc
+          "printf '%s\n' '#include <stdio.h>' 'int main(void) { puts(\"ok\"); return 0; }' > Main.c &&
+          gcc -O2 -pipe Main.c -o Main &&
+          [ \"\$(./Main)\" = ok ]"
+      - run: >
+          docker run --rm "aonohako-ci-mix:type-i" python3 -c
+          "from pathlib import Path; import numpy as np; Path('same-folder.txt').write_text(str(int(np.arange(5).sum())), encoding='utf-8'); assert Path('same-folder.txt').read_text(encoding='utf-8') == '10'; print('ok')"
+      - run: >
+          docker run --rm "aonohako-ci-mix:type-i" bash -lc
+          "printf '%s\n' 'public class Main {' '  public static void main(String[] args) {' '    System.out.println(\"ok\");' '  }' '}' > Main.java &&
+          javac --release 11 Main.java &&
+          java Main | grep '^ok$'"
