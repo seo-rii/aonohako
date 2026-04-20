@@ -13,7 +13,9 @@ case ",${AONOHAKO_LANGUAGES:-}," in
     ;;
 esac
 
-aonohako-selftest "${suite}"
+for _ in 1 2 3; do
+  aonohako-selftest "${suite}"
+done
 
 IFS=$'\t' read -r -a smoke_parts <<< "${AONOHAKO_SMOKE_COMMAND}"
 exec "${smoke_parts[@]}"

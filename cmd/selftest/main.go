@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"aonohako/internal/execute"
@@ -48,50 +51,17 @@ func main() {
 }
 
 func runImagePermissionsSuite() error {
-	return runSuiteCases([]suiteCase{
-		{
-			name: "protected-paths-are-not-readable",
-			req: model.RunRequest{
-				Lang: "binary",
-				Binaries: []model.Binary{{
-					Name:    "run.sh",
-					DataB64: encodeScript("#!/bin/sh\nif [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi\nif [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi\nif [ -x /root ]; then echo leaked; else echo blocked; fi\n"),
-					Mode:    "exec",
-				}},
-				ExpectedStdout: "blocked\nblocked\nblocked\n",
-				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
-			},
-		},
-		{
-			name: "image-metadata-paths-are-not-readable",
-			req: model.RunRequest{
-				Lang: "binary",
-				Binaries: []model.Binary{{
-					Name:    "run.sh",
-					DataB64: encodeScript("#!/bin/sh\nfor p in /etc/debian_version /etc/os-release /var/lib/dpkg/status; do\n  if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi\ndone\nif cd /usr/share/doc 2>/dev/null; then echo leaked; else echo blocked; fi\n"),
-					Mode:    "exec",
-				}},
-				ExpectedStdout: "blocked\nblocked\nblocked\nblocked\n",
-				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
-			},
-		},
-		{
-			name: "workspace-is-writable-but-submission-is-immutable",
-			req: model.RunRequest{
-				Lang: "binary",
-				Binaries: []model.Binary{{
-					Name:    "run.sh",
-					DataB64: encodeScript("#!/bin/sh\nif echo mutated > run.sh 2>/dev/null; then echo overwrote; else echo blocked; fi\necho ok > note.txt\nread value < note.txt\nprintf '%s\\n' \"$value\"\n"),
-					Mode:    "exec",
-				}},
-				ExpectedStdout: "blocked\nok\n",
-				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
-			},
-		},
-	})
+	if err := runDirectImagePermissionChecks(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func runPermissionsSuite() error {
+	if err := runDirectImagePermissionChecks(); err != nil {
+		return err
+	}
+
 	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-selftest-unixgram-%d.sock", time.Now().UnixNano()))
 	addr := &net.UnixAddr{Name: socketPath, Net: "unixgram"}
 	listener, err := net.ListenUnixgram("unixgram", addr)
@@ -107,45 +77,6 @@ func runPermissionsSuite() error {
 	}
 
 	cases := []suiteCase{
-		{
-			name: "protected-paths-are-not-readable",
-			req: model.RunRequest{
-				Lang: "binary",
-				Binaries: []model.Binary{{
-					Name:    "run.sh",
-					DataB64: encodeScript("#!/bin/sh\nif [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi\nif [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi\nif [ -x /root ]; then echo leaked; else echo blocked; fi\n"),
-					Mode:    "exec",
-				}},
-				ExpectedStdout: "blocked\nblocked\nblocked\n",
-				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
-			},
-		},
-		{
-			name: "image-metadata-paths-are-not-readable",
-			req: model.RunRequest{
-				Lang: "binary",
-				Binaries: []model.Binary{{
-					Name:    "run.sh",
-					DataB64: encodeScript("#!/bin/sh\nfor p in /etc/debian_version /etc/os-release /var/lib/dpkg/status; do\n  if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi\ndone\nif cd /usr/share/doc 2>/dev/null; then echo leaked; else echo blocked; fi\n"),
-					Mode:    "exec",
-				}},
-				ExpectedStdout: "blocked\nblocked\nblocked\nblocked\n",
-				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
-			},
-		},
-		{
-			name: "workspace-is-writable-but-submission-is-immutable",
-			req: model.RunRequest{
-				Lang: "binary",
-				Binaries: []model.Binary{{
-					Name:    "run.sh",
-					DataB64: encodeScript("#!/bin/sh\nif echo mutated > run.sh 2>/dev/null; then echo overwrote; else echo blocked; fi\necho ok > note.txt\nread value < note.txt\nprintf '%s\\n' \"$value\"\n"),
-					Mode:    "exec",
-				}},
-				ExpectedStdout: "blocked\nok\n",
-				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
-			},
-		},
 		{
 			name: "unix-datagram-send-is-blocked",
 			req: model.RunRequest{
@@ -211,6 +142,90 @@ func runPermissionsSuite() error {
 
 	_, _ = fmt.Fprintln(os.Stdout, "sandbox permissions ok")
 	return nil
+}
+
+func runDirectImagePermissionChecks() error {
+	protectedOut, protectedErr, err := runAsSandboxUser(
+		"if [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi; " +
+			"if [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi; " +
+			"if [ -x /root ]; then echo leaked; else echo blocked; fi",
+		"",
+	)
+	if err != nil {
+		return fmt.Errorf("protected-paths-are-not-readable: %w\n%s", err, protectedErr)
+	}
+	if protectedOut != "blocked\nblocked\nblocked\n" {
+		return fmt.Errorf("protected-paths-are-not-readable: unexpected stdout %q stderr %q", protectedOut, protectedErr)
+	}
+
+	imageOut, imageErr, err := runAsSandboxUser(
+		"for p in /etc/debian_version /etc/os-release /var/lib/dpkg/status; do if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi; done; " +
+			"if cd /usr/share/doc 2>/dev/null; then echo leaked; else echo blocked; fi",
+		"",
+	)
+	if err != nil {
+		return fmt.Errorf("image-metadata-paths-are-not-readable: %w\n%s", err, imageErr)
+	}
+	if imageOut != "blocked\nblocked\nblocked\nblocked\n" {
+		return fmt.Errorf("image-metadata-paths-are-not-readable: unexpected stdout %q stderr %q", imageOut, imageErr)
+	}
+
+	workDir, err := os.MkdirTemp("", "aonohako-selftest-work-*")
+	if err != nil {
+		return fmt.Errorf("mktemp selftest workdir: %w", err)
+	}
+	defer os.RemoveAll(workDir)
+	if err := os.Chmod(workDir, 0o755); err != nil {
+		return fmt.Errorf("chmod selftest workdir: %w", err)
+	}
+
+	boxDir := filepath.Join(workDir, "box")
+	if err := os.MkdirAll(boxDir, 0o777); err != nil {
+		return fmt.Errorf("mkdir selftest box: %w", err)
+	}
+	if err := os.Chmod(boxDir, 0o777|os.ModeSticky); err != nil {
+		return fmt.Errorf("chmod selftest box: %w", err)
+	}
+	probePath := filepath.Join(boxDir, "probe")
+	if err := os.WriteFile(probePath, []byte("immutable\n"), 0o555); err != nil {
+		return fmt.Errorf("write selftest probe: %w", err)
+	}
+
+	workspaceOut, workspaceErr, err := runAsSandboxUser(
+		"if printf mutated > probe 2>/dev/null; then echo overwrote; else echo blocked; fi; printf ok > note.txt; cat note.txt",
+		boxDir,
+	)
+	if err != nil {
+		return fmt.Errorf("workspace-is-writable-but-submission-is-immutable: %w\n%s", err, workspaceErr)
+	}
+	if workspaceOut != "blocked\nok" && workspaceOut != "blocked\nok\n" {
+		return fmt.Errorf("workspace-is-writable-but-submission-is-immutable: unexpected stdout %q stderr %q", workspaceOut, workspaceErr)
+	}
+	return nil
+}
+
+func runAsSandboxUser(script, dir string) (string, string, error) {
+	cmd := exec.Command("/bin/sh", "-lc", script)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	cmd.Env = []string{
+		"PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
+		"LANG=C.UTF-8",
+		"LC_ALL=C.UTF-8",
+		"HOME=/tmp",
+	}
+	if os.Geteuid() == 0 {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Credential: &syscall.Credential{Uid: 65532, Gid: 65532},
+		}
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.String(), stderr.String(), err
 }
 
 func runSuiteCases(cases []suiteCase) error {

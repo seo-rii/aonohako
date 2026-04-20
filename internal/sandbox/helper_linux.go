@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
-	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -20,6 +20,9 @@ func MaybeRunFromEnv() bool {
 	if os.Getenv(HelperModeEnv) != HelperModeExec {
 		return false
 	}
+	runtime.GOMAXPROCS(1)
+	runtime.LockOSThread()
+	debug.SetGCPercent(-1)
 
 	fail := func(format string, args ...any) {
 		_, _ = fmt.Fprintf(os.Stderr, "sandbox-init: "+format+"\n", args...)
@@ -50,6 +53,26 @@ func MaybeRunFromEnv() bool {
 	if req.Dir == "" || !filepath.IsAbs(req.Dir) {
 		fail("dir must be absolute: %s", req.Dir)
 	}
+	execPath, err := unix.BytePtrFromString(req.Command[0])
+	if err != nil {
+		fail("encode exec path: %v", err)
+	}
+	argv := make([]*byte, len(req.Command)+1)
+	for i, arg := range req.Command {
+		ptr, err := unix.BytePtrFromString(arg)
+		if err != nil {
+			fail("encode argv[%d]: %v", i, err)
+		}
+		argv[i] = ptr
+	}
+	envv := make([]*byte, len(req.Env)+1)
+	for i, item := range req.Env {
+		ptr, err := unix.BytePtrFromString(item)
+		if err != nil {
+			fail("encode env[%d]: %v", i, err)
+		}
+		envv[i] = ptr
+	}
 
 	timeMs := req.Limits.TimeMs
 	if timeMs < 1 {
@@ -61,8 +84,8 @@ func MaybeRunFromEnv() bool {
 		memMB = 16
 	}
 	asMB := memMB + 64
-	if asMB < 256 {
-		asMB = 256
+	if asMB < 512 {
+		asMB = 512
 	}
 	threadLimit := req.ThreadLimit
 	if threadLimit < 32 {
@@ -284,16 +307,20 @@ func MaybeRunFromEnv() bool {
 		fail("prctl seccomp: %v", err)
 	}
 
-	if err := os.Chdir(req.Dir); err != nil {
+	if err := unix.Chdir(req.Dir); err != nil {
 		fail("chdir %s: %v", req.Dir, err)
 	}
-	if err := unix.CloseRange(3, ^uint(0), 0); err != nil && err != unix.ENOSYS && err != unix.EINVAL {
+	if err := unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil && err != unix.ENOSYS && err != unix.EINVAL {
 		for fd := 3; fd < 1024; fd++ {
-			_ = unix.Close(fd)
+			unix.CloseOnExec(fd)
 		}
 	}
-	if err := syscall.Exec(req.Command[0], req.Command, req.Env); err != nil {
-		fail("exec %s: %v", req.Command[0], err)
+	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(execPath)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&envv[0])))
+	runtime.KeepAlive(execPath)
+	runtime.KeepAlive(argv)
+	runtime.KeepAlive(envv)
+	if errno != 0 {
+		fail("exec %s: %v", req.Command[0], errno)
 	}
 	return true
 }

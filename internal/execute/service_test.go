@@ -707,6 +707,29 @@ func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
 	}
 }
 
+func TestRunShellScriptsRemainStableAtLowMemoryLimit(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	req := &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nprintf 'one\\ntwo\\nthree\\n'\n")),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "one\ntwo\nthree\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}
+
+	for i := 0; i < 100; i++ {
+		resp := svc.Run(context.Background(), req, Hooks{})
+		if resp.Status != model.RunStatusAccepted {
+			t.Fatalf("iteration %d: expected Accepted, got %+v", i, resp)
+		}
+	}
+}
+
 func TestRunDirectModeDoesNotRequireUnshareBinary(t *testing.T) {
 	requireSandboxSupport(t)
 	t.Setenv("PATH", t.TempDir())
