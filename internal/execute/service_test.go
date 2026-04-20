@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -348,6 +351,36 @@ func TestRunBlocksNetworkWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestRunBlocksUnixSocketConnectWhenNetworkDisabled(t *testing.T) {
+	requireSandboxSupport(t)
+
+	socketPath := filepath.Join(t.TempDir(), "control.sock")
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("listen unix socket: %v", err)
+	}
+	defer listener.Close()
+
+	svc := New()
+	script := fmt.Sprintf(
+		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n    s.settimeout(0.5)\n    s.connect(%q)\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
+		socketPath,
+	)
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback(t *testing.T) {
 	t.Setenv("K_SERVICE", "aonohako-runner")
 
@@ -366,6 +399,66 @@ func TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback(t *testing.T) {
 
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted on Cloud Run path, got %+v", resp)
+	}
+}
+
+func TestRunRequiresRootOutsideCloudRun(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("requires non-root host mode")
+	}
+	t.Setenv("K_SERVICE", "")
+	t.Setenv("CLOUD_RUN_JOB", "")
+	t.Setenv("CLOUD_RUN_WORKER_POOL", "")
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\necho ok\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "ok\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "sandbox requires root") {
+		t.Fatalf("expected root requirement failure, got %+v", resp)
+	}
+}
+
+func TestRunCannotSignalSiblingProcess(t *testing.T) {
+	requireSandboxSupport(t)
+
+	target := exec.Command("sleep", "10")
+	if err := target.Start(); err != nil {
+		t.Fatalf("start target process: %v", err)
+	}
+	defer func() {
+		_ = target.Process.Kill()
+		_, _ = target.Process.Wait()
+	}()
+
+	svc := New()
+	script := fmt.Sprintf(
+		"import os, signal\ntry:\n    os.kill(%d, signal.SIGTERM)\n    print('signaled')\nexcept OSError:\n    print('blocked')\n",
+		target.Process.Pid,
+	)
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+	if err := target.Process.Signal(syscall.Signal(0)); err != nil {
+		t.Fatalf("sandbox should not signal sibling process: %v", err)
 	}
 }
 
@@ -483,6 +576,7 @@ func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
 }
 
 func TestRunDirectModeDoesNotRequireUnshareBinary(t *testing.T) {
+	requireSandboxSupport(t)
 	t.Setenv("PATH", t.TempDir())
 
 	svc := New()

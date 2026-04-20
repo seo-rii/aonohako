@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"aonohako/internal/model"
+	"aonohako/internal/platform"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
@@ -428,6 +429,9 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int) execResult {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
+	}
+	if os.Geteuid() != 0 && !platform.IsCloudRun() {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires root outside Cloud Run"}
 	}
 	timeLimitMs := max(1, req.Limits.TimeMs)
 	memoryLimitKB := int64(0)
