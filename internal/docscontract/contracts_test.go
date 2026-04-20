@@ -45,6 +45,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`CloseRange(3, ..., CLOSE_RANGE_CLOEXEC)` fallback `CloseOnExec` loop") {
 		t.Fatalf("architecture.md must describe CLOEXEC fd inheritance behavior")
 	}
+	if !strings.Contains(architecture, "hardens shared scratch directories") {
+		t.Fatalf("architecture.md must describe startup scratch hardening")
+	}
 }
 
 func mustRead(t *testing.T, path string) string {

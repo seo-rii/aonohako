@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -606,6 +607,18 @@ func TestRunPreventsRemovingOrReplacingSubmittedFiles(t *testing.T) {
 
 func TestRunBlocksWritesOutsideWorkspaceTempDirs(t *testing.T) {
 	requireSandboxSupport(t)
+	for _, dir := range []string{"/tmp", "/var/tmp"} {
+		info, err := os.Stat(dir)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			t.Fatalf("stat %s: %v", dir, err)
+		}
+		if info.Mode().Perm()&0o022 != 0 {
+			t.Skip("global scratch hardening is validated by runtime image selftests")
+		}
+	}
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{

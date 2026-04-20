@@ -173,9 +173,10 @@ Environment variables redirect common runtime scratch paths into the per-run
 workspace, for example `HOME`, `TMPDIR`, `JAVA_TOOL_OPTIONS`,
 `XDG_CACHE_HOME`, `PIP_CACHE_DIR`, `MIX_HOME`, and `HEX_HOME`.
 
-To avoid escaping into global writable directories, the root parent also
-temporarily tightens shared scratch directories such as `/tmp`, `/var/tmp`,
-`/dev/shm`, and `/run/lock` while a run is active.
+To avoid escaping into global writable directories, the runtime image entrypoint
+hardens shared scratch directories such as `/tmp`, `/var/tmp`, `/dev/shm`, and
+`/run/lock` once at container startup before the server begins accepting
+requests.
 
 ### Output capture
 
