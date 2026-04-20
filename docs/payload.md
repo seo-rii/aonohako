@@ -43,7 +43,7 @@
     {
       "name": "Main",                       // filename
       "data_b64": "<base64>",               // base64-encoded content
-      "mode": "exec"                         // "exec" → chmod 500; otherwise chmod 400
+      "mode": "exec"                         // "exec" → chmod 0555; otherwise chmod 0444
     }
   ],
   "stdin": "hello\n",                        // input fed to process stdin
@@ -63,7 +63,7 @@
     "lang": "binary",                        // SPJ runtime language
     "emit_score": true                       // SPJ outputs float score to stdout
   },
-  "file_outputs": [                          // read program output from file instead of stdout
+  "file_outputs": [                          // read program output from file instead of stdout (at most one path)
     {"path": "output.txt"}
   ],
   "sidecar_outputs": [                       // capture extra files after execution
@@ -77,7 +77,7 @@
 
 ```jsonc
 {
-  "status": "Accepted",                     // Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Runtime Error|Container Initialization Failed
+  "status": "Accepted",                     // Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Workspace Limit Exceeded|Runtime Error|Container Initialization Failed
   "time_ms": 42,                            // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                       // wall-clock time from CLOCK_MONOTONIC (ms)
   "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
@@ -101,6 +101,13 @@ The built-in comparator (used when no SPJ is provided):
 2. Trim trailing whitespace (`\t`, ` `, `\r`) from each line
 3. Drop trailing blank lines
 4. Compare line-by-line (exact byte match)
+
+When `file_outputs` is present:
+
+- at most one path is supported
+- the captured file replaces process stdout for judging and returned `stdout`
+- capture failure is reported as `Runtime Error` instead of silently falling
+  back to process stdout
 
 ## Special Judge (SPJ)
 
@@ -169,9 +176,9 @@ When `spj` is provided, the SPJ binary is invoked as:
 | Mechanism | What it limits |
 |---|---|
 | `prlimit --cpu` | CPU seconds (time_ms / 1000 + 1) |
-| `prlimit --as` | Virtual address space (memory_mb + 64 MB, min 256 MB) |
+| `prlimit --as` | Virtual address space (memory_mb + 64 MB, min 512 MB) |
 | `prlimit --nofile` | Max open file descriptors (64) |
-| `prlimit --fsize` | Max file size (32 MB) |
+| `prlimit --fsize` | Max file size (workspace_bytes when set, otherwise 128 MB) |
 | `taskset -c 0` | Pin to single CPU core |
 | Context timeout | Wall-clock kill via SIGKILL to process group |
 

@@ -127,7 +127,7 @@ The Linux helper applies:
 | Core dumps | `RLIMIT_CORE=0` | disables core files |
 | Privilege escalation | `PR_SET_NO_NEW_PRIVS` | prevents gaining new privileges after exec |
 | Dumpability | `PR_SET_DUMPABLE=0` | blocks ptrace-style exposure |
-| FD inheritance | `CloseRange(3, ...)` fallback close loop | blocks reuse of inherited descriptors |
+| FD inheritance | `CloseRange(3, ..., CLOSE_RANGE_CLOEXEC)` fallback `CloseOnExec` loop | blocks descriptor inheritance across `execve` |
 | Process cleanup | `Setpgid` + group kill | kills helper and target together |
 
 The seccomp filter denies high-risk operations, including:
@@ -190,8 +190,9 @@ Defaults and caps:
 - default: `64 KiB`
 - hard cap: `8 MiB`
 
-Requested file outputs are validated as relative paths and rejected if they are
-symlinks or non-regular files before they are returned.
+Requested file outputs are validated as relative paths. At most one file output
+may replace judged stdout; missing, symlinked, or non-regular outputs are
+reported as runtime failure instead of silently falling back to process stdout.
 
 ## Time and Memory Accounting
 

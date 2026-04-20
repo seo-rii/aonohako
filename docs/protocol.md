@@ -9,7 +9,7 @@ one `result` event.
 |---|---|---|
 | `progress` | both | Acceptance, queue position, and start notifications |
 | `image` | `/execute` | Real-time image frames from sidecar output |
-| `log` | both | stdout / stderr chunks |
+| `log` | both | buffered stdout / stderr payloads emitted before `result` |
 | `result` | both | **Final** response (exactly once per request) |
 | `error` | both | Terminal error (emitted **before** `result` on failure) |
 | `heartbeat` | both | Periodic keep-alive |
@@ -21,8 +21,9 @@ one `result` event.
 ```
 Client                        aonohako
   |--- POST /compile --------->|
+  |                            |  (if shared queue is full → 429)
   |<-- progress (accepted) ----|
-  |<-- log (stderr chunk) -----|   (during compilation)
+  |<-- log (buffered stderr) --|
   |<-- result (CompileResp) ---|
 ```
 
@@ -57,12 +58,12 @@ Client                        aonohako
 ```
 Client                        aonohako
   |--- POST /execute --------->|
-  |                            |  (if queue is full → 429)
+  |                            |  (if shared queue is full → 429)
   |<-- progress (accepted) ----|
   |        ...waiting...       |  (queued until slot available)
   |<-- progress (start) -------|
   |<-- image ------------------|  (if sidecar image output)
-  |<-- log (stdout/stderr) ----|
+  |<-- log (buffered stdout/stderr) --|
   |<-- result (RunResponse) ---|
 ```
 
@@ -96,8 +97,8 @@ Client                        aonohako
   "cpu_time_ms": 17,                    // CPU time from process CPU clock (ms)
   "memory_kb": 8192,                    // peak RSS (KB, from getrusage)
   "exit_code": 0,                       // nullable; process exit code
-  "stdout": "",                         // truncated stdout (on WA/RE only, max 3000 bytes)
-  "stderr": "",                         // truncated stderr (on non-zero exit)
+  "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)
+  "stderr": "",                         // truncated stderr (up to `limits.output_bytes`; on non-zero exit)
   "reason": "",                         // failure reason
   "score": null,                        // nullable float; SPJ score (0.0–1.0)
   "sidecar_outputs": [                  // captured sidecar files
@@ -114,6 +115,7 @@ Client                        aonohako
 | `Wrong Answer` | Output does not match |
 | `Time Limit Exceeded` | Execution exceeded time limit |
 | `Memory Limit Exceeded` | Peak RSS exceeded memory limit |
+| `Workspace Limit Exceeded` | Workspace file growth exceeded `limits.workspace_bytes` |
 | `Runtime Error` | Non-zero exit or signal |
 | `Container Initialization Failed` | Workspace setup or process start failed |
 
@@ -121,7 +123,7 @@ Client                        aonohako
 
 ## Queue & Rate Limiting
 
-`/execute` uses a bounded concurrency queue:
+Both `/compile` and `/execute` share the same bounded queue:
 
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `max(1, cpu−2)`)
 - **Pending queue**: `AONOHAKO_MAX_PENDING_QUEUE` (default: `0` = unlimited)

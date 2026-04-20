@@ -86,6 +86,9 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if len(req.FileOutputs) > 1 {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "at most one file output is supported"}
+	}
 	capturedOutputLimit := outputLimitBytes(req)
 	if len(req.Binaries) == 0 {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "no binaries"}
@@ -119,13 +122,19 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		return model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason}
 	}
 
-	fullOut := res.Stdout
+	rawOut := res.Stdout
+	judgeOut := rawOut
 	fullErr := res.Stderr
 
 	if len(req.FileOutputs) > 0 {
 		captured, err := captureFileOutput(ws, req.FileOutputs[0])
-		if err == nil {
-			fullOut = captured
+		if err != nil {
+			if res.Status == "OK" {
+				res.Status = model.RunStatusRE
+				res.Reason = "file output capture failed: " + err.Error()
+			}
+		} else {
+			judgeOut = captured
 		}
 	}
 
@@ -144,7 +153,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
 	if evaluateOutputs {
 		if hasSPJ(req) {
-			ok, sc, spjErr := runSPJ(ctx, ws, req, string(fullOut))
+			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut))
 			if sc != nil {
 				score = sc
 			}
@@ -156,7 +165,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 				outputOK = ok
 			}
 		} else {
-			outputOK = compareOutputs([]byte(req.ExpectedStdout), fullOut)
+			outputOK = compareOutputs([]byte(req.ExpectedStdout), judgeOut)
 		}
 	}
 
@@ -178,15 +187,15 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 
 	var outResp, errResp string
 	if status == model.RunStatusWA || status == model.RunStatusRE || (status == model.RunStatusTLE && req.IgnoreTLE) {
-		outResp = clipUTF8(fullOut, capturedOutputLimit)
+		outResp = clipUTF8(judgeOut, capturedOutputLimit)
 	}
 	if res.ExitCode != nil && *res.ExitCode != 0 {
 		errResp = clipUTF8(fullErr, capturedOutputLimit)
 	}
 
 	if hooks.OnLog != nil {
-		if len(fullOut) > 0 {
-			hooks.OnLog("stdout", clipUTF8(fullOut, capturedOutputLimit))
+		if len(rawOut) > 0 {
+			hooks.OnLog("stdout", clipUTF8(rawOut, capturedOutputLimit))
 		}
 		if len(fullErr) > 0 {
 			hooks.OnLog("stderr", clipUTF8(fullErr, capturedOutputLimit))
@@ -751,7 +760,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 					return nil
 				})
 				if workspaceBytes > workspaceLimitBytes {
-					result.Status = model.RunStatusMLE
+					result.Status = model.RunStatusWLE
 					result.Reason = "workspace quota exceeded"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 				}
@@ -1064,7 +1073,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	args := buildCommand(spjPath, spjLang, spjReq)
 	args = append(args, inputPath, solutionPath, outputPath)
 	res := runCommandWithSandbox(ctx, ws, args, &model.RunRequest{Limits: req.Limits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(req))
-	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusInitFail {
+	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
 	if res.ExitCode != nil && *res.ExitCode == 0 {
