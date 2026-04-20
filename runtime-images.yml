@@ -512,6 +512,22 @@ languages:
           ldc2 Main.d -O3 -release -of=Main
           ./Main | grep '^ok$'
 
+  coq:
+    install:
+      apt:
+        - coq
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.v <<'COQ'
+          Theorem same_folder_ok : 1 = 1.
+          Proof. reflexivity. Qed.
+          COQ
+          coqc -q Main.v
+          [ -f Main.vo ]
+
   rust:
     install:
       apt:
@@ -703,3 +719,7 @@ profiles:
       - plain
       - python
       - java
+  type-j:
+    base_image: debian:bookworm-slim
+    languages:
+      - coq

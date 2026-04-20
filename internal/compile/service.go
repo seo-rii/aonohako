@@ -98,6 +98,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "FORTRAN"
 	case "d":
 		l = "D"
+	case "coq":
+		l = "COQ"
 	case "lisp":
 		l = "LISP"
 	case "c", "c11":
@@ -304,6 +306,30 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no lisp sources"}
 		}
 		artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+	case "coq":
+		var checked int
+		var fullOut bytes.Buffer
+		var fullErr bytes.Buffer
+		for _, src := range req.Sources {
+			if !strings.HasSuffix(strings.ToLower(src.Name), ".v") {
+				continue
+			}
+			checked++
+			stdout, stderr, status, reason := runCommand(ctx, workDir, "coqc", []string{"-q", filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
+			fullOut.WriteString(stdout)
+			fullErr.WriteString(stderr)
+			if status != model.CompileStatusOK {
+				return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+			}
+		}
+		if checked == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no coq sources"}
+		}
+		artifacts, err := collectArtifacts(workDir, func(name string) bool { return strings.HasSuffix(strings.ToLower(name), ".v") }, "")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
 		}

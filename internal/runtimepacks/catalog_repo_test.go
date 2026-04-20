@@ -16,8 +16,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 9 {
-		t.Fatalf("expected 9 production images, got %d", len(production))
+	if len(production) != 10 {
+		t.Fatalf("expected 10 production images, got %d", len(production))
 	}
 
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"bf", "elixir", "erlang", "haskell", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "python", "r", "ruby", "sqlite", "wasm", "whitespace"}) {
@@ -47,6 +47,9 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"java", "plain", "python"}) {
 		t.Fatalf("type-i production image = %+v", production[8])
 	}
+	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"coq"}) {
+		t.Fatalf("type-j production image = %+v", production[9])
+	}
 
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
@@ -58,6 +61,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	}
 	if !reflect.DeepEqual(names, []string{
 		"ci-bf",
+		"ci-coq",
 		"ci-csharp",
 		"ci-d",
 		"ci-elixir",
