@@ -94,6 +94,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "GO"
 	case "zig":
 		l = "ZIG"
+	case "fortran", "fortan":
+		l = "FORTRAN"
 	case "c", "c11":
 		l = "C11"
 	case "c99":
@@ -238,6 +240,8 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileTypeScript(ctx, workDir, req.Sources)
 	case "kotlin":
 		return compileKotlinNative(ctx, workDir, target, req.Sources)
+	case "fortran":
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".f", ".for", ".f90", ".f95", ".f03", ".f08"), "gfortran", []string{"-O2", "-pipe"})
 	case "haskell":
 		return compileHaskell(ctx, workDir, target, req.Sources)
 	case "swift":
