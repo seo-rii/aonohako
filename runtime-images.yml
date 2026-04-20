@@ -607,6 +607,7 @@ languages:
     install:
       apt:
         - curl
+        - openjdk-17-jre-headless
         - xz-utils
       script:
         - export KONAN_VERSION=1.8.10
