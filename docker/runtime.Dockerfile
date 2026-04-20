@@ -49,6 +49,7 @@ RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
 COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
+COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
 RUN install -d -m 0700 /var/aonohako /var/aonohako/protected && \
     printf 'runtime-owned\n' > /var/aonohako/protected/probe.txt && \
@@ -73,5 +74,5 @@ ENV PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
     AONOHAKO_LANGUAGES=${LANGUAGES} \
     AONOHAKO_SMOKE_COMMAND=${SMOKE_COMMAND}
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/aonohako-entrypoint"]
 CMD ["aonohako"]

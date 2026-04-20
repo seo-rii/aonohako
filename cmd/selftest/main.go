@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -168,6 +169,27 @@ func runDirectImagePermissionChecks() error {
 	}
 	if imageOut != "blocked\nblocked\nblocked\nblocked\n" {
 		return fmt.Errorf("image-metadata-paths-are-not-readable: unexpected stdout %q stderr %q", imageOut, imageErr)
+	}
+
+	scratchOut, scratchErr, err := runAsSandboxUser(
+		"for p in /tmp /var/tmp /run/lock /dev/shm /dev/mqueue; do " +
+			"if [ -e \"$p\" ]; then " +
+			"if [ -w \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; " +
+			"fi; " +
+			"done",
+		"",
+	)
+	if err != nil {
+		return fmt.Errorf("global-scratch-dirs-are-not-writable: %w\n%s", err, scratchErr)
+	}
+	lines := strings.Fields(strings.TrimSpace(scratchOut))
+	if len(lines) == 0 {
+		return fmt.Errorf("global-scratch-dirs-are-not-writable: no scratch dirs were checked")
+	}
+	for i := 0; i+1 < len(lines); i += 2 {
+		if lines[i+1] != "blocked" {
+			return fmt.Errorf("global-scratch-dirs-are-not-writable: unexpected stdout %q stderr %q", scratchOut, scratchErr)
+		}
 	}
 
 	workDir, err := os.MkdirTemp("", "aonohako-selftest-work-*")
