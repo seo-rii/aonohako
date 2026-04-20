@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"os"
+	"path/filepath"
+	"time"
 
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
@@ -34,9 +37,21 @@ func main() {
 }
 
 func runPermissionsSuite() error {
+	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-selftest-unixgram-%d.sock", time.Now().UnixNano()))
+	addr := &net.UnixAddr{Name: socketPath, Net: "unixgram"}
+	listener, err := net.ListenUnixgram("unixgram", addr)
+	if err != nil {
+		return fmt.Errorf("listen unixgram socket: %w", err)
+	}
+	defer func() {
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
+	}()
+
 	cases := []struct {
-		name string
-		req  model.RunRequest
+		name  string
+		req   model.RunRequest
+		check func(model.RunResponse) error
 	}{
 		{
 			name: "protected-paths-are-not-readable",
@@ -64,6 +79,49 @@ func runPermissionsSuite() error {
 				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
 			},
 		},
+		{
+			name: "unix-datagram-send-is-blocked",
+			req: model.RunRequest{
+				Lang: "python",
+				Binaries: []model.Binary{{
+					Name: "main.py",
+					DataB64: encodeScript(fmt.Sprintf(
+						"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)\n    s.sendto(b'escape', %q)\n    print('sent')\nexcept OSError:\n    print('blocked')\n",
+						socketPath,
+					)),
+				}},
+				ExpectedStdout: "blocked\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+			check: func(model.RunResponse) error {
+				_ = listener.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+				buf := make([]byte, 64)
+				if n, _, err := listener.ReadFromUnix(buf); err == nil {
+					return fmt.Errorf("unix-datagram-send-is-blocked: unexpected datagram %q", string(buf[:n]))
+				}
+				return nil
+			},
+		},
+		{
+			name: "submitted-files-cannot-be-replaced",
+			req: model.RunRequest{
+				Lang: "python",
+				Binaries: []model.Binary{
+					{
+						Name: "main.py",
+						DataB64: encodeScript(
+							"from pathlib import Path\nimport os\ntry:\n    os.unlink('data.txt')\n    print('unlinked')\nexcept OSError:\n    print('blocked-unlink')\nPath('swap.txt').write_text('mutated\\n')\ntry:\n    os.replace('swap.txt', 'data.txt')\n    print('replaced')\nexcept OSError:\n    print('blocked-replace')\nprint(Path('data.txt').read_text(), end='')\n",
+						),
+					},
+					{
+						Name:    "data.txt",
+						DataB64: encodeScript("original\n"),
+					},
+				},
+				ExpectedStdout: "blocked-unlink\nblocked-replace\noriginal\n",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
 	}
 
 	svc := execute.New()
@@ -71,6 +129,11 @@ func runPermissionsSuite() error {
 		resp := svc.Run(context.Background(), &tc.req, execute.Hooks{})
 		if resp.Status != model.RunStatusAccepted {
 			return fmt.Errorf("%s: expected Accepted, got %+v", tc.name, resp)
+		}
+		if tc.check != nil {
+			if err := tc.check(resp); err != nil {
+				return err
+			}
 		}
 	}
 

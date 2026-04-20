@@ -381,6 +381,43 @@ func TestRunBlocksUnixSocketConnectWhenNetworkDisabled(t *testing.T) {
 	}
 }
 
+func TestRunBlocksUnixDatagramSendWhenNetworkDisabled(t *testing.T) {
+	requireSandboxSupport(t)
+
+	socketPath := filepath.Join(t.TempDir(), "control-dgram.sock")
+	addr := &net.UnixAddr{Name: socketPath, Net: "unixgram"}
+	listener, err := net.ListenUnixgram("unixgram", addr)
+	if err != nil {
+		t.Fatalf("listen unixgram socket: %v", err)
+	}
+	defer listener.Close()
+
+	svc := New()
+	script := fmt.Sprintf(
+		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)\n    s.sendto(b'escape', %q)\n    print('sent')\nexcept OSError:\n    print('blocked')\n",
+		socketPath,
+	)
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+
+	_ = listener.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	buf := make([]byte, 64)
+	if n, _, err := listener.ReadFromUnix(buf); err == nil {
+		t.Fatalf("expected no datagram delivery, got %q", string(buf[:n]))
+	}
+}
+
 func TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback(t *testing.T) {
 	t.Setenv("K_SERVICE", "aonohako-runner")
 
@@ -424,6 +461,33 @@ func TestRunRequiresRootOutsideCloudRun(t *testing.T) {
 
 	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "sandbox requires root") {
 		t.Fatalf("expected root requirement failure, got %+v", resp)
+	}
+}
+
+func TestRunPreventsRemovingOrReplacingSubmittedFiles(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{
+			{
+				Name: "main.py",
+				DataB64: base64.StdEncoding.EncodeToString([]byte(
+					"from pathlib import Path\nimport os\ntry:\n    os.unlink('data.txt')\n    print('unlinked')\nexcept OSError:\n    print('blocked-unlink')\nPath('swap.txt').write_text('mutated\\n')\ntry:\n    os.replace('swap.txt', 'data.txt')\n    print('replaced')\nexcept OSError:\n    print('blocked-replace')\nprint(Path('data.txt').read_text(), end='')\n",
+				)),
+			},
+			{
+				Name:    "data.txt",
+				DataB64: base64.StdEncoding.EncodeToString([]byte("original\n")),
+			},
+		},
+		ExpectedStdout: "blocked-unlink\nblocked-replace\noriginal\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
 	}
 }
 
