@@ -35,6 +35,11 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"SWIFT",
 		"SQLITE",
 		"JULIA",
+		"SCALA",
+		"FSHARP",
+		"WHITESPACE",
+		"BF",
+		"WASM",
 		"OCAML",
 		"ELIXIR",
 		"RUBY",
@@ -54,12 +59,17 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 
 func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	tests := map[string]string{
-		"OCAML":   "ocaml",
-		"ELIXIR":  "elixir",
-		"HASKELL": "binary",
-		"SWIFT":   "binary",
-		"SQLITE":  "sqlite",
-		"JULIA":   "julia",
+		"OCAML":      "ocaml",
+		"ELIXIR":     "elixir",
+		"HASKELL":    "binary",
+		"SWIFT":      "binary",
+		"SQLITE":     "sqlite",
+		"JULIA":      "julia",
+		"SCALA":      "scala",
+		"FSHARP":     "fsharp",
+		"WASM":       "wasm",
+		"BF":         "brainfuck",
+		"WHITESPACE": "whitespace",
 	}
 
 	for input, want := range tests {

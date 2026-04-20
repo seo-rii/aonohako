@@ -17,5 +17,11 @@ for _ in 1 2 3; do
   aonohako-selftest "${suite}"
 done
 
-IFS=$'\t' read -r -a smoke_parts <<< "${AONOHAKO_SMOKE_COMMAND}"
+smoke_parts=()
+rest=${AONOHAKO_SMOKE_COMMAND}
+while [[ "${rest}" == *$'\t'* ]]; do
+  smoke_parts+=("${rest%%$'\t'*}")
+  rest=${rest#*$'\t'}
+done
+smoke_parts+=("${rest}")
 exec "${smoke_parts[@]}"

@@ -58,6 +58,21 @@ languages:
           javac --release 11 Main.java
           java Main | grep '^ok$'
 
+  scala:
+    install:
+      apt:
+        - bash
+        - openjdk-17-jdk-headless
+        - scala
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'object Main extends App {' '  val path = new java.io.File("same-folder.txt")' '  val writer = new java.io.PrintWriter(path, "UTF-8")' '  writer.write("ok")' '  writer.close()' '  println(scala.io.Source.fromFile(path, "UTF-8").mkString.trim)' '}' > Main.scala
+          scalac Main.scala
+          scala -nocompdaemon -classpath . Main | grep '^ok$'
+
   javascript:
     install:
       apt:
@@ -210,6 +225,84 @@ languages:
           end
           println(read("same-folder.txt", String))
 
+  whitespace:
+    install:
+      apt:
+        - python3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          python3 - <<'PY' > Main.ws
+          S = " "
+          T = "\t"
+          L = "\n"
+          def number(value):
+              sign = S if value >= 0 else T
+              bits = bin(abs(value))[2:]
+              payload = ''.join(S if ch == '0' else T for ch in bits)
+              return sign + payload + L
+          def push(value):
+              return S + S + number(value)
+          def out_char():
+              return T + L + S + S
+          program = ''.join(push(ord(ch)) + out_char() for ch in "ok\n") + L + L + L
+          print(program, end="")
+          PY
+          python3 /usr/local/lib/aonohako/whitespace.py Main.ws | grep '^ok$'
+
+  bf:
+    install:
+      apt:
+        - python3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s' '++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.' > Main.bf
+          python3 /usr/local/lib/aonohako/brainfuck.py Main.bf | grep '^Hello World!$'
+
+  wasm:
+    install:
+      apt:
+        - curl
+        - wabt
+        - xz-utils
+      script:
+        - curl -fsSL https://wasmtime.dev/install.sh | bash
+        - ln -sfn /root/.wasmtime/bin/wasmtime /usr/local/bin/wasmtime
+        - test -x /usr/local/bin/wasmtime
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.wat <<'WAT'
+          (module
+            (import "wasi_snapshot_preview1" "fd_write"
+              (func $fd_write (param i32 i32 i32 i32) (result i32)))
+            (memory 1)
+            (export "memory" (memory 0))
+            (data (i32.const 8) "ok\n")
+            (func (export "_start")
+              i32.const 0
+              i32.const 8
+              i32.store
+              i32.const 4
+              i32.const 3
+              i32.store
+              i32.const 1
+              i32.const 0
+              i32.const 1
+              i32.const 20
+              call $fd_write
+              drop))
+          WAT
+          wat2wasm Main.wat -o Main.wasm
+          wasmtime run --dir=. Main.wasm | grep '^ok$'
+
   ocaml:
     install:
       apt:
@@ -307,6 +400,45 @@ languages:
           env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish app --configuration Release -o publish
           dotnet ./publish/App.dll | grep '^ok$'
 
+  fsharp:
+    install:
+      apt:
+        - curl
+        - libicu72
+      script:
+        - mkdir -p /opt/dotnet
+        - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+        - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
+        - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
+        - rm -f /tmp/dotnet-install.sh
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          mkdir -p /tmp/fsharp-home /tmp/fsharp-packages
+          cat > App.fsproj <<'FSPROJ'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net8.0</TargetFramework>
+            </PropertyGroup>
+            <ItemGroup>
+              <Compile Include="Program.fs" />
+            </ItemGroup>
+          </Project>
+          FSPROJ
+          cat > Program.fs <<'FS'
+          open System.IO
+          [<EntryPoint>]
+          let main _ =
+              File.WriteAllText("same-folder.txt", "ok")
+              printfn "%s" (File.ReadAllText("same-folder.txt"))
+              0
+          FS
+          env HOME=/tmp/fsharp-home DOTNET_CLI_HOME=/tmp/fsharp-home NUGET_PACKAGES=/tmp/fsharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.fsproj --configuration Release -o publish -p:UseAppHost=false
+          dotnet ./publish/App.dll | grep '^ok$'
+
   uhmlang:
     install:
       apt:
@@ -330,6 +462,7 @@ profiles:
   type-a:
     base_image: debian:bookworm-slim
     languages:
+      - bf
       - plain
       - python
       - pypy
@@ -341,11 +474,14 @@ profiles:
       - haskell
       - sqlite
       - ocaml
+      - wasm
+      - whitespace
   type-b:
     base_image: debian:bookworm-slim
     languages:
       - java
       - javascript
+      - scala
       - typescript
   type-c:
     base_image: debian:bookworm-slim
@@ -360,6 +496,7 @@ profiles:
     base_image: debian:bookworm-slim
     languages:
       - csharp
+      - fsharp
   type-f:
     base_image: debian:bookworm-slim
     languages:
@@ -372,3 +509,9 @@ profiles:
     base_image: swift:6.2.1-bookworm
     languages:
       - swift
+  type-i:
+    base_image: debian:bookworm-slim
+    languages:
+      - plain
+      - python
+      - java

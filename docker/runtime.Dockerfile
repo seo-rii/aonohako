@@ -49,6 +49,8 @@ RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
 COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
+COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
+COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
 RUN install -d -m 0700 /var/aonohako /var/aonohako/protected && \
