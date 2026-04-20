@@ -110,6 +110,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "GROOVY"
 	case "erlang":
 		l = "ERLANG"
+	case "prolog":
+		l = "PROLOG"
 	case "scala":
 		l = "SCALA"
 	case "f#", "fsharp":
@@ -250,6 +252,30 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		if checked == 0 {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no r sources"}
+		}
+		artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+	case "prolog":
+		var checked int
+		var fullOut bytes.Buffer
+		var fullErr bytes.Buffer
+		for _, src := range req.Sources {
+			if !strings.HasSuffix(strings.ToLower(src.Name), ".pl") {
+				continue
+			}
+			checked++
+			stdout, stderr, status, reason := runCommand(ctx, workDir, "swipl", []string{"-q", "-f", "none", "-g", "halt", "-t", "halt", filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
+			fullOut.WriteString(stdout)
+			fullErr.WriteString(stderr)
+			if status != model.CompileStatusOK {
+				return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+			}
+		}
+		if checked == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no prolog sources"}
 		}
 		artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
 		if err != nil {

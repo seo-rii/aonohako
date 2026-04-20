@@ -20,7 +20,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 9 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"bf", "elixir", "erlang", "haskell", "lua", "ocaml", "perl", "php", "plain", "pypy", "python", "r", "ruby", "sqlite", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"bf", "elixir", "erlang", "haskell", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "python", "r", "ruby", "sqlite", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"groovy", "java", "javascript", "scala", "typescript"}) {
@@ -76,6 +76,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-perl",
 		"ci-php",
 		"ci-plain",
+		"ci-prolog",
 		"ci-pypy",
 		"ci-python",
 		"ci-r",

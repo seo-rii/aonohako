@@ -62,6 +62,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"sqlite":     {compileKind: "sqlite", runLang: "sqlite"},
 		"julia":      {compileKind: "julia", runLang: "julia"},
 		"erlang":     {compileKind: "erlang", runLang: "erlang"},
+		"prolog":     {compileKind: "prolog", runLang: "prolog"},
 		"r":          {compileKind: "r", runLang: "r"},
 		"groovy":     {compileKind: "groovy", runLang: "groovy"},
 		"fortan":     {compileKind: "fortran", runLang: "binary"},
