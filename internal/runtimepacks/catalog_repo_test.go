@@ -22,7 +22,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 11 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"bf", "elixir", "erlang", "haskell", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "python", "r", "racket", "ruby", "sqlite", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "bf", "elixir", "erlang", "haskell", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "python", "r", "racket", "ruby", "sqlite", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "groovy", "java", "javascript", "scala", "typescript"}) {
@@ -66,6 +66,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	}
 	if !reflect.DeepEqual(names, []string{
 		"ci-ada",
+		"ci-aheui",
 		"ci-bf",
 		"ci-clojure",
 		"ci-coq",
@@ -118,6 +119,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 	}
 
 	tests := map[string][]string{
+		"aheui":   {"Hello, World!", "Main.aheui"},
 		"ada":     {"gnatmake", "Broken.adb"},
 		"clojure": {"PushbackReader", "Main.clj"},
 		"dart":    {"dart compile exe", "Broken.dart"},
@@ -146,6 +148,24 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 				t.Fatalf("language %q smoke command must contain %q, got %q", language, pattern, body)
 			}
 		}
+	}
+}
+
+func TestRepositoryCatalogIncludesAheuiRuntime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	spec, ok := catalog.Languages["aheui"]
+	if !ok {
+		t.Fatalf("aheui language missing from catalog")
+	}
+	if !slices.Contains(spec.Install.Apt, "python3") || !slices.Contains(spec.Install.Apt, "python3-pip") {
+		t.Fatalf("aheui apt packages = %v, want python3 and python3-pip", spec.Install.Apt)
+	}
+	if !slices.Contains(spec.Install.Pip, "aheui") {
+		t.Fatalf("aheui pip packages = %v, want aheui", spec.Install.Pip)
 	}
 }
 

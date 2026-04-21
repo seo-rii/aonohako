@@ -84,6 +84,8 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 func resolveProfile(lang string) (profiles.Profile, bool) {
 	l := strings.TrimSpace(lang)
 	switch strings.ToLower(l) {
+	case "aheui":
+		l = "AHEUI"
 	case "python", "python3":
 		l = "PYTHON3"
 	case "pypy", "pypy3":

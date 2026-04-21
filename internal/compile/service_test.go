@@ -57,6 +57,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{
+		"aheui":      {compileKind: "none", runLang: "aheui"},
 		"pascal":     {compileKind: "pascal", runLang: "binary"},
 		"nim":        {compileKind: "nim", runLang: "binary"},
 		"clojure":    {compileKind: "clojure", runLang: "clojure"},

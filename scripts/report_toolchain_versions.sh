@@ -97,6 +97,7 @@ report ".NET" dotnet --version
 report "Coq" coqc --version
 report "Wasmtime" wasmtime --version
 
+report_python_pkg "Aheui" "aheui"
 report_python_pkg "NumPy" "numpy"
 report_python_pkg "Pandas" "pandas"
 report_python_pkg "Seaborn" "seaborn"

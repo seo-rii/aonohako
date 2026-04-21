@@ -42,6 +42,7 @@ var profiles = map[string]Profile{
 	"JAVA15":     {SourceLang: "JAVA15", Extension: "java", CompileKind: "java", JavaRelease: "15", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"GROOVY":     {SourceLang: "GROOVY", Extension: "groovy", CompileKind: "groovy", RunLang: "groovy", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"KOTLIN":     {SourceLang: "KOTLIN", Extension: "kt", DefaultTarget: "Main", CompileKind: "kotlin", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
+	"AHEUI":      {SourceLang: "AHEUI", Extension: "aheui", CompileKind: "none", RunLang: "aheui", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"PASCAL":     {SourceLang: "PASCAL", Extension: "pas", DefaultTarget: "Main", CompileKind: "pascal", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"NIM":        {SourceLang: "NIM", Extension: "nim", DefaultTarget: "Main", CompileKind: "nim", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"CLOJURE":    {SourceLang: "CLOJURE", Extension: "clj", CompileKind: "clojure", RunLang: "clojure", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
@@ -88,7 +89,7 @@ func Resolve(language string) (Profile, bool) {
 func NormalizeRunLang(language string) string {
 	key := strings.ToLower(strings.TrimSpace(language))
 	switch key {
-	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "brainfuck", "wasm", "lisp", "coq", "clojure", "racket":
+	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "brainfuck", "wasm", "lisp", "coq", "clojure", "racket", "aheui":
 		return key
 	case "bf":
 		return "brainfuck"

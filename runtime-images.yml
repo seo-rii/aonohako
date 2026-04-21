@@ -14,6 +14,22 @@ languages:
           gcc -O2 -pipe Main.c -o Main
           [ "$(./Main)" = ok ]
 
+  aheui:
+    install:
+      apt:
+        - python3
+        - python3-pip
+      pip:
+        - aheui
+    smoke:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          printf '%s' '밞바밤밣받밞밞밞밦밞바밝밣바박박밦밞받밞받밞발밣받뱔희밞땨몋드떠받볋' > Main.aheui
+          output="$(aheui Main.aheui 2>/tmp/aheui.stderr || true)"
+          printf '%s\n' "${output}" | grep '^Hello, World!$'
+
   python:
     install:
       apt:
@@ -910,6 +926,7 @@ profiles:
   type-a:
     base_image: debian:bookworm-slim
     languages:
+      - aheui
       - bf
       - elixir
       - erlang
