@@ -34,3 +34,21 @@ func TestCreateWorkDirIgnoresLegacyRootEnv(t *testing.T) {
 		t.Fatalf("expected legacy GO_WORK_ROOT to be ignored, got %s", dir)
 	}
 }
+
+func TestCreateWorkDirRequiresConfiguredRootInStrictModes(t *testing.T) {
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "cloudrun")
+	t.Setenv("AONOHAKO_WORK_ROOT", "")
+
+	if _, err := CreateWorkDir("aonohako-test-*"); err == nil {
+		t.Fatalf("expected strict execution mode to reject missing AONOHAKO_WORK_ROOT")
+	}
+}
+
+func TestCreateWorkDirRejectsMissingStrictRoot(t *testing.T) {
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-root")
+	t.Setenv("AONOHAKO_WORK_ROOT", filepath.Join(t.TempDir(), "missing"))
+
+	if _, err := CreateWorkDir("aonohako-test-*"); err == nil {
+		t.Fatalf("expected strict execution mode to reject a missing work root")
+	}
+}

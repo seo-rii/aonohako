@@ -3,12 +3,14 @@ package execute
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"aonohako/internal/model"
 )
@@ -20,6 +22,17 @@ func forceDirectMode(t *testing.T) {
 
 func requireSandboxSupport(t *testing.T) {
 	t.Helper()
+	if os.Getenv("AONOHAKO_EXECUTION_MODE") == "" {
+		t.Setenv("AONOHAKO_EXECUTION_MODE", "local-root")
+	}
+	if os.Getenv("AONOHAKO_WORK_ROOT") == "" {
+		workRoot := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-test-work-%d", time.Now().UnixNano()))
+		if err := os.MkdirAll(workRoot, 0o755); err != nil {
+			t.Fatalf("mkdir work root: %v", err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(workRoot) })
+		t.Setenv("AONOHAKO_WORK_ROOT", workRoot)
+	}
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
@@ -36,6 +49,9 @@ func requireSandboxSupport(t *testing.T) {
 		return
 	}
 	if strings.Contains(resp.Stderr, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox-init:") || strings.Contains(resp.Reason, "sandbox requires root") {
+		if os.Getenv("AONOHAKO_ENFORCE_SANDBOX_TESTS") != "" {
+			t.Fatalf("sandbox isolation must be available on this runner: %+v", resp)
+		}
 		t.Skipf("sandbox isolation is unavailable on this runner: %+v", resp)
 	}
 }

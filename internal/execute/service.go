@@ -19,7 +19,6 @@ import (
 	"unicode/utf8"
 
 	"aonohako/internal/model"
-	"aonohako/internal/platform"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
@@ -272,8 +271,14 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", fmt.Errorf("binaries total size exceeded")
 		}
 		dest := filepath.Join(ws.BoxDir, clean)
-		if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+		parentDir := filepath.Dir(dest)
+		if err := os.MkdirAll(parentDir, 0o777|os.ModeSticky); err != nil {
 			return "", "", err
+		}
+		for dir := parentDir; dir != ws.BoxDir && strings.HasPrefix(dir, ws.BoxDir+string(os.PathSeparator)); dir = filepath.Dir(dir) {
+			if err := os.Chmod(dir, 0o777|os.ModeSticky); err != nil {
+				return "", "", err
+			}
 		}
 		mode := os.FileMode(0o444)
 		if b.Mode == "exec" || isLikelyExec(clean) {
@@ -354,7 +359,7 @@ func buildSubmissionJar(workDir, entryPoint string, classes []string) (string, e
 		mainClass = "Main"
 	}
 	mainClass = strings.ReplaceAll(mainClass, "/", ".")
-	jarPath := filepath.Join(workDir, "submission.jar")
+	jarPath := filepath.Join(workDir, ".aonohako-submission.jar")
 	file, err := os.Create(jarPath)
 	if err != nil {
 		return "", err
@@ -405,7 +410,7 @@ func buildSubmissionJar(workDir, entryPoint string, classes []string) (string, e
 	if err := file.Close(); err != nil {
 		return "", err
 	}
-	_ = os.Chmod(jarPath, 0o500)
+	_ = os.Chmod(jarPath, 0o444)
 	return jarPath, nil
 }
 
@@ -515,8 +520,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
-	if os.Geteuid() != 0 && !platform.IsCloudRun() {
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires root outside Cloud Run"}
+	if os.Geteuid() != 0 {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires root"}
 	}
 	timeLimitMs := max(1, req.Limits.TimeMs)
 	memoryLimitKB := int64(0)

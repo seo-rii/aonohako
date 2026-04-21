@@ -25,9 +25,27 @@ func TestDefaultMaxActiveRuns(t *testing.T) {
 }
 
 func TestDefaultMaxActiveRunsCloudRunIsOne(t *testing.T) {
-	t.Setenv("K_SERVICE", "aonohako")
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "cloudrun")
 	if got := defaultMaxActiveRuns(); got != 1 {
 		t.Fatalf("expected Cloud Run default max active runs to be 1, got %d", got)
+	}
+}
+
+func TestLoadRejectsCloudRunMarkersWithoutExplicitMode(t *testing.T) {
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "")
+	t.Setenv("K_SERVICE", "aonohako")
+
+	if _, err := Load(); err == nil {
+		t.Fatalf("expected explicit execution mode requirement when Cloud Run markers are present")
+	}
+}
+
+func TestLoadRejectsStrictModeWithoutWorkRoot(t *testing.T) {
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "cloudrun")
+	t.Setenv("AONOHAKO_WORK_ROOT", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatalf("expected strict execution mode to require AONOHAKO_WORK_ROOT")
 	}
 }
 
@@ -48,7 +66,10 @@ func TestLoadUsesEnvAndFallbacks(t *testing.T) {
 	_ = os.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "7")
 	_ = os.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "2")
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
 	if cfg.Port != "18080" {
 		t.Fatalf("port mismatch: %s", cfg.Port)
 	}
@@ -65,7 +86,10 @@ func TestLoadUsesEnvAndFallbacks(t *testing.T) {
 	_ = os.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "-1")
 	_ = os.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "-1")
 	_ = os.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "0")
-	cfg = Load()
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load returned error on fallback path: %v", err)
+	}
 	if cfg.MaxActiveRuns != defaultMaxActiveRuns() {
 		t.Fatalf("fallback max active mismatch: %d", cfg.MaxActiveRuns)
 	}
@@ -91,7 +115,10 @@ func TestLoadIgnoresLegacyEnvFallbacks(t *testing.T) {
 		_ = os.Unsetenv("GO_HEARTBEAT_INTERVAL_SEC")
 	})
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
 	if cfg.MaxActiveRuns != defaultMaxActiveRuns() {
 		t.Fatalf("legacy max active env should be ignored, got %d", cfg.MaxActiveRuns)
 	}

@@ -1,9 +1,9 @@
 package api
 
 import (
-	"aonohako/internal/config"
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -12,10 +12,26 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"aonohako/internal/config"
+	"aonohako/internal/execute"
+	"aonohako/internal/model"
 )
+
+type executeRunnerStub struct {
+	run func(context.Context, *model.RunRequest, execute.Hooks) model.RunResponse
+}
+
+func (s executeRunnerStub) Run(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+	return s.run(ctx, req, hooks)
+}
 
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
 	s := New(configForTest(t))
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		time.Sleep(2 * time.Second)
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}}
 	h := s.Handler()
 	ts := httptest.NewServer(h)
 	defer ts.Close()
@@ -79,6 +95,10 @@ func TestHealthz(t *testing.T) {
 
 func TestExecuteSSESequence(t *testing.T) {
 	s := New(configForTest(t))
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		hooks.OnLog("stdout", "ok\n")
+		return model.RunResponse{Status: model.RunStatusAccepted, TimeMs: 5, WallTimeMs: 5, CPUTimeMs: 3, Stdout: "ok\n"}
+	}}
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -184,9 +204,7 @@ func readSSEEvents(r io.Reader, t *testing.T) []sseEvent {
 
 func configForTest(t *testing.T) config.Config {
 	t.Helper()
-	t.Setenv("K_SERVICE", "aonohako-test")
-	t.Setenv("CLOUD_RUN_JOB", "")
-	t.Setenv("CLOUD_RUN_WORKER_POOL", "")
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-dev")
 	return config.Config{Port: "0", MaxActiveRuns: 1, MaxPendingQueue: 1, HeartbeatInterval: 100 * time.Millisecond}
 }
 
@@ -194,6 +212,10 @@ func configForTest(t *testing.T) config.Config {
 
 func TestCompileQueueOverflowReturns429(t *testing.T) {
 	s := New(configForTest(t))
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		time.Sleep(2 * time.Second)
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}}
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 

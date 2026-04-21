@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"aonohako/internal/api"
@@ -15,7 +16,11 @@ func main() {
 		return
 	}
 
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("aonohako startup validation failed", "err", err)
+		os.Exit(1)
+	}
 	server := api.New(cfg)
 
 	httpServer := &http.Server{

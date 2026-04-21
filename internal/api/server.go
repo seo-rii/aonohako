@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -20,10 +21,14 @@ import (
 
 type Server struct {
 	cfg     config.Config
-	compile *compile.Service
-	execute *execute.Service
-	queue   *queue.Manager
-	seq     atomic.Uint64
+	compile interface {
+		Run(context.Context, *model.CompileRequest) model.CompileResponse
+	}
+	execute interface {
+		Run(context.Context, *model.RunRequest, execute.Hooks) model.RunResponse
+	}
+	queue *queue.Manager
+	seq   atomic.Uint64
 }
 
 func New(cfg config.Config) *Server {

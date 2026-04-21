@@ -2,6 +2,7 @@ package execute
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -118,5 +119,69 @@ func TestCaptureFileOutputRejectsSymlink(t *testing.T) {
 
 	if _, err := captureFileOutput(ws, model.OutputFile{Path: "result.txt"}); err == nil {
 		t.Fatalf("expected symlink output rejection")
+	}
+}
+
+func TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to drop to sandbox user")
+	}
+
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang: "java",
+		Binaries: []model.Binary{
+			{Name: "pkg/Main.class", DataB64: b64("class-bytes")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+
+	cmd := exec.Command("sh", "-lc", "cat pkg/Main.class >/dev/null && touch pkg/generated.txt && test -f pkg/generated.txt")
+	cmd.Dir = ws.BoxDir
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65532, Gid: 65532}}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("sandbox user should traverse nested submission dirs and create peers: %v\n%s", err, string(output))
+	}
+}
+
+func TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to drop to sandbox user")
+	}
+
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	jarPath, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang:       "java",
+		EntryPoint: "Main",
+		Binaries: []model.Binary{
+			{Name: "Main.class", DataB64: b64("class-bytes")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "java" {
+		t.Fatalf("lang = %q, want java", lang)
+	}
+
+	cmd := exec.Command("sh", "-lc", "test -r \"$1\"", "sh", jarPath)
+	cmd.Dir = ws.BoxDir
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65532, Gid: 65532}}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("sandbox user should read generated jar: %v\n%s", err, string(output))
 	}
 }
