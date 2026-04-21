@@ -38,7 +38,7 @@
 
 ```jsonc
 {
-  "lang": "binary",                          // runtime language: binary|python|pypy|java|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|fsharp|text|clojure|racket|groovy|scala|erlang|prolog|lisp|coq|r|whitespace|brainfuck|wasm
+  "lang": "binary",                          // runtime language: binary|python|pypy|java|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|fsharp|text|clojure|racket|groovy|scala|erlang|prolog|lisp|coq|r|whitespace|brainfuck|wasm|aheui
   "binaries": [                              // files to place in work directory
     {
       "name": "Main",                       // filename
@@ -168,6 +168,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | WHITESPACE | `whitespace` | Structural validation (whitespace-only source) |
 | BF | `brainfuck` | Bracket-balance validation |
 | WASM | `wasm` | `wat2wasm` or `wasm-validate` |
+| AHEUI | `aheui` | Pass-through artifacts |
 | UHMLANG, TEXT | `none` | Pass-through |
 
 ### Runtime languages
@@ -201,6 +202,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `whitespace` | `python3 /usr/local/lib/aonohako/whitespace.py <file>` |
 | `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |
 | `wasm` | `wasmtime run --dir=. <file>` |
+| `aheui` | `sh -c 'aheui "$1" ...' sh <file>` |
 | `text` | `cat <file>` |
 
 ## Resource Enforcement

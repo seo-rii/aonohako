@@ -146,6 +146,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		wantFirst string
 	}{
 		{"binary", "/tmp/a.out", "/tmp/a.out"},
+		{"aheui", "/tmp/sol.aheui", "sh"},
 		{"clojure", "/tmp/sol.clj", "clojure"},
 		{"coq", "/tmp/Main.v", "coqc"},
 		{"ocaml", "/tmp/sol", "env"},
@@ -199,6 +200,9 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			}
 			if tc.lang == "elixir" && !containsArg(args, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1") {
 				t.Errorf("buildCommand(%s) missing ERL_AFLAGS in %v", tc.lang, args)
+			}
+			if tc.lang == "aheui" && (len(args) < 3 || !strings.Contains(args[2], "aheui \"$1\"")) {
+				t.Errorf("buildCommand(%s) missing aheui wrapper body in %v", tc.lang, args)
 			}
 		})
 	}

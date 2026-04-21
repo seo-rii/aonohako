@@ -310,7 +310,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "coq", "whitespace", "brainfuck", "wasm":
+	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "coq", "whitespace", "brainfuck", "wasm", "aheui":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
@@ -436,6 +436,26 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	switch lang {
 	case "binary":
 		return []string{primaryPath}
+	case "aheui":
+		return []string{
+			"sh",
+			"-c",
+			"err_file=.aonohako-aheui.stderr.$$; " +
+				"if aheui \"$1\" 2>\"${err_file}\"; then " +
+				"cat \"${err_file}\" >&2; rm -f \"${err_file}\"; exit 0; " +
+				"fi; " +
+				"status=$?; " +
+				"cat \"${err_file}\" >&2; " +
+				"stderr_body=\"$(tr -d '\\r' < \"${err_file}\")\"; " +
+				"rm -f \"${err_file}\"; " +
+				"if [ -z \"${stderr_body}\" ] || [ \"${stderr_body}\" = \"[Warning:VirtualMachine] Running without rlib/jit.\" ]; then " +
+				"exit 0; " +
+				"fi; " +
+				"case \"${stderr_body}\" in *\"Traceback (most recent call last):\"*) exit \"${status}\" ;; esac; " +
+				"exit \"${status}\"",
+			"sh",
+			primaryPath,
+		}
 	case "clojure":
 		return []string{"clojure", primaryPath}
 	case "python":

@@ -25,7 +25,7 @@ binary, configurable runtime images, and testable build metadata.
 The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
 
 - Production mode builds grouped images such as `type-a` (`plain`, `python`,
-  `pypy`, `racket`, `bf`, `whitespace`, `wasm`, and scripting runtimes),
+  `pypy`, `aheui`, `racket`, `bf`, `whitespace`, `wasm`, and scripting runtimes),
   `type-b` (`clojure`, `java`, `javascript`, `scala`, `typescript`), `type-c`
   (`ada`, `d`, `fortran`, `go`, `nim`, `pascal`, `rust`, `zig`), `type-e`
   (`csharp`, `fsharp`), and the mixin validation profile `type-i` (`plain`,
@@ -41,10 +41,10 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   Groovy, Scala, Clojure, JavaScript/TypeScript, Ruby, PHP, Lua, Perl, Elixir,
   Haskell, OCaml, SQLite, Go, Rust, Zig, Nim, Pascal, Ada, Kotlin, C#, F#,
   Julia, Swift, R, Racket, Erlang, Prolog, Brainfuck, Whitespace, WASM, Coq,
-  Dart, and UHMLANG. C/C++ submitters compile into binaries and should target
-  the `plain` runtime image rather than dedicated C/C++ runtime images. Add new
-  languages by extending the YAML file instead of editing shell loops or
-  workflow matrices.
+  Aheui, Dart, and UHMLANG. C/C++ submitters compile into binaries and should
+  target the `plain` runtime image rather than dedicated C/C++ runtime images.
+  Add new languages by extending the YAML file instead of editing shell loops
+  or workflow matrices.
 
 Inspect the generated matrix:
 

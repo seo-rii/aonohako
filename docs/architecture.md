@@ -303,7 +303,7 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `bf`, `elixir`, `erlang`, `haskell`, `lisp`, `lua`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `python`, `r`, `racket`, `ruby`, `sqlite`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `bf`, `elixir`, `erlang`, `haskell`, `lisp`, `lua`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `python`, `r`, `racket`, `ruby`, `sqlite`, `wasm`, `whitespace` |
 | `type-b` | `clojure`, `groovy`, `java`, `javascript`, `scala`, `typescript` |
 | `type-c` | `ada`, `d`, `fortran`, `go`, `nim`, `pascal`, `rust`, `zig` |
 | `type-d` | `kotlin` |
