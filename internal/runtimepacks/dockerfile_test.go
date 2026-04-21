@@ -25,6 +25,9 @@ func TestRuntimeDockerfileDeclaresRuntimeBaseBeforeFirstFrom(t *testing.T) {
 	if !(argIndex < goFromIndex && goFromIndex < runtimeFromIndex) {
 		t.Fatalf("ARG RUNTIME_BASE must be declared before the first FROM to be usable in a later FROM")
 	}
+	if !strings.Contains(body, "ARG RUNTIME_BASE=debian:trixie-slim") {
+		t.Fatalf("runtime.Dockerfile must default runtime images to debian:trixie-slim")
+	}
 }
 
 func TestRuntimeDockerfileUsesGo123BuilderImage(t *testing.T) {
