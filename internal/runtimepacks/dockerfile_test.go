@@ -57,6 +57,9 @@ func TestRuntimeDockerfilePATHIncludesSbin(t *testing.T) {
 	if !strings.Contains(body, "PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin") {
 		t.Fatalf("runtime.Dockerfile PATH must include go/cargo bins and /usr/sbin:/sbin for sandbox tools")
 	}
+	if !strings.Contains(body, "PYTHONPATH=/usr/local/lib/aonohako/python") {
+		t.Fatalf("runtime.Dockerfile must export PYTHONPATH for vendored python judge helpers")
+	}
 }
 
 func TestRuntimeDockerfileExportsRustToolchainEnv(t *testing.T) {
@@ -137,6 +140,12 @@ func TestRuntimeDockerfileCopiesSandboxSelftestBinary(t *testing.T) {
 	}
 	if !strings.Contains(body, "COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest") {
 		t.Fatalf("runtime.Dockerfile must copy the sandbox selftest binary into runtime images")
+	}
+	if !strings.Contains(body, "COPY python/ /usr/local/lib/aonohako/python/") {
+		t.Fatalf("runtime.Dockerfile must copy vendored python judge helpers into runtime images")
+	}
+	if !strings.Contains(body, "find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} +") {
+		t.Fatalf("runtime.Dockerfile must preserve traversable permissions on vendored python helper directories")
 	}
 }
 

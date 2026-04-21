@@ -66,6 +66,33 @@ PY
     printf '| %s | `%s` |\n' "${name}" "${output}"
 }
 
+report_python_module() {
+    local name="$1"
+    local module="$2"
+    local output
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 0
+    elif output="$(MODULE_NAME="${module}" python3 - <<'PY' 2>&1
+import importlib.util
+import os
+import sys
+
+spec = importlib.util.find_spec(os.environ["MODULE_NAME"])
+if spec is None:
+    sys.exit(1)
+print("vendored")
+PY
+)"; then
+        :
+    else
+        return 0
+    fi
+
+    output="$(printf "%s" "${output}" | sed -n '1p' | tr -d '\r' | sed 's/|/\\|/g')"
+    printf '| %s | `%s` |\n' "${name}" "${output}"
+}
+
 echo "| Tool | Version |"
 echo "| --- | --- |"
 report "Python" python3 --version
