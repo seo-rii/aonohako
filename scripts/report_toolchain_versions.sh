@@ -70,8 +70,10 @@ report "Java compiler" javac -version
 report "Java runtime" java -version
 report "Groovy" groovy --version
 report "Scala" scala -version
+report "GNU as" as --version
 report "GCC" gcc --version
 report "G++" g++ --version
+report "NASM" nasm -v
 report "Go" go version
 report "Rust" rustc --version
 report "Swift" swift --version

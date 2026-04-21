@@ -28,7 +28,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "groovy", "java", "javascript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "d", "fortran", "go", "nim", "pascal", "rust", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "d", "fortran", "go", "nasm", "nim", "pascal", "rust", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin"}) {
@@ -67,6 +67,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if !reflect.DeepEqual(names, []string{
 		"ci-ada",
 		"ci-aheui",
+		"ci-asm",
 		"ci-bf",
 		"ci-clojure",
 		"ci-coq",
@@ -86,6 +87,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-kotlin",
 		"ci-lisp",
 		"ci-lua",
+		"ci-nasm",
 		"ci-nim",
 		"ci-ocaml",
 		"ci-pascal",
@@ -121,6 +123,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 	tests := map[string][]string{
 		"aheui":   {"Hello, World!", "Main.aheui"},
 		"ada":     {"gnatmake", "Broken.adb"},
+		"asm":     {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
 		"clojure": {"PushbackReader", "Main.clj"},
 		"dart":    {"dart compile exe", "Broken.dart"},
 		"erlang":  {"Broken.erl", "erlc"},
@@ -134,6 +137,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"groovy":  {"Broken.groovy", "groovyc"},
 		"prolog":  {"Broken.pl", "swipl"},
 		"lisp":    {"Broken.lisp", "sbcl"},
+		"nasm":    {"Main.asm", "Broken.asm", "nasm -felf64"},
 		"coq":     {"Broken.v", "coqc"},
 	}
 
@@ -166,6 +170,29 @@ func TestRepositoryCatalogIncludesAheuiRuntime(t *testing.T) {
 	}
 	if !slices.Contains(spec.Install.Pip, "aheui") {
 		t.Fatalf("aheui pip packages = %v, want aheui", spec.Install.Pip)
+	}
+}
+
+func TestRepositoryCatalogIncludesAssemblyToolchains(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	asmSpec, ok := catalog.Languages["asm"]
+	if !ok {
+		t.Fatalf("asm language missing from catalog")
+	}
+	if !slices.Contains(asmSpec.Install.Apt, "gcc") {
+		t.Fatalf("asm apt packages = %v, want gcc", asmSpec.Install.Apt)
+	}
+
+	nasmSpec, ok := catalog.Languages["nasm"]
+	if !ok {
+		t.Fatalf("nasm language missing from catalog")
+	}
+	if !slices.Contains(nasmSpec.Install.Apt, "gcc") || !slices.Contains(nasmSpec.Install.Apt, "nasm") {
+		t.Fatalf("nasm apt packages = %v, want gcc and nasm", nasmSpec.Install.Apt)
 	}
 }
 
