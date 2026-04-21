@@ -3,6 +3,10 @@
 Both `/compile` and `/execute` open SSE streams and terminate with exactly
 one `result` event.
 
+When `aonohako` is configured with remote execution transport, the local server
+keeps the same SSE contract and forwards `log`, `image`, `error`, and `result`
+events from the remote runner.
+
 ## Event Types
 
 | Event | Emitted by | Description |
@@ -126,7 +130,7 @@ Client                        aonohako
 Both `/compile` and `/execute` share the same bounded queue:
 
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `1` in
-  `AONOHAKO_EXECUTION_MODE=cloudrun`, otherwise `max(1, cpu−2)`)
+  `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`, otherwise `max(1, cpu−2)`)
 - **Pending queue**: `AONOHAKO_MAX_PENDING_QUEUE` (default: `0` = unlimited)
 
 When the pending queue is full, the server returns:

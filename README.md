@@ -76,14 +76,30 @@ Repository policy check:
 ## Configuration
 
 - `PORT` defaults to `8080`
-- `AONOHAKO_EXECUTION_MODE` selects the deployment contract:
-  `cloudrun`, `local-root`, or `local-dev` (default)
-- `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` in `cloudrun` mode, otherwise
-  `max(1, cpu-2)`
+- `AONOHAKO_DEPLOYMENT_TARGET` selects where the server is meant to run:
+  `cloudrun`, `selfhosted`, or `dev` (default)
+- `AONOHAKO_EXECUTION_TRANSPORT` selects how `/execute` is handled:
+  `embedded` (default) or `remote`
+- `AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation:
+  `helper`, `container`, or `none`
+- `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand:
+  `cloudrun` → `cloudrun + embedded + helper`
+  `local-root` → `selfhosted + embedded + helper`
+  `local-dev` → `dev + embedded + helper`
+- `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` when
+  `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`, otherwise `max(1, cpu-2)`
 - `AONOHAKO_MAX_PENDING_QUEUE` defaults to `0` for unlimited queue depth
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
-  and is required in `cloudrun` and `local-root` mode
+  and is required for `cloudrun`, and for `selfhosted + embedded + helper`
+- `AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another
+  `aonohako` runner service
+- `AONOHAKO_REMOTE_RUNNER_AUTH` can be `none`, `bearer`, or
+  `cloudrun-idtoken`
+- `AONOHAKO_REMOTE_RUNNER_TOKEN` provides the bearer token when
+  `AONOHAKO_REMOTE_RUNNER_AUTH=bearer`
+- `AONOHAKO_REMOTE_RUNNER_AUDIENCE` overrides the ID-token audience for
+  `cloudrun-idtoken` auth; it defaults to `AONOHAKO_REMOTE_RUNNER_URL`
 
 Per-request execution limits are part of the `/execute` payload:
 
@@ -114,18 +130,21 @@ and process-group cleanup.
 
 Security posture depends on where it runs:
 
-- `cloudrun` is the supported production security target. Startup now fails
-  closed unless `AONOHAKO_WORK_ROOT` is configured, writable, owned by the
-  server UID, and the process is running as root.
-- `local-root` applies the same dedicated work-root contract for local
-  root-backed containers.
-- `local-dev` is for development ergonomics. It may fall back to the system temp
-  directory, but `/execute` still requires root because the hardened sandbox path
-  is root-backed.
+- `cloudrun + embedded + helper` is the supported production security target.
+  Startup fails closed unless `AONOHAKO_WORK_ROOT` is configured, writable,
+  owned by the server UID, and the process is running as root.
+- `selfhosted + embedded + helper` applies the same dedicated work-root
+  contract for local root-backed containers and VMs.
+- `dev + remote + none` is the non-root development path. The local server keeps
+  serving `/compile` and forwards `/execute` to a remote hardened runner.
+- `dev + embedded + helper` remains available through the compatibility mode, but
+  `/execute` still requires root because the local helper sandbox is root-backed.
 
 For Cloud Run deployments, use this baseline:
 
-- `AONOHAKO_EXECUTION_MODE=cloudrun`
+- `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
+- `AONOHAKO_EXECUTION_TRANSPORT=embedded`
+- `AONOHAKO_SANDBOX_BACKEND=helper`
 - second-generation execution environment
 - service concurrency `1`
 - a bounded in-memory volume mounted at a path such as `/work`, with
@@ -139,6 +158,18 @@ Cloud Run's own documentation states that volumes must be configured through
 Cloud Run volume mounts and that arbitrary in-container mounting is not
 supported, so `aonohako` does not depend on cgroup creation or mount-based
 filesystem isolation when running there.
+
+For non-Cloud-Run control-plane deployments that should still execute safely,
+use this baseline:
+
+- `AONOHAKO_DEPLOYMENT_TARGET=dev`
+- `AONOHAKO_EXECUTION_TRANSPORT=remote`
+- `AONOHAKO_SANDBOX_BACKEND=none`
+- `AONOHAKO_REMOTE_RUNNER_URL=https://<dedicated-runner>`
+- optional `AONOHAKO_REMOTE_RUNNER_AUTH=bearer` with
+  `AONOHAKO_REMOTE_RUNNER_TOKEN=...`, or
+  `AONOHAKO_REMOTE_RUNNER_AUTH=cloudrun-idtoken` when calling another Cloud Run
+  service
 
 ## License
 

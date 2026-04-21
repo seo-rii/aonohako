@@ -64,9 +64,9 @@ artifacts, not for enforcing the main untrusted runtime boundary.
 `/execute` is the security-sensitive path.
 
 1. The request acquires a queue permit.
-2. A per-run workspace is created under `AONOHAKO_WORK_ROOT` in `cloudrun` and
-   `local-root` mode, or under the system temp root in `local-dev` when no
-   dedicated work root is configured.
+2. A per-run workspace is created under `AONOHAKO_WORK_ROOT` when the selected
+   runtime shape requires a dedicated work root, or under the system temp root
+   for local development shapes that do not.
 3. Submitted files are materialized into `box/`.
 4. Existing submitted files are immutable:
    - regular files: `0444`
@@ -80,10 +80,13 @@ artifacts, not for enforcing the main untrusted runtime boundary.
 7. Side directories such as `.tmp`, `.cache`, `.home`, `.mix`, `.hex`, and
    image output directories are created per request and redirected through
    environment variables.
-8. The parent process starts the sandbox helper.
-9. The helper applies hardening, then `execve()`s the real target command.
+8. The parent either starts the local sandbox helper or forwards the request to
+   a remote hardened runner, depending on the configured execution transport.
+9. The local helper applies hardening, then `execve()`s the real target
+   command. The remote transport proxies the same SSE event contract from the
+   downstream runner.
 10. The parent watches time, memory, workspace growth, stdout, stderr, and
-   optional sidecar image output.
+    optional sidecar image output when running locally.
 11. The parent compares output or runs an SPJ and returns the final result.
 
 ## Sandbox Process Model
@@ -224,24 +227,46 @@ Memory enforcement uses several layers:
 - a post-exit address-space proximity check with slack
 - workspace byte accounting, so temp-file growth is also limited
 
-## Cloud Run Deployment Contract
+## Deployment Contract
 
-The supported production target is a dedicated Cloud Run runner service.
+The runtime now separates three concerns:
+
+- `AONOHAKO_DEPLOYMENT_TARGET`: `cloudrun`, `selfhosted`, or `dev`
+- `AONOHAKO_EXECUTION_TRANSPORT`: `embedded` or `remote`
+- `AONOHAKO_SANDBOX_BACKEND`: `helper`, `container`, or `none`
+
+`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand that maps to the
+legacy embedded-helper shapes.
+
+Supported combinations today:
+
+- `cloudrun + embedded + helper`: supported production target
+- `selfhosted + embedded + helper`: supported root-backed local/container target
+- `dev + remote + none`: supported non-root control-plane target that forwards
+  `/execute` to another runner
+
+`embedded + container` is reserved for a future self-hosted backend and is
+currently rejected at startup.
 
 Server startup validates the deployment contract instead of trusting docs alone.
-`cloudrun` and `local-root` mode fail closed unless all of the following are
-true before the HTTP server starts:
+The following checks are enforced before the HTTP server starts:
 
-- `AONOHAKO_EXECUTION_MODE` is explicitly set
-- `AONOHAKO_WORK_ROOT` is configured
-- the work root already exists and is a directory
-- the work root is owned by the current server UID
-- the server can create and remove a probe directory under that root
-- the process is running as root
+- Cloud Run marker envs require `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
+- `remote` transport requires `AONOHAKO_REMOTE_RUNNER_URL`
+- `remote + bearer` requires `AONOHAKO_REMOTE_RUNNER_TOKEN`
+- `remote + cloudrun-idtoken` defaults its audience to the remote runner URL if
+  `AONOHAKO_REMOTE_RUNNER_AUDIENCE` is unset
+- `cloudrun` always requires `AONOHAKO_WORK_ROOT`
+- `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`
+- every required work root must already exist, be a directory, be owned by the
+  current server UID, and accept a probe directory create/remove cycle
+- `embedded + helper` requires the process to be running as root
 
-Recommended deployment baseline:
+Recommended Cloud Run deployment baseline:
 
-- `AONOHAKO_EXECUTION_MODE=cloudrun`
+- `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
+- `AONOHAKO_EXECUTION_TRANSPORT=embedded`
+- `AONOHAKO_SANDBOX_BACKEND=helper`
 - second-generation execution environment
 - service concurrency `1`
 - bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`
@@ -249,14 +274,25 @@ Recommended deployment baseline:
 - Direct VPC egress with `all-traffic`
 - firewall-denied outbound traffic except for explicitly allowed destinations
 
+Recommended non-Cloud-Run control-plane baseline:
+
+- `AONOHAKO_DEPLOYMENT_TARGET=dev`
+- `AONOHAKO_EXECUTION_TRANSPORT=remote`
+- `AONOHAKO_SANDBOX_BACKEND=none`
+- `AONOHAKO_REMOTE_RUNNER_URL=https://<dedicated-runner>`
+- optional `AONOHAKO_REMOTE_RUNNER_AUTH=bearer` with
+  `AONOHAKO_REMOTE_RUNNER_TOKEN=...`
+- or `AONOHAKO_REMOTE_RUNNER_AUTH=cloudrun-idtoken` when the downstream runner
+  is another Cloud Run service
+
 Why the design looks this way:
 
 - Cloud Run is the intended security boundary, not nested container tricks
 - the runtime does not depend on child cgroup creation
 - the runtime does not depend on mount-based filesystem isolation
 - the runtime does not assume Landlock availability
-- Cloud Run marker env vars alone do not switch security policy; the execution
-  mode is explicit to avoid accidental partial hardening
+- Cloud Run marker env vars alone do not switch security policy; the deployment
+  target is explicit to avoid accidental partial hardening
 
 ## Runtime Image Model
 

@@ -36,9 +36,10 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	protocolWants := []string{
 		"Both `/compile` and `/execute` share the same bounded queue",
 		"buffered stdout / stderr payloads emitted before `result`",
+		"forwards `log`, `image`, `error`, and `result`",
 		"Workspace Limit Exceeded",
 		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
-		"`AONOHAKO_EXECUTION_MODE=cloudrun`",
+		"`AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
 	}
 	for _, want := range protocolWants {
 		if !strings.Contains(protocol, want) {
@@ -52,7 +53,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "hardens shared scratch directories") {
 		t.Fatalf("architecture.md must describe startup scratch hardening")
 	}
-	if !strings.Contains(architecture, "fail closed unless all of the following are") || !strings.Contains(architecture, "true before the HTTP server starts") {
+	if !strings.Contains(architecture, "Server startup validates the deployment contract instead of trusting docs alone.") || !strings.Contains(architecture, "The following checks are enforced before the HTTP server starts") {
 		t.Fatalf("architecture.md must describe startup deployment contract validation")
 	}
 }
@@ -61,11 +62,13 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
 
 	for _, want := range []string{
-		"`AONOHAKO_EXECUTION_MODE` selects the deployment contract",
-		"`cloudrun`, `local-root`, or `local-dev`",
+		"`AONOHAKO_DEPLOYMENT_TARGET` selects where the server is meant to run",
+		"`AONOHAKO_EXECUTION_TRANSPORT` selects how `/execute` is handled",
+		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
+		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
-		"`cloudrun` is the supported production security target",
-		"`local-dev` is for development ergonomics",
+		"`cloudrun + embedded + helper` is the supported production security target",
+		"`dev + remote + none` is the non-root development path",
 	} {
 		if !strings.Contains(readme, want) {
 			t.Fatalf("README.md missing %q", want)
@@ -75,7 +78,11 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 
 func TestReadmeExecutionModeNarrativeMatchesRuntimeBehavior(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_MODE", "")
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "")
 	t.Setenv("AONOHAKO_WORK_ROOT", "")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "")
 	t.Setenv("K_SERVICE", "")
 	t.Setenv("CLOUD_RUN_JOB", "")
 	t.Setenv("CLOUD_RUN_WORKER_POOL", "")
@@ -83,24 +90,32 @@ func TestReadmeExecutionModeNarrativeMatchesRuntimeBehavior(t *testing.T) {
 	if got := platform.CurrentExecutionMode(); got != platform.ExecutionModeLocalDev {
 		t.Fatalf("CurrentExecutionMode() = %q, want local-dev default", got)
 	}
+	if got := platform.CurrentRuntimeOptions(); got.DeploymentTarget != platform.DeploymentTargetDev || got.ExecutionTransport != platform.ExecutionTransportEmbedded || got.SandboxBackend != platform.SandboxBackendHelper {
+		t.Fatalf("CurrentRuntimeOptions() = %+v", got)
+	}
 
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	cfg, err := config.Load()
 	if err != nil {
-		t.Fatalf("config.Load() in local-dev without work root: %v", err)
+		t.Fatalf("config.Load() in remote dev mode: %v", err)
 	}
 	if cfg.MaxActiveRuns < 1 {
 		t.Fatalf("config.Load() returned invalid MaxActiveRuns: %+v", cfg)
 	}
+	if cfg.Execution.Platform.ExecutionTransport != platform.ExecutionTransportRemote || cfg.Execution.Platform.SandboxBackend != platform.SandboxBackendNone {
+		t.Fatalf("config.Load() returned wrong remote execution shape: %+v", cfg.Execution.Platform)
+	}
 
 	t.Setenv("K_SERVICE", "aonohako")
 	if _, err := config.Load(); err == nil {
-		t.Fatalf("config.Load() should reject Cloud Run markers without AONOHAKO_EXECUTION_MODE=cloudrun")
+		t.Fatalf("config.Load() should reject Cloud Run markers without AONOHAKO_DEPLOYMENT_TARGET=cloudrun")
 	}
 
-	t.Setenv("AONOHAKO_EXECUTION_MODE", "cloudrun")
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
 	t.Setenv("K_SERVICE", "")
 	if _, err := config.Load(); err == nil {
-		t.Fatalf("config.Load() should require AONOHAKO_WORK_ROOT in cloudrun mode")
+		t.Fatalf("config.Load() should require AONOHAKO_WORK_ROOT in cloudrun target")
 	}
 }
 
