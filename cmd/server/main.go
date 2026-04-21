@@ -21,7 +21,11 @@ func main() {
 		slog.Error("aonohako startup validation failed", "err", err)
 		os.Exit(1)
 	}
-	server := api.New(cfg)
+	server, err := api.New(cfg)
+	if err != nil {
+		slog.Error("aonohako executor initialization failed", "err", err)
+		os.Exit(1)
+	}
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

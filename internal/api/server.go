@@ -24,18 +24,26 @@ type Server struct {
 	compile interface {
 		Run(context.Context, *model.CompileRequest) model.CompileResponse
 	}
-	execute interface {
-		Run(context.Context, *model.RunRequest, execute.Hooks) model.RunResponse
-	}
-	queue *queue.Manager
-	seq   atomic.Uint64
+	execute execute.Runner
+	queue   *queue.Manager
+	seq     atomic.Uint64
 }
 
-func New(cfg config.Config) *Server {
+func New(cfg config.Config) (*Server, error) {
+	runner, err := execute.Build(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return NewWithServices(cfg, compile.New(), runner), nil
+}
+
+func NewWithServices(cfg config.Config, compileService interface {
+	Run(context.Context, *model.CompileRequest) model.CompileResponse
+}, executeRunner execute.Runner) *Server {
 	return &Server{
 		cfg:     cfg,
-		compile: compile.New(),
-		execute: execute.New(),
+		compile: compileService,
+		execute: executeRunner,
 		queue:   queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
 	}
 }
