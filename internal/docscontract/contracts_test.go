@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"aonohako/internal/config"
+	"aonohako/internal/platform"
 )
 
 func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
@@ -51,6 +54,53 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	}
 	if !strings.Contains(architecture, "fail closed unless all of the following are") || !strings.Contains(architecture, "true before the HTTP server starts") {
 		t.Fatalf("architecture.md must describe startup deployment contract validation")
+	}
+}
+
+func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
+	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
+
+	for _, want := range []string{
+		"`AONOHAKO_EXECUTION_MODE` selects the deployment contract",
+		"`cloudrun`, `local-root`, or `local-dev`",
+		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
+		"`cloudrun` is the supported production security target",
+		"`local-dev` is for development ergonomics",
+	} {
+		if !strings.Contains(readme, want) {
+			t.Fatalf("README.md missing %q", want)
+		}
+	}
+}
+
+func TestReadmeExecutionModeNarrativeMatchesRuntimeBehavior(t *testing.T) {
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "")
+	t.Setenv("AONOHAKO_WORK_ROOT", "")
+	t.Setenv("K_SERVICE", "")
+	t.Setenv("CLOUD_RUN_JOB", "")
+	t.Setenv("CLOUD_RUN_WORKER_POOL", "")
+
+	if got := platform.CurrentExecutionMode(); got != platform.ExecutionModeLocalDev {
+		t.Fatalf("CurrentExecutionMode() = %q, want local-dev default", got)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() in local-dev without work root: %v", err)
+	}
+	if cfg.MaxActiveRuns < 1 {
+		t.Fatalf("config.Load() returned invalid MaxActiveRuns: %+v", cfg)
+	}
+
+	t.Setenv("K_SERVICE", "aonohako")
+	if _, err := config.Load(); err == nil {
+		t.Fatalf("config.Load() should reject Cloud Run markers without AONOHAKO_EXECUTION_MODE=cloudrun")
+	}
+
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "cloudrun")
+	t.Setenv("K_SERVICE", "")
+	if _, err := config.Load(); err == nil {
+		t.Fatalf("config.Load() should require AONOHAKO_WORK_ROOT in cloudrun mode")
 	}
 }
 
