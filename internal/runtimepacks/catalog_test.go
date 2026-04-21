@@ -230,3 +230,51 @@ func TestSmokeScriptPreservesMultilineSmokeCommands(t *testing.T) {
 		t.Fatalf("smoke_runtime.sh must preserve multiline command bodies, got %q", string(out))
 	}
 }
+
+func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "report_toolchain_versions.sh")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	for _, marker := range []string{
+		`report "PyPy" pypy3 --version`,
+		`report "Free Pascal" fpc -iV`,
+		`report "Nim" nim --version`,
+		`report "Clojure" clojure -e "(println (clojure-version))"`,
+		`report "Racket" racket --version`,
+		`report "Ada" gnatmake -v`,
+		`report "Dart" dart --version`,
+		`report_python_pkg "NumPy" "numpy"`,
+		`report_python_pkg "Torch" "torch"`,
+		`report_python_pkg "JAXLIB" "jaxlib"`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("report_toolchain_versions.sh must contain %q", marker)
+		}
+	}
+}
+
+func TestWorkflowLogsToolchainVersionsForSmokeImages(t *testing.T) {
+	path := filepath.Join("..", "..", ".github", "workflows", "ci.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	if !strings.Contains(body, "scripts/report_toolchain_versions.sh") {
+		t.Fatalf("ci workflow must invoke report_toolchain_versions.sh")
+	}
+	if !strings.Contains(body, "aonohako-ci:${{ matrix.name }}") {
+		t.Fatalf("ci workflow must log versions for per-language smoke images")
+	}
+	if !strings.Contains(body, "aonohako-ci-mix:type-i") {
+		t.Fatalf("ci workflow must log versions for the mixin smoke image")
+	}
+	if !strings.Contains(body, "tee -a \"$GITHUB_STEP_SUMMARY\"") {
+		t.Fatalf("ci workflow must publish toolchain versions to the job summary")
+	}
+}

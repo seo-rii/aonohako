@@ -38,7 +38,7 @@
 
 ```jsonc
 {
-  "lang": "binary",                          // runtime language: binary|python|pypy|java|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|text
+  "lang": "binary",                          // runtime language: binary|python|pypy|java|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|fsharp|text|clojure|racket|groovy|scala|erlang|prolog|lisp|coq|r|whitespace|brainfuck|wasm
   "binaries": [                              // files to place in work directory
     {
       "name": "Main",                       // filename
@@ -131,23 +131,43 @@ When `spj` is provided, the SPJ binary is invoked as:
 | CPP, CPP03–CPP26 | `cpp` | `g++ -O2 -Wall -lm --static -pipe` |
 | RUST, RUST2018–2024 | `rust` | `rustc --edition <ed> -O` |
 | GO | `go` | `go build` |
+| ZIG | `zig` | `zig build-exe -O ReleaseSafe` |
 | JAVA, JAVA8–15 | `java` | `javac --release <v>` |
+| GROOVY | `groovy` | `groovyc -d <dir>` |
+| SCALA | `scala` | `scalac -d <dir>` |
+| CLOJURE | `clojure` | `clojure` reader parse loop |
+| RACKET | `racket` | `raco make` |
 | PYTHON3 | `python` | `python3 -m compileall` |
 | PYPY3 | `pypy` | `pypy3 -m compileall` |
 | JAVASCRIPT | `javascript` | `node --check` |
 | TYPESCRIPT | `typescript` | `tsc` |
 | KOTLIN | `kotlin` | `kotlinc-native` |
+| PASCAL | `pascal` | `fpc -O2 -Xs` |
+| NIM | `nim` | `nim c -d:release --opt:speed` |
+| ADA | `ada` | `gnatmake -O2` |
+| DART | `dart` | `dart compile exe` |
+| FORTRAN | `fortran` | `gfortran -O2 -pipe` |
+| D | `d` | `ldc2 -O3 -release` |
 | HASKELL | `haskell` | `ghc -O2` |
 | SWIFT | `swift` | `swiftc -O` |
 | SQLITE | `sqlite` | Pass-through artifacts (requires at least one `.sql`) |
 | JULIA | `julia` | Pass-through artifacts (requires at least one `.jl`) |
+| R | `r` | `Rscript --vanilla -e parse(...)` |
+| ERLANG | `erlang` | `erlc -o <dir>` |
+| PROLOG | `prolog` | `swipl -q -f none -g halt -t halt` |
+| LISP | `lisp` | `sbcl --load ... --eval '(quit)'` |
+| COQ | `coq` | `coqc -q` |
 | OCAML | `ocaml` | `ocamlopt` |
 | ELIXIR | `elixir` | `elixir` parse check |
 | CSHARP | `csharp` | `dotnet publish` |
+| FSHARP | `fsharp` | `dotnet publish` |
 | RUBY | `ruby` | `ruby -c` |
 | PHP | `php` | `php -l` |
 | LUA | `lua` | `luac5.4 -p` |
 | PERL | `perl` | `perl -c` |
+| WHITESPACE | `whitespace` | Structural validation (whitespace-only source) |
+| BF | `brainfuck` | Bracket-balance validation |
+| WASM | `wasm` | `wat2wasm` or `wasm-validate` |
 | UHMLANG, TEXT | `none` | Pass-through |
 
 ### Runtime languages
@@ -155,10 +175,19 @@ When `spj` is provided, the SPJ binary is invoked as:
 | Runtime lang | Executor |
 |---|---|
 | `binary` | Direct execution |
+| `clojure` | `clojure <file>` |
+| `racket` | `racket <file>` |
 | `python` | `python3 <file>` |
 | `pypy` | `pypy3 <file>` |
+| `groovy` | `groovy -cp <dir> <MainClass>` |
+| `scala` | `scala -classpath <dir> <MainClass>` |
 | `java` | `java -jar <file>` |
+| `erlang` | `erl -noshell -pa <dir> -s <module> <function> -s init stop` |
+| `prolog` | `swipl -q -f <file> -g main -t halt` |
+| `lisp` | `sbcl --script <file>` |
+| `coq` | `coqc -q <file>` |
 | `javascript` | `node <file>` |
+| `r` | `Rscript --vanilla <file>` |
 | `ruby` | `ruby <file>` |
 | `php` | `php <file>` |
 | `lua` | `lua5.4 <file>` |
@@ -168,7 +197,10 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `sqlite` | `sqlite3 <workspace-db> < <file>` |
 | `julia` | `julia --startup-file=no --history-file=no <file>` |
 | `uhmlang` | `/usr/bin/umjunsik-lang-go <file>` |
-| `csharp` | `dotnet <file>` or direct |
+| `csharp`, `fsharp` | `dotnet <file>` or direct |
+| `whitespace` | `python3 /usr/local/lib/aonohako/whitespace.py <file>` |
+| `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |
+| `wasm` | `wasmtime run --dir=. <file>` |
 | `text` | `cat <file>` |
 
 ## Resource Enforcement

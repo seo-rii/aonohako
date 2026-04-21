@@ -303,18 +303,22 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `bf`, `plain`, `python`, `pypy`, `ruby`, `php`, `lua`, `perl`, `elixir`, `haskell`, `ocaml`, `sqlite`, `wasm`, `whitespace` |
-| `type-b` | `java`, `javascript`, `scala`, `typescript` |
-| `type-c` | `go`, `rust` |
+| `type-a` | `bf`, `elixir`, `erlang`, `haskell`, `lisp`, `lua`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `python`, `r`, `racket`, `ruby`, `sqlite`, `wasm`, `whitespace` |
+| `type-b` | `clojure`, `groovy`, `java`, `javascript`, `scala`, `typescript` |
+| `type-c` | `ada`, `d`, `fortran`, `go`, `nim`, `pascal`, `rust`, `zig` |
 | `type-d` | `kotlin` |
 | `type-e` | `csharp`, `fsharp` |
 | `type-f` | `uhmlang` |
 | `type-g` | `julia` |
 | `type-h` | `swift` |
 | `type-i` | `plain`, `python`, `java` |
+| `type-j` | `coq` |
+| `type-k` | `dart` |
 
 CI mode expands the same catalog into one image per language so each smoke job
-validates a single runtime in isolation.
+validates a single runtime in isolation. Each smoke job also runs
+`scripts/report_toolchain_versions.sh`, which records toolchain versions and
+Python judge-library versions in the GitHub Actions job summary.
 
 The runtime Docker image is also hardened to reduce the readable surface for the
 sandbox UID. Non-essential metadata and package-manager paths are made
