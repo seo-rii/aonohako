@@ -13,9 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"aonohako/internal/compile"
 	"aonohako/internal/config"
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
+	"aonohako/internal/platform"
 )
 
 type executeRunnerStub struct {
@@ -27,7 +29,7 @@ func (s executeRunnerStub) Run(ctx context.Context, req *model.RunRequest, hooks
 }
 
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
 		time.Sleep(2 * time.Second)
 		return model.RunResponse{Status: model.RunStatusAccepted}
@@ -75,7 +77,7 @@ func TestExecuteQueueOverflowReturns429(t *testing.T) {
 }
 
 func TestHealthz(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -94,7 +96,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestExecuteSSESequence(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
 		hooks.OnLog("stdout", "ok\n")
 		return model.RunResponse{Status: model.RunStatusAccepted, TimeMs: 5, WallTimeMs: 5, CPUTimeMs: 3, Stdout: "ok\n"}
@@ -153,6 +155,74 @@ func TestExecuteSSESequence(t *testing.T) {
 	}
 }
 
+func TestExecuteSSESequenceViaRemoteRunner(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/execute" {
+			t.Fatalf("unexpected remote path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: log\n"))
+		_, _ = w.Write([]byte("data: {\"stream\":\"stdout\",\"chunk\":\"from-remote\\n\"}\n\n"))
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"Accepted\",\"time_ms\":7,\"wall_time_ms\":7,\"cpu_time_ms\":4,\"stdout\":\"from-remote\\n\"}\n\n"))
+	}))
+	defer remote.Close()
+
+	s, err := New(config.Config{
+		Port:              "0",
+		MaxActiveRuns:     1,
+		MaxPendingQueue:   1,
+		HeartbeatInterval: 100 * time.Millisecond,
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	payload := map[string]any{
+		"lang":            "binary",
+		"binaries":        []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"expected_stdout": "",
+		"limits":          map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	events := readSSEEvents(resp.Body, t)
+	if len(events) < 4 {
+		t.Fatalf("expected accepted/start/log/result events, got %d", len(events))
+	}
+	if events[2].Name != "log" || events[2].JSON["chunk"] != "from-remote\n" {
+		t.Fatalf("unexpected forwarded log event: %#v", events[2])
+	}
+	last := events[len(events)-1]
+	if last.Name != "result" || last.JSON["status"] != "Accepted" {
+		t.Fatalf("unexpected result event: %#v", last)
+	}
+}
+
 type sseEvent struct {
 	Name string
 	JSON map[string]any
@@ -204,14 +274,21 @@ func readSSEEvents(r io.Reader, t *testing.T) []sseEvent {
 
 func configForTest(t *testing.T) config.Config {
 	t.Helper()
-	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-dev")
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
 	return config.Config{Port: "0", MaxActiveRuns: 1, MaxPendingQueue: 1, HeartbeatInterval: 100 * time.Millisecond}
+}
+
+func newServerForTest(t *testing.T) *Server {
+	t.Helper()
+	return NewWithServices(configForTest(t), compile.New(), execute.New())
 }
 
 // --------------- #3: /compile shares queue with /execute ---------------
 
 func TestCompileQueueOverflowReturns429(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
 		time.Sleep(2 * time.Second)
 		return model.RunResponse{Status: model.RunStatusAccepted}
@@ -266,7 +343,7 @@ func TestCompileQueueOverflowReturns429(t *testing.T) {
 }
 
 func TestCompileSSEHasProgressEvents(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -300,7 +377,7 @@ func TestCompileSSEHasProgressEvents(t *testing.T) {
 }
 
 func TestCompileMethodNotAllowed(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -315,7 +392,7 @@ func TestCompileMethodNotAllowed(t *testing.T) {
 }
 
 func TestExecuteMethodNotAllowed(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -330,7 +407,7 @@ func TestExecuteMethodNotAllowed(t *testing.T) {
 }
 
 func TestCompileInvalidJSON(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -347,7 +424,7 @@ func TestCompileInvalidJSON(t *testing.T) {
 }
 
 func TestExecuteInvalidJSON(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
@@ -385,7 +462,7 @@ func (w *noFlushResponseWriter) Write(p []byte) (int, error) {
 }
 
 func TestCompileSSEInitFailureReleasesPermit(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	payload := map[string]any{
 		"lang":    "UHMLANG",
 		"sources": []map[string]any{{"name": "Main.uhm", "data_b64": base64.StdEncoding.EncodeToString([]byte("text"))}},
@@ -403,7 +480,7 @@ func TestCompileSSEInitFailureReleasesPermit(t *testing.T) {
 }
 
 func TestExecuteSSEInitFailureReleasesPermit(t *testing.T) {
-	s := New(configForTest(t))
+	s := newServerForTest(t)
 	payload := map[string]any{
 		"lang":     "binary",
 		"binaries": []map[string]any{{"name": "run.sh", "data_b64": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho ok\n")), "mode": "exec"}},

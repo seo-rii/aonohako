@@ -12,11 +12,32 @@ import (
 	"aonohako/internal/platform"
 )
 
+type RemoteAuthMode string
+
+const (
+	RemoteAuthNone            RemoteAuthMode = "none"
+	RemoteAuthBearer          RemoteAuthMode = "bearer"
+	RemoteAuthCloudRunIDToken RemoteAuthMode = "cloudrun-idtoken"
+)
+
+type RemoteExecutorConfig struct {
+	URL         string
+	Auth        RemoteAuthMode
+	BearerToken string
+	Audience    string
+}
+
+type ExecutionConfig struct {
+	Platform platform.RuntimeOptions
+	Remote   RemoteExecutorConfig
+}
+
 type Config struct {
 	Port              string
 	MaxActiveRuns     int
 	MaxPendingQueue   int
 	HeartbeatInterval time.Duration
+	Execution         ExecutionConfig
 }
 
 func Load() (Config, error) {
@@ -24,15 +45,52 @@ func Load() (Config, error) {
 	maxActive := parsePositiveInt(getenv("AONOHAKO_MAX_ACTIVE_RUNS", ""), defaultMaxActiveRuns())
 	maxPending := parseNonNegativeInt(getenv("AONOHAKO_MAX_PENDING_QUEUE", "0"), 0)
 	heartbeatSec := parsePositiveInt(getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "10"), 10)
-	mode := platform.CurrentExecutionMode()
+	execution := ExecutionConfig{
+		Platform: platform.CurrentRuntimeOptions(),
+		Remote: RemoteExecutorConfig{
+			URL:         strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_URL")),
+			Auth:        parseRemoteAuth(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUTH")),
+			BearerToken: strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_TOKEN")),
+			Audience:    strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUDIENCE")),
+		},
+	}
 	workRoot := strings.TrimSpace(os.Getenv("AONOHAKO_WORK_ROOT"))
 
-	if platform.CloudRunMarkersPresent() && mode != platform.ExecutionModeCloudRun {
-		return Config{}, fmt.Errorf("AONOHAKO_EXECUTION_MODE=cloudrun is required when Cloud Run markers are present")
+	if platform.CloudRunMarkersPresent() && execution.Platform.DeploymentTarget != platform.DeploymentTargetCloudRun {
+		return Config{}, fmt.Errorf("AONOHAKO_DEPLOYMENT_TARGET=cloudrun is required when Cloud Run markers are present")
 	}
+	switch execution.Platform.ExecutionTransport {
+	case platform.ExecutionTransportEmbedded:
+		if execution.Platform.SandboxBackend != platform.SandboxBackendHelper {
+			return Config{}, fmt.Errorf("embedded execution supports only helper sandbox backend")
+		}
+	case platform.ExecutionTransportRemote:
+		if execution.Platform.SandboxBackend != platform.SandboxBackendNone {
+			return Config{}, fmt.Errorf("remote execution requires AONOHAKO_SANDBOX_BACKEND=none")
+		}
+		if execution.Remote.URL == "" {
+			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL is required for remote execution")
+		}
+		switch execution.Remote.Auth {
+		case RemoteAuthNone:
+		case RemoteAuthBearer:
+			if execution.Remote.BearerToken == "" {
+				return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_TOKEN is required for bearer remote auth")
+			}
+		case RemoteAuthCloudRunIDToken:
+			if execution.Remote.Audience == "" {
+				execution.Remote.Audience = execution.Remote.URL
+			}
+		default:
+			return Config{}, fmt.Errorf("unsupported remote auth mode: %s", execution.Remote.Auth)
+		}
+	default:
+		return Config{}, fmt.Errorf("unsupported execution transport: %s", execution.Platform.ExecutionTransport)
+	}
+
 	if platform.UsesDedicatedWorkRoot() {
 		if workRoot == "" {
-			return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT is required in %s mode", mode)
+			return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT is required for %s target", execution.Platform.DeploymentTarget)
 		}
 		info, err := os.Stat(workRoot)
 		if err != nil {
@@ -49,9 +107,9 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT is not writable: %w", err)
 		}
 		_ = os.RemoveAll(probe)
-		if os.Geteuid() != 0 {
-			return Config{}, fmt.Errorf("execution mode %s requires root", mode)
-		}
+	}
+	if platform.RequiresRootForExecution() && os.Geteuid() != 0 {
+		return Config{}, fmt.Errorf("execution backend %s/%s requires root", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
 	}
 
 	return Config{
@@ -59,6 +117,7 @@ func Load() (Config, error) {
 		MaxActiveRuns:     maxActive,
 		MaxPendingQueue:   maxPending,
 		HeartbeatInterval: time.Duration(heartbeatSec) * time.Second,
+		Execution:         execution,
 	}, nil
 }
 
@@ -104,4 +163,17 @@ func parseNonNegativeInt(raw string, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+func parseRemoteAuth(raw string) RemoteAuthMode {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "", string(RemoteAuthNone):
+		return RemoteAuthNone
+	case string(RemoteAuthBearer):
+		return RemoteAuthBearer
+	case string(RemoteAuthCloudRunIDToken):
+		return RemoteAuthCloudRunIDToken
+	default:
+		return RemoteAuthMode(strings.TrimSpace(strings.ToLower(raw)))
+	}
 }
