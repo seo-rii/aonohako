@@ -20,7 +20,7 @@ languages:
         - python3
         - python3-pip
       pip:
-        - aheui
+        - aheui==1.2.5
     smoke:
       command:
         - /bin/sh
@@ -109,18 +109,18 @@ languages:
         - python3
         - python3-pip
       pip:
-        - numpy
-        - pandas
-        - seaborn
-        - matplotlib
-        - pillow
-        - six
-        - qiskit
-        - pyparsing
-        - pylatexenc
-        - jax[cpu]
+        - numpy==2.4.4
+        - pandas==3.0.2
+        - seaborn==0.13.2
+        - matplotlib==3.10.8
+        - pillow==12.2.0
+        - six==1.17.0
+        - qiskit==2.4.0
+        - pyparsing==3.3.2
+        - pylatexenc==2.10
+        - jax[cpu]==0.10.0
       script:
-        - python3 -m pip install --break-system-packages --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
+        - python3 -m pip install --break-system-packages --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.11.0+cpu torchvision==0.26.0+cpu
     smoke:
       command:
         - python3
@@ -919,7 +919,7 @@ languages:
     install:
       apt:
         - curl
-        - libicu72
+        - libicu76
       script:
         - mkdir -p /opt/dotnet
         - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
@@ -941,7 +941,7 @@ languages:
     install:
       apt:
         - curl
-        - libicu72
+        - libicu76
       script:
         - mkdir -p /opt/dotnet
         - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
@@ -997,7 +997,7 @@ languages:
 
 profiles:
   type-a:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - aheui
       - bf
@@ -1020,7 +1020,7 @@ profiles:
       - wasm
       - whitespace
   type-b:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - clojure
       - groovy
@@ -1029,7 +1029,7 @@ profiles:
       - scala
       - typescript
   type-c:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - ada
       - asm
@@ -1042,16 +1042,16 @@ profiles:
       - rust
       - zig
   type-d:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - kotlin
   type-e:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - csharp
       - fsharp
   type-f:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - uhmlang
   type-g:
@@ -1063,16 +1063,16 @@ profiles:
     languages:
       - swift
   type-i:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - plain
       - python
       - java
   type-j:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - coq
   type-k:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages:
       - dart

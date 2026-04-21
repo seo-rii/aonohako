@@ -17,8 +17,8 @@ binary, configurable runtime images, and testable build metadata.
   single-language CI smoke images from the same YAML catalog
 - GitHub Actions CI that runs Go tests, repository policy checks, sandbox
   regressions, per-language smoke builds in parallel, and an explicit
-  `plain`+`python`+`java` mixin smoke job, while logging runtime and library
-  versions for each smoke image
+  `plain`+`python`+`java` mixin smoke job, while publishing one consolidated
+  toolchain summary across production runtime profiles
 
 ## Runtime image model
 
@@ -32,9 +32,12 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   `python`, `java`), plus dedicated profiles where a toolchain needs its own
   base image or install path such as `swift`, `julia`, `coq`, or `dart`.
 - CI mode expands the same catalog into one image per language so that each
-  smoke job validates a single toolchain in isolation, and each smoke job runs
+  smoke job validates a single toolchain in isolation. A separate CI job builds
+  the production profiles and runs
   [`scripts/report_toolchain_versions.sh`](scripts/report_toolchain_versions.sh)
-  so the resulting tool and library versions are visible in CI summaries.
+  once per profile so the resulting tool and library versions appear in one
+  consolidated GitHub Actions summary instead of being fragmented across the
+  per-language matrix.
 - The current catalog covers native binaries, Python plus bundled judge
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), PyPy, Java,
@@ -45,6 +48,11 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   compile into binaries and should target the `plain` runtime image rather than
   dedicated native runtime images. Add new languages by extending the YAML file
   instead of editing shell loops or workflow matrices.
+- Debian-based production profiles track `debian:trixie-slim`, which raises the
+  default Python, PyPy, and GCC toolchain versions for both production and
+  single-language CI runtime images.
+- Python judge libraries in the runtime catalog are pinned to exact versions so
+  runtime rebuilds stay reproducible across CI and production.
 
 Inspect the generated matrix:
 

@@ -168,8 +168,35 @@ func TestRepositoryCatalogIncludesAheuiRuntime(t *testing.T) {
 	if !slices.Contains(spec.Install.Apt, "python3") || !slices.Contains(spec.Install.Apt, "python3-pip") {
 		t.Fatalf("aheui apt packages = %v, want python3 and python3-pip", spec.Install.Apt)
 	}
-	if !slices.Contains(spec.Install.Pip, "aheui") {
-		t.Fatalf("aheui pip packages = %v, want aheui", spec.Install.Pip)
+	if !slices.Contains(spec.Install.Pip, "aheui==1.2.5") {
+		t.Fatalf("aheui pip packages = %v, want aheui==1.2.5", spec.Install.Pip)
+	}
+}
+
+func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k"} {
+		profile, ok := catalog.Profiles[profileName]
+		if !ok {
+			t.Fatalf("profile %q missing from catalog", profileName)
+		}
+		if profile.BaseImage != "debian:trixie-slim" {
+			t.Fatalf("profile %q base image = %q, want debian:trixie-slim", profileName, profile.BaseImage)
+		}
+	}
+
+	for _, language := range []string{"csharp", "fsharp"} {
+		spec, ok := catalog.Languages[language]
+		if !ok {
+			t.Fatalf("language %q missing from catalog", language)
+		}
+		if !slices.Contains(spec.Install.Apt, "libicu76") {
+			t.Fatalf("%s apt packages = %v, want libicu76", language, spec.Install.Apt)
+		}
 	}
 }
 
@@ -207,16 +234,16 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 		t.Fatalf("python language missing from catalog")
 	}
 	for _, pkg := range []string{
-		"numpy",
-		"pandas",
-		"seaborn",
-		"matplotlib",
-		"pillow",
-		"six",
-		"qiskit",
-		"pyparsing",
-		"pylatexenc",
-		"jax[cpu]",
+		"numpy==2.4.4",
+		"pandas==3.0.2",
+		"seaborn==0.13.2",
+		"matplotlib==3.10.8",
+		"pillow==12.2.0",
+		"six==1.17.0",
+		"qiskit==2.4.0",
+		"pyparsing==3.3.2",
+		"pylatexenc==2.10",
+		"jax[cpu]==0.10.0",
 	} {
 		if !slices.Contains(python.Install.Pip, pkg) {
 			t.Fatalf("python runtime must include %q, got %v", pkg, python.Install.Pip)
@@ -225,8 +252,8 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 	scriptBody := strings.Join(python.Install.Script, "\n")
 	for _, marker := range []string{
 		"download.pytorch.org/whl/cpu",
-		"torch",
-		"torchvision",
+		"torch==2.11.0+cpu",
+		"torchvision==0.26.0+cpu",
 	} {
 		if !strings.Contains(scriptBody, marker) {
 			t.Fatalf("python runtime install script must contain %q, got %q", marker, scriptBody)

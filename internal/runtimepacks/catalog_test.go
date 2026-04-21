@@ -37,10 +37,10 @@ languages:
       command: ["java", "-version"]
 profiles:
   type-a:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages: [plain, python]
   type-b:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages: [java]
 `)
 
@@ -100,7 +100,7 @@ languages:
       apt: [python3]
 profiles:
   type-a:
-    base_image: debian:bookworm-slim
+    base_image: debian:trixie-slim
     languages: [python, java]
 `)
 
@@ -112,7 +112,7 @@ profiles:
 func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 	spec := ImageSpec{
 		Name:         "type-a",
-		BaseImage:    "debian:bookworm-slim",
+		BaseImage:    "debian:trixie-slim",
 		Languages:    []string{"plain", "python"},
 		AptPackages:  []string{"python3", "python3-numpy"},
 		PipPackages:  []string{"requests"},
@@ -127,7 +127,7 @@ func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 	if build.File != "docker/runtime.Dockerfile" {
 		t.Fatalf("docker file = %q", build.File)
 	}
-	if build.BuildArgs["RUNTIME_BASE"] != "debian:bookworm-slim" {
+	if build.BuildArgs["RUNTIME_BASE"] != "debian:trixie-slim" {
 		t.Fatalf("build args = %#v", build.BuildArgs)
 	}
 	if build.BuildArgs["APT_PACKAGES"] != "python3 python3-numpy" {
@@ -147,7 +147,7 @@ func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 func TestImageSpecDockerBuildCarriesInstallScript(t *testing.T) {
 	spec := ImageSpec{
 		Name:          "type-z",
-		BaseImage:     "debian:bookworm-slim",
+		BaseImage:     "debian:trixie-slim",
 		Languages:     []string{"kotlin"},
 		InstallScript: []string{"echo installing", "echo done"},
 	}
@@ -240,6 +240,8 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 
 	body := string(data)
 	for _, marker := range []string{
+		"echo \"- Languages: \\`${AONOHAKO_LANGUAGES}\\`\"",
+		`if ! command -v "$1" >/dev/null 2>&1; then`,
 		`report_python_pkg "Aheui" "aheui"`,
 		`report "GNU as" as --version`,
 		`report "NASM" nasm -v`,
@@ -260,7 +262,7 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 	}
 }
 
-func TestWorkflowLogsToolchainVersionsForSmokeImages(t *testing.T) {
+func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	path := filepath.Join("..", "..", ".github", "workflows", "ci.yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -271,13 +273,19 @@ func TestWorkflowLogsToolchainVersionsForSmokeImages(t *testing.T) {
 	if !strings.Contains(body, "scripts/report_toolchain_versions.sh") {
 		t.Fatalf("ci workflow must invoke report_toolchain_versions.sh")
 	}
-	if !strings.Contains(body, "aonohako-ci:${{ matrix.name }}") {
-		t.Fatalf("ci workflow must log versions for per-language smoke images")
+	if !strings.Contains(body, "toolchain-summary:") {
+		t.Fatalf("ci workflow must define a dedicated toolchain summary job")
 	}
-	if !strings.Contains(body, "aonohako-ci-mix:type-i") {
-		t.Fatalf("ci workflow must log versions for the mixin smoke image")
+	if !strings.Contains(body, "go run ./cmd/runtime-matrix -mode production") {
+		t.Fatalf("ci workflow must iterate production profiles for one consolidated summary")
 	}
-	if !strings.Contains(body, "tee -a \"$GITHUB_STEP_SUMMARY\"") {
+	if !strings.Contains(body, "aonohako-ci-prod:${name}") {
+		t.Fatalf("ci workflow must report production-profile images in the consolidated summary")
+	}
+	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${languages}\"") {
+		t.Fatalf("ci workflow must include the language list in the consolidated summary")
+	}
+	if !strings.Contains(body, ">> \"$GITHUB_STEP_SUMMARY\"") {
 		t.Fatalf("ci workflow must publish toolchain versions to the job summary")
 	}
 }

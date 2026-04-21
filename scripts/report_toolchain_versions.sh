@@ -13,6 +13,9 @@ REPO_DIGEST="$(docker image inspect "${IMAGE_REF}" --format '{{if .RepoDigests}}
 echo "## Runtime Toolchain Versions"
 echo
 echo "- Image: \`${IMAGE_REF}\`"
+if [ -n "${AONOHAKO_LANGUAGES:-}" ]; then
+    echo "- Languages: \`${AONOHAKO_LANGUAGES}\`"
+fi
 if [ -n "${REPO_DIGEST}" ]; then
     echo "- Repo digest: \`${REPO_DIGEST}\`"
 fi
@@ -25,6 +28,10 @@ report() {
     local name="$1"
     shift
     local output
+
+    if ! command -v "$1" >/dev/null 2>&1; then
+        return 0
+    fi
 
     if output="$("$@" 2>&1)"; then
         :
@@ -42,7 +49,7 @@ report_python_pkg() {
     local output
 
     if ! command -v python3 >/dev/null 2>&1; then
-        output="<command failed>"
+        return 0
     elif output="$(DIST_NAME="${dist}" python3 - <<'PY' 2>&1
 import importlib.metadata
 import os
@@ -52,7 +59,7 @@ PY
 )"; then
         :
     else
-        output="<command failed>"
+        return 0
     fi
 
     output="$(printf "%s" "${output}" | sed -n '1p' | tr -d '\r' | sed 's/|/\\|/g')"
