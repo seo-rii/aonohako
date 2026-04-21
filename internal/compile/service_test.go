@@ -57,7 +57,9 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{
+		"asm":        {compileKind: "asm", runLang: "binary"},
 		"aheui":      {compileKind: "none", runLang: "aheui"},
+		"nasm":       {compileKind: "nasm", runLang: "binary"},
 		"pascal":     {compileKind: "pascal", runLang: "binary"},
 		"nim":        {compileKind: "nim", runLang: "binary"},
 		"clojure":    {compileKind: "clojure", runLang: "clojure"},
@@ -100,8 +102,11 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 
 func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 	tests := map[string]string{
+		"assembly":   "asm",
+		"gas":        "asm",
 		"freepascal": "pascal",
 		"fpc":        "pascal",
+		"nasm64":     "nasm",
 		"scheme":     "racket",
 	}
 

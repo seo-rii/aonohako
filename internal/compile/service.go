@@ -84,8 +84,12 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 func resolveProfile(lang string) (profiles.Profile, bool) {
 	l := strings.TrimSpace(lang)
 	switch strings.ToLower(l) {
+	case "asm", "asm64", "assembly", "gas":
+		l = "ASM"
 	case "aheui":
 		l = "AHEUI"
+	case "nasm", "nasm64":
+		l = "NASM"
 	case "python", "python3":
 		l = "PYTHON3"
 	case "pypy", "pypy3":
@@ -190,6 +194,8 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".c", ".h"), "gcc", []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE", "-std=" + profile.CompileStd})
 	case "cpp":
 		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".cpp", ".cc", ".cxx", ".h", ".hpp"), "g++", []string{"-O2", "-Wall", "-lm", "--static", "-pipe", "-DONLINE_JUDGE", "-std=" + profile.CompileStd})
+	case "asm":
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".s"), "gcc", []string{"-nostdlib", "-static", "-no-pie"})
 	case "pascal":
 		var rootSource string
 		for _, src := range req.Sources {
@@ -489,6 +495,39 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		stdout, stderr, status, reason := runCommand(ctx, workDir, "ldc2", []string{rootSource, "-O3", "-release", "-of=" + filepath.Join(workDir, target)}, nil)
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+	case "nasm":
+		var rootSource string
+		for _, src := range req.Sources {
+			if !strings.HasSuffix(strings.ToLower(src.Name), ".asm") {
+				continue
+			}
+			clean := filepath.Clean(src.Name)
+			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.asm") {
+				rootSource = filepath.Join(workDir, clean)
+			}
+			if strings.EqualFold(filepath.Base(clean), "Main.asm") {
+				break
+			}
+		}
+		if rootSource == "" {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no nasm sources"}
+		}
+		objectPath := filepath.Join(workDir, target+".o")
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "nasm", []string{"-felf64", rootSource, "-o", objectPath}, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		linkOut, linkErr, linkStatus, linkReason := runCommand(ctx, workDir, "gcc", []string{"-nostdlib", "-static", "-no-pie", objectPath, "-o", target}, nil)
+		stdout += linkOut
+		stderr += linkErr
+		if linkStatus != model.CompileStatusOK {
+			return model.CompileResponse{Status: linkStatus, Stdout: stdout, Stderr: stderr, Reason: linkReason}
 		}
 		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
 		if err != nil {

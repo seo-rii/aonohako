@@ -132,6 +132,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 | RUST, RUST2018–2024 | `rust` | `rustc --edition <ed> -O` |
 | GO | `go` | `go build` |
 | ZIG | `zig` | `zig build-exe -O ReleaseSafe` |
+| ASM | `binary` | `gcc -nostdlib -static -no-pie` |
+| NASM | `binary` | `nasm -felf64` + `gcc -nostdlib -static -no-pie` |
 | JAVA, JAVA8–15 | `java` | `javac --release <v>` |
 | GROOVY | `groovy` | `groovyc -d <dir>` |
 | SCALA | `scala` | `scalac -d <dir>` |

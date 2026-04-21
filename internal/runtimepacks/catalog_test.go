@@ -241,6 +241,8 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 	body := string(data)
 	for _, marker := range []string{
 		`report_python_pkg "Aheui" "aheui"`,
+		`report "GNU as" as --version`,
+		`report "NASM" nasm -v`,
 		`report "PyPy" pypy3 --version`,
 		`report "Free Pascal" fpc -iV`,
 		`report "Nim" nim --version`,

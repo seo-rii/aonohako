@@ -27,8 +27,8 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
 - Production mode builds grouped images such as `type-a` (`plain`, `python`,
   `pypy`, `aheui`, `racket`, `bf`, `whitespace`, `wasm`, and scripting runtimes),
   `type-b` (`clojure`, `java`, `javascript`, `scala`, `typescript`), `type-c`
-  (`ada`, `d`, `fortran`, `go`, `nim`, `pascal`, `rust`, `zig`), `type-e`
-  (`csharp`, `fsharp`), and the mixin validation profile `type-i` (`plain`,
+  (`ada`, `asm`, `d`, `fortran`, `go`, `nasm`, `nim`, `pascal`, `rust`, `zig`),
+  `type-e` (`csharp`, `fsharp`), and the mixin validation profile `type-i` (`plain`,
   `python`, `java`), plus dedicated profiles where a toolchain needs its own
   base image or install path such as `swift`, `julia`, `coq`, or `dart`.
 - CI mode expands the same catalog into one image per language so that each
@@ -39,12 +39,12 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), PyPy, Java,
   Groovy, Scala, Clojure, JavaScript/TypeScript, Ruby, PHP, Lua, Perl, Elixir,
-  Haskell, OCaml, SQLite, Go, Rust, Zig, Nim, Pascal, Ada, Kotlin, C#, F#,
-  Julia, Swift, R, Racket, Erlang, Prolog, Brainfuck, Whitespace, WASM, Coq,
-  Aheui, Dart, and UHMLANG. C/C++ submitters compile into binaries and should
-  target the `plain` runtime image rather than dedicated C/C++ runtime images.
-  Add new languages by extending the YAML file instead of editing shell loops
-  or workflow matrices.
+  Haskell, OCaml, SQLite, Go, Rust, Zig, Nim, Pascal, Ada, GNU assembly, NASM,
+  Kotlin, C#, F#, Julia, Swift, R, Racket, Erlang, Prolog, Brainfuck,
+  Whitespace, WASM, Coq, Aheui, Dart, and UHMLANG. C/C++ and assembly submitters
+  compile into binaries and should target the `plain` runtime image rather than
+  dedicated native runtime images. Add new languages by extending the YAML file
+  instead of editing shell loops or workflow matrices.
 
 Inspect the generated matrix:
 
