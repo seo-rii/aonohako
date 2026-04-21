@@ -132,8 +132,10 @@ languages:
           import pandas as pd
           import PIL.Image
           import qiskit
+          import robot_judge
           import seaborn as sns
           import torch
+          from jungol_robot import Direction, Position
           total = int(np.arange(5).sum())
           assert int(pd.Series([1, 2, 3]).sum()) == 6
           assert torch.tensor([1, 2]).sum().item() == 3
@@ -141,6 +143,10 @@ languages:
           assert callable(PIL.Image.new)
           assert callable(qiskit.QuantumCircuit)
           assert sns.__version__
+          assert Direction("r").to_char() == "r"
+          assert (Position(1, 2) + Position(3, 4)).to_list() == [4, 6]
+          assert robot_judge.parse_expected_state("1 2 R") == (1, 2, "R")
+          assert robot_judge.simulate_robot([], start=(0, 0), direction="R") == (0, 0, "R")
           pathlib.Path("same-folder.txt").write_text(str(total), encoding="utf-8")
           assert pathlib.Path("same-folder.txt").read_text(encoding="utf-8") == "10"
 

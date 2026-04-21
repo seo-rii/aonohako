@@ -51,9 +51,12 @@ COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
+COPY python/ /usr/local/lib/aonohako/python/
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
-RUN install -d -m 0700 /var/aonohako /var/aonohako/protected && \
+RUN find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
+    find /usr/local/lib/aonohako/python -type f -exec chmod 0644 {} + && \
+    install -d -m 0700 /var/aonohako /var/aonohako/protected && \
     printf 'runtime-owned\n' > /var/aonohako/protected/probe.txt && \
     chmod 0700 /var/aonohako /var/aonohako/protected && \
     chmod 0600 /var/aonohako/protected/probe.txt && \
@@ -72,6 +75,7 @@ RUN install -d -m 0700 /var/aonohako /var/aonohako/protected && \
 ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
+    PYTHONPATH=/usr/local/lib/aonohako/python \
     RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     AONOHAKO_IMAGE_NAME=${IMAGE_NAME} \

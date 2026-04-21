@@ -40,12 +40,13 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   per-language matrix.
 - The current catalog covers native binaries, Python plus bundled judge
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
-  `torch`, `torchvision`, `jax[cpu]`, and related dependencies), PyPy, Java,
-  Groovy, Scala, Clojure, JavaScript/TypeScript, Ruby, PHP, Lua, Perl, Elixir,
-  Haskell, OCaml, SQLite, Go, Rust, Zig, Nim, Pascal, Ada, GNU assembly, NASM,
-  Kotlin, C#, F#, Julia, Swift, R, Racket, Erlang, Prolog, Brainfuck,
-  Whitespace, WASM, Coq, Aheui, Dart, and UHMLANG. C/C++ and assembly submitters
-  compile into binaries and should target the `plain` runtime image rather than
+  `torch`, `torchvision`, `jax[cpu]`, and related dependencies), plus vendored
+  `jungol_robot` and `robot_judge` helpers, PyPy, Java, Groovy, Scala,
+  Clojure, JavaScript/TypeScript, Ruby, PHP, Lua, Perl, Elixir, Haskell,
+  OCaml, SQLite, Go, Rust, Zig, Nim, Pascal, Ada, GNU assembly, NASM, Kotlin,
+  C#, F#, Julia, Swift, R, Racket, Erlang, Prolog, Brainfuck, Whitespace,
+  WASM, Coq, Aheui, Dart, and UHMLANG. C/C++ and assembly submitters compile
+  into binaries and should target the `plain` runtime image rather than
   dedicated native runtime images. Add new languages by extending the YAML file
   instead of editing shell loops or workflow matrices.
 - Debian-based production profiles track `debian:trixie-slim`, which raises the

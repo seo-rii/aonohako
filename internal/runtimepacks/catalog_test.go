@@ -243,6 +243,8 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		"echo \"- Languages: \\`${AONOHAKO_LANGUAGES}\\`\"",
 		`if ! command -v "$1" >/dev/null 2>&1; then`,
 		`report_python_pkg "Aheui" "aheui"`,
+		`report_python_module "JungolRobot" "jungol_robot"`,
+		`report_python_module "robot_judge" "robot_judge"`,
 		`report "GNU as" as --version`,
 		`report "NASM" nasm -v`,
 		`report "PyPy" pypy3 --version`,

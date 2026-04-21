@@ -318,13 +318,15 @@ Production profiles currently group languages like this:
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the
 production profiles and runs `scripts/report_toolchain_versions.sh` once per
-profile, so toolchain versions and Python judge-library versions land in one
-GitHub Actions summary instead of being split across the smoke matrix.
+profile, so toolchain versions, Python judge-library versions, and vendored
+Python judge-helper availability land in one GitHub Actions summary instead of
+being split across the smoke matrix.
 
 Debian-based production profiles now use `debian:trixie-slim`, which raises the
 baseline Python, PyPy, and GCC versions seen by both production and CI runtime
 images. Python judge libraries are pinned in the catalog so rebuilds stay
-reproducible.
+reproducible, and vendored helpers such as `jungol_robot` are copied into the
+runtime image directly because they are not published on PyPI.
 
 The runtime Docker image is also hardened to reduce the readable surface for the
 sandbox UID. Non-essential metadata and package-manager paths are made

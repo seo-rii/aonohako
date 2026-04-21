@@ -139,6 +139,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"lisp":    {"Broken.lisp", "sbcl"},
 		"nasm":    {"Main.asm", "Broken.asm", "nasm -felf64"},
 		"coq":     {"Broken.v", "coqc"},
+		"python":  {"import qiskit", "import robot_judge", "from jungol_robot import Direction, Position"},
 	}
 
 	for language, patterns := range tests {
