@@ -76,10 +76,14 @@ Repository policy check:
 ## Configuration
 
 - `PORT` defaults to `8080`
-- `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` on Cloud Run, otherwise `max(1, cpu-2)`
+- `AONOHAKO_EXECUTION_MODE` selects the deployment contract:
+  `cloudrun`, `local-root`, or `local-dev` (default)
+- `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` in `cloudrun` mode, otherwise
+  `max(1, cpu-2)`
 - `AONOHAKO_MAX_PENDING_QUEUE` defaults to `0` for unlimited queue depth
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
-- `AONOHAKO_WORK_ROOT` points temp compile/run directories at a dedicated work root
+- `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
+  and is required in `cloudrun` and `local-root` mode
 
 Per-request execution limits are part of the `/execute` payload:
 
@@ -110,15 +114,18 @@ and process-group cleanup.
 
 Security posture depends on where it runs:
 
-- Cloud Run deployment mode is the supported security target. This is where the
-  runtime image permissions, service account scoping, and deployment-level
-  egress controls form the expected boundary.
-- Local non-root execution is development mode. It still applies process-level
-  limits and seccomp, but it does not promise the same filesystem isolation as a
-  root-owned runtime container on Cloud Run.
+- `cloudrun` is the supported production security target. Startup now fails
+  closed unless `AONOHAKO_WORK_ROOT` is configured, writable, owned by the
+  server UID, and the process is running as root.
+- `local-root` applies the same dedicated work-root contract for local
+  root-backed containers.
+- `local-dev` is for development ergonomics. It may fall back to the system temp
+  directory, but `/execute` still requires root because the hardened sandbox path
+  is root-backed.
 
 For Cloud Run deployments, use this baseline:
 
+- `AONOHAKO_EXECUTION_MODE=cloudrun`
 - second-generation execution environment
 - service concurrency `1`
 - a bounded in-memory volume mounted at a path such as `/work`, with

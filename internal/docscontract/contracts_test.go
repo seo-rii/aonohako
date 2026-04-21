@@ -35,6 +35,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"buffered stdout / stderr payloads emitted before `result`",
 		"Workspace Limit Exceeded",
 		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
+		"`AONOHAKO_EXECUTION_MODE=cloudrun`",
 	}
 	for _, want := range protocolWants {
 		if !strings.Contains(protocol, want) {
@@ -47,6 +48,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	}
 	if !strings.Contains(architecture, "hardens shared scratch directories") {
 		t.Fatalf("architecture.md must describe startup scratch hardening")
+	}
+	if !strings.Contains(architecture, "fail closed unless all of the following are") || !strings.Contains(architecture, "true before the HTTP server starts") {
+		t.Fatalf("architecture.md must describe startup deployment contract validation")
 	}
 }
 

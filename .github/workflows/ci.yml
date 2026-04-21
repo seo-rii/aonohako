@@ -35,9 +35,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - uses: docker/setup-buildx-action@v3
+      - run: chmod +x scripts/build_runtime_images.sh
+      - run: ./scripts/build_runtime_images.sh -mode ci -only ci-python -tag-prefix "aonohako-ci-sandbox"
       - run: >
-          go test ./internal/execute -count=1 -run
-          'TestRunBlocksNetworkWhenDisabled|TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback|TestRunCannotReadHostPathOutsideSandbox|TestRunExposesOnlySafeDevices|TestRunBlocksForkAttempts|TestRunBlocksProcFDBrowsingOutsideSandbox|TestRunBlocksSocketPairCreationWhenNetworkDisabled|TestRunBlocksNamespaceEscapeAttempts'
+          docker run --rm
+          -e AONOHAKO_EXECUTION_MODE=local-root
+          -e AONOHAKO_ENFORCE_SANDBOX_TESTS=1
+          -v "$PWD":/workspace
+          -w /workspace
+          "aonohako-ci-sandbox:ci-python"
+          bash -c 'mkdir -p /work && export AONOHAKO_WORK_ROOT=/work && /usr/local/go/bin/go test -c ./internal/execute -o /work/execute.test && chmod 0755 /work/execute.test && /work/execute.test -test.count=1 -test.run "TestRunBlocksNetworkWhenDisabled|TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback|TestRunCannotReadHostPathOutsideSandbox|TestRunExposesOnlySafeDevices|TestRunBlocksForkAttempts|TestRunBlocksProcFDBrowsingOutsideSandbox|TestRunBlocksSocketPairCreationWhenNetworkDisabled|TestRunBlocksNamespaceEscapeAttempts"'
 
   runtime-matrix:
     runs-on: ubuntu-latest

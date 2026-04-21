@@ -64,7 +64,9 @@ artifacts, not for enforcing the main untrusted runtime boundary.
 `/execute` is the security-sensitive path.
 
 1. The request acquires a queue permit.
-2. A per-run workspace is created under `AONOHAKO_WORK_ROOT`.
+2. A per-run workspace is created under `AONOHAKO_WORK_ROOT` in `cloudrun` and
+   `local-root` mode, or under the system temp root in `local-dev` when no
+   dedicated work root is configured.
 3. Submitted files are materialized into `box/`.
 4. Existing submitted files are immutable:
    - regular files: `0444`
@@ -72,14 +74,17 @@ artifacts, not for enforcing the main untrusted runtime boundary.
 5. `box/` itself is writable and sticky (`01777`) so the submission can create
    new files in the same folder without overwriting somebody else's existing
    files by name.
-6. Side directories such as `.tmp`, `.cache`, `.home`, `.mix`, `.hex`, and
+6. Any nested submission directory created under `box/` is also made sticky and
+   writable so `pkg/Main.class` style layouts remain readable and can create
+   sibling files under the sandbox UID.
+7. Side directories such as `.tmp`, `.cache`, `.home`, `.mix`, `.hex`, and
    image output directories are created per request and redirected through
    environment variables.
-7. The parent process starts the sandbox helper.
-8. The helper applies hardening, then `execve()`s the real target command.
-9. The parent watches time, memory, workspace growth, stdout, stderr, and
+8. The parent process starts the sandbox helper.
+9. The helper applies hardening, then `execve()`s the real target command.
+10. The parent watches time, memory, workspace growth, stdout, stderr, and
    optional sidecar image output.
-10. The parent compares output or runs an SPJ and returns the final result.
+11. The parent compares output or runs an SPJ and returns the final result.
 
 ## Sandbox Process Model
 
@@ -107,9 +112,9 @@ The runtime uses a parent/helper/target split:
    - inherits the helper's limits and seccomp filter
    - stays in the same process group for cleanup
 
-When `aonohako` is running as root, the parent drops the helper/target to
-UID/GID `65532`. The runtime image is hardened so only explicitly readable
-paths remain accessible to that account.
+`/execute` requires a root parent. The parent drops the helper/target to
+UID/GID `65532`, while the runtime image is hardened so only explicitly
+readable paths remain accessible to that account.
 
 ## Enforcement Layers
 
@@ -223,8 +228,20 @@ Memory enforcement uses several layers:
 
 The supported production target is a dedicated Cloud Run runner service.
 
+Server startup validates the deployment contract instead of trusting docs alone.
+`cloudrun` and `local-root` mode fail closed unless all of the following are
+true before the HTTP server starts:
+
+- `AONOHAKO_EXECUTION_MODE` is explicitly set
+- `AONOHAKO_WORK_ROOT` is configured
+- the work root already exists and is a directory
+- the work root is owned by the current server UID
+- the server can create and remove a probe directory under that root
+- the process is running as root
+
 Recommended deployment baseline:
 
+- `AONOHAKO_EXECUTION_MODE=cloudrun`
 - second-generation execution environment
 - service concurrency `1`
 - bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`
@@ -238,6 +255,8 @@ Why the design looks this way:
 - the runtime does not depend on child cgroup creation
 - the runtime does not depend on mount-based filesystem isolation
 - the runtime does not assume Landlock availability
+- Cloud Run marker env vars alone do not switch security policy; the execution
+  mode is explicit to avoid accidental partial hardening
 
 ## Runtime Image Model
 
@@ -300,6 +319,8 @@ The repository verifies the design through:
 - smoke builds generated from the runtime catalog
 - regression tests for sandbox escape attempts such as network use, process
   creation, inherited-fd access, and writable scratch bypasses
+- root-backed sandbox regression tests executed inside a runtime container in CI,
+  with skip paths promoted to failures there
 
 For operational use, keep architecture and security decisions aligned with the
 actual code in `internal/execute`, `internal/sandbox`, and
