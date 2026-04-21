@@ -575,7 +575,14 @@ func TestRunBlocksNamespaceEscapeAttempts(t *testing.T) {
 }
 
 func TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback(t *testing.T) {
-	t.Setenv("K_SERVICE", "aonohako-runner")
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "cloudrun")
+	workRoot := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-cloudrun-test-%d", time.Now().UnixNano()))
+	if err := os.MkdirAll(workRoot, 0o755); err != nil {
+		t.Fatalf("mkdir work root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(workRoot) })
+	t.Setenv("AONOHAKO_WORK_ROOT", workRoot)
+	requireSandboxSupport(t)
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
@@ -599,9 +606,7 @@ func TestRunRequiresRootOutsideCloudRun(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("requires non-root host mode")
 	}
-	t.Setenv("K_SERVICE", "")
-	t.Setenv("CLOUD_RUN_JOB", "")
-	t.Setenv("CLOUD_RUN_WORKER_POOL", "")
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-dev")
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
