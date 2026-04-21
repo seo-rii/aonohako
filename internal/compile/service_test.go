@@ -57,6 +57,12 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{
+		"pascal":     {compileKind: "pascal", runLang: "binary"},
+		"nim":        {compileKind: "nim", runLang: "binary"},
+		"clojure":    {compileKind: "clojure", runLang: "clojure"},
+		"racket":     {compileKind: "racket", runLang: "racket"},
+		"ada":        {compileKind: "ada", runLang: "binary"},
+		"dart":       {compileKind: "dart", runLang: "binary"},
 		"haskell":    {compileKind: "haskell", runLang: "binary"},
 		"swift":      {compileKind: "swift", runLang: "binary"},
 		"sqlite":     {compileKind: "sqlite", runLang: "sqlite"},
@@ -87,6 +93,24 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		}
 		if profile.RunLang != want.runLang {
 			t.Fatalf("resolveProfile(%q) run lang = %q, want %q", input, profile.RunLang, want.runLang)
+		}
+	}
+}
+
+func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
+	tests := map[string]string{
+		"freepascal": "pascal",
+		"fpc":        "pascal",
+		"scheme":     "racket",
+	}
+
+	for input, wantCompileKind := range tests {
+		profile, ok := resolveProfile(input)
+		if !ok {
+			t.Fatalf("resolveProfile(%q) reported unsupported language", input)
+		}
+		if profile.CompileKind != wantCompileKind {
+			t.Fatalf("resolveProfile(%q) compile kind = %q, want %q", input, profile.CompileKind, wantCompileKind)
 		}
 	}
 }

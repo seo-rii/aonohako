@@ -90,6 +90,19 @@ func TestRuntimeDockerfileSupportsInstallScriptBuildArg(t *testing.T) {
 	}
 }
 
+func TestRuntimeDockerfileAllowsSystemPipPackagesForPythonRuntime(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	if !strings.Contains(body, "python3 -m pip install --break-system-packages --no-cache-dir ${PIP_PACKAGES}") {
+		t.Fatalf("runtime.Dockerfile must allow system-wide pip installs for bundled judge libraries")
+	}
+}
+
 func TestRuntimeDockerfileCopiesGoBeforeStrictInstallScript(t *testing.T) {
 	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
 	data, err := os.ReadFile(path)

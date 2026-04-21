@@ -33,7 +33,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 RUN if [[ -n "${PIP_PACKAGES}" ]]; then \
-      python3 -m pip install --no-cache-dir ${PIP_PACKAGES}; \
+      python3 -m pip install --break-system-packages --no-cache-dir ${PIP_PACKAGES}; \
     fi
 
 RUN if [[ -n "${NPM_PACKAGES}" ]]; then \

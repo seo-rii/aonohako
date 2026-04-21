@@ -19,15 +19,39 @@ languages:
       apt:
         - python3
         - python3-pip
-        - python3-numpy
+      pip:
+        - numpy
+        - pandas
+        - seaborn
+        - matplotlib
+        - pillow
+        - six
+        - qiskit
+        - pyparsing
+        - pylatexenc
+        - jax[cpu]
+      script:
+        - python3 -m pip install --break-system-packages --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
     smoke:
       command:
         - python3
         - -c
         - |
+          import jax.numpy as jnp
           import pathlib
           import numpy as np
+          import pandas as pd
+          import PIL.Image
+          import qiskit
+          import seaborn as sns
+          import torch
           total = int(np.arange(5).sum())
+          assert int(pd.Series([1, 2, 3]).sum()) == 6
+          assert torch.tensor([1, 2]).sum().item() == 3
+          assert int(jnp.arange(5).sum()) == 10
+          assert callable(PIL.Image.new)
+          assert callable(qiskit.QuantumCircuit)
+          assert sns.__version__
           pathlib.Path("same-folder.txt").write_text(str(total), encoding="utf-8")
           assert pathlib.Path("same-folder.txt").read_text(encoding="utf-8") == "10"
 
@@ -40,7 +64,9 @@ languages:
         - pypy3
         - -c
         - |
+          import sys
           from pathlib import Path
+          assert sys.implementation.name == "pypy"
           Path("same-folder.txt").write_text("ok", encoding="utf-8")
           print(Path("same-folder.txt").read_text(encoding="utf-8"))
 
@@ -627,6 +653,179 @@ languages:
           env KONAN_DATA_DIR=/tmp/.konan KONAN_USER_HOME=/tmp/.konan.home kotlinc-native Main.kt -o Main
           ./Main.kexe | grep '^ok$'
 
+  pascal:
+    install:
+      apt:
+        - fp-compiler
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.pas <<'PAS'
+          program Main;
+          var
+            F: Text;
+            Line: string;
+          begin
+            Assign(F, 'same-folder.txt');
+            Rewrite(F);
+            Writeln(F, 'ok');
+            Close(F);
+            Assign(F, 'same-folder.txt');
+            Reset(F);
+            ReadLn(F, Line);
+            Close(F);
+            Writeln(Line);
+          end.
+          PAS
+          fpc -O2 -Xs -oMain Main.pas >/dev/null
+          ./Main | grep '^ok$'
+          cat > Broken.pas <<'PAS'
+          program Broken;
+          begin
+            Writeln('oops')
+          PAS
+          if fpc -O2 -Xs -oBroken Broken.pas >/dev/null 2>&1; then exit 1; fi
+
+  nim:
+    install:
+      apt:
+        - gcc
+        - nim
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.nim <<'NIM'
+          import std/[os, strutils]
+          writeFile("same-folder.txt", "ok")
+          echo readFile("same-folder.txt").strip()
+          NIM
+          nim c -d:release --opt:speed --out:Main Main.nim >/dev/null
+          ./Main | grep '^ok$'
+          cat > Broken.nim <<'NIM'
+          proc main() =
+            echo "oops"
+          this is invalid
+          NIM
+          if nim c -d:release --opt:speed --out:Broken Broken.nim >/dev/null 2>&1; then exit 1; fi
+
+  clojure:
+    install:
+      apt:
+        - clojure
+        - openjdk-17-jre-headless
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.clj <<'CLOJURE'
+          (require '[clojure.string :as str])
+          (spit "same-folder.txt" "ok")
+          (println (str/trim (slurp "same-folder.txt")))
+          CLOJURE
+          clojure Main.clj | grep '^ok$'
+          cat > Broken.clj <<'CLOJURE'
+          (defn broken []
+            (println "oops"
+          CLOJURE
+          if clojure -e "(require '[clojure.java.io :as io]) (with-open [r (java.io.PushbackReader. (io/reader (first *command-line-args*)))] (loop [] (let [form (read {:eof ::eof} r)] (when-not (= form ::eof) (recur)))))" Broken.clj >/dev/null 2>&1; then exit 1; fi
+
+  racket:
+    install:
+      apt:
+        - racket
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.rkt <<'RACKET'
+          #lang racket
+          (require racket/string)
+          (call-with-output-file "same-folder.txt"
+            (lambda (out) (displayln "ok" out))
+            #:exists 'replace)
+          (displayln (string-trim (file->string "same-folder.txt")))
+          RACKET
+          raco make Main.rkt >/dev/null
+          racket Main.rkt | grep '^ok$'
+          cat > Broken.rkt <<'RACKET'
+          #lang racket
+          (displayln "oops"
+          RACKET
+          if raco make Broken.rkt >/dev/null 2>&1; then exit 1; fi
+
+  ada:
+    install:
+      apt:
+        - gnat
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.adb <<'ADA'
+          with Ada.Text_IO; use Ada.Text_IO;
+          procedure Main is
+            F : File_Type;
+          begin
+            Create(F, Out_File, "same-folder.txt");
+            Put_Line(F, "ok");
+            Close(F);
+            Open(F, In_File, "same-folder.txt");
+            Put_Line(Get_Line(F));
+            Close(F);
+          end Main;
+          ADA
+          gnatmake -O2 -o Main Main.adb >/dev/null
+          ./Main | grep '^ok$'
+          cat > Broken.adb <<'ADA'
+          with Ada.Text_IO; use Ada.Text_IO;
+          procedure Broken is
+          begin
+            Put_Line("oops")
+          end Broken;
+          ADA
+          if gnatmake -O2 -o Broken Broken.adb >/dev/null 2>&1; then exit 1; fi
+
+  dart:
+    install:
+      apt:
+        - curl
+        - unzip
+      script:
+        - export DART_VERSION=3.11.5
+        - curl -fsSL "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dartsdk.zip
+        - rm -rf /opt/dart-sdk
+        - unzip -q /tmp/dartsdk.zip -d /opt
+        - ln -sfn /opt/dart-sdk/bin/dart /usr/local/bin/dart
+        - rm -f /tmp/dartsdk.zip
+        - dart --version
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.dart <<'DART'
+          import 'dart:io';
+          void main() {
+            File('same-folder.txt').writeAsStringSync('ok');
+            stdout.writeln(File('same-folder.txt').readAsStringSync().trim());
+          }
+          DART
+          dart compile exe Main.dart -o Main >/dev/null
+          ./Main | grep '^ok$'
+          cat > Broken.dart <<'DART'
+          void main() {
+            print('oops'
+          }
+          DART
+          if dart compile exe Broken.dart -o Broken >/dev/null 2>&1; then exit 1; fi
+
   csharp:
     install:
       apt:
@@ -725,6 +924,7 @@ profiles:
       - pypy
       - python
       - r
+      - racket
       - ruby
       - sqlite
       - wasm
@@ -732,6 +932,7 @@ profiles:
   type-b:
     base_image: debian:bookworm-slim
     languages:
+      - clojure
       - groovy
       - java
       - javascript
@@ -740,9 +941,12 @@ profiles:
   type-c:
     base_image: debian:bookworm-slim
     languages:
+      - ada
       - d
       - fortran
       - go
+      - nim
+      - pascal
       - rust
       - zig
   type-d:
@@ -776,3 +980,7 @@ profiles:
     base_image: debian:bookworm-slim
     languages:
       - coq
+  type-k:
+    base_image: debian:bookworm-slim
+    languages:
+      - dart
