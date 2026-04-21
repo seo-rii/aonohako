@@ -252,6 +252,8 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 	var jarPath string
 	var pyPath string
+	var clojurePath string
+	var racketPath string
 	classFiles := make([]string, 0)
 	totalBytes := 0
 	for i, b := range req.Binaries {
@@ -296,6 +298,12 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(strings.ToLower(clean), ".py") && pyPath == "" {
 			pyPath = dest
 		}
+		if strings.HasSuffix(strings.ToLower(clean), ".clj") && clojurePath == "" {
+			clojurePath = dest
+		}
+		if strings.HasSuffix(strings.ToLower(clean), ".rkt") && racketPath == "" {
+			racketPath = dest
+		}
 		if strings.HasSuffix(strings.ToLower(clean), ".class") {
 			classFiles = append(classFiles, clean)
 		}
@@ -309,6 +317,16 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			pyPath = primaryPath
 		}
 		return pyPath, lang, nil
+	case "clojure":
+		if clojurePath == "" {
+			clojurePath = primaryPath
+		}
+		return clojurePath, lang, nil
+	case "racket":
+		if racketPath == "" {
+			racketPath = primaryPath
+		}
+		return racketPath, lang, nil
 	case "erlang":
 		hasBeam := false
 		for _, binary := range req.Binaries {
@@ -418,10 +436,14 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	switch lang {
 	case "binary":
 		return []string{primaryPath}
+	case "clojure":
+		return []string{"clojure", primaryPath}
 	case "python":
 		return []string{"python3", primaryPath}
 	case "pypy":
 		return []string{"pypy3", primaryPath}
+	case "racket":
+		return []string{"racket", primaryPath}
 	case "erlang":
 		module := "main"
 		function := "main"

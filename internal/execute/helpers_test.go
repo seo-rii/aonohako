@@ -146,11 +146,13 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		wantFirst string
 	}{
 		{"binary", "/tmp/a.out", "/tmp/a.out"},
+		{"clojure", "/tmp/sol.clj", "clojure"},
 		{"coq", "/tmp/Main.v", "coqc"},
 		{"ocaml", "/tmp/sol", "env"},
 		{"elixir", "/tmp/sol.exs", "env"},
 		{"python", "/tmp/sol.py", "python3"},
 		{"pypy", "/tmp/sol.py", "pypy3"},
+		{"racket", "/tmp/sol.rkt", "racket"},
 		{"erlang", "/tmp/beam", "erl"},
 		{"prolog", "/tmp/sol.pl", "swipl"},
 		{"groovy", "/tmp/classes", "groovy"},
