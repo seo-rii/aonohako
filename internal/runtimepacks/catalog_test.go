@@ -32,7 +32,7 @@ languages:
       command: ["python3", "-c", "import numpy; print(numpy.arange(3).sum())"]
   java:
     install:
-      apt: [openjdk-17-jdk-headless]
+      apt: [default-jdk-headless]
     smoke:
       command: ["java", "-version"]
 profiles:
@@ -79,7 +79,7 @@ profiles:
 	if ci[0].Name != "ci-java" || !reflect.DeepEqual(ci[0].Languages, []string{"java"}) {
 		t.Fatalf("ci[0] = %+v", ci[0])
 	}
-	if !reflect.DeepEqual(ci[0].AptPackages, []string{"openjdk-17-jdk-headless"}) {
+	if !reflect.DeepEqual(ci[0].AptPackages, []string{"default-jdk-headless"}) {
 		t.Fatalf("ci[0] apt packages = %v", ci[0].AptPackages)
 	}
 

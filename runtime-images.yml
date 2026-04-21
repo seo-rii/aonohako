@@ -4,6 +4,7 @@ languages:
       apt:
         - gcc
         - g++
+        - libc6-dev
         - make
     smoke:
       command:
@@ -169,7 +170,7 @@ languages:
     install:
       apt:
         - bash
-        - openjdk-17-jdk-headless
+        - default-jdk-headless
     smoke:
       command:
         - bash
@@ -183,8 +184,8 @@ languages:
     install:
       apt:
         - bash
+        - default-jdk-headless
         - groovy
-        - openjdk-17-jdk-headless
     smoke:
       command:
         - bash
@@ -213,7 +214,7 @@ languages:
     install:
       apt:
         - bash
-        - openjdk-17-jdk-headless
+        - default-jdk-headless
         - scala
     smoke:
       command:
@@ -728,7 +729,7 @@ languages:
     install:
       apt:
         - curl
-        - openjdk-17-jre-headless
+        - default-jre-headless
         - xz-utils
       script:
         - export KONAN_VERSION=1.8.10
@@ -786,8 +787,16 @@ languages:
   nim:
     install:
       apt:
+        - curl
         - gcc
-        - nim
+        - libc6-dev
+        - xz-utils
+      script:
+        - export PATH="/root/.nimble/bin:${PATH}"
+        - curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
+        - choosenim 2.2.8
+        - ln -sfn /root/.nimble/bin/nim /usr/local/bin/nim
+        - ln -sfn /root/.nimble/bin/nimble /usr/local/bin/nimble
     smoke:
       command:
         - bash
@@ -811,7 +820,7 @@ languages:
     install:
       apt:
         - clojure
-        - openjdk-17-jre-headless
+        - default-jre-headless
     smoke:
       command:
         - bash

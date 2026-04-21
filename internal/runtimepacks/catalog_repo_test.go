@@ -272,6 +272,13 @@ func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
 		t.Fatalf("LoadCatalog returned error: %v", err)
 	}
 
+	if !slices.Contains(catalog.Languages["plain"].Install.Apt, "libc6-dev") {
+		t.Fatalf("plain apt packages = %v, want libc6-dev for hosted C/C++ compilation", catalog.Languages["plain"].Install.Apt)
+	}
+	if !slices.Contains(catalog.Languages["nim"].Install.Apt, "libc6-dev") {
+		t.Fatalf("nim apt packages = %v, want libc6-dev for Nim C backend headers", catalog.Languages["nim"].Install.Apt)
+	}
+
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
 		t.Fatalf("CILanguageImages returned error: %v", err)
@@ -281,8 +288,17 @@ func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
 		if spec.Name != "ci-kotlin" {
 			continue
 		}
-		if !slices.Contains(spec.AptPackages, "openjdk-17-jre-headless") {
-			t.Fatalf("ci-kotlin apt packages = %v, want openjdk-17-jre-headless for run_konan", spec.AptPackages)
+		if !slices.Contains(spec.AptPackages, "default-jre-headless") {
+			t.Fatalf("ci-kotlin apt packages = %v, want default-jre-headless for run_konan", spec.AptPackages)
+		}
+		for _, marker := range []string{
+			"nim-lang.org/choosenim/init.sh",
+			"choosenim 2.2.8",
+			"/root/.nimble/bin/nim",
+		} {
+			if !strings.Contains(strings.Join(catalog.Languages["nim"].Install.Script, "\n"), marker) {
+				t.Fatalf("nim install script must contain %q", marker)
+			}
 		}
 		return
 	}
