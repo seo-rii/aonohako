@@ -194,6 +194,27 @@ func TestRunReturnsTLEOnParentCancel(t *testing.T) {
 	}
 }
 
+func TestRunRejectsNetworkEnabledRequests(t *testing.T) {
+	forceDirectMode(t)
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\necho ok\n"),
+			Mode:    "exec",
+		}},
+		Limits:        model.Limits{TimeMs: 1000, MemoryMB: 128},
+		EnableNetwork: true,
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail {
+		t.Fatalf("expected network-enabled run to be rejected, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "enable_network=true") {
+		t.Fatalf("expected rejection reason to mention enable_network, got %+v", resp)
+	}
+}
+
 func TestRunCapturesSidecarOutput(t *testing.T) {
 	forceDirectMode(t)
 	svc := New()

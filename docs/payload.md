@@ -52,7 +52,7 @@
     "time_ms": 2000,                         // wall-clock time limit (ms)
     "memory_mb": 256                         // memory limit (MB, enforced via prlimit AS)
   },
-  "enable_network": false,                   // allow outbound network (default: false)
+  "enable_network": false,                   // outbound network request flag; embedded helper rejects true and remote execution must enforce its own isolation
   "entry_point": "Main",                     // entry class for Java
   "spj": {                                   // optional special judge
     "binary": {                              // pre-compiled SPJ binary

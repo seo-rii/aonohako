@@ -61,6 +61,12 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if req.EnableNetwork {
+		return model.RunResponse{
+			Status: model.RunStatusInitFail,
+			Reason: "embedded helper execution does not support enable_network=true; use remote execution for networked workloads",
+		}
+	}
 	if len(req.FileOutputs) > 1 {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "at most one file output is supported"}
 	}

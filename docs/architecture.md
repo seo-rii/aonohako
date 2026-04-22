@@ -163,6 +163,10 @@ This is paired with two additional protections:
 
 - proxy-related environment variables are cleared for network-disabled requests
 - deployment-level egress policy should still be deny-by-default on Cloud Run
+- embedded helper execution rejects `enable_network=true` outright because
+  Cloud Run metadata endpoints cannot be reliably excluded inside the helper
+  process alone; networked workloads should run through a remote executor with
+  its own isolation boundary
 
 ### Workspace controls
 

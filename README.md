@@ -144,6 +144,9 @@ Per-request execution limits are part of the `/execute` payload:
 - `limits.memory_mb`
 - `limits.output_bytes`
   Defaults to `64 KiB` when omitted and is capped internally at `8 MiB`
+- `enable_network`
+  `embedded + helper` rejects `true`; if a workload needs outbound network,
+  forward `/execute` to a remote runner that enforces its own network boundary
 
 ## Security notes
 
