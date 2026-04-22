@@ -1,0 +1,530 @@
+package execute
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"aonohako/internal/model"
+	"aonohako/internal/profiles"
+	"aonohako/internal/sandbox"
+	"aonohako/internal/security"
+	"aonohako/internal/timing"
+	"aonohako/internal/util"
+)
+
+type execResult struct {
+	Status     string
+	ExitCode   *int
+	Stdout     []byte
+	Stderr     []byte
+	MemoryKB   int64
+	WallTimeMs int64
+	CPUTimeMs  int64
+	Reason     string
+}
+
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int) execResult {
+	limits := req.Limits
+	timeMs := max(1, limits.TimeMs)
+	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
+	defer cancel()
+
+	return executeSandboxCommand(ctx, ws, command, req, hooks, outputLimitBytes)
+}
+
+func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int) execResult {
+	if len(command) == 0 {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
+	}
+	if os.Geteuid() != 0 {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires root"}
+	}
+	timeLimitMs := max(1, req.Limits.TimeMs)
+	memoryLimitKB := int64(0)
+	if req.Limits.MemoryMB > 0 {
+		memoryLimitKB = int64(req.Limits.MemoryMB) * 1024
+	}
+	workspaceLimitBytes := req.Limits.WorkspaceBytes
+	if workspaceLimitBytes <= 0 {
+		workspaceLimitBytes = defaultWorkspaceBytes
+	}
+	if workspaceLimitBytes > hardMaxWorkspaceBytes {
+		workspaceLimitBytes = hardMaxWorkspaceBytes
+	}
+	addressSpaceLimitKB := int64(addressSpaceLimitBytes(req.Limits.MemoryMB) / 1024)
+
+	baseEnv := []string{
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"LANG=C.UTF-8",
+		"LC_ALL=C.UTF-8",
+	}
+	innerEnv := append(append(baseEnv[:0:0], baseEnv...), security.ThreadLimitEnv()...)
+	innerEnv = append(innerEnv, security.WorkspaceScopedEnv(ws.RootDir)...)
+	if !req.EnableNetwork {
+		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
+	}
+
+	switch profiles.NormalizeRunLang(req.Lang) {
+	case "ocaml":
+		innerEnv = append(innerEnv, "OCAMLRUNPARAM="+ocamlRunParam)
+	case "elixir":
+		innerEnv = append(innerEnv, "ERL_AFLAGS="+elixirERLAFlags)
+	}
+
+	finalCommand := append([]string(nil), command...)
+	resolveRealPath := func(name string) (string, error) {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			return "", err
+		}
+		if real, err := filepath.EvalSymlinks(path); err == nil && real != "" {
+			path = real
+		}
+		return path, nil
+	}
+	if !filepath.IsAbs(finalCommand[0]) {
+		path, err := resolveRealPath(finalCommand[0])
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "resolve command failed: " + err.Error()}
+		}
+		finalCommand[0] = path
+	}
+	if filepath.Base(finalCommand[0]) == "env" {
+		for i := 1; i < len(finalCommand); i++ {
+			if strings.Contains(finalCommand[i], "=") {
+				continue
+			}
+			if filepath.IsAbs(finalCommand[i]) {
+				break
+			}
+			path, err := resolveRealPath(finalCommand[i])
+			if err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "resolve env command failed: " + err.Error()}
+			}
+			finalCommand[i] = path
+			break
+		}
+	}
+
+	if os.Geteuid() == 0 {
+		const sandboxUID = 65532
+		const sandboxGID = 65532
+		if err := os.Chmod(ws.RootDir, 0o755); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+		}
+		for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+			if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
+			}
+		}
+		if err := os.Chmod(ws.BoxDir, 0o777|os.ModeSticky); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+		}
+		for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+			if err := os.Chmod(dir, 0o700); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
+			}
+		}
+	}
+
+	reqPath := filepath.Join(ws.RootDir, ".tmp", "sandbox-request.json")
+	helperReq := sandbox.ExecRequest{
+		Command:       finalCommand,
+		Dir:           ws.BoxDir,
+		Env:           innerEnv,
+		Limits:        req.Limits,
+		ThreadLimit:   sandboxThreadLimit,
+		EnableNetwork: req.EnableNetwork,
+	}
+	rawReq, err := json.Marshal(helperReq)
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request failed: " + err.Error()}
+	}
+	if err := os.WriteFile(reqPath, rawReq, 0o644); err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
+	}
+
+	helperPath, err := os.Executable()
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "resolve helper failed: " + err.Error()}
+	}
+
+	cmd := exec.CommandContext(ctx, helperPath)
+	cmd.Dir = ws.BoxDir
+	cmd.Stdin = strings.NewReader(req.Stdin)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid:   true,
+		Pdeathsig: syscall.SIGKILL,
+	}
+	if os.Geteuid() == 0 {
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
+	}
+	cmd.Env = append(append(baseEnv[:0:0], baseEnv...), sandbox.HelperModeEnv+"="+sandbox.HelperModeExec, sandbox.RequestPathEnv+"="+reqPath)
+
+	stdoutBuf := cappedBuffer{limit: outputLimitBytes}
+	stderrBuf := cappedBuffer{limit: outputLimitBytes}
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "stdout pipe failed: " + err.Error()}
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "stderr pipe failed: " + err.Error()}
+	}
+	if err := cmd.Start(); err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
+	}
+
+	imageDone := make(chan struct{})
+	if imgPath := firstImagePath(req.SidecarOutputs); imgPath != "" {
+		go func() {
+			streamImageEvents(ctx, ws, imgPath, hooks.OnImage)
+			close(imageDone)
+		}()
+	} else {
+		close(imageDone)
+	}
+
+	doneOut := make(chan struct{})
+	doneErr := make(chan struct{})
+	go func() {
+		_, _ = ioCopy(&stdoutBuf, stdoutPipe)
+		close(doneOut)
+	}()
+	go func() {
+		_, _ = ioCopy(&stderrBuf, stderrPipe)
+		close(doneErr)
+	}()
+
+	wallStart := timing.MonotonicNow()
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- cmd.Wait()
+	}()
+	resolvedHelperPath := helperPath
+	if realHelperPath, err := filepath.EvalSymlinks(helperPath); err == nil && realHelperPath != "" {
+		resolvedHelperPath = realHelperPath
+	}
+	cpuBaselineNs := uint64(0)
+	targetStarted := false
+	watchdog := time.NewTicker(5 * time.Millisecond)
+	defer watchdog.Stop()
+	lastWorkspaceScan := time.Time{}
+	maxCPUTimeMs := int64(0)
+	maxRSSKB := int64(0)
+	maxVmSizeKB := int64(0)
+
+	result := execResult{Status: "OK"}
+	for {
+		select {
+		case <-ctx.Done():
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			<-waitCh
+			if result.Status == "OK" {
+				result.Status = model.RunStatusTLE
+				result.Reason = "wall time limit exceeded"
+			}
+			goto done
+		case err := <-waitCh:
+			if err != nil && result.Status == "OK" {
+				result.Status = model.RunStatusRE
+			}
+			goto done
+		case <-watchdog.C:
+			if !targetStarted {
+				exePath, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", cmd.Process.Pid))
+				if err != nil {
+					continue
+				}
+				if realExePath, err := filepath.EvalSymlinks(exePath); err == nil && realExePath != "" {
+					exePath = realExePath
+				}
+				if exePath == resolvedHelperPath {
+					continue
+				}
+				targetStarted = true
+				cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
+				lastWorkspaceScan = time.Now()
+				continue
+			}
+			if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
+				cpuTimeMs := timing.MilliFromNanoseconds(cpuNs)
+				if cpuBaselineNs > 0 && cpuNs > cpuBaselineNs {
+					cpuTimeMs = timing.MilliFromNanoseconds(cpuNs - cpuBaselineNs)
+				}
+				if cpuTimeMs > maxCPUTimeMs {
+					maxCPUTimeMs = cpuTimeMs
+				}
+				if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+					result.Status = model.RunStatusTLE
+					result.Reason = "cpu time limit exceeded"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				}
+			}
+
+			if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", cmd.Process.Pid)); err == nil {
+				fields := strings.Fields(string(raw))
+				if len(fields) >= 2 {
+					pageKB := int64(os.Getpagesize() / 1024)
+					if v, err := strconv.ParseInt(fields[0], 10, 64); err == nil {
+						v *= pageKB
+						if v > maxVmSizeKB {
+							maxVmSizeKB = v
+						}
+					}
+					if v, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
+						v *= pageKB
+						if v > maxRSSKB {
+							maxRSSKB = v
+						}
+					}
+				}
+				if result.Status == "OK" && memoryLimitKB > 0 && maxRSSKB > memoryLimitKB {
+					result.Status = model.RunStatusMLE
+					result.Reason = "memory limit exceeded"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				}
+			}
+
+			if result.Status == "OK" && (lastWorkspaceScan.IsZero() || time.Since(lastWorkspaceScan) >= 25*time.Millisecond) {
+				lastWorkspaceScan = time.Now()
+				workspaceBytes := int64(0)
+				_ = filepath.Walk(ws.RootDir, func(path string, info os.FileInfo, err error) error {
+					if err != nil || info == nil {
+						return nil
+					}
+					if info.Mode().IsRegular() {
+						workspaceBytes += info.Size()
+					}
+					return nil
+				})
+				if workspaceBytes > workspaceLimitBytes {
+					result.Status = model.RunStatusWLE
+					result.Reason = "workspace quota exceeded"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				}
+			}
+		}
+	}
+done:
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+
+	<-doneOut
+	<-doneErr
+	<-imageDone
+
+	result.WallTimeMs = timing.SinceMillis(wallStart)
+	result.CPUTimeMs = maxCPUTimeMs
+	result.Stdout = stdoutBuf.Bytes()
+	result.Stderr = stderrBuf.Bytes()
+	result.MemoryKB = maxRSSKB
+
+	if ps := cmd.ProcessState; ps != nil {
+		if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
+			if ws.Exited() {
+				c := ws.ExitStatus()
+				result.ExitCode = &c
+			}
+			if ws.Signaled() {
+				if result.Status == "OK" {
+					if ws.Signal() == syscall.SIGKILL || ws.Signal() == syscall.SIGXCPU {
+						result.Status = model.RunStatusTLE
+					} else {
+						result.Status = model.RunStatusRE
+					}
+				}
+			}
+		}
+		if sysu, ok := ps.SysUsage().(*syscall.Rusage); ok {
+			if sysu.Maxrss > result.MemoryKB {
+				result.MemoryKB = sysu.Maxrss
+			}
+		}
+		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > result.CPUTimeMs {
+			result.CPUTimeMs = usageCPU
+		}
+	}
+	if result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
+		result.Status = model.RunStatusMLE
+		result.Reason = "memory limit exceeded"
+	}
+	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
+		result.Status = model.RunStatusInitFail
+		result.Reason = clipUTF8(result.Stderr, outputLimitBytes)
+	}
+	if result.Status == "OK" && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		result.Status = model.RunStatusTLE
+	}
+	return result
+}
+
+func ioCopy(dst interface{ Write([]byte) (int, error) }, src any) (int64, error) {
+	switch r := src.(type) {
+	case *os.File:
+		var n int64
+		buf := make([]byte, 16*1024)
+		for {
+			k, err := r.Read(buf)
+			if k > 0 {
+				nn, _ := dst.Write(buf[:k])
+				n += int64(nn)
+			}
+			if err != nil {
+				if errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "file already closed") {
+					return n, nil
+				}
+				if err.Error() == "EOF" {
+					return n, nil
+				}
+				return n, nil
+			}
+		}
+	case interface{ Read([]byte) (int, error) }:
+		var n int64
+		buf := make([]byte, 16*1024)
+		for {
+			k, err := r.Read(buf)
+			if k > 0 {
+				nn, _ := dst.Write(buf[:k])
+				n += int64(nn)
+			}
+			if err != nil {
+				if errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "file already closed") {
+					return n, nil
+				}
+				if errors.Is(err, context.Canceled) {
+					return n, nil
+				}
+				if err.Error() == "EOF" {
+					return n, nil
+				}
+				return n, nil
+			}
+		}
+	default:
+		return 0, nil
+	}
+}
+
+func outputLimitBytes(req *model.RunRequest) int {
+	if req == nil || req.Limits.OutputBytes <= 0 {
+		return defaultMaxOutputBytes
+	}
+	if req.Limits.OutputBytes > hardMaxOutputBytes {
+		return hardMaxOutputBytes
+	}
+	return req.Limits.OutputBytes
+}
+
+func firstImagePath(paths []model.OutputFile) string {
+	for _, p := range paths {
+		if strings.Contains(strings.ToLower(p.Path), "image") || strings.Contains(strings.ToLower(p.Path), "img") {
+			return p.Path
+		}
+	}
+	if len(paths) == 0 {
+		return ""
+	}
+	return paths[0].Path
+}
+
+func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit func(mime, b64 string, ts int64)) {
+	if emit == nil {
+		return
+	}
+	clean, err := util.ValidateRelativePath(relPath)
+	if err != nil {
+		return
+	}
+	ticker := time.NewTicker(80 * time.Millisecond)
+	defer ticker.Stop()
+	var offset int64
+	var carry string
+
+	readNew := func() {
+		output, err := openWorkspaceReadOnly(ws, clean)
+		if err != nil {
+			return
+		}
+		defer output.cleanup()
+		if output.info.Size() <= offset {
+			return
+		}
+		if _, err := output.file.Seek(offset, 0); err != nil {
+			return
+		}
+		reader := bufio.NewReader(output.file)
+		chunk, _ := ioReadAll(reader)
+		offset += int64(len(chunk))
+		if len(chunk) == 0 {
+			return
+		}
+		text := carry + string(chunk)
+		lines := strings.Split(text, "\n")
+		if !strings.HasSuffix(text, "\n") {
+			carry = lines[len(lines)-1]
+			lines = lines[:len(lines)-1]
+		} else {
+			carry = ""
+		}
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var payload struct {
+				Mime string `json:"mime"`
+				B64  string `json:"b64"`
+				TS   int64  `json:"ts"`
+			}
+			if err := json.Unmarshal([]byte(line), &payload); err != nil {
+				continue
+			}
+			if payload.Mime == "" || payload.B64 == "" {
+				continue
+			}
+			ts := payload.TS
+			if ts == 0 {
+				ts = time.Now().UnixMilli()
+			}
+			emit(payload.Mime, payload.B64, ts)
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			readNew()
+			return
+		case <-ticker.C:
+			readNew()
+		}
+	}
+}
+
+func ioReadAll(r *bufio.Reader) ([]byte, error) {
+	var out bytes.Buffer
+	for {
+		chunk, err := r.ReadBytes('\n')
+		if len(chunk) > 0 {
+			_, _ = out.Write(chunk)
+		}
+		if err != nil {
+			if strings.Contains(err.Error(), "EOF") {
+				return out.Bytes(), nil
+			}
+			return out.Bytes(), err
+		}
+	}
+}
