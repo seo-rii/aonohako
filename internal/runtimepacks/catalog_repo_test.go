@@ -124,25 +124,26 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 	}
 
 	tests := map[string][]string{
-		"aheui":   {"Hello, World!", "Main.aheui"},
-		"ada":     {"gnatmake", "Broken.adb"},
-		"asm":     {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
-		"clojure": {"PushbackReader", "Main.clj"},
-		"dart":    {"dart compile exe", "Broken.dart"},
-		"erlang":  {"Broken.erl", "erlc"},
-		"nim":     {"nim c", "Broken.nim"},
-		"pascal":  {"fpc", "Broken.pas"},
-		"racket":  {"raco make", "Broken.rkt"},
-		"zig":     {"Broken.zig", "zig build-exe"},
-		"r":       {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
-		"fortran": {"Broken.f90", "gfortran"},
-		"d":       {"Broken.d", "ldc2"},
-		"groovy":  {"Broken.groovy", "groovyc"},
-		"prolog":  {"Broken.pl", "swipl"},
-		"lisp":    {"Broken.lisp", "sbcl"},
-		"nasm":    {"Main.asm", "Broken.asm", "nasm -felf64"},
-		"coq":     {"Broken.v", "coqc"},
-		"python":  {"import qiskit", "import robot_judge", "from jungol_robot import Direction, Position"},
+		"aheui":      {"Hello, World!", "Main.aheui"},
+		"ada":        {"gnatmake", "Broken.adb"},
+		"asm":        {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
+		"clojure":    {"PushbackReader", "Main.clj"},
+		"dart":       {"dart compile exe", "Broken.dart"},
+		"erlang":     {"Broken.erl", "erlc"},
+		"nim":        {"nim c", "Broken.nim"},
+		"pascal":     {"fpc", "Broken.pas"},
+		"racket":     {"raco make", "Broken.rkt"},
+		"zig":        {"Broken.zig", "zig build-exe"},
+		"r":          {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
+		"fortran":    {"Broken.f90", "gfortran"},
+		"d":          {"Broken.d", "ldc2"},
+		"groovy":     {"Broken.groovy", "groovyc"},
+		"prolog":     {"Broken.pl", "swipl"},
+		"lisp":       {"Broken.lisp", "sbcl"},
+		"nasm":       {"Main.asm", "Broken.asm", "nasm -felf64"},
+		"coq":        {"Broken.v", "coqc"},
+		"python":     {"import qiskit", "import robot_judge", "from jungol_robot import Direction, Position"},
+		"typescript": {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist"},
 	}
 
 	for language, patterns := range tests {
@@ -224,6 +225,34 @@ func TestRepositoryCatalogIncludesAssemblyToolchains(t *testing.T) {
 	}
 	if !slices.Contains(nasmSpec.Install.Apt, "gcc") || !slices.Contains(nasmSpec.Install.Apt, "nasm") {
 		t.Fatalf("nasm apt packages = %v, want gcc and nasm", nasmSpec.Install.Apt)
+	}
+}
+
+func TestRepositoryCatalogPinsOfficialNode24Toolchain(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	for _, language := range []string{"javascript", "typescript"} {
+		spec, ok := catalog.Languages[language]
+		if !ok {
+			t.Fatalf("%s language missing from catalog", language)
+		}
+		if !reflect.DeepEqual(spec.Install.Apt, []string{"curl", "xz-utils"}) {
+			t.Fatalf("%s apt packages = %v, want curl and xz-utils", language, spec.Install.Apt)
+		}
+		installScript := strings.Join(spec.Install.Script, "\n")
+		for _, marker := range []string{
+			"export NODE_VERSION=24.15.0",
+			"https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz",
+			`ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node`,
+			`ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm`,
+		} {
+			if !strings.Contains(installScript, marker) {
+				t.Fatalf("%s install script must contain %q, got %q", language, marker, installScript)
+			}
+		}
 	}
 }
 

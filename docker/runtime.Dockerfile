@@ -36,14 +36,14 @@ RUN if [[ -n "${PIP_PACKAGES}" ]]; then \
       python3 -m pip install --break-system-packages --no-cache-dir ${PIP_PACKAGES}; \
     fi
 
-RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
-      npm install --global ${NPM_PACKAGES}; \
-    fi
-
 COPY --from=builder /usr/local/go /usr/local/go
 
 RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
       /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
+    fi
+
+RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
+      env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}; \
     fi
 
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako

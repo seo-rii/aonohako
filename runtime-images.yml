@@ -228,8 +228,19 @@ languages:
   javascript:
     install:
       apt:
-        - nodejs
-        - npm
+        - curl
+        - xz-utils
+      script:
+        - export NODE_VERSION=24.15.0
+        - curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
+        - mkdir -p /opt
+        - tar -xJf /tmp/node.tar.xz -C /opt
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
+        - rm -f /tmp/node.tar.xz
     smoke:
       command:
         - node
@@ -242,8 +253,19 @@ languages:
   typescript:
     install:
       apt:
-        - nodejs
-        - npm
+        - curl
+        - xz-utils
+      script:
+        - export NODE_VERSION=24.15.0
+        - curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
+        - mkdir -p /opt
+        - tar -xJf /tmp/node.tar.xz -C /opt
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
+        - rm -f /tmp/node.tar.xz
       npm:
         - typescript
     smoke:
@@ -251,7 +273,7 @@ languages:
         - bash
         - -lc
         - |
-          printf '%s\n' "import { writeFileSync, readFileSync } from 'fs';" "writeFileSync('same-folder.txt', 'ok');" "console.log(readFileSync('same-folder.txt', 'utf8'));" > Main.ts
+          printf '%s\n' "declare const require: any;" "const fs = require('fs');" "fs.writeFileSync('same-folder.txt', 'ok');" "console.log(fs.readFileSync('same-folder.txt', 'utf8'));" > Main.ts
           tsc Main.ts --module commonjs --target es2019 --outDir dist
           node dist/Main.js | grep '^ok$'
 
