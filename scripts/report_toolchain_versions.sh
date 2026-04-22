@@ -24,6 +24,25 @@ echo
 docker run --rm -i --entrypoint bash "${IMAGE_REF}" <<'EOF'
 set -euo pipefail
 
+declare -A enabled_languages=()
+declare -A reported_tools=()
+
+if [ -n "${AONOHAKO_LANGUAGES:-}" ]; then
+    while IFS= read -r raw_language; do
+        language="$(printf "%s" "${raw_language}" | tr -d '[:space:]')"
+        if [ -n "${language}" ]; then
+            enabled_languages["${language}"]=1
+        fi
+    done < <(printf "%s" "${AONOHAKO_LANGUAGES}" | tr ',' '\n')
+fi
+
+has_language() {
+    if [ "${#enabled_languages[@]}" -eq 0 ]; then
+        return 0
+    fi
+    [ -n "${enabled_languages[$1]:-}" ]
+}
+
 report() {
     local name="$1"
     shift
@@ -39,7 +58,10 @@ report() {
         output="<command failed>"
     fi
 
-    output="$(printf "%s" "${output}" | sed -n '1p' | tr -d '\r' | sed 's/|/\\|/g')"
+    output="$(printf "%s" "${output}" | tr -d '\r' | sed -n '/./{s/|/\\|/g;p;q;}')"
+    if [ -z "${output}" ]; then
+        output="<no version output>"
+    fi
     printf '| %s | `%s` |\n' "${name}" "${output}"
 }
 
@@ -93,60 +115,197 @@ PY
     printf '| %s | `%s` |\n' "${name}" "${output}"
 }
 
+report_once() {
+    local name="$1"
+    shift
+
+    if [ -n "${reported_tools[${name}]:-}" ]; then
+        return 0
+    fi
+    reported_tools["${name}"]=1
+    report "${name}" "$@"
+}
+
+report_python_pkg_once() {
+    local name="$1"
+    shift
+
+    if [ -n "${reported_tools[${name}]:-}" ]; then
+        return 0
+    fi
+    reported_tools["${name}"]=1
+    report_python_pkg "${name}" "$@"
+}
+
+report_python_module_once() {
+    local name="$1"
+    shift
+
+    if [ -n "${reported_tools[${name}]:-}" ]; then
+        return 0
+    fi
+    reported_tools["${name}"]=1
+    report_python_module "${name}" "$@"
+}
+
 echo "| Tool | Version |"
 echo "| --- | --- |"
-report "Python" python3 --version
-report "PyPy" pypy3 --version
-report "Node.js" node --version
-report "npm" npm --version
-report "TypeScript" tsc --version
-report "Java compiler" javac -version
-report "Java runtime" java -version
-report "Groovy" groovy --version
-report "Scala" scala -version
-report "GNU as" as --version
-report "GCC" gcc --version
-report "G++" g++ --version
-report "NASM" nasm -v
-report "Go" go version
-report "Rust" rustc --version
-report "Swift" swift --version
-report "Kotlin/Native" kotlinc-native -version
-report "Free Pascal" fpc -iV
-report "Nim" nim --version
-report "Clojure" clojure -e "(println (clojure-version))"
-report "Racket" racket --version
-report "Ada" gnatmake -v
-report "Dart" dart --version
-report "Julia" julia --version
-report "R" Rscript --version
-report "Erlang" erl -noshell -eval "io:format(\"~s~n\", [erlang:system_info(otp_release)]), halt()."
-report "Prolog" swipl --version
-report "OCaml" ocamlopt -version
-report "Elixir" elixir -e "IO.puts(System.version())"
-report "Ruby" ruby -e "print RUBY_VERSION, \"\n\""
-report "PHP" php --version
-report "Lua" lua5.4 -v
-report "Perl" perl -e "print sprintf(q(v%vd\n), \$^V)"
-report "SQLite" sqlite3 --version
-report ".NET" dotnet --version
-report "Coq" coqc --version
-report "Wasmtime" wasmtime --version
+if has_language "aheui"; then
+    report_once "Python" python3 --version
+    report_python_pkg_once "Aheui" "aheui"
+fi
 
-report_python_pkg "Aheui" "aheui"
-report_python_pkg "NumPy" "numpy"
-report_python_pkg "Pandas" "pandas"
-report_python_pkg "Seaborn" "seaborn"
-report_python_pkg "Matplotlib" "matplotlib"
-report_python_pkg "Pillow" "Pillow"
-report_python_pkg "Six" "six"
-report_python_pkg "Qiskit" "qiskit"
-report_python_pkg "PyParsing" "pyparsing"
-report_python_pkg "PyLaTeXEnc" "pylatexenc"
-report_python_pkg "Torch" "torch"
-report_python_pkg "TorchVision" "torchvision"
-report_python_pkg "JAX" "jax"
-report_python_pkg "JAXLIB" "jaxlib"
-report_python_module "JungolRobot" "jungol_robot"
-report_python_module "robot_judge" "robot_judge"
+if has_language "python"; then
+    report_once "Python" python3 --version
+    report_python_pkg_once "NumPy" "numpy"
+    report_python_pkg_once "Pandas" "pandas"
+    report_python_pkg_once "Seaborn" "seaborn"
+    report_python_pkg_once "Matplotlib" "matplotlib"
+    report_python_pkg_once "Pillow" "Pillow"
+    report_python_pkg_once "Six" "six"
+    report_python_pkg_once "Qiskit" "qiskit"
+    report_python_pkg_once "PyParsing" "pyparsing"
+    report_python_pkg_once "PyLaTeXEnc" "pylatexenc"
+    report_python_pkg_once "Torch" "torch"
+    report_python_pkg_once "TorchVision" "torchvision"
+    report_python_pkg_once "JAX" "jax"
+    report_python_pkg_once "JAXLIB" "jaxlib"
+    report_python_module_once "JungolRobot" "jungol_robot"
+    report_python_module_once "robot_judge" "robot_judge"
+fi
+
+if has_language "pypy"; then
+    report_once "PyPy" pypy3 --version
+fi
+
+if has_language "javascript" || has_language "typescript"; then
+    report_once "Node.js" node --version
+    report_once "npm" npm --version
+fi
+
+if has_language "typescript"; then
+    report_once "TypeScript" tsc --version
+fi
+
+if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure"; then
+    report_once "Java compiler" javac -version
+    report_once "Java runtime" java -version
+fi
+
+if has_language "groovy"; then
+    report_once "Groovy" groovy --version
+fi
+
+if has_language "scala"; then
+    report_once "Scala" scala -version
+fi
+
+if has_language "plain" || has_language "asm" || has_language "nasm"; then
+    report_once "GCC" gcc --version
+    report_once "G++" g++ --version
+fi
+
+if has_language "asm"; then
+    report_once "GNU as" as --version
+fi
+
+if has_language "nasm"; then
+    report_once "NASM" nasm -v
+fi
+
+if has_language "go"; then
+    report_once "Go" go version
+fi
+
+if has_language "rust"; then
+    report_once "Rust" rustc --version
+fi
+
+if has_language "swift"; then
+    report_once "Swift" swift --version
+fi
+
+if has_language "kotlin"; then
+    report_once "Kotlin/Native" kotlinc-native -version
+fi
+
+if has_language "pascal"; then
+    report_once "Free Pascal" fpc -iV
+fi
+
+if has_language "nim"; then
+    report_once "Nim" nim --version
+fi
+
+if has_language "clojure"; then
+    report_once "Clojure" clojure -e "(println (clojure-version))"
+fi
+
+if has_language "racket"; then
+    report_once "Racket" racket --version
+fi
+
+if has_language "ada"; then
+    report_once "Ada" gnatmake -v
+fi
+
+if has_language "dart"; then
+    report_once "Dart" dart --version
+fi
+
+if has_language "julia"; then
+    report_once "Julia" julia --version
+fi
+
+if has_language "r"; then
+    report_once "R" Rscript --version
+fi
+
+if has_language "erlang"; then
+    report_once "Erlang" erl -noshell -eval "io:format(\"~s~n\", [erlang:system_info(otp_release)]), halt()."
+fi
+
+if has_language "prolog"; then
+    report_once "Prolog" swipl --version
+fi
+
+if has_language "ocaml"; then
+    report_once "OCaml" ocamlopt -version
+fi
+
+if has_language "elixir"; then
+    report_once "Elixir" elixir -e "IO.puts(System.version())"
+fi
+
+if has_language "ruby"; then
+    report_once "Ruby" ruby -e "print RUBY_VERSION, \"\n\""
+fi
+
+if has_language "php"; then
+    report_once "PHP" php --version
+fi
+
+if has_language "lua"; then
+    report_once "Lua" lua5.4 -v
+fi
+
+if has_language "perl"; then
+    report_once "Perl" perl -e "printf \"v%vd\\n\", \$^V"
+fi
+
+if has_language "sqlite"; then
+    report_once "SQLite" sqlite3 --version
+fi
+
+if has_language "csharp" || has_language "fsharp"; then
+    report_once ".NET" dotnet --version
+fi
+
+if has_language "coq"; then
+    report_once "Coq" coqc --version
+fi
+
+if has_language "wasm"; then
+    report_once "Wasmtime" wasmtime --version
+fi
 EOF
