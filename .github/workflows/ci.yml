@@ -145,11 +145,9 @@ jobs:
           fi
           echo "has_artifacts=true" >> "${GITHUB_OUTPUT}"
       - run: |
-          shopt -s nullglob
-          for dir in toolchain-artifacts/toolchain-profile-*; do
-            cat "${dir}/summary.md" >> "$GITHUB_STEP_SUMMARY"
-            echo >> "$GITHUB_STEP_SUMMARY"
-          done
+          python3 scripts/aggregate_toolchain_summaries.py toolchain-artifacts \
+            | tee toolchain-artifacts/SUMMARY.md \
+            >> "$GITHUB_STEP_SUMMARY"
         if: steps.bundle.outputs.has_artifacts == 'true'
       - run: |
           find toolchain-artifacts -type f | sort > toolchain-artifacts/MANIFEST.txt
