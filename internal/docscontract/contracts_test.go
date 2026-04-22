@@ -52,8 +52,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`CloseRange(3, ..., CLOSE_RANGE_CLOEXEC)` fallback `CloseOnExec` loop") {
 		t.Fatalf("architecture.md must describe CLOEXEC fd inheritance behavior")
 	}
-	if !strings.Contains(architecture, "hardens shared scratch directories") {
-		t.Fatalf("architecture.md must describe startup scratch hardening")
+	if !strings.Contains(architecture, "ships shared scratch paths such as `/tmp`, `/var/tmp`, and `/run/lock`") || !strings.Contains(architecture, "entrypoint no longer mutates") {
+		t.Fatalf("architecture.md must describe static scratch hardening without startup mutation")
 	}
 	if !strings.Contains(architecture, "Server startup validates the deployment contract instead of trusting docs alone.") || !strings.Contains(architecture, "The following checks are enforced before the HTTP server starts") {
 		t.Fatalf("architecture.md must describe startup deployment contract validation")

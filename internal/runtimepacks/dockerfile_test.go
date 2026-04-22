@@ -191,3 +191,23 @@ func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.
 		}
 	}
 }
+
+func TestRuntimeDockerfileHardensSharedScratchPathsAtBuildTime(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	for _, marker := range []string{
+		"/tmp",
+		"/var/tmp",
+		"/run/lock",
+		"chmod 0755",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("runtime.Dockerfile must statically harden %s to avoid runtime scratch mutation", marker)
+		}
+	}
+}
