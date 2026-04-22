@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -42,39 +43,52 @@ type RuntimeOptions struct {
 	SandboxBackend     SandboxBackend
 }
 
-func CurrentExecutionMode() ExecutionMode {
-	switch strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_EXECUTION_MODE"))) {
+func CurrentExecutionMode() (ExecutionMode, error) {
+	switch raw := strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_EXECUTION_MODE"))); raw {
+	case "":
+		return ExecutionModeLocalDev, nil
 	case string(ExecutionModeCloudRun):
-		return ExecutionModeCloudRun
+		return ExecutionModeCloudRun, nil
 	case string(ExecutionModeLocalRoot):
-		return ExecutionModeLocalRoot
-	default:
-		return ExecutionModeLocalDev
+		return ExecutionModeLocalRoot, nil
+	case string(ExecutionModeLocalDev):
+		return ExecutionModeLocalDev, nil
 	}
+	return "", fmt.Errorf("unsupported AONOHAKO_EXECUTION_MODE: %q", os.Getenv("AONOHAKO_EXECUTION_MODE"))
 }
 
-func CurrentRuntimeOptions() RuntimeOptions {
-	legacy := runtimeOptionsForMode(CurrentExecutionMode())
+func CurrentRuntimeOptions() (RuntimeOptions, error) {
+	mode, err := CurrentExecutionMode()
+	if err != nil {
+		return RuntimeOptions{}, err
+	}
+	legacy := runtimeOptionsForMode(mode)
 	target := legacy.DeploymentTarget
-	switch strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_DEPLOYMENT_TARGET"))) {
+	switch raw := strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_DEPLOYMENT_TARGET"))); raw {
+	case "":
 	case string(DeploymentTargetCloudRun):
 		target = DeploymentTargetCloudRun
 	case string(DeploymentTargetSelfHosted):
 		target = DeploymentTargetSelfHosted
 	case string(DeploymentTargetDev):
 		target = DeploymentTargetDev
+	default:
+		return RuntimeOptions{}, fmt.Errorf("unsupported AONOHAKO_DEPLOYMENT_TARGET: %q", os.Getenv("AONOHAKO_DEPLOYMENT_TARGET"))
 	}
 
 	transport := legacy.ExecutionTransport
-	switch strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_EXECUTION_TRANSPORT"))) {
+	switch raw := strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_EXECUTION_TRANSPORT"))); raw {
+	case "":
 	case string(ExecutionTransportRemote):
 		transport = ExecutionTransportRemote
 	case string(ExecutionTransportEmbedded):
 		transport = ExecutionTransportEmbedded
+	default:
+		return RuntimeOptions{}, fmt.Errorf("unsupported AONOHAKO_EXECUTION_TRANSPORT: %q", os.Getenv("AONOHAKO_EXECUTION_TRANSPORT"))
 	}
 
 	backend := legacy.SandboxBackend
-	switch strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_SANDBOX_BACKEND"))) {
+	switch raw := strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_SANDBOX_BACKEND"))); raw {
 	case string(SandboxBackendContainer):
 		backend = SandboxBackendContainer
 	case string(SandboxBackendNone):
@@ -85,17 +99,20 @@ func CurrentRuntimeOptions() RuntimeOptions {
 		if transport == ExecutionTransportRemote {
 			backend = SandboxBackendNone
 		}
+	default:
+		return RuntimeOptions{}, fmt.Errorf("unsupported AONOHAKO_SANDBOX_BACKEND: %q", os.Getenv("AONOHAKO_SANDBOX_BACKEND"))
 	}
 
 	return RuntimeOptions{
 		DeploymentTarget:   target,
 		ExecutionTransport: transport,
 		SandboxBackend:     backend,
-	}
+	}, nil
 }
 
 func IsCloudRun() bool {
-	return CurrentRuntimeOptions().DeploymentTarget == DeploymentTargetCloudRun
+	opts, err := CurrentRuntimeOptions()
+	return err == nil && opts.DeploymentTarget == DeploymentTargetCloudRun
 }
 
 func CloudRunMarkersPresent() bool {
@@ -107,17 +124,23 @@ func CloudRunMarkersPresent() bool {
 	return false
 }
 
-func UsesDedicatedWorkRoot() bool {
-	opts := CurrentRuntimeOptions()
-	if opts.DeploymentTarget == DeploymentTargetCloudRun {
-		return true
+func UsesDedicatedWorkRoot() (bool, error) {
+	opts, err := CurrentRuntimeOptions()
+	if err != nil {
+		return false, err
 	}
-	return opts.DeploymentTarget == DeploymentTargetSelfHosted && opts.ExecutionTransport == ExecutionTransportEmbedded && opts.SandboxBackend == SandboxBackendHelper
+	if opts.DeploymentTarget == DeploymentTargetCloudRun {
+		return true, nil
+	}
+	return opts.DeploymentTarget == DeploymentTargetSelfHosted && opts.ExecutionTransport == ExecutionTransportEmbedded && opts.SandboxBackend == SandboxBackendHelper, nil
 }
 
-func RequiresRootForExecution() bool {
-	opts := CurrentRuntimeOptions()
-	return opts.ExecutionTransport == ExecutionTransportEmbedded && opts.SandboxBackend == SandboxBackendHelper
+func RequiresRootForExecution() (bool, error) {
+	opts, err := CurrentRuntimeOptions()
+	if err != nil {
+		return false, err
+	}
+	return opts.ExecutionTransport == ExecutionTransportEmbedded && opts.SandboxBackend == SandboxBackendHelper, nil
 }
 
 func runtimeOptionsForMode(mode ExecutionMode) RuntimeOptions {
