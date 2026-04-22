@@ -72,10 +72,28 @@ Dry-run image builds:
 
 ## Local development
 
-Run the server:
+For non-root local development, keep `/compile` local and forward `/execute` to
+a hardened runner:
 
 ```bash
+AONOHAKO_DEPLOYMENT_TARGET=dev \
+AONOHAKO_EXECUTION_TRANSPORT=remote \
+AONOHAKO_SANDBOX_BACKEND=none \
+AONOHAKO_REMOTE_RUNNER_URL=https://runner.internal \
 go run ./cmd/server
+```
+
+If you want the local root-backed helper sandbox, run it explicitly with a
+dedicated work root:
+
+```bash
+sudo env \
+  AONOHAKO_DEPLOYMENT_TARGET=selfhosted \
+  AONOHAKO_EXECUTION_TRANSPORT=embedded \
+  AONOHAKO_SANDBOX_BACKEND=helper \
+  AONOHAKO_WORK_ROOT=/work \
+  AONOHAKO_MAX_ACTIVE_RUNS=1 \
+  go run ./cmd/server
 ```
 
 Run the test suite:
@@ -103,8 +121,9 @@ Repository policy check:
   `cloudrun` → `cloudrun + embedded + helper`
   `local-root` → `selfhosted + embedded + helper`
   `local-dev` → `dev + embedded + helper`
-- `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` when
-  `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`, otherwise `max(1, cpu-2)`
+- `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` for `embedded + helper`, stays `1`
+  for `cloudrun`, and otherwise defaults to `max(1, cpu-2)`. The
+  `embedded + helper` backend rejects values other than `1`.
 - `AONOHAKO_MAX_PENDING_QUEUE` defaults to `0` for unlimited queue depth
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
@@ -149,9 +168,12 @@ Security posture depends on where it runs:
 
 - `cloudrun + embedded + helper` is the supported production security target.
   Startup fails closed unless `AONOHAKO_WORK_ROOT` is configured, writable,
-  owned by the server UID, and the process is running as root.
+  not group/world writable, owned by the server UID, the process is running as
+  root, and the helper queue is single-slot.
 - `selfhosted + embedded + helper` applies the same dedicated work-root
-  contract for local root-backed containers and VMs.
+  contract for local root-backed containers and VMs, including
+  `AONOHAKO_MAX_ACTIVE_RUNS=1` so concurrent runs do not share the same sandbox
+  UID.
 - `dev + remote + none` is the non-root development path. The local server keeps
   serving `/compile` and forwards `/execute` to a remote hardened runner.
 - `dev + embedded + helper` remains available through the compatibility mode, but

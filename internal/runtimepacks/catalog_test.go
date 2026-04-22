@@ -303,3 +303,21 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 		t.Fatalf("ci workflow must consolidate per-profile summaries into the job summary")
 	}
 }
+
+func TestWorkflowSandboxJobCoversRootBackedWorkspacePermissionChecks(t *testing.T) {
+	path := filepath.Join("..", "..", ".github", "workflows", "ci.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	for _, marker := range []string{
+		"TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser",
+		"TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("sandbox workflow must cover %q", marker)
+		}
+	}
+}

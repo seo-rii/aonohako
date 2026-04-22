@@ -259,8 +259,11 @@ The following checks are enforced before the HTTP server starts:
 - `cloudrun` always requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`
 - every required work root must already exist, be a directory, be owned by the
-  current server UID, and accept a probe directory create/remove cycle
+  current server UID, not be group/world writable, and accept a probe
+  directory create/remove cycle
 - `embedded + helper` requires the process to be running as root
+- `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
+  executions do not overlap under the shared sandbox UID
 
 Recommended Cloud Run deployment baseline:
 
@@ -293,6 +296,8 @@ Why the design looks this way:
 - the runtime does not assume Landlock availability
 - Cloud Run marker env vars alone do not switch security policy; the deployment
   target is explicit to avoid accidental partial hardening
+- the helper backend intentionally serializes active runs because every
+  sandboxed process currently drops to the same UID/GID pair inside the runner
 
 ## Runtime Image Model
 
