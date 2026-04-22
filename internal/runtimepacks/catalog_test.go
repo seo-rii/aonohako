@@ -236,6 +236,8 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_python_pkg_once "NumPy" "numpy"`,
 		`report_python_pkg_once "Torch" "torch"`,
 		`report_python_pkg_once "JAXLIB" "jaxlib"`,
+		`report_once "GCC" gcc -dumpfullversion -dumpversion`,
+		`report_once "G++" g++ -dumpfullversion -dumpversion`,
 		`report_once "GNU as" as --version`,
 		`report_once "NASM" nasm -v`,
 		`report_once "PyPy" pypy3 --version`,
