@@ -122,6 +122,80 @@ func TestCaptureFileOutputRejectsSymlink(t *testing.T) {
 	}
 }
 
+func TestCaptureFileOutputDoesNotFallbackFromBoxSymlinkToWorkspaceRoot(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ws.RootDir, "result.txt"), []byte("workspace-root"), 0o644); err != nil {
+		t.Fatalf("write workspace root fallback: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(ws.BoxDir, "result.txt")); err != nil {
+		t.Fatalf("symlink result.txt: %v", err)
+	}
+
+	if _, err := captureFileOutput(ws, model.OutputFile{Path: "result.txt"}); err == nil {
+		t.Fatalf("expected symlink in box dir to block workspace-root fallback")
+	}
+}
+
+func TestCaptureFileOutputPrefersBoxContentOverWorkspaceRoot(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(ws.RootDir, "result.txt"), []byte("workspace-root"), 0o644); err != nil {
+		t.Fatalf("write workspace root result: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ws.BoxDir, "result.txt"), []byte("box"), 0o644); err != nil {
+		t.Fatalf("write box result: %v", err)
+	}
+
+	got, err := captureFileOutput(ws, model.OutputFile{Path: "result.txt"})
+	if err != nil {
+		t.Fatalf("captureFileOutput: %v", err)
+	}
+	if string(got) != "box" {
+		t.Fatalf("captureFileOutput read %q, want box content", string(got))
+	}
+}
+
+func TestCaptureSidecarOutputsSkipsEscapingOrSymlinkedPaths(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ws.RootDir, "result.txt"), []byte("workspace-root"), 0o644); err != nil {
+		t.Fatalf("write workspace root fallback: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(ws.BoxDir, "result.txt")); err != nil {
+		t.Fatalf("symlink result.txt: %v", err)
+	}
+
+	outputs := captureSidecarOutputs(ws, []model.OutputFile{
+		{Path: "result.txt"},
+		{Path: "../escape.txt"},
+		{Path: "/tmp/escape.txt"},
+	})
+	if len(outputs) != 0 {
+		t.Fatalf("expected suspicious sidecar outputs to be ignored, got %+v", outputs)
+	}
+}
+
 func TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("requires root to drop to sandbox user")
