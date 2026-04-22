@@ -200,8 +200,6 @@ func MaybeRunFromEnv() bool {
 	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataNrOffset)
 
 	for _, sysno := range []uint32{
-		uint32(unix.SYS_FORK),
-		uint32(unix.SYS_VFORK),
 		uint32(unix.SYS_UNSHARE),
 		uint32(unix.SYS_SETNS),
 		uint32(unix.SYS_CHROOT),
@@ -255,6 +253,8 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_SWAPOFF),
 		uint32(unix.SYS_SETHOSTNAME),
 		uint32(unix.SYS_SETDOMAINNAME),
+		uint32(unix.SYS_SETPGID),
+		uint32(unix.SYS_SETSID),
 		uint32(unix.SYS_CHMOD),
 		uint32(unix.SYS_FCHMOD),
 		uint32(unix.SYS_FCHMODAT),
@@ -269,14 +269,24 @@ func MaybeRunFromEnv() bool {
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 	}
 
-	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE3), 0, 1)
-	appendStmt(unix.BPF_RET|unix.BPF_K, clone3Deny)
+	if !req.AllowProcesses {
+		for _, sysno := range []uint32{
+			uint32(unix.SYS_FORK),
+			uint32(unix.SYS_VFORK),
+		} {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
 
-	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE), 0, 4)
-	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
-	appendJump(unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, unix.CLONE_THREAD, 0, 1)
-	appendStmt(unix.BPF_RET|unix.BPF_K, allow)
-	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE3), 0, 1)
+		appendStmt(unix.BPF_RET|unix.BPF_K, clone3Deny)
+
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE), 0, 4)
+		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
+		appendJump(unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, unix.CLONE_THREAD, 0, 1)
+		appendStmt(unix.BPF_RET|unix.BPF_K, allow)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	}
 
 	if !req.EnableNetwork {
 		for _, sysno := range []uint32{
