@@ -423,6 +423,40 @@ func TestCompileInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestCompileRejectsUnknownJSONFields(t *testing.T) {
+	s := newServerForTest(t)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", strings.NewReader(`{"lang":"UHMLANG","sources":[{"name":"Main.uhm","data_b64":"dGV4dA=="}],"unexpected":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown compile field, got %d", resp.StatusCode)
+	}
+}
+
+func TestCompileRejectsTrailingJSONPayload(t *testing.T) {
+	s := newServerForTest(t)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", strings.NewReader(`{"lang":"UHMLANG","sources":[{"name":"Main.uhm","data_b64":"dGV4dA=="}]}{"extra":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for trailing compile JSON, got %d", resp.StatusCode)
+	}
+}
+
 func TestExecuteInvalidJSON(t *testing.T) {
 	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())
@@ -437,6 +471,40 @@ func TestExecuteInvalidJSON(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid JSON, got %d", resp.StatusCode)
+	}
+}
+
+func TestExecuteRejectsUnknownJSONFields(t *testing.T) {
+	s := newServerForTest(t)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", strings.NewReader(`{"lang":"text","binaries":[{"name":"Main.txt","data_b64":"dGV4dA=="}],"limits":{"time_ms":1000,"memory_mb":64},"unexpected":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown execute field, got %d", resp.StatusCode)
+	}
+}
+
+func TestExecuteRejectsTrailingJSONPayload(t *testing.T) {
+	s := newServerForTest(t)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", strings.NewReader(`{"lang":"text","binaries":[{"name":"Main.txt","data_b64":"dGV4dA=="}],"limits":{"time_ms":1000,"memory_mb":64}}{"extra":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for trailing execute JSON, got %d", resp.StatusCode)
 	}
 }
 

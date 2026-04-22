@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -72,7 +73,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req model.CompileRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<20)).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -139,7 +140,7 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req model.RunRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<20)).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -209,4 +210,19 @@ func firstNonEmpty(v ...string) string {
 		}
 	}
 	return ""
+}
+
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return errors.New("unexpected trailing data")
+		}
+		return err
+	}
+	return nil
 }
