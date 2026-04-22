@@ -244,6 +244,103 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 	}
 }
 
+func TestAggregateToolchainSummariesScriptMergesConsistentVersions(t *testing.T) {
+	root := t.TempDir()
+	for _, fixture := range []struct {
+		profile string
+		body    string
+	}{
+		{
+			profile: "type-a",
+			body:    "## Runtime Toolchain Versions\n\n- Image: `a`\n\n| Tool | Version |\n| --- | --- |\n| GCC | `14.2.0` |\n| Python | `3.13.3` |\n",
+		},
+		{
+			profile: "type-b",
+			body:    "## Runtime Toolchain Versions\n\n- Image: `b`\n\n| Tool | Version |\n| --- | --- |\n| GCC | `14.2.0` |\n| Swift | `6.1` |\n",
+		},
+	} {
+		dir := filepath.Join(root, "toolchain-profile-"+fixture.profile)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q): %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "summary.md"), []byte(fixture.body), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", dir, err)
+		}
+	}
+
+	path := filepath.Join("..", "..", "scripts", "aggregate_toolchain_summaries.py")
+	cmd := exec.Command("python3", path, root)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("aggregate_toolchain_summaries.py: %v\n%s", err, string(out))
+	}
+
+	body := string(out)
+	for _, want := range []string{
+		"## Runtime Toolchain Versions",
+		"- Profiles: `type-a`, `type-b`",
+		"| GCC | `14.2.0` | `type-a`, `type-b` |",
+		"| Python | `3.13.3` | `type-a` |",
+		"| Swift | `6.1` | `type-b` |",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("aggregate summary missing %q in %q", want, body)
+		}
+	}
+	if strings.Contains(body, "### Version Differences") {
+		t.Fatalf("aggregate summary should omit conflict table when versions match, got %q", body)
+	}
+}
+
+func TestAggregateToolchainSummariesScriptSeparatesVersionConflicts(t *testing.T) {
+	root := t.TempDir()
+	for _, fixture := range []struct {
+		profile string
+		body    string
+	}{
+		{
+			profile: "type-a",
+			body:    "## Runtime Toolchain Versions\n\n- Image: `a`\n\n| Tool | Version |\n| --- | --- |\n| GCC | `14.2.0` |\n| Python | `3.13.3` |\n",
+		},
+		{
+			profile: "type-b",
+			body:    "## Runtime Toolchain Versions\n\n- Image: `b`\n\n| Tool | Version |\n| --- | --- |\n| Python | `3.12.9` |\n| Swift | `6.1` |\n",
+		},
+		{
+			profile: "type-c",
+			body:    "## Runtime Toolchain Versions\n\n- Image: `c`\n\n| Tool | Version |\n| --- | --- |\n| GCC | `14.2.0` |\n| Python | `3.13.3` |\n",
+		},
+	} {
+		dir := filepath.Join(root, "toolchain-profile-"+fixture.profile)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q): %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "summary.md"), []byte(fixture.body), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", dir, err)
+		}
+	}
+
+	path := filepath.Join("..", "..", "scripts", "aggregate_toolchain_summaries.py")
+	cmd := exec.Command("python3", path, root)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("aggregate_toolchain_summaries.py: %v\n%s", err, string(out))
+	}
+
+	body := string(out)
+	for _, want := range []string{
+		"| GCC | `14.2.0` | `type-a`, `type-c` |",
+		"| Swift | `6.1` | `type-b` |",
+		"### Version Differences",
+		"| Python | `3.12.9` | `type-b` |",
+		"| Python | `3.13.3` | `type-a`, `type-c` |",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("aggregate summary missing %q in %q", want, body)
+		}
+	}
+}
+
 func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	path := filepath.Join("..", "..", ".github", "workflows", "ci.yml")
 	data, err := os.ReadFile(path)
@@ -279,8 +376,8 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "toolchain-summary-bundle") {
 		t.Fatalf("ci workflow must publish a final bundle artifact for toolchain reports")
 	}
-	if !strings.Contains(body, "cat \"${dir}/summary.md\" >> \"$GITHUB_STEP_SUMMARY\"") {
-		t.Fatalf("ci workflow must consolidate per-profile summaries into the job summary")
+	if !strings.Contains(body, "scripts/aggregate_toolchain_summaries.py toolchain-artifacts") {
+		t.Fatalf("ci workflow must aggregate per-profile summaries into the job summary")
 	}
 }
 
