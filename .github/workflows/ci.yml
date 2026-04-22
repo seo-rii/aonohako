@@ -178,16 +178,4 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - run: chmod +x scripts/build_runtime_images.sh
       - run: ./scripts/build_runtime_images.sh -mode production -only type-i -tag-prefix "aonohako-ci-mix"
-      - run: >
-          docker run --rm "aonohako-ci-mix:type-i" bash -lc
-          "printf '%s\n' '#include <stdio.h>' 'int main(void) { puts(\"ok\"); return 0; }' > Main.c &&
-          gcc -O2 -pipe Main.c -o Main &&
-          [ \"\$(./Main)\" = ok ]"
-      - run: >
-          docker run --rm "aonohako-ci-mix:type-i" python3 -c
-          "from pathlib import Path; import numpy as np; Path('same-folder.txt').write_text(str(int(np.arange(5).sum())), encoding='utf-8'); assert Path('same-folder.txt').read_text(encoding='utf-8') == '10'; print('ok')"
-      - run: >
-          docker run --rm "aonohako-ci-mix:type-i" bash -lc
-          "printf '%s\n' 'public class Main {' '  public static void main(String[] args) {' '    System.out.println(\"ok\");' '  }' '}' > Main.java &&
-          javac --release 11 Main.java &&
-          java Main | grep '^ok$'"
+      - run: docker run --rm "aonohako-ci-mix:type-i" aonohako-smoke

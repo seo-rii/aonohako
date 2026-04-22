@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -z "${AONOHAKO_SMOKE_COMMAND:-}" ]]; then
-  echo "AONOHAKO_SMOKE_COMMAND is empty" >&2
-  exit 1
-fi
-
 suite=image-permissions
 case ",${AONOHAKO_LANGUAGES:-}," in
   *,python,*)
@@ -16,6 +11,17 @@ esac
 for _ in 1 2 3; do
   aonohako-selftest "${suite}"
 done
+
+work_root="${AONOHAKO_SMOKE_WORK_ROOT:-/work}"
+mkdir -p "${work_root}"
+chmod 0700 "${work_root}"
+export AONOHAKO_EXECUTION_MODE=local-root
+export AONOHAKO_WORK_ROOT="${work_root}"
+aonohako-selftest compile-execute
+
+if [[ -z "${AONOHAKO_SMOKE_COMMAND:-}" ]]; then
+  exit 0
+fi
 
 smoke_parts=()
 rest=${AONOHAKO_SMOKE_COMMAND}

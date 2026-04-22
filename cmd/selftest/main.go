@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,8 +18,12 @@ import (
 	"syscall"
 	"time"
 
+	"aonohako/internal/api"
+	"aonohako/internal/compile"
+	"aonohako/internal/config"
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
 )
 
@@ -24,13 +33,21 @@ type suiteCase struct {
 	check func(model.RunResponse) error
 }
 
+type compileExecuteCase struct {
+	compileLang    string
+	entryPoint     string
+	expectedStdout string
+	limits         model.Limits
+	sources        []model.Source
+}
+
 func main() {
 	if sandbox.MaybeRunFromEnv() {
 		return
 	}
 
 	if len(os.Args) != 2 {
-		_, _ = fmt.Fprintln(os.Stderr, "usage: aonohako-selftest image-permissions|permissions")
+		_, _ = fmt.Fprintln(os.Stderr, "usage: aonohako-selftest image-permissions|permissions|compile-execute")
 		os.Exit(2)
 	}
 
@@ -42,6 +59,11 @@ func main() {
 		}
 	case "permissions":
 		if err := runPermissionsSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "compile-execute":
+		if err := runCompileExecuteSuite(); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -171,6 +193,851 @@ func runPermissionsSuite() error {
 
 	_, _ = fmt.Fprintln(os.Stdout, "sandbox permissions ok")
 	return nil
+}
+
+func runCompileExecuteSuite() error {
+	rawLanguages := strings.TrimSpace(os.Getenv("AONOHAKO_LANGUAGES"))
+	if rawLanguages == "" {
+		return fmt.Errorf("AONOHAKO_LANGUAGES is empty")
+	}
+
+	server := api.NewWithServices(
+		config.Config{
+			MaxActiveRuns:     1,
+			MaxPendingQueue:   1,
+			HeartbeatInterval: time.Second,
+		},
+		compile.New(),
+		execute.New(),
+	)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	cases := compileExecuteCases()
+	seen := map[string]struct{}{}
+	for _, rawLanguage := range strings.Split(rawLanguages, ",") {
+		language := strings.TrimSpace(rawLanguage)
+		if language == "" {
+			continue
+		}
+		if _, ok := seen[language]; ok {
+			continue
+		}
+		seen[language] = struct{}{}
+
+		tc, ok := cases[language]
+		if !ok {
+			return fmt.Errorf("compile-execute selftest has no case for language %q", language)
+		}
+
+		profile, ok := profiles.Resolve(tc.compileLang)
+		if !ok {
+			return fmt.Errorf("compile-execute selftest could not resolve compile profile %q", tc.compileLang)
+		}
+
+		compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+			Lang:       tc.compileLang,
+			Sources:    tc.sources,
+			EntryPoint: tc.entryPoint,
+		})
+		if err != nil {
+			return fmt.Errorf("%s compile request failed: %w", language, err)
+		}
+		if compileResp.Status != model.CompileStatusOK {
+			return fmt.Errorf("%s compile failed: status=%s reason=%s stdout=%q stderr=%q", language, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+		}
+
+		limits := tc.limits
+		if limits.TimeMs <= 0 {
+			limits.TimeMs = 6000
+		}
+		if limits.MemoryMB <= 0 {
+			limits.MemoryMB = 512
+		}
+
+		binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+		for _, artifact := range compileResp.Artifacts {
+			binaries = append(binaries, model.Binary{
+				Name:    artifact.Name,
+				DataB64: artifact.DataB64,
+				Mode:    artifact.Mode,
+			})
+		}
+
+		runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+			Lang:           profile.RunLang,
+			Binaries:       binaries,
+			EntryPoint:     tc.entryPoint,
+			ExpectedStdout: tc.expectedStdout,
+			Limits:         limits,
+		})
+		if err != nil {
+			return fmt.Errorf("%s execute request failed: %w", language, err)
+		}
+		if runResp.Status != model.RunStatusAccepted {
+			return fmt.Errorf("%s execute failed: status=%s reason=%s stdout=%q stderr=%q", language, runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
+		}
+	}
+
+	_, _ = fmt.Fprintln(os.Stdout, "compile execute ok")
+	return nil
+}
+
+func postCompileRequest(baseURL string, req model.CompileRequest) (model.CompileResponse, error) {
+	return postSSEJSON[model.CompileResponse](baseURL+"/compile", req)
+}
+
+func postExecuteRequest(baseURL string, req model.RunRequest) (model.RunResponse, error) {
+	return postSSEJSON[model.RunResponse](baseURL+"/execute", req)
+}
+
+func postSSEJSON[T any](url string, payload any) (T, error) {
+	var zero T
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return zero, err
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return zero, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return zero, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return zero, fmt.Errorf("unexpected status %s: %s", resp.Status, strings.TrimSpace(string(raw)))
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	eventName := ""
+	dataLines := make([]string, 0, 4)
+	lastErr := ""
+	dispatch := func() (T, bool, error) {
+		var out T
+		if eventName == "" {
+			dataLines = dataLines[:0]
+			return out, false, nil
+		}
+		payload := strings.Join(dataLines, "\n")
+		dataLines = dataLines[:0]
+		switch eventName {
+		case "error":
+			var message struct {
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal([]byte(payload), &message); err == nil {
+				lastErr = strings.TrimSpace(message.Message)
+			}
+			return out, false, nil
+		case "result":
+			if err := json.Unmarshal([]byte(payload), &out); err != nil {
+				return out, false, err
+			}
+			return out, true, nil
+		default:
+			return out, false, nil
+		}
+	}
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return zero, err
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			out, done, dispatchErr := dispatch()
+			if dispatchErr != nil {
+				return zero, dispatchErr
+			}
+			if done {
+				return out, nil
+			}
+			eventName = ""
+		} else if strings.HasPrefix(line, "event:") {
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		} else if strings.HasPrefix(line, "data:") {
+			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+		}
+		if err == io.EOF {
+			break
+		}
+	}
+
+	if strings.TrimSpace(lastErr) != "" {
+		return zero, fmt.Errorf("stream ended without result: %s", lastErr)
+	}
+	return zero, fmt.Errorf("stream ended without result")
+}
+
+func compileExecuteCases() map[string]compileExecuteCase {
+	source := func(name, body string) model.Source {
+		return model.Source{Name: name, DataB64: encodeScript(body)}
+	}
+	whitespaceProgram := func(text string) string {
+		space := " "
+		tab := "\t"
+		lf := "\n"
+		number := func(value int) string {
+			sign := space
+			if value < 0 {
+				sign = tab
+				value = -value
+			}
+			bits := fmt.Sprintf("%b", value)
+			var payload strings.Builder
+			for _, ch := range bits {
+				if ch == '0' {
+					payload.WriteString(space)
+				} else {
+					payload.WriteString(tab)
+				}
+			}
+			return sign + payload.String() + lf
+		}
+		push := func(value int) string {
+			return space + space + number(value)
+		}
+		outChar := tab + lf + space + space
+		var program strings.Builder
+		for _, ch := range text {
+			program.WriteString(push(int(ch)))
+			program.WriteString(outChar)
+		}
+		program.WriteString(lf)
+		program.WriteString(lf)
+		program.WriteString(lf)
+		return program.String()
+	}
+
+	return map[string]compileExecuteCase{
+		"ada": {
+			compileLang:    "ADA",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.adb", `with Ada.Text_IO; use Ada.Text_IO;
+procedure Main is
+  F : File_Type;
+begin
+  Create(F, Out_File, "same-folder.txt");
+  Put_Line(F, "ok");
+  Close(F);
+  Open(F, In_File, "same-folder.txt");
+  Put_Line(Get_Line(F));
+  Close(F);
+end Main;`),
+			},
+		},
+		"plain": {
+			compileLang:    "C11",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.c", `#include <stdio.h>
+int main(void) {
+    FILE *out = fopen("same-folder.txt", "w");
+    if (out == NULL) {
+        return 1;
+    }
+    fputs("ok\n", out);
+    fclose(out);
+    FILE *in = fopen("same-folder.txt", "r");
+    if (in == NULL) {
+        return 1;
+    }
+    char buf[16] = {0};
+    if (fgets(buf, sizeof buf, in) == NULL) {
+        fclose(in);
+        return 1;
+    }
+    fclose(in);
+    fputs(buf, stdout);
+    return 0;
+}`),
+			},
+		},
+		"aheui": {
+			compileLang:    "AHEUI",
+			expectedStdout: "Hello, World!\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.aheui", "밞바밤밣받밞밞밞밦밞바밝밣바박박밦밞받밞받밞발밣받뱔희밞땨몋드떠받볋"),
+			},
+		},
+		"asm": {
+			compileLang:    "ASM",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.s", `.global _start
+.section .text
+_start:
+    mov $1, %rax
+    mov $1, %rdi
+    lea msg(%rip), %rsi
+    mov $3, %rdx
+    syscall
+    mov $60, %rax
+    xor %rdi, %rdi
+    syscall
+.section .rodata
+msg:
+    .ascii "ok\n"`),
+			},
+		},
+		"bf": {
+			compileLang:    "BF",
+			expectedStdout: "Hello World!\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.bf", "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>."),
+			},
+		},
+		"clojure": {
+			compileLang:    "CLOJURE",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.clj", `(require '[clojure.string :as str])
+(spit "same-folder.txt" "ok")
+(println (str/trim (slurp "same-folder.txt")))`),
+			},
+		},
+		"coq": {
+			compileLang: "COQ",
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.v", `Theorem same_folder_ok : 1 = 1.
+Proof. reflexivity. Qed.`),
+			},
+		},
+		"csharp": {
+			compileLang:    "CSHARP",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Program.cs", `System.IO.File.WriteAllText("same-folder.txt", "ok");
+Console.WriteLine(System.IO.File.ReadAllText("same-folder.txt"));`),
+			},
+		},
+		"d": {
+			compileLang:    "D",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.d", `import std.file : readText, write;
+import std.stdio : writeln;
+
+void main() {
+    write("same-folder.txt", "ok");
+    writeln(readText("same-folder.txt"));
+}`),
+			},
+		},
+		"dart": {
+			compileLang:    "DART",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.dart", `import 'dart:io';
+
+void main() {
+  File('same-folder.txt').writeAsStringSync('ok');
+  stdout.writeln(File('same-folder.txt').readAsStringSync().trim());
+}`),
+			},
+		},
+		"elixir": {
+			compileLang:    "ELIXIR",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.exs", `File.write!("same-folder.txt", "ok")
+IO.puts(File.read!("same-folder.txt"))`),
+			},
+		},
+		"erlang": {
+			compileLang:    "ERLANG",
+			entryPoint:     "main:main",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("main.erl", `-module(main).
+-export([main/0]).
+
+main() ->
+    ok = file:write_file("same-folder.txt", <<"ok">>),
+    {ok, Data} = file:read_file("same-folder.txt"),
+    io:format("~s~n", [Data]).`),
+			},
+		},
+		"fortran": {
+			compileLang:    "FORTRAN",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.f90", `program main
+  implicit none
+  character(len=32) :: line
+  open(unit=10, file='same-folder.txt', status='replace', action='write')
+  write(10, '(A)') 'ok'
+  close(10)
+  open(unit=11, file='same-folder.txt', status='old', action='read')
+  read(11, '(A)') line
+  close(11)
+  print '(A)', trim(line)
+end program main`),
+			},
+		},
+		"fsharp": {
+			compileLang:    "FSHARP",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Program.fs", `open System.IO
+
+[<EntryPoint>]
+let main _ =
+    File.WriteAllText("same-folder.txt", "ok")
+    printfn "%s" (File.ReadAllText("same-folder.txt"))
+    0`),
+			},
+		},
+		"go": {
+			compileLang:    "GO",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("main.go", `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	if err := os.WriteFile("same-folder.txt", []byte("ok\n"), 0o644); err != nil {
+		panic(err)
+	}
+	data, err := os.ReadFile("same-folder.txt")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Print(string(data))
+}`),
+			},
+		},
+		"groovy": {
+			compileLang:    "GROOVY",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.groovy", `class Main {
+    static void main(String[] args) {
+        new File("same-folder.txt").text = "ok"
+        println new File("same-folder.txt").text.trim()
+    }
+}`),
+			},
+		},
+		"haskell": {
+			compileLang:    "HASKELL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.hs", `main :: IO ()
+main = do
+  writeFile "same-folder.txt" "ok"
+  readFile "same-folder.txt" >>= putStrLn`),
+			},
+		},
+		"java": {
+			compileLang:    "JAVA11",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.java", `import java.nio.file.Files;
+import java.nio.file.Path;
+
+public class Main {
+  public static void main(String[] args) throws Exception {
+    Path path = Path.of("same-folder.txt");
+    Files.writeString(path, "ok");
+    System.out.println(Files.readString(path).trim());
+  }
+}`),
+			},
+		},
+		"javascript": {
+			compileLang:    "JAVASCRIPT",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.js", `const fs = require('fs');
+fs.writeFileSync('same-folder.txt', 'ok');
+console.log(fs.readFileSync('same-folder.txt', 'utf8'));`),
+			},
+		},
+		"julia": {
+			compileLang:    "JULIA",
+			expectedStdout: "2\n",
+			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.jl", `using Statistics
+
+open("same-folder.txt", "w") do io
+    write(io, string(mean([1, 2, 3])))
+end
+println(read("same-folder.txt", String))`),
+			},
+		},
+		"kotlin": {
+			compileLang:    "KOTLIN",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.kt", `fun main() {
+  println("ok")
+}`),
+			},
+		},
+		"lisp": {
+			compileLang:    "LISP",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.lisp", `(with-open-file (out "same-folder.txt"
+                     :direction :output
+                     :if-exists :supersede
+                     :if-does-not-exist :create)
+  (write-line "ok" out))
+(with-open-file (in "same-folder.txt" :direction :input)
+  (format t "~a~%" (read-line in nil "")))`),
+			},
+		},
+		"lua": {
+			compileLang:    "LUA",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.lua", `local out = assert(io.open("same-folder.txt", "w"))
+out:write("ok")
+out:close()
+local input = assert(io.open("same-folder.txt", "r"))
+local data = input:read("*a")
+input:close()
+print(data)`),
+			},
+		},
+		"nasm": {
+			compileLang:    "NASM",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.asm", `default rel
+global _start
+section .text
+_start:
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rel msg]
+    mov rdx, msg_len
+    syscall
+    mov rax, 60
+    xor rdi, rdi
+    syscall
+section .rodata
+msg: db "ok", 10
+msg_len equ $ - msg`),
+			},
+		},
+		"nim": {
+			compileLang:    "NIM",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.nim", `import std/[os, strutils]
+
+writeFile("same-folder.txt", "ok")
+echo readFile("same-folder.txt").strip()`),
+			},
+		},
+		"ocaml": {
+			compileLang:    "OCAML",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.ml", `let () =
+  let out = open_out "same-folder.txt" in
+  output_string out "ok\n";
+  close_out out;
+  let input = open_in "same-folder.txt" in
+  print_string (input_line input);
+  print_newline ();
+  close_in input`),
+			},
+		},
+		"pascal": {
+			compileLang:    "PASCAL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.pas", `program Main;
+var
+  F: Text;
+  Line: string;
+begin
+  Assign(F, 'same-folder.txt');
+  Rewrite(F);
+  Writeln(F, 'ok');
+  Close(F);
+  Assign(F, 'same-folder.txt');
+  Reset(F);
+  ReadLn(F, Line);
+  Close(F);
+  Writeln(Line);
+end.`),
+			},
+		},
+		"perl": {
+			compileLang:    "PERL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.pl", `open my $fh, '>', 'same-folder.txt' or die $!;
+print {$fh} "ok";
+close $fh;
+open my $rfh, '<', 'same-folder.txt' or die $!;
+print scalar <$rfh>;
+close $rfh;`),
+			},
+		},
+		"php": {
+			compileLang:    "PHP",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.php", `<?php
+file_put_contents('same-folder.txt', "ok\n");
+echo file_get_contents('same-folder.txt');`),
+			},
+		},
+		"prolog": {
+			compileLang:    "PROLOG",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.pl", `:- use_module(library(readutil)).
+
+main :-
+    open('same-folder.txt', write, Out),
+    write(Out, 'ok'),
+    close(Out),
+    open('same-folder.txt', read, In),
+    read_line_to_string(In, Line),
+    close(In),
+    writeln(Line).`),
+			},
+		},
+		"pypy": {
+			compileLang:    "PYPY3",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.py", `from pathlib import Path
+
+Path("same-folder.txt").write_text("ok", encoding="utf-8")
+print(Path("same-folder.txt").read_text(encoding="utf-8"))`),
+			},
+		},
+		"python": {
+			compileLang:    "PYTHON3",
+			expectedStdout: "10\n",
+			limits:         model.Limits{TimeMs: 20000, MemoryMB: 2048},
+			sources: []model.Source{
+				source("Main.py", `import pathlib
+import jax.numpy as jnp
+import numpy as np
+import pandas as pd
+import PIL.Image
+import qiskit
+import robot_judge
+import seaborn as sns
+import torch
+from jungol_robot import Direction, Position
+
+total = int(np.arange(5).sum())
+assert int(pd.Series([1, 2, 3]).sum()) == 6
+assert torch.tensor([1, 2]).sum().item() == 3
+assert int(jnp.arange(5).sum()) == 10
+assert callable(PIL.Image.new)
+assert callable(qiskit.QuantumCircuit)
+assert sns.__version__
+assert Direction("r").to_char() == "r"
+assert (Position(1, 2) + Position(3, 4)).to_list() == [4, 6]
+assert robot_judge.parse_expected_state("1 2 R") == (1, 2, "R")
+assert robot_judge.simulate_robot([], start=(0, 0), direction="R") == (0, 0, "R")
+pathlib.Path("same-folder.txt").write_text(str(total), encoding="utf-8")
+print(pathlib.Path("same-folder.txt").read_text(encoding="utf-8"))`),
+			},
+		},
+		"r": {
+			compileLang:    "R",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.R", `writeLines("ok", "same-folder.txt")
+cat(readLines("same-folder.txt"), sep = "\n")`),
+			},
+		},
+		"racket": {
+			compileLang:    "RACKET",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.rkt", `#lang racket
+(require racket/string)
+(call-with-output-file "same-folder.txt"
+  (lambda (out) (displayln "ok" out))
+  #:exists 'replace)
+(displayln (string-trim (file->string "same-folder.txt")))`),
+			},
+		},
+		"ruby": {
+			compileLang:    "RUBY",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.rb", `File.write("same-folder.txt", "ok\n")
+print File.read("same-folder.txt")`),
+			},
+		},
+		"rust": {
+			compileLang:    "RUST2024",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("main.rs", `use std::fs;
+
+fn main() {
+    fs::write("same-folder.txt", "ok\n").unwrap();
+    print!("{}", fs::read_to_string("same-folder.txt").unwrap());
+}`),
+			},
+		},
+		"scala": {
+			compileLang:    "SCALA",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.scala", `object Main extends App {
+  val path = new java.io.File("same-folder.txt")
+  val writer = new java.io.PrintWriter(path, "UTF-8")
+  writer.write("ok")
+  writer.close()
+  println(scala.io.Source.fromFile(path, "UTF-8").mkString.trim)
+}`),
+			},
+		},
+		"sqlite": {
+			compileLang:    "SQLITE",
+			expectedStdout: "6\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.sql", `create table numbers(v integer);
+insert into numbers(v) values (1),(2),(3);
+select sum(v) from numbers;`),
+			},
+		},
+		"swift": {
+			compileLang:    "SWIFT",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.swift", `import Foundation
+
+try! "ok".write(toFile: "same-folder.txt", atomically: true, encoding: .utf8)
+print(try! String(contentsOfFile: "same-folder.txt").trimmingCharacters(in: .whitespacesAndNewlines))`),
+			},
+		},
+		"typescript": {
+			compileLang:    "TYPESCRIPT",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.ts", `declare const require: any;
+const fs = require('fs');
+fs.writeFileSync('same-folder.txt', 'ok');
+console.log(fs.readFileSync('same-folder.txt', 'utf8'));`),
+			},
+		},
+		"uhmlang": {
+			compileLang:    "UHMLANG",
+			expectedStdout: "X\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.uhm", "어떻게\n식........... ........ㅋ\n이 사람이름이냐ㅋㅋ\n"),
+			},
+		},
+		"wasm": {
+			compileLang:    "WASM",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.wat", `(module
+  (import "wasi_snapshot_preview1" "fd_write"
+    (func $fd_write (param i32 i32 i32 i32) (result i32)))
+  (memory 1)
+  (export "memory" (memory 0))
+  (data (i32.const 8) "ok\n")
+  (func (export "_start")
+    i32.const 0
+    i32.const 8
+    i32.store
+    i32.const 4
+    i32.const 3
+    i32.store
+    i32.const 1
+    i32.const 0
+    i32.const 1
+    i32.const 20
+    call $fd_write
+    drop))`),
+			},
+		},
+		"whitespace": {
+			compileLang:    "WHITESPACE",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.ws", whitespaceProgram("ok\n")),
+			},
+		},
+		"zig": {
+			compileLang:    "ZIG",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.zig", `const std = @import("std");
+
+pub fn main() !void {
+    try std.fs.cwd().writeFile(.{ .sub_path = "same-folder.txt", .data = "ok" });
+    const data = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, "same-folder.txt", 16);
+    defer std.heap.page_allocator.free(data);
+    try std.io.getStdOut().writer().print("{s}\n", .{data});
+}`),
+			},
+		},
+	}
 }
 
 func runDirectImagePermissionChecks() error {

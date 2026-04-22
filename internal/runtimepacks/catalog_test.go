@@ -199,6 +199,12 @@ func TestSmokeScriptRunsSandboxSelftestBeforeLanguageSmoke(t *testing.T) {
 	if !strings.Contains(body, "aonohako-selftest \"${suite}\"") {
 		t.Fatalf("smoke_runtime.sh must run the selected sandbox selftest before language smoke")
 	}
+	if !strings.Contains(body, "aonohako-selftest compile-execute") {
+		t.Fatalf("smoke_runtime.sh must run compile-execute smoke through aonohako before legacy language commands")
+	}
+	if !strings.Contains(body, "export AONOHAKO_EXECUTION_MODE=local-root") || !strings.Contains(body, `work_root="${AONOHAKO_SMOKE_WORK_ROOT:-/work}"`) || !strings.Contains(body, `export AONOHAKO_WORK_ROOT="${work_root}"`) {
+		t.Fatalf("smoke_runtime.sh must force a dedicated local-root work root for compile/execute smoke")
+	}
 }
 
 func TestRuntimeEntrypointPassesThroughToRequestedCommand(t *testing.T) {
@@ -222,8 +228,10 @@ func TestSmokeScriptPreservesMultilineSmokeCommands(t *testing.T) {
 	}
 
 	cmd := exec.Command("/bin/bash", path)
+	workRoot := filepath.Join(t.TempDir(), "work")
 	cmd.Env = append(os.Environ(),
 		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"AONOHAKO_SMOKE_WORK_ROOT="+workRoot,
 		"AONOHAKO_SMOKE_COMMAND=bash\t-lc\tprintf 'first\\n'\nprintf 'second\\n'",
 	)
 	out, err := cmd.CombinedOutput()
@@ -435,6 +443,9 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	}
 	if !strings.Contains(summarySection, `summary="$(python3 scripts/aggregate_toolchain_summaries.py toolchain-artifacts)"`) {
 		t.Fatalf("ci workflow must fail closed if summary aggregation fails")
+	}
+	if !strings.Contains(body, `docker run --rm "aonohako-ci-mix:type-i" aonohako-smoke`) {
+		t.Fatalf("mixin smoke must run through aonohako-smoke so CI exercises compile and execute sequentially")
 	}
 }
 
