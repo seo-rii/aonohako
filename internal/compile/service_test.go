@@ -6,7 +6,11 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"aonohako/internal/model"
 )
@@ -177,5 +181,69 @@ func TestCollectArtifactsRejectsOversizedFile(t *testing.T) {
 	}
 	if _, err := collectArtifacts(root, func(string) bool { return true }, ""); err == nil {
 		t.Fatalf("expected oversized artifact error")
+	}
+}
+
+func TestCollectArtifactsRejectsSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.bin")
+	if err := os.WriteFile(outside, []byte("secret"), 0o644); err != nil {
+		t.Fatalf("write outside.bin: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "artifact.bin")); err != nil {
+		t.Fatalf("symlink artifact.bin: %v", err)
+	}
+	if _, err := collectArtifacts(root, func(string) bool { return true }, ""); err == nil {
+		t.Fatalf("expected symlink artifact error")
+	}
+}
+
+func TestReadSingleArtifactRejectsSymlinkParents(t *testing.T) {
+	root := t.TempDir()
+	outsideDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outsideDir, "payload.bin"), []byte("secret"), 0o644); err != nil {
+		t.Fatalf("write payload.bin: %v", err)
+	}
+	if err := os.Symlink(outsideDir, filepath.Join(root, "subdir")); err != nil {
+		t.Fatalf("symlink subdir: %v", err)
+	}
+	if _, err := readSingleArtifact(root, filepath.Join("subdir", "payload.bin"), "payload.bin", ""); err == nil {
+		t.Fatalf("expected symlink parent rejection")
+	}
+}
+
+func TestRunCommandKillsBackgroundChildren(t *testing.T) {
+	workDir := t.TempDir()
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		workDir,
+		"/bin/sh",
+		[]string{"-c", "sleep 30 & echo $! > bg.pid"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("runCommand status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+	rawPID, err := os.ReadFile(filepath.Join(workDir, "bg.pid"))
+	if err != nil {
+		t.Fatalf("read bg.pid: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(rawPID)))
+	if err != nil {
+		t.Fatalf("parse bg.pid: %v", err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		err := syscall.Kill(pid, 0)
+		if err == syscall.ESRCH {
+			return
+		}
+		if err != nil {
+			t.Fatalf("kill(%d, 0): %v", pid, err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("background child %d is still alive", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

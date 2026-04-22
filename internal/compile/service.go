@@ -3,8 +3,10 @@ package compile
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -16,6 +18,7 @@ import (
 
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
 	"aonohako/internal/util"
 )
@@ -28,6 +31,9 @@ const (
 	maxArtifactBytes           = 16 << 20
 	maxArtifactTotalBytes      = 48 << 20
 	elixirERLAFlags            = "+MIscs 128 +S 1:1 +A 1"
+	compileSandboxMemoryMB     = 2048
+	compileSandboxThreadLimit  = 256
+	compileWorkspaceBytes      = 512 << 20
 )
 
 type Service struct{}
@@ -217,7 +223,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
-		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
@@ -243,7 +249,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
-		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
@@ -273,7 +279,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
-		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
@@ -470,7 +476,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
-		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
@@ -496,7 +502,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
-		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
@@ -529,7 +535,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if linkStatus != model.CompileStatusOK {
 			return model.CompileResponse{Status: linkStatus, Stdout: stdout, Stderr: stderr, Reason: linkReason}
 		}
-		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
@@ -605,7 +611,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
-		artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
@@ -650,7 +656,7 @@ func compileNative(ctx context.Context, workDir, target string, srcRel []string,
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
-	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
@@ -675,7 +681,7 @@ func compileRust(ctx context.Context, workDir, target string, sources []model.So
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
-	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
@@ -716,7 +722,7 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
-	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
@@ -833,7 +839,11 @@ func compileKotlinNative(ctx context.Context, workDir, target string, sources []
 	if _, err := os.Stat(binaryPath); err != nil {
 		binaryPath = filepath.Join(workDir, target)
 	}
-	artifacts, err := readSingleArtifact(binaryPath, filepath.Base(binaryPath), "exec")
+	binaryRel, err := filepath.Rel(workDir, binaryPath)
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	artifacts, err := readSingleArtifact(workDir, binaryRel, filepath.Base(binaryPath), "exec")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
@@ -856,7 +866,7 @@ func compileHaskell(ctx context.Context, workDir, target string, sources []model
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
-	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
@@ -883,7 +893,7 @@ func compileSwift(ctx context.Context, workDir, target string, sources []model.S
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
-	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
@@ -1100,7 +1110,7 @@ func compileWasm(ctx context.Context, workDir, target string, sources []model.So
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 		}
 	}
-	artifacts, err := readSingleArtifact(targetPath, target, "")
+	artifacts, err := readSingleArtifact(workDir, target, target, "")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 	}
@@ -1145,7 +1155,7 @@ func compileOCaml(ctx context.Context, workDir, target string, sources []model.S
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
-	artifacts, err := readSingleArtifact(filepath.Join(workDir, target), target, "exec")
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
@@ -1284,8 +1294,11 @@ func passThroughArtifacts(workDir string, sources []model.Source) model.CompileR
 }
 
 func runCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Dir = workDir
+	for _, dir := range security.WorkspaceScopedDirs(workDir) {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+		}
+	}
 	finalEnv := make(map[string]string, len(util.BaseEnv())+len(security.WorkspaceScopedEnv(workDir))+len(env))
 	for _, item := range util.BaseEnv() {
 		parts := strings.SplitN(item, "=", 2)
@@ -1305,45 +1318,133 @@ func runCommand(ctx context.Context, workDir, bin string, args, env []string) (s
 			finalEnv[parts[0]] = parts[1]
 		}
 	}
-	cmd.Env = make([]string, 0, len(finalEnv))
-	for key, value := range finalEnv {
-		cmd.Env = append(cmd.Env, key+"="+value)
+	for _, key := range []string{"http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "no_proxy"} {
+		finalEnv[key] = ""
 	}
-	sort.Strings(cmd.Env)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if err := cmd.Start(); err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return "", "", model.CompileStatusInternal, bin + " not found"
+	command := append([]string{bin}, args...)
+	resolveRealPath := func(name string) (string, error) {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			return "", err
 		}
-		return "", "", model.CompileStatusInternal, err.Error()
+		if real, err := filepath.EvalSymlinks(path); err == nil && real != "" {
+			path = real
+		}
+		return path, nil
 	}
+	if !filepath.IsAbs(command[0]) {
+		path, err := resolveRealPath(command[0])
+		if err != nil {
+			if errors.Is(err, exec.ErrNotFound) {
+				return "", "", model.CompileStatusInternal, bin + " not found"
+			}
+			return "", "", model.CompileStatusInternal, err.Error()
+		}
+		command[0] = path
+	}
+	helperEnv := make([]string, 0, len(finalEnv))
+	for key, value := range finalEnv {
+		helperEnv = append(helperEnv, key+"="+value)
+	}
+	sort.Strings(helperEnv)
+	reqPath := filepath.Join(workDir, ".tmp", "compile-request.json")
+	helperReq := sandbox.ExecRequest{
+		Command: append([]string(nil), command...),
+		Dir:     workDir,
+		Env:     helperEnv,
+		Limits: model.Limits{
+			TimeMs:         int(buildTimeout / time.Millisecond),
+			MemoryMB:       compileSandboxMemoryMB,
+			WorkspaceBytes: compileWorkspaceBytes,
+		},
+		ThreadLimit:    compileSandboxThreadLimit,
+		EnableNetwork:  false,
+		AllowProcesses: true,
+	}
+	rawReq, err := json.Marshal(helperReq)
+	if err != nil {
+		return "", "", model.CompileStatusInternal, "sandbox request failed: " + err.Error()
+	}
+	if err := os.WriteFile(reqPath, rawReq, 0o644); err != nil {
+		return "", "", model.CompileStatusInternal, "sandbox request write failed: " + err.Error()
+	}
+	helperPath, err := os.Executable()
+	if err != nil {
+		return "", "", model.CompileStatusInternal, "resolve helper failed: " + err.Error()
+	}
+	cmd := exec.CommandContext(ctx, helperPath)
+	cmd.Dir = workDir
+	cmd.Env = []string{
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"LANG=C.UTF-8",
+		"LC_ALL=C.UTF-8",
+		sandbox.HelperModeEnv + "=" + sandbox.HelperModeExec,
+		sandbox.RequestPathEnv + "=" + reqPath,
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+	if os.Geteuid() == 0 {
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
+	}
+	stdoutFile, err := os.CreateTemp(filepath.Join(workDir, ".tmp"), "compile-stdout-*")
+	if err != nil {
+		return "", "", model.CompileStatusInternal, "stdout capture failed: " + err.Error()
+	}
+	defer func() {
+		_ = stdoutFile.Close()
+		_ = os.Remove(stdoutFile.Name())
+	}()
+	stderrFile, err := os.CreateTemp(filepath.Join(workDir, ".tmp"), "compile-stderr-*")
+	if err != nil {
+		return "", "", model.CompileStatusInternal, "stderr capture failed: " + err.Error()
+	}
+	defer func() {
+		_ = stderrFile.Close()
+		_ = os.Remove(stderrFile.Name())
+	}()
+	cmd.Stdout = stdoutFile
+	cmd.Stderr = stderrFile
+	if err := cmd.Start(); err != nil {
+		return "", "", model.CompileStatusInternal, "start failed: " + err.Error()
+	}
+	pgid := cmd.Process.Pid
 	waitCh := make(chan error, 1)
 	go func() { waitCh <- cmd.Wait() }()
+	readCaptured := func(file *os.File) string {
+		if _, err := file.Seek(0, 0); err != nil {
+			return ""
+		}
+		data, err := io.ReadAll(file)
+		if err != nil {
+			return ""
+		}
+		return string(data)
+	}
+	defer func() {
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	}()
 	select {
 	case <-ctx.Done():
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		<-waitCh
-		return outBuf.String(), errBuf.String(), model.CompileStatusTimeout, ctx.Err().Error()
+		return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusTimeout, ctx.Err().Error()
 	case err := <-waitCh:
 		if err != nil {
-			return outBuf.String(), errBuf.String(), model.CompileStatusCompileError, ""
+			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, ""
 		}
 	}
-	return outBuf.String(), errBuf.String(), model.CompileStatusOK, ""
+	return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusOK, ""
 }
 
-func readSingleArtifact(path, name, mode string) ([]model.Artifact, error) {
-	st, err := os.Stat(path)
+func readSingleArtifact(root, rel, name, mode string) ([]model.Artifact, error) {
+	artifact, err := openArtifact(root, rel)
 	if err != nil {
 		return nil, fmt.Errorf("read artifact failed: %w", err)
 	}
-	if st.Size() > maxArtifactBytes {
+	defer artifact.cleanup()
+	if artifact.info.Size() > maxArtifactBytes {
 		return nil, fmt.Errorf("artifact too large: %s", name)
 	}
-	data, err := os.ReadFile(path)
+	data, err := io.ReadAll(artifact.file)
 	if err != nil {
 		return nil, fmt.Errorf("read artifact failed: %w", err)
 	}
@@ -1360,26 +1461,33 @@ func collectArtifacts(root string, include func(name string) bool, prefix string
 		if d.IsDir() {
 			return nil
 		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("artifact path contains a symlink: %s", d.Name())
+		}
 		if include != nil && !include(d.Name()) {
 			return nil
 		}
-		info, err := d.Info()
+		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
+		artifact, err := openArtifact(root, rel)
+		if err != nil {
+			return err
+		}
+		info := artifact.info
 		if info.Size() > maxArtifactBytes {
+			artifact.cleanup()
 			return fmt.Errorf("artifact too large: %s", d.Name())
 		}
 		totalBytes += info.Size()
 		if totalBytes > maxArtifactTotalBytes {
+			artifact.cleanup()
 			return fmt.Errorf("artifact total size exceeded")
 		}
-		data, err := os.ReadFile(path)
+		data, err := io.ReadAll(artifact.file)
 		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
+			artifact.cleanup()
 			return err
 		}
 		name := filepath.ToSlash(rel)
@@ -1387,6 +1495,7 @@ func collectArtifacts(root string, include func(name string) bool, prefix string
 			name = filepath.ToSlash(filepath.Join(prefix, rel))
 		}
 		artifacts = append(artifacts, model.Artifact{Name: name, DataB64: util.EncodeB64(data)})
+		artifact.cleanup()
 		return nil
 	})
 	if err != nil {

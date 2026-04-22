@@ -9,10 +9,11 @@ const (
 )
 
 type ExecRequest struct {
-	Command       []string     `json:"command"`
-	Dir           string       `json:"dir"`
-	Env           []string     `json:"env"`
-	Limits        model.Limits `json:"limits"`
-	ThreadLimit   int          `json:"thread_limit"`
-	EnableNetwork bool         `json:"enable_network"`
+	Command        []string     `json:"command"`
+	Dir            string       `json:"dir"`
+	Env            []string     `json:"env"`
+	Limits         model.Limits `json:"limits"`
+	ThreadLimit    int          `json:"thread_limit"`
+	EnableNetwork  bool         `json:"enable_network"`
+	AllowProcesses bool         `json:"allow_processes,omitempty"`
 }
