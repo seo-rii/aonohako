@@ -328,7 +328,7 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `bf`, `elixir`, `erlang`, `haskell`, `lisp`, `lua`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `python`, `r`, `racket`, `ruby`, `sqlite`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `bf`, `elixir`, `erlang`, `haskell`, `lisp`, `lua`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `r`, `racket`, `ruby`, `sqlite`, `wasm`, `whitespace` |
 | `type-b` | `clojure`, `groovy`, `java`, `javascript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `d`, `fortran`, `go`, `nasm`, `nim`, `pascal`, `rust`, `zig` |
 | `type-d` | `kotlin` |
@@ -339,6 +339,7 @@ Production profiles currently group languages like this:
 | `type-i` | `plain`, `python`, `java` |
 | `type-j` | `coq` |
 | `type-k` | `dart` |
+| `type-l` | `python` |
 
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the

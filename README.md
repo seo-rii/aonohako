@@ -24,13 +24,14 @@ binary, configurable runtime images, and testable build metadata.
 
 The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
 
-- Production mode builds grouped images such as `type-a` (`plain`, `python`,
-  `pypy`, `aheui`, `racket`, `bf`, `whitespace`, `wasm`, and scripting runtimes),
+- Production mode builds grouped images such as `type-a` (`plain`, `pypy`,
+  `aheui`, `racket`, `bf`, `whitespace`, `wasm`, and other lighter scripting runtimes),
   `type-b` (`clojure`, `java`, `javascript`, `scala`, `typescript`), `type-c`
   (`ada`, `asm`, `d`, `fortran`, `go`, `nasm`, `nim`, `pascal`, `rust`, `zig`),
   `type-e` (`csharp`, `fsharp`), and the mixin validation profile `type-i` (`plain`,
   `python`, `java`), plus dedicated profiles where a toolchain needs its own
-  base image or install path such as `swift`, `julia`, `coq`, or `dart`.
+  base image or install path such as `python` judge libraries (`type-l`),
+  `swift`, `julia`, `coq`, or `dart`.
 - CI mode expands the same catalog into one image per language so that each
   smoke job validates a single toolchain in isolation. A separate CI job builds
   the production profiles in parallel, runs

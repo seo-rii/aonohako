@@ -1027,7 +1027,6 @@ profiles:
       - plain
       - prolog
       - pypy
-      - python
       - r
       - racket
       - ruby
@@ -1091,3 +1090,7 @@ profiles:
     base_image: debian:trixie-slim
     languages:
       - dart
+  type-l:
+    base_image: debian:trixie-slim
+    languages:
+      - python
