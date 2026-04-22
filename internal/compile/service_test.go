@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"aonohako/internal/model"
+	"golang.org/x/sys/unix"
 )
 
 func b64String(v string) string {
@@ -266,6 +267,23 @@ func TestRunCommandRejectsNetworkSockets(t *testing.T) {
 	}
 }
 
+func TestRunCommandRejectsSocketPairCreation(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		t.TempDir(),
+		python,
+		[]string{"-c", "import errno, socket, sys\ntry:\n    socket.socketpair()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("expected socketpair denial probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
 func TestRunCommandRejectsNamespaceEscape(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
@@ -280,5 +298,45 @@ func TestRunCommandRejectsNamespaceEscape(t *testing.T) {
 	)
 	if status != model.CompileStatusOK {
 		t.Fatalf("expected unshare denial probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
+func TestRunCommandDoesNotLeakInheritedFileDescriptors(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+
+	fdFile, err := os.CreateTemp(t.TempDir(), "inherited-fd-*")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	defer fdFile.Close()
+
+	if _, err := fdFile.WriteString("secret"); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+	if _, err := fdFile.Seek(0, 0); err != nil {
+		t.Fatalf("Seek: %v", err)
+	}
+
+	fd := int(fdFile.Fd())
+	flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0)
+	if err != nil {
+		t.Fatalf("F_GETFD: %v", err)
+	}
+	if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags&^unix.FD_CLOEXEC); err != nil {
+		t.Fatalf("F_SETFD: %v", err)
+	}
+
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		t.TempDir(),
+		python,
+		[]string{"-c", "import errno, os, sys\nfd = int(sys.argv[1])\ntry:\n    os.read(fd, 1)\nexcept OSError as exc:\n    sys.exit(0 if exc.errno == errno.EBADF else 1)\nsys.exit(1)\n", strconv.Itoa(fd)},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("expected inherited fd probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
 	}
 }

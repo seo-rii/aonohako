@@ -460,6 +460,10 @@ func TestWorkflowSandboxJobCoversRootBackedWorkspacePermissionChecks(t *testing.
 	for _, marker := range []string{
 		"TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser",
 		"TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser",
+		"TestRunCommandRejectsNetworkSockets",
+		"TestRunCommandRejectsSocketPairCreation",
+		"TestRunCommandRejectsNamespaceEscape",
+		"TestRunCommandDoesNotLeakInheritedFileDescriptors",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("sandbox workflow must cover %q", marker)
