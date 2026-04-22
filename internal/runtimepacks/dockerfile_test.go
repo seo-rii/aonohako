@@ -127,6 +127,24 @@ func TestRuntimeDockerfileCopiesGoBeforeStrictInstallScript(t *testing.T) {
 	}
 }
 
+func TestRuntimeDockerfileInstallsNpmPackagesAfterInstallScript(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	installRunIndex := strings.Index(body, "/bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"")
+	npmRunIndex := strings.Index(body, "env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}")
+	if installRunIndex == -1 || npmRunIndex == -1 {
+		t.Fatalf("runtime.Dockerfile is missing INSTALL_SCRIPT or npm package installation")
+	}
+	if installRunIndex > npmRunIndex {
+		t.Fatalf("runtime.Dockerfile must run INSTALL_SCRIPT before npm installs so custom node runtimes are available")
+	}
+}
+
 func TestRuntimeDockerfileCopiesSandboxSelftestBinary(t *testing.T) {
 	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
 	data, err := os.ReadFile(path)
