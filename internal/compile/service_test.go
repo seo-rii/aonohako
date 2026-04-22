@@ -25,6 +25,21 @@ func b64Bytes(v []byte) string {
 	return base64.StdEncoding.EncodeToString(v)
 }
 
+func sandboxWritableTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if os.Geteuid() != 0 {
+		return dir
+	}
+	if err := os.Chown(dir, 65532, 65532); err != nil {
+		t.Fatalf("Chown(%q): %v", dir, err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("Chmod(%q): %v", dir, err)
+	}
+	return dir
+}
+
 func TestRunRejectsInvalidTargetPath(t *testing.T) {
 	svc := New()
 	tests := []string{"../escape", "nested/Main", "/tmp/Main"}
@@ -155,6 +170,37 @@ func TestRunRejectsInvalidBrainfuckProgram(t *testing.T) {
 	}
 }
 
+func TestRunPythonCompileSucceedsWithRootBackedSandboxWorkspace(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to drop compile helper to sandbox user")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	workRoot := t.TempDir()
+	if err := os.Chmod(workRoot, 0o755); err != nil {
+		t.Fatalf("Chmod(%q): %v", workRoot, err)
+	}
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-root")
+	t.Setenv("AONOHAKO_WORK_ROOT", workRoot)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: b64String("print('ok')\n"),
+		}},
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("expected root-backed python compile to succeed, got status=%q reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+	}
+	if len(resp.Artifacts) == 0 {
+		t.Fatalf("expected compiled python artifacts")
+	}
+}
+
 func TestCompileCSharpMaterializesProjectSources(t *testing.T) {
 	workDir := t.TempDir()
 	_ = compileCSharp(context.Background(), workDir, []model.Source{
@@ -215,7 +261,7 @@ func TestReadSingleArtifactRejectsSymlinkParents(t *testing.T) {
 }
 
 func TestRunCommandKillsBackgroundChildren(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := sandboxWritableTempDir(t)
 	stdout, stderr, status, reason := runCommand(
 		context.Background(),
 		workDir,
@@ -257,7 +303,7 @@ func TestRunCommandRejectsNetworkSockets(t *testing.T) {
 	}
 	stdout, stderr, status, reason := runCommand(
 		context.Background(),
-		t.TempDir(),
+		sandboxWritableTempDir(t),
 		python,
 		[]string{"-c", "import errno, socket, sys\ntry:\n    socket.socket()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
 		nil,
@@ -274,7 +320,7 @@ func TestRunCommandRejectsSocketPairCreation(t *testing.T) {
 	}
 	stdout, stderr, status, reason := runCommand(
 		context.Background(),
-		t.TempDir(),
+		sandboxWritableTempDir(t),
 		python,
 		[]string{"-c", "import errno, socket, sys\ntry:\n    socket.socketpair()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
 		nil,
@@ -291,7 +337,7 @@ func TestRunCommandRejectsNamespaceEscape(t *testing.T) {
 	}
 	stdout, stderr, status, reason := runCommand(
 		context.Background(),
-		t.TempDir(),
+		sandboxWritableTempDir(t),
 		python,
 		[]string{"-c", "import ctypes, errno, sys\nlibc = ctypes.CDLL(None, use_errno=True)\nif libc.unshare(0x20000) == 0:\n    sys.exit(1)\nsys.exit(0 if ctypes.get_errno() in (errno.EPERM, errno.ENOSYS) else 1)\n"},
 		nil,
@@ -307,7 +353,8 @@ func TestRunCommandDoesNotLeakInheritedFileDescriptors(t *testing.T) {
 		t.Skip("python3 not available")
 	}
 
-	fdFile, err := os.CreateTemp(t.TempDir(), "inherited-fd-*")
+	workDir := sandboxWritableTempDir(t)
+	fdFile, err := os.CreateTemp(workDir, "inherited-fd-*")
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
@@ -331,7 +378,7 @@ func TestRunCommandDoesNotLeakInheritedFileDescriptors(t *testing.T) {
 
 	stdout, stderr, status, reason := runCommand(
 		context.Background(),
-		t.TempDir(),
+		workDir,
 		python,
 		[]string{"-c", "import errno, os, sys\nfd = int(sys.argv[1])\ntry:\n    os.read(fd, 1)\nexcept OSError as exc:\n    sys.exit(0 if exc.errno == errno.EBADF else 1)\nsys.exit(1)\n", strconv.Itoa(fd)},
 		nil,

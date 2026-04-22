@@ -68,6 +68,41 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	if err := materializeSources(workDir, req.Sources); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 	}
+	if os.Geteuid() == 0 {
+		const sandboxUID = 65532
+		const sandboxGID = 65532
+		scopedDirs := make(map[string]struct{}, len(security.WorkspaceScopedDirs(workDir)))
+		for _, dir := range security.WorkspaceScopedDirs(workDir) {
+			scopedDirs[dir] = struct{}{}
+		}
+		if err := filepath.WalkDir(workDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if path != workDir {
+				if _, ok := scopedDirs[path]; ok {
+					return filepath.SkipDir
+				}
+			}
+			if err := os.Chown(path, sandboxUID, sandboxGID); err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return os.Chmod(path, 0o755)
+			}
+			return os.Chmod(path, 0o444)
+		}); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace ownership failed: " + err.Error()}
+		}
+		for _, dir := range security.WorkspaceScopedDirs(workDir) {
+			if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace ownership failed: " + err.Error()}
+			}
+			if err := os.Chmod(dir, 0o700); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace ownership failed: " + err.Error()}
+			}
+		}
+	}
 
 	target := strings.TrimSpace(req.Target)
 	if target == "" {
@@ -1293,10 +1328,26 @@ func passThroughArtifacts(workDir string, sources []model.Source) model.CompileR
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
 }
 
-func runCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
+func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
 	for _, dir := range security.WorkspaceScopedDirs(workDir) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+		}
+	}
+	if os.Geteuid() == 0 {
+		if err := os.Chown(workDir, 65532, 65532); err != nil {
+			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+		}
+		if err := os.Chmod(workDir, 0o755); err != nil {
+			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+		}
+		for _, dir := range security.WorkspaceScopedDirs(workDir) {
+			if err := os.Chown(dir, 65532, 65532); err != nil {
+				return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+			}
+			if err := os.Chmod(dir, 0o700); err != nil {
+				return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+			}
 		}
 	}
 	finalEnv := make(map[string]string, len(util.BaseEnv())+len(security.WorkspaceScopedEnv(workDir))+len(env))
@@ -1433,6 +1484,10 @@ func runCommand(ctx context.Context, workDir, bin string, args, env []string) (s
 		}
 	}
 	return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusOK, ""
+}
+
+func runCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
+	return RunSandboxedCommand(ctx, workDir, bin, args, env)
 }
 
 func readSingleArtifact(root, rel, name, mode string) ([]model.Artifact, error) {

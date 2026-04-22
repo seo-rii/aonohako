@@ -205,6 +205,9 @@ func TestSmokeScriptRunsSandboxSelftestBeforeLanguageSmoke(t *testing.T) {
 	if !strings.Contains(body, "export AONOHAKO_EXECUTION_MODE=local-root") || !strings.Contains(body, `work_root="${AONOHAKO_SMOKE_WORK_ROOT:-/work}"`) || !strings.Contains(body, `export AONOHAKO_WORK_ROOT="${work_root}"`) {
 		t.Fatalf("smoke_runtime.sh must force a dedicated local-root work root for compile/execute smoke")
 	}
+	if !strings.Contains(body, `chmod 0755 "${work_root}"`) {
+		t.Fatalf("smoke_runtime.sh must keep the smoke work root traversable for sandboxed helpers")
+	}
 }
 
 func TestRuntimeEntrypointPassesThroughToRequestedCommand(t *testing.T) {
@@ -458,12 +461,10 @@ func TestWorkflowSandboxJobCoversRootBackedWorkspacePermissionChecks(t *testing.
 
 	body := string(data)
 	for _, marker := range []string{
+		`chmod 0755 /work`,
 		"TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser",
 		"TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser",
-		"TestRunCommandRejectsNetworkSockets",
-		"TestRunCommandRejectsSocketPairCreation",
-		"TestRunCommandRejectsNamespaceEscape",
-		"TestRunCommandDoesNotLeakInheritedFileDescriptors",
+		"aonohako-selftest compile-security",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("sandbox workflow must cover %q", marker)

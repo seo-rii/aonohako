@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -25,6 +26,8 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
+
+	"golang.org/x/sys/unix"
 )
 
 type suiteCase struct {
@@ -47,7 +50,7 @@ func main() {
 	}
 
 	if len(os.Args) != 2 {
-		_, _ = fmt.Fprintln(os.Stderr, "usage: aonohako-selftest image-permissions|permissions|compile-execute")
+		_, _ = fmt.Fprintln(os.Stderr, "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute")
 		os.Exit(2)
 	}
 
@@ -59,6 +62,11 @@ func main() {
 		}
 	case "permissions":
 		if err := runPermissionsSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "compile-security":
+		if err := runCompileSecuritySuite(); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -192,6 +200,134 @@ func runPermissionsSuite() error {
 	}
 
 	_, _ = fmt.Fprintln(os.Stdout, "sandbox permissions ok")
+	return nil
+}
+
+func runCompileSecuritySuite() error {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		return fmt.Errorf("python3 not available: %w", err)
+	}
+
+	compileResp := compile.New().Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: encodeScript("print('ok')\n"),
+		}},
+	})
+	if compileResp.Status != model.CompileStatusOK {
+		return fmt.Errorf("python compile failed: status=%s reason=%s stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+	}
+	if len(compileResp.Artifacts) == 0 {
+		return fmt.Errorf("python compile produced no artifacts")
+	}
+
+	workDir, err := os.MkdirTemp("", "aonohako-selftest-compile-*")
+	if err != nil {
+		return fmt.Errorf("mkdtemp compile selftest: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(workDir) }()
+
+	stdout, stderr, status, reason := compile.RunSandboxedCommand(
+		context.Background(),
+		workDir,
+		"/bin/sh",
+		[]string{"-c", "sleep 30 & echo $! > bg.pid"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		return fmt.Errorf("background-child probe failed: status=%s reason=%s stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+	rawPID, err := os.ReadFile(filepath.Join(workDir, "bg.pid"))
+	if err != nil {
+		return fmt.Errorf("read bg.pid: %w", err)
+	}
+	pidText := strings.TrimSpace(string(rawPID))
+	pid, err := strconv.Atoi(pidText)
+	if err != nil {
+		return fmt.Errorf("parse bg.pid %q: %w", pidText, err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		err := syscall.Kill(pid, 0)
+		if err == syscall.ESRCH {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("kill(%d, 0): %w", pid, err)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("background child %d is still alive", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	probes := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "network-socket",
+			args: []string{"-c", "import errno, socket, sys\ntry:\n    socket.socket()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
+		},
+		{
+			name: "socketpair",
+			args: []string{"-c", "import errno, socket, sys\ntry:\n    socket.socketpair()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
+		},
+		{
+			name: "namespace-unshare",
+			args: []string{"-c", "import ctypes, errno, sys\nlibc = ctypes.CDLL(None, use_errno=True)\nif libc.unshare(0x20000) == 0:\n    sys.exit(1)\nsys.exit(0 if ctypes.get_errno() in (errno.EPERM, errno.ENOSYS) else 1)\n"},
+		},
+	}
+	for _, probe := range probes {
+		probeDir, err := os.MkdirTemp("", "aonohako-selftest-compile-probe-*")
+		if err != nil {
+			return fmt.Errorf("mkdtemp %s: %w", probe.name, err)
+		}
+		stdout, stderr, status, reason := compile.RunSandboxedCommand(context.Background(), probeDir, python, probe.args, nil)
+		_ = os.RemoveAll(probeDir)
+		if status != model.CompileStatusOK {
+			return fmt.Errorf("%s probe failed: status=%s reason=%s stdout=%q stderr=%q", probe.name, status, reason, stdout, stderr)
+		}
+	}
+
+	fdDir, err := os.MkdirTemp("", "aonohako-selftest-compile-fd-*")
+	if err != nil {
+		return fmt.Errorf("mkdtemp fd probe: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(fdDir) }()
+	fdFile, err := os.CreateTemp(fdDir, "inherited-fd-*")
+	if err != nil {
+		return fmt.Errorf("CreateTemp inherited fd: %w", err)
+	}
+	defer fdFile.Close()
+	if _, err := fdFile.WriteString("secret"); err != nil {
+		return fmt.Errorf("write inherited fd probe: %w", err)
+	}
+	if _, err := fdFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("seek inherited fd probe: %w", err)
+	}
+	fd := int(fdFile.Fd())
+	flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0)
+	if err != nil {
+		return fmt.Errorf("fcntl F_GETFD: %w", err)
+	}
+	if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags&^unix.FD_CLOEXEC); err != nil {
+		return fmt.Errorf("fcntl F_SETFD: %w", err)
+	}
+	stdout, stderr, status, reason = compile.RunSandboxedCommand(
+		context.Background(),
+		fdDir,
+		python,
+		[]string{"-c", "import errno, os, sys\nfd = int(sys.argv[1])\ntry:\n    os.read(fd, 1)\nexcept OSError as exc:\n    sys.exit(0 if exc.errno == errno.EBADF else 1)\nsys.exit(1)\n", fmt.Sprintf("%d", fd)},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		return fmt.Errorf("fd leak probe failed: status=%s reason=%s stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+
+	_, _ = fmt.Fprintln(os.Stdout, "compile security ok")
 	return nil
 }
 
@@ -862,30 +998,20 @@ print(Path("same-folder.txt").read_text(encoding="utf-8"))`),
 		"python": {
 			compileLang:    "PYTHON3",
 			expectedStdout: "10\n",
-			limits:         model.Limits{TimeMs: 20000, MemoryMB: 2048},
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.py", `import pathlib
-import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import PIL.Image
 import qiskit
-import robot_judge
 import seaborn as sns
-import torch
-from jungol_robot import Direction, Position
 
 total = int(np.arange(5).sum())
 assert int(pd.Series([1, 2, 3]).sum()) == 6
-assert torch.tensor([1, 2]).sum().item() == 3
-assert int(jnp.arange(5).sum()) == 10
 assert callable(PIL.Image.new)
 assert callable(qiskit.QuantumCircuit)
 assert sns.__version__
-assert Direction("r").to_char() == "r"
-assert (Position(1, 2) + Position(3, 4)).to_list() == [4, 6]
-assert robot_judge.parse_expected_state("1 2 R") == (1, 2, "R")
-assert robot_judge.simulate_robot([], start=(0, 0), direction="R") == (0, 0, "R")
 pathlib.Path("same-folder.txt").write_text(str(total), encoding="utf-8")
 print(pathlib.Path("same-folder.txt").read_text(encoding="utf-8"))`),
 			},

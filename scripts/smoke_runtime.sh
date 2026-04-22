@@ -14,7 +14,7 @@ done
 
 work_root="${AONOHAKO_SMOKE_WORK_ROOT:-/work}"
 mkdir -p "${work_root}"
-chmod 0700 "${work_root}"
+chmod 0755 "${work_root}"
 export AONOHAKO_EXECUTION_MODE=local-root
 export AONOHAKO_WORK_ROOT="${work_root}"
 aonohako-selftest compile-execute
