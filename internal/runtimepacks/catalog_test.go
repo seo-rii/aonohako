@@ -38,9 +38,15 @@ languages:
 profiles:
   type-a:
     base_image: debian:trixie-slim
+    install:
+      apt: [curl]
+      script: ["echo profile-a"]
     languages: [plain, python]
   type-b:
     base_image: debian:trixie-slim
+    install:
+      apt: [wget]
+      script: ["echo profile-b"]
     languages: [java]
 `)
 
@@ -64,8 +70,11 @@ profiles:
 	if !reflect.DeepEqual(typeA.Languages, []string{"plain", "python"}) {
 		t.Fatalf("type-a languages = %v", typeA.Languages)
 	}
-	if !reflect.DeepEqual(typeA.AptPackages, []string{"python3", "python3-numpy"}) {
+	if !reflect.DeepEqual(typeA.AptPackages, []string{"curl", "python3", "python3-numpy"}) {
 		t.Fatalf("type-a apt packages = %v", typeA.AptPackages)
+	}
+	if !reflect.DeepEqual(typeA.InstallScript, []string{"echo profile-a"}) {
+		t.Fatalf("type-a install script = %v", typeA.InstallScript)
 	}
 
 	ci, err := catalog.CILanguageImages()
@@ -79,16 +88,31 @@ profiles:
 	if ci[0].Name != "ci-java" || !reflect.DeepEqual(ci[0].Languages, []string{"java"}) {
 		t.Fatalf("ci[0] = %+v", ci[0])
 	}
-	if !reflect.DeepEqual(ci[0].AptPackages, []string{"default-jdk-headless"}) {
+	if !reflect.DeepEqual(ci[0].AptPackages, []string{"default-jdk-headless", "wget"}) {
 		t.Fatalf("ci[0] apt packages = %v", ci[0].AptPackages)
+	}
+	if !reflect.DeepEqual(ci[0].InstallScript, []string{"echo profile-b"}) {
+		t.Fatalf("ci[0] install script = %v", ci[0].InstallScript)
 	}
 
 	if ci[1].Name != "ci-plain" || !reflect.DeepEqual(ci[1].Languages, []string{"plain"}) {
 		t.Fatalf("ci[1] = %+v", ci[1])
 	}
+	if !reflect.DeepEqual(ci[1].AptPackages, []string{"curl"}) {
+		t.Fatalf("ci[1] apt packages = %v", ci[1].AptPackages)
+	}
+	if !reflect.DeepEqual(ci[1].InstallScript, []string{"echo profile-a"}) {
+		t.Fatalf("ci[1] install script = %v", ci[1].InstallScript)
+	}
 
 	if ci[2].Name != "ci-python" || !reflect.DeepEqual(ci[2].SmokeCommand, []string{"python3", "-c", "import numpy; print(numpy.arange(3).sum())"}) {
 		t.Fatalf("ci[2] = %+v", ci[2])
+	}
+	if !reflect.DeepEqual(ci[2].AptPackages, []string{"curl", "python3", "python3-numpy"}) {
+		t.Fatalf("ci[2] apt packages = %v", ci[2].AptPackages)
+	}
+	if !reflect.DeepEqual(ci[2].InstallScript, []string{"echo profile-a"}) {
+		t.Fatalf("ci[2] install script = %v", ci[2].InstallScript)
 	}
 }
 
