@@ -40,6 +40,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"Workspace Limit Exceeded",
 		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
 		"`AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
+		"`embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
+		"backend rejects values\n  other than `1`",
 	}
 	for _, want := range protocolWants {
 		if !strings.Contains(protocol, want) {
@@ -56,6 +58,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "Server startup validates the deployment contract instead of trusting docs alone.") || !strings.Contains(architecture, "The following checks are enforced before the HTTP server starts") {
 		t.Fatalf("architecture.md must describe startup deployment contract validation")
 	}
+	if !strings.Contains(architecture, "`embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1`") {
+		t.Fatalf("architecture.md must describe serialized helper execution")
+	}
 }
 
 func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
@@ -67,6 +72,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
+		"`embedded + helper` backend rejects values other than `1`",
 		"`cloudrun + embedded + helper` is the supported production security target",
 		"`dev + remote + none` is the non-root development path",
 	} {
