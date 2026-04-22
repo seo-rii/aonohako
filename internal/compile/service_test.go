@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -245,5 +246,39 @@ func TestRunCommandKillsBackgroundChildren(t *testing.T) {
 			t.Fatalf("background child %d is still alive", pid)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestRunCommandRejectsNetworkSockets(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		t.TempDir(),
+		python,
+		[]string{"-c", "import errno, socket, sys\ntry:\n    socket.socket()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("expected socket denial probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
+func TestRunCommandRejectsNamespaceEscape(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		t.TempDir(),
+		python,
+		[]string{"-c", "import ctypes, errno, sys\nlibc = ctypes.CDLL(None, use_errno=True)\nif libc.unshare(0x20000) == 0:\n    sys.exit(1)\nsys.exit(0 if ctypes.get_errno() in (errno.EPERM, errno.ENOSYS) else 1)\n"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("expected unshare denial probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
 	}
 }
