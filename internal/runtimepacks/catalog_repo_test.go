@@ -256,6 +256,30 @@ func TestRepositoryCatalogPinsOfficialNode24Toolchain(t *testing.T) {
 	}
 }
 
+func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	for _, profileName := range sortedKeys(catalog.Profiles) {
+		profile := catalog.Profiles[profileName]
+		installScript := strings.Join(profile.Install.Script, "\n")
+		for _, marker := range []string{
+			"deb http://deb.debian.org/debian sid main",
+			"apt-get install -y --no-install-recommends -t sid gcc-16 g++-16",
+			"ln -sfn /usr/bin/gcc-16 /usr/local/bin/gcc",
+			"ln -sfn /usr/bin/g++-16 /usr/local/bin/g++",
+			"ln -sfn /usr/bin/gcc-16 /usr/local/bin/cc",
+			"ln -sfn /usr/bin/g++-16 /usr/local/bin/c++",
+		} {
+			if !strings.Contains(installScript, marker) {
+				t.Fatalf("profile %q install script must contain %q, got %q", profileName, marker, installScript)
+			}
+		}
+	}
+}
+
 func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
 	if err != nil {

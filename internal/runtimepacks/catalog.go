@@ -28,8 +28,9 @@ type LanguageSpec struct {
 }
 
 type ProfileSpec struct {
-	BaseImage string   `yaml:"base_image"`
-	Languages []string `yaml:"languages"`
+	BaseImage string      `yaml:"base_image"`
+	Languages []string    `yaml:"languages"`
+	Install   InstallSpec `yaml:"install"`
 }
 
 type Catalog struct {
@@ -85,7 +86,7 @@ func (c Catalog) ProductionImages() ([]ImageSpec, error) {
 	images := make([]ImageSpec, 0, len(names))
 	for _, name := range names {
 		profile := c.Profiles[name]
-		images = append(images, c.buildImage(name, profile.BaseImage, profile.Languages, nil))
+		images = append(images, c.buildImage(name, profile, nil))
 	}
 	return images, nil
 }
@@ -98,18 +99,26 @@ func (c Catalog) CILanguageImages() ([]ImageSpec, error) {
 		if profileName == "" {
 			return nil, fmt.Errorf("language %s is not assigned to any profile", lang)
 		}
-		images = append(images, c.buildImage("ci-"+lang, baseImage, []string{lang}, c.Languages[lang].Smoke.Command))
+		images = append(images, c.buildImage("ci-"+lang, ProfileSpec{
+			BaseImage: baseImage,
+			Languages: []string{lang},
+			Install:   c.Profiles[profileName].Install,
+		}, c.Languages[lang].Smoke.Command))
 	}
 	return images, nil
 }
 
-func (c Catalog) buildImage(name, baseImage string, languages []string, smoke []string) ImageSpec {
+func (c Catalog) buildImage(name string, profile ProfileSpec, smoke []string) ImageSpec {
 	spec := ImageSpec{
 		Name:      name,
-		BaseImage: baseImage,
-		Languages: slices.Clone(languages),
+		BaseImage: profile.BaseImage,
+		Languages: slices.Clone(profile.Languages),
 	}
 	sort.Strings(spec.Languages)
+	spec.AptPackages = append(spec.AptPackages, profile.Install.Apt...)
+	spec.PipPackages = append(spec.PipPackages, profile.Install.Pip...)
+	spec.NPMPackages = append(spec.NPMPackages, profile.Install.NPM...)
+	spec.InstallScript = append(spec.InstallScript, profile.Install.Script...)
 	for _, lang := range spec.Languages {
 		langSpec := c.Languages[lang]
 		spec.AptPackages = append(spec.AptPackages, langSpec.Install.Apt...)

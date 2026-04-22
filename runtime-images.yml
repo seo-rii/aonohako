@@ -1035,6 +1035,16 @@ languages:
 profiles:
   type-a:
     base_image: debian:trixie-slim
+    install: &gcc16_profile
+      script:
+        - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list.d/aonohako-gcc16-sid.list
+        - apt-get update
+        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid gcc-16 g++-16
+        - rm -rf /var/lib/apt/lists/*
+        - ln -sfn /usr/bin/gcc-16 /usr/local/bin/gcc
+        - ln -sfn /usr/bin/g++-16 /usr/local/bin/g++
+        - ln -sfn /usr/bin/gcc-16 /usr/local/bin/cc
+        - ln -sfn /usr/bin/g++-16 /usr/local/bin/c++
     languages:
       - aheui
       - bf
@@ -1057,6 +1067,7 @@ profiles:
       - whitespace
   type-b:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - clojure
       - groovy
@@ -1066,6 +1077,7 @@ profiles:
       - typescript
   type-c:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - ada
       - asm
@@ -1079,40 +1091,49 @@ profiles:
       - zig
   type-d:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - kotlin
   type-e:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - csharp
       - fsharp
   type-f:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - uhmlang
   type-g:
     base_image: julia:1.11.5-bookworm
+    install: *gcc16_profile
     languages:
       - julia
   type-h:
     base_image: swift:6.2.1-bookworm
+    install: *gcc16_profile
     languages:
       - swift
   type-i:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - plain
       - python
       - java
   type-j:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - coq
   type-k:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - dart
   type-l:
     base_image: debian:trixie-slim
+    install: *gcc16_profile
     languages:
       - python
