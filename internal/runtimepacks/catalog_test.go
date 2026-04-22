@@ -376,19 +376,22 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "production_matrix") {
 		t.Fatalf("ci workflow must publish a production profile matrix")
 	}
+	if !strings.Contains(body, "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true") {
+		t.Fatalf("ci workflow must force JavaScript actions onto Node 24 to avoid runner deprecation noise")
+	}
 	if !strings.Contains(body, "aonohako-ci-prod:${{ matrix.name }}") {
 		t.Fatalf("ci workflow must build production-profile images in the profile matrix")
 	}
 	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
 		t.Fatalf("ci workflow must include the language list in the profile summaries")
 	}
-	if !strings.Contains(body, "actions/upload-artifact@v4") || !strings.Contains(body, "actions/download-artifact@v4") {
+	if !strings.Contains(body, "actions/upload-artifact@v7") || !strings.Contains(body, "actions/download-artifact@v8") {
 		t.Fatalf("ci workflow must aggregate toolchain summary data through artifacts")
 	}
 	if !strings.Contains(summarySection, "    if: ${{ always() }}") {
 		t.Fatalf("toolchain summary job must remain always-on")
 	}
-	if !strings.Contains(summarySection, "      - uses: actions/checkout@v4") {
+	if !strings.Contains(summarySection, "      - uses: actions/checkout@v6") {
 		t.Fatalf("toolchain summary job must check out the repository before running aggregation scripts")
 	}
 	if !strings.Contains(body, `docker save "aonohako-ci-prod:${{ matrix.name }}"`) {
