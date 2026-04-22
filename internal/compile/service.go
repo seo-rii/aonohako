@@ -30,7 +30,8 @@ const (
 	maxDecodedSourceTotalBytes = 48 << 20
 	maxArtifactBytes           = 16 << 20
 	maxArtifactTotalBytes      = 48 << 20
-	elixirERLAFlags            = "+MIscs 128 +S 1:1 +A 1"
+	ocamlCompileRunParam       = "s=32k"
+	elixirERLAFlags            = "+MIscs 128 +S 1:1 +A 1 +MMscs 0"
 	compileSandboxMemoryMB     = 2048
 	compileSandboxThreadLimit  = 256
 	compileWorkspaceBytes      = 512 << 20
@@ -333,7 +334,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		args := []string{"-d", workDir}
 		args = append(args, groovyFiles...)
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "groovyc", args, nil)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "groovyc", args, javaCompileEnv(workDir, 768))
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -351,13 +352,14 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		var checked int
 		var fullOut bytes.Buffer
 		var fullErr bytes.Buffer
-		parseExpr := `(require '[clojure.java.io :as io]) (with-open [r (java.io.PushbackReader. (io/reader (first *command-line-args*)))] (loop [] (let [form (read {:eof ::eof} r)] (when-not (= form ::eof) (recur)))))`
 		for _, src := range req.Sources {
 			if !strings.HasSuffix(strings.ToLower(src.Name), ".clj") {
 				continue
 			}
 			checked++
-			stdout, stderr, status, reason := runCommand(ctx, workDir, "clojure", []string{"-e", parseExpr, filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
+			sourcePath := filepath.Join(workDir, filepath.Clean(src.Name))
+			parseExpr := fmt.Sprintf(`(require '[clojure.java.io :as io]) (with-open [r (java.io.PushbackReader. (io/reader %q))] (loop [] (let [form (read {:eof ::eof} r)] (when-not (= form ::eof) (recur)))))`, sourcePath)
+			stdout, stderr, status, reason := runCommand(ctx, workDir, "clojure", []string{"-e", parseExpr}, javaCompileEnv(workDir, 768))
 			fullOut.WriteString(stdout)
 			fullErr.WriteString(stderr)
 			if status != model.CompileStatusOK {
@@ -459,7 +461,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 				continue
 			}
 			checked++
-			stdout, stderr, status, reason := runCommand(ctx, workDir, "coqc", []string{"-q", filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
+			stdout, stderr, status, reason := runCommand(ctx, workDir, "coqc", []string{"-q", filepath.Join(workDir, filepath.Clean(src.Name))}, []string{"OCAMLRUNPARAM=" + ocamlCompileRunParam})
 			fullOut.WriteString(stdout)
 			fullErr.WriteString(stderr)
 			if status != model.CompileStatusOK {
@@ -595,7 +597,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		args := []string{"-o", workDir}
 		args = append(args, erlangFiles...)
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "erlc", args, nil)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "erlc", args, []string{"ERL_AFLAGS=" + elixirERLAFlags})
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -642,7 +644,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if rootSource == "" {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no dart sources"}
 		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "dart", []string{"compile", "exe", rootSource, "-o", filepath.Join(workDir, target)}, nil)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "dart", []string{"compile", "exe", rootSource, "-o", filepath.Join(workDir, target)}, []string{"DART_SUPPRESS_ANALYTICS=true"})
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -774,9 +776,9 @@ func compileJava(ctx context.Context, workDir string, sources []model.Source, re
 	if len(javaPaths) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no java sources"}
 	}
-	args := []string{"--release", release, "-J-Xms1024m", "-J-Xmx1920m", "-J-Xss512m", "-encoding", "UTF-8"}
+	args := []string{"--release", release, "-encoding", "UTF-8"}
 	args = append(args, javaPaths...)
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "javac", args, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "javac", args, javaCompileEnv(workDir, 768))
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -983,7 +985,7 @@ func compileScala(ctx context.Context, workDir string, sources []model.Source) m
 	}
 	args := []string{"-d", workDir}
 	args = append(args, scalaFiles...)
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "scalac", args, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "scalac", args, javaCompileEnv(workDir, 768))
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1241,10 +1243,14 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 	}
 	var hasProject bool
 	var projectPath string
+	var csFiles []string
 	for _, src := range sources {
 		clean, err := util.ValidateRelativePath(src.Name)
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		if strings.HasSuffix(strings.ToLower(clean), ".cs") {
+			csFiles = append(csFiles, filepath.Join(workDir, clean))
 		}
 		if strings.HasSuffix(strings.ToLower(clean), ".csproj") {
 			hasProject = true
@@ -1253,6 +1259,70 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 			}
 			break
 		}
+	}
+	if !hasProject {
+		if len(csFiles) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no csharp sources"}
+		}
+		sdkDirs, err := filepath.Glob("/opt/dotnet/sdk/*")
+		if err != nil || len(sdkDirs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet sdk not found"}
+		}
+		sort.Strings(sdkDirs)
+		cscPath := filepath.Join(sdkDirs[len(sdkDirs)-1], "Roslyn", "bincore", "csc.dll")
+		if _, err := os.Stat(cscPath); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "csc compiler not found"}
+		}
+		refDirs, err := filepath.Glob("/opt/dotnet/packs/Microsoft.NETCore.App.Ref/*/ref/net8.0")
+		if err != nil || len(refDirs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet reference pack not found"}
+		}
+		sort.Strings(refDirs)
+		refDLLs, err := filepath.Glob(filepath.Join(refDirs[len(refDirs)-1], "*.dll"))
+		if err != nil || len(refDLLs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet reference assemblies not found"}
+		}
+		sort.Strings(refDLLs)
+		outDLL := filepath.Join(workDir, "App.dll")
+		globalUsingsPath := filepath.Join(workDir, "Aonohako.GlobalUsings.g.cs")
+		globalUsings := "global using System;\n" +
+			"global using System.Collections.Generic;\n" +
+			"global using System.IO;\n" +
+			"global using System.Linq;\n" +
+			"global using System.Net.Http;\n" +
+			"global using System.Threading;\n" +
+			"global using System.Threading.Tasks;\n"
+		if err := os.WriteFile(globalUsingsPath, []byte(globalUsings), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+		args := []string{cscPath, "-nologo", "-target:exe", "-langversion:latest", "-optimize+", "-out:" + outDLL}
+		for _, refDLL := range refDLLs {
+			args = append(args, "-r:"+refDLL)
+		}
+		args = append(args, csFiles...)
+		args = append(args, globalUsingsPath)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		runtimeDirs, err := filepath.Glob("/opt/dotnet/shared/Microsoft.NETCore.App/*")
+		if err != nil || len(runtimeDirs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet runtime not found", Stdout: stdout, Stderr: stderr}
+		}
+		sort.Strings(runtimeDirs)
+		runtimeVersion := filepath.Base(runtimeDirs[len(runtimeDirs)-1])
+		runtimeConfig := fmt.Sprintf("{\n  \"runtimeOptions\": {\n    \"tfm\": \"net8.0\",\n    \"framework\": {\n      \"name\": \"Microsoft.NETCore.App\",\n      \"version\": %q\n    }\n  }\n}\n", runtimeVersion)
+		if err := os.WriteFile(filepath.Join(workDir, "App.runtimeconfig.json"), []byte(runtimeConfig), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		artifacts, err := collectArtifacts(workDir, func(name string) bool {
+			lower := strings.ToLower(name)
+			return lower == "app.dll" || lower == "app.runtimeconfig.json"
+		}, "")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	}
 	if !hasProject {
 		if _, _, status, reason := runCommand(ctx, workDir, "dotnet", []string{"new", "console", "--force", "-o", projectDir}, dotnetBuildEnv()); status != model.CompileStatusOK {
@@ -1285,15 +1355,22 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 
 func dotnetBuildEnv() []string {
 	return []string{
-		"HOME=/tmp/csharp-home",
-		"DOTNET_CLI_HOME=/tmp/csharp-home",
-		"NUGET_PACKAGES=/tmp/csharp-packages",
 		"DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
 		"DOTNET_CLI_TELEMETRY_OPTOUT=1",
 		"DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",
 		"DOTNET_GENERATE_ASPNET_CERTIFICATE=false",
 		"DOTNET_NOLOGO=1",
 		"MSBuildEnableWorkloadResolver=false",
+	}
+}
+
+func javaCompileEnv(workDir string, xmxMB int) []string {
+	if xmxMB < 256 {
+		xmxMB = 256
+	}
+	tmp := filepath.Join(workDir, ".tmp")
+	return []string{
+		fmt.Sprintf("JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=%s -Xms64m -Xmx%dm -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m", tmp, xmxMB),
 	}
 }
 
@@ -1373,18 +1450,13 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		finalEnv[key] = ""
 	}
 	command := append([]string{bin}, args...)
-	resolveRealPath := func(name string) (string, error) {
-		path, err := exec.LookPath(name)
-		if err != nil {
-			return "", err
-		}
-		if real, err := filepath.EvalSymlinks(path); err == nil && real != "" {
-			path = real
-		}
-		return path, nil
+	helperEnv := make([]string, 0, len(finalEnv))
+	for key, value := range finalEnv {
+		helperEnv = append(helperEnv, key+"="+value)
 	}
+	sort.Strings(helperEnv)
 	if !filepath.IsAbs(command[0]) {
-		path, err := resolveRealPath(command[0])
+		path, err := util.ResolveCommandPath(command[0], helperEnv)
 		if err != nil {
 			if errors.Is(err, exec.ErrNotFound) {
 				return "", "", model.CompileStatusInternal, bin + " not found"
@@ -1393,11 +1465,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 		command[0] = path
 	}
-	helperEnv := make([]string, 0, len(finalEnv))
-	for key, value := range finalEnv {
-		helperEnv = append(helperEnv, key+"="+value)
-	}
-	sort.Strings(helperEnv)
+	disableDotnetLimits := filepath.Base(command[0]) == "dotnet"
 	reqPath := filepath.Join(workDir, ".tmp", "compile-request.json")
 	helperReq := sandbox.ExecRequest{
 		Command: append([]string(nil), command...),
@@ -1408,9 +1476,16 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			MemoryMB:       compileSandboxMemoryMB,
 			WorkspaceBytes: compileWorkspaceBytes,
 		},
-		ThreadLimit:    compileSandboxThreadLimit,
-		EnableNetwork:  false,
-		AllowProcesses: true,
+		ThreadLimit:              compileSandboxThreadLimit,
+		OpenFileLimit:            64,
+		EnableNetwork:            false,
+		AllowUnixSockets:         true,
+		AllowProcesses:           true,
+		DisableFileSizeLimit:     disableDotnetLimits,
+		DisableAddressSpaceLimit: disableDotnetLimits,
+	}
+	if disableDotnetLimits {
+		helperReq.OpenFileLimit = 512
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {

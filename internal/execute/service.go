@@ -21,7 +21,7 @@ const (
 	maxCapturedFileBytes         = 8 << 20
 	maxCapturedSidecarTotalBytes = 16 << 20
 	ocamlRunParam                = "s=32k"
-	elixirERLAFlags              = "+MIscs 128 +S 1:1 +A 1"
+	elixirERLAFlags              = "+MIscs 128 +S 1:1 +A 1 +MMscs 0"
 )
 
 type Hooks struct {

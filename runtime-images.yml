@@ -343,7 +343,7 @@ languages:
         - -lc
         - |
           printf '%s\n' 'File.write!("same-folder.txt", "ok")' 'IO.puts(File.read!("same-folder.txt"))' > Main.exs
-          env ERL_AFLAGS='+MIscs 128 +S 1:1 +A 1' elixir Main.exs | grep '^ok$'
+          env ERL_AFLAGS='+MIscs 128 +S 1:1 +A 1 +MMscs 0' elixir Main.exs | grep '^ok$'
 
   haskell:
     install:
@@ -548,7 +548,7 @@ languages:
         - xz-utils
       script:
         - curl -fsSL https://wasmtime.dev/install.sh | bash
-        - ln -sfn /root/.wasmtime/bin/wasmtime /usr/local/bin/wasmtime
+        - install -m 0755 /root/.wasmtime/bin/wasmtime /usr/local/bin/wasmtime
         - test -x /usr/local/bin/wasmtime
     smoke:
       command:
@@ -817,8 +817,10 @@ languages:
         - export PATH="/root/.nimble/bin:${PATH}"
         - curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
         - choosenim 2.2.8
-        - ln -sfn /root/.nimble/bin/nim /usr/local/bin/nim
-        - ln -sfn /root/.nimble/bin/nimble /usr/local/bin/nimble
+        - install -d /usr/local/lib/nim
+        - cp -a /root/.choosenim/toolchains/nim-2.2.8/lib /usr/local/lib/nim/
+        - install -m 0755 /root/.choosenim/toolchains/nim-2.2.8/bin/nim /usr/local/bin/nim
+        - install -m 0755 /root/.choosenim/toolchains/nim-2.2.8/bin/nimble /usr/local/bin/nimble
     smoke:
       command:
         - bash

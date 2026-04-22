@@ -75,26 +75,21 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
 	}
 
-	switch profiles.NormalizeRunLang(req.Lang) {
+	runLang := profiles.NormalizeRunLang(req.Lang)
+	allowUnixSockets := false
+	switch runLang {
 	case "ocaml":
 		innerEnv = append(innerEnv, "OCAMLRUNPARAM="+ocamlRunParam)
 	case "elixir":
 		innerEnv = append(innerEnv, "ERL_AFLAGS="+elixirERLAFlags)
+		allowUnixSockets = true
+	case "erlang":
+		allowUnixSockets = true
 	}
 
 	finalCommand := append([]string(nil), command...)
-	resolveRealPath := func(name string) (string, error) {
-		path, err := exec.LookPath(name)
-		if err != nil {
-			return "", err
-		}
-		if real, err := filepath.EvalSymlinks(path); err == nil && real != "" {
-			path = real
-		}
-		return path, nil
-	}
 	if !filepath.IsAbs(finalCommand[0]) {
-		path, err := resolveRealPath(finalCommand[0])
+		path, err := util.ResolveCommandPath(finalCommand[0], innerEnv)
 		if err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "resolve command failed: " + err.Error()}
 		}
@@ -108,7 +103,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			if filepath.IsAbs(finalCommand[i]) {
 				break
 			}
-			path, err := resolveRealPath(finalCommand[i])
+			path, err := util.ResolveCommandPath(finalCommand[i], innerEnv)
 			if err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "resolve env command failed: " + err.Error()}
 			}
@@ -116,6 +111,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			break
 		}
 	}
+	disableDotnetLimits := filepath.Base(finalCommand[0]) == "dotnet"
 
 	if os.Geteuid() == 0 {
 		const sandboxUID = 65532
@@ -140,12 +136,19 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 
 	reqPath := filepath.Join(ws.RootDir, ".tmp", "sandbox-request.json")
 	helperReq := sandbox.ExecRequest{
-		Command:       finalCommand,
-		Dir:           ws.BoxDir,
-		Env:           innerEnv,
-		Limits:        req.Limits,
-		ThreadLimit:   sandboxThreadLimit,
-		EnableNetwork: req.EnableNetwork,
+		Command:                  finalCommand,
+		Dir:                      ws.BoxDir,
+		Env:                      innerEnv,
+		Limits:                   req.Limits,
+		ThreadLimit:              sandboxThreadLimit,
+		OpenFileLimit:            64,
+		EnableNetwork:            req.EnableNetwork,
+		AllowUnixSockets:         allowUnixSockets,
+		DisableFileSizeLimit:     disableDotnetLimits,
+		DisableAddressSpaceLimit: disableDotnetLimits,
+	}
+	if disableDotnetLimits {
+		helperReq.OpenFileLimit = 512
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
@@ -355,7 +358,7 @@ done:
 			result.CPUTimeMs = usageCPU
 		}
 	}
-	if result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
+	if !disableDotnetLimits && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
 		result.Status = model.RunStatusMLE
 		result.Reason = "memory limit exceeded"
 	}

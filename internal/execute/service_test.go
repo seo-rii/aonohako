@@ -574,6 +574,79 @@ func TestRunBlocksSocketPairCreationWhenNetworkDisabled(t *testing.T) {
 	}
 }
 
+func TestRunAllowsPrlimitQueriesNeededByManagedRuntimes(t *testing.T) {
+	requireSandboxSupport(t)
+
+	binPath := buildCTestBinary(t, `#define _GNU_SOURCE
+#include <stdio.h>
+#include <sys/resource.h>
+
+int main(void) {
+	struct rlimit lim;
+	if (prlimit(0, RLIMIT_STACK, NULL, &lim) != 0) {
+		perror("prlimit");
+		return 1;
+	}
+	puts("ok");
+	return 0;
+}
+`)
+	payload, err := os.ReadFile(binPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", binPath, err)
+	}
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "probe",
+			DataB64: base64.StdEncoding.EncodeToString(payload),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "ok\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestExecuteSandboxAllowsLocalUnixSocketsForErlangRuntime(t *testing.T) {
+	requireSandboxSupport(t)
+
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	result := executeSandboxCommand(
+		context.Background(),
+		ws,
+		[]string{
+			python,
+			"-c",
+			"import socket, sys\na, b = socket.socketpair()\na.sendmsg([b'ok'])\ndata, _, _, _ = b.recvmsg(2)\nsys.exit(0 if data == b'ok' else 1)\n",
+		},
+		&model.RunRequest{
+			Lang:   "erlang",
+			Limits: model.Limits{TimeMs: 2000, MemoryMB: 256},
+		},
+		Hooks{},
+		1024,
+	)
+	if result.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", result)
+	}
+}
+
 func TestRunBlocksNamespaceEscapeAttempts(t *testing.T) {
 	requireSandboxSupport(t)
 
@@ -1045,6 +1118,28 @@ func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {
 	}
 	if resp.TimeMs != resp.WallTimeMs {
 		t.Fatalf("time_ms should match wall_time_ms, got %+v", resp)
+	}
+}
+
+func TestRunTreatsCoqAsCompileValidatedLanguage(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "coq",
+		Binaries: []model.Binary{{
+			Name:    "Main.v",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("Theorem same_folder_ok : 1 = 1.\nProof. reflexivity. Qed.\n")),
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected coq execute to be a compile-validated no-op, got %+v", resp)
+	}
+	if resp.ExitCode == nil || *resp.ExitCode != 0 {
+		t.Fatalf("expected zero exit code, got %+v", resp)
 	}
 }
 

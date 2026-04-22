@@ -2,6 +2,7 @@ package execute
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -9,31 +10,50 @@ import (
 )
 
 func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
+	ertsBin := ""
+	erlangRuntime := "erl"
+	if matches, err := filepath.Glob("/usr/lib/erlang/erts-*/bin/erlexec"); err == nil && len(matches) > 0 {
+		erlangRuntime = matches[len(matches)-1]
+		ertsBin = filepath.Dir(erlangRuntime)
+	}
+
 	switch lang {
 	case "binary":
 		return []string{primaryPath}
 	case "aheui":
 		return []string{
-			"sh",
+			"python3",
 			"-c",
-			"err_file=.aonohako-aheui.stderr.$$; " +
-				"if aheui \"$1\" 2>\"${err_file}\"; then " +
-				"cat \"${err_file}\" >&2; rm -f \"${err_file}\"; exit 0; " +
-				"fi; " +
-				"status=$?; " +
-				"cat \"${err_file}\" >&2; " +
-				"stderr_body=\"$(tr -d '\\r' < \"${err_file}\")\"; " +
-				"rm -f \"${err_file}\"; " +
-				"if [ -z \"${stderr_body}\" ] || [ \"${stderr_body}\" = \"[Warning:VirtualMachine] Running without rlib/jit.\" ]; then " +
-				"exit 0; " +
-				"fi; " +
-				"case \"${stderr_body}\" in *\"Traceback (most recent call last):\"*) exit \"${status}\" ;; esac; " +
-				"exit \"${status}\"",
-			"sh",
+			"import io, sys\n" +
+				"from contextlib import redirect_stderr\n" +
+				"from aheui.aheui import entry_point\n" +
+				"stderr = io.StringIO()\n" +
+				"with redirect_stderr(stderr):\n" +
+				"    code = entry_point(['aheui', sys.argv[1]])\n" +
+				"body = stderr.getvalue().replace('\\r', '')\n" +
+				"sys.stderr.write(body)\n" +
+				"trimmed = '\\n'.join(line for line in body.splitlines() if line.strip())\n" +
+				"if code == 0 or trimmed in ('', '[Warning:VirtualMachine] Running without rlib/jit.'):\n" +
+				"    raise SystemExit(0)\n" +
+				"raise SystemExit(code)\n",
 			primaryPath,
 		}
 	case "clojure":
-		return []string{"clojure", primaryPath}
+		xmx := max(32, req.Limits.MemoryMB/2)
+		return []string{
+			"java",
+			fmt.Sprintf("-Xmx%dm", xmx),
+			"-Xss1m",
+			"-XX:+UseSerialGC",
+			"-XX:ReservedCodeCacheSize=32m",
+			"-XX:MaxMetaspaceSize=192m",
+			"-XX:CompressedClassSpaceSize=64m",
+			"-Dfile.encoding=UTF-8",
+			"-cp",
+			"/usr/share/java/clojure-1.12.jar",
+			"clojure.main",
+			primaryPath,
+		}
 	case "python":
 		return []string{"python3", primaryPath}
 	case "pypy":
@@ -60,13 +80,37 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		if function == "" {
 			function = "main"
 		}
-		return []string{"erl", "+S", "1:1", "+A", "1", "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
+		if ertsBin != "" {
+			return []string{
+				"env",
+				"EMU=beam",
+				"ROOTDIR=/usr/lib/erlang",
+				"BINDIR=" + ertsBin,
+				"PROGNAME=erl",
+				"ERL_AFLAGS=" + elixirERLAFlags,
+				erlangRuntime,
+				"+S",
+				"1:1",
+				"+A",
+				"1",
+				"-noshell",
+				"-pa",
+				primaryPath,
+				"-s",
+				module,
+				function,
+				"-s",
+				"init",
+				"stop",
+			}
+		}
+		return []string{erlangRuntime, "+S", "1:1", "+A", "1", "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
 	case "prolog":
 		return []string{"swipl", "-q", "-f", primaryPath, "-g", "main", "-t", "halt"}
 	case "lisp":
 		return []string{"sbcl", "--noinform", "--script", primaryPath}
 	case "coq":
-		return []string{"coqc", "-q", primaryPath}
+		return []string{"true"}
 	case "groovy":
 		mainClass := strings.TrimSpace(req.EntryPoint)
 		if mainClass == "" {
@@ -82,8 +126,8 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		mainClass = strings.ReplaceAll(mainClass, "/", ".")
 		return []string{"scala", "-nocompdaemon", "-classpath", primaryPath, mainClass}
 	case "java":
-		xmx := max(32, req.Limits.MemoryMB)
-		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss16m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
+		xmx := max(32, req.Limits.MemoryMB/2)
+		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss1m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
 	case "javascript":
 		return []string{"node", "--stack-size=65536", primaryPath}
 	case "julia":
@@ -101,7 +145,29 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	case "ocaml":
 		return []string{"env", "OCAMLRUNPARAM=" + ocamlRunParam, primaryPath}
 	case "elixir":
-		return []string{"env", "ERL_AFLAGS=" + elixirERLAFlags, "elixir", primaryPath}
+		elixirRoot := "/usr/lib/elixir/lib"
+		if info, err := os.Stat(filepath.Join(elixirRoot, "elixir", "ebin")); err != nil || !info.IsDir() || ertsBin == "" {
+			return []string{"env", "ERL_AFLAGS=" + elixirERLAFlags, "elixir", primaryPath}
+		}
+		return []string{
+			"env",
+			"EMU=beam",
+			"ROOTDIR=/usr/lib/erlang",
+			"BINDIR=" + ertsBin,
+			"PROGNAME=erl",
+			"ERL_AFLAGS=" + elixirERLAFlags,
+			erlangRuntime,
+			"-noshell",
+			"-elixir_root",
+			elixirRoot,
+			"-pa",
+			filepath.Join(elixirRoot, "elixir", "ebin"),
+			"-s",
+			"elixir",
+			"start_cli",
+			"-extra",
+			primaryPath,
+		}
 	case "sqlite":
 		dbPath := filepath.Join(filepath.Dir(primaryPath), ".aonohako.sqlite3")
 		return []string{"sh", "-c", "exec sqlite3 \"$0\" < \"$1\"", dbPath, primaryPath}

@@ -334,6 +334,29 @@ func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
 	if !slices.Contains(catalog.Languages["nim"].Install.Apt, "libc6-dev") {
 		t.Fatalf("nim apt packages = %v, want libc6-dev for Nim C backend headers", catalog.Languages["nim"].Install.Apt)
 	}
+	nimScriptBody := strings.Join(catalog.Languages["nim"].Install.Script, "\n")
+	for _, marker := range []string{
+		"nim-lang.org/choosenim/init.sh",
+		"choosenim 2.2.8",
+		"install -d /usr/local/lib/nim",
+		"cp -a /root/.choosenim/toolchains/nim-2.2.8/lib /usr/local/lib/nim/",
+		"install -m 0755 /root/.choosenim/toolchains/nim-2.2.8/bin/nim /usr/local/bin/nim",
+		"install -m 0755 /root/.choosenim/toolchains/nim-2.2.8/bin/nimble /usr/local/bin/nimble",
+	} {
+		if !strings.Contains(nimScriptBody, marker) {
+			t.Fatalf("nim install script must contain %q", marker)
+		}
+	}
+	if strings.Contains(nimScriptBody, "ln -sfn /root/.nimble/bin/") {
+		t.Fatalf("nim install script must not leave /usr/local/bin symlinked into /root/.nimble/bin")
+	}
+	wasmScriptBody := strings.Join(catalog.Languages["wasm"].Install.Script, "\n")
+	if !strings.Contains(wasmScriptBody, "install -m 0755 /root/.wasmtime/bin/wasmtime /usr/local/bin/wasmtime") {
+		t.Fatalf("wasm install script must materialize wasmtime under /usr/local/bin")
+	}
+	if strings.Contains(wasmScriptBody, "ln -sfn /root/.wasmtime/bin/wasmtime") {
+		t.Fatalf("wasm install script must not leave /usr/local/bin symlinked into /root/.wasmtime/bin")
+	}
 
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
@@ -346,15 +369,6 @@ func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
 		}
 		if !slices.Contains(spec.AptPackages, "default-jre-headless") {
 			t.Fatalf("ci-kotlin apt packages = %v, want default-jre-headless for run_konan", spec.AptPackages)
-		}
-		for _, marker := range []string{
-			"nim-lang.org/choosenim/init.sh",
-			"choosenim 2.2.8",
-			"/root/.nimble/bin/nim",
-		} {
-			if !strings.Contains(strings.Join(catalog.Languages["nim"].Install.Script, "\n"), marker) {
-				t.Fatalf("nim install script must contain %q", marker)
-			}
 		}
 		return
 	}

@@ -102,6 +102,32 @@ func TestMaterializeFilesStoresProgramsInsideBoxWithImmutableModes(t *testing.T)
 	}
 }
 
+func TestMaterializeFilesPrefersCoqSourceAsPrimary(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang: "coq",
+		Binaries: []model.Binary{
+			{Name: "Main.glob", DataB64: b64("glob")},
+			{Name: "Main.v", DataB64: b64("Theorem t : True.\nProof. exact I. Qed.\n")},
+			{Name: "Main.vo", DataB64: b64("vo")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "coq" {
+		t.Fatalf("lang = %q, want coq", lang)
+	}
+	if got := filepath.Base(primary); got != "Main.v" {
+		t.Fatalf("primary file = %q, want Main.v", got)
+	}
+}
+
 func TestCaptureFileOutputRejectsSymlink(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

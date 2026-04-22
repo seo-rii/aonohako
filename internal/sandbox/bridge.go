@@ -9,11 +9,15 @@ const (
 )
 
 type ExecRequest struct {
-	Command        []string     `json:"command"`
-	Dir            string       `json:"dir"`
-	Env            []string     `json:"env"`
-	Limits         model.Limits `json:"limits"`
-	ThreadLimit    int          `json:"thread_limit"`
-	EnableNetwork  bool         `json:"enable_network"`
-	AllowProcesses bool         `json:"allow_processes,omitempty"`
+	Command                  []string     `json:"command"`
+	Dir                      string       `json:"dir"`
+	Env                      []string     `json:"env"`
+	Limits                   model.Limits `json:"limits"`
+	ThreadLimit              int          `json:"thread_limit"`
+	OpenFileLimit            int          `json:"open_file_limit,omitempty"`
+	EnableNetwork            bool         `json:"enable_network"`
+	AllowUnixSockets         bool         `json:"allow_unix_sockets,omitempty"`
+	AllowProcesses           bool         `json:"allow_processes,omitempty"`
+	DisableFileSizeLimit     bool         `json:"disable_file_size_limit,omitempty"`
+	DisableAddressSpaceLimit bool         `json:"disable_address_space_limit,omitempty"`
 }
