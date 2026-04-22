@@ -96,6 +96,39 @@ func TestRemoteRunnerSendsBearerToken(t *testing.T) {
 	}
 }
 
+func TestRemoteRunnerRejectsNonSSESuccessResponses(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"Accepted"}`))
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:     "text",
+		Binaries: []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+		Limits:   model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail {
+		t.Fatalf("expected init failure for non-SSE upstream response, got %+v", resp)
+	}
+	if got := resp.Reason; got == "" || got == "remote execute stream ended without result" {
+		t.Fatalf("expected explicit non-SSE reason, got %+v", resp)
+	}
+}
+
 func TestNormalizeRemoteExecuteURLAppendsExecutePath(t *testing.T) {
 	tests := []struct {
 		raw  string

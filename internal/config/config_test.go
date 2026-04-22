@@ -81,6 +81,29 @@ func TestLoadRejectsRemoteExecutionWithoutURL(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidRemoteRunnerURLs(t *testing.T) {
+	tests := []string{
+		"/execute",
+		"ftp://runner.internal/execute",
+		"https://user:pass@runner.internal/execute",
+		"https://runner.internal/execute?debug=1",
+		"https://runner.internal/execute#frag",
+	}
+
+	for _, rawURL := range tests {
+		t.Run(rawURL, func(t *testing.T) {
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", rawURL)
+
+			if _, err := Load(); err == nil {
+				t.Fatalf("expected Load() to reject remote URL %q", rawURL)
+			}
+		})
+	}
+}
+
 func TestLoadRejectsBearerRemoteAuthWithoutToken(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")

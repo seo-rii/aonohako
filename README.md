@@ -130,7 +130,8 @@ Repository policy check:
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another
-  `aonohako` runner service
+  `aonohako` runner service and must be an absolute `http(s)` URL without
+  embedded credentials, query strings, or fragments
 - `AONOHAKO_REMOTE_RUNNER_AUTH` can be `none`, `bearer`, or
   `cloudrun-idtoken`
 - `AONOHAKO_REMOTE_RUNNER_TOKEN` provides the bearer token when
