@@ -201,7 +201,11 @@ func TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser(t *tes
 		t.Skip("requires root to drop to sandbox user")
 	}
 
-	workDir := t.TempDir()
+	workDir, err := os.MkdirTemp("", "aonohako-workspace-test-*")
+	if err != nil {
+		t.Fatalf("mkdirtemp: %v", err)
+	}
+	defer os.RemoveAll(workDir)
 	ws, err := prepareWorkspaceDirs(workDir)
 	if err != nil {
 		t.Fatalf("prepareWorkspaceDirs: %v", err)
@@ -215,6 +219,9 @@ func TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser(t *tes
 	})
 	if err != nil {
 		t.Fatalf("materializeFiles: %v", err)
+	}
+	if err := os.Chmod(ws.RootDir, 0o755); err != nil {
+		t.Fatalf("chmod workspace root: %v", err)
 	}
 
 	cmd := exec.Command("sh", "-lc", "cat pkg/Main.class >/dev/null && touch pkg/generated.txt && test -f pkg/generated.txt")
@@ -231,7 +238,11 @@ func TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser(t *testing.T)
 		t.Skip("requires root to drop to sandbox user")
 	}
 
-	workDir := t.TempDir()
+	workDir, err := os.MkdirTemp("", "aonohako-workspace-test-*")
+	if err != nil {
+		t.Fatalf("mkdirtemp: %v", err)
+	}
+	defer os.RemoveAll(workDir)
 	ws, err := prepareWorkspaceDirs(workDir)
 	if err != nil {
 		t.Fatalf("prepareWorkspaceDirs: %v", err)
@@ -249,6 +260,9 @@ func TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser(t *testing.T)
 	}
 	if lang != "java" {
 		t.Fatalf("lang = %q, want java", lang)
+	}
+	if err := os.Chmod(ws.RootDir, 0o755); err != nil {
+		t.Fatalf("chmod workspace root: %v", err)
 	}
 
 	cmd := exec.Command("sh", "-lc", "test -r \"$1\"", "sh", jarPath)
