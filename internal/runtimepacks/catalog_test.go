@@ -358,6 +358,10 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "toolchain-summary:") {
 		t.Fatalf("ci workflow must define a dedicated toolchain summary job")
 	}
+	summarySection := body[strings.Index(body, "toolchain-summary:"):]
+	if idx := strings.Index(summarySection, "\n  mixin-smoke:"); idx >= 0 {
+		summarySection = summarySection[:idx]
+	}
 	if !strings.Contains(body, "production_matrix") {
 		t.Fatalf("ci workflow must publish a production profile matrix")
 	}
@@ -370,14 +374,23 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "actions/upload-artifact@v4") || !strings.Contains(body, "actions/download-artifact@v4") {
 		t.Fatalf("ci workflow must aggregate toolchain summary data through artifacts")
 	}
+	if !strings.Contains(summarySection, "    if: ${{ always() }}") {
+		t.Fatalf("toolchain summary job must remain always-on")
+	}
+	if !strings.Contains(summarySection, "      - uses: actions/checkout@v4") {
+		t.Fatalf("toolchain summary job must check out the repository before running aggregation scripts")
+	}
 	if !strings.Contains(body, `docker save "aonohako-ci-prod:${{ matrix.name }}"`) {
 		t.Fatalf("ci workflow must export production-profile images into artifact files")
 	}
 	if !strings.Contains(body, "toolchain-summary-bundle") {
 		t.Fatalf("ci workflow must publish a final bundle artifact for toolchain reports")
 	}
-	if !strings.Contains(body, "scripts/aggregate_toolchain_summaries.py toolchain-artifacts") {
+	if !strings.Contains(summarySection, "scripts/aggregate_toolchain_summaries.py toolchain-artifacts") {
 		t.Fatalf("ci workflow must aggregate per-profile summaries into the job summary")
+	}
+	if !strings.Contains(summarySection, `summary="$(python3 scripts/aggregate_toolchain_summaries.py toolchain-artifacts)"`) {
+		t.Fatalf("ci workflow must fail closed if summary aggregation fails")
 	}
 }
 
