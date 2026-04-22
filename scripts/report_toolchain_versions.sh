@@ -201,8 +201,8 @@ if has_language "scala"; then
 fi
 
 if has_language "plain" || has_language "asm" || has_language "nasm"; then
-    report_once "GCC" gcc --version
-    report_once "G++" g++ --version
+    report_once "GCC" gcc -dumpfullversion -dumpversion
+    report_once "G++" g++ -dumpfullversion -dumpversion
 fi
 
 if has_language "asm"; then

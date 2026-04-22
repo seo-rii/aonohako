@@ -238,6 +238,8 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_python_pkg_once "JAXLIB" "jaxlib"`,
 		`report_python_module_once "JungolRobot" "jungol_robot"`,
 		`report_python_module_once "robot_judge" "robot_judge"`,
+		`report_once "GCC" gcc -dumpfullversion -dumpversion`,
+		`report_once "G++" g++ -dumpfullversion -dumpversion`,
 		`report_once "GNU as" as --version`,
 		`report_once "NASM" nasm -v`,
 		`report_once "PyPy" pypy3 --version`,
