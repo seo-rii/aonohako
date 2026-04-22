@@ -177,35 +177,15 @@ func TestSmokeScriptRunsSandboxSelftestBeforeLanguageSmoke(t *testing.T) {
 	}
 }
 
-func TestRuntimeEntrypointHardensScratchDirsBeforeExec(t *testing.T) {
+func TestRuntimeEntrypointPassesThroughToRequestedCommand(t *testing.T) {
 	path := filepath.Join("..", "..", "scripts", "runtime_entrypoint.sh")
-	root := t.TempDir()
-	dirs := []string{
-		filepath.Join(root, "tmp"),
-		filepath.Join(root, "var-tmp"),
-		filepath.Join(root, "dev-shm"),
-	}
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0o777); err != nil {
-			t.Fatalf("MkdirAll(%q): %v", dir, err)
-		}
-		if err := os.Chmod(dir, 0o777); err != nil {
-			t.Fatalf("Chmod(%q): %v", dir, err)
-		}
-	}
-
-	cmdText := "for dir in \"$@\"; do stat -c %a \"$dir\"; done"
-	cmdArgs := []string{path, "sh", "-c", cmdText, "sh"}
-	cmdArgs = append(cmdArgs, dirs...)
-	cmd := exec.Command("/bin/sh", cmdArgs...)
-	cmd.Env = append(os.Environ(), "AONOHAKO_SCRATCH_DIRS="+strings.Join(dirs, " "))
+	cmd := exec.Command("/bin/sh", path, "sh", "-c", "printf ok")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("runtime_entrypoint.sh: %v\n%s", err, string(out))
 	}
-
-	if string(out) != "755\n755\n755\n" {
-		t.Fatalf("runtime_entrypoint.sh must chmod scratch dirs before exec, got %q", string(out))
+	if string(out) != "ok" {
+		t.Fatalf("runtime_entrypoint.sh must exec the requested command without mutation, got %q", string(out))
 	}
 }
 

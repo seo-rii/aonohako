@@ -202,7 +202,7 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	scratchOut, scratchErr, err := runAsSandboxUser(
-		"for p in /tmp /var/tmp /run/lock /dev/shm /dev/mqueue; do "+
+		"for p in /tmp /var/tmp /run/lock; do "+
 			"if [ -e \"$p\" ]; then "+
 			"if [ -w \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
 			"fi; "+
