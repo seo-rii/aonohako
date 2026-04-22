@@ -317,10 +317,12 @@ Production profiles currently group languages like this:
 
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the
-production profiles and runs `scripts/report_toolchain_versions.sh` once per
-profile, so toolchain versions, Python judge-library versions, and vendored
-Python judge-helper availability land in one GitHub Actions summary instead of
-being split across the smoke matrix.
+production profiles in a parallel matrix and runs
+`scripts/report_toolchain_versions.sh` once per profile. Each matrix leg uploads
+its summary fragment and a `docker save` archive for the image as artifacts. A
+final CI summary job downloads those artifacts, concatenates the per-profile
+reports into one GitHub Actions summary, and republishes the summaries plus
+image archives as a single bundle artifact.
 
 Debian-based production profiles now use `debian:trixie-slim`, which raises the
 baseline Python, PyPy, and GCC versions seen by both production and CI runtime

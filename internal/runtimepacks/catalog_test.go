@@ -275,19 +275,31 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "scripts/report_toolchain_versions.sh") {
 		t.Fatalf("ci workflow must invoke report_toolchain_versions.sh")
 	}
+	if !strings.Contains(body, "toolchain-profile:") {
+		t.Fatalf("ci workflow must define a dedicated production-profile artifact job")
+	}
 	if !strings.Contains(body, "toolchain-summary:") {
 		t.Fatalf("ci workflow must define a dedicated toolchain summary job")
 	}
-	if !strings.Contains(body, "go run ./cmd/runtime-matrix -mode production") {
-		t.Fatalf("ci workflow must iterate production profiles for one consolidated summary")
+	if !strings.Contains(body, "production_matrix") {
+		t.Fatalf("ci workflow must publish a production profile matrix")
 	}
-	if !strings.Contains(body, "aonohako-ci-prod:${name}") {
-		t.Fatalf("ci workflow must report production-profile images in the consolidated summary")
+	if !strings.Contains(body, "aonohako-ci-prod:${{ matrix.name }}") {
+		t.Fatalf("ci workflow must build production-profile images in the profile matrix")
 	}
-	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${languages}\"") {
-		t.Fatalf("ci workflow must include the language list in the consolidated summary")
+	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
+		t.Fatalf("ci workflow must include the language list in the profile summaries")
 	}
-	if !strings.Contains(body, ">> \"$GITHUB_STEP_SUMMARY\"") {
-		t.Fatalf("ci workflow must publish toolchain versions to the job summary")
+	if !strings.Contains(body, "actions/upload-artifact@v4") || !strings.Contains(body, "actions/download-artifact@v4") {
+		t.Fatalf("ci workflow must aggregate toolchain summary data through artifacts")
+	}
+	if !strings.Contains(body, `docker save "aonohako-ci-prod:${{ matrix.name }}"`) {
+		t.Fatalf("ci workflow must export production-profile images into artifact files")
+	}
+	if !strings.Contains(body, "toolchain-summary-bundle") {
+		t.Fatalf("ci workflow must publish a final bundle artifact for toolchain reports")
+	}
+	if !strings.Contains(body, "cat \"${dir}/summary.md\" >> \"$GITHUB_STEP_SUMMARY\"") {
+		t.Fatalf("ci workflow must consolidate per-profile summaries into the job summary")
 	}
 }

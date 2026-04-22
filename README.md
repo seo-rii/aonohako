@@ -33,11 +33,12 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   base image or install path such as `swift`, `julia`, `coq`, or `dart`.
 - CI mode expands the same catalog into one image per language so that each
   smoke job validates a single toolchain in isolation. A separate CI job builds
-  the production profiles and runs
+  the production profiles in parallel, runs
   [`scripts/report_toolchain_versions.sh`](scripts/report_toolchain_versions.sh)
-  once per profile so the resulting tool and library versions appear in one
-  consolidated GitHub Actions summary instead of being fragmented across the
-  per-language matrix.
+  once per profile, and uploads both the profile summary fragment and a
+  `docker save` archive for that image as artifacts. A final CI job downloads
+  those artifacts, publishes one consolidated GitHub Actions summary, and
+  re-uploads the collected summaries plus image archives as a single bundle.
 - The current catalog covers native binaries, Python plus bundled judge
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), plus vendored
