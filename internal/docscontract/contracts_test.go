@@ -87,11 +87,19 @@ func TestReadmeExecutionModeNarrativeMatchesRuntimeBehavior(t *testing.T) {
 	t.Setenv("CLOUD_RUN_JOB", "")
 	t.Setenv("CLOUD_RUN_WORKER_POOL", "")
 
-	if got := platform.CurrentExecutionMode(); got != platform.ExecutionModeLocalDev {
-		t.Fatalf("CurrentExecutionMode() = %q, want local-dev default", got)
+	gotMode, err := platform.CurrentExecutionMode()
+	if err != nil {
+		t.Fatalf("CurrentExecutionMode() error = %v", err)
 	}
-	if got := platform.CurrentRuntimeOptions(); got.DeploymentTarget != platform.DeploymentTargetDev || got.ExecutionTransport != platform.ExecutionTransportEmbedded || got.SandboxBackend != platform.SandboxBackendHelper {
-		t.Fatalf("CurrentRuntimeOptions() = %+v", got)
+	if gotMode != platform.ExecutionModeLocalDev {
+		t.Fatalf("CurrentExecutionMode() = %q, want local-dev default", gotMode)
+	}
+	gotOptions, err := platform.CurrentRuntimeOptions()
+	if err != nil {
+		t.Fatalf("CurrentRuntimeOptions() error = %v", err)
+	}
+	if gotOptions.DeploymentTarget != platform.DeploymentTargetDev || gotOptions.ExecutionTransport != platform.ExecutionTransportEmbedded || gotOptions.SandboxBackend != platform.SandboxBackendHelper {
+		t.Fatalf("CurrentRuntimeOptions() = %+v", gotOptions)
 	}
 
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")

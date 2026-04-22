@@ -5,10 +5,16 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"aonohako/internal/platform"
 )
 
 func TestDefaultMaxActiveRuns(t *testing.T) {
-	got := defaultMaxActiveRuns()
+	got := defaultMaxActiveRuns(platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetDev,
+		ExecutionTransport: platform.ExecutionTransportRemote,
+		SandboxBackend:     platform.SandboxBackendNone,
+	})
 	cpu := runtime.NumCPU()
 	if cpu == 1 && got != 1 {
 		t.Fatalf("expected 1 for single-core, got %d", got)
@@ -25,9 +31,22 @@ func TestDefaultMaxActiveRuns(t *testing.T) {
 }
 
 func TestDefaultMaxActiveRunsCloudRunIsOne(t *testing.T) {
-	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
-	if got := defaultMaxActiveRuns(); got != 1 {
+	if got := defaultMaxActiveRuns(platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetCloudRun,
+		ExecutionTransport: platform.ExecutionTransportRemote,
+		SandboxBackend:     platform.SandboxBackendNone,
+	}); got != 1 {
 		t.Fatalf("expected Cloud Run default max active runs to be 1, got %d", got)
+	}
+}
+
+func TestDefaultMaxActiveRunsEmbeddedHelperIsOne(t *testing.T) {
+	if got := defaultMaxActiveRuns(platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+		ExecutionTransport: platform.ExecutionTransportEmbedded,
+		SandboxBackend:     platform.SandboxBackendHelper,
+	}); got != 1 {
+		t.Fatalf("expected embedded helper default max active runs to be 1, got %d", got)
 	}
 }
 
@@ -106,6 +125,62 @@ func TestLoadRejectsEmbeddedHelperWhenNotRoot(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsEmbeddedHelperWithParallelActiveRuns(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "2")
+
+	if _, err := Load(); err == nil {
+		t.Fatalf("expected embedded helper execution to reject parallel active runs")
+	}
+}
+
+func TestLoadRejectsUnknownRuntimeAxisValues(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{name: "execution mode", env: map[string]string{"AONOHAKO_EXECUTION_MODE": "mystery"}},
+		{name: "deployment target", env: map[string]string{"AONOHAKO_DEPLOYMENT_TARGET": "mystery"}},
+		{name: "execution transport", env: map[string]string{"AONOHAKO_EXECUTION_TRANSPORT": "mystery"}},
+		{name: "sandbox backend", env: map[string]string{"AONOHAKO_SANDBOX_BACKEND": "mystery"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AONOHAKO_EXECUTION_MODE", "")
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+			if _, err := Load(); err == nil {
+				t.Fatalf("expected Load() to reject %+v", tc.env)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsGroupWritableDedicatedWorkRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0o775); err != nil {
+		t.Fatalf("chmod root: %v", err)
+	}
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_WORK_ROOT", root)
+
+	if _, err := Load(); err == nil {
+		t.Fatalf("expected group-writable dedicated work root to be rejected")
+	}
+}
+
 func TestLoadUsesEnvAndFallbacks(t *testing.T) {
 	prevPort := os.Getenv("PORT")
 	prevActive := os.Getenv("AONOHAKO_MAX_ACTIVE_RUNS")
@@ -150,7 +225,7 @@ func TestLoadUsesEnvAndFallbacks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error on fallback path: %v", err)
 	}
-	if cfg.MaxActiveRuns != defaultMaxActiveRuns() {
+	if cfg.MaxActiveRuns != defaultMaxActiveRuns(cfg.Execution.Platform) {
 		t.Fatalf("fallback max active mismatch: %d", cfg.MaxActiveRuns)
 	}
 	if cfg.MaxPendingQueue != 0 {
@@ -182,7 +257,7 @@ func TestLoadIgnoresLegacyEnvFallbacks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.MaxActiveRuns != defaultMaxActiveRuns() {
+	if cfg.MaxActiveRuns != defaultMaxActiveRuns(cfg.Execution.Platform) {
 		t.Fatalf("legacy max active env should be ignored, got %d", cfg.MaxActiveRuns)
 	}
 	if cfg.MaxPendingQueue != 0 {

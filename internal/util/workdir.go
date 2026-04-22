@@ -10,13 +10,21 @@ import (
 
 func CreateWorkDir(prefix string) (string, error) {
 	root := strings.TrimSpace(os.Getenv("AONOHAKO_WORK_ROOT"))
+	mode, err := platform.CurrentExecutionMode()
+	if err != nil {
+		return "", err
+	}
+	usesDedicatedWorkRoot, err := platform.UsesDedicatedWorkRoot()
+	if err != nil {
+		return "", err
+	}
 	if root == "" {
-		if platform.UsesDedicatedWorkRoot() {
-			return "", fmt.Errorf("AONOHAKO_WORK_ROOT is required in %s mode", platform.CurrentExecutionMode())
+		if usesDedicatedWorkRoot {
+			return "", fmt.Errorf("AONOHAKO_WORK_ROOT is required in %s mode", mode)
 		}
 		return os.MkdirTemp("", prefix)
 	}
-	if platform.UsesDedicatedWorkRoot() {
+	if usesDedicatedWorkRoot {
 		info, err := os.Stat(root)
 		if err != nil {
 			return "", err

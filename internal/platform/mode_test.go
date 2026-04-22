@@ -4,27 +4,42 @@ import "testing"
 
 func TestCurrentExecutionModeDefaultsToLocalDev(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_MODE", "")
-	if got := CurrentExecutionMode(); got != ExecutionModeLocalDev {
+	got, err := CurrentExecutionMode()
+	if err != nil {
+		t.Fatalf("CurrentExecutionMode() error = %v", err)
+	}
+	if got != ExecutionModeLocalDev {
 		t.Fatalf("CurrentExecutionMode() = %q, want %q", got, ExecutionModeLocalDev)
 	}
 }
 
 func TestCurrentExecutionModeParsesExplicitModes(t *testing.T) {
 	tests := []struct {
-		raw  string
-		want ExecutionMode
+		raw     string
+		want    ExecutionMode
+		wantErr bool
 	}{
 		{raw: "cloudrun", want: ExecutionModeCloudRun},
 		{raw: "local-root", want: ExecutionModeLocalRoot},
 		{raw: "local-dev", want: ExecutionModeLocalDev},
 		{raw: " CLOUDRUN ", want: ExecutionModeCloudRun},
-		{raw: "unknown", want: ExecutionModeLocalDev},
+		{raw: "unknown", wantErr: true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.raw, func(t *testing.T) {
 			t.Setenv("AONOHAKO_EXECUTION_MODE", tc.raw)
-			if got := CurrentExecutionMode(); got != tc.want {
+			got, err := CurrentExecutionMode()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("CurrentExecutionMode(%q) error = nil, want rejection", tc.raw)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CurrentExecutionMode(%q) error = %v", tc.raw, err)
+			}
+			if got != tc.want {
 				t.Fatalf("CurrentExecutionMode(%q) = %q, want %q", tc.raw, got, tc.want)
 			}
 		})
@@ -40,7 +55,11 @@ func TestCloudRunMarkersDoNotChangeExecutionMode(t *testing.T) {
 	if !CloudRunMarkersPresent() {
 		t.Fatalf("CloudRunMarkersPresent() = false, want true")
 	}
-	if got := CurrentExecutionMode(); got != ExecutionModeLocalDev {
+	got, err := CurrentExecutionMode()
+	if err != nil {
+		t.Fatalf("CurrentExecutionMode() error = %v", err)
+	}
+	if got != ExecutionModeLocalDev {
 		t.Fatalf("CurrentExecutionMode() = %q, want %q even when markers are present", got, ExecutionModeLocalDev)
 	}
 	if IsCloudRun() {
@@ -54,7 +73,10 @@ func TestCurrentRuntimeOptionsDefaultToLegacyLocalDevShape(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "")
 
-	got := CurrentRuntimeOptions()
+	got, err := CurrentRuntimeOptions()
+	if err != nil {
+		t.Fatalf("CurrentRuntimeOptions() error = %v", err)
+	}
 	if got.DeploymentTarget != DeploymentTargetDev || got.ExecutionTransport != ExecutionTransportEmbedded || got.SandboxBackend != SandboxBackendHelper {
 		t.Fatalf("CurrentRuntimeOptions() = %+v", got)
 	}
@@ -66,7 +88,10 @@ func TestCurrentRuntimeOptionsAllowAxisOverrides(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
 
-	got := CurrentRuntimeOptions()
+	got, err := CurrentRuntimeOptions()
+	if err != nil {
+		t.Fatalf("CurrentRuntimeOptions() error = %v", err)
+	}
 	if got.DeploymentTarget != DeploymentTargetSelfHosted || got.ExecutionTransport != ExecutionTransportRemote || got.SandboxBackend != SandboxBackendNone {
 		t.Fatalf("CurrentRuntimeOptions() = %+v", got)
 	}
@@ -77,9 +102,38 @@ func TestCurrentRuntimeOptionsDefaultRemoteBackendToNone(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "")
 
-	got := CurrentRuntimeOptions()
+	got, err := CurrentRuntimeOptions()
+	if err != nil {
+		t.Fatalf("CurrentRuntimeOptions() error = %v", err)
+	}
 	if got.ExecutionTransport != ExecutionTransportRemote || got.SandboxBackend != SandboxBackendNone {
 		t.Fatalf("CurrentRuntimeOptions() = %+v", got)
+	}
+}
+
+func TestCurrentRuntimeOptionsRejectsUnknownAxisValues(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{name: "target", env: map[string]string{"AONOHAKO_DEPLOYMENT_TARGET": "mystery"}},
+		{name: "transport", env: map[string]string{"AONOHAKO_EXECUTION_TRANSPORT": "mystery"}},
+		{name: "backend", env: map[string]string{"AONOHAKO_SANDBOX_BACKEND": "mystery"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AONOHAKO_EXECUTION_MODE", "")
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "")
+			t.Setenv("AONOHAKO_SANDBOX_BACKEND", "")
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+			if _, err := CurrentRuntimeOptions(); err == nil {
+				t.Fatalf("CurrentRuntimeOptions() should reject %+v", tc.env)
+			}
+		})
 	}
 }
 
@@ -104,7 +158,11 @@ func TestUsesDedicatedWorkRootMatchesRuntimeShape(t *testing.T) {
 			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", tc.target)
 			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", tc.transport)
 			t.Setenv("AONOHAKO_SANDBOX_BACKEND", tc.backend)
-			if got := UsesDedicatedWorkRoot(); got != tc.want {
+			got, err := UsesDedicatedWorkRoot()
+			if err != nil {
+				t.Fatalf("UsesDedicatedWorkRoot() error = %v", err)
+			}
+			if got != tc.want {
 				t.Fatalf("UsesDedicatedWorkRoot() = %v, want %v", got, tc.want)
 			}
 		})
@@ -128,7 +186,11 @@ func TestRequiresRootForExecutionMatchesBackend(t *testing.T) {
 			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
 			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", tc.transport)
 			t.Setenv("AONOHAKO_SANDBOX_BACKEND", tc.backend)
-			if got := RequiresRootForExecution(); got != tc.want {
+			got, err := RequiresRootForExecution()
+			if err != nil {
+				t.Fatalf("RequiresRootForExecution() error = %v", err)
+			}
+			if got != tc.want {
 				t.Fatalf("RequiresRootForExecution() = %v, want %v", got, tc.want)
 			}
 		})

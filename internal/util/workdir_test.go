@@ -52,3 +52,11 @@ func TestCreateWorkDirRejectsMissingStrictRoot(t *testing.T) {
 		t.Fatalf("expected strict execution mode to reject a missing work root")
 	}
 }
+
+func TestCreateWorkDirRejectsUnknownExecutionMode(t *testing.T) {
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "mystery")
+
+	if _, err := CreateWorkDir("aonohako-test-*"); err == nil {
+		t.Fatalf("expected unknown execution mode to be rejected")
+	}
+}
