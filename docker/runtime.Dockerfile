@@ -63,7 +63,7 @@ RUN find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
     for path in /etc/debian_version /etc/os-release /etc/issue /etc/issue.net /etc/motd; do \
       if [[ -e "${path}" ]]; then chmod 0600 "${path}"; fi; \
     done && \
-    for path in /usr/share/doc /usr/share/info /usr/share/man /usr/share/lintian /usr/share/bug /var/cache/apt /var/lib/apt /var/lib/dpkg; do \
+    for path in /usr/share/doc /usr/share/info /usr/share/man /usr/share/lintian /usr/share/bug /usr/share/common-licenses /usr/share/bash-completion /var/cache/apt /var/cache/debconf /var/lib/apt /var/lib/dpkg /var/lib/systemd /etc/apt; do \
       if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
     done && \
     chmod 0700 /root && \
