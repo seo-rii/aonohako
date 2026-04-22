@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -74,6 +75,22 @@ func Load() (Config, error) {
 		}
 		if execution.Remote.URL == "" {
 			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL is required for remote execution")
+		}
+		parsedURL, err := url.Parse(execution.Remote.URL)
+		if err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL is invalid: %w", err)
+		}
+		if !parsedURL.IsAbs() || parsedURL.Host == "" {
+			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL must be an absolute http(s) URL")
+		}
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL must use http or https")
+		}
+		if parsedURL.User != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL must not include credentials")
+		}
+		if parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
+			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL must not include query or fragment components")
 		}
 		switch execution.Remote.Auth {
 		case RemoteAuthNone:

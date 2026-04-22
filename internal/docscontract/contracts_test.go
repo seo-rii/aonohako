@@ -78,6 +78,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
+		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another",
 		"`embedded + helper` backend rejects values other than `1`",
 		"`cloudrun + embedded + helper` is the supported production security target",
 		"`dev + remote + none` is the non-root development path",
