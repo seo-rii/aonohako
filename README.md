@@ -178,6 +178,10 @@ Security posture depends on where it runs:
   serving `/compile` and forwards `/execute` to a remote hardened runner.
 - `dev + embedded + helper` remains available through the compatibility mode, but
   `/execute` still requires root because the local helper sandbox is root-backed.
+- for higher-throughput self-hosted deployments, keep helper-backed runners at
+  one active execution each and scale a remote runner pool horizontally instead
+  of increasing helper slots inside one process. See
+  [docs/selfhosted.md](docs/selfhosted.md).
 
 For Cloud Run deployments, use this baseline:
 

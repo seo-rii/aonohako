@@ -16,6 +16,7 @@ Related docs:
 
 - [protocol.md](./protocol.md): API contract
 - [payload.md](./payload.md): request and response examples
+- [selfhosted.md](./selfhosted.md): self-hosted topology guidance
 - [`runtime-images.yml`](../runtime-images.yml): runtime image catalog
 
 ## System View
@@ -298,6 +299,25 @@ Why the design looks this way:
   target is explicit to avoid accidental partial hardening
 - the helper backend intentionally serializes active runs because every
   sandboxed process currently drops to the same UID/GID pair inside the runner
+
+## Self-Hosted Scale Path
+
+`selfhosted + embedded + helper` is supported, but it deliberately keeps one
+active execution per instance. The helper backend drops targets to a shared
+sandbox UID and depends on a dedicated work root plus immutable submitted
+files, so startup rejects `AONOHAKO_MAX_ACTIVE_RUNS` values other than `1`.
+
+For higher-throughput self-hosted deployments, prefer this shape:
+
+1. API/control-plane instances in `dev + remote + none`
+2. dedicated runner instances in `selfhosted + embedded + helper`
+3. `AONOHAKO_MAX_ACTIVE_RUNS=1` on every runner instance
+4. horizontal scale by adding runner instances instead of increasing local
+   helper slots
+
+`embedded + container` is reserved for a future self-hosted backend. It should
+not be enabled until it can provide stronger per-run ownership separation and a
+dedicated writable filesystem view for each execution.
 
 ## Runtime Image Model
 

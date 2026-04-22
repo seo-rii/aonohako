@@ -61,6 +61,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1`") {
 		t.Fatalf("architecture.md must describe serialized helper execution")
 	}
+	if !strings.Contains(architecture, "API/control-plane instances in `dev + remote + none`") || !strings.Contains(architecture, "horizontal scale by adding runner instances") {
+		t.Fatalf("architecture.md must describe the self-hosted scale-out path")
+	}
 }
 
 func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
@@ -75,6 +78,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`embedded + helper` backend rejects values other than `1`",
 		"`cloudrun + embedded + helper` is the supported production security target",
 		"`dev + remote + none` is the non-root development path",
+		"[docs/selfhosted.md](docs/selfhosted.md)",
 	} {
 		if !strings.Contains(readme, want) {
 			t.Fatalf("README.md missing %q", want)
