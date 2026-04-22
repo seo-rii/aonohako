@@ -18,6 +18,9 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		`Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Workspace Limit Exceeded|Runtime Error|Container Initialization Failed`,
 		"`prlimit --as` | Virtual address space (memory_mb + 64 MB, min 512 MB)",
 		"`prlimit --fsize` | Max file size (workspace_bytes when set, otherwise 128 MB)",
+		`"sources": [                               // source files to compile (max 512 entries)`,
+		`"binaries": [                              // files to place in work directory (max 512 entries)`,
+		`"sidecar_outputs": [                       // capture extra files after execution (max 64 paths)`,
 		"at most one path is supported",
 		"capture failure is reported as `Runtime Error`",
 	}

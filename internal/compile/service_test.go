@@ -73,6 +73,27 @@ func TestRunRejectsOversizedSource(t *testing.T) {
 	}
 }
 
+func TestRunRejectsTooManySources(t *testing.T) {
+	svc := New()
+	sources := make([]model.Source, 0, maxSourceFiles+1)
+	for i := 0; i < maxSourceFiles+1; i++ {
+		sources = append(sources, model.Source{
+			Name:    "Main" + strconv.Itoa(i) + ".uhm",
+			DataB64: b64String("text"),
+		})
+	}
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang:    "UHMLANG",
+		Sources: sources,
+	})
+	if resp.Status != model.CompileStatusInvalid {
+		t.Fatalf("status=%q want=%q", resp.Status, model.CompileStatusInvalid)
+	}
+	if !strings.Contains(resp.Reason, "too many sources") {
+		t.Fatalf("expected too many sources reason, got %+v", resp)
+	}
+}
+
 func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 	tests := map[string]struct {
 		compileKind string

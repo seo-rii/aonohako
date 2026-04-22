@@ -30,6 +30,7 @@ const (
 	maxDecodedSourceTotalBytes = 48 << 20
 	maxArtifactBytes           = 16 << 20
 	maxArtifactTotalBytes      = 48 << 20
+	maxSourceFiles             = 512
 	ocamlCompileRunParam       = "s=32k"
 	elixirERLAFlags            = "+MIscs 128 +S 1:1 +A 1 +MMscs 0"
 	compileSandboxMemoryMB     = 2048
@@ -49,6 +50,9 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	}
 	if len(req.Sources) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no sources"}
+	}
+	if len(req.Sources) > maxSourceFiles {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: fmt.Sprintf("too many sources: max %d", maxSourceFiles)}
 	}
 	profile, ok := resolveProfile(req.Lang)
 	if !ok {

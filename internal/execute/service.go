@@ -3,6 +3,7 @@ package execute
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 
 	"aonohako/internal/model"
@@ -14,6 +15,8 @@ const (
 	hardMaxOutputBytes           = 8 << 20
 	defaultWorkspaceBytes        = 128 << 20
 	hardMaxWorkspaceBytes        = 1 << 30
+	maxBinaryFiles              = 512
+	maxSidecarOutputSpecs       = 64
 	addressSpaceSlackKB          = 8 << 10
 	sandboxThreadLimit           = 128
 	maxBinaryFileBytes           = 16 << 20
@@ -70,7 +73,13 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if len(req.FileOutputs) > 1 {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "at most one file output is supported"}
 	}
+	if len(req.SidecarOutputs) > maxSidecarOutputSpecs {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("too many sidecar outputs: max %d", maxSidecarOutputSpecs)}
+	}
 	capturedOutputLimit := outputLimitBytes(req)
+	if len(req.Binaries) > maxBinaryFiles {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("too many binaries: max %d", maxBinaryFiles)}
+	}
 	if len(req.Binaries) == 0 {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "no binaries"}
 	}

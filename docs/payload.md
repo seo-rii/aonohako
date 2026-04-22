@@ -5,7 +5,7 @@
 ```jsonc
 {
   "lang": "CPP17",                           // language identifier (see Supported Languages)
-  "sources": [                               // source files to compile
+  "sources": [                               // source files to compile (max 512 entries)
     {
       "name": "Main.cpp",                   // filename (relative, no path traversal allowed)
       "data_b64": "<base64>"                // base64-encoded file contents
@@ -39,7 +39,7 @@
 ```jsonc
 {
   "lang": "binary",                          // runtime language: binary|python|pypy|java|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|fsharp|text|clojure|racket|groovy|scala|erlang|prolog|lisp|coq|r|whitespace|brainfuck|wasm|aheui
-  "binaries": [                              // files to place in work directory
+  "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
       "data_b64": "<base64>",               // base64-encoded content
@@ -66,7 +66,7 @@
   "file_outputs": [                          // read program output from file instead of stdout (at most one path)
     {"path": "output.txt"}
   ],
-  "sidecar_outputs": [                       // capture extra files after execution
+  "sidecar_outputs": [                       // capture extra files after execution (max 64 paths)
     {"path": "__img__/images.jsonl"}
   ],
   "ignore_tle": false                        // evaluate output even on TLE
