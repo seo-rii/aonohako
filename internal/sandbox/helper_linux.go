@@ -91,6 +91,10 @@ func MaybeRunFromEnv() bool {
 	if threadLimit < 32 {
 		threadLimit = 32
 	}
+	openFileLimit := req.OpenFileLimit
+	if openFileLimit < 64 {
+		openFileLimit = 64
+	}
 	nprocLimit := uint64(threadLimit)
 	if entries, err := os.ReadDir("/proc"); err == nil {
 		currentUID := fmt.Sprintf("%d", os.Getuid())
@@ -132,20 +136,31 @@ func MaybeRunFromEnv() bool {
 		}
 		nprocLimit = uint64(currentCount + threadLimit + 8)
 	}
-	fileSizeLimit := uint64(128 * 1024 * 1024)
-	if req.Limits.WorkspaceBytes > 0 {
-		fileSizeLimit = uint64(req.Limits.WorkspaceBytes)
-	}
 	limits := []struct {
 		resource int
 		value    uint64
 	}{
 		{unix.RLIMIT_CPU, uint64(cpuSec)},
-		{unix.RLIMIT_AS, uint64(asMB) * 1024 * 1024},
 		{unix.RLIMIT_NOFILE, 64},
 		{unix.RLIMIT_NPROC, nprocLimit},
-		{unix.RLIMIT_FSIZE, fileSizeLimit},
 		{unix.RLIMIT_CORE, 0},
+	}
+	limits[1].value = uint64(openFileLimit)
+	if !req.DisableAddressSpaceLimit {
+		limits = append(limits, struct {
+			resource int
+			value    uint64
+		}{unix.RLIMIT_AS, uint64(asMB) * 1024 * 1024})
+	}
+	if !req.DisableFileSizeLimit {
+		fileSizeLimit := uint64(128 * 1024 * 1024)
+		if req.Limits.WorkspaceBytes > 0 {
+			fileSizeLimit = uint64(req.Limits.WorkspaceBytes)
+		}
+		limits = append(limits, struct {
+			resource int
+			value    uint64
+		}{unix.RLIMIT_FSIZE, fileSizeLimit})
 	}
 	for _, item := range limits {
 		if err := unix.Setrlimit(item.resource, &unix.Rlimit{Cur: item.value, Max: item.value}); err != nil {
@@ -193,6 +208,13 @@ func MaybeRunFromEnv() bool {
 	appendJump := func(code uint16, k uint32, jt, jf uint8) {
 		program = append(program, unix.SockFilter{Code: code, Jt: jt, Jf: jf, K: k})
 	}
+	appendAllowOnlyUnixDomain := func(sysno uint32) {
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 4)
+		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.AF_UNIX, 1, 0)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		appendStmt(unix.BPF_RET|unix.BPF_K, allow)
+	}
 
 	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArchOffset)
 	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, archAudit, 1, 0)
@@ -222,7 +244,6 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_KILL),
 		uint32(unix.SYS_TKILL),
 		uint32(unix.SYS_TGKILL),
-		uint32(unix.SYS_PRLIMIT64),
 		uint32(unix.SYS_SETPRIORITY),
 		uint32(unix.SYS_BPF),
 		uint32(unix.SYS_IO_SETUP),
@@ -289,24 +310,29 @@ func MaybeRunFromEnv() bool {
 	}
 
 	if !req.EnableNetwork {
-		for _, sysno := range []uint32{
-			uint32(unix.SYS_SOCKET),
-			uint32(unix.SYS_SOCKETPAIR),
-			uint32(unix.SYS_CONNECT),
-			uint32(unix.SYS_BIND),
-			uint32(unix.SYS_LISTEN),
-			uint32(unix.SYS_ACCEPT),
-			uint32(unix.SYS_ACCEPT4),
-			uint32(unix.SYS_SHUTDOWN),
-			uint32(unix.SYS_SENDTO),
-			uint32(unix.SYS_SENDMSG),
-			uint32(unix.SYS_SENDMMSG),
-			uint32(unix.SYS_RECVFROM),
-			uint32(unix.SYS_RECVMSG),
-			uint32(unix.SYS_RECVMMSG),
-		} {
-			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
-			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		if req.AllowUnixSockets {
+			appendAllowOnlyUnixDomain(uint32(unix.SYS_SOCKET))
+			appendAllowOnlyUnixDomain(uint32(unix.SYS_SOCKETPAIR))
+		} else {
+			for _, sysno := range []uint32{
+				uint32(unix.SYS_SOCKET),
+				uint32(unix.SYS_SOCKETPAIR),
+				uint32(unix.SYS_CONNECT),
+				uint32(unix.SYS_BIND),
+				uint32(unix.SYS_LISTEN),
+				uint32(unix.SYS_ACCEPT),
+				uint32(unix.SYS_ACCEPT4),
+				uint32(unix.SYS_SHUTDOWN),
+				uint32(unix.SYS_SENDTO),
+				uint32(unix.SYS_SENDMSG),
+				uint32(unix.SYS_SENDMMSG),
+				uint32(unix.SYS_RECVFROM),
+				uint32(unix.SYS_RECVMSG),
+				uint32(unix.SYS_RECVMMSG),
+			} {
+				appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+				appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+			}
 		}
 	}
 

@@ -246,6 +246,29 @@ func TestCollectArtifactsRejectsSymlink(t *testing.T) {
 	}
 }
 
+func TestCollectArtifactsForCoqKeepsSourceArtifactForExecution(t *testing.T) {
+	root := t.TempDir()
+	for name, content := range map[string]string{
+		"Main.v":    "Theorem same_folder_ok : 1 = 1.\nProof. reflexivity. Qed.\n",
+		"Main.vo":   "vo",
+		"Main.glob": "glob",
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	artifacts, err := collectArtifacts(root, func(name string) bool { return strings.HasSuffix(strings.ToLower(name), ".v") }, "")
+	if err != nil {
+		t.Fatalf("collectArtifacts: %v", err)
+	}
+	if len(artifacts) != 1 {
+		t.Fatalf("expected only coq source artifact, got %+v", artifacts)
+	}
+	if artifacts[0].Name != "Main.v" {
+		t.Fatalf("expected coq compile artifact Main.v, got %+v", artifacts)
+	}
+}
+
 func TestReadSingleArtifactRejectsSymlinkParents(t *testing.T) {
 	root := t.TempDir()
 	outsideDir := t.TempDir()
@@ -296,6 +319,35 @@ func TestRunCommandKillsBackgroundChildren(t *testing.T) {
 	}
 }
 
+func TestRunSandboxedCommandAllowsWritesBesideNestedCompileSources(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to drop compile helper to sandbox user")
+	}
+
+	workDir := t.TempDir()
+	sourceDir := filepath.Join(workDir, "src", "App")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("mkdir source dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "Program.cs"), []byte("class Program {}"), 0o644); err != nil {
+		t.Fatalf("write source file: %v", err)
+	}
+
+	stdout, stderr, status, reason := RunSandboxedCommand(
+		context.Background(),
+		workDir,
+		"/bin/sh",
+		[]string{"-c", "mkdir -p src/App/obj && touch src/App/obj/generated.txt"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(sourceDir, "obj", "generated.txt")); err != nil {
+		t.Fatalf("expected nested generated file: %v", err)
+	}
+}
+
 func TestRunCommandRejectsNetworkSockets(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
@@ -313,7 +365,7 @@ func TestRunCommandRejectsNetworkSockets(t *testing.T) {
 	}
 }
 
-func TestRunCommandRejectsSocketPairCreation(t *testing.T) {
+func TestRunCommandAllowsLocalUnixSocketPairs(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 not available")
@@ -322,11 +374,28 @@ func TestRunCommandRejectsSocketPairCreation(t *testing.T) {
 		context.Background(),
 		sandboxWritableTempDir(t),
 		python,
-		[]string{"-c", "import errno, socket, sys\ntry:\n    socket.socketpair()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
+		[]string{"-c", "import socket, sys\na, b = socket.socketpair()\na.sendall(b'ok')\nsys.exit(0 if b.recv(2) == b'ok' else 1)\n"},
 		nil,
 	)
 	if status != model.CompileStatusOK {
-		t.Fatalf("expected socketpair denial probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+		t.Fatalf("expected local unix socketpair probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
+func TestRunCommandAllowsLocalUnixSocketSendmsg(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		sandboxWritableTempDir(t),
+		python,
+		[]string{"-c", "import socket, sys\na, b = socket.socketpair()\na.sendmsg([b'ok'])\ndata, _, _, _ = b.recvmsg(2)\nsys.exit(0 if data == b'ok' else 1)\n"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("expected local unix sendmsg probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
 	}
 }
 

@@ -95,8 +95,8 @@ func TestBuildCommandJavaXmxDynamic(t *testing.T) {
 	}{
 		{"below_32_floors_to_32", 16, "-Xmx32m"},
 		{"exactly_32", 32, "-Xmx32m"},
-		{"above_32", 128, "-Xmx128m"},
-		{"large_memory", 512, "-Xmx512m"},
+		{"above_32", 128, "-Xmx64m"},
+		{"large_memory", 512, "-Xmx256m"},
 		{"zero_floors_to_32", 0, "-Xmx32m"},
 	}
 	for _, tc := range tests {
@@ -144,36 +144,37 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		lang      string
 		path      string
 		wantFirst string
+		wantPath  bool
 	}{
-		{"binary", "/tmp/a.out", "/tmp/a.out"},
-		{"aheui", "/tmp/sol.aheui", "sh"},
-		{"clojure", "/tmp/sol.clj", "clojure"},
-		{"coq", "/tmp/Main.v", "coqc"},
-		{"ocaml", "/tmp/sol", "env"},
-		{"elixir", "/tmp/sol.exs", "env"},
-		{"python", "/tmp/sol.py", "python3"},
-		{"pypy", "/tmp/sol.py", "pypy3"},
-		{"racket", "/tmp/sol.rkt", "racket"},
-		{"erlang", "/tmp/beam", "erl"},
-		{"prolog", "/tmp/sol.pl", "swipl"},
-		{"groovy", "/tmp/classes", "groovy"},
-		{"lisp", "/tmp/sol.lisp", "sbcl"},
-		{"scala", "/tmp/classes", "scala"},
-		{"fsharp", "/tmp/App.dll", "dotnet"},
-		{"javascript", "/tmp/sol.js", "node"},
-		{"julia", "/tmp/sol.jl", "julia"},
-		{"r", "/tmp/sol.R", "Rscript"},
-		{"whitespace", "/tmp/sol.ws", "python3"},
-		{"brainfuck", "/tmp/sol.bf", "python3"},
-		{"wasm", "/tmp/sol.wasm", "wasmtime"},
-		{"ruby", "/tmp/sol.rb", "ruby"},
-		{"php", "/tmp/sol.php", "php"},
-		{"lua", "/tmp/sol.lua", "lua5.4"},
-		{"perl", "/tmp/sol.pl", "perl"},
-		{"sqlite", "/tmp/sol.sql", "sh"},
-		{"uhmlang", "/tmp/sol.umm", "/usr/bin/umjunsik-lang-go"},
-		{"text", "/tmp/data.txt", "cat"},
-		{"unknown_lang", "/tmp/a.out", "/tmp/a.out"},
+		{"binary", "/tmp/a.out", "/tmp/a.out", true},
+		{"aheui", "/tmp/sol.aheui", "python3", true},
+		{"clojure", "/tmp/sol.clj", "java", true},
+		{"coq", "/tmp/Main.v", "true", false},
+		{"ocaml", "/tmp/sol", "env", true},
+		{"elixir", "/tmp/sol.exs", "env", true},
+		{"python", "/tmp/sol.py", "python3", true},
+		{"pypy", "/tmp/sol.py", "pypy3", true},
+		{"racket", "/tmp/sol.rkt", "racket", true},
+		{"erlang", "/tmp/beam", "erl", true},
+		{"prolog", "/tmp/sol.pl", "swipl", true},
+		{"groovy", "/tmp/classes", "groovy", true},
+		{"lisp", "/tmp/sol.lisp", "sbcl", true},
+		{"scala", "/tmp/classes", "scala", true},
+		{"fsharp", "/tmp/App.dll", "dotnet", true},
+		{"javascript", "/tmp/sol.js", "node", true},
+		{"julia", "/tmp/sol.jl", "julia", true},
+		{"r", "/tmp/sol.R", "Rscript", true},
+		{"whitespace", "/tmp/sol.ws", "python3", true},
+		{"brainfuck", "/tmp/sol.bf", "python3", true},
+		{"wasm", "/tmp/sol.wasm", "wasmtime", true},
+		{"ruby", "/tmp/sol.rb", "ruby", true},
+		{"php", "/tmp/sol.php", "php", true},
+		{"lua", "/tmp/sol.lua", "lua5.4", true},
+		{"perl", "/tmp/sol.pl", "perl", true},
+		{"sqlite", "/tmp/sol.sql", "sh", true},
+		{"uhmlang", "/tmp/sol.umm", "/usr/bin/umjunsik-lang-go", true},
+		{"text", "/tmp/data.txt", "cat", true},
+		{"unknown_lang", "/tmp/a.out", "/tmp/a.out", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.lang, func(t *testing.T) {
@@ -181,28 +182,48 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			if len(args) == 0 {
 				t.Fatalf("buildCommand returned empty args for %s", tc.lang)
 			}
-			if args[0] != tc.wantFirst {
+			if tc.lang == "erlang" {
+				if args[0] == "env" {
+					found := false
+					for _, a := range args {
+						if filepath.Base(a) == "erlexec" {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("buildCommand(%s) missing erlexec in %v", tc.lang, args)
+					}
+				} else if filepath.Base(args[0]) != tc.wantFirst {
+					t.Errorf("buildCommand(%s) first arg = %q, want basename %q", tc.lang, args[0], tc.wantFirst)
+				}
+			} else if args[0] != tc.wantFirst {
 				t.Errorf("buildCommand(%s) first arg = %q, want %q", tc.lang, args[0], tc.wantFirst)
 			}
 			// path should be in args
-			found := false
-			for _, a := range args {
-				if a == tc.path {
-					found = true
-					break
+			if tc.wantPath {
+				found := false
+				for _, a := range args {
+					if a == tc.path {
+						found = true
+						break
+					}
 				}
-			}
-			if !found {
-				t.Errorf("buildCommand(%s) missing path %q in %v", tc.lang, tc.path, args)
+				if !found {
+					t.Errorf("buildCommand(%s) missing path %q in %v", tc.lang, tc.path, args)
+				}
 			}
 			if tc.lang == "ocaml" && !containsArg(args, "OCAMLRUNPARAM=s=32k") {
 				t.Errorf("buildCommand(%s) missing OCAMLRUNPARAM in %v", tc.lang, args)
 			}
-			if tc.lang == "elixir" && !containsArg(args, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1") {
+			if tc.lang == "clojure" && !containsArg(args, "-XX:CompressedClassSpaceSize=64m") {
+				t.Errorf("buildCommand(%s) missing clojure JVM class-space guard in %v", tc.lang, args)
+			}
+			if tc.lang == "elixir" && !containsArg(args, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 +MMscs 0") {
 				t.Errorf("buildCommand(%s) missing ERL_AFLAGS in %v", tc.lang, args)
 			}
-			if tc.lang == "aheui" && (len(args) < 3 || !strings.Contains(args[2], "aheui \"$1\"")) {
-				t.Errorf("buildCommand(%s) missing aheui wrapper body in %v", tc.lang, args)
+			if tc.lang == "aheui" && (len(args) < 3 || !strings.Contains(args[2], "from aheui.aheui import entry_point")) {
+				t.Errorf("buildCommand(%s) missing aheui python wrapper body in %v", tc.lang, args)
 			}
 		})
 	}
@@ -212,13 +233,29 @@ func TestBuildCommandErlangEntryPointVariants(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 64}}
 
 	defaultArgs := buildCommand("/tmp/beam", "erlang", req)
-	if !reflect.DeepEqual(defaultArgs, []string{"erl", "+S", "1:1", "+A", "1", "-noshell", "-pa", "/tmp/beam", "-s", "main", "main", "-s", "init", "stop"}) {
+	expectedTail := []string{"+S", "1:1", "+A", "1", "-noshell", "-pa", "/tmp/beam", "-s", "main", "main", "-s", "init", "stop"}
+	if defaultArgs[0] == "env" {
+		if !containsArg(defaultArgs, "EMU=beam") || !containsArg(defaultArgs, "PROGNAME=erl") || !containsArg(defaultArgs, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 +MMscs 0") {
+			t.Fatalf("default erlang env wrapper missing beam vars: %v", defaultArgs)
+		}
+		if !reflect.DeepEqual(defaultArgs[len(defaultArgs)-len(expectedTail):], expectedTail) {
+			t.Fatalf("default erlang command tail = %v", defaultArgs)
+		}
+	} else if filepath.Base(defaultArgs[0]) != "erl" || !reflect.DeepEqual(defaultArgs[1:], expectedTail) {
 		t.Fatalf("default erlang command = %v", defaultArgs)
 	}
 
 	req.EntryPoint = "judge/main:solve"
 	entryArgs := buildCommand("/tmp/beam", "erlang", req)
-	if !reflect.DeepEqual(entryArgs, []string{"erl", "+S", "1:1", "+A", "1", "-noshell", "-pa", "/tmp/beam", "-s", "main", "solve", "-s", "init", "stop"}) {
+	expectedEntryTail := []string{"+S", "1:1", "+A", "1", "-noshell", "-pa", "/tmp/beam", "-s", "main", "solve", "-s", "init", "stop"}
+	if entryArgs[0] == "env" {
+		if !containsArg(entryArgs, "EMU=beam") || !containsArg(entryArgs, "PROGNAME=erl") || !containsArg(entryArgs, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 +MMscs 0") {
+			t.Fatalf("entrypoint erlang env wrapper missing beam vars: %v", entryArgs)
+		}
+		if !reflect.DeepEqual(entryArgs[len(entryArgs)-len(expectedEntryTail):], expectedEntryTail) {
+			t.Fatalf("entrypoint erlang command tail = %v", entryArgs)
+		}
+	} else if filepath.Base(entryArgs[0]) != "erl" || !reflect.DeepEqual(entryArgs[1:], expectedEntryTail) {
 		t.Fatalf("entrypoint erlang command = %v", entryArgs)
 	}
 }
@@ -241,7 +278,7 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 96}}
 
 	coqArgs := buildCommand("/tmp/Main.v", "coq", req)
-	if !reflect.DeepEqual(coqArgs, []string{"coqc", "-q", "/tmp/Main.v"}) {
+	if !reflect.DeepEqual(coqArgs, []string{"true"}) {
 		t.Fatalf("coq command = %v", coqArgs)
 	}
 
@@ -256,6 +293,35 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 	}
 }
 
+func TestBuildCommandTreatsAheuiWarningExitAsSuccess(t *testing.T) {
+	workDir := t.TempDir()
+	pkgDir := filepath.Join(workDir, "pkg", "aheui")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", pkgDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "__init__.py"), []byte(""), 0o644); err != nil {
+		t.Fatalf("WriteFile(__init__.py): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "aheui.py"), []byte("import sys\n\ndef entry_point(argv):\n    sys.stdout.write('Hello, World!\\n')\n    sys.stderr.write('[Warning:VirtualMachine] Running without rlib/jit.\\n\\n')\n    return 9\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(aheui.py): %v", err)
+	}
+	program := filepath.Join(workDir, "Main.aheui")
+	if err := os.WriteFile(program, []byte("fake"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", program, err)
+	}
+	args := buildCommand(program, "aheui", &model.RunRequest{Limits: model.Limits{MemoryMB: 64}})
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(), "PYTHONPATH="+filepath.Join(workDir, "pkg"))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("aheui wrapper should accept warning-only exit, err=%v output=%q", err, string(output))
+	}
+	if !strings.Contains(string(output), "Hello, World!\n") {
+		t.Fatalf("aheui wrapper output = %q, want Hello, World! line", string(output))
+	}
+}
+
 func TestBuildCommandUsesRuntimeScopedSQLiteDBAndJavaHeap(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 96}}
 
@@ -265,8 +331,8 @@ func TestBuildCommandUsesRuntimeScopedSQLiteDBAndJavaHeap(t *testing.T) {
 	}
 
 	javaArgs := buildCommand("/tmp/submission.jar", "java", req)
-	if !containsArg(javaArgs, "-Xmx96m") {
-		t.Fatalf("java command missing -Xmx96m: %v", javaArgs)
+	if !containsArg(javaArgs, "-Xmx48m") {
+		t.Fatalf("java command missing -Xmx48m: %v", javaArgs)
 	}
 	if !containsArg(javaArgs, "-jar") || javaArgs[len(javaArgs)-1] != "/tmp/submission.jar" {
 		t.Fatalf("java command should end with jar path: %v", javaArgs)

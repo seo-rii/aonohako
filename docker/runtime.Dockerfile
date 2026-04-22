@@ -46,6 +46,8 @@ RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
       env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}; \
     fi
 
+RUN install -d -m 0755 /usr/local/lib/aonohako
+
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
 COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
@@ -54,7 +56,9 @@ COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
 COPY python/ /usr/local/lib/aonohako/python/
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
-RUN find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
+RUN chmod 0755 /usr/local/lib/aonohako && \
+    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py && \
+    find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
     find /usr/local/lib/aonohako/python -type f -exec chmod 0644 {} + && \
     install -d -m 0700 /var/aonohako /var/aonohako/protected && \
     printf 'runtime-owned\n' > /var/aonohako/protected/probe.txt && \

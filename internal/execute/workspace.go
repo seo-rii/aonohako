@@ -51,6 +51,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var jarPath string
 	var pyPath string
 	var clojurePath string
+	var coqPath string
 	var racketPath string
 	classFiles := make([]string, 0)
 	totalBytes := 0
@@ -99,6 +100,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(strings.ToLower(clean), ".clj") && clojurePath == "" {
 			clojurePath = dest
 		}
+		if strings.HasSuffix(strings.ToLower(clean), ".v") && coqPath == "" {
+			coqPath = dest
+		}
 		if strings.HasSuffix(strings.ToLower(clean), ".rkt") && racketPath == "" {
 			racketPath = dest
 		}
@@ -108,7 +112,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "coq", "whitespace", "brainfuck", "wasm", "aheui":
+	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "aheui":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
@@ -120,6 +124,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			clojurePath = primaryPath
 		}
 		return clojurePath, lang, nil
+	case "coq":
+		if coqPath == "" {
+			coqPath = primaryPath
+		}
+		return coqPath, lang, nil
 	case "racket":
 		if racketPath == "" {
 			racketPath = primaryPath

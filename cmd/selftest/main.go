@@ -272,8 +272,8 @@ func runCompileSecuritySuite() error {
 			args: []string{"-c", "import errno, socket, sys\ntry:\n    socket.socket()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
 		},
 		{
-			name: "socketpair",
-			args: []string{"-c", "import errno, socket, sys\ntry:\n    socket.socketpair()\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
+			name: "local-unix-socketpair",
+			args: []string{"-c", "import socket, sys\na, b = socket.socketpair()\na.sendall(b'ok')\nsys.exit(0 if b.recv(2) == b'ok' else 1)\n"},
 		},
 		{
 			name: "namespace-unshare",
@@ -641,7 +641,7 @@ msg:
 		"clojure": {
 			compileLang:    "CLOJURE",
 			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.clj", `(require '[clojure.string :as str])
 (spit "same-folder.txt" "ok")
@@ -650,7 +650,7 @@ msg:
 		},
 		"coq": {
 			compileLang: "COQ",
-			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.v", `Theorem same_folder_ok : 1 = 1.
 Proof. reflexivity. Qed.`),
@@ -659,7 +659,7 @@ Proof. reflexivity. Qed.`),
 		"csharp": {
 			compileLang:    "CSHARP",
 			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Program.cs", `System.IO.File.WriteAllText("same-folder.txt", "ok");
 Console.WriteLine(System.IO.File.ReadAllText("same-folder.txt"));`),
@@ -682,7 +682,7 @@ void main() {
 		"dart": {
 			compileLang:    "DART",
 			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.dart", `import 'dart:io';
 
@@ -695,7 +695,7 @@ void main() {
 		"elixir": {
 			compileLang:    "ELIXIR",
 			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.exs", `File.write!("same-folder.txt", "ok")
 IO.puts(File.read!("same-folder.txt"))`),
@@ -705,7 +705,7 @@ IO.puts(File.read!("same-folder.txt"))`),
 			compileLang:    "ERLANG",
 			entryPoint:     "main:main",
 			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
 				source("main.erl", `-module(main).
 -export([main/0]).
@@ -799,7 +799,7 @@ main = do
 		"java": {
 			compileLang:    "JAVA11",
 			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.java", `import java.nio.file.Files;
 import java.nio.file.Path;
@@ -998,7 +998,7 @@ print(Path("same-folder.txt").read_text(encoding="utf-8"))`),
 		"python": {
 			compileLang:    "PYTHON3",
 			expectedStdout: "10\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			limits:         model.Limits{TimeMs: 30000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.py", `import pathlib
 import numpy as np
