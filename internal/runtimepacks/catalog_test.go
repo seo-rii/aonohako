@@ -403,6 +403,12 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true") {
 		t.Fatalf("ci workflow must force JavaScript actions onto Node 24 to avoid runner deprecation noise")
 	}
+	if !strings.Contains(body, "GOCACHE: ${{ github.workspace }}/.cache/go-build") {
+		t.Fatalf("ci workflow must place GOCACHE under the workspace so setup-go cache restores into an empty per-job directory")
+	}
+	if !strings.Contains(body, "GOMODCACHE: ${{ github.workspace }}/.cache/go-mod") {
+		t.Fatalf("ci workflow must place GOMODCACHE under the workspace so setup-go cache restores without colliding with preexisting module files")
+	}
 	if !strings.Contains(body, "aonohako-ci-prod:${{ matrix.name }}") {
 		t.Fatalf("ci workflow must build production-profile images in the profile matrix")
 	}
