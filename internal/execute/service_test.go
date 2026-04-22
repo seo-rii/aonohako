@@ -215,6 +215,55 @@ func TestRunRejectsNetworkEnabledRequests(t *testing.T) {
 	}
 }
 
+func TestRunRejectsTooManyBinaries(t *testing.T) {
+	svc := New()
+	binaries := make([]model.Binary, 0, maxBinaryFiles+1)
+	for i := 0; i < maxBinaryFiles+1; i++ {
+		binaries = append(binaries, model.Binary{
+			Name:    fmt.Sprintf("Main%d.txt", i),
+			DataB64: b64("text"),
+		})
+	}
+
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang:     "text",
+		Binaries: binaries,
+		Limits:   model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusInitFail {
+		t.Fatalf("expected init failure for too many binaries, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "too many binaries") {
+		t.Fatalf("expected too many binaries reason, got %+v", resp)
+	}
+}
+
+func TestRunRejectsTooManySidecarOutputs(t *testing.T) {
+	svc := New()
+	sidecarOutputs := make([]model.OutputFile, 0, maxSidecarOutputSpecs+1)
+	for i := 0; i < maxSidecarOutputSpecs+1; i++ {
+		sidecarOutputs = append(sidecarOutputs, model.OutputFile{Path: fmt.Sprintf("artifact-%d.txt", i)})
+	}
+
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "text",
+		Binaries: []model.Binary{{
+			Name:    "Main.txt",
+			DataB64: b64("ok"),
+		}},
+		SidecarOutputs: sidecarOutputs,
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusInitFail {
+		t.Fatalf("expected init failure for too many sidecar outputs, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "too many sidecar outputs") {
+		t.Fatalf("expected too many sidecar outputs reason, got %+v", resp)
+	}
+}
+
 func TestRunCapturesSidecarOutput(t *testing.T) {
 	forceDirectMode(t)
 	svc := New()
