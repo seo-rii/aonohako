@@ -223,6 +223,73 @@ func TestExecuteSSESequenceViaRemoteRunner(t *testing.T) {
 	}
 }
 
+func TestCompileSSESequenceViaRemoteRunner(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/compile" {
+			t.Fatalf("unexpected remote path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"compiled\\n\",\"artifacts\":[{\"name\":\"Main.pyc\",\"data_b64\":\"Ynl0ZWNvZGU=\"}]}\n\n"))
+	}))
+	defer remote.Close()
+
+	s, err := New(config.Config{
+		Port:              "0",
+		MaxActiveRuns:     1,
+		MaxPendingQueue:   1,
+		HeartbeatInterval: 100 * time.Millisecond,
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	payload := map[string]any{
+		"lang":        "python3",
+		"entry_point": "src/Main.py",
+		"sources": []map[string]any{{
+			"name":     "src/Main.py",
+			"data_b64": base64.StdEncoding.EncodeToString([]byte("print('ok')\n")),
+		}},
+	}
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	events := readSSEEvents(resp.Body, t)
+	if len(events) < 4 {
+		t.Fatalf("expected accepted/start/log/result events, got %d", len(events))
+	}
+	if events[2].Name != "log" || events[2].JSON["chunk"] != "compiled\n" {
+		t.Fatalf("unexpected forwarded log event: %#v", events[2])
+	}
+	last := events[len(events)-1]
+	if last.Name != "result" || last.JSON["status"] != "OK" {
+		t.Fatalf("unexpected result event: %#v", last)
+	}
+}
+
 type sseEvent struct {
 	Name string
 	JSON map[string]any

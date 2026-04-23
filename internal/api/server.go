@@ -31,11 +31,15 @@ type Server struct {
 }
 
 func New(cfg config.Config) (*Server, error) {
+	compileRunner, err := compile.Build(cfg)
+	if err != nil {
+		return nil, err
+	}
 	runner, err := execute.Build(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return NewWithServices(cfg, compile.New(), runner), nil
+	return NewWithServices(cfg, compileRunner, runner), nil
 }
 
 func NewWithServices(cfg config.Config, compileService interface {

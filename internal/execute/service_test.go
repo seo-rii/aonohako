@@ -194,8 +194,14 @@ func TestRunReturnsTLEOnParentCancel(t *testing.T) {
 	}
 }
 
-func TestRunRejectsNetworkEnabledRequests(t *testing.T) {
-	forceDirectMode(t)
+func TestRunRejectsNetworkEnabledRequestsOnCloudRun(t *testing.T) {
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "cloudrun")
+	workRoot := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-cloudrun-network-test-%d", time.Now().UnixNano()))
+	if err := os.MkdirAll(workRoot, 0o755); err != nil {
+		t.Fatalf("mkdir work root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(workRoot) })
+	t.Setenv("AONOHAKO_WORK_ROOT", workRoot)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "binary",
@@ -212,6 +218,85 @@ func TestRunRejectsNetworkEnabledRequests(t *testing.T) {
 	}
 	if !strings.Contains(resp.Reason, "enable_network=true") {
 		t.Fatalf("expected rejection reason to mention enable_network, got %+v", resp)
+	}
+}
+
+func TestRunAllowsOutboundNetworkWhenEnabledOutsideCloudRun(t *testing.T) {
+	requireSandboxSupport(t)
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-root")
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen tcp: %v", err)
+	}
+	defer listener.Close()
+
+	accepted := make(chan struct{}, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		accepted <- struct{}{}
+	}()
+
+	address := listener.Addr().String()
+	script := fmt.Sprintf(
+		"import socket\nhost, port = %q.split(':')\ns = socket.create_connection((host, int(port)), timeout=1)\nprint('connected')\ns.close()\n",
+		address,
+	)
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "connected\n",
+		EnableNetwork:  true,
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+	select {
+	case <-accepted:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("expected sandboxed process to connect to local tcp listener")
+	}
+}
+
+func TestRunBlocksUnixSocketConnectWhenNetworkEnabled(t *testing.T) {
+	requireSandboxSupport(t)
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-root")
+
+	socketPath := filepath.Join(t.TempDir(), "control.sock")
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("listen unix socket: %v", err)
+	}
+	defer listener.Close()
+
+	svc := New()
+	script := fmt.Sprintf(
+		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n    s.settimeout(0.5)\n    s.connect(%q)\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
+		socketPath,
+	)
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "blocked\n",
+		EnableNetwork:  true,
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
 	}
 }
 
