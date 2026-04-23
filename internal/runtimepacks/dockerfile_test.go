@@ -30,7 +30,7 @@ func TestRuntimeDockerfileDeclaresRuntimeBaseBeforeFirstFrom(t *testing.T) {
 	}
 }
 
-func TestRuntimeDockerfileUsesGo123BuilderImage(t *testing.T) {
+func TestRuntimeDockerfileUsesGo126BuilderImage(t *testing.T) {
 	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -41,8 +41,8 @@ func TestRuntimeDockerfileUsesGo123BuilderImage(t *testing.T) {
 	if len(m) != 2 {
 		t.Fatalf("runtime.Dockerfile is missing a parseable GO_IMAGE default")
 	}
-	if m[1] != "1.23" {
-		t.Fatalf("GO_IMAGE default = %s, want 1.23 to satisfy go.mod and CI image builds", m[1])
+	if m[1] != "1.26" {
+		t.Fatalf("GO_IMAGE default = %s, want 1.26 to satisfy go.mod and CI image builds", m[1])
 	}
 }
 

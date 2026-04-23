@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG GO_IMAGE=golang:1.23-bookworm
+ARG GO_IMAGE=golang:1.26-bookworm
 ARG RUNTIME_BASE=debian:trixie-slim
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
 WORKDIR /src
