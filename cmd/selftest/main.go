@@ -263,6 +263,38 @@ func runCompileSecuritySuite() error {
 		time.Sleep(50 * time.Millisecond)
 	}
 
+	streamDir, err := os.MkdirTemp("", "aonohako-selftest-compile-stream-*")
+	if err != nil {
+		return fmt.Errorf("mkdtemp stream probe: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(streamDir) }()
+	if err := os.Chmod(streamDir, 0o777); err != nil {
+		return fmt.Errorf("chmod stream probe dir: %w", err)
+	}
+	streamPath := filepath.Join(streamDir, "control.sock")
+	streamListener, err := net.Listen("unix", streamPath)
+	if err != nil {
+		return fmt.Errorf("listen unix stream probe: %w", err)
+	}
+	defer streamListener.Close()
+	if err := os.Chmod(streamPath, 0o777); err != nil {
+		return fmt.Errorf("chmod unix stream probe socket: %w", err)
+	}
+
+	dgramPath := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-selftest-compile-dgram-%d.sock", time.Now().UnixNano()))
+	_ = os.Remove(dgramPath)
+	dgramListener, err := net.ListenUnixgram("unixgram", &net.UnixAddr{Name: dgramPath, Net: "unixgram"})
+	if err != nil {
+		return fmt.Errorf("listen unix datagram probe: %w", err)
+	}
+	defer func() {
+		_ = dgramListener.Close()
+		_ = os.Remove(dgramPath)
+	}()
+	if err := os.Chmod(dgramPath, 0o777); err != nil {
+		return fmt.Errorf("chmod unix datagram probe socket: %w", err)
+	}
+
 	probes := []struct {
 		name string
 		args []string
@@ -276,8 +308,24 @@ func runCompileSecuritySuite() error {
 			args: []string{"-c", "import socket, sys\na, b = socket.socketpair()\na.sendall(b'ok')\nsys.exit(0 if b.recv(2) == b'ok' else 1)\n"},
 		},
 		{
+			name: "unix-stream-connect",
+			args: []string{"-c", fmt.Sprintf("import socket, sys\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n    s.settimeout(0.5)\n    s.connect(%q)\nexcept OSError:\n    sys.exit(0)\nsys.exit(1)\n", streamPath)},
+		},
+		{
+			name: "unix-datagram-sendmsg",
+			args: []string{"-c", fmt.Sprintf("import socket, sys\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)\n    s.sendmsg([b'escape'], [], 0, %q)\nexcept OSError:\n    sys.exit(0)\nsys.exit(1)\n", dgramPath)},
+		},
+		{
 			name: "namespace-unshare",
 			args: []string{"-c", "import ctypes, errno, sys\nlibc = ctypes.CDLL(None, use_errno=True)\nif libc.unshare(0x20000) == 0:\n    sys.exit(1)\nsys.exit(0 if ctypes.get_errno() in (errno.EPERM, errno.ENOSYS) else 1)\n"},
+		},
+		{
+			name: "process-group-escape",
+			args: []string{"-c", "import errno, os, sys\ntry:\n    os.setpgid(0, 0)\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
+		},
+		{
+			name: "filesystem-privilege-syscalls",
+			args: []string{"-c", "import errno, os, sys\nopen('owned.txt', 'w').close()\nchecks = [\n    lambda: os.chmod('owned.txt', 0o777),\n    lambda: os.chown('owned.txt', os.getuid(), os.getgid()),\n    lambda: os.mknod('node'),\n]\nfor action in checks:\n    try:\n        action()\n        sys.exit(1)\n    except OSError as exc:\n        if exc.errno not in (errno.EPERM, errno.EACCES, errno.ENOSYS):\n            sys.exit(1)\nsys.exit(0)\n"},
 		},
 	}
 	for _, probe := range probes {
@@ -289,6 +337,36 @@ func runCompileSecuritySuite() error {
 		_ = os.RemoveAll(probeDir)
 		if status != model.CompileStatusOK {
 			return fmt.Errorf("%s probe failed: status=%s reason=%s stdout=%q stderr=%q", probe.name, status, reason, stdout, stderr)
+		}
+	}
+	_ = dgramListener.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	dgramBuf := make([]byte, 64)
+	if n, _, err := dgramListener.ReadFromUnix(dgramBuf); err == nil {
+		return fmt.Errorf("unix-datagram-sendmsg probe delivered %q", string(dgramBuf[:n]))
+	}
+
+	if os.Geteuid() == 0 {
+		secretDir, err := os.MkdirTemp("", "aonohako-selftest-compile-secret-*")
+		if err != nil {
+			return fmt.Errorf("mkdtemp secret probe: %w", err)
+		}
+		defer func() { _ = os.RemoveAll(secretDir) }()
+		if err := os.Chmod(secretDir, 0o700); err != nil {
+			return fmt.Errorf("chmod secret probe dir: %w", err)
+		}
+		secretPath := filepath.Join(secretDir, "secret.txt")
+		if err := os.WriteFile(secretPath, []byte("top-secret"), 0o600); err != nil {
+			return fmt.Errorf("write secret probe file: %w", err)
+		}
+		secretScript := fmt.Sprintf("from pathlib import Path\nfor action in [lambda: Path(%q).read_text(), lambda: Path(%q).write_text('escape')]:\n    try:\n        action()\n        raise SystemExit(1)\n    except Exception:\n        pass\n", secretPath, filepath.Join(secretDir, "created.txt"))
+		secretDirWork, err := os.MkdirTemp("", "aonohako-selftest-compile-secret-work-*")
+		if err != nil {
+			return fmt.Errorf("mkdtemp secret work probe: %w", err)
+		}
+		stdout, stderr, status, reason := compile.RunSandboxedCommand(context.Background(), secretDirWork, python, []string{"-c", secretScript}, nil)
+		_ = os.RemoveAll(secretDirWork)
+		if status != model.CompileStatusOK {
+			return fmt.Errorf("host-path probe failed: status=%s reason=%s stdout=%q stderr=%q", status, reason, stdout, stderr)
 		}
 	}
 

@@ -330,6 +330,15 @@ func MaybeRunFromEnv() bool {
 			appendAllowOnlyUnixDomain(uint32(unix.SYS_SOCKETPAIR))
 			appendAllowOnlyZeroArg(uint32(unix.SYS_SENDTO), 5)
 			appendAllowOnlyZeroArg(uint32(unix.SYS_RECVFROM), 4)
+			if !req.AllowUnixSocketMessages {
+				for _, sysno := range []uint32{
+					uint32(unix.SYS_SENDMSG),
+					uint32(unix.SYS_RECVMSG),
+				} {
+					appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+					appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+				}
+			}
 		} else {
 			for _, sysno := range []uint32{
 				uint32(unix.SYS_SOCKET),
