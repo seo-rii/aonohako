@@ -231,6 +231,9 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			if tc.lang == "julia" && !containsArg(args, "--compiled-modules=no") {
 				t.Errorf("buildCommand(%s) should disable runtime precompile spawning in %v", tc.lang, args)
 			}
+			if tc.lang == "lisp" && !containsArg(args, "--dynamic-space-size") {
+				t.Errorf("buildCommand(%s) should bound SBCL dynamic space in %v", tc.lang, args)
+			}
 			if tc.lang == "aheui" && (len(args) < 3 || !strings.Contains(args[2], "from aheui.aheui import entry_point")) {
 				t.Errorf("buildCommand(%s) missing aheui python wrapper body in %v", tc.lang, args)
 			}
@@ -310,7 +313,7 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 	}
 
 	lispArgs := buildCommand("/tmp/Main.lisp", "lisp", req)
-	if !reflect.DeepEqual(lispArgs, []string{"sbcl", "--noinform", "--script", "/tmp/Main.lisp"}) {
+	if !reflect.DeepEqual(lispArgs, []string{"sbcl", "--noinform", "--dynamic-space-size", "64", "--script", "/tmp/Main.lisp"}) {
 		t.Fatalf("lisp command = %v", lispArgs)
 	}
 }
