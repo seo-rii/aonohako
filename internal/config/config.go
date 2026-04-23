@@ -47,9 +47,18 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	maxActive := parsePositiveInt(getenv("AONOHAKO_MAX_ACTIVE_RUNS", ""), defaultMaxActiveRuns(runtimePlatform))
-	maxPending := parseNonNegativeInt(getenv("AONOHAKO_MAX_PENDING_QUEUE", "0"), 0)
-	heartbeatSec := parsePositiveInt(getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "10"), 10)
+	maxActive, err := parsePositiveIntEnv("AONOHAKO_MAX_ACTIVE_RUNS", os.Getenv("AONOHAKO_MAX_ACTIVE_RUNS"), defaultMaxActiveRuns(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	maxPending, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PENDING_QUEUE", os.Getenv("AONOHAKO_MAX_PENDING_QUEUE"), 0)
+	if err != nil {
+		return Config{}, err
+	}
+	heartbeatSec, err := parsePositiveIntEnv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", os.Getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC"), 10)
+	if err != nil {
+		return Config{}, err
+	}
 	execution := ExecutionConfig{
 		Platform: runtimePlatform,
 		Remote: RemoteExecutorConfig{
@@ -175,26 +184,26 @@ func getenv(key, fallback string) string {
 	return fallback
 }
 
-func parsePositiveInt(raw string, fallback int) int {
+func parsePositiveIntEnv(key, raw string, fallback int) (int, error) {
 	if raw == "" {
-		return fallback
+		return fallback, nil
 	}
 	v, err := strconv.Atoi(raw)
 	if err != nil || v <= 0 {
-		return fallback
+		return 0, fmt.Errorf("%s must be a positive integer", key)
 	}
-	return v
+	return v, nil
 }
 
-func parseNonNegativeInt(raw string, fallback int) int {
+func parseNonNegativeIntEnv(key, raw string, fallback int) (int, error) {
 	if raw == "" {
-		return fallback
+		return fallback, nil
 	}
 	v, err := strconv.Atoi(raw)
 	if err != nil || v < 0 {
-		return fallback
+		return 0, fmt.Errorf("%s must be a non-negative integer", key)
 	}
-	return v
+	return v, nil
 }
 
 func parseRemoteAuth(raw string) RemoteAuthMode {

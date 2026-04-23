@@ -135,6 +135,10 @@ Both `/compile` and `/execute` share the same bounded queue:
   other than `1`.
 - **Pending queue**: `AONOHAKO_MAX_PENDING_QUEUE` (default: `0` = unlimited)
 
+Numeric queue/timing environment variables are strict: malformed values,
+negative values, or zero values where a positive integer is required fail server
+startup instead of silently falling back.
+
 When the pending queue is full, the server returns:
 
 ```

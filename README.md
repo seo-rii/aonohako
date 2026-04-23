@@ -117,7 +117,8 @@ Repository policy check:
 - `AONOHAKO_EXECUTION_TRANSPORT` selects how `/execute` is handled:
   `embedded` (default) or `remote`
 - `AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation:
-  `helper`, `container`, or `none`
+  `helper` or `none`. `container` is a reserved enum value for a future
+  backend and is rejected by startup validation today.
 - `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand:
   `cloudrun` → `cloudrun + embedded + helper`
   `local-root` → `selfhosted + embedded + helper`
@@ -127,6 +128,8 @@ Repository policy check:
   `embedded + helper` backend rejects values other than `1`.
 - `AONOHAKO_MAX_PENDING_QUEUE` defaults to `0` for unlimited queue depth
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
+- Numeric environment variables are strict: malformed, negative, or zero values
+  where a positive integer is required fail startup instead of falling back.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another

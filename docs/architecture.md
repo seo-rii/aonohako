@@ -238,7 +238,8 @@ The runtime now separates three concerns:
 
 - `AONOHAKO_DEPLOYMENT_TARGET`: `cloudrun`, `selfhosted`, or `dev`
 - `AONOHAKO_EXECUTION_TRANSPORT`: `embedded` or `remote`
-- `AONOHAKO_SANDBOX_BACKEND`: `helper`, `container`, or `none`
+- `AONOHAKO_SANDBOX_BACKEND`: `helper` or `none` in supported deployments.
+  `container` is recognized only as a reserved future backend value.
 
 `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand that maps to the
 legacy embedded-helper shapes.
@@ -261,6 +262,9 @@ The following checks are enforced before the HTTP server starts:
 - `remote + bearer` requires `AONOHAKO_REMOTE_RUNNER_TOKEN`
 - `remote + cloudrun-idtoken` defaults its audience to the remote runner URL if
   `AONOHAKO_REMOTE_RUNNER_AUDIENCE` is unset
+- numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
+  `AONOHAKO_MAX_PENDING_QUEUE`, and `AONOHAKO_HEARTBEAT_INTERVAL_SEC` are
+  strict; malformed or out-of-range values fail startup
 - `cloudrun` always requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`
 - every required work root must already exist, be a directory, be owned by the
