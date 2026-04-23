@@ -86,6 +86,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`container` is a reserved enum value for a future",
 		"fail startup instead of falling back",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
+		"non-root development path)",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another",
 		"`embedded + helper` backend rejects values other than `1`",
