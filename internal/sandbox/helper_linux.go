@@ -228,7 +228,7 @@ func MaybeRunFromEnv() bool {
 		program = append(program, unix.SockFilter{Code: code, Jt: jt, Jf: jf, K: k})
 	}
 	appendAllowOnlyInternetDomain := func(sysno uint32) {
-		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 6)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 5)
 		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.AF_INET, 2, 0)
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.AF_INET6, 1, 0)
