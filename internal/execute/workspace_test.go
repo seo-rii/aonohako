@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -99,6 +100,96 @@ func TestMaterializeFilesStoresProgramsInsideBoxWithImmutableModes(t *testing.T)
 	}
 	if dataInfo.Mode().Perm() != 0o444 {
 		t.Fatalf("input.txt mode = %v, want 0444", dataInfo.Mode())
+	}
+}
+
+func TestMaterializeFilesUsesExplicitPythonEntrypoint(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang:       "python",
+		EntryPoint: "src/main.py",
+		Binaries: []model.Binary{
+			{Name: "tools/ignored.py", DataB64: b64("print('wrong')\n")},
+			{Name: "data/input.csv", DataB64: b64("2,3\n")},
+			{Name: "src/main.py", DataB64: b64("print('right')\n")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "python" {
+		t.Fatalf("lang = %q, want python", lang)
+	}
+	if got := filepath.ToSlash(strings.TrimPrefix(primary, ws.BoxDir+string(os.PathSeparator))); got != "src/main.py" {
+		t.Fatalf("primary = %q, want src/main.py", got)
+	}
+}
+
+func TestMaterializeFilesRejectsMissingEntrypoint(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang:       "python",
+		EntryPoint: "src/missing.py",
+		Binaries: []model.Binary{
+			{Name: "src/main.py", DataB64: b64("print('ok')\n")},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected missing entrypoint validation error")
+	}
+	if !strings.Contains(err.Error(), "entry_point") {
+		t.Fatalf("expected entry_point validation error, got %v", err)
+	}
+}
+
+func TestMaterializeFilesRejectsEntrypointPathEscape(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang:       "python",
+		EntryPoint: "../main.py",
+		Binaries: []model.Binary{
+			{Name: "src/main.py", DataB64: b64("print('ok')\n")},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected entrypoint path escape validation error")
+	}
+}
+
+func TestMaterializeFilesRejectsUnsafeJavaEntrypoint(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang:       "java",
+		EntryPoint: "Main\r\nClass-Path: /tmp/evil",
+		Binaries: []model.Binary{
+			{Name: "Main.class", DataB64: b64("class-bytes")},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected unsafe java entrypoint validation error")
+	}
+	if !strings.Contains(err.Error(), "entry_point") {
+		t.Fatalf("expected entry_point validation error, got %v", err)
 	}
 }
 

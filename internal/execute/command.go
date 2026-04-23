@@ -116,11 +116,10 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	case "coq":
 		return []string{"true"}
 	case "groovy":
-		mainClass := strings.TrimSpace(req.EntryPoint)
-		if mainClass == "" {
-			mainClass = "Main"
+		mainClass, err := normalizeJVMMainClass(req.EntryPoint, "Main")
+		if err != nil {
+			return nil
 		}
-		mainClass = strings.ReplaceAll(mainClass, "/", ".")
 		groovyClasspath := []string{primaryPath}
 		for _, pattern := range []string{
 			"/usr/share/groovy/embeddable/groovy-all*.jar",
@@ -153,11 +152,10 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 			mainClass,
 		}
 	case "scala":
-		mainClass := strings.TrimSpace(req.EntryPoint)
-		if mainClass == "" {
-			mainClass = "Main"
+		mainClass, err := normalizeJVMMainClass(req.EntryPoint, "Main")
+		if err != nil {
+			return nil
 		}
-		mainClass = strings.ReplaceAll(mainClass, "/", ".")
 		scalaClasspath := []string{primaryPath}
 		if matches, err := filepath.Glob("/usr/share/java/scala*.jar"); err == nil {
 			scalaClasspath = append(scalaClasspath, matches...)

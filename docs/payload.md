@@ -12,9 +12,16 @@
     }
   ],
   "target": "Main",                          // optional output binary name (default: "Main")
-  "entry_point": "Main"                      // optional entry point (used for Java)
+  "entry_point": "src/main.c"                // optional submitted source path to validate as the intended entry file
 }
 ```
+
+`sources` may contain multiple files. Every `name` is interpreted as a relative
+path inside the compile workspace; absolute paths and traversal are rejected.
+When `entry_point` names a source path, it must exactly match one submitted
+source after path cleaning. Native multi-file compilers such as C/C++ still
+compile all source files of the language, so `entry_point` is validation
+metadata rather than an argument that drops helper sources.
 
 ## `POST /compile` — Response
 
@@ -53,7 +60,7 @@
     "memory_mb": 256                         // memory limit (MB, enforced via prlimit AS)
   },
   "enable_network": false,                   // outbound network request flag; embedded helper rejects true and remote execution must enforce its own isolation
-  "entry_point": "Main",                     // entry class for Java
+  "entry_point": "src/main.py",              // optional submitted file path to run; JVM/BEAM runtimes use class/module entry names
   "spj": {                                   // optional special judge
     "binary": {                              // pre-compiled SPJ binary
       "name": "checker",
@@ -72,6 +79,15 @@
   "ignore_tle": false                        // evaluate output even on TLE
 }
 ```
+
+`binaries` may contain multiple files. They are materialized into the same
+working directory, so scripts can read adjacent data files such as CSV fixtures
+by relative path. For path-based runtimes (`binary`, Python, Ruby, JavaScript,
+text, and similar), `entry_point` must be a submitted file path and selects the
+primary file to execute. For Java, Scala, Groovy, and Erlang, `entry_point`
+keeps its existing class/module meaning instead of selecting a file path; JVM
+class names are validated before they are written into generated manifests or
+command arguments.
 
 ## `POST /execute` — Response
 
