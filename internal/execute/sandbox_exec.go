@@ -140,7 +140,6 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		}
 	}
 
-	reqPath := filepath.Join(ws.RootDir, ".tmp", "sandbox-request.json")
 	helperReq := sandbox.ExecRequest{
 		Command:                  finalCommand,
 		Dir:                      ws.BoxDir,
@@ -158,9 +157,13 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request failed: " + err.Error()}
 	}
-	if err := os.WriteFile(reqPath, rawReq, 0o644); err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
+
+	requestRead, requestWrite, err := os.Pipe()
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request pipe failed: " + err.Error()}
 	}
+	defer requestRead.Close()
+	defer requestWrite.Close()
 
 	helperPath, err := os.Executable()
 	if err != nil {
@@ -177,7 +180,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if os.Geteuid() == 0 {
 		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
 	}
-	cmd.Env = append(append(baseEnv[:0:0], baseEnv...), sandbox.HelperModeEnv+"="+sandbox.HelperModeExec, sandbox.RequestPathEnv+"="+reqPath)
+	cmd.ExtraFiles = []*os.File{requestRead}
+	cmd.Env = append(append(baseEnv[:0:0], baseEnv...), sandbox.HelperModeEnv+"="+sandbox.HelperModeExec, sandbox.RequestFDEnv+"=3")
 
 	stdoutBuf := cappedBuffer{limit: outputLimitBytes}
 	stderrBuf := cappedBuffer{limit: outputLimitBytes}
@@ -191,6 +195,21 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
+	}
+	_ = requestRead.Close()
+	if n, err := requestWrite.Write(rawReq); err != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
+	} else if n != len(rawReq) {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: short write"}
+	}
+	if err := requestWrite.Close(); err != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
 	}
 
 	imageDone := make(chan struct{})

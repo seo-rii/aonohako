@@ -1554,7 +1554,6 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if filepath.Base(command[0]) == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
-	reqPath := filepath.Join(workDir, ".tmp", "compile-request.json")
 	helperReq := sandbox.ExecRequest{
 		Command: append([]string(nil), command...),
 		Dir:     workDir,
@@ -1577,9 +1576,13 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if err != nil {
 		return "", "", model.CompileStatusInternal, "sandbox request failed: " + err.Error()
 	}
-	if err := os.WriteFile(reqPath, rawReq, 0o644); err != nil {
-		return "", "", model.CompileStatusInternal, "sandbox request write failed: " + err.Error()
+
+	requestRead, requestWrite, err := os.Pipe()
+	if err != nil {
+		return "", "", model.CompileStatusInternal, "sandbox request pipe failed: " + err.Error()
 	}
+	defer requestRead.Close()
+	defer requestWrite.Close()
 	helperPath, err := os.Executable()
 	if err != nil {
 		return "", "", model.CompileStatusInternal, "resolve helper failed: " + err.Error()
@@ -1591,8 +1594,9 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		"LANG=C.UTF-8",
 		"LC_ALL=C.UTF-8",
 		sandbox.HelperModeEnv + "=" + sandbox.HelperModeExec,
-		sandbox.RequestPathEnv + "=" + reqPath,
+		sandbox.RequestFDEnv + "=3",
 	}
+	cmd.ExtraFiles = []*os.File{requestRead}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	if os.Geteuid() == 0 {
 		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
@@ -1617,6 +1621,21 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	cmd.Stderr = stderrFile
 	if err := cmd.Start(); err != nil {
 		return "", "", model.CompileStatusInternal, "start failed: " + err.Error()
+	}
+	_ = requestRead.Close()
+	if n, err := requestWrite.Write(rawReq); err != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+		return "", "", model.CompileStatusInternal, "sandbox request write failed: " + err.Error()
+	} else if n != len(rawReq) {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+		return "", "", model.CompileStatusInternal, "sandbox request write failed: short write"
+	}
+	if err := requestWrite.Close(); err != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+		return "", "", model.CompileStatusInternal, "sandbox request write failed: " + err.Error()
 	}
 	pgid := cmd.Process.Pid
 	killSandbox := func() {

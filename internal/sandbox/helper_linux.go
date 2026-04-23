@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -29,16 +30,34 @@ func MaybeRunFromEnv() bool {
 		os.Exit(120)
 	}
 
-	reqPath := os.Getenv(RequestPathEnv)
-	if reqPath == "" {
-		fail("missing %s", RequestPathEnv)
-	}
+	var raw []byte
+	if reqFD := os.Getenv(RequestFDEnv); reqFD != "" {
+		fd, err := strconv.Atoi(reqFD)
+		if err != nil {
+			fail("invalid %s: %v", RequestFDEnv, err)
+		}
+		reqFile := os.NewFile(uintptr(fd), "sandbox-request")
+		if reqFile == nil {
+			fail("open request fd %d", fd)
+		}
+		raw, err = io.ReadAll(reqFile)
+		_ = reqFile.Close()
+		if err != nil {
+			fail("read request fd: %v", err)
+		}
+	} else {
+		reqPath := os.Getenv(RequestPathEnv)
+		if reqPath == "" {
+			fail("missing %s", RequestPathEnv)
+		}
 
-	raw, err := os.ReadFile(reqPath)
-	if err != nil {
-		fail("read request: %v", err)
+		var err error
+		raw, err = os.ReadFile(reqPath)
+		if err != nil {
+			fail("read request: %v", err)
+		}
+		_ = os.Remove(reqPath)
 	}
-	_ = os.Remove(reqPath)
 
 	var req ExecRequest
 	if err := json.Unmarshal(raw, &req); err != nil {
