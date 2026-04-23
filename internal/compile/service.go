@@ -239,6 +239,9 @@ func hardenCompileWorkspace(workDir string) error {
 		return err
 	}
 	for _, dir := range security.WorkspaceScopedDirs(workDir) {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
 		if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
 			return err
 		}
