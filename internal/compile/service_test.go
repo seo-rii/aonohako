@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -422,6 +424,41 @@ func TestRunCommandRejectsNetworkSockets(t *testing.T) {
 	}
 }
 
+func TestRunCommandRejectsUnixSocketConnectToHost(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	socketDir := t.TempDir()
+	if err := os.Chmod(socketDir, 0o777); err != nil {
+		t.Fatalf("chmod socket dir: %v", err)
+	}
+	socketPath := filepath.Join(socketDir, "control.sock")
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("listen unix socket: %v", err)
+	}
+	defer listener.Close()
+	if err := os.Chmod(socketPath, 0o777); err != nil {
+		t.Fatalf("chmod unix socket: %v", err)
+	}
+
+	script := fmt.Sprintf(
+		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n    s.settimeout(0.5)\n    s.connect(%q)\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
+		socketPath,
+	)
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		sandboxWritableTempDir(t),
+		python,
+		[]string{"-c", script},
+		nil,
+	)
+	if status != model.CompileStatusOK || stdout != "blocked\n" {
+		t.Fatalf("expected unix socket connect denial, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
 func TestRunCommandAllowsLocalUnixSocketPairs(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
@@ -439,20 +476,44 @@ func TestRunCommandAllowsLocalUnixSocketPairs(t *testing.T) {
 	}
 }
 
-func TestRunCommandAllowsLocalUnixSocketSendmsg(t *testing.T) {
+func TestRunCommandRejectsUnixSocketSendmsgToHost(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 not available")
 	}
+	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-compile-dgram-%d.sock", time.Now().UnixNano()))
+	_ = os.Remove(socketPath)
+	addr := &net.UnixAddr{Name: socketPath, Net: "unixgram"}
+	listener, err := net.ListenUnixgram("unixgram", addr)
+	if err != nil {
+		t.Fatalf("listen unixgram socket: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
+	}()
+	if err := os.Chmod(socketPath, 0o777); err != nil {
+		t.Fatalf("chmod unixgram socket: %v", err)
+	}
+
+	script := fmt.Sprintf(
+		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)\n    s.sendmsg([b'escape'], [], 0, %q)\n    print('sent')\nexcept OSError:\n    print('blocked')\n",
+		socketPath,
+	)
 	stdout, stderr, status, reason := runCommand(
 		context.Background(),
 		sandboxWritableTempDir(t),
 		python,
-		[]string{"-c", "import socket, sys\na, b = socket.socketpair()\na.sendmsg([b'ok'])\ndata, _, _, _ = b.recvmsg(2)\nsys.exit(0 if data == b'ok' else 1)\n"},
+		[]string{"-c", script},
 		nil,
 	)
-	if status != model.CompileStatusOK {
-		t.Fatalf("expected local unix sendmsg probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	if status != model.CompileStatusOK || stdout != "blocked\n" {
+		t.Fatalf("expected unix sendmsg denial, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+	_ = listener.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	buf := make([]byte, 64)
+	if n, _, err := listener.ReadFromUnix(buf); err == nil {
+		t.Fatalf("expected no datagram delivery, got %q", string(buf[:n]))
 	}
 }
 
@@ -470,6 +531,74 @@ func TestRunCommandRejectsNamespaceEscape(t *testing.T) {
 	)
 	if status != model.CompileStatusOK {
 		t.Fatalf("expected unshare denial probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
+func TestRunCommandRejectsProcessGroupEscape(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		sandboxWritableTempDir(t),
+		python,
+		[]string{"-c", "import errno, os, sys\ntry:\n    os.setpgid(0, 0)\nexcept OSError as exc:\n    sys.exit(0 if exc.errno in (errno.EPERM, errno.EACCES) else 1)\nsys.exit(1)\n"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("expected process-group denial probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
+func TestRunCommandRejectsFilesystemPrivilegeSyscalls(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		sandboxWritableTempDir(t),
+		python,
+		[]string{"-c", "import errno, os, sys\nopen('owned.txt', 'w').close()\nchecks = [\n    ('chmod', lambda: os.chmod('owned.txt', 0o777)),\n    ('chown', lambda: os.chown('owned.txt', os.getuid(), os.getgid())),\n    ('mknod', lambda: os.mknod('node')),\n]\nfor name, action in checks:\n    try:\n        action()\n        print(name + ':escaped')\n        sys.exit(1)\n    except OSError as exc:\n        if exc.errno not in (errno.EPERM, errno.EACCES, errno.ENOSYS):\n            print(name + ':error:' + str(exc.errno))\n            sys.exit(1)\nprint('blocked')\n"},
+		nil,
+	)
+	if status != model.CompileStatusOK || stdout != "blocked\n" {
+		t.Fatalf("expected filesystem privilege syscall denial, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
+func TestRunCommandCannotReadOrWriteRootOwnedHostPaths(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to drop compile helper to sandbox user")
+	}
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+
+	secretDir := t.TempDir()
+	if err := os.Chmod(secretDir, 0o700); err != nil {
+		t.Fatalf("chmod secret dir: %v", err)
+	}
+	secretPath := filepath.Join(secretDir, "secret.txt")
+	if err := os.WriteFile(secretPath, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+	script := fmt.Sprintf(
+		"from pathlib import Path\nfor label, action in [('read', lambda: Path(%q).read_text()), ('write', lambda: Path(%q).write_text('escape'))]:\n    try:\n        action()\n        print(label + ':escaped')\n    except Exception:\n        print(label + ':blocked')\n",
+		secretPath,
+		filepath.Join(secretDir, "created.txt"),
+	)
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		sandboxWritableTempDir(t),
+		python,
+		[]string{"-c", script},
+		nil,
+	)
+	if status != model.CompileStatusOK || stdout != "read:blocked\nwrite:blocked\n" {
+		t.Fatalf("expected host path read/write denial, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
 	}
 }
 
