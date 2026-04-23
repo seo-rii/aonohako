@@ -275,6 +275,46 @@ func TestRunPythonCompileSucceedsWithRootBackedSandboxWorkspace(t *testing.T) {
 	}
 }
 
+func TestRunPythonCompileDoesNotExecuteSitecustomize(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	originalMain := "print('ok')\n"
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{
+			{
+				Name:    "Main.py",
+				DataB64: b64String(originalMain),
+			},
+			{
+				Name:    "sitecustomize.py",
+				DataB64: b64String("from pathlib import Path\nPath('Main.py').write_text(\"print(\\\"pwned\\\")\\n\")\n"),
+			},
+		},
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status=%q reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+	}
+
+	artifacts := map[string]string{}
+	for _, artifact := range resp.Artifacts {
+		raw, err := base64.StdEncoding.DecodeString(artifact.DataB64)
+		if err != nil {
+			t.Fatalf("decode artifact %q: %v", artifact.Name, err)
+		}
+		artifacts[artifact.Name] = string(raw)
+	}
+	if got := artifacts["Main.py"]; got != originalMain {
+		t.Fatalf("expected Main.py artifact to stay unchanged, got %q", got)
+	}
+	if got := artifacts["sitecustomize.py"]; got == "" {
+		t.Fatalf("expected sitecustomize.py artifact to be preserved")
+	}
+}
+
 func TestCompileCSharpMaterializesProjectSources(t *testing.T) {
 	workDir := t.TempDir()
 	_ = compileCSharp(context.Background(), workDir, []model.Source{
@@ -317,6 +357,20 @@ func TestCollectArtifactsRejectsSymlink(t *testing.T) {
 	}
 	if _, err := collectArtifacts(root, func(string) bool { return true }, ""); err == nil {
 		t.Fatalf("expected symlink artifact error")
+	}
+}
+
+func TestCollectArtifactsRejectsHardlink(t *testing.T) {
+	root := t.TempDir()
+	original := filepath.Join(root, "original.bin")
+	if err := os.WriteFile(original, []byte("secret"), 0o644); err != nil {
+		t.Fatalf("write original.bin: %v", err)
+	}
+	if err := os.Link(original, filepath.Join(root, "artifact.bin")); err != nil {
+		t.Fatalf("link artifact.bin: %v", err)
+	}
+	if _, err := collectArtifacts(root, func(string) bool { return true }, ""); err == nil {
+		t.Fatalf("expected hardlink artifact error")
 	}
 }
 
@@ -455,6 +509,47 @@ func TestRunSandboxedCommandAllowsWritesBesideNestedCompileSources(t *testing.T)
 	}
 	if _, err := os.Stat(filepath.Join(sourceDir, "obj", "generated.txt")); err != nil {
 		t.Fatalf("expected nested generated file: %v", err)
+	}
+}
+
+func TestRunSandboxedCommandPreventsRemovingOrReplacingSubmittedCompileSources(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to drop compile helper to sandbox user")
+	}
+
+	workDir := t.TempDir()
+	if err := materializeSources(workDir, []model.Source{
+		{
+			Name:    "pkg/Main.py",
+			DataB64: b64String("print('safe')\n"),
+		},
+	}); err != nil {
+		t.Fatalf("materializeSources: %v", err)
+	}
+	if err := hardenCompileWorkspace(workDir); err != nil {
+		t.Fatalf("hardenCompileWorkspace: %v", err)
+	}
+
+	stdout, stderr, status, reason := RunSandboxedCommand(
+		context.Background(),
+		workDir,
+		"/bin/sh",
+		[]string{"-c", "rm -f pkg/Main.py || true; printf 'print(\"pwned\")\\n' > pkg/Main.py 2>/dev/null || true; printf 'ok\\n' > pkg/generated.txt"},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(workDir, "pkg", "Main.py"))
+	if err != nil {
+		t.Fatalf("read Main.py: %v", err)
+	}
+	if string(raw) != "print('safe')\n" {
+		t.Fatalf("submitted source changed: %q", string(raw))
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "pkg", "generated.txt")); err != nil {
+		t.Fatalf("expected generated sibling file: %v", err)
 	}
 }
 

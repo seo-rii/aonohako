@@ -94,40 +94,8 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	if err := materializeSources(workDir, req.Sources); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 	}
-	if os.Geteuid() == 0 {
-		const sandboxUID = 65532
-		const sandboxGID = 65532
-		scopedDirs := make(map[string]struct{}, len(security.WorkspaceScopedDirs(workDir)))
-		for _, dir := range security.WorkspaceScopedDirs(workDir) {
-			scopedDirs[dir] = struct{}{}
-		}
-		if err := filepath.WalkDir(workDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if path != workDir {
-				if _, ok := scopedDirs[path]; ok {
-					return filepath.SkipDir
-				}
-			}
-			if err := os.Chown(path, sandboxUID, sandboxGID); err != nil {
-				return err
-			}
-			if d.IsDir() {
-				return os.Chmod(path, 0o755)
-			}
-			return os.Chmod(path, 0o444)
-		}); err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace ownership failed: " + err.Error()}
-		}
-		for _, dir := range security.WorkspaceScopedDirs(workDir) {
-			if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
-				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace ownership failed: " + err.Error()}
-			}
-			if err := os.Chmod(dir, 0o700); err != nil {
-				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace ownership failed: " + err.Error()}
-			}
-		}
+	if err := hardenCompileWorkspace(workDir); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace ownership failed: " + err.Error()}
 	}
 
 	target := strings.TrimSpace(req.Target)
@@ -239,6 +207,43 @@ func materializeSources(root string, sources []model.Source) error {
 		}
 		if err := os.WriteFile(dest, data, 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", clean, err)
+		}
+	}
+	return nil
+}
+
+func hardenCompileWorkspace(workDir string) error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+	const sandboxUID = 65532
+	const sandboxGID = 65532
+	scopedDirs := make(map[string]struct{}, len(security.WorkspaceScopedDirs(workDir)))
+	for _, dir := range security.WorkspaceScopedDirs(workDir) {
+		scopedDirs[dir] = struct{}{}
+	}
+	if err := filepath.WalkDir(workDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path != workDir {
+			if _, ok := scopedDirs[path]; ok {
+				return filepath.SkipDir
+			}
+		}
+		if d.IsDir() {
+			return os.Chmod(path, 0o777|os.ModeSticky)
+		}
+		return os.Chmod(path, 0o444)
+	}); err != nil {
+		return err
+	}
+	for _, dir := range security.WorkspaceScopedDirs(workDir) {
+		if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
+			return err
+		}
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -832,7 +837,7 @@ func compileJava(ctx context.Context, workDir string, sources []model.Source, re
 }
 
 func compilePythonLike(ctx context.Context, workDir string, sources []model.Source, interpreter string) model.CompileResponse {
-	stdout, stderr, status, reason := runCommand(ctx, workDir, interpreter, []string{"-m", "compileall", "-b", "."}, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, interpreter, []string{"-I", "-S", "-m", "compileall", "-b", "."}, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1514,10 +1519,24 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 	}
 	if os.Geteuid() == 0 {
-		if err := os.Chown(workDir, 65532, 65532); err != nil {
-			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+		scopedDirs := make(map[string]struct{}, len(security.WorkspaceScopedDirs(workDir)))
+		for _, dir := range security.WorkspaceScopedDirs(workDir) {
+			scopedDirs[dir] = struct{}{}
 		}
-		if err := os.Chmod(workDir, 0o755); err != nil {
+		if err := filepath.WalkDir(workDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() {
+				return nil
+			}
+			if path != workDir {
+				if _, ok := scopedDirs[path]; ok {
+					return filepath.SkipDir
+				}
+			}
+			return os.Chmod(path, 0o777|os.ModeSticky)
+		}); err != nil {
 			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
 		}
 		for _, dir := range security.WorkspaceScopedDirs(workDir) {

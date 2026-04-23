@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"aonohako/internal/util"
 
@@ -47,6 +48,11 @@ func openArtifact(root, rel string) (openedArtifact, error) {
 		_ = file.Close()
 		_ = unix.Close(dirfd)
 		return openedArtifact{}, fmt.Errorf("artifact is not a regular file: %s", rel)
+	}
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Nlink > 1 {
+		_ = file.Close()
+		_ = unix.Close(dirfd)
+		return openedArtifact{}, fmt.Errorf("artifact must not be a hard link: %s", rel)
 	}
 	return openedArtifact{
 		file: file,
