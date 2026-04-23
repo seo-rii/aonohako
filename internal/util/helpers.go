@@ -3,9 +3,9 @@ package util
 import (
 	"encoding/base64"
 	"errors"
-	"os/exec"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -68,9 +68,6 @@ func ResolveCommandPath(name string, env []string) (string, error) {
 		}
 		if info.IsDir() || info.Mode()&0o111 == 0 {
 			return "", fmt.Errorf("not executable: %s", path)
-		}
-		if real, err := filepath.EvalSymlinks(path); err == nil && real != "" {
-			path = real
 		}
 		return path, nil
 	}

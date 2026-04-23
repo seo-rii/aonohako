@@ -35,3 +35,23 @@ func TestResolveCommandPathUsesProvidedPath(t *testing.T) {
 		t.Fatalf("resolved path = %q, want %q", path, safe)
 	}
 }
+
+func TestResolveCommandPathPreservesSymlinkArgv0(t *testing.T) {
+	tempDir := t.TempDir()
+	target := filepath.Join(tempDir, "toolchain-driver")
+	if err := os.WriteFile(target, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	link := filepath.Join(tempDir, "swiftc")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	path, err := ResolveCommandPath("swiftc", []string{"PATH=" + tempDir})
+	if err != nil {
+		t.Fatalf("ResolveCommandPath: %v", err)
+	}
+	if path != link {
+		t.Fatalf("resolved path = %q, want symlink %q", path, link)
+	}
+}

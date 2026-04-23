@@ -159,7 +159,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"prolog", "/tmp/sol.pl", "swipl", true},
 		{"groovy", "/tmp/classes", "java", false},
 		{"lisp", "/tmp/sol.lisp", "sbcl", true},
-		{"scala", "/tmp/classes", "scala", true},
+		{"scala", "/tmp/classes", "java", false},
 		{"fsharp", "/tmp/App.dll", "dotnet", true},
 		{"javascript", "/tmp/sol.js", "node", true},
 		{"julia", "/tmp/sol.jl", "julia", true},
@@ -294,8 +294,21 @@ func TestBuildCommandNormalizesManagedRuntimeEntryPoints(t *testing.T) {
 	}
 
 	scalaArgs := buildCommand("/tmp/classes", "scala", req)
-	if !reflect.DeepEqual(scalaArgs, []string{"scala", "-nocompdaemon", "-classpath", "/tmp/classes", "pkg.Main"}) {
+	if scalaArgs[0] != "java" {
+		t.Fatalf("scala command should bypass the forking scala shell launcher, got %v", scalaArgs)
+	}
+	if !containsArg(scalaArgs, "-cp") || !containsArg(scalaArgs, "pkg.Main") {
 		t.Fatalf("scala command = %v", scalaArgs)
+	}
+	scalaClasspath := ""
+	for i, arg := range scalaArgs {
+		if arg == "-cp" && i+1 < len(scalaArgs) {
+			scalaClasspath = scalaArgs[i+1]
+			break
+		}
+	}
+	if !strings.Contains(scalaClasspath, "/tmp/classes") || !strings.Contains(scalaClasspath, "scala") {
+		t.Fatalf("scala classpath should include compiled classes and scala runtime jars, got %q", scalaClasspath)
 	}
 }
 
@@ -315,6 +328,11 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 	lispArgs := buildCommand("/tmp/Main.lisp", "lisp", req)
 	if !reflect.DeepEqual(lispArgs, []string{"sbcl", "--noinform", "--dynamic-space-size", "64", "--script", "/tmp/Main.lisp"}) {
 		t.Fatalf("lisp command = %v", lispArgs)
+	}
+
+	jsArgs := buildCommand("/tmp/Main.js", "javascript", req)
+	if !reflect.DeepEqual(jsArgs, []string{"node", "--max-old-space-size=48", "--stack-size=65536", "/tmp/Main.js"}) {
+		t.Fatalf("javascript command = %v", jsArgs)
 	}
 }
 

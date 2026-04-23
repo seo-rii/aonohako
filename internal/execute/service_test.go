@@ -623,6 +623,41 @@ func TestRunBlocksSocketPairCreationWhenNetworkDisabled(t *testing.T) {
 	}
 }
 
+func TestRunBlocksProcessGroupEscapeAttempts(t *testing.T) {
+	requireSandboxSupport(t)
+
+	code := `
+#include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void) {
+	if (setpgid(0, 0) == 0) {
+		puts("escaped");
+		return 0;
+	}
+	puts(errno == EPERM ? "blocked" : "error");
+	return 0;
+}
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "runner",
+			DataB64: buildCTestBinary(t, code),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunAllowsPrlimitQueriesNeededByManagedRuntimes(t *testing.T) {
 	requireSandboxSupport(t)
 
@@ -662,7 +697,7 @@ int main(void) {
 	}
 }
 
-func TestExecuteSandboxAllowsLocalUnixSocketsForErlangRuntime(t *testing.T) {
+func TestExecuteSandboxAllowsLocalUnixSocketPairsForManagedRuntimes(t *testing.T) {
 	requireSandboxSupport(t)
 
 	python, err := exec.LookPath("python3")
@@ -676,17 +711,63 @@ func TestExecuteSandboxAllowsLocalUnixSocketsForErlangRuntime(t *testing.T) {
 		t.Fatalf("prepareWorkspaceDirs: %v", err)
 	}
 
+	for _, lang := range []string{"erlang", "wasm"} {
+		t.Run(lang, func(t *testing.T) {
+			result := executeSandboxCommand(
+				context.Background(),
+				ws,
+				[]string{
+					python,
+					"-c",
+					"import socket, sys\na, b = socket.socketpair()\na.sendmsg([b'ok'])\ndata, _, _, _ = b.recvmsg(2)\nsys.exit(0 if data == b'ok' else 1)\n",
+				},
+				&model.RunRequest{
+					Lang:   lang,
+					Limits: model.Limits{TimeMs: 2000, MemoryMB: 256},
+				},
+				Hooks{},
+				1024,
+			)
+			if result.Status != model.RunStatusAccepted {
+				t.Fatalf("expected Accepted, got %+v", result)
+			}
+		})
+	}
+}
+
+func TestExecuteSandboxBlocksUnixSocketConnectForManagedRuntimeSocketAllowance(t *testing.T) {
+	requireSandboxSupport(t)
+
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+
+	socketPath := filepath.Join(t.TempDir(), "control.sock")
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("listen unix socket: %v", err)
+	}
+	defer listener.Close()
+
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+	script := fmt.Sprintf(
+		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n    s.settimeout(0.5)\n    s.connect(%q)\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
+		socketPath,
+	)
+
 	result := executeSandboxCommand(
 		context.Background(),
 		ws,
-		[]string{
-			python,
-			"-c",
-			"import socket, sys\na, b = socket.socketpair()\na.sendmsg([b'ok'])\ndata, _, _, _ = b.recvmsg(2)\nsys.exit(0 if data == b'ok' else 1)\n",
-		},
+		[]string{python, "-c", script},
 		&model.RunRequest{
-			Lang:   "erlang",
-			Limits: model.Limits{TimeMs: 2000, MemoryMB: 256},
+			Lang:           "wasm",
+			ExpectedStdout: "blocked\n",
+			Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
 		},
 		Hooks{},
 		1024,
