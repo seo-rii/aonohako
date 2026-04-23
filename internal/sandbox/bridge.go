@@ -6,6 +6,7 @@ const (
 	HelperModeEnv  = "AONOHAKO_INTERNAL_MODE"
 	HelperModeExec = "sandbox-exec"
 	RequestPathEnv = "AONOHAKO_SANDBOX_REQUEST"
+	RequestFDEnv   = "AONOHAKO_SANDBOX_REQUEST_FD"
 )
 
 type ExecRequest struct {

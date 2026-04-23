@@ -96,13 +96,14 @@ The runtime uses a parent/helper/target split:
 
 1. Parent process:
    - prepares the workspace
-   - writes the helper request file
+   - passes the helper request JSON through an inherited pipe file descriptor
    - opens stdout and stderr pipes
    - starts the helper in its own process group
    - kills the entire group on timeout or quota violation
 
 2. Helper process:
    - runs from the same `aonohako` binary in internal mode
+   - reads the helper request from the inherited pipe file descriptor
    - applies `setrlimit`
    - enables `PR_SET_DUMPABLE=0`
    - enables `PR_SET_NO_NEW_PRIVS=1`
@@ -119,6 +120,12 @@ The runtime uses a parent/helper/target split:
 `/execute` requires a root parent. The parent drops the helper/target to
 UID/GID `65532`, while the runtime image is hardened so only explicitly
 readable paths remain accessible to that account.
+
+The normal embedded-helper path does not materialize the helper request as a
+workspace file. The parent writes the request JSON to an inherited pipe fd and
+the helper consumes that fd before applying the target hardening; the legacy
+request-file environment variable remains accepted only for direct helper
+compatibility.
 
 ## Enforcement Layers
 
