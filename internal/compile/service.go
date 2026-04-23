@@ -441,7 +441,11 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 				continue
 			}
 			checked++
-			stdout, stderr, status, reason := runCommand(ctx, workDir, "sbcl", []string{"--noinform", "--non-interactive", "--load", filepath.Join(workDir, filepath.Clean(src.Name)), "--eval", "(quit)"}, nil)
+			clean := filepath.Clean(src.Name)
+			sourcePath := filepath.Join(workDir, clean)
+			outputPath := filepath.Join(workDir, ".cache", strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean))+".fasl")
+			eval := fmt.Sprintf(`(handler-case (progn (compile-file %q :output-file %q) (sb-ext:exit :code 0)) (error (e) (format *error-output* "~A~%%" e) (sb-ext:exit :code 1)))`, sourcePath, outputPath)
+			stdout, stderr, status, reason := runCommand(ctx, workDir, "sbcl", []string{"--noinform", "--non-interactive", "--eval", eval}, nil)
 			fullOut.WriteString(stdout)
 			fullErr.WriteString(stderr)
 			if status != model.CompileStatusOK {
@@ -451,7 +455,10 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if checked == 0 {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no lisp sources"}
 		}
-		artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
+		artifacts, err := collectArtifacts(workDir, func(name string) bool {
+			l := strings.ToLower(name)
+			return strings.HasSuffix(l, ".lisp") || strings.HasSuffix(l, ".lsp")
+		}, "")
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
 		}
@@ -758,7 +765,14 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 	} else {
 		args = append(args, goFiles...)
 	}
-	env := append(util.BaseEnv(), "GOCACHE="+goCache, "GOMODCACHE="+goModCache, "GOPATH="+goPath, "GOENV=off")
+	env := append(util.BaseEnv(),
+		"GOCACHE="+goCache,
+		"GOMODCACHE="+goModCache,
+		"GOPATH="+goPath,
+		"GOENV=off",
+		"GOTELEMETRY=off",
+		"GOTOOLCHAIN=local",
+	)
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "go", args, env)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
@@ -870,9 +884,21 @@ func compileKotlinNative(ctx context.Context, workDir, target string, sources []
 	if len(kt) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no kotlin sources"}
 	}
-	args := []string{"-o", target, "-opt"}
+	args := []string{
+		"-J-Xms64m",
+		"-J-Xmx1024m",
+		"-J-Xss1m",
+		"-J-XX:+UseSerialGC",
+		"-J-XX:ReservedCodeCacheSize=32m",
+		"-J-XX:MaxMetaspaceSize=192m",
+		"-J-XX:CompressedClassSpaceSize=64m",
+		"-o",
+		target,
+		"-opt",
+	}
 	args = append(args, kt...)
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "kotlinc-native", args, nil)
+	env := append(javaCompileEnv(workDir, 1024), "KONAN_DATA_DIR=/usr/local/lib/aonohako/konan")
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "kotlinc-native", args, env)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1525,6 +1551,10 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	}
 	disableDotnetLimits := filepath.Base(command[0]) == "dotnet"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
+	memoryLimitMB := compileSandboxMemoryMB
+	if filepath.Base(command[0]) == "kotlinc-native" {
+		memoryLimitMB = 4096
+	}
 	reqPath := filepath.Join(workDir, ".tmp", "compile-request.json")
 	helperReq := sandbox.ExecRequest{
 		Command: append([]string(nil), command...),
@@ -1532,7 +1562,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		Env:     helperEnv,
 		Limits: model.Limits{
 			TimeMs:         int(buildTimeout / time.Millisecond),
-			MemoryMB:       compileSandboxMemoryMB,
+			MemoryMB:       memoryLimitMB,
 			WorkspaceBytes: compileWorkspaceBytes,
 		},
 		ThreadLimit:              compileSandboxThreadLimit,

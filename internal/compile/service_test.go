@@ -290,6 +290,42 @@ func TestCollectArtifactsForCoqKeepsSourceArtifactForExecution(t *testing.T) {
 	}
 }
 
+func TestRunLispCompileDoesNotReturnRuntimeCreatedFiles(t *testing.T) {
+	if _, err := exec.LookPath("sbcl"); err != nil {
+		t.Skip("sbcl not available")
+	}
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang: "LISP",
+		Sources: []model.Source{{
+			Name: "Main.lisp",
+			DataB64: b64String(`(with-open-file (out "same-folder.txt"
+                     :direction :output
+                     :if-exists :supersede
+                     :if-does-not-exist :create)
+  (write-line "ok" out))
+(format t "ok~%")
+`),
+		}},
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status=%q reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+	}
+	foundSource := false
+	for _, artifact := range resp.Artifacts {
+		if artifact.Name == "same-folder.txt" {
+			t.Fatalf("lisp compile must not execute top-level writes or return runtime-created files: %+v", resp.Artifacts)
+		}
+		if artifact.Name == "Main.lisp" {
+			foundSource = true
+		}
+	}
+	if !foundSource {
+		t.Fatalf("lisp compile should return source artifact, got %+v", resp.Artifacts)
+	}
+}
+
 func TestReadSingleArtifactRejectsSymlinkParents(t *testing.T) {
 	root := t.TempDir()
 	outsideDir := t.TempDir()

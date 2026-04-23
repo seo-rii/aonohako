@@ -761,6 +761,14 @@ languages:
         - ln -sfn "/opt/kotlin-native-linux-x86_64-${KONAN_VERSION}/bin/kotlinc-native" /usr/local/bin/kotlinc-native
         - ln -sfn "/opt/kotlin-native-linux-x86_64-${KONAN_VERSION}/bin/run_konan" /usr/local/bin/run_konan
         - rm -f /tmp/kotlin-native.tar.gz
+        - mkdir -p /usr/local/lib/aonohako/konan /tmp/.konan.home
+        - printf '%s\n' 'fun main() {' '  println("warmup")' '}' > /tmp/KonanWarmup.kt
+        - env KONAN_DATA_DIR=/usr/local/lib/aonohako/konan KONAN_USER_HOME=/tmp/.konan.home kotlinc-native -J-Xms64m -J-Xmx1024m -J-Xss1m /tmp/KonanWarmup.kt -o /tmp/KonanWarmup
+        - rm -rf /tmp/KonanWarmup.kt /tmp/KonanWarmup.kexe /tmp/.konan.home
+        - chmod -R a+rX /usr/local/lib/aonohako/konan
+        - touch /usr/local/lib/aonohako/konan/cache/.lock
+        - chown 65532:65532 /usr/local/lib/aonohako/konan/cache/.lock
+        - chmod 0600 /usr/local/lib/aonohako/konan/cache/.lock
     smoke:
       command:
         - bash
@@ -768,7 +776,7 @@ languages:
         - |
           mkdir -p /tmp/.konan /tmp/.konan.home
           printf '%s\n' 'fun main() {' '  println("ok")' '}' > Main.kt
-          env KONAN_DATA_DIR=/tmp/.konan KONAN_USER_HOME=/tmp/.konan.home kotlinc-native Main.kt -o Main
+          env KONAN_DATA_DIR=/usr/local/lib/aonohako/konan KONAN_USER_HOME=/tmp/.konan.home kotlinc-native -J-Xms64m -J-Xmx1024m -J-Xss1m Main.kt -o Main
           ./Main.kexe | grep '^ok$'
 
   pascal:

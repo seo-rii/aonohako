@@ -26,6 +26,9 @@ func WorkspaceScopedDirs(workDir string) []string {
 		filepath.Join(workDir, ".home"),
 		filepath.Join(workDir, ".tmp"),
 		filepath.Join(workDir, ".cache"),
+		filepath.Join(workDir, ".gocache"),
+		filepath.Join(workDir, ".gomodcache"),
+		filepath.Join(workDir, ".gopath"),
 		filepath.Join(workDir, ".mpl"),
 		filepath.Join(workDir, ".pip-cache"),
 		filepath.Join(workDir, ".dotnet-home"),
@@ -43,6 +46,9 @@ func WorkspaceScopedEnv(workDir string) []string {
 	home := filepath.Join(workDir, ".home")
 	tmp := filepath.Join(workDir, ".tmp")
 	cache := filepath.Join(workDir, ".cache")
+	goCache := filepath.Join(workDir, ".gocache")
+	goModCache := filepath.Join(workDir, ".gomodcache")
+	goPath := filepath.Join(workDir, ".gopath")
 	mpl := filepath.Join(workDir, ".mpl")
 	pip := filepath.Join(workDir, ".pip-cache")
 	dotnetHome := filepath.Join(workDir, ".dotnet-home")
@@ -61,6 +67,12 @@ func WorkspaceScopedEnv(workDir string) []string {
 		fmt.Sprintf("TEMPDIR=%s", tmp),
 		fmt.Sprintf("JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=%s", tmp),
 		fmt.Sprintf("XDG_CACHE_HOME=%s", cache),
+		fmt.Sprintf("GOCACHE=%s", goCache),
+		fmt.Sprintf("GOMODCACHE=%s", goModCache),
+		fmt.Sprintf("GOPATH=%s", goPath),
+		"GOENV=off",
+		"GOTELEMETRY=off",
+		"GOTOOLCHAIN=local",
 		fmt.Sprintf("MPLCONFIGDIR=%s", mpl),
 		fmt.Sprintf("PIP_CACHE_DIR=%s", pip),
 		fmt.Sprintf("DOTNET_CLI_HOME=%s", dotnetHome),

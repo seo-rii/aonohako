@@ -108,7 +108,11 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	case "prolog":
 		return []string{"swipl", "-q", "-f", primaryPath, "-g", "main", "-t", "halt"}
 	case "lisp":
-		return []string{"sbcl", "--noinform", "--script", primaryPath}
+		dynamicSpaceMB := max(64, req.Limits.MemoryMB/2)
+		if dynamicSpaceMB > 512 {
+			dynamicSpaceMB = 512
+		}
+		return []string{"sbcl", "--noinform", "--dynamic-space-size", fmt.Sprintf("%d", dynamicSpaceMB), "--script", primaryPath}
 	case "coq":
 		return []string{"true"}
 	case "groovy":
