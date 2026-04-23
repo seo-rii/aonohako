@@ -45,6 +45,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"`AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
 		"`embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
 		"backend rejects values\n  other than `1`",
+		"fail server\nstartup instead of silently falling back",
 	}
 	for _, want := range protocolWants {
 		if !strings.Contains(protocol, want) {
@@ -64,6 +65,12 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1`") {
 		t.Fatalf("architecture.md must describe serialized helper execution")
 	}
+	if !strings.Contains(architecture, "`container` is recognized only as a reserved future backend value") {
+		t.Fatalf("architecture.md must describe reserved container backend semantics")
+	}
+	if !strings.Contains(architecture, "malformed or out-of-range values fail startup") {
+		t.Fatalf("architecture.md must describe strict numeric env parsing")
+	}
 	if !strings.Contains(architecture, "API/control-plane instances in `dev + remote + none`") || !strings.Contains(architecture, "horizontal scale by adding runner instances") {
 		t.Fatalf("architecture.md must describe the self-hosted scale-out path")
 	}
@@ -76,6 +83,8 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_DEPLOYMENT_TARGET` selects where the server is meant to run",
 		"`AONOHAKO_EXECUTION_TRANSPORT` selects how `/execute` is handled",
 		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
+		"`container` is a reserved enum value for a future",
+		"fail startup instead of falling back",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another",

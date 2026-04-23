@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -204,25 +205,15 @@ func TestLoadRejectsGroupWritableDedicatedWorkRoot(t *testing.T) {
 	}
 }
 
-func TestLoadUsesEnvAndFallbacks(t *testing.T) {
-	prevPort := os.Getenv("PORT")
-	prevActive := os.Getenv("AONOHAKO_MAX_ACTIVE_RUNS")
-	prevQueue := os.Getenv("AONOHAKO_MAX_PENDING_QUEUE")
-	prevHeartbeat := os.Getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC")
-	t.Cleanup(func() {
-		_ = os.Setenv("PORT", prevPort)
-		_ = os.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", prevActive)
-		_ = os.Setenv("AONOHAKO_MAX_PENDING_QUEUE", prevQueue)
-		_ = os.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", prevHeartbeat)
-	})
-
-	_ = os.Setenv("PORT", "18080")
-	_ = os.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "3")
-	_ = os.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "7")
-	_ = os.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "2")
-	_ = os.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
-	_ = os.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
-	_ = os.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
+	t.Setenv("PORT", "18080")
+	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "3")
+	t.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "7")
+	t.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "2")
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 
 	cfg, err := Load()
 	if err != nil {
@@ -240,41 +231,54 @@ func TestLoadUsesEnvAndFallbacks(t *testing.T) {
 	if cfg.HeartbeatInterval != 2*time.Second {
 		t.Fatalf("heartbeat mismatch: %v", cfg.HeartbeatInterval)
 	}
+}
 
-	_ = os.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "-1")
-	_ = os.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "-1")
-	_ = os.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "0")
-	cfg, err = Load()
-	if err != nil {
-		t.Fatalf("Load returned error on fallback path: %v", err)
+func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "max active zero", key: "AONOHAKO_MAX_ACTIVE_RUNS", value: "0"},
+		{name: "max active negative", key: "AONOHAKO_MAX_ACTIVE_RUNS", value: "-1"},
+		{name: "max active malformed", key: "AONOHAKO_MAX_ACTIVE_RUNS", value: "many"},
+		{name: "pending negative", key: "AONOHAKO_MAX_PENDING_QUEUE", value: "-1"},
+		{name: "pending malformed", key: "AONOHAKO_MAX_PENDING_QUEUE", value: "many"},
+		{name: "heartbeat zero", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "0"},
+		{name: "heartbeat negative", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "-1"},
+		{name: "heartbeat malformed", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "soon"},
 	}
-	if cfg.MaxActiveRuns != defaultMaxActiveRuns(cfg.Execution.Platform) {
-		t.Fatalf("fallback max active mismatch: %d", cfg.MaxActiveRuns)
-	}
-	if cfg.MaxPendingQueue != 0 {
-		t.Fatalf("fallback max pending mismatch: %d", cfg.MaxPendingQueue)
-	}
-	if cfg.HeartbeatInterval != 10*time.Second {
-		t.Fatalf("fallback heartbeat mismatch: %v", cfg.HeartbeatInterval)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+			t.Setenv(tc.key, tc.value)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected Load() to reject %s=%q", tc.key, tc.value)
+			}
+			if !strings.Contains(err.Error(), tc.key) {
+				t.Fatalf("error %q should mention %s", err, tc.key)
+			}
+		})
 	}
 }
 
 func TestLoadIgnoresLegacyEnvFallbacks(t *testing.T) {
-	_ = os.Unsetenv("AONOHAKO_MAX_ACTIVE_RUNS")
-	_ = os.Unsetenv("AONOHAKO_MAX_PENDING_QUEUE")
-	_ = os.Unsetenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC")
-	_ = os.Setenv("GO_MAX_ACTIVE_RUNS", "5")
-	_ = os.Setenv("GO_MAX_PENDING_QUEUE", "9")
-	_ = os.Setenv("GO_HEARTBEAT_INTERVAL_SEC", "4")
-	_ = os.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
-	_ = os.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
-	_ = os.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
-
-	t.Cleanup(func() {
-		_ = os.Unsetenv("GO_MAX_ACTIVE_RUNS")
-		_ = os.Unsetenv("GO_MAX_PENDING_QUEUE")
-		_ = os.Unsetenv("GO_HEARTBEAT_INTERVAL_SEC")
-	})
+	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "")
+	t.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "")
+	t.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "")
+	t.Setenv("GO_MAX_ACTIVE_RUNS", "5")
+	t.Setenv("GO_MAX_PENDING_QUEUE", "9")
+	t.Setenv("GO_HEARTBEAT_INTERVAL_SEC", "4")
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 
 	cfg, err := Load()
 	if err != nil {
