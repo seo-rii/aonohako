@@ -114,7 +114,8 @@ Repository policy check:
 - `PORT` defaults to `8080`
 - `AONOHAKO_DEPLOYMENT_TARGET` selects where the server is meant to run:
   `cloudrun`, `selfhosted`, or `dev` (default)
-- `AONOHAKO_EXECUTION_TRANSPORT` selects how `/execute` is handled:
+- `AONOHAKO_EXECUTION_TRANSPORT` selects how `/compile` and `/execute` are
+  handled:
   `embedded` (default) or `remote`
 - `AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation:
   `helper` or `none`. `container` is a reserved enum value for a future
@@ -133,7 +134,7 @@ Repository policy check:
   where a positive integer is required fail startup instead of falling back.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
-- `AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another
+- `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
   `aonohako` runner service and must be an absolute `http(s)` URL without
   embedded credentials, query strings, or fragments
 - `AONOHAKO_REMOTE_RUNNER_AUTH` can be `none`, `bearer`, or
@@ -150,8 +151,10 @@ Per-request execution limits are part of the `/execute` payload:
 - `limits.output_bytes`
   Defaults to `64 KiB` when omitted and is capped internally at `8 MiB`
 - `enable_network`
-  `embedded + helper` rejects `true`; if a workload needs outbound network,
-  forward `/execute` to a remote runner that enforces its own network boundary
+  Cloud Run embedded-helper runners reject `true`. Self-hosted embedded-helper
+  runners allow outbound `AF_INET`/`AF_INET6` client sockets only; listener
+  syscalls and host `AF_UNIX` sockets stay blocked. Control-plane instances can
+  forward networked workloads to those runners with `remote` transport.
 
 ## Security notes
 
@@ -180,14 +183,16 @@ Security posture depends on where it runs:
   not group/world writable, owned by the server UID, the process is running as
   root, and the helper queue is single-slot.
 - `cloudrun + remote + none` is the supported Cloud Run control-plane shape
-  when `/execute` should be forwarded to a separate hardened runner. It still
-  requires a bounded `AONOHAKO_WORK_ROOT` for local compile/workspace handling.
+  when `/compile` and `/execute` should be forwarded to a separate hardened
+  runner. It still requires a bounded `AONOHAKO_WORK_ROOT` for local
+  compile/workspace handling.
 - `selfhosted + embedded + helper` applies the same dedicated work-root
   contract for local root-backed containers and VMs, including
   `AONOHAKO_MAX_ACTIVE_RUNS=1` so concurrent runs do not share the same sandbox
   UID.
-- `dev + remote + none` is the non-root development path. The local server keeps
-  serving `/compile` and forwards `/execute` to a remote hardened runner.
+- `dev + remote + none` is the non-root development path. The local server
+  forwards `/compile` and `/execute` to a remote hardened runner instead of
+  building or running untrusted inputs locally.
 - `dev + embedded + helper` remains available through the compatibility mode, but
   `/execute` still requires root because the local helper sandbox is root-backed.
 - for higher-throughput self-hosted deployments, keep helper-backed runners at
@@ -209,7 +214,8 @@ For Cloud Run deployments, use this baseline:
 - a dedicated service account with no unnecessary IAM permissions and no baked
   secrets in the image
 
-For a Cloud Run API/control-plane service that forwards `/execute`, use
+For a Cloud Run API/control-plane service that forwards `/compile` and
+`/execute`, use
 `AONOHAKO_EXECUTION_TRANSPORT=remote`,
 `AONOHAKO_SANDBOX_BACKEND=none`, the same bounded `AONOHAKO_WORK_ROOT`, and a
 private `AONOHAKO_REMOTE_RUNNER_URL`.

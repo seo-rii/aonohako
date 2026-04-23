@@ -60,6 +60,10 @@ language profile, and runs the appropriate toolchain with a 60-second timeout.
 Artifacts are returned as base64 payloads. This step is for building judge
 artifacts, not for enforcing the main untrusted runtime boundary.
 
+When `AONOHAKO_EXECUTION_TRANSPORT=remote`, both `/compile` and `/execute` are
+forwarded to the downstream runner, so non-root control-plane instances do not
+build or run untrusted inputs locally.
+
 Even so, the local compile path applies the same helper-process hardening model
 as `/execute` when it runs as a root-backed embedded helper:
 
@@ -178,14 +182,22 @@ Per-request network disable adds seccomp denies for socket-related syscalls:
 - `sendto`, `sendmsg`, `sendmmsg`
 - `recvfrom`, `recvmsg`, `recvmmsg`
 
+When `enable_network=true` on a self-hosted embedded-helper runner, seccomp
+still keeps the surface narrower than the default host namespace:
+
+- `socket()` is limited to `AF_INET` and `AF_INET6`
+- `bind`, `listen`, `accept`, and `accept4` stay denied
+- host `AF_UNIX` sockets remain blocked; only explicit local socketpair
+  allowances for managed runtimes survive
+
 This is paired with two additional protections:
 
 - proxy-related environment variables are cleared for network-disabled requests
 - deployment-level egress policy should still be deny-by-default on Cloud Run
-- embedded helper execution rejects `enable_network=true` outright because
-  Cloud Run metadata endpoints cannot be reliably excluded inside the helper
-  process alone; networked workloads should run through a remote executor with
-  its own isolation boundary
+- Cloud Run embedded-helper execution rejects `enable_network=true` outright
+  because metadata endpoints cannot be reliably excluded inside the helper
+  process alone; networked workloads should run through a self-hosted runner,
+  either directly or through `remote` transport
 
 ### Workspace controls
 
@@ -267,11 +279,11 @@ Supported combinations today:
 
 - `cloudrun + embedded + helper`: supported production target
 - `cloudrun + remote + none`: supported Cloud Run control-plane target that
-  keeps `/compile` and API handling local but forwards `/execute` to another
-  hardened runner; it still requires `AONOHAKO_WORK_ROOT`
+  forwards `/compile` and `/execute` to another hardened runner; it still
+  requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper`: supported root-backed local/container target
 - `dev + remote + none`: supported non-root control-plane target that forwards
-  `/execute` to another runner
+  `/compile` and `/execute` to another runner
 
 `embedded + container` is reserved for a future self-hosted backend and is
 currently rejected at startup.
@@ -308,8 +320,8 @@ Recommended Cloud Run deployment baseline:
 - Direct VPC egress with `all-traffic`
 - firewall-denied outbound traffic except for explicitly allowed destinations
 
-For a Cloud Run API/control-plane service that forwards execution to a separate
-runner, use `cloudrun + remote + none` with the same bounded
+For a Cloud Run API/control-plane service that forwards `/compile` and
+`/execute` to a separate runner, use `cloudrun + remote + none` with the same bounded
 `AONOHAKO_WORK_ROOT` requirement and a private `AONOHAKO_REMOTE_RUNNER_URL`.
 
 Recommended non-Cloud-Run control-plane baseline:

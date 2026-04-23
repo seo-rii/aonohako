@@ -59,7 +59,7 @@ metadata rather than an argument that drops helper sources.
     "time_ms": 2000,                         // wall-clock time limit (ms)
     "memory_mb": 256                         // memory limit (MB, enforced via prlimit AS)
   },
-  "enable_network": false,                   // outbound network request flag; embedded helper rejects true and remote execution must enforce its own isolation
+  "enable_network": false,                   // outbound network request flag; Cloud Run embedded helper rejects true, self-hosted helper allows outbound AF_INET/AF_INET6 clients only
   "entry_point": "src/main.py",              // optional submitted file path to run; JVM/BEAM runtimes use class/module entry names
   "spj": {                                   // optional special judge
     "binary": {                              // pre-compiled SPJ binary

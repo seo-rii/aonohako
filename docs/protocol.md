@@ -3,9 +3,7 @@
 Both `/compile` and `/execute` open SSE streams and terminate with exactly
 one `result` event.
 
-When `aonohako` is configured with remote execution transport, the local server
-keeps the same SSE contract and forwards `log`, `image`, `error`, and `result`
-events from the remote runner.
+When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner. `/compile` returns the remote compile result with the same buffered `log` and `result` shape.
 
 ## Event Types
 

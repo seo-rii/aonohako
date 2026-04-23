@@ -32,8 +32,8 @@ would weaken ownership isolation, so startup rejects values other than `1`.
 
 ### Non-root control plane with remote execution
 
-Use this when the local service should keep handling `/compile` and API traffic
-but must not execute submissions itself:
+Use this when the local service should stay non-root and must not build or run
+untrusted submissions itself:
 
 - `AONOHAKO_DEPLOYMENT_TARGET=dev`
 - `AONOHAKO_EXECUTION_TRANSPORT=remote`
@@ -41,7 +41,8 @@ but must not execute submissions itself:
 - `AONOHAKO_REMOTE_RUNNER_URL=https://runner.internal`
 
 This is the recommended self-hosted shape for higher throughput. The local
-server stays non-root and forwards `/execute` to a separate runner pool.
+server stays non-root and forwards both `/compile` and `/execute` to a separate
+runner pool.
 
 ## Recommended high-throughput topology
 
@@ -63,6 +64,8 @@ This keeps the same invariants as the Cloud Run baseline:
 - dedicated writable work root
 - immutable submitted files
 - no shared mutable scratch between concurrent submissions in the same process
+- optional outbound network only on dedicated self-hosted runners when
+  `enable_network=true` is explicitly requested
 
 ## Why the helper backend stays single-slot
 
