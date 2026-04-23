@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -859,7 +860,7 @@ func compileTypeScript(ctx context.Context, workDir string, sources []model.Sour
 	if len(tsFiles) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no ts sources"}
 	}
-	args := []string{"--module", "commonjs", "--target", "es5", "--sourceMap", "--moduleResolution", "node", "--outDir", "dist"}
+	args := []string{"--module", "commonjs", "--target", "es2019", "--sourceMap", "--outDir", "dist"}
 	args = append(args, tsFiles...)
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "tsc", args, nil)
 	if status != model.CompileStatusOK {
@@ -950,10 +951,7 @@ func compileSwift(ctx context.Context, workDir, target string, sources []model.S
 	if len(swiftFiles) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no swift sources"}
 	}
-	moduleCacheDir := filepath.Join(workDir, ".swift-module-cache")
-	if err := os.MkdirAll(moduleCacheDir, 0o755); err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
-	}
+	moduleCacheDir := filepath.Join(workDir, ".cache", "swift-module-cache")
 	args := []string{"-O", "-module-cache-path", moduleCacheDir, "-o", target}
 	args = append(args, swiftFiles...)
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "swiftc", args, nil)
@@ -1550,6 +1548,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		command[0] = path
 	}
 	disableDotnetLimits := filepath.Base(command[0]) == "dotnet"
+	allowProcessGroups := filepath.Base(command[0]) == "swiftc"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
 	if filepath.Base(command[0]) == "kotlinc-native" {
@@ -1570,6 +1569,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		EnableNetwork:            false,
 		AllowUnixSockets:         true,
 		AllowProcesses:           true,
+		AllowProcessGroups:       allowProcessGroups,
 		DisableFileSizeLimit:     disableDotnetLimits,
 		DisableAddressSpaceLimit: disableDotnetLimits,
 	}
@@ -1619,6 +1619,49 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		return "", "", model.CompileStatusInternal, "start failed: " + err.Error()
 	}
 	pgid := cmd.Process.Pid
+	killSandbox := func() {
+		descendants := map[int]bool{pgid: true}
+		for changed := true; changed; {
+			changed = false
+			entries, err := os.ReadDir("/proc")
+			if err != nil {
+				break
+			}
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				pid, err := strconv.Atoi(entry.Name())
+				if err != nil || descendants[pid] {
+					continue
+				}
+				raw, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "status"))
+				if err != nil {
+					continue
+				}
+				ppid := 0
+				for _, line := range strings.Split(string(raw), "\n") {
+					if strings.HasPrefix(line, "PPid:") {
+						fields := strings.Fields(line)
+						if len(fields) >= 2 {
+							ppid, _ = strconv.Atoi(fields[1])
+						}
+						break
+					}
+				}
+				if ppid > 0 && descendants[ppid] {
+					descendants[pid] = true
+					changed = true
+				}
+			}
+		}
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		for pid := range descendants {
+			if pid != pgid {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	}
 	waitCh := make(chan error, 1)
 	go func() { waitCh <- cmd.Wait() }()
 	readCaptured := func(file *os.File) string {
@@ -1631,12 +1674,10 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 		return string(data)
 	}
-	defer func() {
-		_ = syscall.Kill(-pgid, syscall.SIGKILL)
-	}()
+	defer killSandbox()
 	select {
 	case <-ctx.Done():
-		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		killSandbox()
 		<-waitCh
 		return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusTimeout, ctx.Err().Error()
 	case err := <-waitCh:

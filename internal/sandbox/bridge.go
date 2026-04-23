@@ -18,6 +18,7 @@ type ExecRequest struct {
 	EnableNetwork            bool         `json:"enable_network"`
 	AllowUnixSockets         bool         `json:"allow_unix_sockets,omitempty"`
 	AllowProcesses           bool         `json:"allow_processes,omitempty"`
+	AllowProcessGroups       bool         `json:"allow_process_groups,omitempty"`
 	DisableFileSizeLimit     bool         `json:"disable_file_size_limit,omitempty"`
 	DisableAddressSpaceLimit bool         `json:"disable_address_space_limit,omitempty"`
 }

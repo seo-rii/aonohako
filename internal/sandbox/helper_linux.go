@@ -215,6 +215,13 @@ func MaybeRunFromEnv() bool {
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 		appendStmt(unix.BPF_RET|unix.BPF_K, allow)
 	}
+	appendAllowOnlyZeroArg := func(sysno uint32, argIndex uint32) {
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 4)
+		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset+argIndex*8)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 1, 0)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		appendStmt(unix.BPF_RET|unix.BPF_K, allow)
+	}
 
 	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArchOffset)
 	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, archAudit, 1, 0)
@@ -274,8 +281,6 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_SWAPOFF),
 		uint32(unix.SYS_SETHOSTNAME),
 		uint32(unix.SYS_SETDOMAINNAME),
-		uint32(unix.SYS_SETPGID),
-		uint32(unix.SYS_SETSID),
 		uint32(unix.SYS_CHMOD),
 		uint32(unix.SYS_FCHMOD),
 		uint32(unix.SYS_FCHMODAT),
@@ -288,6 +293,16 @@ func MaybeRunFromEnv() bool {
 	} {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	}
+
+	if !req.AllowProcessGroups {
+		for _, sysno := range []uint32{
+			uint32(unix.SYS_SETPGID),
+			uint32(unix.SYS_SETSID),
+		} {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
 	}
 
 	if !req.AllowProcesses {
@@ -313,26 +328,33 @@ func MaybeRunFromEnv() bool {
 		if req.AllowUnixSockets {
 			appendAllowOnlyUnixDomain(uint32(unix.SYS_SOCKET))
 			appendAllowOnlyUnixDomain(uint32(unix.SYS_SOCKETPAIR))
+			appendAllowOnlyZeroArg(uint32(unix.SYS_SENDTO), 5)
+			appendAllowOnlyZeroArg(uint32(unix.SYS_RECVFROM), 4)
 		} else {
 			for _, sysno := range []uint32{
 				uint32(unix.SYS_SOCKET),
 				uint32(unix.SYS_SOCKETPAIR),
-				uint32(unix.SYS_CONNECT),
-				uint32(unix.SYS_BIND),
-				uint32(unix.SYS_LISTEN),
-				uint32(unix.SYS_ACCEPT),
-				uint32(unix.SYS_ACCEPT4),
-				uint32(unix.SYS_SHUTDOWN),
 				uint32(unix.SYS_SENDTO),
-				uint32(unix.SYS_SENDMSG),
-				uint32(unix.SYS_SENDMMSG),
 				uint32(unix.SYS_RECVFROM),
+				uint32(unix.SYS_SENDMSG),
 				uint32(unix.SYS_RECVMSG),
-				uint32(unix.SYS_RECVMMSG),
 			} {
 				appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 				appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 			}
+		}
+		for _, sysno := range []uint32{
+			uint32(unix.SYS_CONNECT),
+			uint32(unix.SYS_BIND),
+			uint32(unix.SYS_LISTEN),
+			uint32(unix.SYS_ACCEPT),
+			uint32(unix.SYS_ACCEPT4),
+			uint32(unix.SYS_SHUTDOWN),
+			uint32(unix.SYS_SENDMMSG),
+			uint32(unix.SYS_RECVMMSG),
+		} {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 		}
 	}
 

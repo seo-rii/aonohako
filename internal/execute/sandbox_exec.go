@@ -83,7 +83,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	case "elixir":
 		innerEnv = append(innerEnv, "ERL_AFLAGS="+elixirERLAFlags)
 		allowUnixSockets = true
-	case "erlang":
+	case "erlang", "wasm":
 		allowUnixSockets = true
 	}
 
@@ -112,6 +112,11 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		}
 	}
 	disableDotnetLimits := filepath.Base(finalCommand[0]) == "dotnet"
+	disableAddressSpaceLimit := disableDotnetLimits
+	switch filepath.Base(finalCommand[0]) {
+	case "node", "wasmtime", "umjunsik-lang-go":
+		disableAddressSpaceLimit = true
+	}
 	openFileLimit := security.OpenFileLimitForCommand(finalCommand[0])
 
 	if os.Geteuid() == 0 {
@@ -146,7 +151,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		EnableNetwork:            req.EnableNetwork,
 		AllowUnixSockets:         allowUnixSockets,
 		DisableFileSizeLimit:     disableDotnetLimits,
-		DisableAddressSpaceLimit: disableDotnetLimits,
+		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
@@ -356,7 +361,7 @@ done:
 			result.CPUTimeMs = usageCPU
 		}
 	}
-	if !disableDotnetLimits && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
+	if !disableAddressSpaceLimit && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
 		result.Status = model.RunStatusMLE
 		result.Reason = "memory limit exceeded"
 	}

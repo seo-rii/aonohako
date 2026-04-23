@@ -158,12 +158,33 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 			mainClass = "Main"
 		}
 		mainClass = strings.ReplaceAll(mainClass, "/", ".")
-		return []string{"scala", "-nocompdaemon", "-classpath", primaryPath, mainClass}
+		scalaClasspath := []string{primaryPath}
+		if matches, err := filepath.Glob("/usr/share/java/scala*.jar"); err == nil {
+			scalaClasspath = append(scalaClasspath, matches...)
+		}
+		if len(scalaClasspath) == 1 {
+			scalaClasspath = append(scalaClasspath, "/usr/share/java/scala-library.jar")
+		}
+		xmx := max(32, req.Limits.MemoryMB/2)
+		return []string{
+			"java",
+			fmt.Sprintf("-Xmx%dm", xmx),
+			"-Xss1m",
+			"-XX:+UseSerialGC",
+			"-XX:ReservedCodeCacheSize=32m",
+			"-XX:MaxMetaspaceSize=192m",
+			"-XX:CompressedClassSpaceSize=64m",
+			"-Dfile.encoding=UTF-8",
+			"-cp",
+			strings.Join(scalaClasspath, string(os.PathListSeparator)),
+			mainClass,
+		}
 	case "java":
 		xmx := max(32, req.Limits.MemoryMB/2)
 		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss1m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
 	case "javascript":
-		return []string{"node", "--stack-size=65536", primaryPath}
+		oldSpaceMB := max(32, req.Limits.MemoryMB/2)
+		return []string{"node", fmt.Sprintf("--max-old-space-size=%d", oldSpaceMB), "--stack-size=65536", primaryPath}
 	case "julia":
 		return []string{"julia", "--startup-file=no", "--history-file=no", "--compiled-modules=no", "--color=no", primaryPath}
 	case "r":
