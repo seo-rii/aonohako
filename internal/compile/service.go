@@ -393,7 +393,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 				continue
 			}
 			checked++
-			stdout, stderr, status, reason := runCommand(ctx, workDir, "Rscript", []string{"--vanilla", "-e", "parse(file=commandArgs(TRUE)[1])", filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
+			stdout, stderr, status, reason := runCommand(ctx, workDir, "/usr/lib/R/bin/exec/R", []string{"--vanilla", "--slave", "-e", "parse(file=commandArgs(TRUE)[1])", "--args", filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
 			fullOut.WriteString(stdout)
 			fullErr.WriteString(stderr)
 			if status != model.CompileStatusOK {
@@ -1524,6 +1524,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		command[0] = path
 	}
 	disableDotnetLimits := filepath.Base(command[0]) == "dotnet"
+	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	reqPath := filepath.Join(workDir, ".tmp", "compile-request.json")
 	helperReq := sandbox.ExecRequest{
 		Command: append([]string(nil), command...),
@@ -1535,15 +1536,12 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			WorkspaceBytes: compileWorkspaceBytes,
 		},
 		ThreadLimit:              compileSandboxThreadLimit,
-		OpenFileLimit:            64,
+		OpenFileLimit:            openFileLimit,
 		EnableNetwork:            false,
 		AllowUnixSockets:         true,
 		AllowProcesses:           true,
 		DisableFileSizeLimit:     disableDotnetLimits,
 		DisableAddressSpaceLimit: disableDotnetLimits,
-	}
-	if disableDotnetLimits {
-		helperReq.OpenFileLimit = 512
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {

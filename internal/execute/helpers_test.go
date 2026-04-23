@@ -163,7 +163,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"fsharp", "/tmp/App.dll", "dotnet", true},
 		{"javascript", "/tmp/sol.js", "node", true},
 		{"julia", "/tmp/sol.jl", "julia", true},
-		{"r", "/tmp/sol.R", "Rscript", true},
+		{"r", "/tmp/sol.R", "/usr/lib/R/bin/exec/R", true},
 		{"whitespace", "/tmp/sol.ws", "python3", true},
 		{"brainfuck", "/tmp/sol.bf", "python3", true},
 		{"wasm", "/tmp/sol.wasm", "wasmtime", true},
@@ -224,6 +224,12 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			}
 			if tc.lang == "elixir" && !containsArg(args, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 +MMscs 0") {
 				t.Errorf("buildCommand(%s) missing ERL_AFLAGS in %v", tc.lang, args)
+			}
+			if tc.lang == "r" && !containsArg(args, "--slave") {
+				t.Errorf("buildCommand(%s) should bypass the forking Rscript wrapper in %v", tc.lang, args)
+			}
+			if tc.lang == "julia" && !containsArg(args, "--compiled-modules=no") {
+				t.Errorf("buildCommand(%s) should disable runtime precompile spawning in %v", tc.lang, args)
 			}
 			if tc.lang == "aheui" && (len(args) < 3 || !strings.Contains(args[2], "from aheui.aheui import entry_point")) {
 				t.Errorf("buildCommand(%s) missing aheui python wrapper body in %v", tc.lang, args)
