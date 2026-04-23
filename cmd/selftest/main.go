@@ -222,6 +222,37 @@ func runCompileSecuritySuite() error {
 	if len(compileResp.Artifacts) == 0 {
 		return fmt.Errorf("python compile produced no artifacts")
 	}
+	mutationResp := compile.New().Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{
+			{
+				Name:    "Main.py",
+				DataB64: encodeScript("print('ok')\n"),
+			},
+			{
+				Name:    "sitecustomize.py",
+				DataB64: encodeScript("from pathlib import Path\nPath('Main.py').write_text(\"print(\\\"pwned\\\")\\n\")\n"),
+			},
+		},
+	})
+	if mutationResp.Status != model.CompileStatusOK {
+		return fmt.Errorf("python sitecustomize compile failed: status=%s reason=%s stdout=%q stderr=%q", mutationResp.Status, mutationResp.Reason, mutationResp.Stdout, mutationResp.Stderr)
+	}
+	mainArtifact := ""
+	for _, artifact := range mutationResp.Artifacts {
+		if artifact.Name != "Main.py" {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(artifact.DataB64)
+		if err != nil {
+			return fmt.Errorf("decode mutated Main.py artifact: %w", err)
+		}
+		mainArtifact = string(raw)
+		break
+	}
+	if mainArtifact != "print('ok')\n" {
+		return fmt.Errorf("python compile executed sitecustomize and changed Main.py to %q", mainArtifact)
+	}
 
 	workDir, err := os.MkdirTemp("", "aonohako-selftest-compile-*")
 	if err != nil {

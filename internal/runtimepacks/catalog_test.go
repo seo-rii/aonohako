@@ -468,6 +468,7 @@ func TestWorkflowSandboxJobCoversRootBackedWorkspacePermissionChecks(t *testing.
 	for _, marker := range []string{
 		`chmod 0755 /work`,
 		"TestSandboxSecurityRegressionSuite",
+		"TestCompileSandboxSecurityRegressionSuite",
 		"aonohako-selftest compile-security",
 	} {
 		if !strings.Contains(body, marker) {
@@ -484,6 +485,23 @@ func TestWorkflowSandboxJobCoversRootBackedWorkspacePermissionChecks(t *testing.
 	} {
 		if !strings.Contains(suiteBody, marker) {
 			t.Fatalf("sandbox security suite must cover %q", marker)
+		}
+	}
+
+	compileSuitePath := filepath.Join("..", "compile", "security_ci_test.go")
+	compileSuiteData, err := os.ReadFile(compileSuitePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", compileSuitePath, err)
+	}
+	compileSuiteBody := string(compileSuiteData)
+	for _, marker := range []string{
+		"TestRunPythonCompileDoesNotExecuteSitecustomize",
+		"TestRunSandboxedCommandPreventsRemovingOrReplacingSubmittedCompileSources",
+		"TestRunCommandCannotReadOrWriteRootOwnedHostPaths",
+		"TestRunCommandDoesNotLeakInheritedFileDescriptors",
+	} {
+		if !strings.Contains(compileSuiteBody, marker) {
+			t.Fatalf("compile sandbox security suite must cover %q", marker)
 		}
 	}
 }

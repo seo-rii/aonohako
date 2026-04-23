@@ -60,6 +60,18 @@ language profile, and runs the appropriate toolchain with a 60-second timeout.
 Artifacts are returned as base64 payloads. This step is for building judge
 artifacts, not for enforcing the main untrusted runtime boundary.
 
+Even so, the local compile path applies the same helper-process hardening model
+as `/execute` when it runs as a root-backed embedded helper:
+
+- submitted source files are made immutable (`0444`)
+- the compile root and any nested submitted source directory are sticky and
+  writable (`01777`) so compilers can create sibling outputs without replacing
+  submitted files by name
+- workspace-scoped scratch directories stay sandbox-owned and private (`0700`)
+- Python-like compile checks run in isolated startup mode (`-I -S`) so
+  submission-controlled `sitecustomize.py`, user site packages, and `PYTHON*`
+  environment hooks do not execute during bytecode compilation
+
 ### Execute
 
 `/execute` is the security-sensitive path.

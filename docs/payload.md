@@ -155,8 +155,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 | SCALA | `scala` | `scalac -d <dir>` |
 | CLOJURE | `clojure` | `clojure` reader parse loop |
 | RACKET | `racket` | `raco make` |
-| PYTHON3 | `python` | `python3 -m compileall` |
-| PYPY3 | `pypy` | `pypy3 -m compileall` |
+| PYTHON3 | `python` | `python3 -I -S -m compileall` |
+| PYPY3 | `pypy` | `pypy3 -I -S -m compileall` |
 | JAVASCRIPT | `javascript` | `node --check` |
 | TYPESCRIPT | `typescript` | `tsc` |
 | KOTLIN | `kotlin` | `kotlinc-native` |
