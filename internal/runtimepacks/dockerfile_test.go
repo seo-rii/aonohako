@@ -229,9 +229,12 @@ func TestRuntimeDockerfileHardensSharedScratchPathsAtBuildTime(t *testing.T) {
 	body := string(data)
 	for _, marker := range []string{
 		"/tmp",
+		"/tmp/.dotnet/shm/global",
+		"/tmp/.dotnet/lockfiles/global",
 		"/var/tmp",
 		"/run/lock",
 		"chmod 0755",
+		"chown -R 65532:65532 /tmp/.dotnet",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("runtime.Dockerfile must statically harden %s to avoid runtime scratch mutation", marker)

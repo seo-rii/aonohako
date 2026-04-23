@@ -157,7 +157,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"racket", "/tmp/sol.rkt", "racket", true},
 		{"erlang", "/tmp/beam", "erl", true},
 		{"prolog", "/tmp/sol.pl", "swipl", true},
-		{"groovy", "/tmp/classes", "groovy", true},
+		{"groovy", "/tmp/classes", "java", false},
 		{"lisp", "/tmp/sol.lisp", "sbcl", true},
 		{"scala", "/tmp/classes", "scala", true},
 		{"fsharp", "/tmp/App.dll", "dotnet", true},
@@ -219,6 +219,9 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			if tc.lang == "clojure" && !containsArg(args, "-XX:CompressedClassSpaceSize=64m") {
 				t.Errorf("buildCommand(%s) missing clojure JVM class-space guard in %v", tc.lang, args)
 			}
+			if tc.lang == "groovy" && !containsArg(args, "-XX:CompressedClassSpaceSize=64m") {
+				t.Errorf("buildCommand(%s) missing groovy JVM class-space guard in %v", tc.lang, args)
+			}
 			if tc.lang == "elixir" && !containsArg(args, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 +MMscs 0") {
 				t.Errorf("buildCommand(%s) missing ERL_AFLAGS in %v", tc.lang, args)
 			}
@@ -264,8 +267,21 @@ func TestBuildCommandNormalizesManagedRuntimeEntryPoints(t *testing.T) {
 	req := &model.RunRequest{EntryPoint: "pkg/Main", Limits: model.Limits{MemoryMB: 64}}
 
 	groovyArgs := buildCommand("/tmp/classes", "groovy", req)
-	if !reflect.DeepEqual(groovyArgs, []string{"groovy", "-cp", "/tmp/classes", "pkg.Main"}) {
+	if groovyArgs[0] != "java" {
+		t.Fatalf("groovy command should bypass the forking groovy shell launcher, got %v", groovyArgs)
+	}
+	if !containsArg(groovyArgs, "-cp") || !containsArg(groovyArgs, "pkg.Main") {
 		t.Fatalf("groovy command = %v", groovyArgs)
+	}
+	classpath := ""
+	for i, arg := range groovyArgs {
+		if arg == "-cp" && i+1 < len(groovyArgs) {
+			classpath = groovyArgs[i+1]
+			break
+		}
+	}
+	if !strings.Contains(classpath, "/tmp/classes") || !strings.Contains(classpath, "groovy") {
+		t.Fatalf("groovy classpath should include compiled classes and groovy runtime jars, got %q", classpath)
 	}
 
 	scalaArgs := buildCommand("/tmp/classes", "scala", req)

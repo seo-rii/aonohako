@@ -1032,18 +1032,65 @@ func compileFSharp(ctx context.Context, workDir string, sources []model.Source) 
 		if len(fsFiles) == 0 {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no fsharp sources"}
 		}
-		var builder strings.Builder
-		builder.WriteString("<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net8.0</TargetFramework>\n    <LangVersion>latest</LangVersion>\n  </PropertyGroup>\n  <ItemGroup>\n")
+		sdkDirs, err := filepath.Glob("/opt/dotnet/sdk/*")
+		if err != nil || len(sdkDirs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet sdk not found"}
+		}
+		sort.Strings(sdkDirs)
+		fsharpDir := filepath.Join(sdkDirs[len(sdkDirs)-1], "FSharp")
+		fscPath := filepath.Join(fsharpDir, "fsc.dll")
+		if _, err := os.Stat(fscPath); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "fsharp compiler not found"}
+		}
+		fsharpCorePath := filepath.Join(fsharpDir, "FSharp.Core.dll")
+		if _, err := os.Stat(fsharpCorePath); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "FSharp.Core not found"}
+		}
+		refDirs, err := filepath.Glob("/opt/dotnet/packs/Microsoft.NETCore.App.Ref/*/ref/net8.0")
+		if err != nil || len(refDirs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet reference pack not found"}
+		}
+		sort.Strings(refDirs)
+		refDLLs, err := filepath.Glob(filepath.Join(refDirs[len(refDirs)-1], "*.dll"))
+		if err != nil || len(refDLLs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet reference assemblies not found"}
+		}
+		sort.Strings(refDLLs)
+		outDLL := filepath.Join(workDir, "App.dll")
+		args := []string{
+			fscPath,
+			"--nologo",
+			"--target:exe",
+			"--targetprofile:netcore",
+			"--noframework",
+			"--out:" + outDLL,
+		}
+		for _, refDLL := range refDLLs {
+			args = append(args, "-r:"+refDLL)
+		}
+		args = append(args, "-r:"+fsharpCorePath)
 		for _, file := range fsFiles {
-			builder.WriteString("    <Compile Include=\"")
-			builder.WriteString(file)
-			builder.WriteString("\" />\n")
+			args = append(args, filepath.Join(projectDir, file))
 		}
-		builder.WriteString("  </ItemGroup>\n</Project>\n")
-		projectPath = filepath.Join(projectDir, "App.fsproj")
-		if err := os.WriteFile(projectPath, []byte(builder.String()), 0o644); err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
+		runtimeConfig, err := dotnetRuntimeConfig()
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		if err := os.WriteFile(filepath.Join(workDir, "App.runtimeconfig.json"), runtimeConfig, 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		artifacts, err := collectArtifacts(workDir, func(name string) bool {
+			lower := strings.ToLower(name)
+			return lower == "app.dll" || lower == "app.runtimeconfig.json" || lower == "fsharp.core.dll"
+		}, "")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	}
 	outDir := filepath.Join(workDir, "publish")
 	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false"}
@@ -1309,14 +1356,11 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
-		runtimeDirs, err := filepath.Glob("/opt/dotnet/shared/Microsoft.NETCore.App/*")
-		if err != nil || len(runtimeDirs) == 0 {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet runtime not found", Stdout: stdout, Stderr: stderr}
+		runtimeConfig, err := dotnetRuntimeConfig()
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
-		sort.Strings(runtimeDirs)
-		runtimeVersion := filepath.Base(runtimeDirs[len(runtimeDirs)-1])
-		runtimeConfig := fmt.Sprintf("{\n  \"runtimeOptions\": {\n    \"tfm\": \"net8.0\",\n    \"framework\": {\n      \"name\": \"Microsoft.NETCore.App\",\n      \"version\": %q\n    }\n  }\n}\n", runtimeVersion)
-		if err := os.WriteFile(filepath.Join(workDir, "App.runtimeconfig.json"), []byte(runtimeConfig), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(workDir, "App.runtimeconfig.json"), runtimeConfig, 0o644); err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
 		artifacts, err := collectArtifacts(workDir, func(name string) bool {
@@ -1355,6 +1399,16 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func dotnetRuntimeConfig() ([]byte, error) {
+	runtimeDirs, err := filepath.Glob("/opt/dotnet/shared/Microsoft.NETCore.App/*")
+	if err != nil || len(runtimeDirs) == 0 {
+		return nil, fmt.Errorf("dotnet runtime not found")
+	}
+	sort.Strings(runtimeDirs)
+	runtimeVersion := filepath.Base(runtimeDirs[len(runtimeDirs)-1])
+	return []byte(fmt.Sprintf("{\n  \"runtimeOptions\": {\n    \"tfm\": \"net8.0\",\n    \"framework\": {\n      \"name\": \"Microsoft.NETCore.App\",\n      \"version\": %q\n    }\n  }\n}\n", runtimeVersion)), nil
 }
 
 func dotnetBuildEnv() []string {

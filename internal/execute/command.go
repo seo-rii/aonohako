@@ -117,7 +117,37 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 			mainClass = "Main"
 		}
 		mainClass = strings.ReplaceAll(mainClass, "/", ".")
-		return []string{"groovy", "-cp", primaryPath, mainClass}
+		groovyClasspath := []string{primaryPath}
+		for _, pattern := range []string{
+			"/usr/share/groovy/embeddable/groovy-all*.jar",
+			"/usr/share/java/groovy-all*.jar",
+			"/usr/share/java/groovy*.jar",
+		} {
+			if matches, err := filepath.Glob(pattern); err == nil {
+				groovyClasspath = append(groovyClasspath, matches...)
+			}
+		}
+		if len(groovyClasspath) == 1 {
+			groovyClasspath = append(groovyClasspath,
+				"/usr/share/groovy/embeddable/groovy-all.jar",
+				"/usr/share/java/groovy-all.jar",
+				"/usr/share/java/groovy.jar",
+			)
+		}
+		xmx := max(32, req.Limits.MemoryMB/2)
+		return []string{
+			"java",
+			fmt.Sprintf("-Xmx%dm", xmx),
+			"-Xss1m",
+			"-XX:+UseSerialGC",
+			"-XX:ReservedCodeCacheSize=32m",
+			"-XX:MaxMetaspaceSize=192m",
+			"-XX:CompressedClassSpaceSize=64m",
+			"-Dfile.encoding=UTF-8",
+			"-cp",
+			strings.Join(groovyClasspath, string(os.PathListSeparator)),
+			mainClass,
+		}
 	case "scala":
 		mainClass := strings.TrimSpace(req.EntryPoint)
 		if mainClass == "" {

@@ -73,6 +73,8 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
     for path in /tmp /var/tmp /run/lock /dev/shm /dev/mqueue; do \
       if [[ -d "${path}" ]]; then chmod 0755 "${path}"; fi; \
     done && \
+    install -d -m 0700 /tmp/.dotnet /tmp/.dotnet/shm /tmp/.dotnet/shm/global /tmp/.dotnet/lockfiles /tmp/.dotnet/lockfiles/global && \
+    chown -R 65532:65532 /tmp/.dotnet && \
     chmod 0700 /root && \
     if [[ -d /var/log ]]; then chmod 0700 /var/log; fi && \
     if [[ -d /var/spool ]]; then chmod 0700 /var/spool; fi && \
