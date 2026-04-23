@@ -47,6 +47,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	protocolWants := []string{
 		"Both `/compile` and `/execute` share the same bounded queue",
 		"buffered stdout / stderr payloads emitted before `result`",
+		"keeps the same SSE contract for `/compile` and `/execute`",
 		"forwards `log`, `image`, `error`, and `result`",
 		"Workspace Limit Exceeded",
 		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
@@ -88,8 +89,14 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`cloudrun + remote + none`: supported Cloud Run control-plane target") {
 		t.Fatalf("architecture.md must describe the Cloud Run remote control-plane topology")
 	}
+	if !strings.Contains(architecture, "both `/compile` and `/execute` are\nforwarded to the downstream runner") {
+		t.Fatalf("architecture.md must describe remoteized compile and execute paths")
+	}
 	if !strings.Contains(architecture, "submitted source files are made immutable (`0444`)") || !strings.Contains(architecture, "Python-like compile checks run in isolated startup mode (`-I -S`)") {
 		t.Fatalf("architecture.md must describe compile workspace immutability and isolated Python startup")
+	}
+	if !strings.Contains(architecture, "`socket()` is limited to `AF_INET` and `AF_INET6`") || !strings.Contains(architecture, "Cloud Run embedded-helper execution rejects `enable_network=true` outright") {
+		t.Fatalf("architecture.md must describe the network-enabled helper boundary")
 	}
 }
 
@@ -98,18 +105,19 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 
 	for _, want := range []string{
 		"`AONOHAKO_DEPLOYMENT_TARGET` selects where the server is meant to run",
-		"`AONOHAKO_EXECUTION_TRANSPORT` selects how `/execute` is handled",
+		"`AONOHAKO_EXECUTION_TRANSPORT` selects how `/compile` and `/execute` are",
 		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
 		"`container` is a reserved enum value for a future",
 		"fail startup instead of falling back",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"non-root development path)",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
-		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another",
+		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`embedded + helper` backend rejects values other than `1`",
 		"`cloudrun + embedded + helper` is the supported production security target",
 		"`cloudrun + remote + none` is the supported Cloud Run control-plane shape",
 		"`dev + remote + none` is the non-root development path",
+		"forwards `/compile` and `/execute` to a remote hardened runner",
 		"[docs/selfhosted.md](docs/selfhosted.md)",
 	} {
 		if !strings.Contains(readme, want) {
