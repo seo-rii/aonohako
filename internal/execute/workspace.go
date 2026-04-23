@@ -54,6 +54,24 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var coqPath string
 	var racketPath string
 	classFiles := make([]string, 0)
+	entryPointPath := ""
+	switch lang {
+	case "java", "scala", "groovy":
+		if _, err := normalizeJVMMainClass(req.EntryPoint, "Main"); err != nil {
+			return "", "", err
+		}
+	case "erlang":
+	default:
+		if rawEntryPoint := strings.TrimSpace(req.EntryPoint); rawEntryPoint != "" {
+			clean, err := util.ValidateRelativePath(rawEntryPoint)
+			if err != nil {
+				return "", "", fmt.Errorf("invalid entry_point: %w", err)
+			}
+			entryPointPath = clean
+		}
+	}
+	submittedPaths := make(map[string]string, len(req.Binaries))
+	submittedExec := make(map[string]bool, len(req.Binaries))
 	totalBytes := 0
 	for i, b := range req.Binaries {
 		clean, err := util.ValidateRelativePath(b.Name)
@@ -88,6 +106,8 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if err := os.WriteFile(dest, data, mode); err != nil {
 			return "", "", err
 		}
+		submittedPaths[clean] = dest
+		submittedExec[clean] = mode&0o111 != 0
 		if i == 0 {
 			primaryPath = dest
 		}
@@ -109,6 +129,16 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(strings.ToLower(clean), ".class") {
 			classFiles = append(classFiles, clean)
 		}
+	}
+	if entryPointPath != "" {
+		selected, ok := submittedPaths[entryPointPath]
+		if !ok {
+			return "", "", fmt.Errorf("entry_point not found in binaries: %s", entryPointPath)
+		}
+		if lang == "binary" && !submittedExec[entryPointPath] {
+			return "", "", fmt.Errorf("entry_point is not executable: %s", entryPointPath)
+		}
+		return selected, lang, nil
 	}
 
 	switch lang {
@@ -179,11 +209,10 @@ func buildSubmissionJar(workDir, entryPoint string, classes []string) (string, e
 	if len(classes) == 0 {
 		return "", fmt.Errorf("java requires .class files")
 	}
-	mainClass := strings.TrimSpace(entryPoint)
-	if mainClass == "" {
-		mainClass = "Main"
+	mainClass, err := normalizeJVMMainClass(entryPoint, "Main")
+	if err != nil {
+		return "", err
 	}
-	mainClass = strings.ReplaceAll(mainClass, "/", ".")
 	jarPath := filepath.Join(workDir, ".aonohako-submission.jar")
 	file, err := os.Create(jarPath)
 	if err != nil {
@@ -237,4 +266,34 @@ func buildSubmissionJar(workDir, entryPoint string, classes []string) (string, e
 	}
 	_ = os.Chmod(jarPath, 0o444)
 	return jarPath, nil
+}
+
+func normalizeJVMMainClass(raw, fallback string) (string, error) {
+	mainClass := strings.TrimSpace(raw)
+	if mainClass == "" {
+		mainClass = fallback
+	}
+	mainClass = strings.ReplaceAll(mainClass, "/", ".")
+	if mainClass == "" {
+		return "", fmt.Errorf("invalid entry_point: empty JVM class")
+	}
+	for _, part := range strings.Split(mainClass, ".") {
+		if part == "" {
+			return "", fmt.Errorf("invalid entry_point: %q", raw)
+		}
+		for i := 0; i < len(part); i++ {
+			ch := part[i]
+			if i == 0 {
+				if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_' || ch == '$' {
+					continue
+				}
+				return "", fmt.Errorf("invalid entry_point: %q", raw)
+			}
+			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '$' {
+				continue
+			}
+			return "", fmt.Errorf("invalid entry_point: %q", raw)
+		}
+	}
+	return mainClass, nil
 }

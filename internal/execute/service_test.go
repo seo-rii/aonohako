@@ -316,6 +316,30 @@ func TestRunUsesRequestedFileOutputForJudging(t *testing.T) {
 	}
 }
 
+func TestRunPythonEntrypointReadsAuxiliaryCSVFile(t *testing.T) {
+	requireSandboxSupport(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang:       "python",
+		EntryPoint: "src/main.py",
+		Binaries: []model.Binary{
+			{Name: "tools/ignored.py", DataB64: b64("print('wrong')\n")},
+			{Name: "data/input.csv", DataB64: b64("2,3\n")},
+			{Name: "src/main.py", DataB64: b64("from pathlib import Path\nprint(sum(map(int, Path('data/input.csv').read_text().strip().split(','))))\n")},
+		},
+		ExpectedStdout: "5\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunMissingRequestedFileOutputFailsExplicitly(t *testing.T) {
 	forceDirectMode(t)
 

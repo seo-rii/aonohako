@@ -59,6 +59,26 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	if !ok {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unsupported lang: " + req.Lang}
 	}
+	if entryPoint := strings.TrimSpace(req.EntryPoint); entryPoint != "" {
+		cleanEntryPoint, err := util.ValidateRelativePath(entryPoint)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid entry_point: " + err.Error()}
+		}
+		found := false
+		for _, src := range req.Sources {
+			cleanSource, err := util.ValidateRelativePath(src.Name)
+			if err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+			}
+			if cleanSource == cleanEntryPoint {
+				found = true
+				break
+			}
+		}
+		if !found && (strings.ContainsAny(cleanEntryPoint, `/\`) || filepath.Ext(cleanEntryPoint) != "") {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "entry_point not found in sources: " + cleanEntryPoint}
+		}
+	}
 
 	workDir, err := util.CreateWorkDir("aonohako-compile-*")
 	if err != nil {

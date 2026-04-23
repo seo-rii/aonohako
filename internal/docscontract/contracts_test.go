@@ -21,6 +21,12 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		`"sources": [                               // source files to compile (max 512 entries)`,
 		`"binaries": [                              // files to place in work directory (max 512 entries)`,
 		`"sidecar_outputs": [                       // capture extra files after execution (max 64 paths)`,
+		"`sources` may contain multiple files",
+		"`entry_point` names a source path, it must exactly match one submitted\nsource",
+		"`binaries` may contain multiple files",
+		"`entry_point` must be a submitted file path and selects the\nprimary file to execute",
+		"For Java, Scala, Groovy, and Erlang, `entry_point`\nkeeps its existing class/module meaning",
+		"JVM\nclass names are validated",
 		"at most one path is supported",
 		"capture failure is reported as `Runtime Error`",
 	}

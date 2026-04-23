@@ -60,6 +60,57 @@ func TestRunRejectsInvalidTargetPath(t *testing.T) {
 	}
 }
 
+func TestRunRejectsMissingCompileEntrypoint(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang:       "C11",
+		EntryPoint: "src/missing.c",
+		Sources: []model.Source{{
+			Name:    "src/main.c",
+			DataB64: b64String("int main(void) { return 0; }\n"),
+		}},
+	})
+	if resp.Status != model.CompileStatusInvalid {
+		t.Fatalf("status=%q want=%q response=%+v", resp.Status, model.CompileStatusInvalid, resp)
+	}
+	if !strings.Contains(resp.Reason, "entry_point") {
+		t.Fatalf("expected entry_point validation reason, got %+v", resp)
+	}
+}
+
+func TestCompileNativeBuildsMultipleCFiles(t *testing.T) {
+	if _, err := exec.LookPath("gcc"); err != nil {
+		t.Skip("gcc not available")
+	}
+
+	workDir := sandboxWritableTempDir(t)
+	sources := []model.Source{
+		{
+			Name:    "src/main.c",
+			DataB64: b64String("#include \"add.h\"\n#include <stdio.h>\nint main(void) { printf(\"%d\\n\", add(2, 3)); return 0; }\n"),
+		},
+		{
+			Name:    "src/add.c",
+			DataB64: b64String("#include \"add.h\"\nint add(int a, int b) { return a + b; }\n"),
+		},
+		{
+			Name:    "src/add.h",
+			DataB64: b64String("int add(int a, int b);\n"),
+		},
+	}
+	if err := materializeSources(workDir, sources); err != nil {
+		t.Fatalf("materializeSources: %v", err)
+	}
+
+	resp := compileNative(context.Background(), workDir, "Main", gatherByExt(sources, ".c", ".h"), "gcc", []string{"-O2"})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("expected multi-file C compile to succeed, got status=%q reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("unexpected artifacts: %+v", resp.Artifacts)
+	}
+}
+
 func TestRunRejectsOversizedSource(t *testing.T) {
 	svc := New()
 	large := bytes.Repeat([]byte("a"), 17<<20)
