@@ -135,6 +135,28 @@ func TestLoadAllowsRemoteExecutionWithoutRoot(t *testing.T) {
 	}
 }
 
+func TestLoadAllowsCloudRunRemoteControlPlaneWithWorkRoot(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Execution.Platform.DeploymentTarget != platform.DeploymentTargetCloudRun {
+		t.Fatalf("deployment target mismatch: %+v", cfg.Execution.Platform)
+	}
+	if cfg.Execution.Platform.ExecutionTransport != platform.ExecutionTransportRemote {
+		t.Fatalf("execution transport mismatch: %+v", cfg.Execution.Platform)
+	}
+	if cfg.Execution.Platform.SandboxBackend != platform.SandboxBackendNone {
+		t.Fatalf("sandbox backend mismatch: %+v", cfg.Execution.Platform)
+	}
+}
+
 func TestLoadRejectsEmbeddedHelperWhenNotRoot(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("requires non-root test runner")

@@ -179,6 +179,9 @@ Security posture depends on where it runs:
   Startup fails closed unless `AONOHAKO_WORK_ROOT` is configured, writable,
   not group/world writable, owned by the server UID, the process is running as
   root, and the helper queue is single-slot.
+- `cloudrun + remote + none` is the supported Cloud Run control-plane shape
+  when `/execute` should be forwarded to a separate hardened runner. It still
+  requires a bounded `AONOHAKO_WORK_ROOT` for local compile/workspace handling.
 - `selfhosted + embedded + helper` applies the same dedicated work-root
   contract for local root-backed containers and VMs, including
   `AONOHAKO_MAX_ACTIVE_RUNS=1` so concurrent runs do not share the same sandbox
@@ -205,6 +208,11 @@ For Cloud Run deployments, use this baseline:
   traffic except for explicitly allowed targets
 - a dedicated service account with no unnecessary IAM permissions and no baked
   secrets in the image
+
+For a Cloud Run API/control-plane service that forwards `/execute`, use
+`AONOHAKO_EXECUTION_TRANSPORT=remote`,
+`AONOHAKO_SANDBOX_BACKEND=none`, the same bounded `AONOHAKO_WORK_ROOT`, and a
+private `AONOHAKO_REMOTE_RUNNER_URL`.
 
 Cloud Run's own documentation states that volumes must be configured through
 Cloud Run volume mounts and that arbitrary in-container mounting is not

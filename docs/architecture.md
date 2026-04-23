@@ -247,6 +247,9 @@ legacy embedded-helper shapes.
 Supported combinations today:
 
 - `cloudrun + embedded + helper`: supported production target
+- `cloudrun + remote + none`: supported Cloud Run control-plane target that
+  keeps `/compile` and API handling local but forwards `/execute` to another
+  hardened runner; it still requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper`: supported root-backed local/container target
 - `dev + remote + none`: supported non-root control-plane target that forwards
   `/execute` to another runner
@@ -285,6 +288,10 @@ Recommended Cloud Run deployment baseline:
 - separate runner service account with minimal IAM permissions
 - Direct VPC egress with `all-traffic`
 - firewall-denied outbound traffic except for explicitly allowed destinations
+
+For a Cloud Run API/control-plane service that forwards execution to a separate
+runner, use `cloudrun + remote + none` with the same bounded
+`AONOHAKO_WORK_ROOT` requirement and a private `AONOHAKO_REMOTE_RUNNER_URL`.
 
 Recommended non-Cloud-Run control-plane baseline:
 
