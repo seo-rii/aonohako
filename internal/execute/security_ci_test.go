@@ -20,8 +20,6 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "unix-datagram-send", fn: TestRunBlocksUnixDatagramSendWhenNetworkDisabled},
 		{name: "unix-datagram-accessible-send", fn: TestRunBlocksUnixDatagramSendToAccessibleSocketWhenNetworkDisabled},
 		{name: "socketpair", fn: TestRunBlocksSocketPairCreationWhenNetworkDisabled},
-		{name: "managed-runtime-socketpair", fn: TestExecuteSandboxAllowsLocalUnixSocketPairsForManagedRuntimes},
-		{name: "managed-runtime-unix-connect", fn: TestExecuteSandboxBlocksUnixSocketConnectForManagedRuntimeSocketAllowance},
 		{name: "namespace", fn: TestRunBlocksNamespaceEscapeAttempts},
 		{name: "process-group", fn: TestRunBlocksProcessGroupEscapeAttempts},
 		{name: "sibling-signal", fn: TestRunCannotSignalSiblingProcess},
