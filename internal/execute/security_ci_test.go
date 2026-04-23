@@ -16,6 +16,8 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 	}{
 		{name: "network", fn: TestRunBlocksNetworkWhenDisabled},
 		{name: "cloudrun-network", fn: TestRunBlocksNetworkOnCloudRunWithoutDirectModeFallback},
+		{name: "enabled-network-outbound", fn: TestRunAllowsOutboundNetworkWhenEnabledOutsideCloudRun},
+		{name: "enabled-network-unix-block", fn: TestRunBlocksUnixSocketConnectWhenNetworkEnabled},
 		{name: "unix-stream-connect", fn: TestRunBlocksUnixSocketConnectWhenNetworkDisabled},
 		{name: "unix-datagram-send", fn: TestRunBlocksUnixDatagramSendWhenNetworkDisabled},
 		{name: "unix-datagram-accessible-send", fn: TestRunBlocksUnixDatagramSendToAccessibleSocketWhenNetworkDisabled},

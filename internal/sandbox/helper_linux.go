@@ -227,6 +227,14 @@ func MaybeRunFromEnv() bool {
 	appendJump := func(code uint16, k uint32, jt, jf uint8) {
 		program = append(program, unix.SockFilter{Code: code, Jt: jt, Jf: jf, K: k})
 	}
+	appendAllowOnlyInternetDomain := func(sysno uint32) {
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 6)
+		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.AF_INET, 2, 0)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.AF_INET6, 1, 0)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		appendStmt(unix.BPF_RET|unix.BPF_K, allow)
+	}
 	appendAllowOnlyUnixDomain := func(sysno uint32) {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 4)
 		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
@@ -380,6 +388,25 @@ func MaybeRunFromEnv() bool {
 			uint32(unix.SYS_SHUTDOWN),
 			uint32(unix.SYS_SENDMMSG),
 			uint32(unix.SYS_RECVMMSG),
+		} {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
+	} else {
+		appendAllowOnlyInternetDomain(uint32(unix.SYS_SOCKET))
+		if req.AllowUnixSockets {
+			appendAllowOnlyUnixDomain(uint32(unix.SYS_SOCKETPAIR))
+			appendAllowOnlyZeroArg(uint32(unix.SYS_SENDTO), 5)
+			appendAllowOnlyZeroArg(uint32(unix.SYS_RECVFROM), 4)
+		} else {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_SOCKETPAIR), 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
+		for _, sysno := range []uint32{
+			uint32(unix.SYS_BIND),
+			uint32(unix.SYS_LISTEN),
+			uint32(unix.SYS_ACCEPT),
+			uint32(unix.SYS_ACCEPT4),
 		} {
 			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 			appendStmt(unix.BPF_RET|unix.BPF_K, deny)

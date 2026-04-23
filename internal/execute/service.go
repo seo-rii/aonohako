@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"aonohako/internal/model"
+	"aonohako/internal/platform"
 	"aonohako/internal/timing"
 )
 
@@ -15,8 +16,8 @@ const (
 	hardMaxOutputBytes           = 8 << 20
 	defaultWorkspaceBytes        = 128 << 20
 	hardMaxWorkspaceBytes        = 1 << 30
-	maxBinaryFiles              = 512
-	maxSidecarOutputSpecs       = 64
+	maxBinaryFiles               = 512
+	maxSidecarOutputSpecs        = 64
 	addressSpaceSlackKB          = 8 << 10
 	sandboxThreadLimit           = 128
 	maxBinaryFileBytes           = 16 << 20
@@ -53,10 +54,16 @@ func (b *cappedBuffer) Bytes() []byte {
 	return b.buf.Bytes()
 }
 
-type Service struct{}
+type Service struct {
+	deploymentTarget platform.DeploymentTarget
+}
 
 func New() *Service {
-	return &Service{}
+	opts, err := platform.CurrentRuntimeOptions()
+	if err != nil {
+		return &Service{}
+	}
+	return &Service{deploymentTarget: opts.DeploymentTarget}
 }
 
 func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
@@ -64,10 +71,10 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
-	if req.EnableNetwork {
+	if req.EnableNetwork && s.deploymentTarget == platform.DeploymentTargetCloudRun {
 		return model.RunResponse{
 			Status: model.RunStatusInitFail,
-			Reason: "embedded helper execution does not support enable_network=true; use remote execution for networked workloads",
+			Reason: "embedded helper execution on cloudrun does not support enable_network=true; use a self-hosted remote runner for networked workloads",
 		}
 	}
 	if len(req.FileOutputs) > 1 {
