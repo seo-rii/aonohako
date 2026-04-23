@@ -122,7 +122,8 @@ Repository policy check:
 - `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand:
   `cloudrun` → `cloudrun + embedded + helper`
   `local-root` → `selfhosted + embedded + helper`
-  `local-dev` → `dev + embedded + helper`
+  `local-dev` → `dev + embedded + helper` (compatibility only; it is not the
+  non-root development path)
 - `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` for `embedded + helper`, stays `1`
   for `cloudrun`, and otherwise defaults to `max(1, cpu-2)`. The
   `embedded + helper` backend rejects values other than `1`.

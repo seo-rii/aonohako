@@ -458,16 +458,32 @@ func TestWorkflowSandboxJobCoversRootBackedWorkspacePermissionChecks(t *testing.
 	if err != nil {
 		t.Fatalf("ReadFile(%q): %v", path, err)
 	}
+	suitePath := filepath.Join("..", "execute", "security_ci_test.go")
+	suiteData, err := os.ReadFile(suitePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", suitePath, err)
+	}
 
 	body := string(data)
 	for _, marker := range []string{
 		`chmod 0755 /work`,
-		"TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser",
-		"TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser",
+		"TestSandboxSecurityRegressionSuite",
 		"aonohako-selftest compile-security",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("sandbox workflow must cover %q", marker)
+		}
+	}
+	suiteBody := string(suiteData)
+	for _, marker := range []string{
+		"TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser",
+		"TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser",
+		"TestRunBlocksUnixSocketConnectWhenNetworkDisabled",
+		"TestRunBlocksUnixDatagramSendWhenNetworkDisabled",
+		"TestRunBlocksUnixDatagramSendToAccessibleSocketWhenNetworkDisabled",
+	} {
+		if !strings.Contains(suiteBody, marker) {
+			t.Fatalf("sandbox security suite must cover %q", marker)
 		}
 	}
 }
