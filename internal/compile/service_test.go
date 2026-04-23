@@ -29,10 +29,14 @@ func b64Bytes(v []byte) string {
 
 func sandboxWritableTempDir(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
 	if os.Geteuid() != 0 {
-		return dir
+		return t.TempDir()
 	}
+	dir, err := os.MkdirTemp(os.TempDir(), "aonohako-compile-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	if err := os.Chown(dir, 65532, 65532); err != nil {
 		t.Fatalf("Chown(%q): %v", dir, err)
 	}
@@ -488,7 +492,7 @@ func TestRunSandboxedCommandAllowsWritesBesideNestedCompileSources(t *testing.T)
 		t.Skip("requires root to drop compile helper to sandbox user")
 	}
 
-	workDir := t.TempDir()
+	workDir := sandboxWritableTempDir(t)
 	sourceDir := filepath.Join(workDir, "src", "App")
 	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
 		t.Fatalf("mkdir source dir: %v", err)
@@ -517,7 +521,7 @@ func TestRunSandboxedCommandPreventsRemovingOrReplacingSubmittedCompileSources(t
 		t.Skip("requires root to drop compile helper to sandbox user")
 	}
 
-	workDir := t.TempDir()
+	workDir := sandboxWritableTempDir(t)
 	if err := materializeSources(workDir, []model.Source{
 		{
 			Name:    "pkg/Main.py",
