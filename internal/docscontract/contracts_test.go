@@ -27,6 +27,8 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		"`entry_point` must be a submitted file path and selects the\nprimary file to execute",
 		"For Java, Scala, Groovy, and Erlang, `entry_point`\nkeeps its existing class/module meaning",
 		"JVM\nclass names are validated",
+		"| PYTHON3 | `python` | `python3 -I -S -m compileall` |",
+		"| PYPY3 | `pypy` | `pypy3 -I -S -m compileall` |",
 		"at most one path is supported",
 		"capture failure is reported as `Runtime Error`",
 	}
@@ -85,6 +87,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	}
 	if !strings.Contains(architecture, "`cloudrun + remote + none`: supported Cloud Run control-plane target") {
 		t.Fatalf("architecture.md must describe the Cloud Run remote control-plane topology")
+	}
+	if !strings.Contains(architecture, "submitted source files are made immutable (`0444`)") || !strings.Contains(architecture, "Python-like compile checks run in isolated startup mode (`-I -S`)") {
+		t.Fatalf("architecture.md must describe compile workspace immutability and isolated Python startup")
 	}
 }
 
