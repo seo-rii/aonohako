@@ -733,9 +733,10 @@ languages:
       script:
         - export RUSTUP_HOME=/usr/local/rustup
         - export CARGO_HOME=/usr/local/cargo
+        - export RUST_VERSION=1.95.0
         - export PATH=/usr/local/cargo/bin:$PATH
         - mkdir -p "$RUSTUP_HOME" "$CARGO_HOME"
-        - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
+        - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$RUST_VERSION" --no-modify-path
         - ln -sfn /usr/local/cargo/bin/rustc /usr/local/bin/rustc
         - ln -sfn /usr/local/cargo/bin/cargo /usr/local/bin/cargo
     smoke:

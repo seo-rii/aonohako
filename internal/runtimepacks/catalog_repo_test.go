@@ -178,6 +178,30 @@ func TestRepositoryCatalogIncludesAheuiRuntime(t *testing.T) {
 	}
 }
 
+func TestRepositoryCatalogPinsRustToolchain(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	spec, ok := catalog.Languages["rust"]
+	if !ok {
+		t.Fatalf("rust language missing from catalog")
+	}
+	body := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"export RUST_VERSION=1.95.0",
+		`--default-toolchain "$RUST_VERSION"`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("rust install script must contain %q", marker)
+		}
+	}
+	if strings.Contains(body, "--default-toolchain stable") {
+		t.Fatalf("rust install script must pin the requested toolchain instead of stable")
+	}
+}
+
 func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
 	if err != nil {
