@@ -112,6 +112,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		}
 	}
 	disableDotnetLimits := filepath.Base(finalCommand[0]) == "dotnet"
+	openFileLimit := security.OpenFileLimitForCommand(finalCommand[0])
 
 	if os.Geteuid() == 0 {
 		const sandboxUID = 65532
@@ -141,14 +142,11 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		Env:                      innerEnv,
 		Limits:                   req.Limits,
 		ThreadLimit:              sandboxThreadLimit,
-		OpenFileLimit:            64,
+		OpenFileLimit:            openFileLimit,
 		EnableNetwork:            req.EnableNetwork,
 		AllowUnixSockets:         allowUnixSockets,
 		DisableFileSizeLimit:     disableDotnetLimits,
 		DisableAddressSpaceLimit: disableDotnetLimits,
-	}
-	if disableDotnetLimits {
-		helperReq.OpenFileLimit = 512
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {

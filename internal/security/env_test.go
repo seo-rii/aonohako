@@ -26,6 +26,12 @@ func TestWorkspaceScopedEnvIncludesWritableToolchainHomes(t *testing.T) {
 		"MIX_HOME=" + filepath.Join(root, ".mix"),
 		"HEX_HOME=" + filepath.Join(root, ".hex"),
 		"JULIA_DEPOT_PATH=" + filepath.Join(root, ".julia"),
+		"JULIA_PROBE_LIBSTDCXX=0",
+		"R_HOME=/usr/lib/R",
+		"R_SHARE_DIR=/usr/share/R/share",
+		"R_INCLUDE_DIR=/usr/share/R/include",
+		"R_DOC_DIR=/usr/share/R/doc",
+		"R_DEFAULT_PACKAGES=NULL",
 	}
 
 	for _, want := range wants {
@@ -38,6 +44,24 @@ func TestWorkspaceScopedEnvIncludesWritableToolchainHomes(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("WorkspaceScopedEnv missing %q in %v", want, env)
+		}
+	}
+}
+
+func TestOpenFileLimitForCommandRaisesKnownRuntimeNeeds(t *testing.T) {
+	tests := []struct {
+		command string
+		want    int
+	}{
+		{"/opt/dotnet/dotnet", 512},
+		{"/usr/bin/Rscript", 256},
+		{"/usr/lib/R/bin/exec/R", 256},
+		{"/usr/bin/python3", 64},
+	}
+
+	for _, tc := range tests {
+		if got := OpenFileLimitForCommand(tc.command); got != tc.want {
+			t.Fatalf("OpenFileLimitForCommand(%q) = %d, want %d", tc.command, got, tc.want)
 		}
 	}
 }

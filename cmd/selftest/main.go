@@ -825,7 +825,7 @@ console.log(fs.readFileSync('same-folder.txt', 'utf8'));`),
 		},
 		"julia": {
 			compileLang:    "JULIA",
-			expectedStdout: "2\n",
+			expectedStdout: "2.0\n",
 			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.jl", `using Statistics

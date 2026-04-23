@@ -76,6 +76,12 @@ func WorkspaceScopedEnv(workDir string) []string {
 		fmt.Sprintf("MIX_HOME=%s", mix),
 		fmt.Sprintf("HEX_HOME=%s", hex),
 		fmt.Sprintf("JULIA_DEPOT_PATH=%s", julia),
+		"JULIA_PROBE_LIBSTDCXX=0",
+		"R_HOME=/usr/lib/R",
+		"R_SHARE_DIR=/usr/share/R/share",
+		"R_INCLUDE_DIR=/usr/share/R/include",
+		"R_DOC_DIR=/usr/share/R/doc",
+		"R_DEFAULT_PACKAGES=NULL",
 		fmt.Sprintf("IMG_OUT_DIR=%s", img),
 	}
 }

@@ -161,9 +161,9 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	case "javascript":
 		return []string{"node", "--stack-size=65536", primaryPath}
 	case "julia":
-		return []string{"julia", "--startup-file=no", "--history-file=no", "--color=no", primaryPath}
+		return []string{"julia", "--startup-file=no", "--history-file=no", "--compiled-modules=no", "--color=no", primaryPath}
 	case "r":
-		return []string{"Rscript", "--vanilla", primaryPath}
+		return []string{"/usr/lib/R/bin/exec/R", "--vanilla", "--slave", "-f", primaryPath}
 	case "ruby":
 		return []string{"ruby", primaryPath}
 	case "php":
