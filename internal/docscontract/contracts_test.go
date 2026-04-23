@@ -74,6 +74,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "API/control-plane instances in `dev + remote + none`") || !strings.Contains(architecture, "horizontal scale by adding runner instances") {
 		t.Fatalf("architecture.md must describe the self-hosted scale-out path")
 	}
+	if !strings.Contains(architecture, "`cloudrun + remote + none`: supported Cloud Run control-plane target") {
+		t.Fatalf("architecture.md must describe the Cloud Run remote control-plane topology")
+	}
 }
 
 func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
@@ -91,6 +94,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` execution at another",
 		"`embedded + helper` backend rejects values other than `1`",
 		"`cloudrun + embedded + helper` is the supported production security target",
+		"`cloudrun + remote + none` is the supported Cloud Run control-plane shape",
 		"`dev + remote + none` is the non-root development path",
 		"[docs/selfhosted.md](docs/selfhosted.md)",
 	} {
