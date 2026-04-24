@@ -765,7 +765,7 @@ int main(void) {
 	return 0;
 }
 `
-	workDir := t.TempDir()
+	workDir := sandboxWritableTempDir(t)
 	binPath := filepath.Join(workDir, "kernel-syscall-probe")
 	compileCmd := exec.Command(cc, "-O2", "-x", "c", "-", "-o", binPath)
 	compileCmd.Stdin = strings.NewReader(code)
