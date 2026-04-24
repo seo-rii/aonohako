@@ -148,6 +148,9 @@ func Load() (Config, error) {
 		}
 		switch execution.Remote.Auth {
 		case RemoteAuthNone:
+			if runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev {
+				return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_AUTH=none is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev; use bearer or cloudrun-idtoken")
+			}
 		case RemoteAuthBearer:
 			if execution.Remote.BearerToken == "" {
 				return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_TOKEN is required for bearer remote auth")

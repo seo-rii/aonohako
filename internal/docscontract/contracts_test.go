@@ -111,6 +111,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "unsupported runtime security contracts fail startup before request handling") {
 		t.Fatalf("architecture.md must describe fail-closed security contract validation")
 	}
+	if !strings.Contains(architecture, "`AONOHAKO_REMOTE_RUNNER_AUTH=none` is rejected outside `dev`") {
+		t.Fatalf("architecture.md must describe production remote-auth none rejection")
+	}
 	if !strings.Contains(architecture, "malformed or out-of-range") || !strings.Contains(architecture, "values fail startup") {
 		t.Fatalf("architecture.md must describe strict numeric env parsing")
 	}
@@ -182,6 +185,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"aonohako-selftest deployment-contract",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
+		"`cloudrun-idtoken`; `none` is allowed only for `dev`",
 		"`embedded + helper` backend rejects values other than `1`",
 		"`cloudrun + embedded + helper` is the supported production security target",
 		"`cloudrun + remote + none` is the supported Cloud Run control-plane shape",
