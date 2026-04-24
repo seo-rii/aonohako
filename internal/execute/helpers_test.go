@@ -331,8 +331,35 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 	}
 
 	jsArgs := buildCommand("/tmp/Main.js", "javascript", req)
-	if !reflect.DeepEqual(jsArgs, []string{"node", "--max-old-space-size=48", "--stack-size=65536", "/tmp/Main.js"}) {
+	if !reflect.DeepEqual(jsArgs, []string{
+		"node",
+		"--disable-wasm-trap-handler",
+		"--max-old-space-size=57",
+		"--max-semi-space-size=1",
+		"--stack-size=2048",
+		"/tmp/Main.js",
+	}) {
 		t.Fatalf("javascript command = %v", jsArgs)
+	}
+
+	wasmArgs := buildCommand("/tmp/Main.wasm", "wasm", req)
+	if !reflect.DeepEqual(wasmArgs, []string{
+		"wasmtime",
+		"run",
+		"--dir=.",
+		"-O", "memory-reservation=50331648",
+		"-O", "memory-reservation-for-growth=0",
+		"-O", "memory-guard-size=65536",
+		"-W", "max-memory-size=50331648",
+		"-W", "max-memories=1",
+		"-W", "max-instances=1",
+		"-W", "max-tables=1",
+		"-W", "max-table-elements=65536",
+		"-W", "max-wasm-stack=1048576",
+		"-W", "trap-on-grow-failure=y",
+		"/tmp/Main.wasm",
+	}) {
+		t.Fatalf("wasm command = %v", wasmArgs)
 	}
 }
 
@@ -481,30 +508,45 @@ func TestClipUTF8MixedValid(t *testing.T) {
 
 func TestAddressSpaceLimitBytes(t *testing.T) {
 	tests := []struct {
-		memMB int
-		want  uint64
+		name        string
+		commandBase string
+		memMB       int
+		want        uint64
 	}{
-		{16, 512 * 1024 * 1024},  // 16+64=80 < 512, floors to 512
-		{128, 512 * 1024 * 1024}, // 128+64=192 < 512, floors to 512
-		{256, 512 * 1024 * 1024}, // 256+64=320 < 512, floors to 512
-		{512, 576 * 1024 * 1024}, // 512+64=576
-		{0, 512 * 1024 * 1024},   // 0+64=64 < 512, floors to 512
+		{"native_small", "runner", 16, 512 * 1024 * 1024},
+		{"native_floor", "runner", 256, 512 * 1024 * 1024},
+		{"native_large", "runner", 512, 576 * 1024 * 1024},
+		{"native_zero", "runner", 0, 512 * 1024 * 1024},
+		{"node_high_virtual_cap", "node", 128, 1024 * 1024 * 1024},
+		{"node_scaled_virtual_cap", "node", 512, 2560 * 1024 * 1024},
+		{"wasmtime_virtual_cap", "wasmtime", 256, 2048 * 1024 * 1024},
+		{"go_interpreter_virtual_cap", "umjunsik-lang-go", 128, 1024 * 1024 * 1024},
+		{"dotnet_virtual_cap", "dotnet", 256, 3584 * 1024 * 1024},
 	}
 	for _, tc := range tests {
-		got := addressSpaceLimitBytes(tc.memMB)
-		if got != tc.want {
-			t.Errorf("addressSpaceLimitBytes(%d) = %d, want %d", tc.memMB, got, tc.want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			got := addressSpaceLimitBytes(tc.commandBase, tc.memMB)
+			if got != tc.want {
+				t.Errorf("addressSpaceLimitBytes(%q, %d) = %d, want %d", tc.commandBase, tc.memMB, got, tc.want)
+			}
+		})
 	}
 }
 
 func TestAddressSpaceLimitBytesAlwaysAtLeast512MB(t *testing.T) {
 	minBytes := uint64(512 * 1024 * 1024)
 	for memMB := 0; memMB <= 200; memMB++ {
-		got := addressSpaceLimitBytes(memMB)
+		got := addressSpaceLimitBytes("runner", memMB)
 		if got < minBytes {
 			t.Errorf("addressSpaceLimitBytes(%d) = %d, below minimum %d", memMB, got, minBytes)
 		}
+	}
+}
+
+func TestSandboxCommandBaseSkipsEnvAssignments(t *testing.T) {
+	got := sandboxCommandBase([]string{"/usr/bin/env", "GOMEMLIMIT=64MiB", "/usr/bin/umjunsik-lang-go", "/tmp/Main.umm"})
+	if got != "umjunsik-lang-go" {
+		t.Fatalf("sandboxCommandBase returned %q", got)
 	}
 }
 

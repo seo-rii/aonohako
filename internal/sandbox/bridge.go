@@ -16,6 +16,7 @@ type ExecRequest struct {
 	Limits                   model.Limits `json:"limits"`
 	ThreadLimit              int          `json:"thread_limit"`
 	OpenFileLimit            int          `json:"open_file_limit,omitempty"`
+	AddressSpaceLimitBytes   uint64       `json:"address_space_limit_bytes,omitempty"`
 	FileSizeLimitBytes       uint64       `json:"file_size_limit_bytes,omitempty"`
 	EnableNetwork            bool         `json:"enable_network"`
 	AllowUnixSockets         bool         `json:"allow_unix_sockets,omitempty"`

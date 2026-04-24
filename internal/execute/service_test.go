@@ -819,6 +819,51 @@ int main(void) {
 	}
 }
 
+func TestRunBlocksMemoryLockAndSysVSharedMemory(t *testing.T) {
+	requireSandboxSupport(t)
+
+	code := `
+#include <errno.h>
+#include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/mman.h>
+#include <sys/shm.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+int main(void) {
+	errno = 0;
+	long lock_rc = syscall(SYS_mlockall, MCL_CURRENT);
+	int lock_blocked = lock_rc == -1 && errno == EPERM;
+	errno = 0;
+	long shm_rc = syscall(SYS_shmget, IPC_PRIVATE, 4096, IPC_CREAT | 0600);
+	int shm_blocked = shm_rc == -1 && errno == EPERM;
+	if (lock_blocked && shm_blocked) {
+		puts("blocked");
+		return 0;
+	}
+	printf("unexpected:%ld:%ld:%d\n", lock_rc, shm_rc, errno);
+	return 1;
+}
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "runner",
+			DataB64: buildCTestBinary(t, code),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunAllowsPrlimitQueriesNeededByManagedRuntimes(t *testing.T) {
 	requireSandboxSupport(t)
 

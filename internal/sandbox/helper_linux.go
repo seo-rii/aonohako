@@ -102,9 +102,13 @@ func MaybeRunFromEnv() bool {
 	if memMB < 16 {
 		memMB = 16
 	}
-	asMB := memMB + 64
-	if asMB < 512 {
-		asMB = 512
+	addressSpaceLimitBytes := req.AddressSpaceLimitBytes
+	if addressSpaceLimitBytes == 0 {
+		asMB := memMB + 64
+		if asMB < 512 {
+			asMB = 512
+		}
+		addressSpaceLimitBytes = uint64(asMB) * 1024 * 1024
 	}
 	threadLimit := req.ThreadLimit
 	if threadLimit < 32 {
@@ -163,13 +167,16 @@ func MaybeRunFromEnv() bool {
 		{unix.RLIMIT_NOFILE, 64},
 		{unix.RLIMIT_NPROC, nprocLimit},
 		{unix.RLIMIT_CORE, 0},
+		{unix.RLIMIT_STACK, 8 * 1024 * 1024},
+		{unix.RLIMIT_MEMLOCK, 0},
+		{unix.RLIMIT_MSGQUEUE, 0},
 	}
 	limits[1].value = uint64(openFileLimit)
 	if !req.DisableAddressSpaceLimit {
 		limits = append(limits, struct {
 			resource int
 			value    uint64
-		}{unix.RLIMIT_AS, uint64(asMB) * 1024 * 1024})
+		}{unix.RLIMIT_AS, addressSpaceLimitBytes})
 	}
 	if !req.DisableFileSizeLimit {
 		fileSizeLimit := uint64(128 * 1024 * 1024)
@@ -223,7 +230,7 @@ func MaybeRunFromEnv() bool {
 		archAudit = unix.AUDIT_ARCH_S390X
 	}
 
-	program := make([]unix.SockFilter, 0, 96)
+	program := make([]unix.SockFilter, 0, 112)
 	appendStmt := func(code uint16, k uint32) {
 		program = append(program, unix.SockFilter{Code: code, K: k})
 	}
@@ -291,6 +298,15 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_IO_URING_ENTER),
 		uint32(unix.SYS_IO_URING_REGISTER),
 		uint32(unix.SYS_USERFAULTFD),
+		uint32(unix.SYS_MLOCK),
+		uint32(unix.SYS_MLOCK2),
+		uint32(unix.SYS_MLOCKALL),
+		uint32(unix.SYS_MUNLOCK),
+		uint32(unix.SYS_MUNLOCKALL),
+		uint32(unix.SYS_SHMGET),
+		uint32(unix.SYS_SHMAT),
+		uint32(unix.SYS_SHMDT),
+		uint32(unix.SYS_SHMCTL),
 		uint32(unix.SYS_PERF_EVENT_OPEN),
 		uint32(unix.SYS_OPEN_BY_HANDLE_AT),
 		uint32(unix.SYS_NAME_TO_HANDLE_AT),

@@ -302,12 +302,37 @@ func clipUTF8(b []byte, n int) string {
 	return string(b[:k])
 }
 
-func addressSpaceLimitBytes(memMB int) uint64 {
-	base := memMB + 64
-	if base < 512 {
-		base = 512
+func sandboxCommandBase(command []string) string {
+	if len(command) == 0 {
+		return ""
 	}
-	return uint64(base) * 1024 * 1024
+	base := filepath.Base(command[0])
+	if base != "env" {
+		return base
+	}
+	for _, arg := range command[1:] {
+		if strings.Contains(arg, "=") {
+			continue
+		}
+		return filepath.Base(arg)
+	}
+	return base
+}
+
+func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
+	memoryMB := max(64, memMB)
+	limitMB := memoryMB + 64
+	switch commandBase {
+	case "node", "umjunsik-lang-go":
+		limitMB = max(1024, memoryMB*4+512)
+	case "wasmtime":
+		limitMB = max(1024, memoryMB*4+1024)
+	case "dotnet":
+		limitMB = max(2048, memoryMB*6+2048)
+	default:
+		limitMB = max(512, limitMB)
+	}
+	return uint64(limitMB) * 1024 * 1024
 }
 
 func max(a, b int) int {
