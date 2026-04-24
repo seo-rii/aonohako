@@ -33,6 +33,15 @@ jobs:
       - run: go test ./...
       - run: ./scripts/build_runtime_images.sh -mode production -dry-run -tag-prefix local/aonohako
 
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
   sandbox:
     runs-on: ubuntu-latest
     steps:
@@ -74,6 +83,7 @@ jobs:
     needs:
       - policy
       - unit
+      - supply-chain
       - sandbox
       - runtime-matrix
     strategy:
@@ -95,6 +105,7 @@ jobs:
     needs:
       - policy
       - unit
+      - supply-chain
       - sandbox
       - runtime-matrix
     strategy:
@@ -130,6 +141,7 @@ jobs:
     needs:
       - policy
       - unit
+      - supply-chain
       - sandbox
       - toolchain-profile
     steps:
@@ -169,6 +181,7 @@ jobs:
     needs:
       - policy
       - unit
+      - supply-chain
       - sandbox
     steps:
       - uses: actions/checkout@v6
