@@ -153,6 +153,9 @@ aonohako-selftest cgroup-preflight
   `/execute` requests per principal per fixed one-minute window; `0` disables
   the per-principal request-rate cap.
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
+- `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30` and bounds how long
+  a remote `/compile` or `/execute` SSE response may stay silent before the
+  control plane cancels it.
 - Numeric environment variables are strict: malformed, negative, or zero values
   where a positive integer is required fail startup instead of falling back.
 - `AONOHAKO_INBOUND_AUTH` controls inbound `/compile` and `/execute`

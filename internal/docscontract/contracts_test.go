@@ -51,6 +51,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"`AONOHAKO_MAX_ACTIVE_STREAMS`",
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE`",
+		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`",
 		`"stream_limit_exceeded"`,
 		`"principal_stream_limit_exceeded"`,
 		`"principal_rate_limited"`,
@@ -112,6 +113,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "malformed or out-of-range") || !strings.Contains(architecture, "values fail startup") {
 		t.Fatalf("architecture.md must describe strict numeric env parsing")
 	}
+	if !strings.Contains(architecture, "`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`") {
+		t.Fatalf("architecture.md must describe the remote SSE idle timeout env")
+	}
 	if !strings.Contains(architecture, "remote runner SSE responses are parsed with bounded line, event, and stream\n  sizes") || !strings.Contains(architecture, "SSE idle heartbeat timeouts") {
 		t.Fatalf("architecture.md must describe remote SSE bounds and idle timeout")
 	}
@@ -166,6 +170,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_MAX_ACTIVE_STREAMS` defaults to `64`",
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
+		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30`",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`embedded + helper` backend rejects values other than `1`",

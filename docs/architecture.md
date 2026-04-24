@@ -351,7 +351,8 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`,
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`,
   `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE`, and
-  `AONOHAKO_HEARTBEAT_INTERVAL_SEC` are strict; malformed or out-of-range
+  `AONOHAKO_HEARTBEAT_INTERVAL_SEC`, and
+  `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` are strict; malformed or out-of-range
   values fail startup
 - `cloudrun` always requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`

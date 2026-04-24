@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"aonohako/internal/platform"
+	"aonohako/internal/remoteio"
 )
 
 type RemoteAuthMode string
@@ -30,10 +31,11 @@ const (
 )
 
 type RemoteExecutorConfig struct {
-	URL         string
-	Auth        RemoteAuthMode
-	BearerToken string
-	Audience    string
+	URL            string
+	Auth           RemoteAuthMode
+	BearerToken    string
+	Audience       string
+	SSEIdleTimeout time.Duration
 }
 
 type InboundAuthConfig struct {
@@ -93,13 +95,18 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	remoteSSEIdleTimeoutSec, err := parsePositiveIntEnv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", os.Getenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC"), int(remoteio.DefaultSSEIdleTimeout/time.Second))
+	if err != nil {
+		return Config{}, err
+	}
 	execution := ExecutionConfig{
 		Platform: runtimePlatform,
 		Remote: RemoteExecutorConfig{
-			URL:         strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_URL")),
-			Auth:        parseRemoteAuth(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUTH")),
-			BearerToken: strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_TOKEN")),
-			Audience:    strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUDIENCE")),
+			URL:            strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_URL")),
+			Auth:           parseRemoteAuth(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUTH")),
+			BearerToken:    strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_TOKEN")),
+			Audience:       strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUDIENCE")),
+			SSEIdleTimeout: time.Duration(remoteSSEIdleTimeoutSec) * time.Second,
 		},
 	}
 	inboundAuth := InboundAuthConfig{

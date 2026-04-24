@@ -150,6 +150,9 @@ Both `/compile` and `/execute` share the same bounded queue:
   `cloudrun` or `selfhosted`). This caps `/compile` and `/execute` requests per
   fixed one-minute window for one bearer, platform, or anonymous remote
   principal.
+- **Remote SSE idle timeout**: `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` (default:
+  `30`). This bounds how long a remote `/compile` or `/execute` stream may stay
+  silent before the control plane cancels it.
 
 Numeric queue/timing environment variables are strict: malformed values,
 negative values, or zero values where a positive integer is required fail server
