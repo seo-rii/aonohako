@@ -1156,6 +1156,43 @@ func TestRunExposesOnlySafeDevices(t *testing.T) {
 	}
 }
 
+func TestRunBlocksFilesystemMetadataSyscalls(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: b64(
+				"import errno, os, sys\n" +
+					"open('owned.txt', 'w').close()\n" +
+					"checks = [\n" +
+					"    ('chmod', lambda: os.chmod('owned.txt', 0o777)),\n" +
+					"    ('chown', lambda: os.chown('owned.txt', os.getuid(), os.getgid())),\n" +
+					"    ('mknod', lambda: os.mknod('node')),\n" +
+					"]\n" +
+					"for name, action in checks:\n" +
+					"    try:\n" +
+					"        action()\n" +
+					"        print(name + ':escaped')\n" +
+					"        sys.exit(1)\n" +
+					"    except OSError as exc:\n" +
+					"        if exc.errno not in (errno.EPERM, errno.EACCES, errno.ENOSYS):\n" +
+					"            print(name + ':error:' + str(exc.errno))\n" +
+					"            sys.exit(1)\n" +
+					"print('blocked')\n",
+			),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunBlocksForkAttempts(t *testing.T) {
 	requireSandboxSupport(t)
 

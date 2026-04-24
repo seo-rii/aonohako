@@ -27,6 +27,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "sibling-signal", fn: TestRunCannotSignalSiblingProcess},
 		{name: "host-path", fn: TestRunCannotReadHostPathOutsideSandbox},
 		{name: "devices", fn: TestRunExposesOnlySafeDevices},
+		{name: "filesystem-metadata-syscalls", fn: TestRunBlocksFilesystemMetadataSyscalls},
 		{name: "fork", fn: TestRunBlocksForkAttempts},
 		{name: "execveat", fn: TestRunBlocksExecveatAttempts},
 		{name: "spj-clean-workspace", fn: TestRunSPJUsesCleanWorkspaceAndReadableFiles},
