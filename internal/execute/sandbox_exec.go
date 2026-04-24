@@ -119,6 +119,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			return execResult{Status: model.RunStatusInitFail, Reason: "dotnet state cleanup failed: " + err.Error()}
 		}
 	}
+	// CoreCLR reserves a very large memfd-backed double-mapped region during
+	// startup; finite RLIMIT_AS/RLIMIT_FSIZE values can fail before user code.
 	disableAddressSpaceLimit := isDotnet
 	switch filepath.Base(finalCommand[0]) {
 	case "node", "wasmtime", "umjunsik-lang-go":

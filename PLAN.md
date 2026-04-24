@@ -5,7 +5,7 @@
 
 - 기준 브랜치: `main`
 - 작성일: 2026-04-24
-- 기준 커밋: `890825a ci: add supply chain vulnerability scan`
+- 기준 커밋: `c853208 fix: stabilize dotnet sandbox smoke`
 
 ## 최근 완료된 단기 배치
 
@@ -64,6 +64,10 @@
   child-process mode에서 run 전체가 하나의 OOM domain으로 취급되게 했다.
 - Phase 12: CI `govulncheck`가 취약한 Go 1.26.0 표준 라이브러리를 쓰지
   않도록 module Go directive를 1.26.2로 올렸다.
+- Phase 8/10: `.NET` sandbox smoke를 안정화했다. CoreCLR의 memfd-backed
+  double-mapper 때문에 `dotnet`은 address-space/file-size rlimit을 끄되,
+  `/tmp/.dotnet` shared state를 sandbox UID로 매 실행 전 재생성하고 compile
+  failure signal reason과 SSE heartbeat shutdown을 보강했다.
 
 ## 작업 원칙
 

@@ -160,7 +160,7 @@ The Linux helper applies:
 | Address space limit | `RLIMIT_AS` | based on request memory plus headroom |
 | Open files | `RLIMIT_NOFILE=64` | keeps fd surface small |
 | Tasks | `RLIMIT_NPROC` | sized from current UID usage plus thread limit |
-| File growth | `RLIMIT_FSIZE` | tied to workspace byte limit; .NET receives a finite compatibility floor instead of disabling the limit |
+| File growth | `RLIMIT_FSIZE` | tied to workspace byte limit; .NET disables this rlimit because CoreCLR reserves a huge memfd-backed double-mapped region at startup |
 | Workspace breadth | periodic workspace scan | enforces total bytes plus entry-count and depth caps |
 | Core dumps | `RLIMIT_CORE=0` | disables core files |
 | Privilege escalation | `PR_SET_NO_NEW_PRIVS` | prevents gaining new privileges after exec |
@@ -276,6 +276,15 @@ Memory enforcement uses several layers:
 - `RLIMIT_AS` to constrain virtual address space growth
 - a post-exit address-space proximity check with slack
 - workspace byte accounting, so temp-file growth is also limited
+
+.NET is the main compatibility exception: `dotnet` invocations disable
+`RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large
+memfd-backed double-mapped region before user code starts. The helper still
+keeps workspace byte accounting, output caps, open-file limits, thread limits,
+and single-slot execution in place. Before each sandboxed `dotnet` invocation,
+the runner recreates `/tmp/.dotnet` with the sandbox UID and `0700` modes so
+CoreCLR/F# shared lock and shared-memory state does not leak between sequential
+runs in the same container.
 
 Self-hosted cgroup support is being staged behind an explicit preflight layer
 before it is wired into execution. `internal/isolation/cgroup` currently checks
