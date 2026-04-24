@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 const (
 	DefaultSSELineBytes   = 256 << 10
 	DefaultSSEEventBytes  = 4 << 20
 	DefaultSSEStreamBytes = 64 << 20
+	DefaultSSEIdleTimeout = 30 * time.Second
 )
 
 type SSEEvent struct {
@@ -25,6 +27,7 @@ type SSEReader struct {
 	maxEventBytes  int
 	maxStreamBytes int
 	bytesRead      int
+	onActivity     func()
 }
 
 func NewSSEReader(r io.Reader) *SSEReader {
@@ -34,6 +37,10 @@ func NewSSEReader(r io.Reader) *SSEReader {
 		maxEventBytes:  DefaultSSEEventBytes,
 		maxStreamBytes: DefaultSSEStreamBytes,
 	}
+}
+
+func (r *SSEReader) SetActivityCallback(fn func()) {
+	r.onActivity = fn
 }
 
 func (r *SSEReader) Next() (SSEEvent, error) {
@@ -86,6 +93,9 @@ func (r *SSEReader) readLine() (string, error) {
 	for {
 		part, err := r.reader.ReadSlice('\n')
 		if len(part) > 0 {
+			if r.onActivity != nil {
+				r.onActivity()
+			}
 			r.bytesRead += len(part)
 			if r.bytesRead > r.maxStreamBytes {
 				return "", fmt.Errorf("sse stream too large: max %d bytes", r.maxStreamBytes)

@@ -112,6 +112,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "malformed or out-of-range") || !strings.Contains(architecture, "values fail startup") {
 		t.Fatalf("architecture.md must describe strict numeric env parsing")
 	}
+	if !strings.Contains(architecture, "remote runner SSE responses are parsed with bounded line, event, and stream\n  sizes") || !strings.Contains(architecture, "SSE idle heartbeat timeouts") {
+		t.Fatalf("architecture.md must describe remote SSE bounds and idle timeout")
+	}
 	if !strings.Contains(architecture, "`AONOHAKO_MAX_ACTIVE_STREAMS`") {
 		t.Fatalf("architecture.md must describe active stream cap validation")
 	}

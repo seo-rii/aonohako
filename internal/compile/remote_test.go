@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
@@ -142,5 +143,35 @@ func TestRemoteRunnerCompileRejectsOversizedSSEEvents(t *testing.T) {
 	})
 	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "sse line too large") {
 		t.Fatalf("expected bounded SSE failure, got %+v", resp)
+	}
+}
+
+func TestRemoteRunnerCompileTimesOutIdleSSEStream(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatalf("test server does not support flushing")
+		}
+		flusher.Flush()
+		<-r.Context().Done()
+	}))
+	defer remote.Close()
+
+	runner := &remoteRunner{
+		client:      remote.Client(),
+		compileURL:  remote.URL + "/compile",
+		idleTimeout: 10 * time.Millisecond,
+	}
+
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "idle timeout") {
+		t.Fatalf("expected idle timeout failure, got %+v", resp)
 	}
 }
