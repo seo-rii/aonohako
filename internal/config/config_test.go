@@ -443,6 +443,19 @@ func TestLoadAllowsExplicitPlatformInboundAuth(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInboundAuthNoneOutsideDev(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "none")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "AONOHAKO_INBOUND_AUTH=none") {
+		t.Fatalf("expected inbound none rejection outside dev, got %v", err)
+	}
+}
+
 func TestLoadMapsCloudRunIDTokenAudienceToRemoteURLWhenUnset(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
