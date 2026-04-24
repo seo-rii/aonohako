@@ -89,6 +89,7 @@ func TestLoadRejectsStrictTargetWithoutWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_WORK_ROOT", "")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 
 	if _, err := Load(); err == nil {
@@ -160,11 +161,26 @@ func TestLoadAllowsRemoteExecutionWithoutRoot(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsRemoteAuthNoneOutsideDev(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "AONOHAKO_REMOTE_RUNNER_AUTH=none") {
+		t.Fatalf("expected remote auth none rejection outside dev, got %v", err)
+	}
+}
+
 func TestLoadAllowsCloudRunRemoteControlPlaneWithWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 
@@ -263,6 +279,7 @@ func TestLoadRejectsGroupWritableDedicatedWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 	t.Setenv("AONOHAKO_WORK_ROOT", root)
 
@@ -412,6 +429,7 @@ func TestLoadDefaultsInboundAuthByDeploymentTarget(t *testing.T) {
 
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AONOHAKO_API_BEARER_TOKEN") {
 		t.Fatalf("cloudrun default should require bearer token, got %v", err)
 	}
@@ -431,6 +449,7 @@ func TestLoadAllowsExplicitPlatformInboundAuth(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 
@@ -448,6 +467,7 @@ func TestLoadRejectsInboundAuthNoneOutsideDev(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "none")
 
 	_, err := Load()

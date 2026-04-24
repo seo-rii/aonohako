@@ -179,7 +179,7 @@ aonohako-selftest cgroup-preflight
   `aonohako` runner service and must be an absolute `http(s)` URL without
   embedded credentials, query strings, or fragments
 - `AONOHAKO_REMOTE_RUNNER_AUTH` can be `none`, `bearer`, or
-  `cloudrun-idtoken`
+  `cloudrun-idtoken`; `none` is allowed only for `dev`
 - `AONOHAKO_REMOTE_RUNNER_TOKEN` provides the bearer token when
   `AONOHAKO_REMOTE_RUNNER_AUTH=bearer`
 - `AONOHAKO_REMOTE_RUNNER_AUDIENCE` overrides the ID-token audience for
@@ -264,7 +264,8 @@ For a Cloud Run API/control-plane service that forwards `/compile` and
 `/execute`, use
 `AONOHAKO_EXECUTION_TRANSPORT=remote`,
 `AONOHAKO_SANDBOX_BACKEND=none`, the same bounded `AONOHAKO_WORK_ROOT`, and a
-private `AONOHAKO_REMOTE_RUNNER_URL`.
+private `AONOHAKO_REMOTE_RUNNER_URL` with `AONOHAKO_REMOTE_RUNNER_AUTH=bearer`
+or `AONOHAKO_REMOTE_RUNNER_AUTH=cloudrun-idtoken`.
 
 Cloud Run's own documentation states that volumes must be configured through
 Cloud Run volume mounts and that arbitrary in-container mounting is not

@@ -338,6 +338,7 @@ The following checks are enforced before the HTTP server starts:
 - Cloud Run marker envs require `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - unsupported runtime security contracts fail startup before request handling
 - `remote` transport requires `AONOHAKO_REMOTE_RUNNER_URL`
+- `AONOHAKO_REMOTE_RUNNER_AUTH=none` is rejected outside `dev`
 - `remote + bearer` requires `AONOHAKO_REMOTE_RUNNER_TOKEN`
 - `remote + cloudrun-idtoken` defaults its audience to the remote runner URL if
   `AONOHAKO_REMOTE_RUNNER_AUDIENCE` is unset
