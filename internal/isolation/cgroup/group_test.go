@@ -26,6 +26,29 @@ func TestCreateRunGroupWritesRequiredLimits(t *testing.T) {
 	assertFile(t, filepath.Join(group.Path, "cpu.max"), "100000 200000")
 }
 
+func TestEnableControllersWritesSubtreeControl(t *testing.T) {
+	parent := t.TempDir()
+	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+
+	if err := EnableControllers(parent, []string{"cpu", "memory", "pids"}); err != nil {
+		t.Fatalf("EnableControllers() error = %v", err)
+	}
+	assertFile(t, filepath.Join(parent, "cgroup.subtree_control"), "+cpu +memory +pids")
+}
+
+func TestEnableControllersRejectsUnsafeNames(t *testing.T) {
+	parent := t.TempDir()
+	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+
+	for _, controller := range []string{"", "+cpu", "-cpu", "cpu memory", "cpu/memory"} {
+		t.Run(controller, func(t *testing.T) {
+			if err := EnableControllers(parent, []string{controller}); err == nil {
+				t.Fatalf("EnableControllers(%q) error = nil, want rejection", controller)
+			}
+		})
+	}
+}
+
 func TestCreateRunGroupRejectsUnsafeNames(t *testing.T) {
 	parent := t.TempDir()
 	for _, name := range []string{"", ".", "..", "../run", "nested/run", "run with space"} {
