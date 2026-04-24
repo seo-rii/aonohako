@@ -29,6 +29,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "devices", fn: TestRunExposesOnlySafeDevices},
 		{name: "fork", fn: TestRunBlocksForkAttempts},
 		{name: "execveat", fn: TestRunBlocksExecveatAttempts},
+		{name: "spj-clean-workspace", fn: TestRunSPJUsesCleanWorkspaceAndReadableFiles},
 		{name: "proc-fd", fn: TestRunBlocksProcFDBrowsingOutsideSandbox},
 		{name: "scratch-writes", fn: TestRunBlocksWritesOutsideWorkspaceTempDirs},
 		{name: "submitted-file-removal", fn: TestRunPreventsRemovingOrReplacingSubmittedFiles},
