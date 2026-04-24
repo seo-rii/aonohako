@@ -525,12 +525,15 @@ The repository verifies the design through:
 - `govulncheck` in CI for Go dependency and standard-library reachability
 - Syft SBOM generation in CI for the root-backed Python runtime image used by
   sandbox regression tests
+- non-blocking Grype scan artifacts in CI for the same sandbox runtime image,
+  so runtime CVE drift is visible before promotion
 - regression tests for sandbox escape attempts such as network use, process
   creation, inherited-fd access, and writable scratch bypasses
 - root-backed sandbox regression tests executed inside a runtime container in CI,
   with skip paths promoted to failures there
-- operational image promotion pipelines should still add CVE scanning for the
-  full production matrix, image signing, and digest pinning before promotion
+- operational image promotion pipelines should still turn CVE scans into
+  release gates for the full production matrix, then add image signing and
+  digest pinning before promotion
 
 For operational use, keep architecture and security decisions aligned with the
 actual code in `internal/execute`, `internal/sandbox`, and

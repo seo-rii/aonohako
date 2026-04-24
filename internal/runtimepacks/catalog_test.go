@@ -413,6 +413,12 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "sbom-ci-python.spdx.json") {
 		t.Fatalf("ci workflow must publish a named SBOM artifact for the sandbox runtime image")
 	}
+	if !strings.Contains(body, "anchore/scan-action@v7.4.0") || !strings.Contains(body, "grype-version: v0.111.0") {
+		t.Fatalf("ci workflow must scan the sandbox runtime image with a pinned Grype action and tool version")
+	}
+	if !strings.Contains(body, "fail-build: false") || !strings.Contains(body, "grype-ci-python.json") {
+		t.Fatalf("ci workflow must publish a non-blocking Grype report artifact for the sandbox runtime image")
+	}
 	summarySection := body[strings.Index(body, "toolchain-summary:"):]
 	if idx := strings.Index(summarySection, "\n  mixin-smoke:"); idx >= 0 {
 		summarySection = summarySection[:idx]

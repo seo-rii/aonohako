@@ -55,6 +55,9 @@
   probe를 추가해 `/compile`이 적대 입력 실행면임을 테스트로 고정했다.
 - Phase 12: CI에서 sandbox regression용 Python runtime image의 Syft SBOM
   artifact를 생성하도록 supply-chain 추적성을 추가했다.
+- Phase 12: 같은 runtime image에 대해 non-blocking Grype JSON scan artifact를
+  생성해 CVE drift를 관찰할 수 있게 했다. promotion gate는 full production
+  matrix 기준으로 남아 있다.
 
 ## 작업 원칙
 
