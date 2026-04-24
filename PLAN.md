@@ -19,6 +19,22 @@
 - `execveat` seccomp 차단 regression
 - compile threat model 문서화, `govulncheck` CI job 추가
 
+## 최근 완료된 장기 Phase 조각
+
+아래 항목은 장기 phase 중 작게 나눠 이미 `main`에 커밋/푸시한 진행분이다.
+
+- Phase 9: SPJ timeout/init failure 같은 judge-owned failure reason을 최종
+  `RunResponse.reason`에 보존해 contestant failure와 구분되게 했다.
+- Phase 10: remote SSE line/event/stream cap에 더해 idle heartbeat timeout을
+  추가하고 `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`로 config화했다.
+- Phase 10: `X-Aonohako-Protocol-Version` 응답 헤더를 추가하고, remote
+  runner가 누락된 헤더는 backward-compatible로 허용하되 mismatched header는
+  fail-closed 처리하게 했다.
+- Phase 11: post-start `execve()` image surface를 architecture/security
+  contract의 explicit gap으로 기록하고 docs contract test로 고정했다.
+- Phase 11: workspace entry-count exhaustion과 depth exhaustion을 실제
+  root-backed sandbox security suite probe로 추가했다.
+
 ## 작업 원칙
 
 - 각 phase는 하나 이상의 작고 검증 가능한 커밋으로 나눈다.
