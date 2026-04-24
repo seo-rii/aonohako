@@ -30,6 +30,11 @@ const maxRunTextFieldBytes = 16 << 20
 
 type principalContextKey struct{}
 
+type principalRateWindow struct {
+	start time.Time
+	count int
+}
+
 type Server struct {
 	cfg     config.Config
 	compile interface {
@@ -42,6 +47,7 @@ type Server struct {
 
 	principalMu      sync.Mutex
 	principalStreams map[string]int
+	principalRates   map[string]principalRateWindow
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -65,6 +71,7 @@ func NewWithServices(cfg config.Config, compileService interface {
 		execute:          executeRunner,
 		queue:            queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
 		principalStreams: map[string]int{},
+		principalRates:   map[string]principalRateWindow{},
 	}
 }
 
@@ -91,7 +98,12 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
-	releaseStream, ok, code := s.acquireStream(principalFromContext(r.Context()))
+	principal := principalFromContext(r.Context())
+	if !s.allowPrincipalRequest(principal, time.Now()) {
+		writeJSONError(w, http.StatusTooManyRequests, "principal_rate_limited")
+		return
+	}
+	releaseStream, ok, code := s.acquireStream(principal)
 	if !ok {
 		writeJSONError(w, http.StatusTooManyRequests, code)
 		return
@@ -165,7 +177,12 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
-	releaseStream, ok, code := s.acquireStream(principalFromContext(r.Context()))
+	principal := principalFromContext(r.Context())
+	if !s.allowPrincipalRequest(principal, time.Now()) {
+		writeJSONError(w, http.StatusTooManyRequests, "principal_rate_limited")
+		return
+	}
+	releaseStream, ok, code := s.acquireStream(principal)
 	if !ok {
 		writeJSONError(w, http.StatusTooManyRequests, code)
 		return
@@ -299,6 +316,28 @@ func (s *Server) acquireStream(principal string) (func(), bool, string) {
 			s.principalMu.Unlock()
 		}
 	}, true, ""
+}
+
+func (s *Server) allowPrincipalRequest(principal string, now time.Time) bool {
+	if s.cfg.MaxPrincipalRequestsPerMinute <= 0 {
+		return true
+	}
+	s.principalMu.Lock()
+	defer s.principalMu.Unlock()
+	if s.principalRates == nil {
+		s.principalRates = map[string]principalRateWindow{}
+	}
+	window := s.principalRates[principal]
+	if window.start.IsZero() || now.Sub(window.start) >= time.Minute {
+		s.principalRates[principal] = principalRateWindow{start: now, count: 1}
+		return true
+	}
+	if window.count >= s.cfg.MaxPrincipalRequestsPerMinute {
+		return false
+	}
+	window.count++
+	s.principalRates[principal] = window
+	return true
 }
 
 func writeJSONError(w http.ResponseWriter, status int, code string) {
