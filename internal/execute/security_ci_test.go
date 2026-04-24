@@ -28,6 +28,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "host-path", fn: TestRunCannotReadHostPathOutsideSandbox},
 		{name: "devices", fn: TestRunExposesOnlySafeDevices},
 		{name: "fork", fn: TestRunBlocksForkAttempts},
+		{name: "execveat", fn: TestRunBlocksExecveatAttempts},
 		{name: "proc-fd", fn: TestRunBlocksProcFDBrowsingOutsideSandbox},
 		{name: "scratch-writes", fn: TestRunBlocksWritesOutsideWorkspaceTempDirs},
 		{name: "submitted-file-removal", fn: TestRunPreventsRemovingOrReplacingSubmittedFiles},
