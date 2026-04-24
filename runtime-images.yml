@@ -1045,7 +1045,7 @@ languages:
 
 profiles:
   type-a:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: &gcc16_profile
       script:
         - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list.d/aonohako-gcc16-sid.list
@@ -1077,7 +1077,7 @@ profiles:
       - wasm
       - whitespace
   type-b:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - clojure
@@ -1087,7 +1087,7 @@ profiles:
       - scala
       - typescript
   type-c:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - ada
@@ -1101,50 +1101,50 @@ profiles:
       - rust
       - zig
   type-d:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - kotlin
   type-e:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - csharp
       - fsharp
   type-f:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - uhmlang
   type-g:
-    base_image: julia:1.11.5-bookworm
+    base_image: julia:1.11.5-bookworm@sha256:be7093a80d030bb8ec7cdc093aabb3428da995b466dbf6c0b472380107472316
     install: *gcc16_profile
     languages:
       - julia
   type-h:
-    base_image: swift:6.2.1-bookworm
+    base_image: swift:6.2.1-bookworm@sha256:73f569f5536fe3c9ad5109eb4622c5560af7424d55304955190e5fbccc047b86
     install: *gcc16_profile
     languages:
       - swift
   type-i:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - plain
       - python
       - java
   type-j:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - coq
   type-k:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - dart
   type-l:
-    base_image: debian:trixie-slim
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - python

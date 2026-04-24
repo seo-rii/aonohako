@@ -25,8 +25,8 @@ func TestRuntimeDockerfileDeclaresRuntimeBaseBeforeFirstFrom(t *testing.T) {
 	if !(argIndex < goFromIndex && goFromIndex < runtimeFromIndex) {
 		t.Fatalf("ARG RUNTIME_BASE must be declared before the first FROM to be usable in a later FROM")
 	}
-	if !strings.Contains(body, "ARG RUNTIME_BASE=debian:trixie-slim") {
-		t.Fatalf("runtime.Dockerfile must default runtime images to debian:trixie-slim")
+	if !strings.Contains(body, "ARG RUNTIME_BASE=debian:trixie-slim@sha256:") {
+		t.Fatalf("runtime.Dockerfile must default runtime images to digest-pinned debian:trixie-slim")
 	}
 }
 
@@ -37,9 +37,9 @@ func TestRuntimeDockerfileUsesGo126BuilderImage(t *testing.T) {
 		t.Fatalf("ReadFile(%q): %v", path, err)
 	}
 
-	m := regexp.MustCompile(`ARG GO_IMAGE=golang:(\d+\.\d+)-bookworm`).FindStringSubmatch(string(data))
+	m := regexp.MustCompile(`ARG GO_IMAGE=golang:(\d+\.\d+)-bookworm@sha256:[a-f0-9]{64}`).FindStringSubmatch(string(data))
 	if len(m) != 2 {
-		t.Fatalf("runtime.Dockerfile is missing a parseable GO_IMAGE default")
+		t.Fatalf("runtime.Dockerfile is missing a parseable digest-pinned GO_IMAGE default")
 	}
 	if m[1] != "1.26" {
 		t.Fatalf("GO_IMAGE default = %s, want 1.26 to satisfy go.mod and CI image builds", m[1])

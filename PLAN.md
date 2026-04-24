@@ -58,6 +58,8 @@
 - Phase 12: 같은 runtime image에 대해 non-blocking Grype JSON scan artifact를
   생성해 CVE drift를 관찰할 수 있게 했다. promotion gate는 full production
   matrix 기준으로 남아 있다.
+- Phase 6: runtime Dockerfile builder/runtime base와 runtime catalog production
+  profile base image를 digest-pinned reference로 바꾸고 repo tests로 고정했다.
 
 ## 작업 원칙
 

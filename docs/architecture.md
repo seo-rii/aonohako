@@ -470,11 +470,13 @@ final CI summary job downloads those artifacts, concatenates the per-profile
 reports into one GitHub Actions summary, and republishes the summaries plus
 image archives as a single bundle artifact.
 
-Debian-based production profiles now use `debian:trixie-slim`, which raises the
-baseline Python, PyPy, and GCC versions seen by both production and CI runtime
-images. Python judge libraries are pinned in the catalog so rebuilds stay
-reproducible, and vendored helpers such as `jungol_robot` are copied into the
-runtime image directly because they are not published on PyPI.
+Debian-based production profiles now use a digest-pinned
+`debian:trixie-slim` base, which raises the baseline Python, PyPy, and GCC
+versions seen by both production and CI runtime images while keeping base-image
+drift explicit in review. The Go builder image and non-Debian profile bases are
+also digest pinned. Python judge libraries are pinned in the catalog so rebuilds
+stay reproducible, and vendored helpers such as `jungol_robot` are copied into
+the runtime image directly because they are not published on PyPI.
 
 The runtime Docker image is also hardened to reduce the readable surface for the
 sandbox UID. Non-essential metadata and package-manager paths are made
@@ -532,8 +534,8 @@ The repository verifies the design through:
 - root-backed sandbox regression tests executed inside a runtime container in CI,
   with skip paths promoted to failures there
 - operational image promotion pipelines should still turn CVE scans into
-  release gates for the full production matrix, then add image signing and
-  digest pinning before promotion
+  release gates for the full production matrix and add image signing before
+  promotion
 
 For operational use, keep architecture and security decisions aligned with the
 actual code in `internal/execute`, `internal/sandbox`, and

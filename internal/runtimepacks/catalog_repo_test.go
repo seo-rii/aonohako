@@ -208,13 +208,25 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 		t.Fatalf("LoadCatalog returned error: %v", err)
 	}
 
+	const pinnedTrixie = "debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a"
 	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l"} {
 		profile, ok := catalog.Profiles[profileName]
 		if !ok {
 			t.Fatalf("profile %q missing from catalog", profileName)
 		}
-		if profile.BaseImage != "debian:trixie-slim" {
-			t.Fatalf("profile %q base image = %q, want debian:trixie-slim", profileName, profile.BaseImage)
+		if profile.BaseImage != pinnedTrixie {
+			t.Fatalf("profile %q base image = %q, want %s", profileName, profile.BaseImage, pinnedTrixie)
+		}
+	}
+	if profile := catalog.Profiles["type-g"]; profile.BaseImage != "julia:1.11.5-bookworm@sha256:be7093a80d030bb8ec7cdc093aabb3428da995b466dbf6c0b472380107472316" {
+		t.Fatalf("type-g base image = %q, want digest-pinned julia image", profile.BaseImage)
+	}
+	if profile := catalog.Profiles["type-h"]; profile.BaseImage != "swift:6.2.1-bookworm@sha256:73f569f5536fe3c9ad5109eb4622c5560af7424d55304955190e5fbccc047b86" {
+		t.Fatalf("type-h base image = %q, want digest-pinned swift image", profile.BaseImage)
+	}
+	for profileName, profile := range catalog.Profiles {
+		if !strings.Contains(profile.BaseImage, "@sha256:") {
+			t.Fatalf("profile %q base image %q must be digest pinned", profileName, profile.BaseImage)
 		}
 	}
 
