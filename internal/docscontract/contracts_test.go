@@ -102,6 +102,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`internal/isolation/cgroup` currently checks") || !strings.Contains(architecture, "required `cpu`, `memory`, and `pids` controllers") {
 		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
 	}
+	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "recreates `/tmp/.dotnet`") {
+		t.Fatalf("architecture.md must describe dotnet rlimit and shared-state compatibility exceptions")
+	}
 	if !strings.Contains(architecture, "writing values such\nas `+cpu +memory +pids` to `cgroup.subtree_control`") || !strings.Contains(architecture, "positive `memory.max`") || !strings.Contains(architecture, "`pids.max` values") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "writing its PID to `cgroup.procs`") || !strings.Contains(architecture, "without recursive deletion") {
 		t.Fatalf("architecture.md must describe cgroup run-group write contract")
 	}

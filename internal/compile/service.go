@@ -1595,6 +1595,8 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			return "", "", model.CompileStatusInternal, "dotnet state cleanup failed: " + err.Error()
 		}
 	}
+	// CoreCLR reserves a very large memfd-backed double-mapped region during
+	// startup; finite RLIMIT_AS/RLIMIT_FSIZE values can fail before user code.
 	disableAddressSpaceLimit := isDotnet
 	allowProcessGroups := filepath.Base(command[0]) == "swiftc"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])

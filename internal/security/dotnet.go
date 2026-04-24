@@ -12,6 +12,9 @@ func ResetDotnetSharedState() error {
 	if os.Geteuid() != 0 {
 		return nil
 	}
+	// CoreCLR uses shared state below /tmp/.dotnet for locks and shared memory.
+	// Recreating it before each sandboxed dotnet invocation avoids cross-run
+	// compiler instability while keeping ownership/mode expectations explicit.
 	root := "/tmp/.dotnet"
 	if err := os.RemoveAll(root); err != nil {
 		return err
