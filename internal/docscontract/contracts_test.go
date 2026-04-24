@@ -52,6 +52,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE`",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`",
+		"`X-Aonohako-Protocol-Version`",
 		`"stream_limit_exceeded"`,
 		`"principal_stream_limit_exceeded"`,
 		`"principal_rate_limited"`,
@@ -118,6 +119,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	}
 	if !strings.Contains(architecture, "remote runner SSE responses are parsed with bounded line, event, and stream\n  sizes") || !strings.Contains(architecture, "SSE idle heartbeat timeouts") {
 		t.Fatalf("architecture.md must describe remote SSE bounds and idle timeout")
+	}
+	if !strings.Contains(architecture, "protocol-version headers are backward compatible when absent") || !strings.Contains(architecture, "fail closed when present with an unsupported value") {
+		t.Fatalf("architecture.md must describe remote protocol version mismatch handling")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_MAX_ACTIVE_STREAMS`") {
 		t.Fatalf("architecture.md must describe active stream cap validation")

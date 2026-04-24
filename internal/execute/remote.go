@@ -94,6 +94,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if contentType := resp.Header.Get("Content-Type"); !strings.Contains(strings.ToLower(contentType), "text/event-stream") {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote execute returned unexpected content type: %s", contentType)}
 	}
+	if err := remoteio.CheckProtocolVersion(resp.Header); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute protocol mismatch: " + err.Error()}
+	}
 
 	reader := remoteio.NewSSEReader(resp.Body)
 	idleTimeout := r.idleTimeout

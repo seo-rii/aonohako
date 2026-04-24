@@ -23,6 +23,7 @@ import (
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
 	"aonohako/internal/queue"
+	"aonohako/internal/remoteio"
 	"aonohako/internal/sse"
 )
 
@@ -134,6 +135,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
 	stream, err := sse.New(w)
 	if err != nil {
 		permit.Cancel()
@@ -217,6 +219,7 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
 	stream, err := sse.New(w)
 	if err != nil {
 		permit.Cancel()
