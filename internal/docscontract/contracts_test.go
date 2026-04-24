@@ -133,6 +133,15 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`socket()` is limited to `AF_INET` and `AF_INET6`") || !strings.Contains(architecture, "Cloud Run embedded-helper execution rejects `enable_network=true` outright") {
 		t.Fatalf("architecture.md must describe the network-enabled helper boundary")
 	}
+	if !strings.Contains(architecture, "post-start\n`execve()` surface") || !strings.Contains(architecture, "world-executable binary that is present in the\nruntime image") {
+		t.Fatalf("architecture.md must describe the remaining execve image surface")
+	}
+	if !strings.Contains(architecture, "treat every world-executable binary in the runtime image as reachable by\nsubmissions") || !strings.Contains(architecture, "shells, package\nmanagers, compilers, debuggers, and diagnostics tooling") {
+		t.Fatalf("architecture.md must describe runtime image minimization for execve exposure")
+	}
+	if !strings.Contains(architecture, "prevention of replacing the running process with another world-executable\n  binary from the runtime image") {
+		t.Fatalf("architecture.md must list execve replacement as a current non-goal")
+	}
 }
 
 func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
