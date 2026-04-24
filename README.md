@@ -148,6 +148,10 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev` and `16`
   for `cloudrun` or `selfhosted`. It caps simultaneous request streams per
   authenticated or platform principal; `0` disables the per-principal cap.
+- `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev` and
+  `60` for `cloudrun` or `selfhosted`. It caps accepted `/compile` and
+  `/execute` requests per principal per fixed one-minute window; `0` disables
+  the per-principal request-rate cap.
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
 - Numeric environment variables are strict: malformed, negative, or zero values
   where a positive integer is required fail startup instead of falling back.

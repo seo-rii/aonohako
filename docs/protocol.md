@@ -145,6 +145,11 @@ Both `/compile` and `/execute` share the same bounded queue:
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` (default: `0` in `dev`, `16` in
   `cloudrun` or `selfhosted`). This caps simultaneous streams for one bearer,
   platform, or anonymous remote principal.
+- **Per-principal request rate**:
+  `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` (default: `0` in `dev`, `60` in
+  `cloudrun` or `selfhosted`). This caps `/compile` and `/execute` requests per
+  fixed one-minute window for one bearer, platform, or anonymous remote
+  principal.
 
 Numeric queue/timing environment variables are strict: malformed values,
 negative values, or zero values where a positive integer is required fail server
@@ -166,6 +171,15 @@ HTTP/1.1 429 Too Many Requests
 Content-Type: application/json
 
 {"error": "principal_stream_limit_exceeded"}
+```
+
+When the per-principal request-rate cap is reached, the server returns:
+
+```
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+
+{"error": "principal_rate_limited"}
 ```
 
 When the pending queue is full, the server returns:

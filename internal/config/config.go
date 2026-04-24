@@ -52,14 +52,15 @@ const (
 )
 
 type Config struct {
-	Port                string
-	MaxActiveRuns       int
-	MaxPendingQueue     int
-	MaxActiveStreams    int
-	MaxPrincipalStreams int
-	HeartbeatInterval   time.Duration
-	Execution           ExecutionConfig
-	InboundAuth         InboundAuthConfig
+	Port                          string
+	MaxActiveRuns                 int
+	MaxPendingQueue               int
+	MaxActiveStreams              int
+	MaxPrincipalStreams           int
+	MaxPrincipalRequestsPerMinute int
+	HeartbeatInterval             time.Duration
+	Execution                     ExecutionConfig
+	InboundAuth                   InboundAuthConfig
 }
 
 func Load() (Config, error) {
@@ -81,6 +82,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	maxPrincipalStreams, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", os.Getenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS"), defaultMaxPrincipalStreams(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	maxPrincipalRequestsPerMinute, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", os.Getenv("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE"), defaultMaxPrincipalRequestsPerMinute(runtimePlatform))
 	if err != nil {
 		return Config{}, err
 	}
@@ -191,14 +196,15 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Port:                port,
-		MaxActiveRuns:       maxActive,
-		MaxPendingQueue:     maxPending,
-		MaxActiveStreams:    maxActiveStreams,
-		MaxPrincipalStreams: maxPrincipalStreams,
-		HeartbeatInterval:   time.Duration(heartbeatSec) * time.Second,
-		Execution:           execution,
-		InboundAuth:         inboundAuth,
+		Port:                          port,
+		MaxActiveRuns:                 maxActive,
+		MaxPendingQueue:               maxPending,
+		MaxActiveStreams:              maxActiveStreams,
+		MaxPrincipalStreams:           maxPrincipalStreams,
+		MaxPrincipalRequestsPerMinute: maxPrincipalRequestsPerMinute,
+		HeartbeatInterval:             time.Duration(heartbeatSec) * time.Second,
+		Execution:                     execution,
+		InboundAuth:                   inboundAuth,
 	}, nil
 }
 
@@ -225,6 +231,13 @@ func defaultMaxPrincipalStreams(opts platform.RuntimeOptions) int {
 		return 0
 	}
 	return 16
+}
+
+func defaultMaxPrincipalRequestsPerMinute(opts platform.RuntimeOptions) int {
+	if opts.DeploymentTarget == platform.DeploymentTargetDev {
+		return 0
+	}
+	return 60
 }
 
 func getenv(key, fallback string) string {
