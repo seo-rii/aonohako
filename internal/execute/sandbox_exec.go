@@ -24,14 +24,16 @@ import (
 )
 
 type execResult struct {
-	Status     string
-	ExitCode   *int
-	Stdout     []byte
-	Stderr     []byte
-	MemoryKB   int64
-	WallTimeMs int64
-	CPUTimeMs  int64
-	Reason     string
+	Status          string
+	ExitCode        *int
+	Stdout          []byte
+	Stderr          []byte
+	StdoutTruncated bool
+	StderrTruncated bool
+	MemoryKB        int64
+	WallTimeMs      int64
+	CPUTimeMs       int64
+	Reason          string
 }
 
 func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int) execResult {
@@ -354,6 +356,8 @@ done:
 	result.CPUTimeMs = maxCPUTimeMs
 	result.Stdout = stdoutBuf.Bytes()
 	result.Stderr = stderrBuf.Bytes()
+	result.StdoutTruncated = stdoutBuf.Truncated()
+	result.StderrTruncated = stderrBuf.Truncated()
 	result.MemoryKB = maxRSSKB
 
 	if ps := cmd.ProcessState; ps != nil {
@@ -477,8 +481,12 @@ func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit f
 	defer ticker.Stop()
 	var offset int64
 	var carry string
+	var streamBytes int64
 
 	readNew := func() {
+		if streamBytes >= maxImageStreamBytes {
+			return
+		}
 		output, err := openWorkspaceReadOnly(ws, clean)
 		if err != nil {
 			return
@@ -490,23 +498,43 @@ func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit f
 		if _, err := output.file.Seek(offset, 0); err != nil {
 			return
 		}
-		reader := bufio.NewReader(output.file)
-		chunk, _ := ioReadAll(reader)
-		offset += int64(len(chunk))
-		if len(chunk) == 0 {
+		remaining := maxImageStreamBytes - streamBytes
+		available := output.info.Size() - offset
+		if available > remaining {
+			available = remaining
+		}
+		if available <= 0 {
 			return
 		}
+		chunk := make([]byte, available)
+		n, _ := output.file.Read(chunk)
+		if n == 0 {
+			return
+		}
+		chunk = chunk[:n]
+		offset += int64(n)
+		streamBytes += int64(n)
 		text := carry + string(chunk)
 		lines := strings.Split(text, "\n")
 		if !strings.HasSuffix(text, "\n") {
 			carry = lines[len(lines)-1]
 			lines = lines[:len(lines)-1]
+			if len(carry) > maxImageEventBytes {
+				carry = ""
+			}
 		} else {
 			carry = ""
 		}
+		emitted := 0
 		for _, line := range lines {
+			if emitted >= maxImageEventsPerRead {
+				return
+			}
 			line = strings.TrimSpace(line)
 			if line == "" {
+				continue
+			}
+			if len(line) > maxImageEventBytes {
 				continue
 			}
 			var payload struct {
@@ -520,11 +548,15 @@ func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit f
 			if payload.Mime == "" || payload.B64 == "" {
 				continue
 			}
+			if len(payload.B64) > maxImageEventBytes {
+				continue
+			}
 			ts := payload.TS
 			if ts == 0 {
 				ts = time.Now().UnixMilli()
 			}
 			emit(payload.Mime, payload.B64, ts)
+			emitted++
 		}
 	}
 

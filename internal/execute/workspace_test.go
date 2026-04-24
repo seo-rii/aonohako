@@ -303,13 +303,16 @@ func TestCaptureSidecarOutputsSkipsEscapingOrSymlinkedPaths(t *testing.T) {
 		t.Fatalf("symlink result.txt: %v", err)
 	}
 
-	outputs := captureSidecarOutputs(ws, []model.OutputFile{
+	outputs, errs := captureSidecarOutputs(ws, []model.OutputFile{
 		{Path: "result.txt"},
 		{Path: "../escape.txt"},
 		{Path: "/tmp/escape.txt"},
 	})
 	if len(outputs) != 0 {
 		t.Fatalf("expected suspicious sidecar outputs to be ignored, got %+v", outputs)
+	}
+	if len(errs) != 3 {
+		t.Fatalf("expected diagnostics for rejected sidecars, got %+v", errs)
 	}
 }
 

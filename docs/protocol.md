@@ -101,10 +101,15 @@ Client                        aonohako
   "exit_code": 0,                       // nullable; process exit code
   "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)
   "stderr": "",                         // truncated stderr (up to `limits.output_bytes`; on non-zero exit)
+  "stdout_truncated": false,            // true when stdout exceeded the capture cap
+  "stderr_truncated": false,            // true when stderr exceeded the capture cap
   "reason": "",                         // failure reason
   "score": null,                        // nullable float; SPJ score (0.0–1.0)
   "sidecar_outputs": [                  // captured sidecar files
     {"path": "result.txt", "data_b64": "<base64>"}
+  ],
+  "sidecar_errors": [                   // optional rejected sidecar diagnostics
+    {"path": "debug.txt", "reason": "file too large"}
   ]
 }
 ```

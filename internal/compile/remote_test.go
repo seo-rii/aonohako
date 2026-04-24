@@ -106,3 +106,41 @@ func TestRemoteRunnerCompileIncludesRemoteErrorMessage(t *testing.T) {
 		t.Fatalf("expected remote error to survive, got %+v", resp)
 	}
 }
+
+func TestRemoteRunnerCompileRejectsOversizedSSEEvents(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write([]byte(strings.Repeat("x", 300<<10)))
+		_, _ = w.Write([]byte("\n\n"))
+	}))
+	defer remote.Close()
+
+	runner, err := Build(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "sse line too large") {
+		t.Fatalf("expected bounded SSE failure, got %+v", resp)
+	}
+}

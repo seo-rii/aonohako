@@ -101,10 +101,15 @@ command arguments.
   "exit_code": 0,                           // nullable; process exit code
   "stdout": "",                             // truncated stdout (up to limits.output_bytes, on WA/RE only)
   "stderr": "",                             // truncated stderr (up to limits.output_bytes, on non-zero exit only)
+  "stdout_truncated": false,                // true when stdout exceeded the capture cap
+  "stderr_truncated": false,                // true when stderr exceeded the capture cap
   "reason": "",                             // human-readable error
   "score": null,                            // nullable float 0.0–1.0 (SPJ score)
   "sidecar_outputs": [                      // captured sidecar files
     {"path": "result.txt", "data_b64": "<base64>"}
+  ],
+  "sidecar_errors": [                       // optional diagnostics for rejected sidecars
+    {"path": "debug.txt", "reason": "file too large"}
   ]
 }
 ```

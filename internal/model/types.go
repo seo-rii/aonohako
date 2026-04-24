@@ -54,6 +54,11 @@ type SidecarOutput struct {
 	DataB64 string `json:"data_b64"`
 }
 
+type SidecarError struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
 type RunRequest struct {
 	Lang           string       `json:"lang"`
 	Binaries       []Binary     `json:"binaries"`
@@ -69,17 +74,20 @@ type RunRequest struct {
 }
 
 type RunResponse struct {
-	Status         string          `json:"status"`
-	TimeMs         int64           `json:"time_ms"`
-	WallTimeMs     int64           `json:"wall_time_ms"`
-	CPUTimeMs      int64           `json:"cpu_time_ms"`
-	MemoryKB       int64           `json:"memory_kb"`
-	ExitCode       *int            `json:"exit_code,omitempty"`
-	Stdout         string          `json:"stdout,omitempty"`
-	Stderr         string          `json:"stderr,omitempty"`
-	Reason         string          `json:"reason,omitempty"`
-	Score          *float64        `json:"score,omitempty"`
-	SidecarOutputs []SidecarOutput `json:"sidecar_outputs,omitempty"`
+	Status          string          `json:"status"`
+	TimeMs          int64           `json:"time_ms"`
+	WallTimeMs      int64           `json:"wall_time_ms"`
+	CPUTimeMs       int64           `json:"cpu_time_ms"`
+	MemoryKB        int64           `json:"memory_kb"`
+	ExitCode        *int            `json:"exit_code,omitempty"`
+	Stdout          string          `json:"stdout,omitempty"`
+	Stderr          string          `json:"stderr,omitempty"`
+	StdoutTruncated bool            `json:"stdout_truncated,omitempty"`
+	StderrTruncated bool            `json:"stderr_truncated,omitempty"`
+	Reason          string          `json:"reason,omitempty"`
+	Score           *float64        `json:"score,omitempty"`
+	SidecarOutputs  []SidecarOutput `json:"sidecar_outputs,omitempty"`
+	SidecarErrors   []SidecarError  `json:"sidecar_errors,omitempty"`
 }
 
 const (
