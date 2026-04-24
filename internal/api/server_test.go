@@ -380,6 +380,70 @@ func TestExecuteRejectsOversizedTextFieldsBeforeQueueing(t *testing.T) {
 	}
 }
 
+func TestExecuteRejectsInvalidLimitsBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("execute runner should not be called for invalid limits")
+		return model.RunResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	tests := []struct {
+		name   string
+		limits map[string]any
+		spj    map[string]any
+		want   string
+	}{
+		{name: "time zero", limits: map[string]any{"time_ms": 0, "memory_mb": 64}, want: "limits.time_ms"},
+		{name: "time too high", limits: map[string]any{"time_ms": maxRunTimeMs + 1, "memory_mb": 64}, want: "limits.time_ms"},
+		{name: "memory zero", limits: map[string]any{"time_ms": 1000, "memory_mb": 0}, want: "limits.memory_mb"},
+		{name: "memory too high", limits: map[string]any{"time_ms": 1000, "memory_mb": maxRunMemoryMB + 1}, want: "limits.memory_mb"},
+		{name: "output negative", limits: map[string]any{"time_ms": 1000, "memory_mb": 64, "output_bytes": -1}, want: "limits.output_bytes"},
+		{name: "output too high", limits: map[string]any{"time_ms": 1000, "memory_mb": 64, "output_bytes": maxRunOutputBytes + 1}, want: "limits.output_bytes"},
+		{name: "workspace negative", limits: map[string]any{"time_ms": 1000, "memory_mb": 64, "workspace_bytes": -1}, want: "limits.workspace_bytes"},
+		{name: "workspace too high", limits: map[string]any{"time_ms": 1000, "memory_mb": 64, "workspace_bytes": int64(maxRunWorkspaceBytes) + 1}, want: "limits.workspace_bytes"},
+		{
+			name:   "spj too high",
+			limits: map[string]any{"time_ms": 1000, "memory_mb": 64},
+			spj: map[string]any{
+				"binary": map[string]any{"name": "checker", "data_b64": script, "mode": "exec"},
+				"limits": map[string]any{"time_ms": maxRunTimeMs + 1},
+			},
+			want: "spj.limits.time_ms",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := map[string]any{
+				"lang":     "binary",
+				"binaries": []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+				"limits":   tc.limits,
+			}
+			if tc.spj != nil {
+				payload["spj"] = tc.spj
+			}
+			body, _ := json.Marshal(payload)
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", tc.name, resp.StatusCode)
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			if !strings.Contains(string(bodyBytes), tc.want) {
+				t.Fatalf("response %q should mention %q", string(bodyBytes), tc.want)
+			}
+		})
+	}
+}
+
 func TestExecuteSSESequence(t *testing.T) {
 	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {

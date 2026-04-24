@@ -26,7 +26,13 @@ import (
 	"aonohako/internal/sse"
 )
 
-const maxRunTextFieldBytes = 16 << 20
+const (
+	maxRunTextFieldBytes = 16 << 20
+	maxRunTimeMs         = 60_000
+	maxRunMemoryMB       = 4096
+	maxRunOutputBytes    = 8 << 20
+	maxRunWorkspaceBytes = 1 << 30
+)
 
 type principalContextKey struct{}
 
@@ -418,6 +424,32 @@ func validateRunRequestFields(req *model.RunRequest) error {
 	}
 	if len(req.ExpectedStdout) > maxRunTextFieldBytes {
 		return fmt.Errorf("expected_stdout too large: max %d bytes", maxRunTextFieldBytes)
+	}
+	if req.Limits.TimeMs <= 0 || req.Limits.TimeMs > maxRunTimeMs {
+		return fmt.Errorf("limits.time_ms must be between 1 and %d", maxRunTimeMs)
+	}
+	if req.Limits.MemoryMB <= 0 || req.Limits.MemoryMB > maxRunMemoryMB {
+		return fmt.Errorf("limits.memory_mb must be between 1 and %d", maxRunMemoryMB)
+	}
+	if req.Limits.OutputBytes < 0 || req.Limits.OutputBytes > maxRunOutputBytes {
+		return fmt.Errorf("limits.output_bytes must be between 0 and %d", maxRunOutputBytes)
+	}
+	if req.Limits.WorkspaceBytes < 0 || req.Limits.WorkspaceBytes > maxRunWorkspaceBytes {
+		return fmt.Errorf("limits.workspace_bytes must be between 0 and %d", maxRunWorkspaceBytes)
+	}
+	if req.SPJ != nil && req.SPJ.Limits != nil {
+		if req.SPJ.Limits.TimeMs < 0 || req.SPJ.Limits.TimeMs > maxRunTimeMs {
+			return fmt.Errorf("spj.limits.time_ms must be between 0 and %d", maxRunTimeMs)
+		}
+		if req.SPJ.Limits.MemoryMB < 0 || req.SPJ.Limits.MemoryMB > maxRunMemoryMB {
+			return fmt.Errorf("spj.limits.memory_mb must be between 0 and %d", maxRunMemoryMB)
+		}
+		if req.SPJ.Limits.OutputBytes < 0 || req.SPJ.Limits.OutputBytes > maxRunOutputBytes {
+			return fmt.Errorf("spj.limits.output_bytes must be between 0 and %d", maxRunOutputBytes)
+		}
+		if req.SPJ.Limits.WorkspaceBytes < 0 || req.SPJ.Limits.WorkspaceBytes > maxRunWorkspaceBytes {
+			return fmt.Errorf("spj.limits.workspace_bytes must be between 0 and %d", maxRunWorkspaceBytes)
+		}
 	}
 	return nil
 }

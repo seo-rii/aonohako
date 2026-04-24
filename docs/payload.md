@@ -56,8 +56,10 @@ metadata rather than an argument that drops helper sources.
   "stdin": "hello\n",                        // input fed to process stdin (max 16 MiB)
   "expected_stdout": "hello\n",              // expected output for built-in diff (max 16 MiB)
   "limits": {
-    "time_ms": 2000,                         // wall-clock time limit (ms)
-    "memory_mb": 256                         // memory limit (MB, enforced via prlimit AS)
+    "time_ms": 2000,                         // wall-clock time limit, 1..60000 ms
+    "memory_mb": 256,                        // memory limit, 1..4096 MB
+    "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..8388608
+    "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
   },
   "enable_network": false,                   // outbound network request flag; Cloud Run embedded helper rejects true, self-hosted helper allows outbound AF_INET/AF_INET6 clients only
   "entry_point": "src/main.py",              // optional submitted file path to run; JVM/BEAM runtimes use class/module entry names
@@ -92,6 +94,12 @@ primary file to execute. For Java, Scala, Groovy, and Erlang, `entry_point`
 keeps its existing class/module meaning instead of selecting a file path; JVM
 class names are validated before they are written into generated manifests or
 command arguments.
+
+`limits.time_ms` and `limits.memory_mb` are required and bounded at the API
+boundary. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
+server-side values when `0` or omitted, but values above the hard API caps are
+rejected before the request enters the run queue. `spj.limits` uses the same
+upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
 
 ## `POST /execute` — Response
 
