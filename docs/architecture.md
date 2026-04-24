@@ -291,9 +291,10 @@ future backend. Parent cgroups enable child controllers by writing values such
 as `+cpu +memory +pids` to `cgroup.subtree_control`. A run group must then be
 created with positive `memory.max` and `pids.max` values. `cpu.max` is written
 only when both quota and period are set, and a target process is admitted by
-writing its PID to `cgroup.procs`. The helper execution path does not use this
-yet; it remains the contract that the self-hosted isolated backend will wire
-into process launch.
+writing its PID to `cgroup.procs`. Cleanup removes the run cgroup directory
+without recursive deletion so leftover processes or files surface as cleanup
+errors. The helper execution path does not use this yet; it remains the
+contract that the self-hosted isolated backend will wire into process launch.
 
 The accounting reader for that future backend reads `memory.current`,
 `memory.peak` when present, `memory.events`, `pids.current`, and `cpu.stat`.
