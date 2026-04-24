@@ -65,6 +65,7 @@ func TestLoadRejectsStrictTargetWithoutWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_WORK_ROOT", "")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 
 	if _, err := Load(); err == nil {
 		t.Fatalf("expected cloudrun target to require AONOHAKO_WORK_ROOT")
@@ -140,6 +141,7 @@ func TestLoadAllowsCloudRunRemoteControlPlaneWithWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 
 	cfg, err := Load()
@@ -164,6 +166,7 @@ func TestLoadRejectsEmbeddedHelperWhenNotRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 
 	if _, err := Load(); err == nil {
@@ -175,6 +178,7 @@ func TestLoadRejectsEmbeddedHelperWithParallelActiveRuns(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "2")
 
@@ -220,6 +224,7 @@ func TestLoadRejectsGroupWritableDedicatedWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
 	t.Setenv("AONOHAKO_WORK_ROOT", root)
 
 	if _, err := Load(); err == nil {
@@ -309,11 +314,59 @@ func TestLoadIgnoresLegacyEnvFallbacks(t *testing.T) {
 	if cfg.MaxActiveRuns != defaultMaxActiveRuns(cfg.Execution.Platform) {
 		t.Fatalf("legacy max active env should be ignored, got %d", cfg.MaxActiveRuns)
 	}
-	if cfg.MaxPendingQueue != 0 {
+	if cfg.MaxPendingQueue != defaultMaxPendingQueue {
 		t.Fatalf("legacy max pending env should be ignored, got %d", cfg.MaxPendingQueue)
 	}
 	if cfg.HeartbeatInterval != 10*time.Second {
 		t.Fatalf("legacy heartbeat env should be ignored, got %v", cfg.HeartbeatInterval)
+	}
+}
+
+func TestLoadDefaultsInboundAuthByDeploymentTarget(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "")
+
+	devCfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load dev config: %v", err)
+	}
+	if devCfg.InboundAuth.Mode != InboundAuthNone {
+		t.Fatalf("dev inbound auth default = %q, want none", devCfg.InboundAuth.Mode)
+	}
+
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AONOHAKO_API_BEARER_TOKEN") {
+		t.Fatalf("cloudrun default should require bearer token, got %v", err)
+	}
+
+	t.Setenv("AONOHAKO_API_BEARER_TOKEN", "secret")
+	cloudCfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load cloudrun config with token: %v", err)
+	}
+	if cloudCfg.InboundAuth.Mode != InboundAuthBearer {
+		t.Fatalf("cloudrun inbound auth default = %q, want bearer", cloudCfg.InboundAuth.Mode)
+	}
+}
+
+func TestLoadAllowsExplicitPlatformInboundAuth(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.InboundAuth.Mode != InboundAuthPlatform {
+		t.Fatalf("inbound auth mode = %q, want platform", cfg.InboundAuth.Mode)
 	}
 }
 

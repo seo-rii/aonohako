@@ -1332,6 +1332,68 @@ func TestCaptureSidecarOutputsSkipsOversizedFile(t *testing.T) {
 	}
 }
 
+func TestWriteTempFileCreatesSandboxReadableFile(t *testing.T) {
+	dir := t.TempDir()
+	path, err := writeTempFile(dir, "spj-input-*", "content")
+	if err != nil {
+		t.Fatalf("writeTempFile: %v", err)
+	}
+	defer os.Remove(path)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat temp file: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o444 {
+		t.Fatalf("temp file mode = %o, want 0444", got)
+	}
+}
+
+func TestRunSPJUsesCleanWorkspaceAndReadableFiles(t *testing.T) {
+	requireSandboxSupport(t)
+
+	spj := `#!/usr/bin/env python3
+import importlib
+import os
+import sys
+
+if ".spj" not in os.getcwd().split(os.sep):
+    raise SystemExit(2)
+for path in sys.argv[1:4]:
+    with open(path, "rb") as handle:
+        handle.read()
+try:
+    importlib.import_module("evil")
+except ModuleNotFoundError:
+    pass
+else:
+    raise SystemExit(3)
+raise SystemExit(0)
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("open('evil.py', 'w').write('raise SystemExit(99)\\n')\nprint('42')\n")),
+		}},
+		ExpectedStdout: "42\n",
+		SPJ: &model.SPJSpec{
+			Binary: &model.Binary{
+				Name:    "spj.py",
+				DataB64: base64.StdEncoding.EncodeToString([]byte(spj)),
+			},
+			Lang: "python",
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected SPJ to accept with clean workspace, got %+v", resp)
+	}
+}
+
 func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {
 	forceDirectMode(t)
 

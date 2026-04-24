@@ -119,7 +119,14 @@ func hasSPJ(req *model.RunRequest) bool {
 }
 
 func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout string) (bool, *float64, error) {
-	spjPath := filepath.Join(ws.RootDir, "spj-runner")
+	spjRoot := filepath.Join(ws.RootDir, ".spj")
+	spjWS, err := prepareWorkspaceDirs(spjRoot)
+	if err != nil {
+		return false, nil, err
+	}
+	defer os.RemoveAll(spjRoot)
+
+	spjPath := filepath.Join(spjWS.RootDir, "spj-runner")
 	data, err := base64.StdEncoding.DecodeString(req.SPJ.Binary.DataB64)
 	if err != nil {
 		return false, nil, err
@@ -127,24 +134,24 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	if len(data) > maxBinaryFileBytes {
 		return false, nil, fmt.Errorf("spj binary too large")
 	}
-	if err := os.WriteFile(spjPath, data, 0o500); err != nil {
+	if err := os.WriteFile(spjPath, data, 0o555); err != nil {
 		return false, nil, err
 	}
 	defer os.Remove(spjPath)
 
-	inputPath, err := writeTempFile(filepath.Join(ws.RootDir, ".tmp"), "spj-input-*", req.Stdin)
+	inputPath, err := writeTempFile(filepath.Join(spjWS.RootDir, ".tmp"), "spj-input-*", req.Stdin)
 	if err != nil {
 		return false, nil, err
 	}
 	defer os.Remove(inputPath)
 
-	solutionPath, err := writeTempFile(filepath.Join(ws.RootDir, ".tmp"), "spj-solution-*", req.ExpectedStdout)
+	solutionPath, err := writeTempFile(filepath.Join(spjWS.RootDir, ".tmp"), "spj-solution-*", req.ExpectedStdout)
 	if err != nil {
 		return false, nil, err
 	}
 	defer os.Remove(solutionPath)
 
-	outputPath, err := writeTempFile(filepath.Join(ws.RootDir, ".tmp"), "spj-output-*", userStdout)
+	outputPath, err := writeTempFile(filepath.Join(spjWS.RootDir, ".tmp"), "spj-output-*", userStdout)
 	if err != nil {
 		return false, nil, err
 	}
@@ -157,7 +164,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	spjReq := &model.RunRequest{Lang: spjLang, Limits: req.Limits, EnableNetwork: false}
 	args := buildCommand(spjPath, spjLang, spjReq)
 	args = append(args, inputPath, solutionPath, outputPath)
-	res := runCommandWithSandbox(ctx, ws, args, &model.RunRequest{Limits: req.Limits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(req))
+	res := runCommandWithSandbox(ctx, spjWS, args, &model.RunRequest{Lang: spjLang, Limits: req.Limits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(req))
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
@@ -197,6 +204,10 @@ func writeTempFile(dir, pattern, content string) (string, error) {
 		return "", err
 	}
 	if err := file.Close(); err != nil {
+		os.Remove(file.Name())
+		return "", err
+	}
+	if err := os.Chmod(file.Name(), 0o444); err != nil {
 		os.Remove(file.Name())
 		return "", err
 	}
