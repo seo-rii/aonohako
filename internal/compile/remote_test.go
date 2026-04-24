@@ -213,3 +213,41 @@ func TestRemoteRunnerCompileRejectsProtocolVersionMismatch(t *testing.T) {
 		t.Fatalf("expected protocol mismatch failure, got %+v", resp)
 	}
 }
+
+func TestRemoteRunnerCompileRejectsMalformedErrorEvents(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: error\n"))
+		_, _ = w.Write([]byte("data: not-json\n\n"))
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"compiled\\n\"}\n\n"))
+	}))
+	defer remote.Close()
+
+	runner, err := Build(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "remote error decode failed") {
+		t.Fatalf("expected malformed error failure, got %+v", resp)
+	}
+}

@@ -125,26 +125,32 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		}
 		switch event.Name {
 		case "log":
-			if hooks.OnLog == nil {
-				continue
-			}
 			var chunk struct {
 				Stream string `json:"stream"`
 				Chunk  string `json:"chunk"`
 			}
-			if err := json.Unmarshal([]byte(event.Data), &chunk); err == nil && chunk.Stream != "" {
+			if err := json.Unmarshal([]byte(event.Data), &chunk); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote log decode failed: " + err.Error()}
+			}
+			if strings.TrimSpace(chunk.Stream) == "" {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote log event missing stream"}
+			}
+			if hooks.OnLog != nil {
 				hooks.OnLog(chunk.Stream, chunk.Chunk)
 			}
 		case "image":
-			if hooks.OnImage == nil {
-				continue
-			}
 			var image struct {
 				Mime string `json:"mime"`
 				B64  string `json:"b64"`
 				TS   int64  `json:"ts"`
 			}
-			if err := json.Unmarshal([]byte(event.Data), &image); err == nil && image.Mime != "" && image.B64 != "" {
+			if err := json.Unmarshal([]byte(event.Data), &image); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote image decode failed: " + err.Error()}
+			}
+			if strings.TrimSpace(image.Mime) == "" || strings.TrimSpace(image.B64) == "" {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote image event missing payload"}
+			}
+			if hooks.OnImage != nil {
 				ts := image.TS
 				if ts == 0 {
 					ts = time.Now().UnixMilli()
@@ -155,7 +161,10 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			var remoteErr struct {
 				Message string `json:"message"`
 			}
-			if err := json.Unmarshal([]byte(event.Data), &remoteErr); err == nil && strings.TrimSpace(remoteErr.Message) != "" {
+			if err := json.Unmarshal([]byte(event.Data), &remoteErr); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote error decode failed: " + err.Error()}
+			}
+			if strings.TrimSpace(remoteErr.Message) != "" {
 				result.Reason = remoteErr.Message
 			}
 		case "result":

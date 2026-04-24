@@ -347,6 +347,8 @@ The following checks are enforced before the HTTP server starts:
   header, idle connection, and SSE idle heartbeat timeouts
 - remote runner protocol-version headers are backward compatible when absent
   and fail closed when present with an unsupported value
+- malformed remote `log`, `image`, `error`, or `result` events fail the remote
+  request as a protocol error instead of being silently ignored
 - inbound `/compile` and `/execute` authentication defaults to bearer tokens
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication
