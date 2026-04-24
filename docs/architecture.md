@@ -59,10 +59,15 @@ High-level responsibilities:
 language profile, and runs the appropriate toolchain with a 60-second timeout.
 Artifacts are returned as base64 payloads. This step is for building judge
 artifacts, not for enforcing the main untrusted runtime boundary.
+Compiler frontends still parse attacker-controlled source code, so production
+deployments should treat `/compile` as an untrusted execution surface rather
+than a safe control-plane helper.
 
 When `AONOHAKO_EXECUTION_TRANSPORT=remote`, both `/compile` and `/execute` are
 forwarded to the downstream runner, so non-root control-plane instances do not
 build or run untrusted inputs locally.
+High-trust deployments should use that remote shape or run local compile only
+inside the same hardened single-slot runner envelope as execution.
 
 Even so, the local compile path applies the same helper-process hardening model
 as `/execute` when it runs as a root-backed embedded helper:
@@ -449,10 +454,13 @@ The repository verifies the design through:
 - Go unit and integration tests around compile and execute behavior
 - selftests embedded in runtime images
 - smoke builds generated from the runtime catalog
+- `govulncheck` in CI for Go dependency and standard-library reachability
 - regression tests for sandbox escape attempts such as network use, process
   creation, inherited-fd access, and writable scratch bypasses
 - root-backed sandbox regression tests executed inside a runtime container in CI,
   with skip paths promoted to failures there
+- operational image pipelines should add Trivy, Grype, or equivalent image CVE
+  scanning, SBOM generation, and image signing before promotion
 
 For operational use, keep architecture and security decisions aligned with the
 actual code in `internal/execute`, `internal/sandbox`, and
