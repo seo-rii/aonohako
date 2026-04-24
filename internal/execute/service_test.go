@@ -1700,3 +1700,26 @@ func TestRunMarksWorkspaceEntryLimitExceeded(t *testing.T) {
 		t.Fatalf("expected workspace entry diagnostic, got %+v", resp)
 	}
 }
+
+func TestRunMarksWorkspaceDepthLimitExceeded(t *testing.T) {
+	forceDirectMode(t)
+
+	script := fmt.Sprintf("from pathlib import Path\nimport time\npath = Path('root')\nfor i in range(%d):\n    path = path / f'd{i:02d}'\npath.mkdir(parents=True)\ntime.sleep(2)\n", maxWorkspaceDepth+8)
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 5000, MemoryMB: 256, WorkspaceBytes: defaultWorkspaceBytes},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusWLE {
+		t.Fatalf("expected workspace limit status from depth exhaustion, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "workspace depth exceeded") {
+		t.Fatalf("expected workspace depth diagnostic, got %+v", resp)
+	}
+}
