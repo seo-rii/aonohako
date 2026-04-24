@@ -30,10 +30,18 @@
 - Phase 10: `X-Aonohako-Protocol-Version` 응답 헤더를 추가하고, remote
   runner가 누락된 헤더는 backward-compatible로 허용하되 mismatched header는
   fail-closed 처리하게 했다.
+- Phase 10: malformed remote `log`, `image`, `error`, `result` event를
+  protocol error로 실패 처리해 compromised/misconfigured runner stream을
+  조용히 무시하지 않게 했다.
 - Phase 11: post-start `execve()` image surface를 architecture/security
   contract의 explicit gap으로 기록하고 docs contract test로 고정했다.
 - Phase 11: workspace entry-count exhaustion과 depth exhaustion을 실제
   root-backed sandbox security suite probe로 추가했다.
+- Phase 12: `aonohako-selftest deployment-contract`를 추가해 현재 env가 어떤
+  security contract와 guardrail로 해석되는지 token 없이 JSON으로 확인할 수
+  있게 했다.
+- Phase 12: production 계열 target에서 inbound auth `none`과 remote runner
+  auth `none`을 reject하도록 startup validation을 강화했다.
 
 ## 작업 원칙
 
