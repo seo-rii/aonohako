@@ -42,6 +42,23 @@ jobs:
           go-version-file: go.mod
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+  image-sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: docker/setup-buildx-action@v4
+      - run: chmod +x scripts/build_runtime_images.sh
+      - run: ./scripts/build_runtime_images.sh -mode ci -only ci-python -tag-prefix "aonohako-sbom"
+      - uses: anchore/sbom-action@v0.24.0
+        with:
+          image: aonohako-sbom:ci-python
+          format: spdx-json
+          artifact-name: sbom-ci-python.spdx.json
+          syft-version: v1.42.4
+
   sandbox:
     runs-on: ubuntu-latest
     steps:

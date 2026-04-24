@@ -404,6 +404,15 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "toolchain-summary:") {
 		t.Fatalf("ci workflow must define a dedicated toolchain summary job")
 	}
+	if !strings.Contains(body, "image-sbom:") {
+		t.Fatalf("ci workflow must define a dedicated runtime image SBOM job")
+	}
+	if !strings.Contains(body, "anchore/sbom-action@v0.24.0") || !strings.Contains(body, "syft-version: v1.42.4") {
+		t.Fatalf("ci workflow must generate SBOMs with a pinned Syft action and tool version")
+	}
+	if !strings.Contains(body, "sbom-ci-python.spdx.json") {
+		t.Fatalf("ci workflow must publish a named SBOM artifact for the sandbox runtime image")
+	}
 	summarySection := body[strings.Index(body, "toolchain-summary:"):]
 	if idx := strings.Index(summarySection, "\n  mixin-smoke:"); idx >= 0 {
 		summarySection = summarySection[:idx]
