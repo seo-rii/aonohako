@@ -1589,7 +1589,13 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 		command[0] = path
 	}
-	disableAddressSpaceLimit := filepath.Base(command[0]) == "dotnet"
+	isDotnet := filepath.Base(command[0]) == "dotnet"
+	if isDotnet {
+		if err := security.ResetDotnetSharedState(); err != nil {
+			return "", "", model.CompileStatusInternal, "dotnet state cleanup failed: " + err.Error()
+		}
+	}
+	disableAddressSpaceLimit := isDotnet
 	allowProcessGroups := filepath.Base(command[0]) == "swiftc"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
@@ -1613,6 +1619,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		AllowProcesses:           true,
 		AllowProcessGroups:       allowProcessGroups,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
+		DisableFileSizeLimit:     isDotnet,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
@@ -1743,7 +1750,17 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusTimeout, ctx.Err().Error()
 	case err := <-waitCh:
 		if err != nil {
-			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, ""
+			reason := err.Error()
+			if ps := cmd.ProcessState; ps != nil {
+				if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
+					if ws.Signaled() {
+						reason = fmt.Sprintf("sandbox command killed by signal %s", ws.Signal())
+					} else if ws.Exited() {
+						reason = fmt.Sprintf("sandbox command exited with code %d", ws.ExitStatus())
+					}
+				}
+			}
+			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, reason
 		}
 	}
 	return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusOK, ""
