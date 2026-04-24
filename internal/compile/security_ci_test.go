@@ -24,6 +24,7 @@ func TestCompileSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "namespace", fn: TestRunCommandRejectsNamespaceEscape},
 		{name: "process-group", fn: TestRunCommandRejectsProcessGroupEscape},
 		{name: "filesystem-privilege-syscalls", fn: TestRunCommandRejectsFilesystemPrivilegeSyscalls},
+		{name: "kernel-attack-surface-syscalls", fn: TestRunCommandRejectsKernelAttackSurfaceSyscalls},
 		{name: "host-path", fn: TestRunCommandCannotReadOrWriteRootOwnedHostPaths},
 		{name: "fd-leak", fn: TestRunCommandDoesNotLeakInheritedFileDescriptors},
 	}
