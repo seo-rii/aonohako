@@ -269,6 +269,15 @@ Memory enforcement uses several layers:
 - a post-exit address-space proximity check with slack
 - workspace byte accounting, so temp-file growth is also limited
 
+Self-hosted cgroup support is being staged behind an explicit preflight layer
+before it is wired into execution. `internal/isolation/cgroup` currently checks
+for a cgroup v2 mount, `cgroup.controllers`, `cgroup.subtree_control`, and the
+required `cpu`, `memory`, and `pids` controllers. The `io` controller is
+reported separately because it is useful for future throttling but not required
+for the first hard memory/process boundary. This preflight does not mutate the
+host cgroup tree; future self-hosted backends should fail closed when it reports
+that required controls are unavailable.
+
 ## Deployment Contract
 
 The runtime now separates three concerns:

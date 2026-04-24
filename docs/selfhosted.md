@@ -107,6 +107,19 @@ not exist yet:
 `embedded + container` remains reserved for a future self-hosted backend. It is
 not implemented today.
 
+The first implementation slice for that backend is a non-mutating cgroup v2
+preflight in `internal/isolation/cgroup`. It checks that:
+
+- the intended root is mounted as `cgroup2`
+- `cgroup.controllers` exists
+- `cgroup.subtree_control` exists
+- `cpu`, `memory`, and `pids` controllers are available
+- the optional `io` controller is reported when present
+
+This check is intentionally separate from execution for now. The future
+container backend should use it as a startup gate before creating per-run
+cgroups or allowing child-process accounting.
+
 If that backend is added later, it should only be enabled after it can provide
 all of the following at the same time:
 
