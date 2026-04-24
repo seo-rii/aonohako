@@ -227,7 +227,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `prolog` | `swipl -q -f <file> -g main -t halt` |
 | `lisp` | `sbcl --script <file>` |
 | `coq` | `coqc -q <file>` |
-| `javascript` | `node <file>` |
+| `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
 | `r` | `Rscript --vanilla <file>` |
 | `ruby` | `ruby <file>` |
 | `php` | `php <file>` |
@@ -237,11 +237,11 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `elixir` | `env ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 elixir <file>` |
 | `sqlite` | `sqlite3 <workspace-db> < <file>` |
 | `julia` | `julia --startup-file=no --history-file=no <file>` |
-| `uhmlang` | `/usr/bin/umjunsik-lang-go <file>` |
+| `uhmlang` | `GOMEMLIMIT=... GOGC=50 /usr/bin/umjunsik-lang-go <file>` |
 | `csharp`, `fsharp` | `dotnet <file>` or direct |
 | `whitespace` | `python3 /usr/local/lib/aonohako/whitespace.py <file>` |
 | `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |
-| `wasm` | `wasmtime run --dir=. <file>` |
+| `wasm` | `wasmtime run --dir=. -O memory-reservation=... -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=... -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-wasm-stack=1048576 <file>` |
 | `aheui` | `sh -c 'aheui "$1" ...' sh <file>` |
 | `text` | `cat <file>` |
 

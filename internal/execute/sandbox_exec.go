@@ -64,8 +64,6 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if workspaceLimitBytes > hardMaxWorkspaceBytes {
 		workspaceLimitBytes = hardMaxWorkspaceBytes
 	}
-	addressSpaceLimitKB := int64(addressSpaceLimitBytes(req.Limits.MemoryMB) / 1024)
-
 	baseEnv := []string{
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"LANG=C.UTF-8",
@@ -87,6 +85,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		allowUnixSockets = true
 	case "erlang", "wasm":
 		allowUnixSockets = true
+	case "uhmlang":
+		innerEnv = append(innerEnv, fmt.Sprintf("GOMEMLIMIT=%dMiB", max(16, req.Limits.MemoryMB-32)), "GOGC=50")
 	}
 
 	finalCommand := append([]string(nil), command...)
@@ -113,7 +113,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			break
 		}
 	}
-	isDotnet := filepath.Base(finalCommand[0]) == "dotnet"
+	runtimeBase := sandboxCommandBase(finalCommand)
+	isDotnet := runtimeBase == "dotnet"
 	if isDotnet {
 		if err := security.ResetDotnetSharedState(); err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "dotnet state cleanup failed: " + err.Error()}
@@ -122,11 +123,9 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup; finite RLIMIT_AS/RLIMIT_FSIZE values can fail before user code.
 	disableAddressSpaceLimit := isDotnet
-	switch filepath.Base(finalCommand[0]) {
-	case "node", "wasmtime", "umjunsik-lang-go":
-		disableAddressSpaceLimit = true
-	}
-	openFileLimit := security.OpenFileLimitForCommand(finalCommand[0])
+	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
+	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
+	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)
 
 	if os.Geteuid() == 0 {
 		const sandboxUID = 65532
@@ -156,7 +155,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		Limits:                   req.Limits,
 		ThreadLimit:              sandboxThreadLimit,
 		OpenFileLimit:            openFileLimit,
-		FileSizeLimitBytes:       security.FileSizeLimitForCommand(finalCommand[0], workspaceLimitBytes),
+		AddressSpaceLimitBytes:   addressSpaceLimit,
+		FileSizeLimitBytes:       security.FileSizeLimitForCommand(runtimeBase, workspaceLimitBytes),
 		EnableNetwork:            req.EnableNetwork,
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  allowUnixSockets,
@@ -206,6 +206,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
 	}
+	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
 	_ = requestRead.Close()
 	if n, err := requestWrite.Write(rawReq); err != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -280,39 +281,24 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			goto done
 		case <-watchdog.C:
 			if !targetStarted {
+				startTargetChecks := false
 				exePath, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", cmd.Process.Pid))
 				if err != nil {
-					if time.Now().Before(targetStartGraceDeadline) {
-						continue
-					}
+					startTargetChecks = !time.Now().Before(targetStartGraceDeadline)
 				} else {
 					if realExePath, err := filepath.EvalSymlinks(exePath); err == nil && realExePath != "" {
 						exePath = realExePath
 					}
-					if exePath == resolvedHelperPath && time.Now().Before(targetStartGraceDeadline) {
-						continue
-					}
+					startTargetChecks = exePath != resolvedHelperPath || !time.Now().Before(targetStartGraceDeadline)
 				}
-				// Some kernels/container settings hide /proc/<pid>/exe after
-				// the helper sets PR_SET_DUMPABLE=0. Start enforcement after
-				// a short grace period so CPU/RSS/workspace checks still run.
-				targetStarted = true
-				cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
-				lastWorkspaceScan = time.Time{}
-				continue
-			}
-			if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
-				cpuTimeMs := timing.MilliFromNanoseconds(cpuNs)
-				if cpuBaselineNs > 0 && cpuNs > cpuBaselineNs {
-					cpuTimeMs = timing.MilliFromNanoseconds(cpuNs - cpuBaselineNs)
-				}
-				if cpuTimeMs > maxCPUTimeMs {
-					maxCPUTimeMs = cpuTimeMs
-				}
-				if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
-					result.Status = model.RunStatusTLE
-					result.Reason = "cpu time limit exceeded"
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				if startTargetChecks {
+					// Some kernels/container settings hide /proc/<pid>/exe after
+					// the helper sets PR_SET_DUMPABLE=0. CPU and workspace
+					// enforcement start after a short grace period, but RSS is
+					// sampled immediately below because the helper execs in-place.
+					targetStarted = true
+					cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
+					lastWorkspaceScan = time.Time{}
 				}
 			}
 
@@ -333,6 +319,20 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 						}
 					}
 				}
+				if memoryLimitKB > 0 && (disableAddressSpaceLimit || maxRSSKB*10 >= memoryLimitKB*8) {
+					if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/smaps_rollup", cmd.Process.Pid)); err == nil {
+						scanner := bufio.NewScanner(bytes.NewReader(raw))
+						for scanner.Scan() {
+							fields := strings.Fields(scanner.Text())
+							if len(fields) >= 2 && fields[0] == "Rss:" {
+								if v, err := strconv.ParseInt(fields[1], 10, 64); err == nil && v > maxRSSKB {
+									maxRSSKB = v
+								}
+								break
+							}
+						}
+					}
+				}
 				if result.Status == "OK" && memoryLimitKB > 0 && maxRSSKB > memoryLimitKB {
 					result.Status = model.RunStatusMLE
 					result.Reason = "memory limit exceeded"
@@ -340,7 +340,24 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 				}
 			}
 
-			if result.Status == "OK" && (lastWorkspaceScan.IsZero() || time.Since(lastWorkspaceScan) >= 25*time.Millisecond) {
+			if targetStarted {
+				if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
+					cpuTimeMs := timing.MilliFromNanoseconds(cpuNs)
+					if cpuBaselineNs > 0 && cpuNs > cpuBaselineNs {
+						cpuTimeMs = timing.MilliFromNanoseconds(cpuNs - cpuBaselineNs)
+					}
+					if cpuTimeMs > maxCPUTimeMs {
+						maxCPUTimeMs = cpuTimeMs
+					}
+					if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+						result.Status = model.RunStatusTLE
+						result.Reason = "cpu time limit exceeded"
+						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					}
+				}
+			}
+
+			if targetStarted && result.Status == "OK" && (lastWorkspaceScan.IsZero() || time.Since(lastWorkspaceScan) >= 25*time.Millisecond) {
 				lastWorkspaceScan = time.Now()
 				usage, err := scanWorkspaceUsage(ws.RootDir)
 				if errors.Is(err, errWorkspaceEntryLimitExceeded) {

@@ -157,7 +157,10 @@ The Linux helper applies:
 | Layer | Mechanism | Notes |
 | --- | --- | --- |
 | CPU hard limit | `RLIMIT_CPU` | helper-side hard stop |
-| Address space limit | `RLIMIT_AS` | based on request memory plus headroom |
+| Address space limit | `RLIMIT_AS` | based on request memory plus language-specific virtual-memory headroom; .NET remains the compatibility exception |
+| Stack size | `RLIMIT_STACK=8MiB` | bounds native stack growth and argument/environment footprint |
+| Locked memory | `RLIMIT_MEMLOCK=0` | prevents `mlock`-style RAM pinning |
+| POSIX message queue bytes | `RLIMIT_MSGQUEUE=0` | prevents message-queue allocation by the sandbox UID |
 | Open files | `RLIMIT_NOFILE=64` | keeps fd surface small |
 | Tasks | `RLIMIT_NPROC` | sized from current UID usage plus thread limit |
 | File growth | `RLIMIT_FSIZE` | tied to workspace byte limit; .NET disables this rlimit because CoreCLR reserves a huge memfd-backed double-mapped region at startup |
@@ -176,7 +179,7 @@ The seccomp filter denies high-risk operations, including:
 - `ptrace`, `process_vm_*`, `pidfd_*`
 - `kill`, `tkill`, `tgkill`
 - `prlimit64`, `setpriority`
-- `bpf`, `io_uring_*`, `userfaultfd`, `perf_event_open`
+- `bpf`, `io_uring_*`, `userfaultfd`, memory locking, SysV shared memory, `perf_event_open`
 - `open_by_handle_at`, `name_to_handle_at`
 - `fanotify_*`, keyring syscalls, module loading, swap, reboot, syslog
 - `chmod`, `chown`, `mknod`
@@ -261,7 +264,7 @@ reported as runtime failure instead of silently falling back to process stdout.
 | --- | --- | --- |
 | `wall_time_ms` | `CLOCK_MONOTONIC` | stable wall clock, not affected by time jumps |
 | `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID | aggregates all threads inside the process |
-| `memory_kb` | `/proc/<pid>/statm` sampled during execution, then `rusage.Maxrss` fallback | captures live RSS peaks and keeps a post-exit fallback |
+| `memory_kb` | `/proc/<pid>/statm` sampled during execution, `/proc/<pid>/smaps_rollup` near the limit or when AS is disabled, then `rusage.Maxrss` fallback | captures live RSS peaks, uses a more accurate procfs source in risky ranges, and keeps a post-exit fallback |
 
 Important consequence:
 
@@ -273,18 +276,21 @@ Important consequence:
 Memory enforcement uses several layers:
 
 - live RSS sampling from `/proc/<pid>/statm`
-- `RLIMIT_AS` to constrain virtual address space growth
+- `/proc/<pid>/smaps_rollup` confirmation when RSS reaches 80% of the limit or when the runtime cannot use address-space limits
+- `RLIMIT_AS` to constrain virtual address space growth; native programs use a tight memory-plus-slack cap, while Node, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps
+- runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
+- child `oom_score_adj=1000` as a best-effort fallback so the sandboxed process is preferred over the server if the host/container OOM killer has to choose
 - a post-exit address-space proximity check with slack
 - workspace byte accounting, so temp-file growth is also limited
 
-.NET is the main compatibility exception: `dotnet` invocations disable
+.NET is the main compatibility exception: `dotnet` invocations still disable
 `RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large
 memfd-backed double-mapped region before user code starts. The helper still
-keeps workspace byte accounting, output caps, open-file limits, thread limits,
-and single-slot execution in place. Before each sandboxed `dotnet` invocation,
-the runner recreates `/tmp/.dotnet` with the sandbox UID and `0700` modes so
-CoreCLR/F# shared lock and shared-memory state does not leak between sequential
-runs in the same container.
+keeps RSS watchdogs, workspace byte accounting, output caps, open-file limits,
+thread limits, OOM-victim preference, and single-slot execution in place. Before
+each sandboxed `dotnet` invocation, the runner recreates `/tmp/.dotnet` with the
+sandbox UID and `0700` modes so CoreCLR/F# shared lock and shared-memory state
+does not leak between sequential runs in the same container.
 
 Self-hosted cgroup support is being staged behind an explicit preflight layer
 before it is wired into execution. `internal/isolation/cgroup` currently checks
