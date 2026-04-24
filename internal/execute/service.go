@@ -29,6 +29,8 @@ const (
 	maxImageStreamBytes          = 8 << 20
 	maxImageEventBytes           = 1 << 20
 	maxImageEventsPerRead        = 8
+	defaultSPJTimeMs             = 1000
+	defaultSPJMemoryMB           = 256
 	ocamlRunParam                = "s=32k"
 	elixirERLAFlags              = "+MIscs 128 +S 1:1 +A 1 +MMscs 0"
 )
