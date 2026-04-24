@@ -21,6 +21,14 @@ const (
 	RemoteAuthCloudRunIDToken RemoteAuthMode = "cloudrun-idtoken"
 )
 
+type InboundAuthMode string
+
+const (
+	InboundAuthNone     InboundAuthMode = "none"
+	InboundAuthBearer   InboundAuthMode = "bearer"
+	InboundAuthPlatform InboundAuthMode = "platform"
+)
+
 type RemoteExecutorConfig struct {
 	URL         string
 	Auth        RemoteAuthMode
@@ -28,10 +36,17 @@ type RemoteExecutorConfig struct {
 	Audience    string
 }
 
+type InboundAuthConfig struct {
+	Mode        InboundAuthMode
+	BearerToken string
+}
+
 type ExecutionConfig struct {
 	Platform platform.RuntimeOptions
 	Remote   RemoteExecutorConfig
 }
+
+const defaultMaxPendingQueue = 16
 
 type Config struct {
 	Port              string
@@ -39,6 +54,7 @@ type Config struct {
 	MaxPendingQueue   int
 	HeartbeatInterval time.Duration
 	Execution         ExecutionConfig
+	InboundAuth       InboundAuthConfig
 }
 
 func Load() (Config, error) {
@@ -51,7 +67,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	maxPending, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PENDING_QUEUE", os.Getenv("AONOHAKO_MAX_PENDING_QUEUE"), 0)
+	maxPending, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PENDING_QUEUE", os.Getenv("AONOHAKO_MAX_PENDING_QUEUE"), defaultMaxPendingQueue)
 	if err != nil {
 		return Config{}, err
 	}
@@ -67,6 +83,10 @@ func Load() (Config, error) {
 			BearerToken: strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_TOKEN")),
 			Audience:    strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUDIENCE")),
 		},
+	}
+	inboundAuth := InboundAuthConfig{
+		Mode:        parseInboundAuth(os.Getenv("AONOHAKO_INBOUND_AUTH"), runtimePlatform),
+		BearerToken: strings.TrimSpace(os.Getenv("AONOHAKO_API_BEARER_TOKEN")),
 	}
 	workRoot := strings.TrimSpace(os.Getenv("AONOHAKO_WORK_ROOT"))
 
@@ -118,6 +138,16 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("unsupported execution transport: %s", execution.Platform.ExecutionTransport)
 	}
 
+	switch inboundAuth.Mode {
+	case InboundAuthNone, InboundAuthPlatform:
+	case InboundAuthBearer:
+		if inboundAuth.BearerToken == "" {
+			return Config{}, fmt.Errorf("AONOHAKO_API_BEARER_TOKEN is required for bearer inbound auth")
+		}
+	default:
+		return Config{}, fmt.Errorf("unsupported inbound auth mode: %s", inboundAuth.Mode)
+	}
+
 	if execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded && execution.Platform.SandboxBackend == platform.SandboxBackendHelper && maxActive != 1 {
 		return Config{}, fmt.Errorf("embedded helper execution requires AONOHAKO_MAX_ACTIVE_RUNS=1")
 	}
@@ -156,6 +186,7 @@ func Load() (Config, error) {
 		MaxPendingQueue:   maxPending,
 		HeartbeatInterval: time.Duration(heartbeatSec) * time.Second,
 		Execution:         execution,
+		InboundAuth:       inboundAuth,
 	}, nil
 }
 
@@ -216,5 +247,23 @@ func parseRemoteAuth(raw string) RemoteAuthMode {
 		return RemoteAuthCloudRunIDToken
 	default:
 		return RemoteAuthMode(strings.TrimSpace(strings.ToLower(raw)))
+	}
+}
+
+func parseInboundAuth(raw string, opts platform.RuntimeOptions) InboundAuthMode {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "":
+		if opts.DeploymentTarget == platform.DeploymentTargetDev {
+			return InboundAuthNone
+		}
+		return InboundAuthBearer
+	case string(InboundAuthNone):
+		return InboundAuthNone
+	case string(InboundAuthBearer):
+		return InboundAuthBearer
+	case string(InboundAuthPlatform):
+		return InboundAuthPlatform
+	default:
+		return InboundAuthMode(strings.TrimSpace(strings.ToLower(raw)))
 	}
 }

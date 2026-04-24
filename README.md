@@ -92,6 +92,7 @@ sudo env \
   AONOHAKO_DEPLOYMENT_TARGET=selfhosted \
   AONOHAKO_EXECUTION_TRANSPORT=embedded \
   AONOHAKO_SANDBOX_BACKEND=helper \
+  AONOHAKO_API_BEARER_TOKEN=replace-me \
   AONOHAKO_WORK_ROOT=/work \
   AONOHAKO_MAX_ACTIVE_RUNS=1 \
   go run ./cmd/server
@@ -128,10 +129,19 @@ Repository policy check:
 - `AONOHAKO_MAX_ACTIVE_RUNS` defaults to `1` for `embedded + helper`, stays `1`
   for `cloudrun`, and otherwise defaults to `max(1, cpu-2)`. The
   `embedded + helper` backend rejects values other than `1`.
-- `AONOHAKO_MAX_PENDING_QUEUE` defaults to `0` for unlimited queue depth
+- `AONOHAKO_MAX_PENDING_QUEUE` defaults to `16`. Set it explicitly to `0` only
+  for development cases that intentionally need an unlimited queue.
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
 - Numeric environment variables are strict: malformed, negative, or zero values
   where a positive integer is required fail startup instead of falling back.
+- `AONOHAKO_INBOUND_AUTH` controls inbound `/compile` and `/execute`
+  authentication. It defaults to `none` for `dev` and `bearer` for `cloudrun`
+  or `selfhosted`. Supported values are `none`, `bearer`, and `platform`.
+- `AONOHAKO_API_BEARER_TOKEN` is required when
+  `AONOHAKO_INBOUND_AUTH=bearer`.
+- `AONOHAKO_INBOUND_AUTH=platform` documents that Cloud Run IAM, an API
+  gateway, mTLS, private ingress, or another platform layer authenticates
+  inbound calls before they reach this process.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
@@ -150,6 +160,8 @@ Per-request execution limits are part of the `/execute` payload:
 - `limits.memory_mb`
 - `limits.output_bytes`
   Defaults to `64 KiB` when omitted and is capped internally at `8 MiB`
+- `stdin` and `expected_stdout`
+  Each field is capped at `16 MiB` before a request enters the shared queue.
 - `enable_network`
   Cloud Run embedded-helper runners reject `true`. Self-hosted embedded-helper
   runners allow outbound `AF_INET`/`AF_INET6` client sockets only; listener
@@ -205,6 +217,9 @@ For Cloud Run deployments, use this baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
+- `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
+  `AONOHAKO_INBOUND_AUTH=platform` only when an upstream layer enforces
+  inbound authentication
 - second-generation execution environment
 - service concurrency `1`
 - a bounded in-memory volume mounted at a path such as `/work`, with

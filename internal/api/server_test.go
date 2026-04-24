@@ -95,6 +95,108 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestExecuteRequiresBearerAuthWhenConfigured(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthBearer, BearerToken: "secret-token"}
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	payload := map[string]any{
+		"lang":     "binary",
+		"binaries": []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"limits":   map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+
+	for _, auth := range []string{"", "Bearer wrong-token", "Basic secret-token"} {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("unauthorized request failed: %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401 for Authorization %q, got %d", auth, resp.StatusCode)
+		}
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer secret-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("authorized request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for authorized request, got %d", resp.StatusCode)
+	}
+}
+
+func TestHealthzDoesNotRequireBearerAuth(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthBearer, BearerToken: "secret-token"}
+	s := NewWithServices(cfg, compile.New(), execute.New())
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("healthz request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for unauthenticated healthz, got %d", resp.StatusCode)
+	}
+}
+
+func TestExecuteRejectsOversizedTextFieldsBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("execute runner should not be called for oversized text fields")
+		return model.RunResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	basePayload := map[string]any{
+		"lang":     "binary",
+		"binaries": []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"limits":   map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+
+	for _, field := range []string{"stdin", "expected_stdout"} {
+		t.Run(field, func(t *testing.T) {
+			payload := map[string]any{}
+			for k, v := range basePayload {
+				payload[k] = v
+			}
+			payload[field] = strings.Repeat("x", maxRunTextFieldBytes+1)
+			body, _ := json.Marshal(payload)
+
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("expected 400 for oversized %s, got %d", field, resp.StatusCode)
+			}
+		})
+	}
+}
+
 func TestExecuteSSESequence(t *testing.T) {
 	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {

@@ -131,7 +131,8 @@ Both `/compile` and `/execute` share the same bounded queue:
   `embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`,
   otherwise `max(1, cpu−2)`). The `embedded + helper` backend rejects values
   other than `1`.
-- **Pending queue**: `AONOHAKO_MAX_PENDING_QUEUE` (default: `0` = unlimited)
+- **Pending queue**: `AONOHAKO_MAX_PENDING_QUEUE` (default: `16`; set `0`
+  explicitly only for an unlimited development queue)
 
 Numeric queue/timing environment variables are strict: malformed values,
 negative values, or zero values where a positive integer is required fail server

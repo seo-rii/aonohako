@@ -296,6 +296,9 @@ The following checks are enforced before the HTTP server starts:
 - `remote + bearer` requires `AONOHAKO_REMOTE_RUNNER_TOKEN`
 - `remote + cloudrun-idtoken` defaults its audience to the remote runner URL if
   `AONOHAKO_REMOTE_RUNNER_AUDIENCE` is unset
+- inbound `/compile` and `/execute` authentication defaults to bearer tokens
+  outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
+  upstream platform layer owns inbound authentication
 - numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
   `AONOHAKO_MAX_PENDING_QUEUE`, and `AONOHAKO_HEARTBEAT_INTERVAL_SEC` are
   strict; malformed or out-of-range values fail startup
@@ -313,6 +316,9 @@ Recommended Cloud Run deployment baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
+- `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, unless
+  `AONOHAKO_INBOUND_AUTH=platform` is set because Cloud Run IAM, mTLS, private
+  ingress, or a gateway enforces inbound authentication
 - second-generation execution environment
 - service concurrency `1`
 - bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`

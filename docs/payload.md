@@ -53,8 +53,8 @@ metadata rather than an argument that drops helper sources.
       "mode": "exec"                         // "exec" → chmod 0555; otherwise chmod 0444
     }
   ],
-  "stdin": "hello\n",                        // input fed to process stdin
-  "expected_stdout": "hello\n",              // expected output for built-in diff
+  "stdin": "hello\n",                        // input fed to process stdin (max 16 MiB)
+  "expected_stdout": "hello\n",              // expected output for built-in diff (max 16 MiB)
   "limits": {
     "time_ms": 2000,                         // wall-clock time limit (ms)
     "memory_mb": 256                         // memory limit (MB, enforced via prlimit AS)
@@ -133,6 +133,9 @@ When `spj` is provided, the SPJ binary is invoked as:
 <spj_binary> <input_file> <expected_output_file> <user_output_file>
 ```
 
+- The SPJ runs from a clean SPJ-only workspace, not the participant writable
+  directory
+- The input, expected output, and user output files are read-only for the SPJ
 - User output is also piped to SPJ's stdin
 - Exit code 0 → accepted; non-zero → wrong answer
 - If `emit_score: true`, SPJ should print a float (0.0–1.0) to stdout

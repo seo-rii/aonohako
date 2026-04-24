@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,6 +21,8 @@ import (
 	"aonohako/internal/queue"
 	"aonohako/internal/sse"
 )
+
+const maxRunTextFieldBytes = 16 << 20
 
 type Server struct {
 	cfg     config.Config
@@ -56,8 +60,8 @@ func NewWithServices(cfg config.Config, compileService interface {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.healthz)
-	mux.HandleFunc("/compile", s.compileHandler)
-	mux.HandleFunc("/execute", s.executeHandler)
+	mux.Handle("/compile", s.requireAuth(http.HandlerFunc(s.compileHandler)))
+	mux.Handle("/execute", s.requireAuth(http.HandlerFunc(s.executeHandler)))
 	return mux
 }
 
@@ -148,6 +152,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	if err := validateRunRequestFields(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	permit, err := s.queue.Acquire()
 	if err != nil {
@@ -214,6 +222,50 @@ func firstNonEmpty(v ...string) string {
 		}
 	}
 	return ""
+}
+
+func (s *Server) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch s.cfg.InboundAuth.Mode {
+		case "", config.InboundAuthNone, config.InboundAuthPlatform:
+			next.ServeHTTP(w, r)
+			return
+		case config.InboundAuthBearer:
+			if s.cfg.InboundAuth.BearerToken == "" {
+				http.Error(w, "server auth misconfigured", http.StatusInternalServerError)
+				return
+			}
+			const prefix = "Bearer "
+			got := r.Header.Get("Authorization")
+			if !strings.HasPrefix(got, prefix) || !constantTimeEqual(strings.TrimPrefix(got, prefix), s.cfg.InboundAuth.BearerToken) {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="aonohako"`)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		default:
+			http.Error(w, "server auth misconfigured", http.StatusInternalServerError)
+			return
+		}
+	})
+}
+
+func constantTimeEqual(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+func validateRunRequestFields(req *model.RunRequest) error {
+	if len(req.Stdin) > maxRunTextFieldBytes {
+		return fmt.Errorf("stdin too large: max %d bytes", maxRunTextFieldBytes)
+	}
+	if len(req.ExpectedStdout) > maxRunTextFieldBytes {
+		return fmt.Errorf("expected_stdout too large: max %d bytes", maxRunTextFieldBytes)
+	}
+	return nil
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
