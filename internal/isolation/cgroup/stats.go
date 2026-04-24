@@ -18,10 +18,23 @@ type Stats struct {
 	CPUThrottled       int64
 	CPUThrottledMicros int64
 	MemoryEvents       map[string]int64
+	PidsEvents         map[string]int64
 }
 
 func (s Stats) OOMEvents() int64 {
 	return s.MemoryEvents["oom"] + s.MemoryEvents["oom_kill"] + s.MemoryEvents["oom_group_kill"]
+}
+
+func (s Stats) MemoryMaxEvents() int64 {
+	return s.MemoryEvents["max"]
+}
+
+func (s Stats) PidsMaxEvents() int64 {
+	return s.PidsEvents["max"]
+}
+
+func (s Stats) CPUThrottleEvents() int64 {
+	return s.CPUThrottled
 }
 
 func ReadStats(groupPath string) (Stats, error) {
@@ -34,6 +47,10 @@ func ReadStats(groupPath string) (Stats, error) {
 		return Stats{}, err
 	}
 	events, err := readKeyValueFile(filepath.Join(groupPath, "memory.events"))
+	if err != nil {
+		return Stats{}, err
+	}
+	pidsEvents, err := readKeyValueFile(filepath.Join(groupPath, "pids.events"))
 	if err != nil {
 		return Stats{}, err
 	}
@@ -51,6 +68,7 @@ func ReadStats(groupPath string) (Stats, error) {
 		CPUThrottled:       cpu["nr_throttled"],
 		CPUThrottledMicros: cpu["throttled_usec"],
 		MemoryEvents:       events,
+		PidsEvents:         pidsEvents,
 	}
 	if peak, err := readIntFile(filepath.Join(groupPath, "memory.peak")); err == nil {
 		stats.MemoryPeakBytes = peak

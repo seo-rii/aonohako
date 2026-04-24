@@ -297,9 +297,10 @@ errors. The helper execution path does not use this yet; it remains the
 contract that the self-hosted isolated backend will wire into process launch.
 
 The accounting reader for that future backend reads `memory.current`,
-`memory.peak` when present, `memory.events`, `pids.current`, and `cpu.stat`.
-OOM verdict integration should prefer `memory.events` `oom`, `oom_kill`, and
-`oom_group_kill` counters over RSS polling once cgroups own the run boundary.
+`memory.peak` when present, `memory.events`, `pids.current`, `pids.events`,
+and `cpu.stat`. Verdict integration should prefer `memory.events` `max`,
+`oom`, `oom_kill`, and `oom_group_kill`, `pids.events` `max`, and `cpu.stat`
+throttling counters over RSS polling once cgroups own the run boundary.
 
 ## Deployment Contract
 
