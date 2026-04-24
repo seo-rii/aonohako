@@ -181,6 +181,14 @@ The seccomp filter denies high-risk operations, including:
 - `fanotify_*`, keyring syscalls, module loading, swap, reboot, syslog
 - `chmod`, `chown`, `mknod`
 
+The helper must allow the initial `execve()` into the requested runtime or
+compiled binary. In the current denylist profile, that also leaves a post-start
+`execve()` surface: normal child-process creation is blocked, so shell-spawn
+patterns generally cannot fork a separate process, but a running submission can
+replace itself with another world-executable binary that is present in the
+runtime image. This is tracked as an image-surface risk until language-family
+allowlist profiles and minimal execute-only images are available.
+
 Per-request network disable adds seccomp denies for socket-related syscalls:
 
 - `socket`, `socketpair`
@@ -462,6 +470,13 @@ sandbox UID. Non-essential metadata and package-manager paths are made
 root-only, while shared libraries and language runtimes remain readable so the
 interpreter or binary can still start normally.
 
+Until execute-only images are split from compile images, image maintainers
+should treat every world-executable binary in the runtime image as reachable by
+submissions through the post-start `execve()` surface. Keep shells, package
+managers, compilers, debuggers, and diagnostics tooling out of execute images
+where language support allows it, and keep the remaining image content free of
+secrets.
+
 ## Security Boundary and Non-goals
 
 This is the most important operational point.
@@ -480,6 +495,8 @@ What the current Cloud Run-compatible design does not claim:
 
 - full filesystem read isolation from the runtime image
 - a mount-level view that exposes only `box/`
+- prevention of replacing the running process with another world-executable
+  binary from the runtime image
 - prevention of dynamic code execution inside languages such as Python, Elixir,
   JavaScript, or Java
 
