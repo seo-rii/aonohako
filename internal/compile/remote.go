@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
@@ -25,6 +26,7 @@ type remoteRunner struct {
 	bearerToken string
 	audience    string
 	metadataURL string
+	idleTimeout time.Duration
 }
 
 func newRemoteRunner(cfg config.Config) Runner {
@@ -39,6 +41,7 @@ func newRemoteRunner(cfg config.Config) Runner {
 		bearerToken: cfg.Execution.Remote.BearerToken,
 		audience:    cfg.Execution.Remote.Audience,
 		metadataURL: cloudRunMetadataIdentityURL,
+		idleTimeout: remoteio.DefaultSSEIdleTimeout,
 	}
 }
 
@@ -52,7 +55,10 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote request encode failed: " + err.Error()}
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, r.compileURL, bytes.NewReader(body))
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+
+	httpReq, err := http.NewRequestWithContext(streamCtx, http.MethodPost, r.compileURL, bytes.NewReader(body))
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote request build failed: " + err.Error()}
 	}
@@ -92,6 +98,17 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 	}
 
 	reader := remoteio.NewSSEReader(resp.Body)
+	idleTimeout := r.idleTimeout
+	if idleTimeout == 0 {
+		idleTimeout = remoteio.DefaultSSEIdleTimeout
+	}
+	if idleTimeout > 0 {
+		idleTimer := time.AfterFunc(idleTimeout, cancelStream)
+		defer idleTimer.Stop()
+		reader.SetActivityCallback(func() {
+			idleTimer.Reset(idleTimeout)
+		})
+	}
 	result := model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream ended without result"}
 
 	for {
@@ -99,6 +116,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return result
+			}
+			if streamCtx.Err() != nil && ctx.Err() == nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream idle timeout exceeded"}
 			}
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream failed: " + err.Error()}
 		}

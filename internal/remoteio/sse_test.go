@@ -35,3 +35,18 @@ func TestSSEReaderRejectsOversizedEvent(t *testing.T) {
 		t.Fatalf("expected event size error, got %v", err)
 	}
 }
+
+func TestSSEReaderReportsHeartbeatActivity(t *testing.T) {
+	reader := NewSSEReader(strings.NewReader(": heartbeat\n\n"))
+	activity := 0
+	reader.SetActivityCallback(func() {
+		activity++
+	})
+
+	if _, err := reader.Next(); !errors.Is(err, io.EOF) {
+		t.Fatalf("expected EOF after heartbeat-only stream, got %v", err)
+	}
+	if activity == 0 {
+		t.Fatalf("expected activity callback for heartbeat-only stream")
+	}
+}
