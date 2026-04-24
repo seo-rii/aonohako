@@ -51,6 +51,18 @@ func TestDefaultMaxActiveRunsEmbeddedHelperIsOne(t *testing.T) {
 	}
 }
 
+func TestDefaultMaxPrincipalStreams(t *testing.T) {
+	if got := defaultMaxPrincipalStreams(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}); got != 0 {
+		t.Fatalf("dev default principal stream cap = %d, want 0", got)
+	}
+	if got := defaultMaxPrincipalStreams(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetCloudRun}); got != 16 {
+		t.Fatalf("cloudrun default principal stream cap = %d, want 16", got)
+	}
+	if got := defaultMaxPrincipalStreams(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetSelfHosted}); got != 16 {
+		t.Fatalf("selfhosted default principal stream cap = %d, want 16", got)
+	}
+}
+
 func TestLoadRejectsCloudRunMarkersWithoutExplicitTarget(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "")
 	t.Setenv("K_SERVICE", "aonohako")
@@ -252,6 +264,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "3")
 	t.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "7")
 	t.Setenv("AONOHAKO_MAX_ACTIVE_STREAMS", "11")
+	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "5")
 	t.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "2")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
@@ -274,6 +287,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if cfg.MaxActiveStreams != 11 {
 		t.Fatalf("max active streams mismatch: %d", cfg.MaxActiveStreams)
 	}
+	if cfg.MaxPrincipalStreams != 5 {
+		t.Fatalf("max principal streams mismatch: %d", cfg.MaxPrincipalStreams)
+	}
 	if cfg.HeartbeatInterval != 2*time.Second {
 		t.Fatalf("heartbeat mismatch: %v", cfg.HeartbeatInterval)
 	}
@@ -292,6 +308,8 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "pending malformed", key: "AONOHAKO_MAX_PENDING_QUEUE", value: "many"},
 		{name: "streams negative", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "-1"},
 		{name: "streams malformed", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "many"},
+		{name: "principal streams negative", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", value: "-1"},
+		{name: "principal streams malformed", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", value: "many"},
 		{name: "heartbeat zero", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "0"},
 		{name: "heartbeat negative", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "-1"},
 		{name: "heartbeat malformed", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "soon"},
@@ -340,6 +358,9 @@ func TestLoadIgnoresLegacyEnvFallbacks(t *testing.T) {
 	}
 	if cfg.MaxActiveStreams != defaultMaxActiveStreams {
 		t.Fatalf("legacy max active streams env should be ignored, got %d", cfg.MaxActiveStreams)
+	}
+	if cfg.MaxPrincipalStreams != defaultMaxPrincipalStreams(cfg.Execution.Platform) {
+		t.Fatalf("legacy max principal streams env should be ignored, got %d", cfg.MaxPrincipalStreams)
 	}
 	if cfg.HeartbeatInterval != 10*time.Second {
 		t.Fatalf("legacy heartbeat env should be ignored, got %v", cfg.HeartbeatInterval)

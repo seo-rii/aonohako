@@ -2,15 +2,19 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +28,8 @@ import (
 
 const maxRunTextFieldBytes = 16 << 20
 
+type principalContextKey struct{}
+
 type Server struct {
 	cfg     config.Config
 	compile interface {
@@ -33,6 +39,9 @@ type Server struct {
 	queue   *queue.Manager
 	seq     atomic.Uint64
 	streams atomic.Int64
+
+	principalMu      sync.Mutex
+	principalStreams map[string]int
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -51,10 +60,11 @@ func NewWithServices(cfg config.Config, compileService interface {
 	Run(context.Context, *model.CompileRequest) model.CompileResponse
 }, executeRunner execute.Runner) *Server {
 	return &Server{
-		cfg:     cfg,
-		compile: compileService,
-		execute: executeRunner,
-		queue:   queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
+		cfg:              cfg,
+		compile:          compileService,
+		execute:          executeRunner,
+		queue:            queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
+		principalStreams: map[string]int{},
 	}
 }
 
@@ -81,9 +91,9 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
-	releaseStream, ok := s.acquireStream()
+	releaseStream, ok, code := s.acquireStream(principalFromContext(r.Context()))
 	if !ok {
-		writeJSONError(w, http.StatusTooManyRequests, "stream_limit_exceeded")
+		writeJSONError(w, http.StatusTooManyRequests, code)
 		return
 	}
 	defer releaseStream()
@@ -155,9 +165,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
-	releaseStream, ok := s.acquireStream()
+	releaseStream, ok, code := s.acquireStream(principalFromContext(r.Context()))
 	if !ok {
-		writeJSONError(w, http.StatusTooManyRequests, "stream_limit_exceeded")
+		writeJSONError(w, http.StatusTooManyRequests, code)
 		return
 	}
 	defer releaseStream()
@@ -239,18 +249,56 @@ func firstNonEmpty(v ...string) string {
 	return ""
 }
 
-func (s *Server) acquireStream() (func(), bool) {
-	if s.cfg.MaxActiveStreams <= 0 {
-		return func() {}, true
+func principalFromContext(ctx context.Context) string {
+	if principal, ok := ctx.Value(principalContextKey{}).(string); ok && principal != "" {
+		return principal
 	}
-	active := s.streams.Add(1)
-	if active > int64(s.cfg.MaxActiveStreams) {
-		s.streams.Add(-1)
-		return nil, false
+	return "anonymous:unknown"
+}
+
+func (s *Server) acquireStream(principal string) (func(), bool, string) {
+	if s.cfg.MaxActiveStreams <= 0 {
+		if s.cfg.MaxPrincipalStreams <= 0 {
+			return func() {}, true, ""
+		}
+	} else {
+		active := s.streams.Add(1)
+		if active > int64(s.cfg.MaxActiveStreams) {
+			s.streams.Add(-1)
+			return nil, false, "stream_limit_exceeded"
+		}
+	}
+	principalAcquired := false
+	if s.cfg.MaxPrincipalStreams > 0 {
+		s.principalMu.Lock()
+		if s.principalStreams == nil {
+			s.principalStreams = map[string]int{}
+		}
+		if s.principalStreams[principal] >= s.cfg.MaxPrincipalStreams {
+			s.principalMu.Unlock()
+			if s.cfg.MaxActiveStreams > 0 {
+				s.streams.Add(-1)
+			}
+			return nil, false, "principal_stream_limit_exceeded"
+		}
+		s.principalStreams[principal]++
+		principalAcquired = true
+		s.principalMu.Unlock()
 	}
 	return func() {
-		s.streams.Add(-1)
-	}, true
+		if s.cfg.MaxActiveStreams > 0 {
+			s.streams.Add(-1)
+		}
+		if principalAcquired {
+			s.principalMu.Lock()
+			if s.principalStreams[principal] <= 1 {
+				delete(s.principalStreams, principal)
+			} else {
+				s.principalStreams[principal]--
+			}
+			s.principalMu.Unlock()
+		}
+	}, true, ""
 }
 
 func writeJSONError(w http.ResponseWriter, status int, code string) {
@@ -262,8 +310,39 @@ func writeJSONError(w http.ResponseWriter, status int, code string) {
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch s.cfg.InboundAuth.Mode {
-		case "", config.InboundAuthNone, config.InboundAuthPlatform:
-			next.ServeHTTP(w, r)
+		case "", config.InboundAuthNone:
+			principal := "anonymous:"
+			if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host != "" {
+				principal += host
+			} else if r.RemoteAddr != "" {
+				principal += r.RemoteAddr
+			} else {
+				principal += "unknown"
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
+			return
+		case config.InboundAuthPlatform:
+			principal := ""
+			for _, header := range []string{"X-Aonohako-Principal", "X-Goog-Authenticated-User-Email", "X-Forwarded-Email", "X-Forwarded-User"} {
+				if value := strings.TrimSpace(r.Header.Get(header)); value != "" {
+					principal = "platform:" + value
+					break
+				}
+			}
+			if principal == "" {
+				principal = "platform:"
+				if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host != "" {
+					principal += host
+				} else if r.RemoteAddr != "" {
+					principal += r.RemoteAddr
+				} else {
+					principal += "unknown"
+				}
+			}
+			if len(principal) > 240 {
+				principal = principal[:240]
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
 			return
 		case config.InboundAuthBearer:
 			if s.cfg.InboundAuth.BearerToken == "" {
@@ -277,7 +356,8 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			next.ServeHTTP(w, r)
+			sum := sha256.Sum256([]byte(s.cfg.InboundAuth.BearerToken))
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, "bearer:"+hex.EncodeToString(sum[:8]))))
 			return
 		default:
 			http.Error(w, "server auth misconfigured", http.StatusInternalServerError)

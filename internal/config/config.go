@@ -52,13 +52,14 @@ const (
 )
 
 type Config struct {
-	Port              string
-	MaxActiveRuns     int
-	MaxPendingQueue   int
-	MaxActiveStreams  int
-	HeartbeatInterval time.Duration
-	Execution         ExecutionConfig
-	InboundAuth       InboundAuthConfig
+	Port                string
+	MaxActiveRuns       int
+	MaxPendingQueue     int
+	MaxActiveStreams    int
+	MaxPrincipalStreams int
+	HeartbeatInterval   time.Duration
+	Execution           ExecutionConfig
+	InboundAuth         InboundAuthConfig
 }
 
 func Load() (Config, error) {
@@ -76,6 +77,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	maxActiveStreams, err := parseNonNegativeIntEnv("AONOHAKO_MAX_ACTIVE_STREAMS", os.Getenv("AONOHAKO_MAX_ACTIVE_STREAMS"), defaultMaxActiveStreams)
+	if err != nil {
+		return Config{}, err
+	}
+	maxPrincipalStreams, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", os.Getenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS"), defaultMaxPrincipalStreams(runtimePlatform))
 	if err != nil {
 		return Config{}, err
 	}
@@ -186,13 +191,14 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Port:              port,
-		MaxActiveRuns:     maxActive,
-		MaxPendingQueue:   maxPending,
-		MaxActiveStreams:  maxActiveStreams,
-		HeartbeatInterval: time.Duration(heartbeatSec) * time.Second,
-		Execution:         execution,
-		InboundAuth:       inboundAuth,
+		Port:                port,
+		MaxActiveRuns:       maxActive,
+		MaxPendingQueue:     maxPending,
+		MaxActiveStreams:    maxActiveStreams,
+		MaxPrincipalStreams: maxPrincipalStreams,
+		HeartbeatInterval:   time.Duration(heartbeatSec) * time.Second,
+		Execution:           execution,
+		InboundAuth:         inboundAuth,
 	}, nil
 }
 
@@ -212,6 +218,13 @@ func defaultMaxActiveRuns(opts platform.RuntimeOptions) int {
 		return 1
 	}
 	return v
+}
+
+func defaultMaxPrincipalStreams(opts platform.RuntimeOptions) int {
+	if opts.DeploymentTarget == platform.DeploymentTargetDev {
+		return 0
+	}
+	return 16
 }
 
 func getenv(key, fallback string) string {
