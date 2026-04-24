@@ -119,6 +119,53 @@ func TestGroupAddProcWritesPID(t *testing.T) {
 	}
 }
 
+func TestGroupRemoveDeletesRunGroup(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-cleanup", Limits{
+		MemoryMaxBytes: 64 << 20,
+		PidsMax:        16,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+	removeFakeCgroupFiles(t, group)
+	if err := group.Remove(); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if _, err := os.Stat(group.Path); !os.IsNotExist(err) {
+		t.Fatalf("group path should be removed, stat err=%v", err)
+	}
+	if err := group.Remove(); err != nil {
+		t.Fatalf("second Remove() should be idempotent, got %v", err)
+	}
+}
+
+func TestGroupRemoveRejectsNonEmptyRunGroup(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-nonempty", Limits{
+		MemoryMaxBytes: 64 << 20,
+		PidsMax:        16,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+	removeFakeCgroupFiles(t, group)
+	writeFile(t, filepath.Join(group.Path, "leftover"), "x")
+	if err := group.Remove(); err == nil {
+		t.Fatalf("Remove() error = nil, want non-empty cgroup rejection")
+	}
+}
+
+func removeFakeCgroupFiles(t *testing.T, group Group) {
+	t.Helper()
+	for _, name := range []string{"memory.max", "pids.max", "cpu.max"} {
+		err := os.Remove(filepath.Join(group.Path, name))
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatalf("remove fake cgroup file %s: %v", name, err)
+		}
+	}
+}
+
 func assertFile(t *testing.T, path, want string) {
 	t.Helper()
 	body, err := os.ReadFile(path)

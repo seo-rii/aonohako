@@ -93,3 +93,13 @@ func (g Group) AddProc(pid int) error {
 	}
 	return nil
 }
+
+func (g Group) Remove() error {
+	if strings.TrimSpace(g.Path) == "" {
+		return nil
+	}
+	if err := os.Remove(g.Path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove cgroup %s: %w", g.Path, err)
+	}
+	return nil
+}
