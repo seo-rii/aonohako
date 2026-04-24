@@ -1,10 +1,10 @@
 package compile
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +13,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/remoteio"
 )
 
 const cloudRunMetadataIdentityURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
@@ -32,7 +33,7 @@ func newRemoteRunner(cfg config.Config) Runner {
 		auth = config.RemoteAuthNone
 	}
 	return &remoteRunner{
-		client:      &http.Client{},
+		client:      remoteio.NewHTTPClient(),
 		compileURL:  normalizeRemoteCompileURL(cfg.Execution.Remote.URL),
 		auth:        auth,
 		bearerToken: cfg.Execution.Remote.BearerToken,
@@ -90,53 +91,29 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("remote compile returned unexpected content type: %s", contentType)}
 	}
 
-	reader := bufio.NewReader(resp.Body)
-	eventName := ""
-	dataLines := make([]string, 0, 4)
+	reader := remoteio.NewSSEReader(resp.Body)
 	result := model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream ended without result"}
 
-	dispatch := func() bool {
-		if eventName == "" {
-			dataLines = dataLines[:0]
-			return false
+	for {
+		event, err := reader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return result
+			}
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream failed: " + err.Error()}
 		}
-		payload := strings.Join(dataLines, "\n")
-		dataLines = dataLines[:0]
-		switch eventName {
+		switch event.Name {
 		case "error":
 			var remoteErr struct {
 				Message string `json:"message"`
 			}
-			if err := json.Unmarshal([]byte(payload), &remoteErr); err == nil && strings.TrimSpace(remoteErr.Message) != "" {
+			if err := json.Unmarshal([]byte(event.Data), &remoteErr); err == nil && strings.TrimSpace(remoteErr.Message) != "" {
 				result.Reason = remoteErr.Message
 			}
 		case "result":
-			if err := json.Unmarshal([]byte(payload), &result); err != nil {
+			if err := json.Unmarshal([]byte(event.Data), &result); err != nil {
 				result = model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote result decode failed: " + err.Error()}
 			}
-			return true
-		}
-		return false
-	}
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil && err != io.EOF {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream failed: " + err.Error()}
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			if dispatch() {
-				return result
-			}
-			eventName = ""
-		} else if strings.HasPrefix(line, "event:") {
-			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-		} else if strings.HasPrefix(line, "data:") {
-			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
-		}
-		if err == io.EOF {
-			dispatch()
 			return result
 		}
 	}

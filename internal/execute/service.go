@@ -24,6 +24,9 @@ const (
 	maxBinaryTotalBytes          = 48 << 20
 	maxCapturedFileBytes         = 8 << 20
 	maxCapturedSidecarTotalBytes = 16 << 20
+	maxImageStreamBytes          = 8 << 20
+	maxImageEventBytes           = 1 << 20
+	maxImageEventsPerRead        = 8
 	ocamlRunParam                = "s=32k"
 	elixirERLAFlags              = "+MIscs 128 +S 1:1 +A 1 +MMscs 0"
 )
@@ -34,24 +37,33 @@ type Hooks struct {
 }
 
 type cappedBuffer struct {
-	limit int
-	buf   bytes.Buffer
+	limit     int
+	truncated bool
+	buf       bytes.Buffer
 }
 
 func (b *cappedBuffer) Write(p []byte) (int, error) {
+	written := len(p)
 	if remaining := b.limit - b.buf.Len(); remaining > 0 {
 		if len(p) > remaining {
+			b.truncated = true
 			p = p[:remaining]
 		}
 		if _, err := b.buf.Write(p); err != nil {
 			return 0, err
 		}
+	} else if len(p) > 0 {
+		b.truncated = true
 	}
-	return len(p), nil
+	return written, nil
 }
 
 func (b *cappedBuffer) Bytes() []byte {
 	return b.buf.Bytes()
+}
+
+func (b *cappedBuffer) Truncated() bool {
+	return b.truncated
 }
 
 type Service struct {
@@ -134,7 +146,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		}
 	}
 
-	sidecarOutputs := captureSidecarOutputs(ws, req.SidecarOutputs)
+	sidecarOutputs, sidecarErrors := captureSidecarOutputs(ws, req.SidecarOutputs)
 	status, score := evaluateRunStatus(ctx, ws, req, res, judgeOut)
 
 	var outResp, errResp string
@@ -155,16 +167,19 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 
 	return model.RunResponse{
-		Status:         status,
-		TimeMs:         res.WallTimeMs,
-		WallTimeMs:     res.WallTimeMs,
-		CPUTimeMs:      res.CPUTimeMs,
-		MemoryKB:       res.MemoryKB,
-		ExitCode:       res.ExitCode,
-		Stdout:         outResp,
-		Stderr:         errResp,
-		Reason:         res.Reason,
-		Score:          score,
-		SidecarOutputs: sidecarOutputs,
+		Status:          status,
+		TimeMs:          res.WallTimeMs,
+		WallTimeMs:      res.WallTimeMs,
+		CPUTimeMs:       res.CPUTimeMs,
+		MemoryKB:        res.MemoryKB,
+		ExitCode:        res.ExitCode,
+		Stdout:          outResp,
+		Stderr:          errResp,
+		StdoutTruncated: res.StdoutTruncated,
+		StderrTruncated: res.StderrTruncated,
+		Reason:          res.Reason,
+		Score:           score,
+		SidecarOutputs:  sidecarOutputs,
+		SidecarErrors:   sidecarErrors,
 	}
 }

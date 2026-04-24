@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"aonohako/internal/config"
@@ -126,6 +127,39 @@ func TestRemoteRunnerRejectsNonSSESuccessResponses(t *testing.T) {
 	}
 	if got := resp.Reason; got == "" || got == "remote execute stream ended without result" {
 		t.Fatalf("expected explicit non-SSE reason, got %+v", resp)
+	}
+}
+
+func TestRemoteRunnerRejectsOversizedSSEEvents(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: log\n"))
+		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write([]byte(strings.Repeat("x", 300<<10)))
+		_, _ = w.Write([]byte("\n\n"))
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:     "text",
+		Binaries: []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+		Limits:   model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "sse line too large") {
+		t.Fatalf("expected bounded SSE failure, got %+v", resp)
 	}
 }
 

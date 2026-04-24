@@ -130,6 +130,42 @@ func TestStreamImageEventsSkipsInvalidLines(t *testing.T) {
 	t.Fatalf("expected exactly two valid events, got %v", events)
 }
 
+func TestStreamImageEventsSkipsOversizedPayloads(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+	imgDir := filepath.Join(workDir, "__img__")
+	if err := os.MkdirAll(imgDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	imgPath := filepath.Join(imgDir, "images.jsonl")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	events := 0
+	go streamImageEvents(ctx, ws, "__img__/images.jsonl", func(mime, b64 string, ts int64) {
+		mu.Lock()
+		events++
+		mu.Unlock()
+	})
+
+	line := fmt.Sprintf("{\"mime\":\"image/png\",\"b64\":%q,\"ts\":123}\n", strings.Repeat("x", maxImageEventBytes+1))
+	if err := os.WriteFile(imgPath, []byte(line), 0o644); err != nil {
+		t.Fatalf("write image file: %v", err)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if events != 0 {
+		t.Fatalf("expected oversized image payload to be skipped, got %d events", events)
+	}
+}
+
 func TestStreamImageEventsRejectsSymlinkEscape(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)
@@ -349,6 +385,19 @@ func TestRunRejectsTooManySidecarOutputs(t *testing.T) {
 	}
 }
 
+func TestCappedBufferTracksTruncation(t *testing.T) {
+	buf := cappedBuffer{limit: 4}
+	if n, err := buf.Write([]byte("abcdef")); err != nil || n != 6 {
+		t.Fatalf("Write returned n=%d err=%v", n, err)
+	}
+	if string(buf.Bytes()) != "abcd" {
+		t.Fatalf("buffer content = %q", string(buf.Bytes()))
+	}
+	if !buf.Truncated() {
+		t.Fatalf("expected truncated flag")
+	}
+}
+
 func TestRunCapturesSidecarOutput(t *testing.T) {
 	forceDirectMode(t)
 	svc := New()
@@ -361,7 +410,7 @@ func TestRunCapturesSidecarOutput(t *testing.T) {
 		}},
 		ExpectedStdout: "",
 		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
-		SidecarOutputs: []model.OutputFile{{Path: "result.txt"}},
+		SidecarOutputs: []model.OutputFile{{Path: "result.txt"}, {Path: "missing.txt"}},
 	}
 
 	resp := svc.Run(context.Background(), req, Hooks{})
@@ -370,6 +419,9 @@ func TestRunCapturesSidecarOutput(t *testing.T) {
 	}
 	if len(resp.SidecarOutputs) != 1 {
 		t.Fatalf("expected one sidecar output, got %d", len(resp.SidecarOutputs))
+	}
+	if len(resp.SidecarErrors) != 1 || resp.SidecarErrors[0].Path != "missing.txt" {
+		t.Fatalf("expected one missing sidecar diagnostic, got %+v", resp.SidecarErrors)
 	}
 	decoded, err := base64.StdEncoding.DecodeString(resp.SidecarOutputs[0].DataB64)
 	if err != nil {
@@ -1326,9 +1378,12 @@ func TestCaptureSidecarOutputsSkipsOversizedFile(t *testing.T) {
 		t.Fatalf("write large sidecar: %v", err)
 	}
 
-	outputs := captureSidecarOutputs(ws, []model.OutputFile{{Path: "large.txt"}})
+	outputs, errs := captureSidecarOutputs(ws, []model.OutputFile{{Path: "large.txt"}})
 	if len(outputs) != 0 {
 		t.Fatalf("expected oversized sidecar to be ignored, got %d outputs", len(outputs))
+	}
+	if len(errs) != 1 || errs[0].Reason != "file too large" {
+		t.Fatalf("expected sidecar size diagnostic, got %+v", errs)
 	}
 }
 

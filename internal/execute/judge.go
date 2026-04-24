@@ -83,35 +83,41 @@ func captureFileOutput(ws Workspace, spec model.OutputFile) ([]byte, error) {
 	return data, nil
 }
 
-func captureSidecarOutputs(ws Workspace, specs []model.OutputFile) []model.SidecarOutput {
+func captureSidecarOutputs(ws Workspace, specs []model.OutputFile) ([]model.SidecarOutput, []model.SidecarError) {
 	outputs := make([]model.SidecarOutput, 0, len(specs))
+	errs := make([]model.SidecarError, 0)
 	var totalBytes int64
 	for _, spec := range specs {
 		output, err := openCapturedOutput(ws, spec.Path)
 		if err != nil {
+			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "capture failed"})
 			continue
 		}
 		if output.info.Size() > maxCapturedFileBytes {
 			output.cleanup()
+			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "file too large"})
 			continue
 		}
 		totalBytes += output.info.Size()
 		if totalBytes > maxCapturedSidecarTotalBytes {
 			output.cleanup()
+			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "sidecar total size exceeded"})
 			continue
 		}
 		if _, err := output.file.Seek(0, 0); err != nil {
 			output.cleanup()
+			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "read failed"})
 			continue
 		}
 		data, err := ioReadAll(bufio.NewReader(output.file))
 		output.cleanup()
 		if err != nil {
+			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "read failed"})
 			continue
 		}
 		outputs = append(outputs, model.SidecarOutput{Path: spec.Path, DataB64: util.EncodeB64(data)})
 	}
-	return outputs
+	return outputs, errs
 }
 
 func hasSPJ(req *model.RunRequest) bool {
