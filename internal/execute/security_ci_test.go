@@ -35,6 +35,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "submitted-file-removal", fn: TestRunPreventsRemovingOrReplacingSubmittedFiles},
 		{name: "submitted-file-overwrite", fn: TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles},
 		{name: "thread-storm", fn: TestRunBlocksThreadStorms},
+		{name: "many-small-files", fn: TestRunMarksWorkspaceEntryLimitExceeded},
 		{name: "nested-path-permissions", fn: TestMaterializeFilesKeepsNestedPathsReadableAndWritableToSandboxUser},
 		{name: "java-jar-permissions", fn: TestMaterializeFilesBuildsReadableSubmissionJarForSandboxUser},
 	}
