@@ -12,6 +12,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/remoteio"
 )
 
 func TestRemoteRunnerForwardsSSELogsImagesAndResult(t *testing.T) {
@@ -189,6 +190,38 @@ func TestRemoteRunnerTimesOutIdleSSEStream(t *testing.T) {
 	}, Hooks{})
 	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "idle timeout") {
 		t.Fatalf("expected idle timeout failure, got %+v", resp)
+	}
+}
+
+func TestRemoteRunnerRejectsProtocolVersionMismatch(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set(remoteio.ProtocolVersionHeader, "1900-01-01")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"Accepted\",\"time_ms\":1,\"wall_time_ms\":1,\"cpu_time_ms\":1}\n\n"))
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:     "text",
+		Binaries: []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+		Limits:   model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "protocol mismatch") {
+		t.Fatalf("expected protocol mismatch failure, got %+v", resp)
 	}
 }
 

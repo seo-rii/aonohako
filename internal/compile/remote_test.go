@@ -12,6 +12,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/remoteio"
 )
 
 func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
@@ -173,5 +174,42 @@ func TestRemoteRunnerCompileTimesOutIdleSSEStream(t *testing.T) {
 	})
 	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "idle timeout") {
 		t.Fatalf("expected idle timeout failure, got %+v", resp)
+	}
+}
+
+func TestRemoteRunnerCompileRejectsProtocolVersionMismatch(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set(remoteio.ProtocolVersionHeader, "1900-01-01")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"compiled\\n\"}\n\n"))
+	}))
+	defer remote.Close()
+
+	runner, err := Build(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "protocol mismatch") {
+		t.Fatalf("expected protocol mismatch failure, got %+v", resp)
 	}
 }

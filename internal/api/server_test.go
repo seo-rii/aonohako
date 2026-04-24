@@ -18,6 +18,7 @@ import (
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/remoteio"
 )
 
 type executeRunnerStub struct {
@@ -472,6 +473,9 @@ func TestExecuteSSESequence(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
+	if got := resp.Header.Get(remoteio.ProtocolVersionHeader); got != remoteio.ProtocolVersion {
+		t.Fatalf("protocol version header = %q, want %q", got, remoteio.ProtocolVersion)
+	}
 
 	events := readSSEEvents(resp.Body, t)
 	if len(events) < 3 {
@@ -558,6 +562,9 @@ func TestExecuteSSESequenceViaRemoteRunner(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
+	if got := resp.Header.Get(remoteio.ProtocolVersionHeader); got != remoteio.ProtocolVersion {
+		t.Fatalf("protocol version header = %q, want %q", got, remoteio.ProtocolVersion)
+	}
 
 	events := readSSEEvents(resp.Body, t)
 	if len(events) < 4 {
@@ -624,6 +631,9 @@ func TestCompileSSESequenceViaRemoteRunner(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get(remoteio.ProtocolVersionHeader); got != remoteio.ProtocolVersion {
+		t.Fatalf("protocol version header = %q, want %q", got, remoteio.ProtocolVersion)
 	}
 
 	events := readSSEEvents(resp.Body, t)

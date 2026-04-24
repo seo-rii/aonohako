@@ -344,6 +344,8 @@ The following checks are enforced before the HTTP server starts:
 - remote runner SSE responses are parsed with bounded line, event, and stream
   sizes, and the remote HTTP transport sets dial, TLS handshake, response
   header, idle connection, and SSE idle heartbeat timeouts
+- remote runner protocol-version headers are backward compatible when absent
+  and fail closed when present with an unsupported value
 - inbound `/compile` and `/execute` authentication defaults to bearer tokens
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication

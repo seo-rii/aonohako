@@ -206,3 +206,8 @@ Callers should implement exponential backoff on 429.
 | `Cache-Control` | `no-cache` |
 | `Connection` | `keep-alive` |
 | `X-Accel-Buffering` | `no` |
+| `X-Aonohako-Protocol-Version` | `2026-04-24` |
+
+Remote control planes accept missing protocol-version headers for older
+runners, but reject a present `X-Aonohako-Protocol-Version` value that does not
+match the current protocol.
