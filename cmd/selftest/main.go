@@ -23,6 +23,7 @@ import (
 	"aonohako/internal/compile"
 	"aonohako/internal/config"
 	"aonohako/internal/execute"
+	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
@@ -44,13 +45,15 @@ type compileExecuteCase struct {
 	sources        []model.Source
 }
 
+const selftestUsage = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|cgroup-preflight"
+
 func main() {
 	if sandbox.MaybeRunFromEnv() {
 		return
 	}
 
 	if len(os.Args) != 2 {
-		_, _ = fmt.Fprintln(os.Stderr, "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute")
+		_, _ = fmt.Fprintln(os.Stderr, selftestUsage)
 		os.Exit(2)
 	}
 
@@ -75,10 +78,28 @@ func main() {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "cgroup-preflight":
+		if err := runCgroupPreflightSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	default:
 		_, _ = fmt.Fprintf(os.Stderr, "unknown selftest suite: %s\n", os.Args[1])
 		os.Exit(2)
 	}
+}
+
+func runCgroupPreflightSuite() error {
+	result := cgroup.Preflight()
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		return fmt.Errorf("encode cgroup preflight result: %w", err)
+	}
+	if !result.Available {
+		return fmt.Errorf("cgroup preflight unavailable: %s", result.Reason)
+	}
+	return nil
 }
 
 func runImagePermissionsSuite() error {

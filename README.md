@@ -110,6 +110,12 @@ Repository policy check:
 ./scripts/check_repo_policy.sh
 ```
 
+Self-hosted runner hosts can also check future cgroup backend prerequisites:
+
+```sh
+aonohako-selftest cgroup-preflight
+```
+
 ## Configuration
 
 - `PORT` defaults to `8080`

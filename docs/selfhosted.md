@@ -120,6 +120,15 @@ This check is intentionally separate from execution for now. The future
 container backend should use it as a startup gate before creating per-run
 cgroups or allowing child-process accounting.
 
+Operators can run the same check explicitly on a candidate runner host:
+
+```bash
+aonohako-selftest cgroup-preflight
+```
+
+The command prints the preflight result as JSON and exits non-zero when required
+cgroup v2 controls are unavailable.
+
 The same package now defines the write contract for one run cgroup:
 
 - create a sanitized run group name under the selected parent
