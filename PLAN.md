@@ -60,6 +60,8 @@
   matrix 기준으로 남아 있다.
 - Phase 6: runtime Dockerfile builder/runtime base와 runtime catalog production
   profile base image를 digest-pinned reference로 바꾸고 repo tests로 고정했다.
+- Phase 2: per-run cgroup 생성 시 `memory.oom.group=1`을 설정해 future
+  child-process mode에서 run 전체가 하나의 OOM domain으로 취급되게 했다.
 
 ## 작업 원칙
 
