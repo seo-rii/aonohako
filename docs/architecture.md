@@ -349,6 +349,7 @@ The following checks are enforced before the HTTP server starts:
 - inbound `/compile` and `/execute` authentication defaults to bearer tokens
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication
+- `AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`
 - numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
   `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`,
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`,

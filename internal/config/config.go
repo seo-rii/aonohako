@@ -170,6 +170,9 @@ func Load() (Config, error) {
 	default:
 		return Config{}, fmt.Errorf("unsupported inbound auth mode: %s", inboundAuth.Mode)
 	}
+	if inboundAuth.Mode == InboundAuthNone && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev {
+		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=none is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev; use bearer or platform")
+	}
 
 	if contract.RequiresSingleActiveRun && maxActive != 1 {
 		return Config{}, fmt.Errorf("embedded helper execution requires AONOHAKO_MAX_ACTIVE_RUNS=1")

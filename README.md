@@ -166,7 +166,8 @@ aonohako-selftest cgroup-preflight
   where a positive integer is required fail startup instead of falling back.
 - `AONOHAKO_INBOUND_AUTH` controls inbound `/compile` and `/execute`
   authentication. It defaults to `none` for `dev` and `bearer` for `cloudrun`
-  or `selfhosted`. Supported values are `none`, `bearer`, and `platform`.
+  or `selfhosted`. Supported values are `none` for `dev` only, `bearer`, and
+  `platform`.
 - `AONOHAKO_API_BEARER_TOKEN` is required when
   `AONOHAKO_INBOUND_AUTH=bearer`.
 - `AONOHAKO_INBOUND_AUTH=platform` documents that Cloud Run IAM, an API

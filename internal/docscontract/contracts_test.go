@@ -123,6 +123,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "protocol-version headers are backward compatible when absent") || !strings.Contains(architecture, "fail closed when present with an unsupported value") {
 		t.Fatalf("architecture.md must describe remote protocol version mismatch handling")
 	}
+	if !strings.Contains(architecture, "`AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`") {
+		t.Fatalf("architecture.md must describe production inbound-auth none rejection")
+	}
 	if !strings.Contains(architecture, "`AONOHAKO_MAX_ACTIVE_STREAMS`") {
 		t.Fatalf("architecture.md must describe active stream cap validation")
 	}
@@ -175,6 +178,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30`",
+		"Supported values are `none` for `dev` only, `bearer`, and\n  `platform`",
 		"aonohako-selftest deployment-contract",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
