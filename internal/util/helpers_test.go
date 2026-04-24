@@ -6,6 +6,26 @@ import (
 	"testing"
 )
 
+func TestValidateRelativePathAllowsBenignDotDotSubstring(t *testing.T) {
+	got, err := ValidateRelativePath("dir/a..b.txt")
+	if err != nil {
+		t.Fatalf("ValidateRelativePath returned error: %v", err)
+	}
+	if got != filepath.Join("dir", "a..b.txt") {
+		t.Fatalf("clean path = %q", got)
+	}
+}
+
+func TestValidateRelativePathRejectsTraversalSegments(t *testing.T) {
+	for _, name := range []string{"../escape.txt", "dir/../../escape.txt", "/tmp/escape.txt", "."} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ValidateRelativePath(name); err == nil {
+				t.Fatalf("expected %q to be rejected", name)
+			}
+		})
+	}
+}
+
 func TestResolveCommandPathUsesProvidedPath(t *testing.T) {
 	tempDir := t.TempDir()
 	safeDir := filepath.Join(tempDir, "safe")

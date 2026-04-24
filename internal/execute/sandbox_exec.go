@@ -113,8 +113,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			break
 		}
 	}
-	disableDotnetLimits := filepath.Base(finalCommand[0]) == "dotnet"
-	disableAddressSpaceLimit := disableDotnetLimits
+	isDotnet := filepath.Base(finalCommand[0]) == "dotnet"
+	disableAddressSpaceLimit := isDotnet
 	switch filepath.Base(finalCommand[0]) {
 	case "node", "wasmtime", "umjunsik-lang-go":
 		disableAddressSpaceLimit = true
@@ -149,10 +149,10 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		Limits:                   req.Limits,
 		ThreadLimit:              sandboxThreadLimit,
 		OpenFileLimit:            openFileLimit,
+		FileSizeLimitBytes:       security.FileSizeLimitForCommand(finalCommand[0], workspaceLimitBytes),
 		EnableNetwork:            req.EnableNetwork,
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  allowUnixSockets,
-		DisableFileSizeLimit:     disableDotnetLimits,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 	}
 	rawReq, err := json.Marshal(helperReq)
@@ -327,17 +327,20 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 
 			if result.Status == "OK" && (lastWorkspaceScan.IsZero() || time.Since(lastWorkspaceScan) >= 25*time.Millisecond) {
 				lastWorkspaceScan = time.Now()
-				workspaceBytes := int64(0)
-				_ = filepath.Walk(ws.RootDir, func(path string, info os.FileInfo, err error) error {
-					if err != nil || info == nil {
-						return nil
-					}
-					if info.Mode().IsRegular() {
-						workspaceBytes += info.Size()
-					}
-					return nil
-				})
-				if workspaceBytes > workspaceLimitBytes {
+				usage, err := scanWorkspaceUsage(ws.RootDir)
+				if errors.Is(err, errWorkspaceEntryLimitExceeded) {
+					result.Status = model.RunStatusWLE
+					result.Reason = "workspace entry limit exceeded"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					continue
+				}
+				if errors.Is(err, errWorkspaceDepthExceeded) {
+					result.Status = model.RunStatusWLE
+					result.Reason = "workspace depth exceeded"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					continue
+				}
+				if usage.bytes > workspaceLimitBytes {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace quota exceeded"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)

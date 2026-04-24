@@ -176,6 +176,9 @@ func MaybeRunFromEnv() bool {
 		if req.Limits.WorkspaceBytes > 0 {
 			fileSizeLimit = uint64(req.Limits.WorkspaceBytes)
 		}
+		if req.FileSizeLimitBytes > 0 {
+			fileSizeLimit = req.FileSizeLimitBytes
+		}
 		limits = append(limits, struct {
 			resource int
 			value    uint64

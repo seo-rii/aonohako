@@ -1589,7 +1589,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 		command[0] = path
 	}
-	disableDotnetLimits := filepath.Base(command[0]) == "dotnet"
+	disableAddressSpaceLimit := filepath.Base(command[0]) == "dotnet"
 	allowProcessGroups := filepath.Base(command[0]) == "swiftc"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
@@ -1607,12 +1607,12 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		},
 		ThreadLimit:              compileSandboxThreadLimit,
 		OpenFileLimit:            openFileLimit,
+		FileSizeLimitBytes:       security.FileSizeLimitForCommand(command[0], compileWorkspaceBytes),
 		EnableNetwork:            false,
 		AllowUnixSockets:         true,
 		AllowProcesses:           true,
 		AllowProcessGroups:       allowProcessGroups,
-		DisableFileSizeLimit:     disableDotnetLimits,
-		DisableAddressSpaceLimit: disableDotnetLimits,
+		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
