@@ -104,6 +104,12 @@ Run the test suite:
 go test ./...
 ```
 
+Validate the current deployment environment without starting the HTTP server:
+
+```bash
+aonohako-selftest deployment-contract
+```
+
 Repository policy check:
 
 ```bash

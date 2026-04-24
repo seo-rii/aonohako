@@ -175,6 +175,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30`",
+		"aonohako-selftest deployment-contract",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`embedded + helper` backend rejects values other than `1`",
