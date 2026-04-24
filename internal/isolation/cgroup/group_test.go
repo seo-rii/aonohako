@@ -22,6 +22,7 @@ func TestCreateRunGroupWritesRequiredLimits(t *testing.T) {
 		t.Fatalf("path = %q", group.Path)
 	}
 	assertFile(t, filepath.Join(group.Path, "memory.max"), "134217728")
+	assertFile(t, filepath.Join(group.Path, "memory.oom.group"), "1")
 	assertFile(t, filepath.Join(group.Path, "pids.max"), "32")
 	assertFile(t, filepath.Join(group.Path, "cpu.max"), "100000 200000")
 }
@@ -158,7 +159,7 @@ func TestGroupRemoveRejectsNonEmptyRunGroup(t *testing.T) {
 
 func removeFakeCgroupFiles(t *testing.T, group Group) {
 	t.Helper()
-	for _, name := range []string{"memory.max", "pids.max", "cpu.max"} {
+	for _, name := range []string{"memory.max", "memory.oom.group", "pids.max", "cpu.max"} {
 		err := os.Remove(filepath.Join(group.Path, name))
 		if err != nil && !os.IsNotExist(err) {
 			t.Fatalf("remove fake cgroup file %s: %v", name, err)

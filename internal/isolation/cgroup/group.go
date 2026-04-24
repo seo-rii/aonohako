@@ -62,6 +62,7 @@ func CreateRunGroup(parentDir, name string, limits Limits) (Group, error) {
 		value string
 	}{
 		{file: "memory.max", value: strconv.FormatInt(limits.MemoryMaxBytes, 10)},
+		{file: "memory.oom.group", value: "1"},
 		{file: "pids.max", value: strconv.Itoa(limits.PidsMax)},
 	}
 	if limits.CPUQuotaMicros > 0 {
