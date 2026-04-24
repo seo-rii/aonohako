@@ -48,6 +48,11 @@
 - Phase 2: cgroup accounting reader가 `memory.events`, `pids.events`,
   `cpu.stat`의 limit signal을 노출해 future verdict reason이 RSS polling에만
   의존하지 않게 했다.
+- Phase 11: execute sandbox suite에 filesystem metadata syscall과 BPF,
+  userfaultfd, io_uring, perf-event probe를 추가해 denylist regression
+  coverage를 넓혔다.
+- Phase 18: compile sandbox suite에도 동일한 kernel attack surface syscall
+  probe를 추가해 `/compile`이 적대 입력 실행면임을 테스트로 고정했다.
 
 ## 작업 원칙
 
