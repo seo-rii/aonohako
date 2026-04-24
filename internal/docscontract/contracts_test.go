@@ -126,6 +126,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "protocol-version headers are backward compatible when absent") || !strings.Contains(architecture, "fail closed when present with an unsupported value") {
 		t.Fatalf("architecture.md must describe remote protocol version mismatch handling")
 	}
+	if !strings.Contains(architecture, "malformed remote `log`, `image`, `error`, or `result` events fail") {
+		t.Fatalf("architecture.md must describe malformed remote event handling")
+	}
 	if !strings.Contains(architecture, "`AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`") {
 		t.Fatalf("architecture.md must describe production inbound-auth none rejection")
 	}

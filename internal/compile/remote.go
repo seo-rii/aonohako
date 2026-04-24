@@ -130,7 +130,10 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 			var remoteErr struct {
 				Message string `json:"message"`
 			}
-			if err := json.Unmarshal([]byte(event.Data), &remoteErr); err == nil && strings.TrimSpace(remoteErr.Message) != "" {
+			if err := json.Unmarshal([]byte(event.Data), &remoteErr); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote error decode failed: " + err.Error()}
+			}
+			if strings.TrimSpace(remoteErr.Message) != "" {
 				result.Reason = remoteErr.Message
 			}
 		case "result":
