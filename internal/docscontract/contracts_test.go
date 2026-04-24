@@ -46,6 +46,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 
 	protocolWants := []string{
 		"Both `/compile` and `/execute` share the same bounded queue",
+		"`AONOHAKO_MAX_ACTIVE_STREAMS`",
+		`"stream_limit_exceeded"`,
 		"buffered stdout / stderr payloads emitted before `result`",
 		"keeps the same SSE contract for `/compile` and `/execute`",
 		"forwards `log`, `image`, `error`, and `result`",
@@ -98,8 +100,11 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "unsupported runtime security contracts fail startup before request handling") {
 		t.Fatalf("architecture.md must describe fail-closed security contract validation")
 	}
-	if !strings.Contains(architecture, "malformed or out-of-range values fail startup") {
+	if !strings.Contains(architecture, "malformed or out-of-range") || !strings.Contains(architecture, "values fail startup") {
 		t.Fatalf("architecture.md must describe strict numeric env parsing")
+	}
+	if !strings.Contains(architecture, "`AONOHAKO_MAX_ACTIVE_STREAMS`") {
+		t.Fatalf("architecture.md must describe active stream cap validation")
 	}
 	if !strings.Contains(architecture, "API/control-plane instances in `dev + remote + none`") || !strings.Contains(architecture, "horizontal scale by adding runner instances") {
 		t.Fatalf("architecture.md must describe the self-hosted scale-out path")
@@ -131,6 +136,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"fail startup instead of falling back",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"non-root development path)",
+		"`AONOHAKO_MAX_ACTIVE_STREAMS` defaults to `64`",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`embedded + helper` backend rejects values other than `1`",

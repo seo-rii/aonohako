@@ -46,12 +46,16 @@ type ExecutionConfig struct {
 	Remote   RemoteExecutorConfig
 }
 
-const defaultMaxPendingQueue = 16
+const (
+	defaultMaxPendingQueue  = 16
+	defaultMaxActiveStreams = 64
+)
 
 type Config struct {
 	Port              string
 	MaxActiveRuns     int
 	MaxPendingQueue   int
+	MaxActiveStreams  int
 	HeartbeatInterval time.Duration
 	Execution         ExecutionConfig
 	InboundAuth       InboundAuthConfig
@@ -68,6 +72,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	maxPending, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PENDING_QUEUE", os.Getenv("AONOHAKO_MAX_PENDING_QUEUE"), defaultMaxPendingQueue)
+	if err != nil {
+		return Config{}, err
+	}
+	maxActiveStreams, err := parseNonNegativeIntEnv("AONOHAKO_MAX_ACTIVE_STREAMS", os.Getenv("AONOHAKO_MAX_ACTIVE_STREAMS"), defaultMaxActiveStreams)
 	if err != nil {
 		return Config{}, err
 	}
@@ -181,6 +189,7 @@ func Load() (Config, error) {
 		Port:              port,
 		MaxActiveRuns:     maxActive,
 		MaxPendingQueue:   maxPending,
+		MaxActiveStreams:  maxActiveStreams,
 		HeartbeatInterval: time.Duration(heartbeatSec) * time.Second,
 		Execution:         execution,
 		InboundAuth:       inboundAuth,

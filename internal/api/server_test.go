@@ -76,6 +76,51 @@ func TestExecuteQueueOverflowReturns429(t *testing.T) {
 	}
 }
 
+func TestExecuteActiveStreamOverflowReturns429(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.MaxPendingQueue = 8
+	cfg.MaxActiveStreams = 1
+	unblock := make(chan struct{})
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		<-unblock
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	body := executePayload(t)
+	req1, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	resp1, err := http.DefaultClient.Do(req1)
+	if err != nil {
+		t.Fatalf("first request failed: %v", err)
+	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != http.StatusOK {
+		t.Fatalf("first request status = %d, want 200", resp1.StatusCode)
+	}
+
+	req2, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("second request failed: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("second request status = %d, want 429", resp2.StatusCode)
+	}
+	var payload map[string]string
+	if err := json.NewDecoder(resp2.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	if payload["error"] != "stream_limit_exceeded" {
+		t.Fatalf("error = %q, want stream_limit_exceeded", payload["error"])
+	}
+	close(unblock)
+	_, _ = io.Copy(io.Discard, resp1.Body)
+}
+
 func TestHealthz(t *testing.T) {
 	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())
@@ -447,6 +492,19 @@ func configForTest(t *testing.T) config.Config {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
 	return config.Config{Port: "0", MaxActiveRuns: 1, MaxPendingQueue: 1, HeartbeatInterval: 100 * time.Millisecond}
+}
+
+func executePayload(t *testing.T) []byte {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"lang":     "binary",
+		"binaries": []map[string]any{{"name": "run.sh", "data_b64": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n")), "mode": "exec"}},
+		"limits":   map[string]any{"time_ms": 1000, "memory_mb": 64},
+	})
+	if err != nil {
+		t.Fatalf("marshal execute payload: %v", err)
+	}
+	return body
 }
 
 func newServerForTest(t *testing.T) *Server {

@@ -32,6 +32,7 @@ type Server struct {
 	execute execute.Runner
 	queue   *queue.Manager
 	seq     atomic.Uint64
+	streams atomic.Int64
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -80,6 +81,13 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
+	releaseStream, ok := s.acquireStream()
+	if !ok {
+		writeJSONError(w, http.StatusTooManyRequests, "stream_limit_exceeded")
+		return
+	}
+	defer releaseStream()
+
 	var req model.CompileRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
@@ -147,6 +155,13 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
+	releaseStream, ok := s.acquireStream()
+	if !ok {
+		writeJSONError(w, http.StatusTooManyRequests, "stream_limit_exceeded")
+		return
+	}
+	defer releaseStream()
+
 	var req model.RunRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
@@ -222,6 +237,26 @@ func firstNonEmpty(v ...string) string {
 		}
 	}
 	return ""
+}
+
+func (s *Server) acquireStream() (func(), bool) {
+	if s.cfg.MaxActiveStreams <= 0 {
+		return func() {}, true
+	}
+	active := s.streams.Add(1)
+	if active > int64(s.cfg.MaxActiveStreams) {
+		s.streams.Add(-1)
+		return nil, false
+	}
+	return func() {
+		s.streams.Add(-1)
+	}, true
+}
+
+func writeJSONError(w http.ResponseWriter, status int, code string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": code})
 }
 
 func (s *Server) requireAuth(next http.Handler) http.Handler {
