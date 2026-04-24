@@ -1177,6 +1177,49 @@ func TestRunBlocksForkAttempts(t *testing.T) {
 	}
 }
 
+func TestRunBlocksExecveatAttempts(t *testing.T) {
+	forceDirectMode(t)
+
+	code := `
+#define _GNU_SOURCE
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+extern char **environ;
+
+int main(void) {
+	char *argv[] = {"/bin/true", NULL};
+	long rc = syscall(SYS_execveat, AT_FDCWD, "/bin/true", argv, environ, 0);
+	if (rc == -1 && (errno == EPERM || errno == EACCES)) {
+		puts("blocked");
+		return 0;
+	}
+	printf("unexpected:%ld:%s\n", rc, strerror(errno));
+	return 0;
+}
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "runner",
+			DataB64: buildCTestBinary(t, code),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunBlocksProcFDBrowsingOutsideSandbox(t *testing.T) {
 	requireSandboxSupport(t)
 
