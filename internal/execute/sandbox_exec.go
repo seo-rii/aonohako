@@ -246,6 +246,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 	cpuBaselineNs := uint64(0)
 	targetStarted := false
+	targetStartGraceDeadline := time.Now().Add(100 * time.Millisecond)
 	watchdog := time.NewTicker(5 * time.Millisecond)
 	defer watchdog.Stop()
 	lastWorkspaceScan := time.Time{}
@@ -273,17 +274,23 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			if !targetStarted {
 				exePath, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", cmd.Process.Pid))
 				if err != nil {
-					continue
+					if time.Now().Before(targetStartGraceDeadline) {
+						continue
+					}
+				} else {
+					if realExePath, err := filepath.EvalSymlinks(exePath); err == nil && realExePath != "" {
+						exePath = realExePath
+					}
+					if exePath == resolvedHelperPath && time.Now().Before(targetStartGraceDeadline) {
+						continue
+					}
 				}
-				if realExePath, err := filepath.EvalSymlinks(exePath); err == nil && realExePath != "" {
-					exePath = realExePath
-				}
-				if exePath == resolvedHelperPath {
-					continue
-				}
+				// Some kernels/container settings hide /proc/<pid>/exe after
+				// the helper sets PR_SET_DUMPABLE=0. Start enforcement after
+				// a short grace period so CPU/RSS/workspace checks still run.
 				targetStarted = true
 				cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
-				lastWorkspaceScan = time.Now()
+				lastWorkspaceScan = time.Time{}
 				continue
 			}
 			if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
