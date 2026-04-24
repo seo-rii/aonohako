@@ -58,6 +58,17 @@ jobs:
           format: spdx-json
           artifact-name: sbom-ci-python.spdx.json
           syft-version: v1.42.4
+      - uses: anchore/scan-action@v7.4.0
+        with:
+          image: aonohako-sbom:ci-python
+          fail-build: false
+          output-format: json
+          output-file: grype-ci-python.json
+          grype-version: v0.111.0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: grype-ci-python
+          path: grype-ci-python.json
 
   sandbox:
     runs-on: ubuntu-latest
