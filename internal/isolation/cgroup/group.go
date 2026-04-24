@@ -19,6 +19,23 @@ type Group struct {
 	Path string
 }
 
+func EnableControllers(parentDir string, controllers []string) error {
+	if len(controllers) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(controllers))
+	for _, controller := range controllers {
+		if controller == "" || strings.ContainsAny(controller, "+- /\t\r\n") {
+			return fmt.Errorf("invalid cgroup controller: %q", controller)
+		}
+		values = append(values, "+"+controller)
+	}
+	if err := os.WriteFile(filepath.Join(parentDir, "cgroup.subtree_control"), []byte(strings.Join(values, " ")), 0o644); err != nil {
+		return fmt.Errorf("enable cgroup controllers: %w", err)
+	}
+	return nil
+}
+
 func CreateRunGroup(parentDir, name string, limits Limits) (Group, error) {
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/ \t\r\n") {
 		return Group{}, fmt.Errorf("invalid cgroup name: %q", name)
