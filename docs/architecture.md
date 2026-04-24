@@ -294,10 +294,20 @@ Supported combinations today:
 `embedded + container` is reserved for a future self-hosted backend and is
 currently rejected at startup.
 
+The supported shapes map to an explicit runtime security contract in
+`internal/platform`:
+
+| Shape | Contract | Local guarantees | Missing local boundary |
+| --- | --- | --- | --- |
+| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting | per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID, child-process accounting, seccomp allowlist |
+| `remote + none` | `remote-control-plane` | `/compile` and `/execute` are forwarded to the configured runner and no local untrusted compile/run work is performed | isolation is delegated to the downstream runner and its private ingress/auth boundary |
+| `embedded + container` | `reserved-container-isolation` | not implemented | must provide per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID or user namespace, child-process accounting, and allowlist-oriented seccomp before it can be enabled |
+
 Server startup validates the deployment contract instead of trusting docs alone.
 The following checks are enforced before the HTTP server starts:
 
 - Cloud Run marker envs require `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
+- unsupported runtime security contracts fail startup before request handling
 - `remote` transport requires `AONOHAKO_REMOTE_RUNNER_URL`
 - `remote + bearer` requires `AONOHAKO_REMOTE_RUNNER_TOKEN`
 - `remote + cloudrun-idtoken` defaults its audience to the remote runner URL if

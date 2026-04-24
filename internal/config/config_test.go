@@ -187,6 +187,21 @@ func TestLoadRejectsEmbeddedHelperWithParallelActiveRuns(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsReservedContainerBackend(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "container")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected reserved container backend to be rejected")
+	}
+	if !strings.Contains(err.Error(), "reserved-container-isolation") {
+		t.Fatalf("reserved backend error should name the contract, got %v", err)
+	}
+}
+
 func TestLoadRejectsUnknownRuntimeAxisValues(t *testing.T) {
 	tests := []struct {
 		name string

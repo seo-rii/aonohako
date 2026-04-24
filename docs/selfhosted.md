@@ -89,6 +89,19 @@ instances, but it is not designed for multiple simultaneous helper-backed runs
 inside one process. The correct way to increase capacity is more runner
 instances.
 
+In code, this shape is named the `embedded-helper-process-hardening` security
+contract. It records the guarantees that exist today and the boundaries that do
+not exist yet:
+
+| Present today | Still missing |
+| --- | --- |
+| root parent with dropped UID child | per-run cgroup |
+| `setrlimit` and workspace accounting | private mount namespace |
+| `PR_SET_NO_NEW_PRIVS` and seccomp denylist | read-only rootfs |
+| network syscall gate | masked `/proc` |
+| fd cleanup and process-group cleanup | per-run UID or user namespace |
+| immutable submissions and symlink-safe output capture | child-process accounting and seccomp allowlists |
+
 ## Reserved future backend
 
 `embedded + container` remains reserved for a future self-hosted backend. It is

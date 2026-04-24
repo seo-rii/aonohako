@@ -121,6 +121,10 @@ Repository policy check:
 - `AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation:
   `helper` or `none`. `container` is a reserved enum value for a future
   backend and is rejected by startup validation today.
+- These axes map to explicit security contracts in code:
+  `embedded-helper-process-hardening`, `remote-control-plane`, and reserved
+  `reserved-container-isolation`. The helper contract is process hardening,
+  not per-run cgroup or mount-namespace isolation.
 - `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand:
   `cloudrun` → `cloudrun + embedded + helper`
   `local-root` → `selfhosted + embedded + helper`

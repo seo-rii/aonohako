@@ -80,6 +80,15 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`container` is recognized only as a reserved future backend value") {
 		t.Fatalf("architecture.md must describe reserved container backend semantics")
 	}
+	if !strings.Contains(architecture, "`embedded-helper-process-hardening`") || !strings.Contains(architecture, "`remote-control-plane`") || !strings.Contains(architecture, "`reserved-container-isolation`") {
+		t.Fatalf("architecture.md must describe named runtime security contracts")
+	}
+	if !strings.Contains(architecture, "per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID") {
+		t.Fatalf("architecture.md must describe missing helper isolation boundaries")
+	}
+	if !strings.Contains(architecture, "unsupported runtime security contracts fail startup before request handling") {
+		t.Fatalf("architecture.md must describe fail-closed security contract validation")
+	}
 	if !strings.Contains(architecture, "malformed or out-of-range values fail startup") {
 		t.Fatalf("architecture.md must describe strict numeric env parsing")
 	}
@@ -108,6 +117,8 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_EXECUTION_TRANSPORT` selects how `/compile` and `/execute` are",
 		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
 		"`container` is a reserved enum value for a future",
+		"`embedded-helper-process-hardening`, `remote-control-plane`, and reserved",
+		"not per-run cgroup or mount-namespace isolation",
 		"fail startup instead of falling back",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"non-root development path)",
