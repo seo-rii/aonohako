@@ -1518,6 +1518,9 @@ func TestRunSPJUsesDedicatedLimits(t *testing.T) {
 	if resp.Status != model.RunStatusRE {
 		t.Fatalf("expected SPJ timeout to be reported as Runtime Error, got %+v", resp)
 	}
+	if !strings.Contains(resp.Reason, "spj failed: Time Limit Exceeded") {
+		t.Fatalf("expected SPJ timeout reason, got %+v", resp)
+	}
 }
 
 func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {

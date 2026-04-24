@@ -151,7 +151,11 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(ws, req.SidecarOutputs)
-	status, score := evaluateRunStatus(ctx, ws, req, res, judgeOut)
+	status, score, evalReason := evaluateRunStatus(ctx, ws, req, res, judgeOut)
+	reason := res.Reason
+	if evalReason != "" {
+		reason = evalReason
+	}
 
 	var outResp, errResp string
 	if status == model.RunStatusWA || status == model.RunStatusRE || (status == model.RunStatusTLE && req.IgnoreTLE) {
@@ -181,7 +185,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		Stderr:          errResp,
 		StdoutTruncated: res.StdoutTruncated,
 		StderrTruncated: res.StderrTruncated,
-		Reason:          res.Reason,
+		Reason:          reason,
 		Score:           score,
 		SidecarOutputs:  sidecarOutputs,
 		SidecarErrors:   sidecarErrors,
