@@ -1677,3 +1677,26 @@ func TestRunMarksWorkspaceQuotaExceeded(t *testing.T) {
 		t.Fatalf("expected workspace limit status from workspace quota exhaustion, got %+v", resp)
 	}
 }
+
+func TestRunMarksWorkspaceEntryLimitExceeded(t *testing.T) {
+	forceDirectMode(t)
+
+	script := fmt.Sprintf("from pathlib import Path\nimport time\nfor i in range(%d):\n    Path(f'f{i:05d}.txt').touch()\ntime.sleep(2)\n", maxWorkspaceEntries+16)
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 5000, MemoryMB: 256, WorkspaceBytes: defaultWorkspaceBytes},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusWLE {
+		t.Fatalf("expected workspace limit status from entry-count exhaustion, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "workspace entry limit exceeded") {
+		t.Fatalf("expected workspace entry diagnostic, got %+v", resp)
+	}
+}
