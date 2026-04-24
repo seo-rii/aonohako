@@ -16,7 +16,7 @@ import (
 	"aonohako/internal/util"
 )
 
-func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte) (string, *float64) {
+func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte) (string, *float64, string) {
 	status := res.Status
 	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
 		status = model.RunStatusMLE
@@ -26,6 +26,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	}
 
 	var score *float64
+	reason := ""
 	outputOK := false
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
 	if evaluateOutputs {
@@ -37,6 +38,10 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 			if spjErr != nil {
 				if status == "OK" {
 					status = model.RunStatusRE
+					reason = spjErr.Error()
+					if !strings.HasPrefix(reason, "spj ") {
+						reason = "spj failed: " + reason
+					}
 				}
 			} else {
 				outputOK = ok
@@ -61,7 +66,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 		}
 		score = &v
 	}
-	return status, score
+	return status, score, reason
 }
 
 func captureFileOutput(ws Workspace, spec model.OutputFile) ([]byte, error) {
