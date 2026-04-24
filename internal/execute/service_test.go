@@ -1214,6 +1214,65 @@ func TestRunBlocksForkAttempts(t *testing.T) {
 	}
 }
 
+func TestRunBlocksKernelAttackSurfaceSyscalls(t *testing.T) {
+	forceDirectMode(t)
+
+	code := `
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+static int check(const char *name, long nr) {
+	errno = 0;
+	long rc = syscall(nr, 0, 0, 0, 0, 0, 0);
+	if (rc == -1 && (errno == EPERM || errno == EACCES || errno == ENOSYS)) {
+		return 0;
+	}
+	printf("%s:%ld:%s\n", name, rc, strerror(errno));
+	return 1;
+}
+
+int main(void) {
+	int failed = 0;
+#ifdef SYS_bpf
+	failed |= check("bpf", SYS_bpf);
+#endif
+#ifdef SYS_userfaultfd
+	failed |= check("userfaultfd", SYS_userfaultfd);
+#endif
+#ifdef SYS_io_uring_setup
+	failed |= check("io_uring_setup", SYS_io_uring_setup);
+#endif
+#ifdef SYS_perf_event_open
+	failed |= check("perf_event_open", SYS_perf_event_open);
+#endif
+	if (failed != 0) {
+		return 1;
+	}
+	puts("blocked");
+	return 0;
+}
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "runner",
+			DataB64: buildCTestBinary(t, code),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunBlocksExecveatAttempts(t *testing.T) {
 	forceDirectMode(t)
 

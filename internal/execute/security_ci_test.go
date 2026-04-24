@@ -29,6 +29,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "devices", fn: TestRunExposesOnlySafeDevices},
 		{name: "filesystem-metadata-syscalls", fn: TestRunBlocksFilesystemMetadataSyscalls},
 		{name: "fork", fn: TestRunBlocksForkAttempts},
+		{name: "kernel-attack-surface-syscalls", fn: TestRunBlocksKernelAttackSurfaceSyscalls},
 		{name: "execveat", fn: TestRunBlocksExecveatAttempts},
 		{name: "spj-clean-workspace", fn: TestRunSPJUsesCleanWorkspaceAndReadableFiles},
 		{name: "proc-fd", fn: TestRunBlocksProcFDBrowsingOutsideSandbox},
