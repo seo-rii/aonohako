@@ -130,7 +130,7 @@ aonohako-selftest cgroup-preflight
 - These axes map to explicit security contracts in code:
   `embedded-helper-process-hardening`, `remote-control-plane`, and reserved
   `reserved-container-isolation`. The helper contract is process hardening,
-  not per-run cgroup or mount-namespace isolation.
+  not per-run cgroup, mount-namespace, or post-start `execve()` isolation.
 - `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand:
   `cloudrun` → `cloudrun + embedded + helper`
   `local-root` → `selfhosted + embedded + helper`

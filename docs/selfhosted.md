@@ -100,7 +100,7 @@ not exist yet:
 | `PR_SET_NO_NEW_PRIVS` and seccomp denylist | read-only rootfs |
 | network syscall gate | masked `/proc` |
 | fd cleanup and process-group cleanup | per-run UID or user namespace |
-| immutable submissions and symlink-safe output capture | child-process accounting and seccomp allowlists |
+| immutable submissions and symlink-safe output capture | child-process accounting, seccomp allowlists, and post-start `execve()` blocking |
 
 ## Reserved future backend
 

@@ -94,6 +94,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID") {
 		t.Fatalf("architecture.md must describe missing helper isolation boundaries")
 	}
+	if !strings.Contains(architecture, "post-start `execve()` blocking") {
+		t.Fatalf("architecture.md must include post-start execve blocking in security contract gaps")
+	}
 	if !strings.Contains(architecture, "`internal/isolation/cgroup` currently checks") || !strings.Contains(architecture, "required `cpu`, `memory`, and `pids` controllers") {
 		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
 	}
@@ -153,7 +156,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
 		"`container` is a reserved enum value for a future",
 		"`embedded-helper-process-hardening`, `remote-control-plane`, and reserved",
-		"not per-run cgroup or mount-namespace isolation",
+		"not per-run cgroup, mount-namespace, or post-start `execve()` isolation",
 		"fail startup instead of falling back",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"non-root development path)",
