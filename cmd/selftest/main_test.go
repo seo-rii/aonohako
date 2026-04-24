@@ -64,3 +64,9 @@ func TestCompileExecuteCasesResolveProfilesAndSources(t *testing.T) {
 		}
 	}
 }
+
+func TestSelftestUsageListsCgroupPreflight(t *testing.T) {
+	if !strings.Contains(selftestUsage, "cgroup-preflight") {
+		t.Fatalf("selftest usage should list cgroup-preflight: %s", selftestUsage)
+	}
+}
