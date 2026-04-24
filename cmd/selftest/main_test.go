@@ -70,3 +70,9 @@ func TestSelftestUsageListsCgroupPreflight(t *testing.T) {
 		t.Fatalf("selftest usage should list cgroup-preflight: %s", selftestUsage)
 	}
 }
+
+func TestSelftestUsageListsDeploymentContract(t *testing.T) {
+	if !strings.Contains(selftestUsage, "deployment-contract") {
+		t.Fatalf("selftest usage should list deployment-contract: %s", selftestUsage)
+	}
+}

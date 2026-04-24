@@ -25,6 +25,7 @@ import (
 	"aonohako/internal/execute"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
+	"aonohako/internal/platform"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
 
@@ -45,7 +46,7 @@ type compileExecuteCase struct {
 	sources        []model.Source
 }
 
-const selftestUsage = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|cgroup-preflight"
+const selftestUsage = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|cgroup-preflight|deployment-contract"
 
 func main() {
 	if sandbox.MaybeRunFromEnv() {
@@ -83,10 +84,72 @@ func main() {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "deployment-contract":
+		if err := runDeploymentContractSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	default:
 		_, _ = fmt.Fprintf(os.Stderr, "unknown selftest suite: %s\n", os.Args[1])
 		os.Exit(2)
 	}
+}
+
+func runDeploymentContractSuite() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("deployment contract validation failed: %w", err)
+	}
+	contract, err := cfg.Execution.Platform.SecurityContract()
+	if err != nil {
+		return fmt.Errorf("security contract lookup failed: %w", err)
+	}
+	summary := struct {
+		DeploymentTarget              platform.DeploymentTarget     `json:"deployment_target"`
+		ExecutionTransport            platform.ExecutionTransport   `json:"execution_transport"`
+		SandboxBackend                platform.SandboxBackend       `json:"sandbox_backend"`
+		Contract                      string                        `json:"contract"`
+		RequiresRootParent            bool                          `json:"requires_root_parent"`
+		RequiresDedicatedWorkRoot     bool                          `json:"requires_dedicated_work_root"`
+		RequiresSingleActiveRun       bool                          `json:"requires_single_active_run"`
+		DelegatesIsolation            bool                          `json:"delegates_isolation"`
+		Capabilities                  []platform.SecurityCapability `json:"capabilities,omitempty"`
+		MissingCapabilities           []platform.SecurityCapability `json:"missing_capabilities,omitempty"`
+		MaxActiveRuns                 int                           `json:"max_active_runs"`
+		MaxPendingQueue               int                           `json:"max_pending_queue"`
+		MaxActiveStreams              int                           `json:"max_active_streams"`
+		MaxPrincipalStreams           int                           `json:"max_principal_streams"`
+		MaxPrincipalRequestsPerMinute int                           `json:"max_principal_requests_per_minute"`
+		HeartbeatIntervalSec          int64                         `json:"heartbeat_interval_sec"`
+		RemoteSSEIdleTimeoutSec       int64                         `json:"remote_sse_idle_timeout_sec"`
+		InboundAuth                   config.InboundAuthMode        `json:"inbound_auth"`
+		RemoteAuth                    config.RemoteAuthMode         `json:"remote_auth"`
+		RemoteURLConfigured           bool                          `json:"remote_url_configured"`
+	}{
+		DeploymentTarget:              cfg.Execution.Platform.DeploymentTarget,
+		ExecutionTransport:            cfg.Execution.Platform.ExecutionTransport,
+		SandboxBackend:                cfg.Execution.Platform.SandboxBackend,
+		Contract:                      contract.Name,
+		RequiresRootParent:            contract.RequiresRootParent,
+		RequiresDedicatedWorkRoot:     contract.RequiresDedicatedWorkRoot,
+		RequiresSingleActiveRun:       contract.RequiresSingleActiveRun,
+		DelegatesIsolation:            contract.DelegatesIsolation,
+		Capabilities:                  contract.Capabilities,
+		MissingCapabilities:           contract.MissingCapabilities,
+		MaxActiveRuns:                 cfg.MaxActiveRuns,
+		MaxPendingQueue:               cfg.MaxPendingQueue,
+		MaxActiveStreams:              cfg.MaxActiveStreams,
+		MaxPrincipalStreams:           cfg.MaxPrincipalStreams,
+		MaxPrincipalRequestsPerMinute: cfg.MaxPrincipalRequestsPerMinute,
+		HeartbeatIntervalSec:          int64(cfg.HeartbeatInterval / time.Second),
+		RemoteSSEIdleTimeoutSec:       int64(cfg.Execution.Remote.SSEIdleTimeout / time.Second),
+		InboundAuth:                   cfg.InboundAuth.Mode,
+		RemoteAuth:                    cfg.Execution.Remote.Auth,
+		RemoteURLConfigured:           strings.TrimSpace(cfg.Execution.Remote.URL) != "",
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(summary)
 }
 
 func runCgroupPreflightSuite() error {
