@@ -19,6 +19,7 @@ func TestReadStatsReadsCgroupAccountingFiles(t *testing.T) {
 		"oom_kill 4",
 		"oom_group_kill 5",
 	}, "\n")+"\n")
+	writeFile(t, filepath.Join(group, "pids.events"), "max 6\n")
 	writeFile(t, filepath.Join(group, "cpu.stat"), strings.Join([]string{
 		"usage_usec 100",
 		"user_usec 60",
@@ -50,8 +51,14 @@ func TestReadStatsReadsCgroupAccountingFiles(t *testing.T) {
 	if got.OOMEvents() != 12 {
 		t.Fatalf("OOMEvents() = %d, want 12", got.OOMEvents())
 	}
-	if got.MemoryEvents["max"] != 2 {
-		t.Fatalf("memory max event = %d", got.MemoryEvents["max"])
+	if got.MemoryMaxEvents() != 2 {
+		t.Fatalf("MemoryMaxEvents() = %d, want 2", got.MemoryMaxEvents())
+	}
+	if got.PidsMaxEvents() != 6 {
+		t.Fatalf("PidsMaxEvents() = %d, want 6", got.PidsMaxEvents())
+	}
+	if got.CPUThrottleEvents() != 8 {
+		t.Fatalf("CPUThrottleEvents() = %d, want 8", got.CPUThrottleEvents())
 	}
 }
 
@@ -60,6 +67,7 @@ func TestReadStatsAllowsMissingMemoryPeak(t *testing.T) {
 	writeFile(t, filepath.Join(group, "memory.current"), "1\n")
 	writeFile(t, filepath.Join(group, "pids.current"), "1\n")
 	writeFile(t, filepath.Join(group, "memory.events"), "oom 0\n")
+	writeFile(t, filepath.Join(group, "pids.events"), "max 0\n")
 	writeFile(t, filepath.Join(group, "cpu.stat"), "usage_usec 1\n")
 
 	got, err := ReadStats(group)
@@ -75,6 +83,7 @@ func TestReadStatsRejectsMissingRequiredFiles(t *testing.T) {
 	group := t.TempDir()
 	writeFile(t, filepath.Join(group, "pids.current"), "1\n")
 	writeFile(t, filepath.Join(group, "memory.events"), "oom 0\n")
+	writeFile(t, filepath.Join(group, "pids.events"), "max 0\n")
 	writeFile(t, filepath.Join(group, "cpu.stat"), "usage_usec 1\n")
 
 	_, err := ReadStats(group)
@@ -86,11 +95,28 @@ func TestReadStatsRejectsMissingRequiredFiles(t *testing.T) {
 	}
 }
 
+func TestReadStatsRejectsMissingPidsEvents(t *testing.T) {
+	group := t.TempDir()
+	writeFile(t, filepath.Join(group, "memory.current"), "1\n")
+	writeFile(t, filepath.Join(group, "pids.current"), "1\n")
+	writeFile(t, filepath.Join(group, "memory.events"), "oom 0\n")
+	writeFile(t, filepath.Join(group, "cpu.stat"), "usage_usec 1\n")
+
+	_, err := ReadStats(group)
+	if err == nil {
+		t.Fatalf("ReadStats() error = nil, want missing pids.events rejection")
+	}
+	if !strings.Contains(err.Error(), "pids.events") {
+		t.Fatalf("error %q should mention pids.events", err)
+	}
+}
+
 func TestReadStatsRejectsMalformedKeyValueFiles(t *testing.T) {
 	group := t.TempDir()
 	writeFile(t, filepath.Join(group, "memory.current"), "1\n")
 	writeFile(t, filepath.Join(group, "pids.current"), "1\n")
 	writeFile(t, filepath.Join(group, "memory.events"), "oom nope\n")
+	writeFile(t, filepath.Join(group, "pids.events"), "max 0\n")
 	writeFile(t, filepath.Join(group, "cpu.stat"), "usage_usec 1\n")
 
 	_, err := ReadStats(group)
