@@ -127,6 +127,14 @@ The same package now defines the write contract for one run cgroup:
 - write `cpu.max` only when both quota and period are configured
 - move the target process by writing its PID to `cgroup.procs`
 
+It also defines the read contract for future verdict integration:
+
+- `memory.current`
+- `memory.peak` when the kernel exposes it
+- `memory.events`, especially `oom`, `oom_kill`, and `oom_group_kill`
+- `pids.current`
+- `cpu.stat`
+
 If that backend is added later, it should only be enabled after it can provide
 all of the following at the same time:
 
