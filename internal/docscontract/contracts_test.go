@@ -86,6 +86,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID") {
 		t.Fatalf("architecture.md must describe missing helper isolation boundaries")
 	}
+	if !strings.Contains(architecture, "`internal/isolation/cgroup` currently checks") || !strings.Contains(architecture, "required `cpu`, `memory`, and `pids` controllers") {
+		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
+	}
 	if !strings.Contains(architecture, "unsupported runtime security contracts fail startup before request handling") {
 		t.Fatalf("architecture.md must describe fail-closed security contract validation")
 	}
