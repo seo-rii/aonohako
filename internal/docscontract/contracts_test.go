@@ -24,6 +24,8 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		"`sources` may contain multiple files",
 		"`entry_point` names a source path, it must exactly match one submitted\nsource",
 		"`binaries` may contain multiple files",
+		"`limits.time_ms` and `limits.memory_mb` are required and bounded at the API\nboundary",
+		"`spj.limits` uses the same\nupper caps",
 		"`entry_point` must be a submitted file path and selects the\nprimary file to execute",
 		"For Java, Scala, Groovy, and Erlang, `entry_point`\nkeeps its existing class/module meaning",
 		"JVM\nclass names are validated",
