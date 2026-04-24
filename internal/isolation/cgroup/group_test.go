@@ -1,0 +1,108 @@
+package cgroup
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestCreateRunGroupWritesRequiredLimits(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-123", Limits{
+		MemoryMaxBytes:  128 << 20,
+		PidsMax:         32,
+		CPUQuotaMicros:  100000,
+		CPUPeriodMicros: 200000,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+	if group.Path != filepath.Join(parent, "run-123") {
+		t.Fatalf("path = %q", group.Path)
+	}
+	assertFile(t, filepath.Join(group.Path, "memory.max"), "134217728")
+	assertFile(t, filepath.Join(group.Path, "pids.max"), "32")
+	assertFile(t, filepath.Join(group.Path, "cpu.max"), "100000 200000")
+}
+
+func TestCreateRunGroupRejectsUnsafeNames(t *testing.T) {
+	parent := t.TempDir()
+	for _, name := range []string{"", ".", "..", "../run", "nested/run", "run with space"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := CreateRunGroup(parent, name, Limits{MemoryMaxBytes: 1, PidsMax: 1})
+			if err == nil {
+				t.Fatalf("CreateRunGroup(%q) error = nil, want rejection", name)
+			}
+		})
+	}
+}
+
+func TestCreateRunGroupRejectsMissingHardLimits(t *testing.T) {
+	parent := t.TempDir()
+	tests := []struct {
+		name   string
+		limits Limits
+		want   string
+	}{
+		{name: "memory", limits: Limits{PidsMax: 1}, want: "memory"},
+		{name: "pids", limits: Limits{MemoryMaxBytes: 1}, want: "pids"},
+		{name: "cpu-pair", limits: Limits{MemoryMaxBytes: 1, PidsMax: 1, CPUQuotaMicros: 100000}, want: "cpu quota and period"},
+		{name: "cpu-negative", limits: Limits{MemoryMaxBytes: 1, PidsMax: 1, CPUQuotaMicros: -1, CPUPeriodMicros: -1}, want: "must not be negative"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := CreateRunGroup(parent, "run-"+tc.name, tc.limits)
+			if err == nil {
+				t.Fatalf("CreateRunGroup() error = nil, want rejection")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q should contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreateRunGroupDoesNotWriteCPUMaxWhenUnset(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-no-cpu", Limits{
+		MemoryMaxBytes: 64 << 20,
+		PidsMax:        16,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(group.Path, "cpu.max")); !os.IsNotExist(err) {
+		t.Fatalf("cpu.max should not be written when CPU limit is unset, stat err=%v", err)
+	}
+}
+
+func TestGroupAddProcWritesPID(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-proc", Limits{
+		MemoryMaxBytes: 64 << 20,
+		PidsMax:        16,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+	writeFile(t, filepath.Join(group.Path, "cgroup.procs"), "")
+	if err := group.AddProc(12345); err != nil {
+		t.Fatalf("AddProc() error = %v", err)
+	}
+	assertFile(t, filepath.Join(group.Path, "cgroup.procs"), "12345")
+	if err := group.AddProc(0); err == nil {
+		t.Fatalf("AddProc(0) error = nil, want rejection")
+	}
+}
+
+func assertFile(t *testing.T, path, want string) {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if string(body) != want {
+		t.Fatalf("%s = %q, want %q", path, string(body), want)
+	}
+}

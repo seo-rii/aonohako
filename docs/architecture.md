@@ -278,6 +278,13 @@ for the first hard memory/process boundary. This preflight does not mutate the
 host cgroup tree; future self-hosted backends should fail closed when it reports
 that required controls are unavailable.
 
+The same package also owns the low-level run-group write contract for the
+future backend. A run group must be created with positive `memory.max` and
+`pids.max` values. `cpu.max` is written only when both quota and period are set,
+and a target process is admitted by writing its PID to `cgroup.procs`. The
+helper execution path does not use this yet; it remains the contract that the
+self-hosted isolated backend will wire into process launch.
+
 ## Deployment Contract
 
 The runtime now separates three concerns:

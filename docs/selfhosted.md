@@ -120,6 +120,13 @@ This check is intentionally separate from execution for now. The future
 container backend should use it as a startup gate before creating per-run
 cgroups or allowing child-process accounting.
 
+The same package now defines the write contract for one run cgroup:
+
+- create a sanitized run group name under the selected parent
+- write positive `memory.max` and `pids.max` values
+- write `cpu.max` only when both quota and period are configured
+- move the target process by writing its PID to `cgroup.procs`
+
 If that backend is added later, it should only be enabled after it can provide
 all of the following at the same time:
 
