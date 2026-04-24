@@ -24,6 +24,7 @@ const (
 	CapabilityPerRunUID                SecurityCapability = "per-run-uid"
 	CapabilityChildProcessAccounting   SecurityCapability = "child-process-accounting"
 	CapabilitySeccompAllowlist         SecurityCapability = "seccomp-allowlist"
+	CapabilityPostStartExecveBlocked   SecurityCapability = "post-start-execve-blocked"
 )
 
 type SecurityContract struct {
@@ -68,6 +69,7 @@ func (opts RuntimeOptions) SecurityContract() (SecurityContract, error) {
 					CapabilityPerRunUID,
 					CapabilityChildProcessAccounting,
 					CapabilitySeccompAllowlist,
+					CapabilityPostStartExecveBlocked,
 				},
 			}, nil
 		case SandboxBackendContainer:
@@ -82,6 +84,7 @@ func (opts RuntimeOptions) SecurityContract() (SecurityContract, error) {
 					CapabilityPerRunUID,
 					CapabilityChildProcessAccounting,
 					CapabilitySeccompAllowlist,
+					CapabilityPostStartExecveBlocked,
 				},
 			}, nil
 		default:

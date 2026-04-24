@@ -48,6 +48,7 @@ func TestSecurityContractDescribesEmbeddedHelperBoundary(t *testing.T) {
 		CapabilityPerRunUID,
 		CapabilityChildProcessAccounting,
 		CapabilitySeccompAllowlist,
+		CapabilityPostStartExecveBlocked,
 	} {
 		if !hasCapability(contract.MissingCapabilities, want) {
 			t.Fatalf("helper contract should record missing capability %q: %+v", want, contract.MissingCapabilities)
@@ -126,6 +127,7 @@ func TestSecurityContractContainerBackendIsReserved(t *testing.T) {
 		CapabilityPerRunUID,
 		CapabilityChildProcessAccounting,
 		CapabilitySeccompAllowlist,
+		CapabilityPostStartExecveBlocked,
 	} {
 		if !hasCapability(contract.Capabilities, want) {
 			t.Fatalf("reserved container contract missing future capability %q: %+v", want, contract.Capabilities)
