@@ -93,15 +93,15 @@ func Load() (Config, error) {
 	if platform.CloudRunMarkersPresent() && execution.Platform.DeploymentTarget != platform.DeploymentTargetCloudRun {
 		return Config{}, fmt.Errorf("AONOHAKO_DEPLOYMENT_TARGET=cloudrun is required when Cloud Run markers are present")
 	}
-	switch execution.Platform.ExecutionTransport {
-	case platform.ExecutionTransportEmbedded:
-		if execution.Platform.SandboxBackend != platform.SandboxBackendHelper {
-			return Config{}, fmt.Errorf("embedded execution supports only helper sandbox backend")
-		}
-	case platform.ExecutionTransportRemote:
-		if execution.Platform.SandboxBackend != platform.SandboxBackendNone {
-			return Config{}, fmt.Errorf("remote execution requires AONOHAKO_SANDBOX_BACKEND=none")
-		}
+	contract, err := execution.Platform.SecurityContract()
+	if err != nil {
+		return Config{}, err
+	}
+	if !contract.Implemented {
+		return Config{}, fmt.Errorf("sandbox contract %s is reserved and is not implemented", contract.Name)
+	}
+
+	if execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
 		if execution.Remote.URL == "" {
 			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL is required for remote execution")
 		}
@@ -134,8 +134,6 @@ func Load() (Config, error) {
 		default:
 			return Config{}, fmt.Errorf("unsupported remote auth mode: %s", execution.Remote.Auth)
 		}
-	default:
-		return Config{}, fmt.Errorf("unsupported execution transport: %s", execution.Platform.ExecutionTransport)
 	}
 
 	switch inboundAuth.Mode {
@@ -148,11 +146,11 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("unsupported inbound auth mode: %s", inboundAuth.Mode)
 	}
 
-	if execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded && execution.Platform.SandboxBackend == platform.SandboxBackendHelper && maxActive != 1 {
+	if contract.RequiresSingleActiveRun && maxActive != 1 {
 		return Config{}, fmt.Errorf("embedded helper execution requires AONOHAKO_MAX_ACTIVE_RUNS=1")
 	}
 
-	if execution.Platform.DeploymentTarget == platform.DeploymentTargetCloudRun || (execution.Platform.DeploymentTarget == platform.DeploymentTargetSelfHosted && execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded && execution.Platform.SandboxBackend == platform.SandboxBackendHelper) {
+	if contract.RequiresDedicatedWorkRoot {
 		if workRoot == "" {
 			return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT is required for %s target", execution.Platform.DeploymentTarget)
 		}
@@ -175,8 +173,7 @@ func Load() (Config, error) {
 		}
 		_ = os.RemoveAll(probe)
 	}
-	requiresRoot := execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded && execution.Platform.SandboxBackend == platform.SandboxBackendHelper
-	if requiresRoot && os.Geteuid() != 0 {
+	if contract.RequiresRootParent && os.Geteuid() != 0 {
 		return Config{}, fmt.Errorf("execution backend %s/%s requires root", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
 	}
 
