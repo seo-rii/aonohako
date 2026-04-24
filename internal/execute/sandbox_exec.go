@@ -114,6 +114,11 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		}
 	}
 	isDotnet := filepath.Base(finalCommand[0]) == "dotnet"
+	if isDotnet {
+		if err := security.ResetDotnetSharedState(); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "dotnet state cleanup failed: " + err.Error()}
+		}
+	}
 	disableAddressSpaceLimit := isDotnet
 	switch filepath.Base(finalCommand[0]) {
 	case "node", "wasmtime", "umjunsik-lang-go":
@@ -154,6 +159,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  allowUnixSockets,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
+		DisableFileSizeLimit:     isDotnet,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {

@@ -142,7 +142,16 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	go stream.Heartbeat(r.Context(), s.cfg.HeartbeatInterval)
+	heartbeatCtx, stopHeartbeat := context.WithCancel(r.Context())
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		stream.Heartbeat(heartbeatCtx, s.cfg.HeartbeatInterval)
+	}()
+	defer func() {
+		stopHeartbeat()
+		<-heartbeatDone
+	}()
 
 	reqID := s.nextID("compile")
 	active, pending := s.queue.Snapshot()
@@ -226,7 +235,16 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	go stream.Heartbeat(r.Context(), s.cfg.HeartbeatInterval)
+	heartbeatCtx, stopHeartbeat := context.WithCancel(r.Context())
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		stream.Heartbeat(heartbeatCtx, s.cfg.HeartbeatInterval)
+	}()
+	defer func() {
+		stopHeartbeat()
+		<-heartbeatDone
+	}()
 
 	reqID := s.nextID("execute")
 	active, pending := s.queue.Snapshot()
