@@ -238,7 +238,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `prlimit --cpu` | CPU seconds (time_ms / 1000 + 1) |
 | `prlimit --as` | Virtual address space (memory_mb + 64 MB, min 512 MB) |
 | `prlimit --nofile` | Max open file descriptors (64) |
-| `prlimit --fsize` | Max file size (workspace_bytes when set, otherwise 128 MB) |
+| `prlimit --fsize` | Max file size (workspace_bytes when set, otherwise 128 MB); .NET gets a finite 512 MiB floor for runtime compatibility |
+| workspace scanner | Total file bytes plus entry count/depth caps |
 | `taskset -c 0` | Pin to single CPU core |
 | Context timeout | Wall-clock kill via SIGKILL to process group |
 

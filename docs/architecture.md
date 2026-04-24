@@ -155,7 +155,8 @@ The Linux helper applies:
 | Address space limit | `RLIMIT_AS` | based on request memory plus headroom |
 | Open files | `RLIMIT_NOFILE=64` | keeps fd surface small |
 | Tasks | `RLIMIT_NPROC` | sized from current UID usage plus thread limit |
-| File growth | `RLIMIT_FSIZE` | tied to workspace byte limit |
+| File growth | `RLIMIT_FSIZE` | tied to workspace byte limit; .NET receives a finite compatibility floor instead of disabling the limit |
+| Workspace breadth | periodic workspace scan | enforces total bytes plus entry-count and depth caps |
 | Core dumps | `RLIMIT_CORE=0` | disables core files |
 | Privilege escalation | `PR_SET_NO_NEW_PRIVS` | prevents gaining new privileges after exec |
 | Dumpability | `PR_SET_DUMPABLE=0` | blocks ptrace-style exposure |

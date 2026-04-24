@@ -20,8 +20,13 @@ func EncodeB64(raw []byte) string {
 
 func ValidateRelativePath(name string) (string, error) {
 	clean := filepath.Clean(strings.TrimSpace(name))
-	if clean == "" || clean == "." || strings.Contains(clean, "..") || filepath.IsAbs(clean) {
+	if clean == "" || clean == "." || filepath.IsAbs(clean) {
 		return "", fmt.Errorf("invalid path: %q", name)
+	}
+	for _, segment := range strings.Split(clean, string(os.PathSeparator)) {
+		if segment == ".." {
+			return "", fmt.Errorf("invalid path: %q", name)
+		}
 	}
 	return clean, nil
 }
