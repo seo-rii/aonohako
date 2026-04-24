@@ -138,10 +138,22 @@ Both `/compile` and `/execute` share the same bounded queue:
   other than `1`.
 - **Pending queue**: `AONOHAKO_MAX_PENDING_QUEUE` (default: `16`; set `0`
   explicitly only for an unlimited development queue)
+- **Open request streams**: `AONOHAKO_MAX_ACTIVE_STREAMS` (default: `64`; set
+  `0` explicitly only for unlimited development streams). This caps
+  simultaneous `/compile` and `/execute` streams before they join the run queue.
 
 Numeric queue/timing environment variables are strict: malformed values,
 negative values, or zero values where a positive integer is required fail server
 startup instead of silently falling back.
+
+When the active stream cap is reached, the server returns:
+
+```
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+
+{"error": "stream_limit_exceeded"}
+```
 
 When the pending queue is full, the server returns:
 

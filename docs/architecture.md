@@ -340,8 +340,9 @@ The following checks are enforced before the HTTP server starts:
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication
 - numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
-  `AONOHAKO_MAX_PENDING_QUEUE`, and `AONOHAKO_HEARTBEAT_INTERVAL_SEC` are
-  strict; malformed or out-of-range values fail startup
+  `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`, and
+  `AONOHAKO_HEARTBEAT_INTERVAL_SEC` are strict; malformed or out-of-range
+  values fail startup
 - `cloudrun` always requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`
 - every required work root must already exist, be a directory, be owned by the
