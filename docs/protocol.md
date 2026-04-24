@@ -141,6 +141,10 @@ Both `/compile` and `/execute` share the same bounded queue:
 - **Open request streams**: `AONOHAKO_MAX_ACTIVE_STREAMS` (default: `64`; set
   `0` explicitly only for unlimited development streams). This caps
   simultaneous `/compile` and `/execute` streams before they join the run queue.
+- **Per-principal open request streams**:
+  `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` (default: `0` in `dev`, `16` in
+  `cloudrun` or `selfhosted`). This caps simultaneous streams for one bearer,
+  platform, or anonymous remote principal.
 
 Numeric queue/timing environment variables are strict: malformed values,
 negative values, or zero values where a positive integer is required fail server
@@ -153,6 +157,15 @@ HTTP/1.1 429 Too Many Requests
 Content-Type: application/json
 
 {"error": "stream_limit_exceeded"}
+```
+
+When the per-principal stream cap is reached, the server returns:
+
+```
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+
+{"error": "principal_stream_limit_exceeded"}
 ```
 
 When the pending queue is full, the server returns:

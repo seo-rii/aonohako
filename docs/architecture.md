@@ -340,9 +340,9 @@ The following checks are enforced before the HTTP server starts:
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication
 - numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
-  `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`, and
-  `AONOHAKO_HEARTBEAT_INTERVAL_SEC` are strict; malformed or out-of-range
-  values fail startup
+  `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`,
+  `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`, and `AONOHAKO_HEARTBEAT_INTERVAL_SEC`
+  are strict; malformed or out-of-range values fail startup
 - `cloudrun` always requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`
 - every required work root must already exist, be a directory, be owned by the
@@ -351,6 +351,10 @@ The following checks are enforced before the HTTP server starts:
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
   executions do not overlap under the shared sandbox UID
+- `/compile` and `/execute` streams are capped globally, and outside `dev` they
+  are also capped per principal. Bearer auth uses a token fingerprint as the
+  principal key; platform auth uses the upstream principal header such as
+  `X-Aonohako-Principal`.
 
 Recommended Cloud Run deployment baseline:
 

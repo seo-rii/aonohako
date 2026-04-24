@@ -145,6 +145,9 @@ aonohako-selftest cgroup-preflight
   `/compile` and `/execute` request streams before they can occupy more server
   resources. Set it explicitly to `0` only for development cases that
   intentionally need unlimited open streams.
+- `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev` and `16`
+  for `cloudrun` or `selfhosted`. It caps simultaneous request streams per
+  authenticated or platform principal; `0` disables the per-principal cap.
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
 - Numeric environment variables are strict: malformed, negative, or zero values
   where a positive integer is required fail startup instead of falling back.

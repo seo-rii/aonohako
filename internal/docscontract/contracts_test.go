@@ -47,7 +47,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	protocolWants := []string{
 		"Both `/compile` and `/execute` share the same bounded queue",
 		"`AONOHAKO_MAX_ACTIVE_STREAMS`",
+		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`",
 		`"stream_limit_exceeded"`,
+		`"principal_stream_limit_exceeded"`,
 		"buffered stdout / stderr payloads emitted before `result`",
 		"keeps the same SSE contract for `/compile` and `/execute`",
 		"forwards `log`, `image`, `error`, and `result`",
@@ -106,6 +108,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`AONOHAKO_MAX_ACTIVE_STREAMS`") {
 		t.Fatalf("architecture.md must describe active stream cap validation")
 	}
+	if !strings.Contains(architecture, "`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`") || !strings.Contains(architecture, "token fingerprint as the\n  principal key") {
+		t.Fatalf("architecture.md must describe per-principal stream caps")
+	}
 	if !strings.Contains(architecture, "API/control-plane instances in `dev + remote + none`") || !strings.Contains(architecture, "horizontal scale by adding runner instances") {
 		t.Fatalf("architecture.md must describe the self-hosted scale-out path")
 	}
@@ -137,6 +142,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"non-root development path)",
 		"`AONOHAKO_MAX_ACTIVE_STREAMS` defaults to `64`",
+		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev`",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`embedded + helper` backend rejects values other than `1`",
