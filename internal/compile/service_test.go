@@ -718,6 +718,74 @@ func TestRunCommandRejectsFilesystemPrivilegeSyscalls(t *testing.T) {
 	}
 }
 
+func TestRunCommandRejectsKernelAttackSurfaceSyscalls(t *testing.T) {
+	cc, err := exec.LookPath("cc")
+	if err != nil {
+		cc, err = exec.LookPath("gcc")
+	}
+	if err != nil {
+		t.Skip("C compiler is unavailable on this runner")
+	}
+
+	code := `
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+static int check(const char *name, long nr) {
+	errno = 0;
+	long rc = syscall(nr, 0, 0, 0, 0, 0, 0);
+	if (rc == -1 && (errno == EPERM || errno == EACCES || errno == ENOSYS)) {
+		return 0;
+	}
+	printf("%s:%ld:%s\n", name, rc, strerror(errno));
+	return 1;
+}
+
+int main(void) {
+	int failed = 0;
+#ifdef SYS_bpf
+	failed |= check("bpf", SYS_bpf);
+#endif
+#ifdef SYS_userfaultfd
+	failed |= check("userfaultfd", SYS_userfaultfd);
+#endif
+#ifdef SYS_io_uring_setup
+	failed |= check("io_uring_setup", SYS_io_uring_setup);
+#endif
+#ifdef SYS_perf_event_open
+	failed |= check("perf_event_open", SYS_perf_event_open);
+#endif
+	if (failed != 0) {
+		return 1;
+	}
+	puts("blocked");
+	return 0;
+}
+`
+	workDir := t.TempDir()
+	binPath := filepath.Join(workDir, "kernel-syscall-probe")
+	compileCmd := exec.Command(cc, "-O2", "-x", "c", "-", "-o", binPath)
+	compileCmd.Stdin = strings.NewReader(code)
+	output, err := compileCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("compile syscall probe: %v\n%s", err, string(output))
+	}
+
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		sandboxWritableTempDir(t),
+		binPath,
+		nil,
+		nil,
+	)
+	if status != model.CompileStatusOK || stdout != "blocked\n" {
+		t.Fatalf("expected kernel syscall denial, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
 func TestRunCommandCannotReadOrWriteRootOwnedHostPaths(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("requires root to drop compile helper to sandbox user")
