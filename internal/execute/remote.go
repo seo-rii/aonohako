@@ -41,7 +41,7 @@ func newRemoteRunner(cfg config.Config) Runner {
 		bearerToken: cfg.Execution.Remote.BearerToken,
 		audience:    cfg.Execution.Remote.Audience,
 		metadataURL: cloudRunMetadataIdentityURL,
-		idleTimeout: remoteio.DefaultSSEIdleTimeout,
+		idleTimeout: cfg.Execution.Remote.SSEIdleTimeout,
 	}
 }
 
