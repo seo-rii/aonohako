@@ -68,7 +68,11 @@ metadata rather than an argument that drops helper sources.
       "mode": "exec"
     },
     "lang": "binary",                        // SPJ runtime language
-    "emit_score": true                       // SPJ outputs float score to stdout
+    "emit_score": true,                      // SPJ outputs float score to stdout
+    "limits": {                              // optional SPJ-specific limits
+      "time_ms": 1000,
+      "memory_mb": 256
+    }
   },
   "file_outputs": [                          // read program output from file instead of stdout (at most one path)
     {"path": "output.txt"}
@@ -141,6 +145,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 - The SPJ runs from a clean SPJ-only workspace, not the participant writable
   directory
 - The input, expected output, and user output files are read-only for the SPJ
+- The SPJ uses `spj.limits` when provided; otherwise it defaults to a fixed
+  1000 ms / 256 MiB policy instead of inheriting contestant limits
 - User output is also piped to SPJ's stdin
 - Exit code 0 → accepted; non-zero → wrong answer
 - If `emit_score: true`, SPJ should print a float (0.0–1.0) to stdout

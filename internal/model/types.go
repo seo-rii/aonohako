@@ -43,6 +43,7 @@ type SPJSpec struct {
 	Binary    *Binary `json:"binary,omitempty"`
 	Lang      string  `json:"lang,omitempty"`
 	EmitScore bool    `json:"emit_score,omitempty"`
+	Limits    *Limits `json:"limits,omitempty"`
 }
 
 type OutputFile struct {

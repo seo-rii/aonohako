@@ -167,10 +167,28 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	if spjLang == "" || spjLang == "binary" {
 		spjLang = "binary"
 	}
-	spjReq := &model.RunRequest{Lang: spjLang, Limits: req.Limits, EnableNetwork: false}
+	spjLimits := model.Limits{
+		TimeMs:         defaultSPJTimeMs,
+		MemoryMB:       defaultSPJMemoryMB,
+		OutputBytes:    req.Limits.OutputBytes,
+		WorkspaceBytes: defaultWorkspaceBytes,
+	}
+	if req.SPJ.Limits != nil {
+		spjLimits = *req.SPJ.Limits
+		if spjLimits.TimeMs <= 0 {
+			spjLimits.TimeMs = defaultSPJTimeMs
+		}
+		if spjLimits.MemoryMB <= 0 {
+			spjLimits.MemoryMB = defaultSPJMemoryMB
+		}
+		if spjLimits.WorkspaceBytes <= 0 {
+			spjLimits.WorkspaceBytes = defaultWorkspaceBytes
+		}
+	}
+	spjReq := &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false}
 	args := buildCommand(spjPath, spjLang, spjReq)
 	args = append(args, inputPath, solutionPath, outputPath)
-	res := runCommandWithSandbox(ctx, spjWS, args, &model.RunRequest{Lang: spjLang, Limits: req.Limits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(req))
+	res := runCommandWithSandbox(ctx, spjWS, args, &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(spjReq))
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}

@@ -1492,6 +1492,34 @@ raise SystemExit(0)
 	}
 }
 
+func TestRunSPJUsesDedicatedLimits(t *testing.T) {
+	requireSandboxSupport(t)
+
+	spj := "#!/usr/bin/env python3\nimport time\ntime.sleep(0.5)\n"
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("print('42')\n")),
+		}},
+		ExpectedStdout: "42\n",
+		SPJ: &model.SPJSpec{
+			Binary: &model.Binary{
+				Name:    "spj.py",
+				DataB64: base64.StdEncoding.EncodeToString([]byte(spj)),
+			},
+			Lang:   "python",
+			Limits: &model.Limits{TimeMs: 50, MemoryMB: 128},
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusRE {
+		t.Fatalf("expected SPJ timeout to be reported as Runtime Error, got %+v", resp)
+	}
+}
+
 func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {
 	forceDirectMode(t)
 
