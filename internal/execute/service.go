@@ -27,6 +27,7 @@ const (
 	maxCapturedFileBytes         = 8 << 20
 	maxCapturedSidecarTotalBytes = 16 << 20
 	maxImageStreamBytes          = 8 << 20
+	maxImageReadChunkBytes       = 256 << 10
 	maxImageEventBytes           = 1 << 20
 	maxImageEventsPerRead        = 8
 	defaultSPJTimeMs             = 1000

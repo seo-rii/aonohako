@@ -121,7 +121,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		}
 	}
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
-	// startup; finite RLIMIT_AS/RLIMIT_FSIZE values can fail before user code.
+	// startup, so finite RLIMIT_AS values can fail before user code.
 	disableAddressSpaceLimit := isDotnet
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
@@ -161,7 +161,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  allowUnixSockets,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
-		DisableFileSizeLimit:     isDotnet,
+		DisableFileSizeLimit:     false,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
@@ -224,9 +224,12 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 
 	imageDone := make(chan struct{})
+	stopImageStream := func() {}
 	if imgPath := firstImagePath(req.SidecarOutputs); imgPath != "" {
+		imageCtx, cancelImage := context.WithCancel(ctx)
+		stopImageStream = cancelImage
 		go func() {
-			streamImageEvents(ctx, ws, imgPath, hooks.OnImage)
+			streamImageEvents(imageCtx, ws, imgPath, hooks.OnImage)
 			close(imageDone)
 		}()
 	} else {
@@ -382,6 +385,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 done:
 	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	stopImageStream()
 
 	<-doneOut
 	<-doneErr
@@ -498,10 +502,7 @@ func firstImagePath(paths []model.OutputFile) string {
 			return p.Path
 		}
 	}
-	if len(paths) == 0 {
-		return ""
-	}
-	return paths[0].Path
+	return ""
 }
 
 func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit func(mime, b64 string, ts int64)) {
@@ -537,6 +538,9 @@ func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit f
 		available := output.info.Size() - offset
 		if available > remaining {
 			available = remaining
+		}
+		if available > maxImageReadChunkBytes {
+			available = maxImageReadChunkBytes
 		}
 		if available <= 0 {
 			return

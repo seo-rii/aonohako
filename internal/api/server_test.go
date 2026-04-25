@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +28,31 @@ type executeRunnerStub struct {
 
 func (s executeRunnerStub) Run(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
 	return s.run(ctx, req, hooks)
+}
+
+type blockingBody struct {
+	started chan struct{}
+	unblock chan struct{}
+	once    sync.Once
+}
+
+func newBlockingBody() *blockingBody {
+	return &blockingBody{started: make(chan struct{}), unblock: make(chan struct{})}
+}
+
+func (b *blockingBody) Read(_ []byte) (int, error) {
+	b.once.Do(func() { close(b.started) })
+	<-b.unblock
+	return 0, io.EOF
+}
+
+func (b *blockingBody) Close() error {
+	select {
+	case <-b.unblock:
+	default:
+		close(b.unblock)
+	}
+	return nil
 }
 
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
@@ -127,6 +153,73 @@ func TestExecuteActiveStreamOverflowReturns429(t *testing.T) {
 	close(unblock)
 	released = true
 	_, _ = io.Copy(io.Discard, resp1.Body)
+}
+
+func TestExecuteDoesNotAcquireStreamBeforeBodyDecode(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.MaxActiveStreams = 1
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("runner should not be called for an undecoded body")
+		return model.RunResponse{}
+	}})
+
+	body := newBlockingBody()
+	req := httptest.NewRequest(http.MethodPost, "/execute", body)
+	req.Header.Set("Content-Type", "application/json")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.Handler().ServeHTTP(httptest.NewRecorder(), req)
+	}()
+
+	select {
+	case <-body.started:
+	case <-time.After(time.Second):
+		t.Fatalf("handler did not start reading request body")
+	}
+	time.Sleep(50 * time.Millisecond)
+	if active := s.streams.Load(); active != 0 {
+		t.Fatalf("active streams = %d while body decode is blocked, want 0", active)
+	}
+	_ = body.Close()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("handler did not finish after body unblock")
+	}
+}
+
+func TestExecuteRejectsRequestControlledNetworkWhenPolicyDisabled(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.AllowRequestNetwork = false
+	called := false
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		called = true
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	var payload map[string]any
+	if err := json.Unmarshal(executePayload(t), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	payload["enable_network"] = true
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if called {
+		t.Fatalf("runner should not be called when enable_network is rejected by policy")
+	}
 }
 
 func TestExecutePrincipalStreamOverflowReturns429(t *testing.T) {

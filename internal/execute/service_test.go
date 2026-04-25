@@ -432,6 +432,76 @@ func TestRunCapturesSidecarOutput(t *testing.T) {
 	}
 }
 
+func TestRunCapturesNonImageSidecarWithoutWaitingForTimeout(t *testing.T) {
+	forceDirectMode(t)
+	svc := New()
+	req := &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\necho sidecar > result.txt\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 128},
+		SidecarOutputs: []model.OutputFile{{Path: "result.txt"}},
+	}
+
+	var imageEvents int
+	start := time.Now()
+	resp := svc.Run(context.Background(), req, Hooks{
+		OnImage: func(mime, b64 string, ts int64) {
+			imageEvents++
+		},
+	})
+	elapsed := time.Since(start)
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected accepted run, got %+v", resp)
+	}
+	if imageEvents != 0 {
+		t.Fatalf("expected non-image sidecar not to emit image events, got %d", imageEvents)
+	}
+	if elapsed >= 1500*time.Millisecond {
+		t.Fatalf("sidecar run took %s; expected it not to wait for wall timeout", elapsed)
+	}
+}
+
+func TestRunFlushesImageSidecarOnFastExit(t *testing.T) {
+	forceDirectMode(t)
+	svc := New()
+	req := &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\nmkdir -p __img__\nprintf '%s\\n' '{\"mime\":\"image/png\",\"b64\":\"abc\",\"ts\":123}' > __img__/images.jsonl\n"),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 128},
+		SidecarOutputs: []model.OutputFile{{Path: "__img__/images.jsonl"}},
+	}
+
+	var mu sync.Mutex
+	var images []string
+	resp := svc.Run(context.Background(), req, Hooks{
+		OnImage: func(mime, b64 string, ts int64) {
+			mu.Lock()
+			images = append(images, mime+":"+b64)
+			mu.Unlock()
+		},
+	})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected accepted run, got %+v", resp)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(images) != 1 || images[0] != "image/png:abc" {
+		t.Fatalf("expected one flushed image event, got %v", images)
+	}
+}
+
 func TestRunUsesRequestedFileOutputForJudging(t *testing.T) {
 	forceDirectMode(t)
 

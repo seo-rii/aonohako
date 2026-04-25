@@ -75,6 +75,18 @@ func TestDefaultMaxPrincipalRequestsPerMinute(t *testing.T) {
 	}
 }
 
+func TestDefaultAllowRequestNetwork(t *testing.T) {
+	if !defaultAllowRequestNetwork(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}) {
+		t.Fatalf("dev should allow request-controlled network by default")
+	}
+	if defaultAllowRequestNetwork(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetSelfHosted}) {
+		t.Fatalf("selfhosted should require explicit network policy opt-in")
+	}
+	if defaultAllowRequestNetwork(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetCloudRun}) {
+		t.Fatalf("cloudrun should reject request-controlled network by default")
+	}
+}
+
 func TestLoadRejectsCloudRunMarkersWithoutExplicitTarget(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "")
 	t.Setenv("K_SERVICE", "aonohako")
@@ -297,6 +309,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "13")
 	t.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "2")
 	t.Setenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", "4")
+	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
@@ -330,6 +343,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if cfg.Execution.Remote.SSEIdleTimeout != 4*time.Second {
 		t.Fatalf("remote SSE idle timeout mismatch: %v", cfg.Execution.Remote.SSEIdleTimeout)
 	}
+	if !cfg.AllowRequestNetwork {
+		t.Fatalf("allow request network should be parsed from env")
+	}
 }
 
 func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
@@ -355,6 +371,7 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "remote sse idle zero", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "0"},
 		{name: "remote sse idle negative", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "-1"},
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
+		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
 	}
 
 	for _, tc := range tests {

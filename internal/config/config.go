@@ -61,6 +61,7 @@ type Config struct {
 	MaxPrincipalStreams           int
 	MaxPrincipalRequestsPerMinute int
 	HeartbeatInterval             time.Duration
+	AllowRequestNetwork           bool
 	Execution                     ExecutionConfig
 	InboundAuth                   InboundAuthConfig
 }
@@ -96,6 +97,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	remoteSSEIdleTimeoutSec, err := parsePositiveIntEnv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", os.Getenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC"), int(remoteio.DefaultSSEIdleTimeout/time.Second))
+	if err != nil {
+		return Config{}, err
+	}
+	allowRequestNetwork, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_NETWORK", os.Getenv("AONOHAKO_ALLOW_REQUEST_NETWORK"), defaultAllowRequestNetwork(runtimePlatform))
 	if err != nil {
 		return Config{}, err
 	}
@@ -216,6 +221,7 @@ func Load() (Config, error) {
 		MaxPrincipalStreams:           maxPrincipalStreams,
 		MaxPrincipalRequestsPerMinute: maxPrincipalRequestsPerMinute,
 		HeartbeatInterval:             time.Duration(heartbeatSec) * time.Second,
+		AllowRequestNetwork:           allowRequestNetwork,
 		Execution:                     execution,
 		InboundAuth:                   inboundAuth,
 	}, nil
@@ -253,6 +259,10 @@ func defaultMaxPrincipalRequestsPerMinute(opts platform.RuntimeOptions) int {
 	return 60
 }
 
+func defaultAllowRequestNetwork(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget == platform.DeploymentTargetDev
+}
+
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -280,6 +290,21 @@ func parseNonNegativeIntEnv(key, raw string, fallback int) (int, error) {
 		return 0, fmt.Errorf("%s must be a non-negative integer", key)
 	}
 	return v, nil
+}
+
+func parseBoolEnv(key, raw string, fallback bool) (bool, error) {
+	value := strings.TrimSpace(strings.ToLower(raw))
+	if value == "" {
+		return fallback, nil
+	}
+	switch value {
+	case "1", "true", "yes", "on":
+		return true, nil
+	case "0", "false", "no", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s must be a boolean", key)
+	}
 }
 
 func parseRemoteAuth(raw string) RemoteAuthMode {

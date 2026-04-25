@@ -262,6 +262,26 @@ func TestCaptureFileOutputDoesNotFallbackFromBoxSymlinkToWorkspaceRoot(t *testin
 	}
 }
 
+func TestCaptureFileOutputRejectsHardlink(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	original := filepath.Join(ws.BoxDir, "original.txt")
+	if err := os.WriteFile(original, []byte("original"), 0o644); err != nil {
+		t.Fatalf("write original: %v", err)
+	}
+	if err := os.Link(original, filepath.Join(ws.BoxDir, "result.txt")); err != nil {
+		t.Skipf("hard links unsupported on test filesystem: %v", err)
+	}
+
+	if _, err := captureFileOutput(ws, model.OutputFile{Path: "result.txt"}); err == nil {
+		t.Fatalf("expected hard-linked output rejection")
+	}
+}
+
 func TestCaptureFileOutputPrefersBoxContentOverWorkspaceRoot(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)
@@ -313,6 +333,30 @@ func TestCaptureSidecarOutputsSkipsEscapingOrSymlinkedPaths(t *testing.T) {
 	}
 	if len(errs) != 3 {
 		t.Fatalf("expected diagnostics for rejected sidecars, got %+v", errs)
+	}
+}
+
+func TestCaptureSidecarOutputsSkipsHardlinkedPaths(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	original := filepath.Join(ws.BoxDir, "original.txt")
+	if err := os.WriteFile(original, []byte("original"), 0o644); err != nil {
+		t.Fatalf("write original: %v", err)
+	}
+	if err := os.Link(original, filepath.Join(ws.BoxDir, "result.txt")); err != nil {
+		t.Skipf("hard links unsupported on test filesystem: %v", err)
+	}
+
+	outputs, errs := captureSidecarOutputs(ws, []model.OutputFile{{Path: "result.txt"}})
+	if len(outputs) != 0 {
+		t.Fatalf("expected hard-linked sidecar output to be skipped, got %+v", outputs)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected diagnostic for hard-linked sidecar, got %+v", errs)
 	}
 }
 
