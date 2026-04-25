@@ -514,6 +514,26 @@ func TestRunSandboxedCommandCapsCapturedOutput(t *testing.T) {
 	}
 }
 
+func TestCapCompileResponseOutputSetsTruncationFlags(t *testing.T) {
+	resp := capCompileResponseOutput(model.CompileResponse{
+		Status: model.CompileStatusCompileError,
+		Stdout: strings.Repeat("x", compileOutputCaptureBytes+1),
+		Stderr: strings.Repeat("y", compileOutputCaptureBytes+2),
+	})
+	if len(resp.Stdout) != compileOutputCaptureBytes {
+		t.Fatalf("stdout length=%d, want cap %d", len(resp.Stdout), compileOutputCaptureBytes)
+	}
+	if len(resp.Stderr) != compileOutputCaptureBytes {
+		t.Fatalf("stderr length=%d, want cap %d", len(resp.Stderr), compileOutputCaptureBytes)
+	}
+	if !resp.StdoutTruncated {
+		t.Fatal("StdoutTruncated=false, want true")
+	}
+	if !resp.StderrTruncated {
+		t.Fatal("StderrTruncated=false, want true")
+	}
+}
+
 func TestRunSandboxedCommandAllowsWritesBesideNestedCompileSources(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("requires root to drop compile helper to sandbox user")

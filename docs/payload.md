@@ -37,6 +37,8 @@ metadata rather than an argument that drops helper sources.
   ],
   "stdout": "",                              // compiler stdout, capped at 1 MiB
   "stderr": "",                              // compiler stderr / warnings, capped at 1 MiB
+  "stdout_truncated": false,                 // true when compiler stdout exceeded the capture cap
+  "stderr_truncated": false,                 // true when compiler stderr exceeded the capture cap
   "reason": ""                               // human-readable error
 }
 ```

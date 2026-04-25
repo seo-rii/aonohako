@@ -118,7 +118,7 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 		event, err := reader.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return result
+				return capCompileResponseOutput(result)
 			}
 			if streamCtx.Err() != nil && ctx.Err() == nil {
 				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream idle timeout exceeded"}
@@ -140,7 +140,7 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 			if err := json.Unmarshal([]byte(event.Data), &result); err != nil {
 				result = model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote result decode failed: " + err.Error()}
 			}
-			return result
+			return capCompileResponseOutput(result)
 		}
 	}
 }

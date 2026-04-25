@@ -19,11 +19,13 @@ type CompileRequest struct {
 }
 
 type CompileResponse struct {
-	Status    string     `json:"status"`
-	Artifacts []Artifact `json:"artifacts,omitempty"`
-	Stdout    string     `json:"stdout,omitempty"`
-	Stderr    string     `json:"stderr,omitempty"`
-	Reason    string     `json:"reason,omitempty"`
+	Status          string     `json:"status"`
+	Artifacts       []Artifact `json:"artifacts,omitempty"`
+	Stdout          string     `json:"stdout,omitempty"`
+	Stderr          string     `json:"stderr,omitempty"`
+	StdoutTruncated bool       `json:"stdout_truncated,omitempty"`
+	StderrTruncated bool       `json:"stderr_truncated,omitempty"`
+	Reason          string     `json:"reason,omitempty"`
 }
 
 type Binary struct {

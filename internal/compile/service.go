@@ -114,7 +114,23 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	ctx, cancel := context.WithTimeout(parent, buildTimeout)
 	defer cancel()
 
-	return executeBuild(ctx, workDir, profile, target, req)
+	return capCompileResponseOutput(executeBuild(ctx, workDir, profile, target, req))
+}
+
+func capCompileResponseOutput(resp model.CompileResponse) model.CompileResponse {
+	var truncated bool
+	resp.Stdout, truncated = capCompileOutputValue(resp.Stdout)
+	resp.StdoutTruncated = resp.StdoutTruncated || truncated
+	resp.Stderr, truncated = capCompileOutputValue(resp.Stderr)
+	resp.StderrTruncated = resp.StderrTruncated || truncated
+	return resp
+}
+
+func capCompileOutputValue(value string) (string, bool) {
+	if len(value) > compileOutputCaptureBytes {
+		return value[:compileOutputCaptureBytes], true
+	}
+	return value, false
 }
 
 func resolveProfile(lang string) (profiles.Profile, bool) {
@@ -1517,6 +1533,13 @@ func passThroughArtifacts(workDir string, sources []model.Source) model.CompileR
 }
 
 func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
+	stdout, stderr, status, reason = runSandboxedCommand(ctx, workDir, bin, args, env)
+	stdout, _ = capCompileOutputValue(stdout)
+	stderr, _ = capCompileOutputValue(stderr)
+	return stdout, stderr, status, reason
+}
+
+func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
 	for _, dir := range security.WorkspaceScopedDirs(workDir) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
@@ -1770,9 +1793,6 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		if err != nil {
 			return ""
 		}
-		if len(data) > compileOutputCaptureBytes {
-			data = data[:compileOutputCaptureBytes]
-		}
 		return string(data)
 	}
 	defer killSandbox()
@@ -1810,7 +1830,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 }
 
 func runCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
-	return RunSandboxedCommand(ctx, workDir, bin, args, env)
+	return runSandboxedCommand(ctx, workDir, bin, args, env)
 }
 
 func readSingleArtifact(root, rel, name, mode string) ([]model.Artifact, error) {
