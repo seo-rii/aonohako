@@ -176,7 +176,9 @@ aonohako-selftest cgroup-preflight
   `AONOHAKO_INBOUND_AUTH=bearer`.
 - `AONOHAKO_INBOUND_AUTH=platform` documents that Cloud Run IAM, an API
   gateway, mTLS, private ingress, or another platform layer authenticates
-  inbound calls before they reach this process.
+  inbound calls before they reach this process. The upstream layer must strip
+  any client-supplied identity headers and rewrite the trusted principal header;
+  do not expose platform mode directly to the public internet.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another

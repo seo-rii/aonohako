@@ -1605,6 +1605,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if filepath.Base(command[0]) == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
+	memoryLimitKB := int64(memoryLimitMB) * 1024
 	helperReq := sandbox.ExecRequest{
 		Command: append([]string(nil), command...),
 		Dir:     workDir,
@@ -1691,7 +1692,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		return "", "", model.CompileStatusInternal, "sandbox request write failed: " + err.Error()
 	}
 	pgid := cmd.Process.Pid
-	killSandbox := func() {
+	descendantPIDs := func() map[int]bool {
 		descendants := map[int]bool{pgid: true}
 		for changed := true; changed; {
 			changed = false
@@ -1727,6 +1728,30 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 				}
 			}
 		}
+		return descendants
+	}
+	processTreeRSSKB := func(pids map[int]bool) int64 {
+		pageKB := int64(os.Getpagesize() / 1024)
+		var total int64
+		for pid := range pids {
+			raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", pid))
+			if err != nil {
+				continue
+			}
+			fields := strings.Fields(string(raw))
+			if len(fields) < 2 {
+				continue
+			}
+			rssPages, err := strconv.ParseInt(fields[1], 10, 64)
+			if err != nil {
+				continue
+			}
+			total += rssPages * pageKB
+		}
+		return total
+	}
+	killSandbox := func() {
+		descendants := descendantPIDs()
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		for pid := range descendants {
 			if pid != pgid {
@@ -1750,27 +1775,37 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		return string(data)
 	}
 	defer killSandbox()
-	select {
-	case <-ctx.Done():
-		killSandbox()
-		<-waitCh
-		return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusTimeout, ctx.Err().Error()
-	case err := <-waitCh:
-		if err != nil {
-			reason := err.Error()
-			if ps := cmd.ProcessState; ps != nil {
-				if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
-					if ws.Signaled() {
-						reason = fmt.Sprintf("sandbox command killed by signal %s", ws.Signal())
-					} else if ws.Exited() {
-						reason = fmt.Sprintf("sandbox command exited with code %d", ws.ExitStatus())
+	watchdog := time.NewTicker(25 * time.Millisecond)
+	defer watchdog.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			killSandbox()
+			<-waitCh
+			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusTimeout, ctx.Err().Error()
+		case <-watchdog.C:
+			if rssKB := processTreeRSSKB(descendantPIDs()); rssKB > memoryLimitKB {
+				killSandbox()
+				<-waitCh
+				return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "memory limit exceeded"
+			}
+		case err := <-waitCh:
+			if err != nil {
+				reason := err.Error()
+				if ps := cmd.ProcessState; ps != nil {
+					if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
+						if ws.Signaled() {
+							reason = fmt.Sprintf("sandbox command killed by signal %s", ws.Signal())
+						} else if ws.Exited() {
+							reason = fmt.Sprintf("sandbox command exited with code %d", ws.ExitStatus())
+						}
 					}
 				}
+				return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, reason
 			}
-			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, reason
+			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusOK, ""
 		}
 	}
-	return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusOK, ""
 }
 
 func runCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {

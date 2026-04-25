@@ -283,6 +283,12 @@ Memory enforcement uses several layers:
 - a post-exit address-space proximity check with slack
 - workspace byte accounting, so temp-file growth is also limited
 
+Compile commands use the same helper process-hardening path. Because compilers
+can legitimately spawn child processes, compile memory enforcement also samples
+the helper process tree and kills the compile sandbox when aggregate RSS exceeds
+the compile sandbox memory budget. This remains best-effort accounting until a
+cgroup-backed compile backend is available.
+
 .NET is the main compatibility exception: `dotnet` invocations still disable
 `RLIMIT_AS` because CoreCLR reserves a very large memfd-backed double-mapped region
 before user code starts. The helper still applies a larger finite
@@ -396,7 +402,9 @@ The following checks are enforced before the HTTP server starts:
 - `/compile` and `/execute` streams are capped globally, and outside `dev` they
   are also capped per principal. Bearer auth uses a token fingerprint as the
   principal key; platform auth uses the upstream principal header such as
-  `X-Aonohako-Principal`.
+  `X-Aonohako-Principal`. Platform auth is safe only behind an upstream
+  identity layer that strips client-supplied identity headers and rewrites the
+  trusted principal header before the request reaches `aonohako`.
 - Outside `dev`, `/compile` and `/execute` requests are also capped per
   principal in a fixed one-minute window before they enter the run queue.
 
