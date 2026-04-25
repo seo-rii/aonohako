@@ -163,7 +163,7 @@ The Linux helper applies:
 | POSIX message queue bytes | `RLIMIT_MSGQUEUE=0` | prevents message-queue allocation by the sandbox UID |
 | Open files | `RLIMIT_NOFILE=64` | keeps fd surface small |
 | Tasks | `RLIMIT_NPROC` | sized from current UID usage plus thread limit |
-| File growth | `RLIMIT_FSIZE` | tied to workspace byte limit; .NET receives a larger finite floor for runtime compatibility |
+| File growth | `RLIMIT_FSIZE` | tied to workspace byte limit; .NET disables this rlimit for CoreCLR/F# compatibility and relies on workspace accounting |
 | Workspace breadth | periodic workspace scan | enforces total bytes plus entry-count and depth caps |
 | Core dumps | `RLIMIT_CORE=0` | disables core files |
 | Privilege escalation | `PR_SET_NO_NEW_PRIVS` | prevents gaining new privileges after exec |
@@ -290,12 +290,13 @@ the compile sandbox memory budget. This remains best-effort accounting until a
 cgroup-backed compile backend is available.
 
 .NET is the main compatibility exception: `dotnet` invocations still disable
-`RLIMIT_AS` because CoreCLR reserves a very large memfd-backed double-mapped region
-before user code starts. The helper still applies a larger finite
-`RLIMIT_FSIZE`, RSS watchdogs, workspace byte accounting, output caps,
-open-file limits, thread limits, OOM-victim preference, and single-slot
-execution. Before each sandboxed `dotnet` invocation, the runner recreates `/tmp/.dotnet`
-with the sandbox UID and `0700` modes so CoreCLR/F# shared lock
+`RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large
+memfd-backed double-mapped region before user code starts, and F# compiler
+startup can fail under finite file-size rlimits. The helper still applies RSS
+watchdogs, workspace byte accounting, output caps, open-file limits, thread
+limits, OOM-victim preference, and single-slot execution. Before each sandboxed
+`dotnet` invocation, the runner recreates `/tmp/.dotnet` with the sandbox UID
+and `0700` modes so CoreCLR/F# shared lock
 and shared-memory state does not leak between sequential runs in the same
 container.
 

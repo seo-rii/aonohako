@@ -161,7 +161,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  allowUnixSockets,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
-		DisableFileSizeLimit:     false,
+		DisableFileSizeLimit:     isDotnet,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
