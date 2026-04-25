@@ -35,8 +35,8 @@ metadata rather than an argument that drops helper sources.
       "mode": "exec"                         // "exec" for executables, "" for data files
     }
   ],
-  "stdout": "",                              // compiler stdout
-  "stderr": "",                              // compiler stderr / warnings
+  "stdout": "",                              // compiler stdout, capped at 1 MiB
+  "stderr": "",                              // compiler stderr / warnings, capped at 1 MiB
   "reason": ""                               // human-readable error
 }
 ```
@@ -61,7 +61,7 @@ metadata rather than an argument that drops helper sources.
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..8388608
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
   },
-  "enable_network": false,                   // outbound network request flag; Cloud Run embedded helper rejects true, self-hosted helper allows outbound AF_INET/AF_INET6 clients only
+  "enable_network": false,                   // outbound network request flag; honored only when server policy allows request-controlled network
   "entry_point": "src/main.py",              // optional submitted file path to run; JVM/BEAM runtimes use class/module entry names
   "spj": {                                   // optional special judge
     "binary": {                              // pre-compiled SPJ binary

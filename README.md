@@ -162,6 +162,10 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30` and bounds how long
   a remote `/compile` or `/execute` SSE response may stay silent before the
   control plane cancels it.
+- `AONOHAKO_ALLOW_REQUEST_NETWORK` controls whether `/execute` may honor
+  client-supplied `enable_network=true`. It defaults to `true` only for `dev`
+  and `false` for `cloudrun` or `selfhosted`; public runners should route
+  network-enabled problems to an explicitly opted-in runner pool.
 - Numeric environment variables are strict: malformed, negative, or zero values
   where a positive integer is required fail startup instead of falling back.
 - `AONOHAKO_INBOUND_AUTH` controls inbound `/compile` and `/execute`
@@ -195,9 +199,10 @@ Per-request execution limits are part of the `/execute` payload:
   Each field is capped at `16 MiB` before a request enters the shared queue.
 - `enable_network`
   Cloud Run embedded-helper runners reject `true`. Self-hosted embedded-helper
-  runners allow outbound `AF_INET`/`AF_INET6` client sockets only; listener
-  syscalls and host `AF_UNIX` sockets stay blocked. Control-plane instances can
-  forward networked workloads to those runners with `remote` transport.
+  runners honor it only when `AONOHAKO_ALLOW_REQUEST_NETWORK=true`, and then
+  allow outbound `AF_INET`/`AF_INET6` client sockets only; listener syscalls and
+  host `AF_UNIX` sockets stay blocked. Control-plane instances can forward
+  networked workloads to explicitly opted-in runners with `remote` transport.
 
 ## Security notes
 

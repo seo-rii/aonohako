@@ -47,8 +47,8 @@ Client                        aonohako
       "mode": "exec"                     // "exec" for executables, "" for data
     }
   ],
-  "stdout": "",                          // compiler stdout
-  "stderr": "",                          // compiler stderr
+  "stdout": "",                          // compiler stdout, capped at 1 MiB
+  "stderr": "",                          // compiler stderr, capped at 1 MiB
   "reason": ""                           // human-readable failure reason
 }
 ```

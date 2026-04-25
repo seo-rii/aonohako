@@ -487,6 +487,33 @@ func TestRunCommandKillsBackgroundChildren(t *testing.T) {
 	}
 }
 
+func TestRunSandboxedCommandCapsCapturedOutput(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	workDir := sandboxWritableTempDir(t)
+	stdout, stderr, status, reason := RunSandboxedCommand(
+		context.Background(),
+		workDir,
+		"python3",
+		[]string{
+			"-c",
+			fmt.Sprintf("import sys; sys.stdout.write('x' * %d); sys.stderr.write('y' * %d)", compileOutputCaptureBytes+1024, compileOutputCaptureBytes+2048),
+		},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("status=%q reason=%q stderr=%q", status, reason, stderr)
+	}
+	if len(stdout) != compileOutputCaptureBytes {
+		t.Fatalf("stdout length=%d, want cap %d", len(stdout), compileOutputCaptureBytes)
+	}
+	if len(stderr) != compileOutputCaptureBytes {
+		t.Fatalf("stderr length=%d, want cap %d", len(stderr), compileOutputCaptureBytes)
+	}
+}
+
 func TestRunSandboxedCommandAllowsWritesBesideNestedCompileSources(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("requires root to drop compile helper to sandbox user")

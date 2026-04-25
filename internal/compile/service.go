@@ -37,6 +37,7 @@ const (
 	compileSandboxMemoryMB     = 2048
 	compileSandboxThreadLimit  = 256
 	compileWorkspaceBytes      = 512 << 20
+	compileOutputCaptureBytes  = 1 << 20
 )
 
 type Service struct{}
@@ -1596,7 +1597,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 	}
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
-	// startup; finite RLIMIT_AS/RLIMIT_FSIZE values can fail before user code.
+	// startup, so finite RLIMIT_AS values can fail before user code.
 	disableAddressSpaceLimit := isDotnet
 	allowProcessGroups := filepath.Base(command[0]) == "swiftc"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
@@ -1621,7 +1622,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		AllowProcesses:           true,
 		AllowProcessGroups:       allowProcessGroups,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
-		DisableFileSizeLimit:     isDotnet,
+		DisableFileSizeLimit:     false,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
@@ -1673,6 +1674,7 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if err := cmd.Start(); err != nil {
 		return "", "", model.CompileStatusInternal, "start failed: " + err.Error()
 	}
+	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
 	_ = requestRead.Close()
 	if n, err := requestWrite.Write(rawReq); err != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -1738,9 +1740,12 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		if _, err := file.Seek(0, 0); err != nil {
 			return ""
 		}
-		data, err := io.ReadAll(file)
+		data, err := io.ReadAll(io.LimitReader(file, compileOutputCaptureBytes+1))
 		if err != nil {
 			return ""
+		}
+		if len(data) > compileOutputCaptureBytes {
+			data = data[:compileOutputCaptureBytes]
 		}
 		return string(data)
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"aonohako/internal/util"
 
@@ -59,6 +60,11 @@ func openWorkspaceReadOnly(ws Workspace, rel string) (workspaceReadOnlyFile, err
 			_ = file.Close()
 			_ = unix.Close(dirfd)
 			return workspaceReadOnlyFile{}, fmt.Errorf("output is not a regular file: %s", rel)
+		}
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Nlink > 1 {
+			_ = file.Close()
+			_ = unix.Close(dirfd)
+			return workspaceReadOnlyFile{}, fmt.Errorf("output must not be a hard link: %s", rel)
 		}
 		return workspaceReadOnlyFile{
 			file:  file,

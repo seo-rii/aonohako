@@ -110,18 +110,19 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusTooManyRequests, "principal_rate_limited")
 		return
 	}
-	releaseStream, ok, code := s.acquireStream(principal)
-	if !ok {
-		writeJSONError(w, http.StatusTooManyRequests, code)
-		return
-	}
-	defer releaseStream()
 
 	var req model.CompileRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	releaseStream, ok, code := s.acquireStream(principal)
+	if !ok {
+		writeJSONError(w, http.StatusTooManyRequests, code)
+		return
+	}
+	defer releaseStream()
 
 	permit, err := s.queue.Acquire()
 	if err != nil {
@@ -199,12 +200,6 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusTooManyRequests, "principal_rate_limited")
 		return
 	}
-	releaseStream, ok, code := s.acquireStream(principal)
-	if !ok {
-		writeJSONError(w, http.StatusTooManyRequests, code)
-		return
-	}
-	defer releaseStream()
 
 	var req model.RunRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
@@ -215,6 +210,17 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if req.EnableNetwork && !s.cfg.AllowRequestNetwork {
+		http.Error(w, "enable_network is not allowed by server policy", http.StatusBadRequest)
+		return
+	}
+
+	releaseStream, ok, code := s.acquireStream(principal)
+	if !ok {
+		writeJSONError(w, http.StatusTooManyRequests, code)
+		return
+	}
+	defer releaseStream()
 
 	permit, err := s.queue.Acquire()
 	if err != nil {

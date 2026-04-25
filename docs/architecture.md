@@ -163,7 +163,7 @@ The Linux helper applies:
 | POSIX message queue bytes | `RLIMIT_MSGQUEUE=0` | prevents message-queue allocation by the sandbox UID |
 | Open files | `RLIMIT_NOFILE=64` | keeps fd surface small |
 | Tasks | `RLIMIT_NPROC` | sized from current UID usage plus thread limit |
-| File growth | `RLIMIT_FSIZE` | tied to workspace byte limit; .NET disables this rlimit because CoreCLR reserves a huge memfd-backed double-mapped region at startup |
+| File growth | `RLIMIT_FSIZE` | tied to workspace byte limit; .NET receives a larger finite floor for runtime compatibility |
 | Workspace breadth | periodic workspace scan | enforces total bytes plus entry-count and depth caps |
 | Core dumps | `RLIMIT_CORE=0` | disables core files |
 | Privilege escalation | `PR_SET_NO_NEW_PRIVS` | prevents gaining new privileges after exec |
@@ -284,13 +284,14 @@ Memory enforcement uses several layers:
 - workspace byte accounting, so temp-file growth is also limited
 
 .NET is the main compatibility exception: `dotnet` invocations still disable
-`RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large
-memfd-backed double-mapped region before user code starts. The helper still
-keeps RSS watchdogs, workspace byte accounting, output caps, open-file limits,
-thread limits, OOM-victim preference, and single-slot execution in place. Before
-each sandboxed `dotnet` invocation, the runner recreates `/tmp/.dotnet` with the
-sandbox UID and `0700` modes so CoreCLR/F# shared lock and shared-memory state
-does not leak between sequential runs in the same container.
+`RLIMIT_AS` because CoreCLR reserves a very large memfd-backed double-mapped region
+before user code starts. The helper still applies a larger finite
+`RLIMIT_FSIZE`, RSS watchdogs, workspace byte accounting, output caps,
+open-file limits, thread limits, OOM-victim preference, and single-slot
+execution. Before each sandboxed `dotnet` invocation, the runner recreates `/tmp/.dotnet`
+with the sandbox UID and `0700` modes so CoreCLR/F# shared lock
+and shared-memory state does not leak between sequential runs in the same
+container.
 
 Self-hosted cgroup support is being staged behind an explicit preflight layer
 before it is wired into execution. `internal/isolation/cgroup` currently checks
@@ -381,6 +382,9 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_HEARTBEAT_INTERVAL_SEC`, and
   `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` are strict; malformed or out-of-range
   values fail startup
+- `AONOHAKO_ALLOW_REQUEST_NETWORK` is strict boolean configuration and defaults
+  to `true` only for `dev`; outside `dev`, client-supplied `enable_network=true`
+  is rejected unless this is explicitly enabled for a dedicated runner policy
 - `cloudrun` always requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`
 - every required work root must already exist, be a directory, be owned by the

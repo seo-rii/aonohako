@@ -144,6 +144,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"coq":        {"Broken.v", "coqc"},
 		"python":     {"import qiskit", "import robot_judge", "from jungol_robot import Direction, Position"},
 		"typescript": {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist"},
+		"wasm":       {"-W max-memory-size=33554432", "-W max-wasm-stack=1048576", "-W trap-on-grow-failure=y"},
 	}
 
 	for language, patterns := range tests {
@@ -387,7 +388,13 @@ func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
 		t.Fatalf("nim install script must not leave /usr/local/bin symlinked into /root/.nimble/bin")
 	}
 	wasmScriptBody := strings.Join(catalog.Languages["wasm"].Install.Script, "\n")
-	if !strings.Contains(wasmScriptBody, "install -m 0755 /root/.wasmtime/bin/wasmtime /usr/local/bin/wasmtime") {
+	if !strings.Contains(wasmScriptBody, "WASMTIME_VERSION=44.0.0") {
+		t.Fatalf("wasm install script must pin wasmtime version")
+	}
+	if !strings.Contains(wasmScriptBody, "github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}") {
+		t.Fatalf("wasm install script must download a pinned release artifact")
+	}
+	if !strings.Contains(wasmScriptBody, "install -m 0755 /tmp/wasmtime/wasmtime /usr/local/bin/wasmtime") {
 		t.Fatalf("wasm install script must materialize wasmtime under /usr/local/bin")
 	}
 	if strings.Contains(wasmScriptBody, "ln -sfn /root/.wasmtime/bin/wasmtime") {
