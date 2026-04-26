@@ -122,6 +122,7 @@ func runDeploymentContractSuite() error {
 		MaxPrincipalRequestsPerMinute int                           `json:"max_principal_requests_per_minute"`
 		HeartbeatIntervalSec          int64                         `json:"heartbeat_interval_sec"`
 		RemoteSSEIdleTimeoutSec       int64                         `json:"remote_sse_idle_timeout_sec"`
+		TrustedRunnerIngress          bool                          `json:"trusted_runner_ingress"`
 		InboundAuth                   config.InboundAuthMode        `json:"inbound_auth"`
 		RemoteAuth                    config.RemoteAuthMode         `json:"remote_auth"`
 		RemoteURLConfigured           bool                          `json:"remote_url_configured"`
@@ -143,6 +144,7 @@ func runDeploymentContractSuite() error {
 		MaxPrincipalRequestsPerMinute: cfg.MaxPrincipalRequestsPerMinute,
 		HeartbeatIntervalSec:          int64(cfg.HeartbeatInterval / time.Second),
 		RemoteSSEIdleTimeoutSec:       int64(cfg.Execution.Remote.SSEIdleTimeout / time.Second),
+		TrustedRunnerIngress:          cfg.TrustedRunnerIngress,
 		InboundAuth:                   cfg.InboundAuth.Mode,
 		RemoteAuth:                    cfg.Execution.Remote.Auth,
 		RemoteURLConfigured:           strings.TrimSpace(cfg.Execution.Remote.URL) != "",

@@ -17,6 +17,7 @@ Use this when the same process is expected to execute submissions directly:
 - `AONOHAKO_SANDBOX_BACKEND=helper`
 - `AONOHAKO_WORK_ROOT=/work`
 - `AONOHAKO_MAX_ACTIVE_RUNS=1`
+- `AONOHAKO_TRUSTED_RUNNER_INGRESS=true`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
   `AONOHAKO_INBOUND_AUTH=platform` when private ingress, mTLS, or a gateway
   authenticates inbound calls

@@ -426,6 +426,9 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_ALLOW_REQUEST_NETWORK` is strict boolean configuration and defaults
   to `true` only for `dev`; outside `dev`, client-supplied `enable_network=true`
   is rejected unless this is explicitly enabled for a dedicated runner policy
+- `AONOHAKO_TRUSTED_RUNNER_INGRESS=true` is required for non-dev
+  `embedded + helper` runners, forcing operators to assert a trusted/private
+  ingress or platform-auth boundary before starting a root helper parent
 - `cloudrun` always requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`
 - every required work root must already exist, be a directory, be owned by the

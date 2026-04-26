@@ -170,6 +170,11 @@ aonohako-selftest cgroup-preflight
   client-supplied `enable_network=true`. It defaults to `true` only for `dev`
   and `false` for `cloudrun` or `selfhosted`; public runners should route
   network-enabled problems to an explicitly opted-in runner pool.
+- `AONOHAKO_TRUSTED_RUNNER_INGRESS` asserts that a root-backed embedded helper
+  runner is reachable only through trusted/private ingress, Cloud Run IAM, mTLS,
+  a gateway, or an equivalent control-plane boundary. It defaults to `true` for
+  `dev` and remote control planes, but non-dev `embedded + helper` runners must
+  set it explicitly to `true`.
 - Numeric environment variables are strict: malformed, negative, or zero values
   where a positive integer is required fail startup instead of falling back.
 - `AONOHAKO_INBOUND_AUTH` controls inbound `/compile` and `/execute`
@@ -241,7 +246,8 @@ Security posture depends on where it runs:
 - `cloudrun + embedded + helper` is the supported production security target.
   Startup fails closed unless `AONOHAKO_WORK_ROOT` is configured, writable,
   not group/world writable, owned by the server UID, the process is running as
-  root, and the helper queue is single-slot.
+  root, `AONOHAKO_TRUSTED_RUNNER_INGRESS=true` is asserted, and the helper
+  queue is single-slot.
 - `cloudrun + remote + none` is the supported Cloud Run control-plane shape
   when `/compile` and `/execute` should be forwarded to a separate hardened
   runner. It still requires a bounded `AONOHAKO_WORK_ROOT` for local
@@ -268,6 +274,8 @@ For Cloud Run deployments, use this baseline:
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
   `AONOHAKO_INBOUND_AUTH=platform` only when an upstream layer enforces
   inbound authentication
+- `AONOHAKO_TRUSTED_RUNNER_INGRESS=true` after configuring private ingress,
+  Cloud Run IAM, mTLS, or an equivalent trusted control-plane boundary
 - second-generation execution environment
 - service concurrency `1`
 - a bounded in-memory volume mounted at a path such as `/work`, with

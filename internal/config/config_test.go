@@ -87,6 +87,25 @@ func TestDefaultAllowRequestNetwork(t *testing.T) {
 	}
 }
 
+func TestDefaultTrustedRunnerIngress(t *testing.T) {
+	if !defaultTrustedRunnerIngress(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}) {
+		t.Fatalf("dev should trust runner ingress by default")
+	}
+	if !defaultTrustedRunnerIngress(platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+		ExecutionTransport: platform.ExecutionTransportRemote,
+	}) {
+		t.Fatalf("remote control planes should delegate ingress trust to the runner boundary")
+	}
+	if defaultTrustedRunnerIngress(platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+		ExecutionTransport: platform.ExecutionTransportEmbedded,
+		SandboxBackend:     platform.SandboxBackendHelper,
+	}) {
+		t.Fatalf("non-dev embedded helper should require explicit trusted ingress assertion")
+	}
+}
+
 func TestLoadRejectsCloudRunMarkersWithoutExplicitTarget(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "")
 	t.Setenv("K_SERVICE", "aonohako")
@@ -321,10 +340,24 @@ func TestLoadRejectsEmbeddedHelperWhenNotRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 
 	if _, err := Load(); err == nil {
 		t.Fatalf("expected embedded helper execution to require root")
+	}
+}
+
+func TestLoadRejectsEmbeddedHelperWithoutTrustedIngressOutsideDev(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "AONOHAKO_TRUSTED_RUNNER_INGRESS=true") {
+		t.Fatalf("expected trusted runner ingress assertion error, got %v", err)
 	}
 }
 
@@ -333,6 +366,7 @@ func TestLoadRejectsEmbeddedHelperWithParallelActiveRuns(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "2")
 
@@ -413,6 +447,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_BODY_READ_TIMEOUT_SEC", "9")
 	t.Setenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", "4")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
+	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "false")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
@@ -452,6 +487,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if !cfg.AllowRequestNetwork {
 		t.Fatalf("allow request network should be parsed from env")
 	}
+	if cfg.TrustedRunnerIngress {
+		t.Fatalf("trusted runner ingress should be parsed from env")
+	}
 }
 
 func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
@@ -481,6 +519,7 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "remote sse idle negative", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "-1"},
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
 		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
+		{name: "trusted runner ingress malformed", key: "AONOHAKO_TRUSTED_RUNNER_INGRESS", value: "sometimes"},
 	}
 
 	for _, tc := range tests {

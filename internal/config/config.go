@@ -100,6 +100,7 @@ type Config struct {
 	HeartbeatInterval             time.Duration
 	BodyReadTimeout               time.Duration
 	AllowRequestNetwork           bool
+	TrustedRunnerIngress          bool
 	Execution                     ExecutionConfig
 	InboundAuth                   InboundAuthConfig
 }
@@ -143,6 +144,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	allowRequestNetwork, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_NETWORK", os.Getenv("AONOHAKO_ALLOW_REQUEST_NETWORK"), defaultAllowRequestNetwork(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	trustedRunnerIngress, err := parseBoolEnv("AONOHAKO_TRUSTED_RUNNER_INGRESS", os.Getenv("AONOHAKO_TRUSTED_RUNNER_INGRESS"), defaultTrustedRunnerIngress(runtimePlatform))
 	if err != nil {
 		return Config{}, err
 	}
@@ -258,6 +263,10 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=none is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev; use bearer or platform")
 	}
 
+	if contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedRunnerIngress {
+		return Config{}, fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_TRUSTED_RUNNER_INGRESS=true")
+	}
+
 	if contract.RequiresSingleActiveRun && maxActive != 1 {
 		return Config{}, fmt.Errorf("embedded helper execution requires AONOHAKO_MAX_ACTIVE_RUNS=1")
 	}
@@ -299,6 +308,7 @@ func Load() (Config, error) {
 		HeartbeatInterval:             time.Duration(heartbeatSec) * time.Second,
 		BodyReadTimeout:               time.Duration(bodyReadTimeoutSec) * time.Second,
 		AllowRequestNetwork:           allowRequestNetwork,
+		TrustedRunnerIngress:          trustedRunnerIngress,
 		Execution:                     execution,
 		InboundAuth:                   inboundAuth,
 	}, nil
@@ -338,6 +348,10 @@ func defaultMaxPrincipalRequestsPerMinute(opts platform.RuntimeOptions) int {
 
 func defaultAllowRequestNetwork(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetDev
+}
+
+func defaultTrustedRunnerIngress(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget == platform.DeploymentTargetDev || opts.ExecutionTransport == platform.ExecutionTransportRemote
 }
 
 func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
