@@ -106,6 +106,18 @@ func TestDefaultTrustedRunnerIngress(t *testing.T) {
 	}
 }
 
+func TestDefaultTrustedPlatformHeaders(t *testing.T) {
+	if !defaultTrustedPlatformHeaders(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}) {
+		t.Fatalf("dev should trust platform headers by default")
+	}
+	if defaultTrustedPlatformHeaders(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetCloudRun}) {
+		t.Fatalf("cloudrun should require explicit trusted platform header assertion")
+	}
+	if defaultTrustedPlatformHeaders(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetSelfHosted}) {
+		t.Fatalf("selfhosted should require explicit trusted platform header assertion")
+	}
+}
+
 func TestLoadRejectsCloudRunMarkersWithoutExplicitTarget(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "")
 	t.Setenv("K_SERVICE", "aonohako")
@@ -122,6 +134,7 @@ func TestLoadRejectsStrictTargetWithoutWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "true")
 
 	if _, err := Load(); err == nil {
 		t.Fatalf("expected cloudrun target to require AONOHAKO_WORK_ROOT")
@@ -343,6 +356,7 @@ func TestLoadAllowsCloudRunRemoteControlPlaneWithWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 
 	cfg, err := Load()
@@ -368,6 +382,7 @@ func TestLoadRejectsEmbeddedHelperWhenNotRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "true")
 	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 
@@ -381,6 +396,7 @@ func TestLoadRejectsEmbeddedHelperWithoutTrustedIngressOutsideDev(t *testing.T) 
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 
 	_, err := Load()
@@ -394,6 +410,7 @@ func TestLoadRejectsEmbeddedHelperWithParallelActiveRuns(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "true")
 	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "2")
@@ -457,6 +474,7 @@ func TestLoadRejectsGroupWritableDedicatedWorkRoot(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT", root)
 
 	if _, err := Load(); err == nil {
@@ -476,6 +494,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", "4")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
 	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "false")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "false")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
@@ -518,6 +537,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if cfg.TrustedRunnerIngress {
 		t.Fatalf("trusted runner ingress should be parsed from env")
 	}
+	if cfg.TrustedPlatformHeaders {
+		t.Fatalf("trusted platform headers should be parsed from env")
+	}
 }
 
 func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
@@ -548,6 +570,7 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
 		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
 		{name: "trusted runner ingress malformed", key: "AONOHAKO_TRUSTED_RUNNER_INGRESS", value: "sometimes"},
+		{name: "trusted platform headers malformed", key: "AONOHAKO_TRUSTED_PLATFORM_HEADERS", value: "sometimes"},
 	}
 
 	for _, tc := range tests {
@@ -645,6 +668,7 @@ func TestLoadAllowsExplicitPlatformInboundAuth(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "true")
 
 	cfg, err := Load()
 	if err != nil {
@@ -652,6 +676,21 @@ func TestLoadAllowsExplicitPlatformInboundAuth(t *testing.T) {
 	}
 	if cfg.InboundAuth.Mode != InboundAuthPlatform {
 		t.Fatalf("inbound auth mode = %q, want platform", cfg.InboundAuth.Mode)
+	}
+}
+
+func TestLoadRejectsPlatformInboundAuthWithoutTrustedHeadersOutsideDev(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "AONOHAKO_TRUSTED_PLATFORM_HEADERS=true") {
+		t.Fatalf("expected trusted platform header assertion error, got %v", err)
 	}
 }
 

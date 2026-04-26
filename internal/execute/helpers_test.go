@@ -625,6 +625,17 @@ func TestAddressSpaceLimitBytesAlwaysAtLeast512MB(t *testing.T) {
 	}
 }
 
+func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) {
+	for _, commandBase := range []string{"dotnet", "node", "pypy3", "python3", "umjunsik-lang-go", "wasmtime"} {
+		if addressSpaceProximityCanClassifyMLE(commandBase) {
+			t.Fatalf("%s should not use address-space proximity for MLE classification", commandBase)
+		}
+	}
+	if !addressSpaceProximityCanClassifyMLE("runner") {
+		t.Fatalf("native runner should use address-space proximity for MLE classification")
+	}
+}
+
 func TestSandboxCommandBaseSkipsEnvAssignments(t *testing.T) {
 	got := sandboxCommandBase([]string{"/usr/bin/env", "GOMEMLIMIT=64MiB", "/usr/bin/umjunsik-lang-go", "/tmp/Main.umm"})
 	if got != "umjunsik-lang-go" {

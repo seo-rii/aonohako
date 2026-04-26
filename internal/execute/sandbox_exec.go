@@ -431,7 +431,7 @@ done:
 			result.CPUTimeMs = usageCPU
 		}
 	}
-	if !disableAddressSpaceLimit && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
+	if addressSpaceProximityCanClassifyMLE(runtimeBase) && !disableAddressSpaceLimit && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
 		result.Status = model.RunStatusMLE
 		result.Reason = "memory limit exceeded"
 	}
