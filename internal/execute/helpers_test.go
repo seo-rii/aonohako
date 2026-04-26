@@ -375,6 +375,8 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 		JVMHeapPercent:            40,
 		GoMemoryReserveMB:         64,
 		GoGOGC:                    80,
+		ErlangSchedulers:          2,
+		ErlangAsyncThreads:        3,
 		NodeOldSpacePercent:       50,
 		NodeMaxSemiSpaceMB:        2,
 		NodeStackSizeKB:           1024,
@@ -397,6 +399,11 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	javaArgs := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java", req, tuning)
 	if !containsArg(javaArgs, "-Xmx102m") {
 		t.Fatalf("java command with tuning = %v", javaArgs)
+	}
+
+	erlangArgs := buildCommandWithRuntimeTuning("/tmp/beam", "erlang", req, tuning)
+	if !containsArg(erlangArgs, "2:2") || !containsArg(erlangArgs, "3") {
+		t.Fatalf("erlang command with tuning = %v", erlangArgs)
 	}
 
 	uhmArgs := buildCommandWithRuntimeTuning("/tmp/Main.umm", "uhmlang", req, tuning)

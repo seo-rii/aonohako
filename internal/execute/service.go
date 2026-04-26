@@ -34,7 +34,6 @@ const (
 	defaultSPJTimeMs             = 1000
 	defaultSPJMemoryMB           = 256
 	ocamlRunParam                = "s=32k"
-	elixirERLAFlags              = "+MIscs 128 +S 1:1 +A 1 +MMscs 0"
 )
 
 type Hooks struct {

@@ -34,7 +34,6 @@ const (
 	maxArtifactTotalBytes      = 48 << 20
 	maxSourceFiles             = 512
 	ocamlCompileRunParam       = "s=32k"
-	elixirERLAFlags            = "+MIscs 128 +S 1:1 +A 1 +MMscs 0"
 	compileSandboxMemoryMB     = 2048
 	compileSandboxThreadLimit  = 256
 	compileWorkspaceBytes      = 512 << 20
@@ -661,7 +660,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		args := []string{"-o", workDir}
 		args = append(args, erlangFiles...)
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "erlc", args, []string{"ERL_AFLAGS=" + elixirERLAFlags})
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "erlc", args, []string{"ERL_AFLAGS=" + erlangAFlags(tuning)})
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -688,7 +687,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "ocaml":
 		return compileOCaml(ctx, workDir, target, req.Sources)
 	case "elixir":
-		return compileElixir(ctx, workDir, req.Sources)
+		return compileElixir(ctx, workDir, req.Sources, tuning)
 	case "csharp":
 		return compileCSharp(ctx, workDir, req.Sources)
 	case "dart":
@@ -1327,10 +1326,11 @@ func compileOCaml(ctx context.Context, workDir, target string, sources []model.S
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
-func compileElixir(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+func compileElixir(ctx context.Context, workDir string, sources []model.Source, tuning config.RuntimeTuningConfig) model.CompileResponse {
 	var fullOut bytes.Buffer
 	var fullErr bytes.Buffer
 	var checked int
+	tuning = tuning.WithSafeDefaults()
 	for _, src := range sources {
 		clean, err := util.ValidateRelativePath(src.Name)
 		if err != nil {
@@ -1346,7 +1346,7 @@ func compileElixir(ctx context.Context, workDir string, sources []model.Source) 
 			workDir,
 			"elixir",
 			[]string{"-e", "Code.string_to_quoted!(File.read!(hd(System.argv())), file: hd(System.argv()))", filepath.Join(workDir, clean)},
-			[]string{"ERL_AFLAGS=" + elixirERLAFlags},
+			[]string{"ERL_AFLAGS=" + erlangAFlags(tuning)},
 		)
 		fullOut.WriteString(stdout)
 		fullErr.WriteString(stderr)
@@ -1362,6 +1362,11 @@ func compileElixir(ctx context.Context, workDir string, sources []model.Source) 
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+}
+
+func erlangAFlags(tuning config.RuntimeTuningConfig) string {
+	tuning = tuning.WithSafeDefaults()
+	return fmt.Sprintf("+MIscs 128 +S %d:%d +A %d +MMscs 0", tuning.ErlangSchedulers, tuning.ErlangSchedulers, tuning.ErlangAsyncThreads)
 }
 
 func compileCSharp(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {

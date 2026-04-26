@@ -83,7 +83,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	case "ocaml":
 		innerEnv = append(innerEnv, "OCAMLRUNPARAM="+ocamlRunParam)
 	case "elixir":
-		innerEnv = append(innerEnv, "ERL_AFLAGS="+elixirERLAFlags)
+		innerEnv = append(innerEnv, "ERL_AFLAGS="+erlangAFlags(tuning))
 		allowUnixSockets = true
 	case "erlang", "wasm":
 		allowUnixSockets = true
