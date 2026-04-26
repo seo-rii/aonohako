@@ -200,6 +200,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 	t.Setenv("AONOHAKO_JVM_HEAP_PERCENT", "40")
 	t.Setenv("AONOHAKO_GO_MEMORY_RESERVE_MB", "64")
 	t.Setenv("AONOHAKO_GO_GOGC", "80")
+	t.Setenv("AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", "768")
 	t.Setenv("AONOHAKO_NODE_OLD_SPACE_PERCENT", "50")
 	t.Setenv("AONOHAKO_NODE_MAX_SEMI_SPACE_MB", "2")
 	t.Setenv("AONOHAKO_NODE_STACK_SIZE_KB", "1024")
@@ -211,14 +212,15 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 		t.Fatalf("Load returned error: %v", err)
 	}
 	want := RuntimeTuningConfig{
-		JVMHeapPercent:            40,
-		GoMemoryReserveMB:         64,
-		GoGOGC:                    80,
-		NodeOldSpacePercent:       50,
-		NodeMaxSemiSpaceMB:        2,
-		NodeStackSizeKB:           1024,
-		WasmtimeMemoryGuardBytes:  131072,
-		WasmtimeMaxWasmStackBytes: 524288,
+		JVMHeapPercent:             40,
+		GoMemoryReserveMB:          64,
+		GoGOGC:                     80,
+		KotlinNativeCompilerHeapMB: 768,
+		NodeOldSpacePercent:        50,
+		NodeMaxSemiSpaceMB:         2,
+		NodeStackSizeKB:            1024,
+		WasmtimeMemoryGuardBytes:   131072,
+		WasmtimeMaxWasmStackBytes:  524288,
 	}
 	if cfg.Execution.RuntimeTuning != want {
 		t.Fatalf("runtime tuning = %+v, want %+v", cfg.Execution.RuntimeTuning, want)
@@ -233,6 +235,7 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 		{key: "AONOHAKO_JVM_HEAP_PERCENT", value: "90"},
 		{key: "AONOHAKO_GO_MEMORY_RESERVE_MB", value: "999"},
 		{key: "AONOHAKO_GO_GOGC", value: "5"},
+		{key: "AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", value: "2048"},
 		{key: "AONOHAKO_NODE_OLD_SPACE_PERCENT", value: "90"},
 		{key: "AONOHAKO_NODE_MAX_SEMI_SPACE_MB", value: "64"},
 		{key: "AONOHAKO_NODE_STACK_SIZE_KB", value: "64"},
@@ -258,14 +261,15 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 
 func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	got := (RuntimeTuningConfig{
-		JVMHeapPercent:            1,
-		GoMemoryReserveMB:         999,
-		GoGOGC:                    1,
-		NodeOldSpacePercent:       1,
-		NodeMaxSemiSpaceMB:        99,
-		NodeStackSizeKB:           64,
-		WasmtimeMemoryGuardBytes:  1,
-		WasmtimeMaxWasmStackBytes: 99 << 20,
+		JVMHeapPercent:             1,
+		GoMemoryReserveMB:          999,
+		GoGOGC:                     1,
+		KotlinNativeCompilerHeapMB: 1,
+		NodeOldSpacePercent:        1,
+		NodeMaxSemiSpaceMB:         99,
+		NodeStackSizeKB:            64,
+		WasmtimeMemoryGuardBytes:   1,
+		WasmtimeMaxWasmStackBytes:  99 << 20,
 	}).WithSafeDefaults()
 
 	if got.NodeOldSpacePercent != minNodeOldSpacePercent {
@@ -279,6 +283,9 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	}
 	if got.GoGOGC != minGoGOGC {
 		t.Fatalf("GoGOGC = %d, want %d", got.GoGOGC, minGoGOGC)
+	}
+	if got.KotlinNativeCompilerHeapMB != minKotlinNativeCompilerHeapMB {
+		t.Fatalf("KotlinNativeCompilerHeapMB = %d, want %d", got.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB)
 	}
 	if got.NodeMaxSemiSpaceMB != maxNodeMaxSemiSpaceMB {
 		t.Fatalf("NodeMaxSemiSpaceMB = %d, want %d", got.NodeMaxSemiSpaceMB, maxNodeMaxSemiSpaceMB)

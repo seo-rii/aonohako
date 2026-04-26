@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
@@ -40,10 +41,16 @@ const (
 	compileOutputCaptureBytes  = 1 << 20
 )
 
-type Service struct{}
+type Service struct {
+	runtimeTuning config.RuntimeTuningConfig
+}
 
 func New() *Service {
-	return &Service{}
+	return NewWithRuntimeTuning(config.DefaultRuntimeTuningConfig())
+}
+
+func NewWithRuntimeTuning(tuning config.RuntimeTuningConfig) *Service {
+	return &Service{runtimeTuning: tuning.WithSafeDefaults()}
 }
 
 func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.CompileResponse {
@@ -114,7 +121,7 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	ctx, cancel := context.WithTimeout(parent, buildTimeout)
 	defer cancel()
 
-	return capCompileResponseOutput(executeBuild(ctx, workDir, profile, target, req))
+	return capCompileResponseOutput(executeBuild(ctx, workDir, profile, target, req, s.runtimeTuning))
 }
 
 func capCompileResponseOutput(resp model.CompileResponse) model.CompileResponse {
@@ -280,7 +287,7 @@ func validateTargetName(raw string) (string, error) {
 	return clean, nil
 }
 
-func executeBuild(ctx context.Context, workDir string, profile profiles.Profile, target string, req *model.CompileRequest) model.CompileResponse {
+func executeBuild(ctx context.Context, workDir string, profile profiles.Profile, target string, req *model.CompileRequest, tuning config.RuntimeTuningConfig) model.CompileResponse {
 	switch profile.CompileKind {
 	case "c":
 		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".c", ".h"), "gcc", []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE", "-std=" + profile.CompileStd})
@@ -546,7 +553,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "typescript":
 		return compileTypeScript(ctx, workDir, req.Sources)
 	case "kotlin":
-		return compileKotlinNative(ctx, workDir, target, req.Sources)
+		return compileKotlinNative(ctx, workDir, target, req.Sources, tuning)
 	case "fortran":
 		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".f", ".for", ".f90", ".f95", ".f03", ".f08"), "gfortran", []string{"-O2", "-pipe"})
 	case "ada":
@@ -920,7 +927,7 @@ func compileTypeScript(ctx context.Context, workDir string, sources []model.Sour
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
-func compileKotlinNative(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+func compileKotlinNative(ctx context.Context, workDir, target string, sources []model.Source, tuning config.RuntimeTuningConfig) model.CompileResponse {
 	var kt []string
 	for _, src := range sources {
 		if strings.HasSuffix(strings.ToLower(src.Name), ".kt") {
@@ -930,9 +937,10 @@ func compileKotlinNative(ctx context.Context, workDir, target string, sources []
 	if len(kt) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no kotlin sources"}
 	}
+	tuning = tuning.WithSafeDefaults()
 	args := []string{
 		"-J-Xms64m",
-		"-J-Xmx1024m",
+		fmt.Sprintf("-J-Xmx%dm", tuning.KotlinNativeCompilerHeapMB),
 		"-J-Xss1m",
 		"-J-XX:+UseSerialGC",
 		"-J-XX:ReservedCodeCacheSize=32m",
@@ -943,7 +951,7 @@ func compileKotlinNative(ctx context.Context, workDir, target string, sources []
 		"-opt",
 	}
 	args = append(args, kt...)
-	env := append(javaCompileEnv(workDir, 1024), "KONAN_DATA_DIR=/usr/local/lib/aonohako/konan")
+	env := append(javaCompileEnv(workDir, tuning.KotlinNativeCompilerHeapMB), "KONAN_DATA_DIR=/usr/local/lib/aonohako/konan")
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "kotlinc-native", args, env)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
