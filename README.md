@@ -313,6 +313,9 @@ flags through requests:
   Allowed range: `1..4`, default `1`.
 - `AONOHAKO_ERLANG_ASYNC_THREADS` controls BEAM async thread count for
   Erlang/Elixir. Allowed range: `0..4`, default `1`.
+- `AONOHAKO_DOTNET_GC_HEAP_PERCENT` controls the .NET GC heap hard-limit share
+  of request memory; the runner converts it to `DOTNET_GCHeapHardLimit`.
+  Allowed range: `25..80`, default `60`.
 - `AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB` controls Kotlin/Native compiler
   JVM heap. Allowed range: `256..1536`, default `1024`.
 - `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of

@@ -377,6 +377,7 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 		GoGOGC:                    80,
 		ErlangSchedulers:          2,
 		ErlangAsyncThreads:        3,
+		DotnetGCHeapPercent:       50,
 		NodeOldSpacePercent:       50,
 		NodeMaxSemiSpaceMB:        2,
 		NodeStackSizeKB:           1024,
@@ -404,6 +405,10 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	erlangArgs := buildCommandWithRuntimeTuning("/tmp/beam", "erlang", req, tuning)
 	if !containsArg(erlangArgs, "2:2") || !containsArg(erlangArgs, "3") {
 		t.Fatalf("erlang command with tuning = %v", erlangArgs)
+	}
+
+	if got := dotnetGCHeapHardLimitHex(256, tuning); got != "8000000" {
+		t.Fatalf("dotnet GC heap hard limit = %s, want 8000000", got)
 	}
 
 	uhmArgs := buildCommandWithRuntimeTuning("/tmp/Main.umm", "uhmlang", req, tuning)

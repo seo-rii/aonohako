@@ -280,7 +280,7 @@ Memory enforcement uses several layers:
 - `RLIMIT_AS` to constrain virtual address space growth; native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps
 - runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
 - deployment-validated runtime tuning for selected JVM, Go, Erlang/Elixir,
-  Kotlin/Native, Node, and Wasmtime
+  .NET GC, Kotlin/Native, Node, and Wasmtime
   numeric knobs, with bounded environment variables and startup rejection for
   unsafe values rather than request-controlled arbitrary runtime flags
 - child `oom_score_adj=1000` as a best-effort fallback so the sandboxed process is preferred over the server if the host/container OOM killer has to choose
@@ -327,11 +327,12 @@ cgroup-backed compile backend is available.
 .NET is the main compatibility exception: `dotnet` invocations still disable
 `RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large
 memfd-backed double-mapped region before user code starts, and F# compiler
-startup can fail under finite file-size rlimits. The helper still applies RSS
-watchdogs, workspace byte accounting, output caps, open-file limits, thread
-limits, OOM-victim preference, and single-slot execution. Before each sandboxed
-`dotnet` invocation, the runner recreates `/tmp/.dotnet` with the sandbox UID
-and `0700` modes so CoreCLR/F# shared lock
+startup can fail under finite file-size rlimits. The helper still applies a
+request-memory-derived `DOTNET_GCHeapHardLimit`, RSS watchdogs, workspace byte
+accounting, output caps, open-file limits, thread limits, OOM-victim
+preference, and single-slot execution. Before each sandboxed `dotnet`
+invocation, the runner recreates `/tmp/.dotnet` with the sandbox UID and `0700`
+modes so CoreCLR/F# shared lock
 and shared-memory state does not leak between sequential runs in the same
 container.
 

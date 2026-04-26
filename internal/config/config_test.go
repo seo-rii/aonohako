@@ -202,6 +202,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 	t.Setenv("AONOHAKO_GO_GOGC", "80")
 	t.Setenv("AONOHAKO_ERLANG_SCHEDULERS", "2")
 	t.Setenv("AONOHAKO_ERLANG_ASYNC_THREADS", "3")
+	t.Setenv("AONOHAKO_DOTNET_GC_HEAP_PERCENT", "55")
 	t.Setenv("AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", "768")
 	t.Setenv("AONOHAKO_NODE_OLD_SPACE_PERCENT", "50")
 	t.Setenv("AONOHAKO_NODE_MAX_SEMI_SPACE_MB", "2")
@@ -219,6 +220,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 		GoGOGC:                     80,
 		ErlangSchedulers:           2,
 		ErlangAsyncThreads:         3,
+		DotnetGCHeapPercent:        55,
 		KotlinNativeCompilerHeapMB: 768,
 		NodeOldSpacePercent:        50,
 		NodeMaxSemiSpaceMB:         2,
@@ -241,6 +243,7 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 		{key: "AONOHAKO_GO_GOGC", value: "5"},
 		{key: "AONOHAKO_ERLANG_SCHEDULERS", value: "8"},
 		{key: "AONOHAKO_ERLANG_ASYNC_THREADS", value: "8"},
+		{key: "AONOHAKO_DOTNET_GC_HEAP_PERCENT", value: "90"},
 		{key: "AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", value: "2048"},
 		{key: "AONOHAKO_NODE_OLD_SPACE_PERCENT", value: "90"},
 		{key: "AONOHAKO_NODE_MAX_SEMI_SPACE_MB", value: "64"},
@@ -272,6 +275,7 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 		GoGOGC:                     1,
 		ErlangSchedulers:           99,
 		ErlangAsyncThreads:         99,
+		DotnetGCHeapPercent:        1,
 		KotlinNativeCompilerHeapMB: 1,
 		NodeOldSpacePercent:        1,
 		NodeMaxSemiSpaceMB:         99,
@@ -297,6 +301,9 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	}
 	if got.ErlangAsyncThreads != maxErlangAsyncThreads {
 		t.Fatalf("ErlangAsyncThreads = %d, want %d", got.ErlangAsyncThreads, maxErlangAsyncThreads)
+	}
+	if got.DotnetGCHeapPercent != minDotnetGCHeapPercent {
+		t.Fatalf("DotnetGCHeapPercent = %d, want %d", got.DotnetGCHeapPercent, minDotnetGCHeapPercent)
 	}
 	if got.KotlinNativeCompilerHeapMB != minKotlinNativeCompilerHeapMB {
 		t.Fatalf("KotlinNativeCompilerHeapMB = %d, want %d", got.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB)

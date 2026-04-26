@@ -118,6 +118,11 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	runtimeBase := sandboxCommandBase(finalCommand)
 	isDotnet := runtimeBase == "dotnet"
 	if isDotnet {
+		if heapLimit := dotnetGCHeapHardLimitHex(req.Limits.MemoryMB, tuning); heapLimit != "" {
+			innerEnv = append(innerEnv, "DOTNET_GCHeapHardLimit="+heapLimit)
+		}
+	}
+	if isDotnet {
 		if err := security.ResetDotnetSharedState(); err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "dotnet state cleanup failed: " + err.Error()}
 		}

@@ -55,6 +55,7 @@ type RuntimeTuningConfig struct {
 	GoGOGC                     int
 	ErlangSchedulers           int
 	ErlangAsyncThreads         int
+	DotnetGCHeapPercent        int
 	KotlinNativeCompilerHeapMB int
 	NodeOldSpacePercent        int
 	NodeMaxSemiSpaceMB         int
@@ -82,6 +83,9 @@ const (
 	defaultErlangAsyncThreads         = 1
 	minErlangAsyncThreads             = 0
 	maxErlangAsyncThreads             = 4
+	defaultDotnetGCHeapPercent        = 60
+	minDotnetGCHeapPercent            = 25
+	maxDotnetGCHeapPercent            = 80
 	defaultKotlinNativeCompilerHeapMB = 1024
 	minKotlinNativeCompilerHeapMB     = 256
 	maxKotlinNativeCompilerHeapMB     = 1536
@@ -181,6 +185,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	runtimeTuning.ErlangAsyncThreads, err = parseBoundedIntEnv("AONOHAKO_ERLANG_ASYNC_THREADS", os.Getenv("AONOHAKO_ERLANG_ASYNC_THREADS"), runtimeTuning.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.DotnetGCHeapPercent, err = parseBoundedIntEnv("AONOHAKO_DOTNET_GC_HEAP_PERCENT", os.Getenv("AONOHAKO_DOTNET_GC_HEAP_PERCENT"), runtimeTuning.DotnetGCHeapPercent, minDotnetGCHeapPercent, maxDotnetGCHeapPercent)
 	if err != nil {
 		return Config{}, err
 	}
@@ -385,6 +393,7 @@ func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 		GoGOGC:                     defaultGoGOGC,
 		ErlangSchedulers:           defaultErlangSchedulers,
 		ErlangAsyncThreads:         defaultErlangAsyncThreads,
+		DotnetGCHeapPercent:        defaultDotnetGCHeapPercent,
 		KotlinNativeCompilerHeapMB: defaultKotlinNativeCompilerHeapMB,
 		NodeOldSpacePercent:        defaultNodeOldSpacePercent,
 		NodeMaxSemiSpaceMB:         defaultNodeMaxSemiSpaceMB,
@@ -434,6 +443,15 @@ func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	}
 	if c.ErlangAsyncThreads > maxErlangAsyncThreads {
 		c.ErlangAsyncThreads = maxErlangAsyncThreads
+	}
+	if c.DotnetGCHeapPercent == 0 {
+		c.DotnetGCHeapPercent = defaults.DotnetGCHeapPercent
+	}
+	if c.DotnetGCHeapPercent < minDotnetGCHeapPercent {
+		c.DotnetGCHeapPercent = minDotnetGCHeapPercent
+	}
+	if c.DotnetGCHeapPercent > maxDotnetGCHeapPercent {
+		c.DotnetGCHeapPercent = maxDotnetGCHeapPercent
 	}
 	if c.KotlinNativeCompilerHeapMB == 0 {
 		c.KotlinNativeCompilerHeapMB = defaults.KotlinNativeCompilerHeapMB
