@@ -309,6 +309,8 @@ flags through requests:
   Go-based interpreter `GOMEMLIMIT`. Allowed range: `0..256`, default `32`.
 - `AONOHAKO_GO_GOGC` controls Go GC aggressiveness for Go-based interpreters.
   Allowed range: `10..200`, default `50`.
+- `AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB` controls Kotlin/Native compiler
+  JVM heap. Allowed range: `256..1536`, default `1024`.
 - `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of
   the request memory limit. Allowed range: `30..75`, default `60`.
 - `AONOHAKO_NODE_MAX_SEMI_SPACE_MB` caps Node/V8 semi-space. Allowed range:

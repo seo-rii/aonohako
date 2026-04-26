@@ -279,7 +279,8 @@ Memory enforcement uses several layers:
 - `/proc/<pid>/smaps_rollup` confirmation when RSS reaches 80% of the limit or when the runtime cannot use address-space limits
 - `RLIMIT_AS` to constrain virtual address space growth; native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps
 - runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
-- deployment-validated runtime tuning for selected JVM, Go, Node, and Wasmtime
+- deployment-validated runtime tuning for selected JVM, Go, Kotlin/Native,
+  Node, and Wasmtime
   numeric knobs, with bounded environment variables and startup rejection for
   unsafe values rather than request-controlled arbitrary runtime flags
 - child `oom_score_adj=1000` as a best-effort fallback so the sandboxed process is preferred over the server if the host/container OOM killer has to choose

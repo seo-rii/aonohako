@@ -50,44 +50,48 @@ type ExecutionConfig struct {
 }
 
 type RuntimeTuningConfig struct {
-	JVMHeapPercent            int
-	GoMemoryReserveMB         int
-	GoGOGC                    int
-	NodeOldSpacePercent       int
-	NodeMaxSemiSpaceMB        int
-	NodeStackSizeKB           int
-	WasmtimeMemoryGuardBytes  int
-	WasmtimeMaxWasmStackBytes int
+	JVMHeapPercent             int
+	GoMemoryReserveMB          int
+	GoGOGC                     int
+	KotlinNativeCompilerHeapMB int
+	NodeOldSpacePercent        int
+	NodeMaxSemiSpaceMB         int
+	NodeStackSizeKB            int
+	WasmtimeMemoryGuardBytes   int
+	WasmtimeMaxWasmStackBytes  int
 }
 
 const (
 	defaultMaxPendingQueue  = 16
 	defaultMaxActiveStreams = 64
 
-	defaultJVMHeapPercent            = 50
-	minJVMHeapPercent                = 25
-	maxJVMHeapPercent                = 75
-	defaultGoMemoryReserveMB         = 32
-	minGoMemoryReserveMB             = 0
-	maxGoMemoryReserveMB             = 256
-	defaultGoGOGC                    = 50
-	minGoGOGC                        = 10
-	maxGoGOGC                        = 200
-	defaultNodeOldSpacePercent       = 60
-	minNodeOldSpacePercent           = 30
-	maxNodeOldSpacePercent           = 75
-	defaultNodeMaxSemiSpaceMB        = 8
-	minNodeMaxSemiSpaceMB            = 1
-	maxNodeMaxSemiSpaceMB            = 16
-	defaultNodeStackSizeKB           = 2048
-	minNodeStackSizeKB               = 512
-	maxNodeStackSizeKB               = 8192
-	defaultWasmtimeMemoryGuardBytes  = 64 << 10
-	minWasmtimeMemoryGuardBytes      = 64 << 10
-	maxWasmtimeMemoryGuardBytes      = 16 << 20
-	defaultWasmtimeMaxWasmStackBytes = 1 << 20
-	minWasmtimeMaxWasmStackBytes     = 256 << 10
-	maxWasmtimeMaxWasmStackBytes     = 8 << 20
+	defaultJVMHeapPercent             = 50
+	minJVMHeapPercent                 = 25
+	maxJVMHeapPercent                 = 75
+	defaultGoMemoryReserveMB          = 32
+	minGoMemoryReserveMB              = 0
+	maxGoMemoryReserveMB              = 256
+	defaultGoGOGC                     = 50
+	minGoGOGC                         = 10
+	maxGoGOGC                         = 200
+	defaultKotlinNativeCompilerHeapMB = 1024
+	minKotlinNativeCompilerHeapMB     = 256
+	maxKotlinNativeCompilerHeapMB     = 1536
+	defaultNodeOldSpacePercent        = 60
+	minNodeOldSpacePercent            = 30
+	maxNodeOldSpacePercent            = 75
+	defaultNodeMaxSemiSpaceMB         = 8
+	minNodeMaxSemiSpaceMB             = 1
+	maxNodeMaxSemiSpaceMB             = 16
+	defaultNodeStackSizeKB            = 2048
+	minNodeStackSizeKB                = 512
+	maxNodeStackSizeKB                = 8192
+	defaultWasmtimeMemoryGuardBytes   = 64 << 10
+	minWasmtimeMemoryGuardBytes       = 64 << 10
+	maxWasmtimeMemoryGuardBytes       = 16 << 20
+	defaultWasmtimeMaxWasmStackBytes  = 1 << 20
+	minWasmtimeMaxWasmStackBytes      = 256 << 10
+	maxWasmtimeMaxWasmStackBytes      = 8 << 20
 )
 
 type Config struct {
@@ -161,6 +165,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	runtimeTuning.GoGOGC, err = parseBoundedIntEnv("AONOHAKO_GO_GOGC", os.Getenv("AONOHAKO_GO_GOGC"), runtimeTuning.GoGOGC, minGoGOGC, maxGoGOGC)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.KotlinNativeCompilerHeapMB, err = parseBoundedIntEnv("AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", os.Getenv("AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB"), runtimeTuning.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB, maxKotlinNativeCompilerHeapMB)
 	if err != nil {
 		return Config{}, err
 	}
@@ -356,14 +364,15 @@ func defaultTrustedRunnerIngress(opts platform.RuntimeOptions) bool {
 
 func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 	return RuntimeTuningConfig{
-		JVMHeapPercent:            defaultJVMHeapPercent,
-		GoMemoryReserveMB:         defaultGoMemoryReserveMB,
-		GoGOGC:                    defaultGoGOGC,
-		NodeOldSpacePercent:       defaultNodeOldSpacePercent,
-		NodeMaxSemiSpaceMB:        defaultNodeMaxSemiSpaceMB,
-		NodeStackSizeKB:           defaultNodeStackSizeKB,
-		WasmtimeMemoryGuardBytes:  defaultWasmtimeMemoryGuardBytes,
-		WasmtimeMaxWasmStackBytes: defaultWasmtimeMaxWasmStackBytes,
+		JVMHeapPercent:             defaultJVMHeapPercent,
+		GoMemoryReserveMB:          defaultGoMemoryReserveMB,
+		GoGOGC:                     defaultGoGOGC,
+		KotlinNativeCompilerHeapMB: defaultKotlinNativeCompilerHeapMB,
+		NodeOldSpacePercent:        defaultNodeOldSpacePercent,
+		NodeMaxSemiSpaceMB:         defaultNodeMaxSemiSpaceMB,
+		NodeStackSizeKB:            defaultNodeStackSizeKB,
+		WasmtimeMemoryGuardBytes:   defaultWasmtimeMemoryGuardBytes,
+		WasmtimeMaxWasmStackBytes:  defaultWasmtimeMaxWasmStackBytes,
 	}
 }
 
@@ -392,6 +401,15 @@ func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	}
 	if c.GoGOGC > maxGoGOGC {
 		c.GoGOGC = maxGoGOGC
+	}
+	if c.KotlinNativeCompilerHeapMB == 0 {
+		c.KotlinNativeCompilerHeapMB = defaults.KotlinNativeCompilerHeapMB
+	}
+	if c.KotlinNativeCompilerHeapMB < minKotlinNativeCompilerHeapMB {
+		c.KotlinNativeCompilerHeapMB = minKotlinNativeCompilerHeapMB
+	}
+	if c.KotlinNativeCompilerHeapMB > maxKotlinNativeCompilerHeapMB {
+		c.KotlinNativeCompilerHeapMB = maxKotlinNativeCompilerHeapMB
 	}
 	if c.NodeOldSpacePercent == 0 {
 		c.NodeOldSpacePercent = defaults.NodeOldSpacePercent
