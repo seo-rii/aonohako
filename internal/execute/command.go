@@ -304,6 +304,15 @@ func goMemoryLimitMB(memoryMB int, tuning config.RuntimeTuningConfig) int {
 	return max(16, max(0, memoryMB)-tuning.GoMemoryReserveMB)
 }
 
+func dotnetGCHeapHardLimitHex(memoryMB int, tuning config.RuntimeTuningConfig) string {
+	if memoryMB <= 0 {
+		return ""
+	}
+	tuning = tuning.WithSafeDefaults()
+	heapMB := max(16, (memoryMB*tuning.DotnetGCHeapPercent)/100)
+	return fmt.Sprintf("%X", uint64(heapMB)*1024*1024)
+}
+
 func erlangAFlags(tuning config.RuntimeTuningConfig) string {
 	tuning = tuning.WithSafeDefaults()
 	return fmt.Sprintf("+MIscs 128 +S %d:%d +A %d +MMscs 0", tuning.ErlangSchedulers, tuning.ErlangSchedulers, tuning.ErlangAsyncThreads)
