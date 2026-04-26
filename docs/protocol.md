@@ -152,6 +152,9 @@ Both `/compile` and `/execute` share the same bounded queue:
   `cloudrun` or `selfhosted`). This caps `/compile` and `/execute` requests per
   fixed one-minute window for one bearer, platform, or anonymous remote
   principal.
+- **Request body read timeout**: `AONOHAKO_BODY_READ_TIMEOUT_SEC` (default:
+  `30`). This bounds the HTTP request-body upload window before the response
+  switches to SSE streaming.
 - **Remote SSE idle timeout**: `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` (default:
   `30`). This bounds how long a remote `/compile` or `/execute` stream may stay
   silent before the control plane cancels it.

@@ -159,6 +159,10 @@ aonohako-selftest cgroup-preflight
   `/execute` requests per principal per fixed one-minute window; `0` disables
   the per-principal request-rate cap.
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
+- `AONOHAKO_BODY_READ_TIMEOUT_SEC` defaults to `30` and bounds how long the
+  HTTP server will spend reading one `/compile` or `/execute` request body.
+  This keeps authenticated slow uploads from holding handler goroutines
+  indefinitely before SSE streaming begins.
 - `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30` and bounds how long
   a remote `/compile` or `/execute` SSE response may stay silent before the
   control plane cancels it.

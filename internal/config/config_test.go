@@ -389,6 +389,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "5")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "13")
 	t.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "2")
+	t.Setenv("AONOHAKO_BODY_READ_TIMEOUT_SEC", "9")
 	t.Setenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", "4")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
@@ -421,6 +422,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if cfg.HeartbeatInterval != 2*time.Second {
 		t.Fatalf("heartbeat mismatch: %v", cfg.HeartbeatInterval)
 	}
+	if cfg.BodyReadTimeout != 9*time.Second {
+		t.Fatalf("body read timeout mismatch: %v", cfg.BodyReadTimeout)
+	}
 	if cfg.Execution.Remote.SSEIdleTimeout != 4*time.Second {
 		t.Fatalf("remote SSE idle timeout mismatch: %v", cfg.Execution.Remote.SSEIdleTimeout)
 	}
@@ -449,6 +453,9 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "heartbeat zero", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "0"},
 		{name: "heartbeat negative", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "-1"},
 		{name: "heartbeat malformed", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "soon"},
+		{name: "body read timeout zero", key: "AONOHAKO_BODY_READ_TIMEOUT_SEC", value: "0"},
+		{name: "body read timeout negative", key: "AONOHAKO_BODY_READ_TIMEOUT_SEC", value: "-1"},
+		{name: "body read timeout malformed", key: "AONOHAKO_BODY_READ_TIMEOUT_SEC", value: "soon"},
 		{name: "remote sse idle zero", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "0"},
 		{name: "remote sse idle negative", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "-1"},
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
