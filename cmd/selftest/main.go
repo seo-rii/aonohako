@@ -126,6 +126,7 @@ func runDeploymentContractSuite() error {
 		InboundAuth                   config.InboundAuthMode        `json:"inbound_auth"`
 		RemoteAuth                    config.RemoteAuthMode         `json:"remote_auth"`
 		RemoteURLConfigured           bool                          `json:"remote_url_configured"`
+		CgroupParentConfigured        bool                          `json:"cgroup_parent_configured"`
 	}{
 		DeploymentTarget:              cfg.Execution.Platform.DeploymentTarget,
 		ExecutionTransport:            cfg.Execution.Platform.ExecutionTransport,
@@ -148,6 +149,7 @@ func runDeploymentContractSuite() error {
 		InboundAuth:                   cfg.InboundAuth.Mode,
 		RemoteAuth:                    cfg.Execution.Remote.Auth,
 		RemoteURLConfigured:           strings.TrimSpace(cfg.Execution.Remote.URL) != "",
+		CgroupParentConfigured:        strings.TrimSpace(cfg.Execution.Cgroup.ParentDir) != "",
 	}
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")

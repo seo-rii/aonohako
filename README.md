@@ -135,8 +135,9 @@ aonohako-selftest cgroup-preflight
   backend and is rejected by startup validation today.
 - These axes map to explicit security contracts in code:
   `embedded-helper-process-hardening`, `remote-control-plane`, and reserved
-  `reserved-container-isolation`. The helper contract is process hardening,
-  not per-run cgroup, mount-namespace, or post-start `execve()` isolation.
+  `reserved-container-isolation`. The helper contract is process hardening by
+  default; self-hosted helpers can opt into per-run cgroup memory/pids limits,
+  but not mount-namespace, per-run UID, or post-start `execve()` isolation.
 - `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand:
   `cloudrun` → `cloudrun + embedded + helper`
   `local-root` → `selfhosted + embedded + helper`
@@ -194,6 +195,11 @@ aonohako-selftest cgroup-preflight
   upstream strip/rewrite boundary explicit.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
+- `AONOHAKO_CGROUP_PARENT` is optional and supported only for
+  `selfhosted + embedded + helper`. When set, startup validates that the parent
+  cgroup exposes `cpu`, `memory`, and `pids`, and each compile/execute/SPJ run
+  is placed in a per-run cgroup with `memory.max`, `pids.max`, and
+  `memory.oom.group=1`.
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
   `aonohako` runner service and must be an absolute `http(s)` URL without
   embedded credentials, query strings, or fragments
@@ -234,10 +240,12 @@ The local execution path now enforces these invariants:
   their own sources or binaries
 - captured outputs reject symlinks to avoid read-through escapes
 
-The runtime sandbox uses helper-process hardening rather than child cgroups or
-mount-based filesystem isolation. It applies `setrlimit`, `PR_SET_NO_NEW_PRIVS`,
-seccomp, fd cleanup, immutable submitted files, a writable per-run workspace,
-and process-group cleanup.
+The runtime sandbox uses helper-process hardening rather than mount-based
+filesystem isolation. It applies `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp,
+fd cleanup, immutable submitted files, a writable per-run workspace, and
+process-group cleanup. Self-hosted helper deployments can additionally set
+`AONOHAKO_CGROUP_PARENT` to place each compile/execute/SPJ sandbox process in a
+per-run cgroup with kernel-enforced memory and pids limits.
 
 Verdicts are classified from wall time, target CPU time, procfs RSS samples,
 workspace scans, process exit state, and output/SPJ evaluation in that order.

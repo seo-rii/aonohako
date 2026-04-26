@@ -68,6 +68,10 @@
   double-mapper 때문에 `dotnet`은 address-space/file-size rlimit을 끄되,
   `/tmp/.dotnet` shared state를 sandbox UID로 매 실행 전 재생성하고 compile
   failure signal reason과 SSE heartbeat shutdown을 보강했다.
+- Phase 2: `AONOHAKO_CGROUP_PARENT`를 self-hosted embedded helper 전용
+  opt-in으로 추가해 compile/execute/SPJ helper process를 per-run cgroup에
+  넣고 `memory.max`, `pids.max`, `memory.oom.group=1` 이벤트를 watchdog에
+  연결했다. Cloud Run helper mode는 계속 cgroup 비의존 경로로 남는다.
 
 ## 작업 원칙
 

@@ -321,10 +321,12 @@ explicit place to document broad runtime compensation; per-problem limits remain
 the main way to absorb known JIT or GC cost.
 
 Compile commands use the same helper process-hardening path. Because compilers
-can legitimately spawn child processes, compile memory enforcement also samples
-the helper process tree and kills the compile sandbox when aggregate RSS exceeds
-the compile sandbox memory budget. This remains best-effort accounting until a
-cgroup-backed compile backend is available.
+can legitimately spawn child processes, compile memory enforcement samples the
+helper process tree and kills the compile sandbox when aggregate RSS exceeds the
+compile sandbox memory budget. If `AONOHAKO_CGROUP_PARENT` is configured for a
+self-hosted helper runner, compile, execute, and SPJ helper processes are also
+placed into per-run cgroups with `memory.max`, `pids.max`, and
+`memory.oom.group=1`.
 
 .NET is the main compatibility exception: `dotnet` invocations still disable
 `RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large
@@ -338,32 +340,31 @@ modes so CoreCLR/F# shared lock
 and shared-memory state does not leak between sequential runs in the same
 container.
 
-Self-hosted cgroup support is being staged behind an explicit preflight layer
-before it is wired into execution. `internal/isolation/cgroup` currently checks
-for a cgroup v2 mount, `cgroup.controllers`, `cgroup.subtree_control`, and the
-required `cpu`, `memory`, and `pids` controllers. The `io` controller is
-reported separately because it is useful for future throttling but not required
-for the first hard memory/process boundary. This preflight does not mutate the
-host cgroup tree; future self-hosted backends should fail closed when it reports
-that required controls are unavailable.
+Self-hosted cgroup support is gated by an explicit preflight layer and an
+operator-selected parent cgroup. `internal/isolation/cgroup` checks for a cgroup
+v2 mount, `cgroup.controllers`, `cgroup.subtree_control`, and the required
+`cpu`, `memory`, and `pids` controllers. The `io` controller is reported
+separately because it is useful for future throttling but not required for the
+first hard memory/process boundary. Setting `AONOHAKO_CGROUP_PARENT` is allowed
+only for `selfhosted + embedded + helper`, and startup validates the selected
+parent before request handling.
 
-The same package also owns the low-level run-group write contract for the
-future backend. Parent cgroups enable child controllers by writing values such
-as `+cpu +memory +pids` to `cgroup.subtree_control`. A run group must then be
-created with positive `memory.max` and `pids.max` values, and
-`memory.oom.group` is set so the kernel treats the run as one OOM domain.
-`cpu.max` is written only when both quota and period are set, and a target
-process is admitted by writing its PID to `cgroup.procs`. Cleanup removes the
-run cgroup directory without recursive deletion so leftover processes or files
-surface as cleanup errors. The helper execution path does not use this yet; it
-remains the contract that the self-hosted isolated backend will wire into
-process launch.
+The same package owns the low-level run-group write contract used by the
+optional cgroup guardrail and the future isolated backend. Parent cgroups enable
+child controllers by writing values such as `+cpu +memory +pids` to
+`cgroup.subtree_control`. A run group must then be created with positive
+`memory.max` and `pids.max` values, and `memory.oom.group` is set so the kernel
+treats the run as one OOM domain. `cpu.max` is written only when both quota and
+period are set, and a target process is admitted by writing its PID to
+`cgroup.procs`. Cleanup removes the run cgroup directory without recursive
+deletion so leftover processes or files surface as cleanup errors.
 
-The accounting reader for that future backend reads `memory.current`,
-`memory.peak` when present, `memory.events`, `pids.current`, `pids.events`,
-and `cpu.stat`. Verdict integration should prefer `memory.events` `max`,
-`oom`, `oom_kill`, and `oom_group_kill`, `pids.events` `max`, and `cpu.stat`
-throttling counters over RSS polling once cgroups own the run boundary.
+The accounting reader reads `memory.current`, `memory.peak` when present,
+`memory.events`, `pids.current`, `pids.events`, and `cpu.stat`. When a run
+cgroup is present, watchdogs prefer `memory.events` `max`, `oom`, `oom_kill`,
+and `oom_group_kill`, plus `pids.events` `max`, over RSS polling for hard memory
+and pids-limit classification. CPU throttling counters remain diagnostic until
+the self-hosted isolated backend owns CPU quota policy.
 
 ## Deployment Contract
 
@@ -488,7 +489,8 @@ Recommended non-Cloud-Run control-plane baseline:
 Why the design looks this way:
 
 - Cloud Run is the intended security boundary, not nested container tricks
-- the runtime does not depend on child cgroup creation
+- the Cloud Run runtime does not depend on child cgroup creation; self-hosted
+  helpers may opt into it with `AONOHAKO_CGROUP_PARENT`
 - the runtime does not depend on mount-based filesystem isolation
 - the runtime does not assume Landlock availability
 - Cloud Run marker env vars alone do not switch security policy; the deployment

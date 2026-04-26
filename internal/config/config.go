@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/platform"
 	"aonohako/internal/remoteio"
 )
@@ -47,6 +48,11 @@ type ExecutionConfig struct {
 	Platform      platform.RuntimeOptions
 	Remote        RemoteExecutorConfig
 	RuntimeTuning RuntimeTuningConfig
+	Cgroup        CgroupConfig
+}
+
+type CgroupConfig struct {
+	ParentDir string
 }
 
 type RuntimeTuningConfig struct {
@@ -231,6 +237,9 @@ func Load() (Config, error) {
 			SSEIdleTimeout: time.Duration(remoteSSEIdleTimeoutSec) * time.Second,
 		},
 		RuntimeTuning: runtimeTuning,
+		Cgroup: CgroupConfig{
+			ParentDir: strings.TrimSpace(os.Getenv("AONOHAKO_CGROUP_PARENT")),
+		},
 	}
 	inboundAuth := InboundAuthConfig{
 		Mode:        parseInboundAuth(os.Getenv("AONOHAKO_INBOUND_AUTH"), runtimePlatform),
@@ -305,6 +314,15 @@ func Load() (Config, error) {
 
 	if contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedRunnerIngress {
 		return Config{}, fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_TRUSTED_RUNNER_INGRESS=true")
+	}
+
+	if execution.Cgroup.ParentDir != "" {
+		if runtimePlatform.DeploymentTarget != platform.DeploymentTargetSelfHosted || runtimePlatform.ExecutionTransport != platform.ExecutionTransportEmbedded || runtimePlatform.SandboxBackend != platform.SandboxBackendHelper {
+			return Config{}, fmt.Errorf("AONOHAKO_CGROUP_PARENT is supported only with selfhosted embedded helper execution")
+		}
+		if err := cgroup.ValidateParent(execution.Cgroup.ParentDir, []string{"cpu", "memory", "pids"}); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_CGROUP_PARENT validation failed: %w", err)
+		}
 	}
 
 	if contract.RequiresSingleActiveRun && maxActive != 1 {

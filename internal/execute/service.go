@@ -74,6 +74,7 @@ func (b *cappedBuffer) Truncated() bool {
 type Service struct {
 	deploymentTarget platform.DeploymentTarget
 	runtimeTuning    config.RuntimeTuningConfig
+	cgroupParentDir  string
 }
 
 func New() *Service {
@@ -130,7 +131,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "empty command"}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit, s.runtimeTuning)
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit, s.runtimeTuning, s.cgroupParentDir)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
 		return model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason}
@@ -153,7 +154,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(ws, req.SidecarOutputs)
-	status, score, evalReason := evaluateRunStatus(ctx, ws, req, res, judgeOut, s.runtimeTuning)
+	status, score, evalReason := evaluateRunStatus(ctx, ws, req, res, judgeOut, s.runtimeTuning, s.cgroupParentDir)
 	reason := res.Reason
 	if evalReason != "" {
 		reason = evalReason

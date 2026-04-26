@@ -105,13 +105,19 @@ not exist yet:
 | fd cleanup and process-group cleanup | per-run UID or user namespace |
 | immutable submissions and symlink-safe output capture | child-process accounting, seccomp allowlists, and post-start `execve()` blocking |
 
-## Reserved future backend
+## Optional cgroup guardrail
 
 `embedded + container` remains reserved for a future self-hosted backend. It is
 not implemented today.
 
-The first implementation slice for that backend is a non-mutating cgroup v2
-preflight in `internal/isolation/cgroup`. It checks that:
+The helper backend can optionally add per-run cgroup v2 memory and pids limits
+when the runner is deployed as `selfhosted + embedded + helper` and
+`AONOHAKO_CGROUP_PARENT` points at a writable parent cgroup. This is not a full
+container backend: it does not add a mount namespace, masked `/proc`, per-run
+UID, or seccomp allowlist. It does give the kernel a run-level memory/pids
+boundary that is stronger than RSS polling alone.
+
+The non-mutating cgroup preflight in `internal/isolation/cgroup` checks that:
 
 - the intended root is mounted as `cgroup2`
 - `cgroup.controllers` exists
@@ -119,9 +125,9 @@ preflight in `internal/isolation/cgroup`. It checks that:
 - `cpu`, `memory`, and `pids` controllers are available
 - the optional `io` controller is reported when present
 
-This check is intentionally separate from execution for now. The future
-container backend should use it as a startup gate before creating per-run
-cgroups or allowing child-process accounting.
+This check is still useful before enabling `AONOHAKO_CGROUP_PARENT`, and the
+future container backend should use the same controls as a startup gate before
+adding mount and UID isolation.
 
 Operators can run the same check explicitly on a candidate runner host:
 
@@ -132,20 +138,25 @@ aonohako-selftest cgroup-preflight
 The command prints the preflight result as JSON and exits non-zero when required
 cgroup v2 controls are unavailable.
 
-The same package now defines the write contract for one run cgroup:
+When `AONOHAKO_CGROUP_PARENT` is set, startup validates that the selected parent
+has the required controllers and `cgroup.subtree_control`. The compile, execute,
+and SPJ helper paths then use this write contract for one run cgroup:
 
 - create a sanitized run group name under the selected parent
 - write positive `memory.max` and `pids.max` values
+- write `memory.oom.group=1`
 - write `cpu.max` only when both quota and period are configured
 - move the target process by writing its PID to `cgroup.procs`
 
-It also defines the read contract for future verdict integration:
+The same package also defines the read contract used by the optional cgroup
+watchdog and the future isolated backend:
 
 - `memory.current`
 - `memory.peak` when the kernel exposes it
 - `memory.events`, especially `oom`, `oom_kill`, and `oom_group_kill`
 - `pids.current`
 - `cpu.stat`
+- `pids.events`
 
 If that backend is added later, it should only be enabled after it can provide
 all of the following at the same time:

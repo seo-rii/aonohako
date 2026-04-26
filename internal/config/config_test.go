@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -417,6 +418,41 @@ func TestLoadRejectsEmbeddedHelperWithParallelActiveRuns(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatalf("expected embedded helper execution to reject parallel active runs")
+	}
+}
+
+func TestLoadRejectsCgroupParentOutsideSelfHostedHelper(t *testing.T) {
+	parent := t.TempDir()
+	os.WriteFile(filepath.Join(parent, "cgroup.controllers"), []byte("cpu memory pids\n"), 0o644)
+	os.WriteFile(filepath.Join(parent, "cgroup.subtree_control"), []byte(""), 0o644)
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_CGROUP_PARENT", parent)
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "AONOHAKO_CGROUP_PARENT is supported only with selfhosted embedded helper execution") {
+		t.Fatalf("expected cgroup parent topology rejection, got %v", err)
+	}
+}
+
+func TestLoadRejectsInvalidCgroupParent(t *testing.T) {
+	parent := t.TempDir()
+	os.WriteFile(filepath.Join(parent, "cgroup.controllers"), []byte("cpu memory\n"), 0o644)
+	os.WriteFile(filepath.Join(parent, "cgroup.subtree_control"), []byte(""), 0o644)
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "true")
+	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "true")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	t.Setenv("AONOHAKO_CGROUP_PARENT", parent)
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "missing pids controller") {
+		t.Fatalf("expected invalid cgroup parent rejection, got %v", err)
 	}
 }
 

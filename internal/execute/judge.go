@@ -17,7 +17,7 @@ import (
 	"aonohako/internal/util"
 )
 
-func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, tuning config.RuntimeTuningConfig) (string, *float64, string) {
+func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string) {
 	status := res.Status
 	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
 		status = model.RunStatusMLE
@@ -32,7 +32,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
 	if evaluateOutputs {
 		if hasSPJ(req) {
-			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), tuning)
+			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), tuning, cgroupParentDir)
 			if sc != nil {
 				score = sc
 			}
@@ -130,7 +130,7 @@ func hasSPJ(req *model.RunRequest) bool {
 	return req != nil && req.SPJ != nil && req.SPJ.Binary != nil && req.SPJ.Binary.Name != "" && req.SPJ.Binary.DataB64 != ""
 }
 
-func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout string, tuning config.RuntimeTuningConfig) (bool, *float64, error) {
+func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout string, tuning config.RuntimeTuningConfig, cgroupParentDir string) (bool, *float64, error) {
 	spjRoot := filepath.Join(ws.RootDir, ".spj")
 	spjWS, err := prepareWorkspaceDirs(spjRoot)
 	if err != nil {
@@ -194,7 +194,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	spjReq := &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false}
 	args := buildCommandWithRuntimeTuning(spjPath, spjLang, spjReq, tuning)
 	args = append(args, inputPath, solutionPath, outputPath)
-	res := runCommandWithSandbox(ctx, spjWS, args, &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(spjReq), tuning)
+	res := runCommandWithSandbox(ctx, spjWS, args, &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
