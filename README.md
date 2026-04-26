@@ -295,6 +295,8 @@ The default runtime memory profile is locked down for public judge runners.
 Operators can narrow selected numeric knobs without passing arbitrary runtime
 flags through requests:
 
+- `AONOHAKO_JVM_HEAP_PERCENT` controls the Java/Clojure/Groovy/Scala `-Xmx`
+  share of the request memory limit. Allowed range: `25..75`, default `50`.
 - `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of
   the request memory limit. Allowed range: `30..75`, default `60`.
 - `AONOHAKO_NODE_MAX_SEMI_SPACE_MB` caps Node/V8 semi-space. Allowed range:

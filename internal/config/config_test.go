@@ -178,6 +178,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+	t.Setenv("AONOHAKO_JVM_HEAP_PERCENT", "40")
 	t.Setenv("AONOHAKO_NODE_OLD_SPACE_PERCENT", "50")
 	t.Setenv("AONOHAKO_NODE_MAX_SEMI_SPACE_MB", "2")
 	t.Setenv("AONOHAKO_NODE_STACK_SIZE_KB", "1024")
@@ -189,6 +190,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 		t.Fatalf("Load returned error: %v", err)
 	}
 	want := RuntimeTuningConfig{
+		JVMHeapPercent:            40,
 		NodeOldSpacePercent:       50,
 		NodeMaxSemiSpaceMB:        2,
 		NodeStackSizeKB:           1024,
@@ -205,6 +207,7 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 		key   string
 		value string
 	}{
+		{key: "AONOHAKO_JVM_HEAP_PERCENT", value: "90"},
 		{key: "AONOHAKO_NODE_OLD_SPACE_PERCENT", value: "90"},
 		{key: "AONOHAKO_NODE_MAX_SEMI_SPACE_MB", value: "64"},
 		{key: "AONOHAKO_NODE_STACK_SIZE_KB", value: "64"},
@@ -230,6 +233,7 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 
 func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	got := (RuntimeTuningConfig{
+		JVMHeapPercent:            1,
 		NodeOldSpacePercent:       1,
 		NodeMaxSemiSpaceMB:        99,
 		NodeStackSizeKB:           64,
@@ -239,6 +243,9 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 
 	if got.NodeOldSpacePercent != minNodeOldSpacePercent {
 		t.Fatalf("NodeOldSpacePercent = %d, want %d", got.NodeOldSpacePercent, minNodeOldSpacePercent)
+	}
+	if got.JVMHeapPercent != minJVMHeapPercent {
+		t.Fatalf("JVMHeapPercent = %d, want %d", got.JVMHeapPercent, minJVMHeapPercent)
 	}
 	if got.NodeMaxSemiSpaceMB != maxNodeMaxSemiSpaceMB {
 		t.Fatalf("NodeMaxSemiSpaceMB = %d, want %d", got.NodeMaxSemiSpaceMB, maxNodeMaxSemiSpaceMB)

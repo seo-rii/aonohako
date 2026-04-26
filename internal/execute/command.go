@@ -45,7 +45,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			primaryPath,
 		}
 	case "clojure":
-		xmx := max(32, req.Limits.MemoryMB/2)
+		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
 		return []string{
 			"java",
 			fmt.Sprintf("-Xmx%dm", xmx),
@@ -143,7 +143,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 				"/usr/share/java/groovy.jar",
 			)
 		}
-		xmx := max(32, req.Limits.MemoryMB/2)
+		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
 		return []string{
 			"java",
 			fmt.Sprintf("-Xmx%dm", xmx),
@@ -169,7 +169,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		if len(scalaClasspath) == 1 {
 			scalaClasspath = append(scalaClasspath, "/usr/share/java/scala-library.jar")
 		}
-		xmx := max(32, req.Limits.MemoryMB/2)
+		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
 		return []string{
 			"java",
 			fmt.Sprintf("-Xmx%dm", xmx),
@@ -184,7 +184,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			mainClass,
 		}
 	case "java":
-		xmx := max(32, req.Limits.MemoryMB/2)
+		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
 		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss1m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
 	case "javascript":
 		limitMB := max(64, req.Limits.MemoryMB)
@@ -284,4 +284,9 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	default:
 		return []string{primaryPath}
 	}
+}
+
+func jvmHeapMB(memoryMB int, tuning config.RuntimeTuningConfig) int {
+	tuning = tuning.WithSafeDefaults()
+	return max(32, (max(0, memoryMB)*tuning.JVMHeapPercent)/100)
 }

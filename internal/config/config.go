@@ -50,6 +50,7 @@ type ExecutionConfig struct {
 }
 
 type RuntimeTuningConfig struct {
+	JVMHeapPercent            int
 	NodeOldSpacePercent       int
 	NodeMaxSemiSpaceMB        int
 	NodeStackSizeKB           int
@@ -61,6 +62,9 @@ const (
 	defaultMaxPendingQueue  = 16
 	defaultMaxActiveStreams = 64
 
+	defaultJVMHeapPercent            = 50
+	minJVMHeapPercent                = 25
+	maxJVMHeapPercent                = 75
 	defaultNodeOldSpacePercent       = 60
 	minNodeOldSpacePercent           = 30
 	maxNodeOldSpacePercent           = 75
@@ -135,6 +139,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	runtimeTuning := DefaultRuntimeTuningConfig()
+	runtimeTuning.JVMHeapPercent, err = parseBoundedIntEnv("AONOHAKO_JVM_HEAP_PERCENT", os.Getenv("AONOHAKO_JVM_HEAP_PERCENT"), runtimeTuning.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
+	if err != nil {
+		return Config{}, err
+	}
 	runtimeTuning.NodeOldSpacePercent, err = parseBoundedIntEnv("AONOHAKO_NODE_OLD_SPACE_PERCENT", os.Getenv("AONOHAKO_NODE_OLD_SPACE_PERCENT"), runtimeTuning.NodeOldSpacePercent, minNodeOldSpacePercent, maxNodeOldSpacePercent)
 	if err != nil {
 		return Config{}, err
@@ -318,6 +326,7 @@ func defaultAllowRequestNetwork(opts platform.RuntimeOptions) bool {
 
 func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 	return RuntimeTuningConfig{
+		JVMHeapPercent:            defaultJVMHeapPercent,
 		NodeOldSpacePercent:       defaultNodeOldSpacePercent,
 		NodeMaxSemiSpaceMB:        defaultNodeMaxSemiSpaceMB,
 		NodeStackSizeKB:           defaultNodeStackSizeKB,
@@ -328,6 +337,15 @@ func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 
 func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	defaults := DefaultRuntimeTuningConfig()
+	if c.JVMHeapPercent == 0 {
+		c.JVMHeapPercent = defaults.JVMHeapPercent
+	}
+	if c.JVMHeapPercent < minJVMHeapPercent {
+		c.JVMHeapPercent = minJVMHeapPercent
+	}
+	if c.JVMHeapPercent > maxJVMHeapPercent {
+		c.JVMHeapPercent = maxJVMHeapPercent
+	}
 	if c.NodeOldSpacePercent == 0 {
 		c.NodeOldSpacePercent = defaults.NodeOldSpacePercent
 	}
