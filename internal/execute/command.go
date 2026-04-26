@@ -6,10 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
 )
 
 func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
+	return buildCommandWithRuntimeTuning(primaryPath, lang, req, config.DefaultRuntimeTuningConfig())
+}
+
+func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunRequest, tuning config.RuntimeTuningConfig) []string {
+	tuning = tuning.WithSafeDefaults()
 	ertsBin := ""
 	erlangRuntime := "erl"
 	if matches, err := filepath.Glob("/usr/lib/erlang/erts-*/bin/erlexec"); err == nil && len(matches) > 0 {
@@ -182,20 +188,20 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss1m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
 	case "javascript":
 		limitMB := max(64, req.Limits.MemoryMB)
-		oldSpaceMB := max(32, (limitMB*60)/100)
+		oldSpaceMB := max(32, (limitMB*tuning.NodeOldSpacePercent)/100)
 		semiSpaceMB := limitMB / 64
 		if semiSpaceMB < 1 {
 			semiSpaceMB = 1
 		}
-		if semiSpaceMB > 8 {
-			semiSpaceMB = 8
+		if semiSpaceMB > tuning.NodeMaxSemiSpaceMB {
+			semiSpaceMB = tuning.NodeMaxSemiSpaceMB
 		}
 		return []string{
 			"node",
 			"--disable-wasm-trap-handler",
 			fmt.Sprintf("--max-old-space-size=%d", oldSpaceMB),
 			fmt.Sprintf("--max-semi-space-size=%d", semiSpaceMB),
-			"--stack-size=2048",
+			fmt.Sprintf("--stack-size=%d", tuning.NodeStackSizeKB),
 			primaryPath,
 		}
 	case "julia":
@@ -263,13 +269,13 @@ func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 			"--dir=.",
 			"-O", fmt.Sprintf("memory-reservation=%d", guestMemoryBytes),
 			"-O", "memory-reservation-for-growth=0",
-			"-O", "memory-guard-size=65536",
+			"-O", fmt.Sprintf("memory-guard-size=%d", tuning.WasmtimeMemoryGuardBytes),
 			"-W", fmt.Sprintf("max-memory-size=%d", guestMemoryBytes),
 			"-W", "max-memories=1",
 			"-W", "max-instances=1",
 			"-W", "max-tables=1",
 			"-W", "max-table-elements=65536",
-			"-W", "max-wasm-stack=1048576",
+			"-W", fmt.Sprintf("max-wasm-stack=%d", tuning.WasmtimeMaxWasmStackBytes),
 			"-W", "trap-on-grow-failure=y",
 			primaryPath,
 		}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/timing"
@@ -73,14 +74,15 @@ func (b *cappedBuffer) Truncated() bool {
 
 type Service struct {
 	deploymentTarget platform.DeploymentTarget
+	runtimeTuning    config.RuntimeTuningConfig
 }
 
 func New() *Service {
 	opts, err := platform.CurrentRuntimeOptions()
 	if err != nil {
-		return &Service{}
+		return &Service{runtimeTuning: config.DefaultRuntimeTuningConfig()}
 	}
-	return &Service{deploymentTarget: opts.DeploymentTarget}
+	return &Service{deploymentTarget: opts.DeploymentTarget, runtimeTuning: config.DefaultRuntimeTuningConfig()}
 }
 
 func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
@@ -124,7 +126,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "materialize failed: " + err.Error()}
 	}
 
-	cmdArgs := buildCommand(primaryPath, runLang, req)
+	cmdArgs := buildCommandWithRuntimeTuning(primaryPath, runLang, req, s.runtimeTuning)
 	if len(cmdArgs) == 0 {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "empty command"}
 	}
@@ -152,7 +154,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(ws, req.SidecarOutputs)
-	status, score, evalReason := evaluateRunStatus(ctx, ws, req, res, judgeOut)
+	status, score, evalReason := evaluateRunStatus(ctx, ws, req, res, judgeOut, s.runtimeTuning)
 	reason := res.Reason
 	if evalReason != "" {
 		reason = evalReason

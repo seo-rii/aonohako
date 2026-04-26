@@ -44,13 +44,38 @@ type InboundAuthConfig struct {
 }
 
 type ExecutionConfig struct {
-	Platform platform.RuntimeOptions
-	Remote   RemoteExecutorConfig
+	Platform      platform.RuntimeOptions
+	Remote        RemoteExecutorConfig
+	RuntimeTuning RuntimeTuningConfig
+}
+
+type RuntimeTuningConfig struct {
+	NodeOldSpacePercent       int
+	NodeMaxSemiSpaceMB        int
+	NodeStackSizeKB           int
+	WasmtimeMemoryGuardBytes  int
+	WasmtimeMaxWasmStackBytes int
 }
 
 const (
 	defaultMaxPendingQueue  = 16
 	defaultMaxActiveStreams = 64
+
+	defaultNodeOldSpacePercent       = 60
+	minNodeOldSpacePercent           = 30
+	maxNodeOldSpacePercent           = 75
+	defaultNodeMaxSemiSpaceMB        = 8
+	minNodeMaxSemiSpaceMB            = 1
+	maxNodeMaxSemiSpaceMB            = 16
+	defaultNodeStackSizeKB           = 2048
+	minNodeStackSizeKB               = 512
+	maxNodeStackSizeKB               = 8192
+	defaultWasmtimeMemoryGuardBytes  = 64 << 10
+	minWasmtimeMemoryGuardBytes      = 64 << 10
+	maxWasmtimeMemoryGuardBytes      = 16 << 20
+	defaultWasmtimeMaxWasmStackBytes = 1 << 20
+	minWasmtimeMaxWasmStackBytes     = 256 << 10
+	maxWasmtimeMaxWasmStackBytes     = 8 << 20
 )
 
 type Config struct {
@@ -104,6 +129,27 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	runtimeTuning := DefaultRuntimeTuningConfig()
+	runtimeTuning.NodeOldSpacePercent, err = parseBoundedIntEnv("AONOHAKO_NODE_OLD_SPACE_PERCENT", os.Getenv("AONOHAKO_NODE_OLD_SPACE_PERCENT"), runtimeTuning.NodeOldSpacePercent, minNodeOldSpacePercent, maxNodeOldSpacePercent)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.NodeMaxSemiSpaceMB, err = parseBoundedIntEnv("AONOHAKO_NODE_MAX_SEMI_SPACE_MB", os.Getenv("AONOHAKO_NODE_MAX_SEMI_SPACE_MB"), runtimeTuning.NodeMaxSemiSpaceMB, minNodeMaxSemiSpaceMB, maxNodeMaxSemiSpaceMB)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.NodeStackSizeKB, err = parseBoundedIntEnv("AONOHAKO_NODE_STACK_SIZE_KB", os.Getenv("AONOHAKO_NODE_STACK_SIZE_KB"), runtimeTuning.NodeStackSizeKB, minNodeStackSizeKB, maxNodeStackSizeKB)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.WasmtimeMemoryGuardBytes, err = parseBoundedIntEnv("AONOHAKO_WASMTIME_MEMORY_GUARD_BYTES", os.Getenv("AONOHAKO_WASMTIME_MEMORY_GUARD_BYTES"), runtimeTuning.WasmtimeMemoryGuardBytes, minWasmtimeMemoryGuardBytes, maxWasmtimeMemoryGuardBytes)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.WasmtimeMaxWasmStackBytes, err = parseBoundedIntEnv("AONOHAKO_WASMTIME_MAX_WASM_STACK_BYTES", os.Getenv("AONOHAKO_WASMTIME_MAX_WASM_STACK_BYTES"), runtimeTuning.WasmtimeMaxWasmStackBytes, minWasmtimeMaxWasmStackBytes, maxWasmtimeMaxWasmStackBytes)
+	if err != nil {
+		return Config{}, err
+	}
 	execution := ExecutionConfig{
 		Platform: runtimePlatform,
 		Remote: RemoteExecutorConfig{
@@ -113,6 +159,7 @@ func Load() (Config, error) {
 			Audience:       strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUDIENCE")),
 			SSEIdleTimeout: time.Duration(remoteSSEIdleTimeoutSec) * time.Second,
 		},
+		RuntimeTuning: runtimeTuning,
 	}
 	inboundAuth := InboundAuthConfig{
 		Mode:        parseInboundAuth(os.Getenv("AONOHAKO_INBOUND_AUTH"), runtimePlatform),
@@ -263,6 +310,66 @@ func defaultAllowRequestNetwork(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetDev
 }
 
+func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
+	return RuntimeTuningConfig{
+		NodeOldSpacePercent:       defaultNodeOldSpacePercent,
+		NodeMaxSemiSpaceMB:        defaultNodeMaxSemiSpaceMB,
+		NodeStackSizeKB:           defaultNodeStackSizeKB,
+		WasmtimeMemoryGuardBytes:  defaultWasmtimeMemoryGuardBytes,
+		WasmtimeMaxWasmStackBytes: defaultWasmtimeMaxWasmStackBytes,
+	}
+}
+
+func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
+	defaults := DefaultRuntimeTuningConfig()
+	if c.NodeOldSpacePercent == 0 {
+		c.NodeOldSpacePercent = defaults.NodeOldSpacePercent
+	}
+	if c.NodeOldSpacePercent < minNodeOldSpacePercent {
+		c.NodeOldSpacePercent = minNodeOldSpacePercent
+	}
+	if c.NodeOldSpacePercent > maxNodeOldSpacePercent {
+		c.NodeOldSpacePercent = maxNodeOldSpacePercent
+	}
+	if c.NodeMaxSemiSpaceMB == 0 {
+		c.NodeMaxSemiSpaceMB = defaults.NodeMaxSemiSpaceMB
+	}
+	if c.NodeMaxSemiSpaceMB < minNodeMaxSemiSpaceMB {
+		c.NodeMaxSemiSpaceMB = minNodeMaxSemiSpaceMB
+	}
+	if c.NodeMaxSemiSpaceMB > maxNodeMaxSemiSpaceMB {
+		c.NodeMaxSemiSpaceMB = maxNodeMaxSemiSpaceMB
+	}
+	if c.NodeStackSizeKB == 0 {
+		c.NodeStackSizeKB = defaults.NodeStackSizeKB
+	}
+	if c.NodeStackSizeKB < minNodeStackSizeKB {
+		c.NodeStackSizeKB = minNodeStackSizeKB
+	}
+	if c.NodeStackSizeKB > maxNodeStackSizeKB {
+		c.NodeStackSizeKB = maxNodeStackSizeKB
+	}
+	if c.WasmtimeMemoryGuardBytes == 0 {
+		c.WasmtimeMemoryGuardBytes = defaults.WasmtimeMemoryGuardBytes
+	}
+	if c.WasmtimeMemoryGuardBytes < minWasmtimeMemoryGuardBytes {
+		c.WasmtimeMemoryGuardBytes = minWasmtimeMemoryGuardBytes
+	}
+	if c.WasmtimeMemoryGuardBytes > maxWasmtimeMemoryGuardBytes {
+		c.WasmtimeMemoryGuardBytes = maxWasmtimeMemoryGuardBytes
+	}
+	if c.WasmtimeMaxWasmStackBytes == 0 {
+		c.WasmtimeMaxWasmStackBytes = defaults.WasmtimeMaxWasmStackBytes
+	}
+	if c.WasmtimeMaxWasmStackBytes < minWasmtimeMaxWasmStackBytes {
+		c.WasmtimeMaxWasmStackBytes = minWasmtimeMaxWasmStackBytes
+	}
+	if c.WasmtimeMaxWasmStackBytes > maxWasmtimeMaxWasmStackBytes {
+		c.WasmtimeMaxWasmStackBytes = maxWasmtimeMaxWasmStackBytes
+	}
+	return c
+}
+
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -288,6 +395,17 @@ func parseNonNegativeIntEnv(key, raw string, fallback int) (int, error) {
 	v, err := strconv.Atoi(raw)
 	if err != nil || v < 0 {
 		return 0, fmt.Errorf("%s must be a non-negative integer", key)
+	}
+	return v, nil
+}
+
+func parseBoundedIntEnv(key, raw string, fallback, minValue, maxValue int) (int, error) {
+	if raw == "" {
+		return fallback, nil
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v < minValue || v > maxValue {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", key, minValue, maxValue)
 	}
 	return v, nil
 }

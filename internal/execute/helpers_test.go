@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
 )
 
@@ -360,6 +361,49 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 		"/tmp/Main.wasm",
 	}) {
 		t.Fatalf("wasm command = %v", wasmArgs)
+	}
+}
+
+func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 256}}
+	tuning := config.RuntimeTuningConfig{
+		NodeOldSpacePercent:       50,
+		NodeMaxSemiSpaceMB:        2,
+		NodeStackSizeKB:           1024,
+		WasmtimeMemoryGuardBytes:  128 << 10,
+		WasmtimeMaxWasmStackBytes: 512 << 10,
+	}
+
+	jsArgs := buildCommandWithRuntimeTuning("/tmp/Main.js", "javascript", req, tuning)
+	if !reflect.DeepEqual(jsArgs, []string{
+		"node",
+		"--disable-wasm-trap-handler",
+		"--max-old-space-size=128",
+		"--max-semi-space-size=2",
+		"--stack-size=1024",
+		"/tmp/Main.js",
+	}) {
+		t.Fatalf("javascript command with tuning = %v", jsArgs)
+	}
+
+	wasmArgs := buildCommandWithRuntimeTuning("/tmp/Main.wasm", "wasm", req, tuning)
+	if !reflect.DeepEqual(wasmArgs, []string{
+		"wasmtime",
+		"run",
+		"--dir=.",
+		"-O", "memory-reservation=201326592",
+		"-O", "memory-reservation-for-growth=0",
+		"-O", "memory-guard-size=131072",
+		"-W", "max-memory-size=201326592",
+		"-W", "max-memories=1",
+		"-W", "max-instances=1",
+		"-W", "max-tables=1",
+		"-W", "max-table-elements=65536",
+		"-W", "max-wasm-stack=524288",
+		"-W", "trap-on-grow-failure=y",
+		"/tmp/Main.wasm",
+	}) {
+		t.Fatalf("wasm command with tuning = %v", wasmArgs)
 	}
 }
 
