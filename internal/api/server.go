@@ -28,11 +28,12 @@ import (
 )
 
 const (
-	maxRunTextFieldBytes = 16 << 20
-	maxRunTimeMs         = 60_000
-	maxRunMemoryMB       = 4096
-	maxRunOutputBytes    = 8 << 20
-	maxRunWorkspaceBytes = 1 << 30
+	maxRunTextFieldBytes    = 16 << 20
+	maxRunTimeMs            = 60_000
+	maxRunMemoryMB          = 4096
+	maxRunOutputBytes       = 8 << 20
+	maxRunWorkspaceBytes    = 1 << 30
+	platformPrincipalHeader = "X-Aonohako-Principal"
 )
 
 type principalContextKey struct{}
@@ -395,11 +396,8 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		case config.InboundAuthPlatform:
 			principal := ""
-			for _, header := range []string{"X-Aonohako-Principal", "X-Goog-Authenticated-User-Email", "X-Forwarded-Email", "X-Forwarded-User"} {
-				if value := strings.TrimSpace(r.Header.Get(header)); value != "" {
-					principal = "platform:" + value
-					break
-				}
+			if value := strings.TrimSpace(r.Header.Get(platformPrincipalHeader)); value != "" {
+				principal = "platform:" + value
 			}
 			if principal == "" {
 				principal = "platform:"
