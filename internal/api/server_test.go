@@ -353,6 +353,47 @@ func TestExecutePrincipalRequestRateOverflowReturns429(t *testing.T) {
 	_, _ = io.Copy(io.Discard, resp3.Body)
 }
 
+func TestPlatformAuthIgnoresForwardedPrincipalHeaders(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform}
+	cfg.MaxActiveRuns = 4
+	cfg.MaxPendingQueue = 8
+	cfg.MaxActiveStreams = 8
+	cfg.MaxPrincipalStreams = 8
+	cfg.MaxPrincipalRequestsPerMinute = 1
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	body := executePayload(t)
+	req1, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-Forwarded-Email", "alice@example.test")
+	resp1, err := http.DefaultClient.Do(req1)
+	if err != nil {
+		t.Fatalf("first request failed: %v", err)
+	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != http.StatusOK {
+		t.Fatalf("first request status = %d, want 200", resp1.StatusCode)
+	}
+	_, _ = io.Copy(io.Discard, resp1.Body)
+
+	req2, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Forwarded-Email", "bob@example.test")
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("second request failed: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("second request status = %d, want 429 because forwarded identity headers are ignored", resp2.StatusCode)
+	}
+}
+
 func TestHealthz(t *testing.T) {
 	s := newServerForTest(t)
 	ts := httptest.NewServer(s.Handler())

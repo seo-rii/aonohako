@@ -437,9 +437,10 @@ The following checks are enforced before the HTTP server starts:
 - `/compile` and `/execute` streams are capped globally, and outside `dev` they
   are also capped per principal. Bearer auth uses a token fingerprint as the
   principal key; platform auth uses the upstream principal header such as
-  `X-Aonohako-Principal`. Platform auth is safe only behind an upstream
-  identity layer that strips client-supplied identity headers and rewrites the
-  trusted principal header before the request reaches `aonohako`.
+  `X-Aonohako-Principal`. Platform auth ignores generic forwarded identity
+  headers and is safe only behind an upstream identity layer that strips any
+  client-supplied copy of `X-Aonohako-Principal` before rewriting it for the
+  request reaching `aonohako`.
 - Outside `dev`, `/compile` and `/execute` requests are also capped per
   principal in a fixed one-minute window before they enter the run queue.
 
