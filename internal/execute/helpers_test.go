@@ -367,6 +367,7 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 256}}
 	tuning := config.RuntimeTuningConfig{
+		JVMHeapPercent:            40,
 		NodeOldSpacePercent:       50,
 		NodeMaxSemiSpaceMB:        2,
 		NodeStackSizeKB:           1024,
@@ -384,6 +385,11 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 		"/tmp/Main.js",
 	}) {
 		t.Fatalf("javascript command with tuning = %v", jsArgs)
+	}
+
+	javaArgs := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java", req, tuning)
+	if !containsArg(javaArgs, "-Xmx102m") {
+		t.Fatalf("java command with tuning = %v", javaArgs)
 	}
 
 	wasmArgs := buildCommandWithRuntimeTuning("/tmp/Main.wasm", "wasm", req, tuning)
