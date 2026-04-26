@@ -246,7 +246,13 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		dbPath := filepath.Join(filepath.Dir(primaryPath), ".aonohako.sqlite3")
 		return []string{"sh", "-c", "exec sqlite3 \"$0\" < \"$1\"", dbPath, primaryPath}
 	case "uhmlang":
-		return []string{"/usr/bin/umjunsik-lang-go", primaryPath}
+		return []string{
+			"env",
+			fmt.Sprintf("GOMEMLIMIT=%dMiB", goMemoryLimitMB(req.Limits.MemoryMB, tuning)),
+			fmt.Sprintf("GOGC=%d", tuning.GoGOGC),
+			"/usr/bin/umjunsik-lang-go",
+			primaryPath,
+		}
 	case "csharp", "fsharp":
 		if strings.HasSuffix(strings.ToLower(primaryPath), ".dll") {
 			return []string{"dotnet", primaryPath}
@@ -289,4 +295,9 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 func jvmHeapMB(memoryMB int, tuning config.RuntimeTuningConfig) int {
 	tuning = tuning.WithSafeDefaults()
 	return max(32, (max(0, memoryMB)*tuning.JVMHeapPercent)/100)
+}
+
+func goMemoryLimitMB(memoryMB int, tuning config.RuntimeTuningConfig) int {
+	tuning = tuning.WithSafeDefaults()
+	return max(16, max(0, memoryMB)-tuning.GoMemoryReserveMB)
 }

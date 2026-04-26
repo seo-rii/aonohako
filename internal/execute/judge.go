@@ -194,7 +194,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	spjReq := &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false}
 	args := buildCommandWithRuntimeTuning(spjPath, spjLang, spjReq, tuning)
 	args = append(args, inputPath, solutionPath, outputPath)
-	res := runCommandWithSandbox(ctx, spjWS, args, &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(spjReq))
+	res := runCommandWithSandbox(ctx, spjWS, args, &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(spjReq), tuning)
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
@@ -324,6 +324,8 @@ func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
 	memoryMB := max(64, memMB)
 	limitMB := memoryMB + 64
 	switch commandBase {
+	case "python3", "pypy3":
+		limitMB = max(1024, memoryMB*3+512)
 	case "node", "umjunsik-lang-go":
 		limitMB = max(1024, memoryMB*4+512)
 	case "wasmtime":
