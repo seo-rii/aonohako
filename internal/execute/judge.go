@@ -338,6 +338,15 @@ func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
 	return uint64(limitMB) * 1024 * 1024
 }
 
+func addressSpaceProximityCanClassifyMLE(commandBase string) bool {
+	switch commandBase {
+	case "dotnet", "node", "pypy3", "python3", "umjunsik-lang-go", "wasmtime":
+		return false
+	default:
+		return true
+	}
+}
+
 func max(a, b int) int {
 	if a > b {
 		return a

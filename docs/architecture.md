@@ -284,7 +284,9 @@ Memory enforcement uses several layers:
   numeric knobs, with bounded environment variables and startup rejection for
   unsafe values rather than request-controlled arbitrary runtime flags
 - child `oom_score_adj=1000` as a best-effort fallback so the sandboxed process is preferred over the server if the host/container OOM killer has to choose
-- a post-exit address-space proximity check with slack
+- a native-command-only post-exit address-space proximity check with slack;
+  interpreter and managed runtimes rely on RSS/runtime-knob signals to avoid
+  false MLE classification from large virtual-memory reservations
 - workspace byte accounting, so temp-file growth is also limited
 
 ### Verdict Classification Policy
@@ -418,6 +420,10 @@ The following checks are enforced before the HTTP server starts:
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication
 - `AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`
+- `AONOHAKO_INBOUND_AUTH=platform` outside `dev` requires
+  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`, forcing operators to assert that
+  the upstream layer strips client-supplied identity headers and rewrites
+  `X-Aonohako-Principal`
 - numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
   `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`,
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`,

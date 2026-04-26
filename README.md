@@ -189,6 +189,9 @@ aonohako-selftest cgroup-preflight
   any client-supplied identity headers and rewrite `X-Aonohako-Principal`;
   forwarded identity headers such as `X-Forwarded-Email` are ignored by the
   application. Do not expose platform mode directly to the public internet.
+- `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` is required outside `dev` when
+  `AONOHAKO_INBOUND_AUTH=platform`, so header-trusting deployments make the
+  upstream strip/rewrite boundary explicit.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
@@ -274,6 +277,8 @@ For Cloud Run deployments, use this baseline:
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
   `AONOHAKO_INBOUND_AUTH=platform` only when an upstream layer enforces
   inbound authentication
+- `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` when using
+  `AONOHAKO_INBOUND_AUTH=platform`
 - `AONOHAKO_TRUSTED_RUNNER_INGRESS=true` after configuring private ingress,
   Cloud Run IAM, mTLS, or an equivalent trusted control-plane boundary
 - second-generation execution environment
