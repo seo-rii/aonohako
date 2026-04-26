@@ -309,6 +309,10 @@ flags through requests:
   Go-based interpreter `GOMEMLIMIT`. Allowed range: `0..256`, default `32`.
 - `AONOHAKO_GO_GOGC` controls Go GC aggressiveness for Go-based interpreters.
   Allowed range: `10..200`, default `50`.
+- `AONOHAKO_ERLANG_SCHEDULERS` controls BEAM scheduler count for Erlang/Elixir.
+  Allowed range: `1..4`, default `1`.
+- `AONOHAKO_ERLANG_ASYNC_THREADS` controls BEAM async thread count for
+  Erlang/Elixir. Allowed range: `0..4`, default `1`.
 - `AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB` controls Kotlin/Native compiler
   JVM heap. Allowed range: `256..1536`, default `1024`.
 - `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of

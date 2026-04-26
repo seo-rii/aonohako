@@ -53,6 +53,8 @@ type RuntimeTuningConfig struct {
 	JVMHeapPercent             int
 	GoMemoryReserveMB          int
 	GoGOGC                     int
+	ErlangSchedulers           int
+	ErlangAsyncThreads         int
 	KotlinNativeCompilerHeapMB int
 	NodeOldSpacePercent        int
 	NodeMaxSemiSpaceMB         int
@@ -74,6 +76,12 @@ const (
 	defaultGoGOGC                     = 50
 	minGoGOGC                         = 10
 	maxGoGOGC                         = 200
+	defaultErlangSchedulers           = 1
+	minErlangSchedulers               = 1
+	maxErlangSchedulers               = 4
+	defaultErlangAsyncThreads         = 1
+	minErlangAsyncThreads             = 0
+	maxErlangAsyncThreads             = 4
 	defaultKotlinNativeCompilerHeapMB = 1024
 	minKotlinNativeCompilerHeapMB     = 256
 	maxKotlinNativeCompilerHeapMB     = 1536
@@ -165,6 +173,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	runtimeTuning.GoGOGC, err = parseBoundedIntEnv("AONOHAKO_GO_GOGC", os.Getenv("AONOHAKO_GO_GOGC"), runtimeTuning.GoGOGC, minGoGOGC, maxGoGOGC)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.ErlangSchedulers, err = parseBoundedIntEnv("AONOHAKO_ERLANG_SCHEDULERS", os.Getenv("AONOHAKO_ERLANG_SCHEDULERS"), runtimeTuning.ErlangSchedulers, minErlangSchedulers, maxErlangSchedulers)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.ErlangAsyncThreads, err = parseBoundedIntEnv("AONOHAKO_ERLANG_ASYNC_THREADS", os.Getenv("AONOHAKO_ERLANG_ASYNC_THREADS"), runtimeTuning.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
 	if err != nil {
 		return Config{}, err
 	}
@@ -367,6 +383,8 @@ func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 		JVMHeapPercent:             defaultJVMHeapPercent,
 		GoMemoryReserveMB:          defaultGoMemoryReserveMB,
 		GoGOGC:                     defaultGoGOGC,
+		ErlangSchedulers:           defaultErlangSchedulers,
+		ErlangAsyncThreads:         defaultErlangAsyncThreads,
 		KotlinNativeCompilerHeapMB: defaultKotlinNativeCompilerHeapMB,
 		NodeOldSpacePercent:        defaultNodeOldSpacePercent,
 		NodeMaxSemiSpaceMB:         defaultNodeMaxSemiSpaceMB,
@@ -401,6 +419,21 @@ func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	}
 	if c.GoGOGC > maxGoGOGC {
 		c.GoGOGC = maxGoGOGC
+	}
+	if c.ErlangSchedulers == 0 {
+		c.ErlangSchedulers = defaults.ErlangSchedulers
+	}
+	if c.ErlangSchedulers < minErlangSchedulers {
+		c.ErlangSchedulers = minErlangSchedulers
+	}
+	if c.ErlangSchedulers > maxErlangSchedulers {
+		c.ErlangSchedulers = maxErlangSchedulers
+	}
+	if c.ErlangAsyncThreads < minErlangAsyncThreads {
+		c.ErlangAsyncThreads = minErlangAsyncThreads
+	}
+	if c.ErlangAsyncThreads > maxErlangAsyncThreads {
+		c.ErlangAsyncThreads = maxErlangAsyncThreads
 	}
 	if c.KotlinNativeCompilerHeapMB == 0 {
 		c.KotlinNativeCompilerHeapMB = defaults.KotlinNativeCompilerHeapMB

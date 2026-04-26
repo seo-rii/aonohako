@@ -200,6 +200,8 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 	t.Setenv("AONOHAKO_JVM_HEAP_PERCENT", "40")
 	t.Setenv("AONOHAKO_GO_MEMORY_RESERVE_MB", "64")
 	t.Setenv("AONOHAKO_GO_GOGC", "80")
+	t.Setenv("AONOHAKO_ERLANG_SCHEDULERS", "2")
+	t.Setenv("AONOHAKO_ERLANG_ASYNC_THREADS", "3")
 	t.Setenv("AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", "768")
 	t.Setenv("AONOHAKO_NODE_OLD_SPACE_PERCENT", "50")
 	t.Setenv("AONOHAKO_NODE_MAX_SEMI_SPACE_MB", "2")
@@ -215,6 +217,8 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 		JVMHeapPercent:             40,
 		GoMemoryReserveMB:          64,
 		GoGOGC:                     80,
+		ErlangSchedulers:           2,
+		ErlangAsyncThreads:         3,
 		KotlinNativeCompilerHeapMB: 768,
 		NodeOldSpacePercent:        50,
 		NodeMaxSemiSpaceMB:         2,
@@ -235,6 +239,8 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 		{key: "AONOHAKO_JVM_HEAP_PERCENT", value: "90"},
 		{key: "AONOHAKO_GO_MEMORY_RESERVE_MB", value: "999"},
 		{key: "AONOHAKO_GO_GOGC", value: "5"},
+		{key: "AONOHAKO_ERLANG_SCHEDULERS", value: "8"},
+		{key: "AONOHAKO_ERLANG_ASYNC_THREADS", value: "8"},
 		{key: "AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", value: "2048"},
 		{key: "AONOHAKO_NODE_OLD_SPACE_PERCENT", value: "90"},
 		{key: "AONOHAKO_NODE_MAX_SEMI_SPACE_MB", value: "64"},
@@ -264,6 +270,8 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 		JVMHeapPercent:             1,
 		GoMemoryReserveMB:          999,
 		GoGOGC:                     1,
+		ErlangSchedulers:           99,
+		ErlangAsyncThreads:         99,
 		KotlinNativeCompilerHeapMB: 1,
 		NodeOldSpacePercent:        1,
 		NodeMaxSemiSpaceMB:         99,
@@ -283,6 +291,12 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	}
 	if got.GoGOGC != minGoGOGC {
 		t.Fatalf("GoGOGC = %d, want %d", got.GoGOGC, minGoGOGC)
+	}
+	if got.ErlangSchedulers != maxErlangSchedulers {
+		t.Fatalf("ErlangSchedulers = %d, want %d", got.ErlangSchedulers, maxErlangSchedulers)
+	}
+	if got.ErlangAsyncThreads != maxErlangAsyncThreads {
+		t.Fatalf("ErlangAsyncThreads = %d, want %d", got.ErlangAsyncThreads, maxErlangAsyncThreads)
 	}
 	if got.KotlinNativeCompilerHeapMB != minKotlinNativeCompilerHeapMB {
 		t.Fatalf("KotlinNativeCompilerHeapMB = %d, want %d", got.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB)

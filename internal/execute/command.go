@@ -67,6 +67,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "racket":
 		return []string{"racket", primaryPath}
 	case "erlang":
+		schedulerArg := fmt.Sprintf("%d:%d", tuning.ErlangSchedulers, tuning.ErlangSchedulers)
+		asyncThreadsArg := fmt.Sprintf("%d", tuning.ErlangAsyncThreads)
 		module := "main"
 		function := "main"
 		entryPoint := strings.TrimSpace(req.EntryPoint)
@@ -93,12 +95,12 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 				"ROOTDIR=/usr/lib/erlang",
 				"BINDIR=" + ertsBin,
 				"PROGNAME=erl",
-				"ERL_AFLAGS=" + elixirERLAFlags,
+				"ERL_AFLAGS=" + erlangAFlags(tuning),
 				erlangRuntime,
 				"+S",
-				"1:1",
+				schedulerArg,
 				"+A",
-				"1",
+				asyncThreadsArg,
 				"-noshell",
 				"-pa",
 				primaryPath,
@@ -110,7 +112,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 				"stop",
 			}
 		}
-		return []string{erlangRuntime, "+S", "1:1", "+A", "1", "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
+		return []string{erlangRuntime, "+S", schedulerArg, "+A", asyncThreadsArg, "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
 	case "prolog":
 		return []string{"swipl", "-q", "-f", primaryPath, "-g", "main", "-t", "halt"}
 	case "lisp":
@@ -221,7 +223,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "elixir":
 		elixirRoot := "/usr/lib/elixir/lib"
 		if info, err := os.Stat(filepath.Join(elixirRoot, "elixir", "ebin")); err != nil || !info.IsDir() || ertsBin == "" {
-			return []string{"env", "ERL_AFLAGS=" + elixirERLAFlags, "elixir", primaryPath}
+			return []string{"env", "ERL_AFLAGS=" + erlangAFlags(tuning), "elixir", primaryPath}
 		}
 		return []string{
 			"env",
@@ -229,7 +231,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"ROOTDIR=/usr/lib/erlang",
 			"BINDIR=" + ertsBin,
 			"PROGNAME=erl",
-			"ERL_AFLAGS=" + elixirERLAFlags,
+			"ERL_AFLAGS=" + erlangAFlags(tuning),
 			erlangRuntime,
 			"-noshell",
 			"-elixir_root",
@@ -300,4 +302,9 @@ func jvmHeapMB(memoryMB int, tuning config.RuntimeTuningConfig) int {
 func goMemoryLimitMB(memoryMB int, tuning config.RuntimeTuningConfig) int {
 	tuning = tuning.WithSafeDefaults()
 	return max(16, max(0, memoryMB)-tuning.GoMemoryReserveMB)
+}
+
+func erlangAFlags(tuning config.RuntimeTuningConfig) string {
+	tuning = tuning.WithSafeDefaults()
+	return fmt.Sprintf("+MIscs 128 +S %d:%d +A %d +MMscs 0", tuning.ErlangSchedulers, tuning.ErlangSchedulers, tuning.ErlangAsyncThreads)
 }
