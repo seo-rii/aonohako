@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
@@ -41,7 +42,8 @@ const (
 )
 
 type Service struct {
-	runtimeTuning config.RuntimeTuningConfig
+	runtimeTuning   config.RuntimeTuningConfig
+	cgroupParentDir string
 }
 
 func New() *Service {
@@ -119,8 +121,26 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 
 	ctx, cancel := context.WithTimeout(parent, buildTimeout)
 	defer cancel()
+	ctx = withCompileCgroupParent(ctx, s.cgroupParentDir)
 
 	return capCompileResponseOutput(executeBuild(ctx, workDir, profile, target, req, s.runtimeTuning))
+}
+
+type compileCgroupParentContextKey struct{}
+
+func withCompileCgroupParent(ctx context.Context, parentDir string) context.Context {
+	if strings.TrimSpace(parentDir) == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, compileCgroupParentContextKey{}, parentDir)
+}
+
+func compileCgroupParentFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	parentDir, _ := ctx.Value(compileCgroupParentContextKey{}).(string)
+	return strings.TrimSpace(parentDir)
 }
 
 func capCompileResponseOutput(resp model.CompileResponse) model.CompileResponse {
@@ -1712,6 +1732,34 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if err := cmd.Start(); err != nil {
 		return "", "", model.CompileStatusInternal, "start failed: " + err.Error()
 	}
+	cgroupParentDir := compileCgroupParentFromContext(ctx)
+	var runGroup cgroup.Group
+	if cgroupParentDir != "" {
+		if err := cgroup.EnableControllers(cgroupParentDir, []string{"cpu", "memory", "pids"}); err != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			return "", "", model.CompileStatusInternal, "cgroup controller setup failed: " + err.Error()
+		}
+		group, err := cgroup.CreateRunGroup(cgroupParentDir, cgroup.RunName("compile"), cgroup.Limits{
+			MemoryMaxBytes: memoryLimitKB * 1024,
+			PidsMax:        compileSandboxThreadLimit + 32,
+		})
+		if err != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			return "", "", model.CompileStatusInternal, "cgroup create failed: " + err.Error()
+		}
+		runGroup = group
+		if err := runGroup.AddProc(cmd.Process.Pid); err != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			_ = runGroup.Remove()
+			return "", "", model.CompileStatusInternal, "cgroup add process failed: " + err.Error()
+		}
+		defer func() {
+			_ = runGroup.Remove()
+		}()
+	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
 	_ = requestRead.Close()
 	if n, err := requestWrite.Write(rawReq); err != nil {
@@ -1818,6 +1866,20 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			<-waitCh
 			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusTimeout, ctx.Err().Error()
 		case <-watchdog.C:
+			if runGroup.Path != "" {
+				if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
+					if stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.MemoryCurrentBytes > memoryLimitKB*1024 {
+						killSandbox()
+						<-waitCh
+						return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "memory limit exceeded"
+					}
+					if stats.PidsMaxEvents() > 0 {
+						killSandbox()
+						<-waitCh
+						return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "process limit exceeded"
+					}
+				}
+			}
 			if rssKB := processTreeRSSKB(descendantPIDs()); rssKB > memoryLimitKB {
 				killSandbox()
 				<-waitCh

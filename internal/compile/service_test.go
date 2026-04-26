@@ -15,7 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/platform"
 	"golang.org/x/sys/unix"
 )
 
@@ -25,6 +27,29 @@ func b64String(v string) string {
 
 func b64Bytes(v []byte) string {
 	return base64.StdEncoding.EncodeToString(v)
+}
+
+func TestBuildEmbeddedRunnerPassesCgroupParent(t *testing.T) {
+	runner, err := Build(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+			Cgroup: config.CgroupConfig{ParentDir: "/sys/fs/cgroup/aonohako"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	service, ok := runner.(*Service)
+	if !ok {
+		t.Fatalf("Build() returned %T, want *Service", runner)
+	}
+	if service.cgroupParentDir != "/sys/fs/cgroup/aonohako" {
+		t.Fatalf("cgroupParentDir = %q", service.cgroupParentDir)
+	}
 }
 
 func sandboxWritableTempDir(t *testing.T) string {

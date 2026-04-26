@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
@@ -37,16 +38,16 @@ type execResult struct {
 	Reason          string
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	limits := req.Limits
 	timeMs := max(1, limits.TimeMs)
 	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
 	defer cancel()
 
-	return executeSandboxCommand(ctx, ws, command, req, hooks, outputLimitBytes, tuning)
+	return executeSandboxCommand(ctx, ws, command, req, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
 
-func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig) execResult {
+func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
@@ -58,6 +59,9 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	memoryLimitKB := int64(0)
 	if req.Limits.MemoryMB > 0 {
 		memoryLimitKB = int64(req.Limits.MemoryMB) * 1024
+	}
+	if cgroupParentDir != "" && memoryLimitKB <= 0 {
+		return execResult{Status: model.RunStatusInitFail, Reason: "cgroup execution requires a positive memory limit"}
 	}
 	workspaceLimitBytes := req.Limits.WorkspaceBytes
 	if workspaceLimitBytes <= 0 {
@@ -213,6 +217,34 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
 	}
+	var runGroup cgroup.Group
+	if cgroupParentDir != "" {
+		if err := cgroup.EnableControllers(cgroupParentDir, []string{"cpu", "memory", "pids"}); err != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			return execResult{Status: model.RunStatusInitFail, Reason: "cgroup controller setup failed: " + err.Error()}
+		}
+		pidsMax := sandboxThreadLimit + 16
+		group, err := cgroup.CreateRunGroup(cgroupParentDir, cgroup.RunName("execute"), cgroup.Limits{
+			MemoryMaxBytes: memoryLimitKB * 1024,
+			PidsMax:        pidsMax,
+		})
+		if err != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			return execResult{Status: model.RunStatusInitFail, Reason: "cgroup create failed: " + err.Error()}
+		}
+		runGroup = group
+		if err := runGroup.AddProc(cmd.Process.Pid); err != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			_ = runGroup.Remove()
+			return execResult{Status: model.RunStatusInitFail, Reason: "cgroup add process failed: " + err.Error()}
+		}
+		defer func() {
+			_ = runGroup.Remove()
+		}()
+	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
 	_ = requestRead.Close()
 	if n, err := requestWrite.Write(rawReq); err != nil {
@@ -347,6 +379,26 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 					result.Status = model.RunStatusMLE
 					result.Reason = "memory limit exceeded"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				}
+			}
+			if runGroup.Path != "" {
+				if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
+					if stats.MemoryCurrentBytes > 0 && stats.MemoryCurrentBytes/1024 > maxRSSKB {
+						maxRSSKB = stats.MemoryCurrentBytes / 1024
+					}
+					if stats.MemoryPeakBytes > 0 && stats.MemoryPeakBytes/1024 > maxRSSKB {
+						maxRSSKB = stats.MemoryPeakBytes / 1024
+					}
+					if result.Status == "OK" && memoryLimitKB > 0 && (stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.MemoryCurrentBytes > memoryLimitKB*1024) {
+						result.Status = model.RunStatusMLE
+						result.Reason = "memory limit exceeded"
+						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					}
+					if result.Status == "OK" && stats.PidsMaxEvents() > 0 {
+						result.Status = model.RunStatusRE
+						result.Reason = "process limit exceeded"
+						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					}
 				}
 			}
 

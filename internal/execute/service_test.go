@@ -19,9 +19,33 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/platform"
 )
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
+func TestBuildEmbeddedRunnerPassesCgroupParent(t *testing.T) {
+	runner, err := Build(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+			Cgroup: config.CgroupConfig{ParentDir: "/sys/fs/cgroup/aonohako"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	service, ok := runner.(*Service)
+	if !ok {
+		t.Fatalf("Build() returned %T, want *Service", runner)
+	}
+	if service.cgroupParentDir != "/sys/fs/cgroup/aonohako" {
+		t.Fatalf("cgroupParentDir = %q", service.cgroupParentDir)
+	}
+}
 
 func TestMaterializeRejectsPathEscape(t *testing.T) {
 	workDir := t.TempDir()
@@ -1005,6 +1029,7 @@ func TestExecuteSandboxAllowsLocalUnixSocketPairsForManagedRuntimes(t *testing.T
 				Hooks{},
 				1024,
 				config.DefaultRuntimeTuningConfig(),
+				"",
 			)
 			if result.Status != model.RunStatusAccepted {
 				t.Fatalf("expected Accepted, got %+v", result)
@@ -1050,6 +1075,7 @@ func TestExecuteSandboxBlocksUnixSocketConnectForManagedRuntimeSocketAllowance(t
 		Hooks{},
 		1024,
 		config.DefaultRuntimeTuningConfig(),
+		"",
 	)
 	if result.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted, got %+v", result)

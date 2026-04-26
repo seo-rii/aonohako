@@ -99,16 +99,16 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "post-start `execve()` blocking") {
 		t.Fatalf("architecture.md must include post-start execve blocking in security contract gaps")
 	}
-	if !strings.Contains(architecture, "`internal/isolation/cgroup` currently checks") || !strings.Contains(architecture, "required `cpu`, `memory`, and `pids` controllers") {
+	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") {
 		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
 	}
 	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "recreates `/tmp/.dotnet`") {
 		t.Fatalf("architecture.md must describe dotnet rlimit and shared-state compatibility exceptions")
 	}
-	if !strings.Contains(architecture, "writing values such\nas `+cpu +memory +pids` to `cgroup.subtree_control`") || !strings.Contains(architecture, "positive `memory.max`") || !strings.Contains(architecture, "`pids.max` values") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "writing its PID to `cgroup.procs`") || !strings.Contains(architecture, "without recursive deletion") {
+	if !strings.Contains(architecture, "writing values such as `+cpu +memory +pids` to\n`cgroup.subtree_control`") || !strings.Contains(architecture, "positive\n`memory.max` and `pids.max` values") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "writing its PID to\n`cgroup.procs`") || !strings.Contains(architecture, "without recursive\ndeletion") {
 		t.Fatalf("architecture.md must describe cgroup run-group write contract")
 	}
-	if !strings.Contains(architecture, "reads `memory.current`,\n`memory.peak` when present, `memory.events`, `pids.current`, `pids.events`,\nand `cpu.stat`") || !strings.Contains(architecture, "`oom_group_kill`, `pids.events` `max`, and `cpu.stat`") {
+	if !strings.Contains(architecture, "reads `memory.current`, `memory.peak` when present,\n`memory.events`, `pids.current`, `pids.events`, and `cpu.stat`") || !strings.Contains(architecture, "`oom_group_kill`, plus `pids.events` `max`") {
 		t.Fatalf("architecture.md must describe cgroup accounting read contract")
 	}
 	if !strings.Contains(architecture, "unsupported runtime security contracts fail startup before request handling") {
@@ -185,7 +185,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
 		"`container` is a reserved enum value for a future",
 		"`embedded-helper-process-hardening`, `remote-control-plane`, and reserved",
-		"not per-run cgroup, mount-namespace, or post-start `execve()` isolation",
+		"self-hosted helpers can opt into per-run cgroup memory/pids limits",
 		"fail startup instead of falling back",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"non-root development path)",
@@ -198,6 +198,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"Supported values are `none` for `dev` only, `bearer`, and\n  `platform`",
 		"aonohako-selftest deployment-contract",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
+		"`AONOHAKO_CGROUP_PARENT` is optional and supported only for",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`cloudrun-idtoken`; `none` is allowed only for `dev`",
 		"`embedded + helper` backend rejects values other than `1`",

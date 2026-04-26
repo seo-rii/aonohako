@@ -50,6 +50,53 @@ func TestEnableControllersRejectsUnsafeNames(t *testing.T) {
 	}
 }
 
+func TestValidateParentAcceptsRequiredControllers(t *testing.T) {
+	parent := t.TempDir()
+	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids io\n")
+	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+
+	if err := ValidateParent(parent, []string{"cpu", "memory", "pids"}); err != nil {
+		t.Fatalf("ValidateParent() error = %v", err)
+	}
+}
+
+func TestValidateParentRejectsMissingController(t *testing.T) {
+	parent := t.TempDir()
+	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory\n")
+	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+
+	err := ValidateParent(parent, []string{"cpu", "memory", "pids"})
+	if err == nil {
+		t.Fatalf("ValidateParent() error = nil, want missing pids rejection")
+	}
+	if !strings.Contains(err.Error(), "pids") {
+		t.Fatalf("error %q should mention pids", err)
+	}
+}
+
+func TestValidateParentRejectsMissingSubtreeControl(t *testing.T) {
+	parent := t.TempDir()
+	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids\n")
+
+	err := ValidateParent(parent, []string{"cpu", "memory", "pids"})
+	if err == nil {
+		t.Fatalf("ValidateParent() error = nil, want missing subtree control rejection")
+	}
+	if !strings.Contains(err.Error(), "cgroup.subtree_control") {
+		t.Fatalf("error %q should mention cgroup.subtree_control", err)
+	}
+}
+
+func TestRunNameSanitizesPrefix(t *testing.T) {
+	got := RunName("../bad name")
+	if strings.ContainsAny(got, "/ \t\r\n") {
+		t.Fatalf("RunName() returned unsafe name %q", got)
+	}
+	if !strings.HasPrefix(got, "bad-name-") {
+		t.Fatalf("RunName() = %q, want sanitized prefix", got)
+	}
+}
+
 func TestCreateRunGroupRejectsUnsafeNames(t *testing.T) {
 	parent := t.TempDir()
 	for _, name := range []string{"", ".", "..", "../run", "nested/run", "run with space"} {

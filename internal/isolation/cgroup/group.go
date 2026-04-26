@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Limits struct {
@@ -17,6 +18,58 @@ type Limits struct {
 
 type Group struct {
 	Path string
+}
+
+func ValidateParent(parentDir string, requiredControllers []string) error {
+	if strings.TrimSpace(parentDir) == "" {
+		return fmt.Errorf("cgroup parent directory is required")
+	}
+	info, err := os.Stat(parentDir)
+	if err != nil {
+		return fmt.Errorf("stat cgroup parent: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("cgroup parent is not a directory: %s", parentDir)
+	}
+	controllers, err := os.ReadFile(filepath.Join(parentDir, "cgroup.controllers"))
+	if err != nil {
+		return fmt.Errorf("read cgroup.controllers: %w", err)
+	}
+	controllerSet := map[string]bool{}
+	for _, controller := range strings.Fields(string(controllers)) {
+		controllerSet[controller] = true
+	}
+	for _, controller := range requiredControllers {
+		if !controllerSet[controller] {
+			return fmt.Errorf("cgroup parent missing %s controller", controller)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(parentDir, "cgroup.subtree_control")); err != nil {
+		return fmt.Errorf("stat cgroup.subtree_control: %w", err)
+	}
+	return nil
+}
+
+func RunName(prefix string) string {
+	clean := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r
+		case r >= '0' && r <= '9':
+			return r
+		case r == '-' || r == '_':
+			return r
+		default:
+			return '-'
+		}
+	}, strings.TrimSpace(prefix))
+	clean = strings.Trim(clean, "-_")
+	if clean == "" {
+		clean = "run"
+	}
+	return fmt.Sprintf("%s-%d-%d", clean, os.Getpid(), time.Now().UnixNano())
 }
 
 func EnableControllers(parentDir string, controllers []string) error {
