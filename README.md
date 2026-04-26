@@ -226,6 +226,11 @@ mount-based filesystem isolation. It applies `setrlimit`, `PR_SET_NO_NEW_PRIVS`,
 seccomp, fd cleanup, immutable submitted files, a writable per-run workspace,
 and process-group cleanup.
 
+Verdicts are classified from wall time, target CPU time, procfs RSS samples,
+workspace scans, process exit state, and output/SPJ evaluation in that order.
+See [docs/architecture.md](docs/architecture.md#verdict-classification-policy)
+for the exact policy and the remaining environment-dependent boundaries.
+
 Security posture depends on where it runs:
 
 - `cloudrun + embedded + helper` is the supported production security target.

@@ -286,6 +286,37 @@ Memory enforcement uses several layers:
 - a post-exit address-space proximity check with slack
 - workspace byte accounting, so temp-file growth is also limited
 
+### Verdict Classification Policy
+
+The runner treats verdict classification as a best-effort policy layered on top
+of Linux process accounting, not as a perfectly reproducible hardware benchmark.
+The stable contract is:
+
+- wall time is the outer safety deadline; if the request context expires before
+  the target exits, the process group is killed and the run is classified as
+  `Time Limit Exceeded` with reason `wall time limit exceeded` unless an earlier
+  resource verdict was already recorded
+- CPU time is sampled from `CLOCK_PROCESS_CPUTIME_ID` after the helper has
+  execed the target; because the execute sandbox denies process creation and
+  allows only thread-form `clone`, this includes all target threads
+- RSS is sampled from procfs immediately after helper start, refined with
+  `smaps_rollup` near the limit or when address-space limits are disabled, and
+  falls back to `rusage.Maxrss` after exit for reporting
+- workspace limit classification is based on periodic workspace scans for total
+  bytes, entry count, and directory depth
+- when a watchdog observes TLE, MLE, or WLE, that first resource verdict kills
+  the process group and is preserved through process exit
+- after a normal `OK` resource run, non-zero exit becomes `Runtime Error`; then
+  stdout/file-output or SPJ evaluation decides between `Accepted` and
+  `Wrong Answer`
+
+Operators should compare results within one deployment profile. Cloud Run CPU
+allocation, JIT warmup, GC timing, runtime memory reservations, and procfs
+sampling races can still change the exact boundary between TLE, MLE, WLE, and
+runtime error. Language profile multipliers in `internal/profiles` are the
+explicit place to document broad runtime compensation; per-problem limits remain
+the main way to absorb known JIT or GC cost.
+
 Compile commands use the same helper process-hardening path. Because compilers
 can legitimately spawn child processes, compile memory enforcement also samples
 the helper process tree and kills the compile sandbox when aggregate RSS exceeds
