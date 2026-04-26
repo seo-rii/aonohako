@@ -31,6 +31,7 @@ func main() {
 		Addr:              ":" + cfg.Port,
 		Handler:           server.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       cfg.BodyReadTimeout,
 	}
 	slog.Info("aonohako listening", "addr", httpServer.Addr, "active", cfg.MaxActiveRuns, "pending", cfg.MaxPendingQueue)
 	if err := httpServer.ListenAndServe(); err != nil {

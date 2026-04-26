@@ -86,6 +86,7 @@ type Config struct {
 	MaxPrincipalStreams           int
 	MaxPrincipalRequestsPerMinute int
 	HeartbeatInterval             time.Duration
+	BodyReadTimeout               time.Duration
 	AllowRequestNetwork           bool
 	Execution                     ExecutionConfig
 	InboundAuth                   InboundAuthConfig
@@ -118,6 +119,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	heartbeatSec, err := parsePositiveIntEnv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", os.Getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC"), 10)
+	if err != nil {
+		return Config{}, err
+	}
+	bodyReadTimeoutSec, err := parsePositiveIntEnv("AONOHAKO_BODY_READ_TIMEOUT_SEC", os.Getenv("AONOHAKO_BODY_READ_TIMEOUT_SEC"), 30)
 	if err != nil {
 		return Config{}, err
 	}
@@ -268,6 +273,7 @@ func Load() (Config, error) {
 		MaxPrincipalStreams:           maxPrincipalStreams,
 		MaxPrincipalRequestsPerMinute: maxPrincipalRequestsPerMinute,
 		HeartbeatInterval:             time.Duration(heartbeatSec) * time.Second,
+		BodyReadTimeout:               time.Duration(bodyReadTimeoutSec) * time.Second,
 		AllowRequestNetwork:           allowRequestNetwork,
 		Execution:                     execution,
 		InboundAuth:                   inboundAuth,
