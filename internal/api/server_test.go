@@ -6,7 +6,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -186,6 +189,72 @@ func TestExecuteDoesNotAcquireStreamBeforeBodyDecode(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatalf("handler did not finish after body unblock")
+	}
+}
+
+func TestHTTPServerReadTimeoutBoundsSlowUploads(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.BodyReadTimeout = 150 * time.Millisecond
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("runner should not be called for a slow incomplete body")
+		return model.RunResponse{}
+	}})
+	server := &http.Server{
+		Handler:           s.Handler(),
+		ReadHeaderTimeout: time.Second,
+		ReadTimeout:       cfg.BodyReadTimeout,
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Serve(listener)
+	}()
+	defer func() {
+		_ = server.Close()
+		select {
+		case err := <-done:
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				t.Fatalf("server.Serve returned %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("server did not stop")
+		}
+	}()
+
+	body := executePayload(t)
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	if _, err := fmt.Fprintf(conn, "POST /execute HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n", listener.Addr().String(), len(body)); err != nil {
+		t.Fatalf("write headers: %v", err)
+	}
+	if _, err := conn.Write(body[:1]); err != nil {
+		t.Fatalf("write first byte: %v", err)
+	}
+	time.Sleep(2 * cfg.BodyReadTimeout)
+	_, _ = conn.Write(body[1:])
+	if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		if s.streams.Load() != 0 {
+			t.Fatalf("active streams = %d after slow upload timeout", s.streams.Load())
+		}
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Fatalf("slow upload status = %d, want error response", resp.StatusCode)
+	}
+	if s.streams.Load() != 0 {
+		t.Fatalf("active streams = %d after slow upload timeout", s.streams.Load())
 	}
 }
 
