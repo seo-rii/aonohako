@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
@@ -36,19 +37,20 @@ type execResult struct {
 	Reason          string
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig) execResult {
 	limits := req.Limits
 	timeMs := max(1, limits.TimeMs)
 	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
 	defer cancel()
 
-	return executeSandboxCommand(ctx, ws, command, req, hooks, outputLimitBytes)
+	return executeSandboxCommand(ctx, ws, command, req, hooks, outputLimitBytes, tuning)
 }
 
-func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int) execResult {
+func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig) execResult {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
+	tuning = tuning.WithSafeDefaults()
 	if os.Geteuid() != 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires root"}
 	}
@@ -86,7 +88,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	case "erlang", "wasm":
 		allowUnixSockets = true
 	case "uhmlang":
-		innerEnv = append(innerEnv, fmt.Sprintf("GOMEMLIMIT=%dMiB", max(16, req.Limits.MemoryMB-32)), "GOGC=50")
+		innerEnv = append(innerEnv, fmt.Sprintf("GOMEMLIMIT=%dMiB", goMemoryLimitMB(req.Limits.MemoryMB, tuning)), fmt.Sprintf("GOGC=%d", tuning.GoGOGC))
 	}
 
 	finalCommand := append([]string(nil), command...)

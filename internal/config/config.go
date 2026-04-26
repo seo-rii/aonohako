@@ -51,6 +51,8 @@ type ExecutionConfig struct {
 
 type RuntimeTuningConfig struct {
 	JVMHeapPercent            int
+	GoMemoryReserveMB         int
+	GoGOGC                    int
 	NodeOldSpacePercent       int
 	NodeMaxSemiSpaceMB        int
 	NodeStackSizeKB           int
@@ -65,6 +67,12 @@ const (
 	defaultJVMHeapPercent            = 50
 	minJVMHeapPercent                = 25
 	maxJVMHeapPercent                = 75
+	defaultGoMemoryReserveMB         = 32
+	minGoMemoryReserveMB             = 0
+	maxGoMemoryReserveMB             = 256
+	defaultGoGOGC                    = 50
+	minGoGOGC                        = 10
+	maxGoGOGC                        = 200
 	defaultNodeOldSpacePercent       = 60
 	minNodeOldSpacePercent           = 30
 	maxNodeOldSpacePercent           = 75
@@ -140,6 +148,14 @@ func Load() (Config, error) {
 	}
 	runtimeTuning := DefaultRuntimeTuningConfig()
 	runtimeTuning.JVMHeapPercent, err = parseBoundedIntEnv("AONOHAKO_JVM_HEAP_PERCENT", os.Getenv("AONOHAKO_JVM_HEAP_PERCENT"), runtimeTuning.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.GoMemoryReserveMB, err = parseBoundedIntEnv("AONOHAKO_GO_MEMORY_RESERVE_MB", os.Getenv("AONOHAKO_GO_MEMORY_RESERVE_MB"), runtimeTuning.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
+	if err != nil {
+		return Config{}, err
+	}
+	runtimeTuning.GoGOGC, err = parseBoundedIntEnv("AONOHAKO_GO_GOGC", os.Getenv("AONOHAKO_GO_GOGC"), runtimeTuning.GoGOGC, minGoGOGC, maxGoGOGC)
 	if err != nil {
 		return Config{}, err
 	}
@@ -327,6 +343,8 @@ func defaultAllowRequestNetwork(opts platform.RuntimeOptions) bool {
 func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 	return RuntimeTuningConfig{
 		JVMHeapPercent:            defaultJVMHeapPercent,
+		GoMemoryReserveMB:         defaultGoMemoryReserveMB,
+		GoGOGC:                    defaultGoGOGC,
 		NodeOldSpacePercent:       defaultNodeOldSpacePercent,
 		NodeMaxSemiSpaceMB:        defaultNodeMaxSemiSpaceMB,
 		NodeStackSizeKB:           defaultNodeStackSizeKB,
@@ -345,6 +363,21 @@ func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	}
 	if c.JVMHeapPercent > maxJVMHeapPercent {
 		c.JVMHeapPercent = maxJVMHeapPercent
+	}
+	if c.GoMemoryReserveMB < minGoMemoryReserveMB {
+		c.GoMemoryReserveMB = minGoMemoryReserveMB
+	}
+	if c.GoMemoryReserveMB > maxGoMemoryReserveMB {
+		c.GoMemoryReserveMB = maxGoMemoryReserveMB
+	}
+	if c.GoGOGC == 0 {
+		c.GoGOGC = defaults.GoGOGC
+	}
+	if c.GoGOGC < minGoGOGC {
+		c.GoGOGC = minGoGOGC
+	}
+	if c.GoGOGC > maxGoGOGC {
+		c.GoGOGC = maxGoGOGC
 	}
 	if c.NodeOldSpacePercent == 0 {
 		c.NodeOldSpacePercent = defaults.NodeOldSpacePercent

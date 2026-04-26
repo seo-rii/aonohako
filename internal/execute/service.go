@@ -131,7 +131,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "empty command"}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit)
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit, s.runtimeTuning)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
 		return model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason}

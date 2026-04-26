@@ -297,6 +297,10 @@ flags through requests:
 
 - `AONOHAKO_JVM_HEAP_PERCENT` controls the Java/Clojure/Groovy/Scala `-Xmx`
   share of the request memory limit. Allowed range: `25..75`, default `50`.
+- `AONOHAKO_GO_MEMORY_RESERVE_MB` subtracts reserved host/runtime memory from
+  Go-based interpreter `GOMEMLIMIT`. Allowed range: `0..256`, default `32`.
+- `AONOHAKO_GO_GOGC` controls Go GC aggressiveness for Go-based interpreters.
+  Allowed range: `10..200`, default `50`.
 - `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of
   the request memory limit. Allowed range: `30..75`, default `60`.
 - `AONOHAKO_NODE_MAX_SEMI_SPACE_MB` caps Node/V8 semi-space. Allowed range:

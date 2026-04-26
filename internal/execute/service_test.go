@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
 )
 
@@ -1003,6 +1004,7 @@ func TestExecuteSandboxAllowsLocalUnixSocketPairsForManagedRuntimes(t *testing.T
 				},
 				Hooks{},
 				1024,
+				config.DefaultRuntimeTuningConfig(),
 			)
 			if result.Status != model.RunStatusAccepted {
 				t.Fatalf("expected Accepted, got %+v", result)
@@ -1047,6 +1049,7 @@ func TestExecuteSandboxBlocksUnixSocketConnectForManagedRuntimeSocketAllowance(t
 		},
 		Hooks{},
 		1024,
+		config.DefaultRuntimeTuningConfig(),
 	)
 	if result.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted, got %+v", result)

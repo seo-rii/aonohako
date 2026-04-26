@@ -239,7 +239,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `elixir` | `env ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 elixir <file>` |
 | `sqlite` | `sqlite3 <workspace-db> < <file>` |
 | `julia` | `julia --startup-file=no --history-file=no <file>` |
-| `uhmlang` | `GOMEMLIMIT=... GOGC=50 /usr/bin/umjunsik-lang-go <file>` |
+| `uhmlang` | `env GOMEMLIMIT=... GOGC=... /usr/bin/umjunsik-lang-go <file>` |
 | `csharp`, `fsharp` | `dotnet <file>` or direct |
 | `whitespace` | `python3 /usr/local/lib/aonohako/whitespace.py <file>` |
 | `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |

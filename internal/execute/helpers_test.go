@@ -173,7 +173,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"lua", "/tmp/sol.lua", "lua5.4", true},
 		{"perl", "/tmp/sol.pl", "perl", true},
 		{"sqlite", "/tmp/sol.sql", "sh", true},
-		{"uhmlang", "/tmp/sol.umm", "/usr/bin/umjunsik-lang-go", true},
+		{"uhmlang", "/tmp/sol.umm", "env", true},
 		{"text", "/tmp/data.txt", "cat", true},
 		{"unknown_lang", "/tmp/a.out", "/tmp/a.out", true},
 	}
@@ -234,6 +234,11 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			}
 			if tc.lang == "lisp" && !containsArg(args, "--dynamic-space-size") {
 				t.Errorf("buildCommand(%s) should bound SBCL dynamic space in %v", tc.lang, args)
+			}
+			if tc.lang == "uhmlang" {
+				if !containsArg(args, "GOMEMLIMIT=32MiB") || !containsArg(args, "GOGC=50") || !containsArg(args, "/usr/bin/umjunsik-lang-go") {
+					t.Errorf("buildCommand(%s) missing Go runtime memory env in %v", tc.lang, args)
+				}
 			}
 			if tc.lang == "aheui" && (len(args) < 3 || !strings.Contains(args[2], "from aheui.aheui import entry_point")) {
 				t.Errorf("buildCommand(%s) missing aheui python wrapper body in %v", tc.lang, args)
@@ -368,6 +373,8 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 256}}
 	tuning := config.RuntimeTuningConfig{
 		JVMHeapPercent:            40,
+		GoMemoryReserveMB:         64,
+		GoGOGC:                    80,
 		NodeOldSpacePercent:       50,
 		NodeMaxSemiSpaceMB:        2,
 		NodeStackSizeKB:           1024,
@@ -390,6 +397,17 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	javaArgs := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java", req, tuning)
 	if !containsArg(javaArgs, "-Xmx102m") {
 		t.Fatalf("java command with tuning = %v", javaArgs)
+	}
+
+	uhmArgs := buildCommandWithRuntimeTuning("/tmp/Main.umm", "uhmlang", req, tuning)
+	if !reflect.DeepEqual(uhmArgs, []string{
+		"env",
+		"GOMEMLIMIT=192MiB",
+		"GOGC=80",
+		"/usr/bin/umjunsik-lang-go",
+		"/tmp/Main.umm",
+	}) {
+		t.Fatalf("uhmlang command with tuning = %v", uhmArgs)
 	}
 
 	wasmArgs := buildCommandWithRuntimeTuning("/tmp/Main.wasm", "wasm", req, tuning)
@@ -567,6 +585,8 @@ func TestAddressSpaceLimitBytes(t *testing.T) {
 		{"native_floor", "runner", 256, 512 * 1024 * 1024},
 		{"native_large", "runner", 512, 576 * 1024 * 1024},
 		{"native_zero", "runner", 0, 512 * 1024 * 1024},
+		{"python_interpreter_virtual_cap", "python3", 256, 1280 * 1024 * 1024},
+		{"pypy_interpreter_virtual_cap", "pypy3", 128, 1024 * 1024 * 1024},
 		{"node_high_virtual_cap", "node", 128, 1024 * 1024 * 1024},
 		{"node_scaled_virtual_cap", "node", 512, 2560 * 1024 * 1024},
 		{"wasmtime_virtual_cap", "wasmtime", 256, 2048 * 1024 * 1024},
