@@ -173,6 +173,87 @@ func TestLoadAllowsRemoteExecutionWithoutRoot(t *testing.T) {
 	}
 }
 
+func TestLoadRuntimeTuningConfig(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+	t.Setenv("AONOHAKO_NODE_OLD_SPACE_PERCENT", "50")
+	t.Setenv("AONOHAKO_NODE_MAX_SEMI_SPACE_MB", "2")
+	t.Setenv("AONOHAKO_NODE_STACK_SIZE_KB", "1024")
+	t.Setenv("AONOHAKO_WASMTIME_MEMORY_GUARD_BYTES", "131072")
+	t.Setenv("AONOHAKO_WASMTIME_MAX_WASM_STACK_BYTES", "524288")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	want := RuntimeTuningConfig{
+		NodeOldSpacePercent:       50,
+		NodeMaxSemiSpaceMB:        2,
+		NodeStackSizeKB:           1024,
+		WasmtimeMemoryGuardBytes:  131072,
+		WasmtimeMaxWasmStackBytes: 524288,
+	}
+	if cfg.Execution.RuntimeTuning != want {
+		t.Fatalf("runtime tuning = %+v, want %+v", cfg.Execution.RuntimeTuning, want)
+	}
+}
+
+func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
+	tests := []struct {
+		key   string
+		value string
+	}{
+		{key: "AONOHAKO_NODE_OLD_SPACE_PERCENT", value: "90"},
+		{key: "AONOHAKO_NODE_MAX_SEMI_SPACE_MB", value: "64"},
+		{key: "AONOHAKO_NODE_STACK_SIZE_KB", value: "64"},
+		{key: "AONOHAKO_WASMTIME_MEMORY_GUARD_BYTES", value: "1024"},
+		{key: "AONOHAKO_WASMTIME_MAX_WASM_STACK_BYTES", value: "67108864"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.key, func(t *testing.T) {
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+			t.Setenv(tc.key, tc.value)
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), tc.key) {
+				t.Fatalf("expected %s validation error, got %v", tc.key, err)
+			}
+		})
+	}
+}
+
+func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
+	got := (RuntimeTuningConfig{
+		NodeOldSpacePercent:       1,
+		NodeMaxSemiSpaceMB:        99,
+		NodeStackSizeKB:           64,
+		WasmtimeMemoryGuardBytes:  1,
+		WasmtimeMaxWasmStackBytes: 99 << 20,
+	}).WithSafeDefaults()
+
+	if got.NodeOldSpacePercent != minNodeOldSpacePercent {
+		t.Fatalf("NodeOldSpacePercent = %d, want %d", got.NodeOldSpacePercent, minNodeOldSpacePercent)
+	}
+	if got.NodeMaxSemiSpaceMB != maxNodeMaxSemiSpaceMB {
+		t.Fatalf("NodeMaxSemiSpaceMB = %d, want %d", got.NodeMaxSemiSpaceMB, maxNodeMaxSemiSpaceMB)
+	}
+	if got.NodeStackSizeKB != minNodeStackSizeKB {
+		t.Fatalf("NodeStackSizeKB = %d, want %d", got.NodeStackSizeKB, minNodeStackSizeKB)
+	}
+	if got.WasmtimeMemoryGuardBytes != minWasmtimeMemoryGuardBytes {
+		t.Fatalf("WasmtimeMemoryGuardBytes = %d, want %d", got.WasmtimeMemoryGuardBytes, minWasmtimeMemoryGuardBytes)
+	}
+	if got.WasmtimeMaxWasmStackBytes != maxWasmtimeMaxWasmStackBytes {
+		t.Fatalf("WasmtimeMaxWasmStackBytes = %d, want %d", got.WasmtimeMaxWasmStackBytes, maxWasmtimeMaxWasmStackBytes)
+	}
+}
+
 func TestLoadRejectsRemoteAuthNoneOutsideDev(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")

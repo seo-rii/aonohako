@@ -279,6 +279,27 @@ Cloud Run volume mounts and that arbitrary in-container mounting is not
 supported, so `aonohako` does not depend on cgroup creation or mount-based
 filesystem isolation when running there.
 
+### Runtime memory tuning
+
+The default runtime memory profile is locked down for public judge runners.
+Operators can narrow selected numeric knobs without passing arbitrary runtime
+flags through requests:
+
+- `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of
+  the request memory limit. Allowed range: `30..75`, default `60`.
+- `AONOHAKO_NODE_MAX_SEMI_SPACE_MB` caps Node/V8 semi-space. Allowed range:
+  `1..16`, default `8`.
+- `AONOHAKO_NODE_STACK_SIZE_KB` sets Node stack size. Allowed range:
+  `512..8192`, default `2048`.
+- `AONOHAKO_WASMTIME_MEMORY_GUARD_BYTES` sets the Wasmtime guard size.
+  Allowed range: `65536..16777216`, default `65536`.
+- `AONOHAKO_WASMTIME_MAX_WASM_STACK_BYTES` sets the Wasmtime wasm stack cap.
+  Allowed range: `262144..8388608`, default `1048576`.
+
+Invalid values fail startup. These settings only tune memory-related runtime
+caps; they do not expose network, filesystem, process, or arbitrary flag
+controls to submissions.
+
 For non-Cloud-Run control-plane deployments that should still execute safely,
 use this baseline:
 
