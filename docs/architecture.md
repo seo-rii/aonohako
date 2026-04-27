@@ -192,6 +192,10 @@ patterns generally cannot fork a separate process, but a running submission can
 replace itself with another world-executable binary that is present in the
 runtime image. This is tracked as an image-surface risk until language-family
 allowlist profiles and minimal execute-only images are available.
+Runtime image hardening reduces the reachable surface where it can do so without
+breaking required language tools: package-manager and fetcher binaries such as
+`apt`, `dpkg`, `curl`, and `wget` are root-only executable, so the sandbox UID
+cannot use them as post-start replacement targets.
 
 Per-request network disable adds seccomp denies for socket-related syscalls:
 
