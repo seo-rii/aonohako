@@ -165,6 +165,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`socket()` is limited to `AF_INET` and `AF_INET6`") || !strings.Contains(architecture, "Cloud Run embedded-helper execution rejects `enable_network=true` outright") {
 		t.Fatalf("architecture.md must describe the network-enabled helper boundary")
 	}
+	if !strings.Contains(architecture, "`memfd_create` except for .NET") {
+		t.Fatalf("architecture.md must describe memfd_create seccomp policy")
+	}
 	if !strings.Contains(architecture, "post-start\n`execve()` surface") || !strings.Contains(architecture, "world-executable binary that is present in the\nruntime image") {
 		t.Fatalf("architecture.md must describe the remaining execve image surface")
 	}

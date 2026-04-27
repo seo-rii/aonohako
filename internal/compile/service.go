@@ -1679,6 +1679,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		AllowUnixSockets:         true,
 		AllowProcesses:           true,
 		AllowProcessGroups:       allowProcessGroups,
+		AllowMemfdCreate:         isDotnet,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     isDotnet,
 	}

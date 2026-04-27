@@ -830,6 +830,9 @@ int main(void) {
 #ifdef SYS_perf_event_open
 	failed |= check("perf_event_open", SYS_perf_event_open);
 #endif
+#ifdef SYS_memfd_create
+	failed |= check("memfd_create", SYS_memfd_create);
+#endif
 	if (failed != 0) {
 		return 1;
 	}
