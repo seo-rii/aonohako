@@ -219,6 +219,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
 	}
 	var runGroup cgroup.Group
+	cgroupCPUBaselineMicros := int64(0)
 	if cgroupParentDir != "" {
 		if err := cgroup.EnableControllers(cgroupParentDir, []string{"cpu", "memory", "pids"}); err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -243,6 +244,9 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			_ = cmd.Wait()
 			_ = runGroup.Remove()
 			return execResult{Status: model.RunStatusInitFail, Reason: "cgroup add process failed: " + err.Error()}
+		}
+		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
+			cgroupCPUBaselineMicros = stats.CPUUsageMicros
 		}
 		defer func() {
 			_ = runGroup.Remove()
@@ -391,6 +395,21 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 					}
 					if stats.MemoryPeakBytes > 0 && stats.MemoryPeakBytes/1024 > maxRSSKB {
 						maxRSSKB = stats.MemoryPeakBytes / 1024
+					}
+					if stats.CPUUsageMicros > 0 {
+						cpuUsageMicros := stats.CPUUsageMicros
+						if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
+							cpuUsageMicros -= cgroupCPUBaselineMicros
+						}
+						cpuTimeMs := cpuUsageMicros / 1000
+						if cpuTimeMs > maxCPUTimeMs {
+							maxCPUTimeMs = cpuTimeMs
+						}
+						if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+							result.Status = model.RunStatusTLE
+							result.Reason = "cpu time limit exceeded"
+							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+						}
 					}
 					if result.Status == "OK" && memoryLimitKB > 0 && (stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.MemoryCurrentBytes > memoryLimitKB*1024) {
 						result.Status = model.RunStatusMLE
