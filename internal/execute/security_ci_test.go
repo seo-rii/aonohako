@@ -33,6 +33,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "execveat", fn: TestRunBlocksExecveatAttempts},
 		{name: "spj-clean-workspace", fn: TestRunSPJUsesCleanWorkspaceAndReadableFiles},
 		{name: "proc-fd", fn: TestRunBlocksProcFDBrowsingOutsideSandbox},
+		{name: "proc-environ", fn: TestRunBlocksProcEnvironRead},
 		{name: "scratch-writes", fn: TestRunBlocksWritesOutsideWorkspaceTempDirs},
 		{name: "submitted-file-removal", fn: TestRunPreventsRemovingOrReplacingSubmittedFiles},
 		{name: "submitted-file-overwrite", fn: TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles},

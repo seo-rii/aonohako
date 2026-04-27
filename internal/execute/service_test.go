@@ -1484,6 +1484,27 @@ func TestRunBlocksProcFDBrowsingOutsideSandbox(t *testing.T) {
 	}
 }
 
+func TestRunBlocksProcEnvironRead(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"from pathlib import Path\ntry:\n    Path('/proc/1/environ').read_bytes()\n    print('leaked')\nexcept Exception:\n    print('blocked')\n",
+			)),
+		}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
 	forceDirectMode(t)
 	svc := New()
