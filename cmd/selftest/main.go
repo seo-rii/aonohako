@@ -123,7 +123,9 @@ func runDeploymentContractSuite() error {
 		HeartbeatIntervalSec          int64                         `json:"heartbeat_interval_sec"`
 		RemoteSSEIdleTimeoutSec       int64                         `json:"remote_sse_idle_timeout_sec"`
 		TrustedRunnerIngress          bool                          `json:"trusted_runner_ingress"`
+		TrustedPlatformHeaders        bool                          `json:"trusted_platform_headers"`
 		InboundAuth                   config.InboundAuthMode        `json:"inbound_auth"`
+		PlatformPrincipalHMAC         bool                          `json:"platform_principal_hmac"`
 		RemoteAuth                    config.RemoteAuthMode         `json:"remote_auth"`
 		RemoteURLConfigured           bool                          `json:"remote_url_configured"`
 		CgroupParentConfigured        bool                          `json:"cgroup_parent_configured"`
@@ -146,7 +148,9 @@ func runDeploymentContractSuite() error {
 		HeartbeatIntervalSec:          int64(cfg.HeartbeatInterval / time.Second),
 		RemoteSSEIdleTimeoutSec:       int64(cfg.Execution.Remote.SSEIdleTimeout / time.Second),
 		TrustedRunnerIngress:          cfg.TrustedRunnerIngress,
+		TrustedPlatformHeaders:        cfg.TrustedPlatformHeaders,
 		InboundAuth:                   cfg.InboundAuth.Mode,
+		PlatformPrincipalHMAC:         strings.TrimSpace(cfg.InboundAuth.PlatformPrincipalHMACSecret) != "",
 		RemoteAuth:                    cfg.Execution.Remote.Auth,
 		RemoteURLConfigured:           strings.TrimSpace(cfg.Execution.Remote.URL) != "",
 		CgroupParentConfigured:        strings.TrimSpace(cfg.Execution.Cgroup.ParentDir) != "",

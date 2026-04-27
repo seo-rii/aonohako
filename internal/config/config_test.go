@@ -715,6 +715,28 @@ func TestLoadAllowsExplicitPlatformInboundAuth(t *testing.T) {
 	}
 }
 
+func TestLoadAllowsPlatformInboundAuthWithPrincipalHMAC(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET", "secret")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.InboundAuth.Mode != InboundAuthPlatform {
+		t.Fatalf("inbound auth mode = %q, want platform", cfg.InboundAuth.Mode)
+	}
+	if cfg.InboundAuth.PlatformPrincipalHMACSecret != "secret" {
+		t.Fatalf("platform HMAC secret was not loaded")
+	}
+}
+
 func TestLoadRejectsPlatformInboundAuthWithoutTrustedHeadersOutsideDev(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")

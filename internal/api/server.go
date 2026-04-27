@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -28,12 +29,13 @@ import (
 )
 
 const (
-	maxRunTextFieldBytes    = 16 << 20
-	maxRunTimeMs            = 60_000
-	maxRunMemoryMB          = 4096
-	maxRunOutputBytes       = 8 << 20
-	maxRunWorkspaceBytes    = 1 << 30
-	platformPrincipalHeader = "X-Aonohako-Principal"
+	maxRunTextFieldBytes             = 16 << 20
+	maxRunTimeMs                     = 60_000
+	maxRunMemoryMB                   = 4096
+	maxRunOutputBytes                = 8 << 20
+	maxRunWorkspaceBytes             = 1 << 30
+	platformPrincipalHeader          = "X-Aonohako-Principal"
+	platformPrincipalSignatureHeader = "X-Aonohako-Principal-Signature"
 )
 
 type principalContextKey struct{}
@@ -396,7 +398,14 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		case config.InboundAuthPlatform:
 			principal := ""
-			if value := strings.TrimSpace(r.Header.Get(platformPrincipalHeader)); value != "" {
+			value := strings.TrimSpace(r.Header.Get(platformPrincipalHeader))
+			if s.cfg.InboundAuth.PlatformPrincipalHMACSecret != "" {
+				if value == "" || !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, value, r.Header.Get(platformPrincipalSignatureHeader)) {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+			}
+			if value != "" {
 				principal = "platform:" + value
 			}
 			if principal == "" {
@@ -434,6 +443,20 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		}
 	})
+}
+
+func verifyPlatformPrincipalSignature(secret, principal, signature string) bool {
+	signature = strings.TrimSpace(signature)
+	if strings.HasPrefix(signature, "v1=") {
+		signature = strings.TrimPrefix(signature, "v1=")
+	}
+	if signature == "" {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(principal))
+	want := hex.EncodeToString(mac.Sum(nil))
+	return constantTimeEqual(strings.ToLower(signature), want)
 }
 
 func constantTimeEqual(a, b string) bool {

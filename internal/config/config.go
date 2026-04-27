@@ -40,8 +40,9 @@ type RemoteExecutorConfig struct {
 }
 
 type InboundAuthConfig struct {
-	Mode        InboundAuthMode
-	BearerToken string
+	Mode                        InboundAuthMode
+	BearerToken                 string
+	PlatformPrincipalHMACSecret string
 }
 
 type ExecutionConfig struct {
@@ -242,8 +243,9 @@ func Load() (Config, error) {
 		},
 	}
 	inboundAuth := InboundAuthConfig{
-		Mode:        parseInboundAuth(os.Getenv("AONOHAKO_INBOUND_AUTH"), runtimePlatform),
-		BearerToken: strings.TrimSpace(os.Getenv("AONOHAKO_API_BEARER_TOKEN")),
+		Mode:                        parseInboundAuth(os.Getenv("AONOHAKO_INBOUND_AUTH"), runtimePlatform),
+		BearerToken:                 strings.TrimSpace(os.Getenv("AONOHAKO_API_BEARER_TOKEN")),
+		PlatformPrincipalHMACSecret: strings.TrimSpace(os.Getenv("AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET")),
 	}
 	workRoot := strings.TrimSpace(os.Getenv("AONOHAKO_WORK_ROOT"))
 
@@ -308,8 +310,8 @@ func Load() (Config, error) {
 	if inboundAuth.Mode == InboundAuthNone && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev {
 		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=none is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev; use bearer or platform")
 	}
-	if inboundAuth.Mode == InboundAuthPlatform && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedPlatformHeaders {
-		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=platform outside dev requires AONOHAKO_TRUSTED_PLATFORM_HEADERS=true")
+	if inboundAuth.Mode == InboundAuthPlatform && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedPlatformHeaders && inboundAuth.PlatformPrincipalHMACSecret == "" {
+		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=platform outside dev requires AONOHAKO_TRUSTED_PLATFORM_HEADERS=true or AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET")
 	}
 
 	if contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedRunnerIngress {
