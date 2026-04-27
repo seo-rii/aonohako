@@ -201,7 +201,10 @@ jobs:
         if: steps.bundle.outputs.has_artifacts == 'true'
         with:
           name: toolchain-summary-bundle
-          path: toolchain-artifacts
+          path: |
+            toolchain-artifacts/SUMMARY.md
+            toolchain-artifacts/MANIFEST.txt
+            toolchain-artifacts/toolchain-profile-*/**/summary.md
           compression-level: 0
 
   mixin-smoke:
