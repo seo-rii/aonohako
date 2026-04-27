@@ -37,6 +37,8 @@
   contract의 explicit gap으로 기록하고 docs contract test로 고정했다.
 - Phase 11: workspace entry-count exhaustion과 depth exhaustion을 실제
   root-backed sandbox security suite probe로 추가했다.
+- Phase 11: procfs regression coverage에 `/proc/1/fd` browsing뿐 아니라
+  `/proc/1/environ` read 차단 probe를 추가했다.
 - Phase 12: `aonohako-selftest deployment-contract`를 추가해 현재 env가 어떤
   security contract와 guardrail로 해석되는지 token 없이 JSON으로 확인할 수
   있게 했다.
