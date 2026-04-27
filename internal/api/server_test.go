@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,6 +59,12 @@ func (b *blockingBody) Close() error {
 		close(b.unblock)
 	}
 	return nil
+}
+
+func platformPrincipalSignatureForTest(secret, principal string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(principal))
+	return "v1=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
@@ -460,6 +469,52 @@ func TestPlatformAuthIgnoresForwardedPrincipalHeaders(t *testing.T) {
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("second request status = %d, want 429 because forwarded identity headers are ignored", resp2.StatusCode)
+	}
+}
+
+func TestPlatformAuthRequiresValidPrincipalSignatureWhenConfigured(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "platform-secret"}
+	cfg.MaxActiveRuns = 4
+	cfg.MaxPendingQueue = 8
+	cfg.MaxActiveStreams = 8
+	cfg.MaxPrincipalStreams = 8
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	body := executePayload(t)
+	for _, tc := range []struct {
+		name      string
+		principal string
+		signature string
+		want      int
+	}{
+		{name: "missing signature", principal: "alice", want: http.StatusUnauthorized},
+		{name: "bad signature", principal: "alice", signature: "v1=bad", want: http.StatusUnauthorized},
+		{name: "valid signature", principal: "alice", signature: platformPrincipalSignatureForTest("platform-secret", "alice"), want: http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			if tc.principal != "" {
+				req.Header.Set(platformPrincipalHeader, tc.principal)
+			}
+			if tc.signature != "" {
+				req.Header.Set(platformPrincipalSignatureHeader, tc.signature)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.want {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
+			}
+			_, _ = io.Copy(io.Discard, resp.Body)
+		})
 	}
 }
 

@@ -135,8 +135,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`") {
 		t.Fatalf("architecture.md must describe production inbound-auth none rejection")
 	}
-	if !strings.Contains(architecture, "`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`") {
-		t.Fatalf("architecture.md must describe trusted platform header assertion")
+	if !strings.Contains(architecture, "`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Signature`") || !strings.Contains(architecture, "`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`") {
+		t.Fatalf("architecture.md must describe platform auth HMAC and trusted-header assertions")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_TRUSTED_RUNNER_INGRESS=true` is required for non-dev") {
 		t.Fatalf("architecture.md must describe trusted runner ingress assertion")
@@ -194,6 +194,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30`",
 		"`AONOHAKO_TRUSTED_RUNNER_INGRESS` asserts that a root-backed embedded helper",
+		"`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` makes platform mode verify",
 		"`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` is required outside `dev`",
 		"Supported values are `none` for `dev` only, `bearer`, and\n  `platform`",
 		"aonohako-selftest deployment-contract",

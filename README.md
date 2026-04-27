@@ -190,9 +190,14 @@ aonohako-selftest cgroup-preflight
   any client-supplied identity headers and rewrite `X-Aonohako-Principal`;
   forwarded identity headers such as `X-Forwarded-Email` are ignored by the
   application. Do not expose platform mode directly to the public internet.
+- `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` makes platform mode verify
+  `X-Aonohako-Principal-Signature: v1=<hex-hmac-sha256>` over the principal
+  header before accepting the request. This is the preferred platform mode when
+  traffic can reach the service from outside a fully trusted header-stripping
+  proxy boundary.
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` is required outside `dev` when
-  `AONOHAKO_INBOUND_AUTH=platform`, so header-trusting deployments make the
-  upstream strip/rewrite boundary explicit.
+  `AONOHAKO_INBOUND_AUTH=platform` and no HMAC secret is configured, so
+  header-trusting deployments make the upstream strip/rewrite boundary explicit.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_CGROUP_PARENT` is optional and supported only for
@@ -285,8 +290,9 @@ For Cloud Run deployments, use this baseline:
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
   `AONOHAKO_INBOUND_AUTH=platform` only when an upstream layer enforces
   inbound authentication
-- `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` when using
-  `AONOHAKO_INBOUND_AUTH=platform`
+- `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` when using platform auth across any
+  boundary that is not fully trusted; otherwise set
+  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` only behind a strip/rewrite proxy
 - `AONOHAKO_TRUSTED_RUNNER_INGRESS=true` after configuring private ingress,
   Cloud Run IAM, mTLS, or an equivalent trusted control-plane boundary
 - second-generation execution environment

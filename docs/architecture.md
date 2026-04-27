@@ -421,10 +421,12 @@ The following checks are enforced before the HTTP server starts:
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication
 - `AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`
-- `AONOHAKO_INBOUND_AUTH=platform` outside `dev` requires
-  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`, forcing operators to assert that
-  the upstream layer strips client-supplied identity headers and rewrites
-  `X-Aonohako-Principal`
+- `AONOHAKO_INBOUND_AUTH=platform` outside `dev` requires either
+  `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` or
+  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`; the HMAC path verifies
+  `X-Aonohako-Principal-Signature`, while the trusted-header path forces
+  operators to assert that the upstream layer strips client-supplied identity
+  headers and rewrites `X-Aonohako-Principal`
 - numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
   `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`,
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`,
@@ -450,9 +452,11 @@ The following checks are enforced before the HTTP server starts:
   are also capped per principal. Bearer auth uses a token fingerprint as the
   principal key; platform auth uses the upstream principal header such as
   `X-Aonohako-Principal`. Platform auth ignores generic forwarded identity
-  headers and is safe only behind an upstream identity layer that strips any
-  client-supplied copy of `X-Aonohako-Principal` before rewriting it for the
-  request reaching `aonohako`.
+  headers. With `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`, the application
+  verifies the principal signature itself; without it, platform auth is safe
+  only behind an upstream identity layer that strips any client-supplied copy of
+  `X-Aonohako-Principal` before rewriting it for the request reaching
+  `aonohako`.
 - Outside `dev`, `/compile` and `/execute` requests are also capped per
   principal in a fixed one-minute window before they enter the run queue.
 
@@ -463,7 +467,9 @@ Recommended Cloud Run deployment baseline:
 - `AONOHAKO_SANDBOX_BACKEND=helper`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, unless
   `AONOHAKO_INBOUND_AUTH=platform` is set because Cloud Run IAM, mTLS, private
-  ingress, or a gateway enforces inbound authentication
+  ingress, or a gateway enforces inbound authentication; use
+  `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` when that gateway can sign the
+  principal header
 - second-generation execution environment
 - service concurrency `1`
 - bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`
