@@ -179,7 +179,8 @@ The seccomp filter denies high-risk operations, including:
 - `ptrace`, `process_vm_*`, `pidfd_*`
 - `kill`, `tkill`, `tgkill`
 - `prlimit64`, `setpriority`
-- `bpf`, `io_uring_*`, `userfaultfd`, memory locking, SysV shared memory, `perf_event_open`
+- `bpf`, `io_uring_*`, `userfaultfd`, `memfd_create` except for .NET, memory
+  locking, SysV shared memory, `perf_event_open`
 - `open_by_handle_at`, `name_to_handle_at`
 - `fanotify_*`, keyring syscalls, module loading, swap, reboot, syslog
 - `chmod`, `chown`, `mknod`

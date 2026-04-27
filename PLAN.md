@@ -53,6 +53,9 @@
   coverage를 넓혔다.
 - Phase 18: compile sandbox suite에도 동일한 kernel attack surface syscall
   probe를 추가해 `/compile`이 적대 입력 실행면임을 테스트로 고정했다.
+- Phase 11/18: `memfd_create`를 기본 seccomp deny 대상으로 추가하고,
+  CoreCLR compatibility 때문에 .NET helper request에서만 예외로 남겼다.
+  execute/compile kernel attack surface probe가 이 syscall 차단도 확인한다.
 - Phase 12: CI에서 sandbox regression용 Python runtime image의 Syft SBOM
   artifact를 생성하도록 supply-chain 추적성을 추가했다.
 - Phase 12: 같은 runtime image에 대해 non-blocking Grype JSON scan artifact를
