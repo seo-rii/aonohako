@@ -1741,8 +1741,10 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			return "", "", model.CompileStatusInternal, "cgroup controller setup failed: " + err.Error()
 		}
 		group, err := cgroup.CreateRunGroup(cgroupParentDir, cgroup.RunName("compile"), cgroup.Limits{
-			MemoryMaxBytes: memoryLimitKB * 1024,
-			PidsMax:        compileSandboxThreadLimit + 32,
+			MemoryMaxBytes:  memoryLimitKB * 1024,
+			PidsMax:         compileSandboxThreadLimit + 32,
+			CPUQuotaMicros:  cgroup.SingleCPUQuotaMicros,
+			CPUPeriodMicros: cgroup.DefaultCPUPeriodMicros,
 		})
 		if err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)

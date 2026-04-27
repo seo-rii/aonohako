@@ -226,8 +226,10 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		}
 		pidsMax := sandboxThreadLimit + 16
 		group, err := cgroup.CreateRunGroup(cgroupParentDir, cgroup.RunName("execute"), cgroup.Limits{
-			MemoryMaxBytes: memoryLimitKB * 1024,
-			PidsMax:        pidsMax,
+			MemoryMaxBytes:  memoryLimitKB * 1024,
+			PidsMax:         pidsMax,
+			CPUQuotaMicros:  cgroup.SingleCPUQuotaMicros,
+			CPUPeriodMicros: cgroup.DefaultCPUPeriodMicros,
 		})
 		if err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)

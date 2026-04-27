@@ -12,8 +12,8 @@ func TestCreateRunGroupWritesRequiredLimits(t *testing.T) {
 	group, err := CreateRunGroup(parent, "run-123", Limits{
 		MemoryMaxBytes:  128 << 20,
 		PidsMax:         32,
-		CPUQuotaMicros:  100000,
-		CPUPeriodMicros: 200000,
+		CPUQuotaMicros:  SingleCPUQuotaMicros,
+		CPUPeriodMicros: DefaultCPUPeriodMicros,
 	})
 	if err != nil {
 		t.Fatalf("CreateRunGroup() error = %v", err)
@@ -24,7 +24,7 @@ func TestCreateRunGroupWritesRequiredLimits(t *testing.T) {
 	assertFile(t, filepath.Join(group.Path, "memory.max"), "134217728")
 	assertFile(t, filepath.Join(group.Path, "memory.oom.group"), "1")
 	assertFile(t, filepath.Join(group.Path, "pids.max"), "32")
-	assertFile(t, filepath.Join(group.Path, "cpu.max"), "100000 200000")
+	assertFile(t, filepath.Join(group.Path, "cpu.max"), "100000 100000")
 }
 
 func TestEnableControllersWritesSubtreeControl(t *testing.T) {
