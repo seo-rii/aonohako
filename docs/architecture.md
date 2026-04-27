@@ -264,7 +264,7 @@ reported as runtime failure instead of silently falling back to process stdout.
 | Metric | Source | Why |
 | --- | --- | --- |
 | `wall_time_ms` | `CLOCK_MONOTONIC` | stable wall clock, not affected by time jumps |
-| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID | aggregates all threads inside the process |
+| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec` for run-cgroup CPU usage | aggregates all threads inside the process and, when cgroups are enabled, covers the run cgroup rather than only the main PID |
 | `memory_kb` | `/proc/<pid>/statm` sampled during execution, `/proc/<pid>/smaps_rollup` near the limit or when AS is disabled, then `rusage.Maxrss` fallback | captures live RSS peaks, uses a more accurate procfs source in risky ranges, and keeps a post-exit fallback |
 
 Important consequence:
@@ -366,9 +366,10 @@ The accounting reader reads `memory.current`, `memory.peak` when present,
 `memory.events`, `pids.current`, `pids.events`, and `cpu.stat`. When a run
 cgroup is present, watchdogs prefer `memory.events` `max`, `oom`, `oom_kill`,
 and `oom_group_kill`, plus `pids.events` `max`, over RSS polling for hard memory
-and pids-limit classification. CPU throttling counters remain diagnostic; the
-current cgroup CPU setting is a bandwidth guardrail, not a separate verdict
-classification source.
+and pids-limit classification. Execute watchdogs also use `cpu.stat` `usage_usec`
+to update reported CPU time and classify CPU-time TLE for the whole run cgroup.
+CPU throttling counters remain diagnostic; the current cgroup CPU setting is a
+bandwidth guardrail, not a separate verdict classification source.
 
 ## Deployment Contract
 

@@ -108,7 +108,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "writing values such as `+cpu +memory +pids` to\n`cgroup.subtree_control`") || !strings.Contains(architecture, "positive\n`memory.max` and `pids.max` values") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "`cpu.max=100000 100000`") || !strings.Contains(architecture, "writing its PID to `cgroup.procs`") || !strings.Contains(architecture, "without recursive deletion") {
 		t.Fatalf("architecture.md must describe cgroup run-group write contract")
 	}
-	if !strings.Contains(architecture, "reads `memory.current`, `memory.peak` when present,\n`memory.events`, `pids.current`, `pids.events`, and `cpu.stat`") || !strings.Contains(architecture, "`oom_group_kill`, plus `pids.events` `max`") {
+	if !strings.Contains(architecture, "reads `memory.current`, `memory.peak` when present,\n`memory.events`, `pids.current`, `pids.events`, and `cpu.stat`") || !strings.Contains(architecture, "`oom_group_kill`, plus `pids.events` `max`") || !strings.Contains(architecture, "`cpu.stat` `usage_usec`") {
 		t.Fatalf("architecture.md must describe cgroup accounting read contract")
 	}
 	if !strings.Contains(architecture, "unsupported runtime security contracts fail startup before request handling") {
