@@ -1,6 +1,7 @@
 package cgroup
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,8 +22,16 @@ type Group struct {
 }
 
 func ValidateParent(parentDir string, requiredControllers []string) error {
+	return ValidateParentAt(parentDir, "/proc/self/mountinfo", requiredControllers)
+}
+
+func ValidateParentAt(parentDir, mountInfoPath string, requiredControllers []string) error {
 	if strings.TrimSpace(parentDir) == "" {
 		return fmt.Errorf("cgroup parent directory is required")
+	}
+	parentDir, err := filepath.Abs(parentDir)
+	if err != nil {
+		return fmt.Errorf("resolve cgroup parent: %w", err)
 	}
 	info, err := os.Stat(parentDir)
 	if err != nil {
@@ -47,7 +56,42 @@ func ValidateParent(parentDir string, requiredControllers []string) error {
 	if _, err := os.Stat(filepath.Join(parentDir, "cgroup.subtree_control")); err != nil {
 		return fmt.Errorf("stat cgroup.subtree_control: %w", err)
 	}
+	if err := validateCgroup2Mount(parentDir, mountInfoPath); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateCgroup2Mount(parentDir, mountInfoPath string) error {
+	mountInfo, err := os.ReadFile(mountInfoPath)
+	if err != nil {
+		return fmt.Errorf("read mountinfo: %w", err)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(mountInfo)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		for i := 0; i < len(fields)-1; i++ {
+			if fields[i] != "-" || fields[i+1] != "cgroup2" {
+				continue
+			}
+			if len(fields) <= 4 {
+				continue
+			}
+			mountPoint := unescapeMountInfoPath(fields[4])
+			if parentDir == mountPoint || strings.HasPrefix(parentDir, strings.TrimRight(mountPoint, "/")+"/") {
+				return nil
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("scan mountinfo: %w", err)
+	}
+	return fmt.Errorf("cgroup parent is not under a cgroup2 mount: %s", parentDir)
+}
+
+func unescapeMountInfoPath(path string) string {
+	replacer := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+	return replacer.Replace(path)
 }
 
 func RunName(prefix string) string {

@@ -139,8 +139,9 @@ The command prints the preflight result as JSON and exits non-zero when required
 cgroup v2 controls are unavailable.
 
 When `AONOHAKO_CGROUP_PARENT` is set, startup validates that the selected parent
-has the required controllers and `cgroup.subtree_control`. The compile, execute,
-and SPJ helper paths then use this write contract for one run cgroup:
+is under a cgroup v2 mount and has the required controllers and
+`cgroup.subtree_control`. The compile, execute, and SPJ helper paths then use
+this write contract for one run cgroup:
 
 - create a sanitized run group name under the selected parent
 - write positive `memory.max` and `pids.max` values

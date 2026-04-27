@@ -197,9 +197,9 @@ aonohako-selftest cgroup-preflight
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_CGROUP_PARENT` is optional and supported only for
   `selfhosted + embedded + helper`. When set, startup validates that the parent
-  cgroup exposes `cpu`, `memory`, and `pids`, and each compile/execute/SPJ run
-  is placed in a per-run cgroup with `memory.max`, `pids.max`, and
-  `memory.oom.group=1`.
+  directory is under a cgroup v2 mount and exposes `cpu`, `memory`, and `pids`,
+  and each compile/execute/SPJ run is placed in a per-run cgroup with
+  `memory.max`, `pids.max`, and `memory.oom.group=1`.
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
   `aonohako` runner service and must be an absolute `http(s)` URL without
   embedded credentials, query strings, or fragments
