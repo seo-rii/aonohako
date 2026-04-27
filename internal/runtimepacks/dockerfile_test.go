@@ -217,6 +217,14 @@ func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.
 			t.Fatalf("runtime.Dockerfile must harden %s to reduce image read surface", marker)
 		}
 	}
+	for _, marker := range []string{
+		"for tool in apt apt-get apt-cache apt-config dpkg dpkg-query dpkg-deb curl wget",
+		"chmod 0750 \"$(command -v \"",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("runtime.Dockerfile must restrict package manager/fetcher execution with %q", marker)
+		}
+	}
 }
 
 func TestRuntimeDockerfileHardensSharedScratchPathsAtBuildTime(t *testing.T) {

@@ -1395,6 +1395,27 @@ func runDirectImagePermissionChecks() error {
 		return fmt.Errorf("image-metadata-paths-are-not-readable: unexpected stdout %q stderr %q", imageOut, imageErr)
 	}
 
+	toolOut, toolErr, err := runAsSandboxUser(
+		"for p in /usr/bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/bin/apt-config /usr/bin/dpkg /usr/bin/dpkg-query /usr/bin/dpkg-deb /usr/bin/curl /usr/bin/wget; do "+
+			"if [ -e \"$p\" ]; then "+
+			"if [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
+			"fi; "+
+			"done",
+		"",
+	)
+	if err != nil {
+		return fmt.Errorf("image-package-tools-are-not-executable: %w\n%s", err, toolErr)
+	}
+	toolFields := strings.Fields(strings.TrimSpace(toolOut))
+	if len(toolFields) == 0 {
+		return fmt.Errorf("image-package-tools-are-not-executable: no package tools were checked")
+	}
+	for i := 0; i+1 < len(toolFields); i += 2 {
+		if toolFields[i+1] != "blocked" {
+			return fmt.Errorf("image-package-tools-are-not-executable: unexpected stdout %q stderr %q", toolOut, toolErr)
+		}
+	}
+
 	scratchOut, scratchErr, err := runAsSandboxUser(
 		"for p in /tmp /var/tmp /run/lock; do "+
 			"if [ -e \"$p\" ]; then "+
