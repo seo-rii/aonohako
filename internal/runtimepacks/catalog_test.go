@@ -435,6 +435,9 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "GOMODCACHE: ${{ github.workspace }}/.cache/go-mod") {
 		t.Fatalf("ci workflow must place GOMODCACHE under the workspace so setup-go cache restores without colliding with preexisting module files")
 	}
+	if !strings.Contains(body, "group: ci-${{ github.workflow }}-${{ github.ref }}") || !strings.Contains(body, "cancel-in-progress: true") {
+		t.Fatalf("ci workflow must cancel superseded same-ref runs")
+	}
 	if !strings.Contains(body, "aonohako-ci-prod:${{ matrix.name }}") {
 		t.Fatalf("ci workflow must build production-profile images in the profile matrix")
 	}
