@@ -136,8 +136,9 @@ aonohako-selftest cgroup-preflight
 - These axes map to explicit security contracts in code:
   `embedded-helper-process-hardening`, `remote-control-plane`, and reserved
   `reserved-container-isolation`. The helper contract is process hardening by
-  default; self-hosted helpers can opt into per-run cgroup memory/pids limits,
-  but not mount-namespace, per-run UID, or post-start `execve()` isolation.
+  default; self-hosted helpers can opt into per-run cgroup memory, pids, and
+  one-vCPU CPU bandwidth limits, but not mount-namespace, per-run UID, or
+  post-start `execve()` isolation.
 - `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand:
   `cloudrun` → `cloudrun + embedded + helper`
   `local-root` → `selfhosted + embedded + helper`
@@ -204,7 +205,8 @@ aonohako-selftest cgroup-preflight
   `selfhosted + embedded + helper`. When set, startup validates that the parent
   directory is under a cgroup v2 mount and exposes `cpu`, `memory`, and `pids`,
   and each compile/execute/SPJ run is placed in a per-run cgroup with
-  `memory.max`, `pids.max`, and `memory.oom.group=1`.
+  `memory.max`, `pids.max`, `cpu.max=100000 100000`, and
+  `memory.oom.group=1`.
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
   `aonohako` runner service and must be an absolute `http(s)` URL without
   embedded credentials, query strings, or fragments
@@ -250,7 +252,8 @@ filesystem isolation. It applies `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp,
 fd cleanup, immutable submitted files, a writable per-run workspace, and
 process-group cleanup. Self-hosted helper deployments can additionally set
 `AONOHAKO_CGROUP_PARENT` to place each compile/execute/SPJ sandbox process in a
-per-run cgroup with kernel-enforced memory and pids limits.
+per-run cgroup with kernel-enforced memory, pids, and one-vCPU CPU bandwidth
+limits.
 
 Verdicts are classified from wall time, target CPU time, procfs RSS samples,
 workspace scans, process exit state, and output/SPJ evaluation in that order.

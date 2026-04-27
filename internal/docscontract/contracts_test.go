@@ -105,7 +105,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "recreates `/tmp/.dotnet`") {
 		t.Fatalf("architecture.md must describe dotnet rlimit and shared-state compatibility exceptions")
 	}
-	if !strings.Contains(architecture, "writing values such as `+cpu +memory +pids` to\n`cgroup.subtree_control`") || !strings.Contains(architecture, "positive\n`memory.max` and `pids.max` values") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "writing its PID to\n`cgroup.procs`") || !strings.Contains(architecture, "without recursive\ndeletion") {
+	if !strings.Contains(architecture, "writing values such as `+cpu +memory +pids` to\n`cgroup.subtree_control`") || !strings.Contains(architecture, "positive\n`memory.max` and `pids.max` values") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "`cpu.max=100000 100000`") || !strings.Contains(architecture, "writing its PID to `cgroup.procs`") || !strings.Contains(architecture, "without recursive deletion") {
 		t.Fatalf("architecture.md must describe cgroup run-group write contract")
 	}
 	if !strings.Contains(architecture, "reads `memory.current`, `memory.peak` when present,\n`memory.events`, `pids.current`, `pids.events`, and `cpu.stat`") || !strings.Contains(architecture, "`oom_group_kill`, plus `pids.events` `max`") {
@@ -185,7 +185,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_SANDBOX_BACKEND` selects the local sandbox implementation",
 		"`container` is a reserved enum value for a future",
 		"`embedded-helper-process-hardening`, `remote-control-plane`, and reserved",
-		"self-hosted helpers can opt into per-run cgroup memory/pids limits",
+		"self-hosted helpers can opt into per-run cgroup memory, pids, and\n  one-vCPU CPU bandwidth limits",
 		"fail startup instead of falling back",
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"non-root development path)",

@@ -17,6 +17,11 @@ type Limits struct {
 	CPUPeriodMicros int64
 }
 
+const (
+	SingleCPUQuotaMicros   int64 = 100000
+	DefaultCPUPeriodMicros int64 = 100000
+)
+
 type Group struct {
 	Path string
 }

@@ -111,12 +111,13 @@ not exist yet:
 `embedded + container` remains reserved for a future self-hosted backend. It is
 not implemented today.
 
-The helper backend can optionally add per-run cgroup v2 memory and pids limits
-when the runner is deployed as `selfhosted + embedded + helper` and
-`AONOHAKO_CGROUP_PARENT` points at a writable parent cgroup. This is not a full
-container backend: it does not add a mount namespace, masked `/proc`, per-run
-UID, or seccomp allowlist. It does give the kernel a run-level memory/pids
-boundary that is stronger than RSS polling alone.
+The helper backend can optionally add per-run cgroup v2 memory, pids, and CPU
+bandwidth limits when the runner is deployed as `selfhosted + embedded +
+helper` and `AONOHAKO_CGROUP_PARENT` points at a writable parent cgroup. This is
+not a full container backend: it does not add a mount namespace, masked `/proc`,
+per-run UID, or seccomp allowlist. It does give the kernel a run-level
+memory/pids boundary and one-vCPU bandwidth guardrail that are stronger than
+RSS polling alone.
 
 The non-mutating cgroup preflight in `internal/isolation/cgroup` checks that:
 
@@ -147,7 +148,7 @@ this write contract for one run cgroup:
 - create a sanitized run group name under the selected parent
 - write positive `memory.max` and `pids.max` values
 - write `memory.oom.group=1`
-- write `cpu.max` only when both quota and period are configured
+- write `cpu.max=100000 100000` to cap sandbox CPU bandwidth at one vCPU
 - move the target process by writing its PID to `cgroup.procs`
 
 The same package also defines the read contract used by the optional cgroup

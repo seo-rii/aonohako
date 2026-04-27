@@ -354,17 +354,20 @@ optional cgroup guardrail and the future isolated backend. Parent cgroups enable
 child controllers by writing values such as `+cpu +memory +pids` to
 `cgroup.subtree_control`. A run group must then be created with positive
 `memory.max` and `pids.max` values, and `memory.oom.group` is set so the kernel
-treats the run as one OOM domain. `cpu.max` is written only when both quota and
-period are set, and a target process is admitted by writing its PID to
-`cgroup.procs`. Cleanup removes the run cgroup directory without recursive
-deletion so leftover processes or files surface as cleanup errors.
+treats the run as one OOM domain. Compile, execute, and SPJ run groups also
+write `cpu.max=100000 100000` so one sandbox cannot burst beyond one vCPU when
+the optional cgroup guardrail is enabled. A target process is admitted by
+writing its PID to `cgroup.procs`. Cleanup removes the run cgroup directory
+without recursive deletion so leftover processes or files surface as cleanup
+errors.
 
 The accounting reader reads `memory.current`, `memory.peak` when present,
 `memory.events`, `pids.current`, `pids.events`, and `cpu.stat`. When a run
 cgroup is present, watchdogs prefer `memory.events` `max`, `oom`, `oom_kill`,
 and `oom_group_kill`, plus `pids.events` `max`, over RSS polling for hard memory
-and pids-limit classification. CPU throttling counters remain diagnostic until
-the self-hosted isolated backend owns CPU quota policy.
+and pids-limit classification. CPU throttling counters remain diagnostic; the
+current cgroup CPU setting is a bandwidth guardrail, not a separate verdict
+classification source.
 
 ## Deployment Contract
 

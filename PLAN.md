@@ -72,6 +72,10 @@
   opt-in으로 추가해 compile/execute/SPJ helper process를 per-run cgroup에
   넣고 `memory.max`, `pids.max`, `memory.oom.group=1` 이벤트를 watchdog에
   연결했다. Cloud Run helper mode는 계속 cgroup 비의존 경로로 남는다.
+- Phase 2: self-hosted cgroup opt-in의 compile/execute/SPJ run group에
+  `cpu.max=100000 100000`을 연결해 run 단위 CPU bandwidth도 1 vCPU로
+  제한한다. CPU throttling counter는 아직 verdict source가 아니라
+  guardrail/diagnostic으로 유지한다.
 
 ## 작업 원칙
 
