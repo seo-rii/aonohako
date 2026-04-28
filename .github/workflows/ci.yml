@@ -160,6 +160,9 @@ jobs:
           docker save "aonohako-ci-prod:${{ matrix.name }}"
           | gzip -1
           > "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"
+      - run: >
+          sha256sum "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"
+          > "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz.sha256"
       - uses: actions/upload-artifact@v7
         with:
           name: toolchain-profile-${{ matrix.name }}
@@ -200,6 +203,9 @@ jobs:
       - run: |
           find toolchain-artifacts -type f | sort > toolchain-artifacts/MANIFEST.txt
         if: steps.bundle.outputs.has_artifacts == 'true'
+      - run: |
+          find toolchain-artifacts -type f -name '*.docker.tar.gz' -print0 | sort -z | xargs -0 -r sha256sum > toolchain-artifacts/SHA256SUMS
+        if: steps.bundle.outputs.has_artifacts == 'true'
       - uses: actions/upload-artifact@v7
         if: steps.bundle.outputs.has_artifacts == 'true'
         with:
@@ -207,7 +213,9 @@ jobs:
           path: |
             toolchain-artifacts/SUMMARY.md
             toolchain-artifacts/MANIFEST.txt
+            toolchain-artifacts/SHA256SUMS
             toolchain-artifacts/toolchain-profile-*/**/summary.md
+            toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz.sha256
           compression-level: 0
 
   mixin-smoke:
