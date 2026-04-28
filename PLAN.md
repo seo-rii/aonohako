@@ -115,6 +115,9 @@
   추가해 기본 `RLIMIT_AS`/RSS watchdog 경로를 언어 이미지에서 확인하게 했다.
 - Phase 11: runtime memory smoke에 Groovy/Scala/Clojure heap pressure
   케이스를 추가해 JVM classpath/launcher별 `-Xmx` 회귀를 확인하게 했다.
+- Phase 11: Cloud Run runner/control-plane, self-hosted runner, dev
+  control-plane `.env` 예시와 docscontract lint를 추가해 auth, ingress,
+  single-slot 배포 계약 drift를 문서 단계에서 잡게 했다.
 - Phase 2: execute watchdog이 cgroup `cpu.stat usage_usec`를 읽어 self-hosted
   cgroup opt-in에서 run cgroup 전체 CPU 사용량으로 `cpu_time_ms`와 CPU TLE를
   갱신하게 했다.

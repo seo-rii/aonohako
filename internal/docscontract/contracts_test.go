@@ -205,6 +205,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` is also required",
 		"Supported values are `none` for `dev` only, `bearer`, and\n  `platform`",
 		"aonohako-selftest deployment-contract",
+		"`cloudrun-runner.env`,\n`cloudrun-control-plane.env`, `selfhosted-runner.env`, and\n`dev-control-plane.env`",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_CGROUP_PARENT` is optional and supported only for",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
@@ -273,6 +274,65 @@ func TestReadmeExecutionModeNarrativeMatchesRuntimeBehavior(t *testing.T) {
 	}
 }
 
+func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
+	examples := map[string]map[string]string{
+		"cloudrun-runner.env":        parseEnvExample(t, filepath.Join("..", "..", "docs", "examples", "cloudrun-runner.env")),
+		"cloudrun-control-plane.env": parseEnvExample(t, filepath.Join("..", "..", "docs", "examples", "cloudrun-control-plane.env")),
+		"selfhosted-runner.env":      parseEnvExample(t, filepath.Join("..", "..", "docs", "examples", "selfhosted-runner.env")),
+		"dev-control-plane.env":      parseEnvExample(t, filepath.Join("..", "..", "docs", "examples", "dev-control-plane.env")),
+	}
+
+	requireEnv := func(name string, env map[string]string, key, want string) {
+		t.Helper()
+		if got := env[key]; got != want {
+			t.Fatalf("%s %s = %q, want %q", name, key, got, want)
+		}
+	}
+	requirePresent := func(name string, env map[string]string, key string) {
+		t.Helper()
+		if strings.TrimSpace(env[key]) == "" {
+			t.Fatalf("%s must set %s", name, key)
+		}
+	}
+
+	for name, env := range examples {
+		requirePresent(name, env, "AONOHAKO_DEPLOYMENT_TARGET")
+		requirePresent(name, env, "AONOHAKO_EXECUTION_TRANSPORT")
+		requirePresent(name, env, "AONOHAKO_SANDBOX_BACKEND")
+		if name != "dev-control-plane.env" {
+			if env["AONOHAKO_INBOUND_AUTH"] == "none" {
+				t.Fatalf("%s must not use unauthenticated inbound auth", name)
+			}
+			requireEnv(name, env, "AONOHAKO_MAX_PENDING_QUEUE", "16")
+			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "16")
+			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "60")
+			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_NETWORK", "false")
+		}
+	}
+
+	for _, name := range []string{"cloudrun-runner.env", "selfhosted-runner.env"} {
+		env := examples[name]
+		requireEnv(name, env, "AONOHAKO_EXECUTION_TRANSPORT", "embedded")
+		requireEnv(name, env, "AONOHAKO_SANDBOX_BACKEND", "helper")
+		requireEnv(name, env, "AONOHAKO_MAX_ACTIVE_RUNS", "1")
+		requireEnv(name, env, "AONOHAKO_TRUSTED_RUNNER_INGRESS", "true")
+		requirePresent(name, env, "AONOHAKO_WORK_ROOT")
+	}
+
+	cloudRemote := examples["cloudrun-control-plane.env"]
+	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_SANDBOX_BACKEND", "none")
+	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
+	requirePresent("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REMOTE_RUNNER_URL")
+	requirePresent("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_WORK_ROOT")
+
+	devRemote := examples["dev-control-plane.env"]
+	requireEnv("dev-control-plane.env", devRemote, "AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	requireEnv("dev-control-plane.env", devRemote, "AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	requireEnv("dev-control-plane.env", devRemote, "AONOHAKO_SANDBOX_BACKEND", "none")
+	requireEnv("dev-control-plane.env", devRemote, "AONOHAKO_INBOUND_AUTH", "none")
+}
+
 func mustRead(t *testing.T, path string) string {
 	t.Helper()
 	body, err := os.ReadFile(path)
@@ -280,4 +340,30 @@ func mustRead(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(body)
+}
+
+func parseEnvExample(t *testing.T, path string) map[string]string {
+	t.Helper()
+	body := mustRead(t, path)
+	env := map[string]string{}
+	for lineNo, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			t.Fatalf("%s:%d: expected KEY=VALUE", path, lineNo+1)
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || strings.ContainsAny(key, " \t") {
+			t.Fatalf("%s:%d: invalid key %q", path, lineNo+1, key)
+		}
+		if _, exists := env[key]; exists {
+			t.Fatalf("%s:%d: duplicate key %s", path, lineNo+1, key)
+		}
+		env[key] = value
+	}
+	return env
 }

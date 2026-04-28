@@ -110,6 +110,11 @@ Validate the current deployment environment without starting the HTTP server:
 aonohako-selftest deployment-contract
 ```
 
+Checked deployment environment examples live under
+[`docs/examples/`](docs/examples/): `cloudrun-runner.env`,
+`cloudrun-control-plane.env`, `selfhosted-runner.env`, and
+`dev-control-plane.env`.
+
 Repository policy check:
 
 ```bash
