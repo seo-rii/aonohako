@@ -1155,6 +1155,43 @@ func TestRunRequiresRootOutsideCloudRun(t *testing.T) {
 	}
 }
 
+func TestRunSandboxEnvironmentDoesNotInheritParentSecrets(t *testing.T) {
+	requireSandboxSupport(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	for _, key := range []string{
+		"AONOHAKO_API_BEARER_TOKEN",
+		"AONOHAKO_REMOTE_RUNNER_TOKEN",
+		"AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET",
+		"DATABASE_URL",
+		"CUSTOM_SECRET",
+	} {
+		t.Setenv(key, "should-not-enter-sandbox")
+	}
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: b64(
+				"import os\n" +
+					"keys = ['AONOHAKO_API_BEARER_TOKEN', 'AONOHAKO_REMOTE_RUNNER_TOKEN', 'AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET', 'DATABASE_URL', 'CUSTOM_SECRET']\n" +
+					"leaked = [key for key in keys if os.environ.get(key)]\n" +
+					"print('leak:' + ','.join(leaked) if leaked else 'clean')\n",
+			),
+		}},
+		ExpectedStdout: "clean\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted without inherited secrets, got %+v", resp)
+	}
+}
+
 func TestRunPreventsRemovingOrReplacingSubmittedFiles(t *testing.T) {
 	requireSandboxSupport(t)
 
