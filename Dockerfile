@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
-FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS builder
+ARG GO_IMAGE=golang:1.26-bookworm@sha256:47ce5636e9936b2c5cbf708925578ef386b4f8872aec74a67bd13a627d242b19
+ARG RUNTIME_BASE=debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:8.0@sha256:4b1cdaa57eed2cecabcf29bdb9bce11e8ca1c287d39dfd2c8b534663ea94d493
+ARG PYTHON_IMAGE=python:3.13-slim-trixie@sha256:a0779d7c12fc20be6ec6b4ddc901a4fd7657b8a6bc9def9d3fde89ed5efe0a3d
+
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
 WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download || true
@@ -9,7 +14,7 @@ ARG TARGETOS TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako ./cmd/server
 
-FROM debian:trixie-slim AS base
+FROM ${RUNTIME_BASE} AS base
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tini && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
 ENV PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -32,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-21-jdk-headless \
     && rm -rf /var/lib/apt/lists/*
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS compile-dotnet
+FROM ${DOTNET_SDK_IMAGE} AS compile-dotnet
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
 ENV PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENTRYPOINT ["aonohako"]
@@ -50,7 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
-FROM python:3.13-slim-trixie AS execute-python
+FROM ${PYTHON_IMAGE} AS execute-python
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tini pypy3 openjdk-21-jre-headless \
     ca-certificates curl bzip2 \
