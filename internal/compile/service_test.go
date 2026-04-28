@@ -852,6 +852,39 @@ int main(void) {
 #ifdef SYS_perf_event_open
 	failed |= check("perf_event_open", SYS_perf_event_open);
 #endif
+#ifdef SYS_open_by_handle_at
+	failed |= check("open_by_handle_at", SYS_open_by_handle_at);
+#endif
+#ifdef SYS_name_to_handle_at
+	failed |= check("name_to_handle_at", SYS_name_to_handle_at);
+#endif
+#ifdef SYS_fanotify_init
+	failed |= check("fanotify_init", SYS_fanotify_init);
+#endif
+#ifdef SYS_fanotify_mark
+	failed |= check("fanotify_mark", SYS_fanotify_mark);
+#endif
+#ifdef SYS_add_key
+	failed |= check("add_key", SYS_add_key);
+#endif
+#ifdef SYS_request_key
+	failed |= check("request_key", SYS_request_key);
+#endif
+#ifdef SYS_keyctl
+	failed |= check("keyctl", SYS_keyctl);
+#endif
+#ifdef SYS_init_module
+	failed |= check("init_module", SYS_init_module);
+#endif
+#ifdef SYS_finit_module
+	failed |= check("finit_module", SYS_finit_module);
+#endif
+#ifdef SYS_delete_module
+	failed |= check("delete_module", SYS_delete_module);
+#endif
+#ifdef SYS_syslog
+	failed |= check("syslog", SYS_syslog);
+#endif
 #ifdef SYS_memfd_create
 	failed |= check("memfd_create", SYS_memfd_create);
 #endif
