@@ -49,6 +49,8 @@
   policy check에 연결했다.
 - Phase 12: production 계열 target에서 inbound auth `none`과 remote runner
   auth `none`을 reject하도록 startup validation을 강화했다.
+- Phase 12: non-dev target에서 pending queue/global stream/principal stream/
+  principal rate cap `0`을 reject해 unlimited 설정이 dev 전용으로 남게 했다.
 - Phase 2: cgroup v2 preflight, parent controller enable, per-run group
   create/add-proc/remove primitive를 추가하고 architecture docs contract로
   고정했다.

@@ -165,6 +165,20 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	if runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev {
+		if maxPending == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_MAX_PENDING_QUEUE=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
+		}
+		if maxActiveStreams == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_MAX_ACTIVE_STREAMS=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
+		}
+		if maxPrincipalStreams == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
+		}
+		if maxPrincipalRequestsPerMinute == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
+		}
+	}
 	heartbeatSec, err := parsePositiveIntEnv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", os.Getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC"), 10)
 	if err != nil {
 		return Config{}, err

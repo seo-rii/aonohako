@@ -132,6 +132,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "malformed or out-of-range") || !strings.Contains(architecture, "values fail startup") {
 		t.Fatalf("architecture.md must describe strict numeric env parsing")
 	}
+	if !strings.Contains(architecture, "non-dev deployments also reject `0` for pending queue, global stream,\n  per-principal stream, and per-principal request-rate caps") {
+		t.Fatalf("architecture.md must describe non-dev rejection of unlimited queue and stream caps")
+	}
 	if !strings.Contains(architecture, "`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`") {
 		t.Fatalf("architecture.md must describe the remote SSE idle timeout env")
 	}

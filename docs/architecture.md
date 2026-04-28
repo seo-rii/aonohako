@@ -469,6 +469,9 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_HEARTBEAT_INTERVAL_SEC`, and
   `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` are strict; malformed or out-of-range
   values fail startup
+- non-dev deployments also reject `0` for pending queue, global stream,
+  per-principal stream, and per-principal request-rate caps so unlimited queue
+  or stream settings stay development-only
 - `AONOHAKO_ALLOW_REQUEST_NETWORK` is strict boolean configuration and defaults
   to `true` only for `dev`; outside `dev`, client-supplied `enable_network=true`
   is rejected unless this is explicitly enabled for a dedicated runner policy
