@@ -138,6 +138,9 @@
 - Phase 11/18: execute/compile seccomp regression probe에 file-handle,
   fanotify, keyring, kernel-module, syslog 계열 syscall 확인을 추가해
   denylist drift 감지를 넓혔다.
+- Phase 3/18: execute target과 compile helper command가 부모 서버 프로세스의
+  token/secret 환경변수를 상속하지 않고 fixed base/workspace/runtime env만
+  받는지 regression으로 고정했다.
 
 ## 작업 원칙
 

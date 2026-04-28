@@ -134,7 +134,9 @@ The runtime uses a parent/helper/target split:
    - `execve()`s the target runtime or binary
 
 3. Target process:
-   - runs with the request-specific environment
+   - runs with a request-specific environment built from fixed base variables,
+     workspace-scoped tool/cache directories, and explicit per-runtime entries;
+     it does not inherit the server process environment
    - inherits the helper's limits and seccomp filter
    - stays in the same process group for cleanup
 

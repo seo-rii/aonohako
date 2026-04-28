@@ -78,6 +78,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "passes the helper request JSON through an inherited pipe file descriptor") || !strings.Contains(architecture, "does not materialize the helper request as a\nworkspace file") {
 		t.Fatalf("architecture.md must describe helper request fd delivery")
 	}
+	if !strings.Contains(architecture, "request-specific environment built from fixed base variables") || !strings.Contains(architecture, "does not inherit the server process environment") {
+		t.Fatalf("architecture.md must describe sandbox environment inheritance boundaries")
+	}
 	if !strings.Contains(architecture, "ships shared scratch paths such as `/tmp`, `/var/tmp`, and `/run/lock`") || !strings.Contains(architecture, "entrypoint no longer mutates") {
 		t.Fatalf("architecture.md must describe static scratch hardening without startup mutation")
 	}

@@ -540,6 +540,40 @@ func TestRunSandboxedCommandCapsCapturedOutput(t *testing.T) {
 	}
 }
 
+func TestRunSandboxedCommandDoesNotInheritParentSecrets(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	for _, key := range []string{
+		"AONOHAKO_API_BEARER_TOKEN",
+		"AONOHAKO_REMOTE_RUNNER_TOKEN",
+		"AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET",
+		"DATABASE_URL",
+		"CUSTOM_SECRET",
+	} {
+		t.Setenv(key, "should-not-enter-sandbox")
+	}
+
+	workDir := sandboxWritableTempDir(t)
+	stdout, stderr, status, reason := RunSandboxedCommand(
+		context.Background(),
+		workDir,
+		"python3",
+		[]string{
+			"-c",
+			"import os\nkeys = ['AONOHAKO_API_BEARER_TOKEN', 'AONOHAKO_REMOTE_RUNNER_TOKEN', 'AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET', 'DATABASE_URL', 'CUSTOM_SECRET']\nleaked = [key for key in keys if os.environ.get(key)]\nprint('leak:' + ','.join(leaked) if leaked else 'clean')",
+		},
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+	if stdout != "clean\n" {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
 func TestRunSandboxedCommandMarksWorkspaceEntryLimitExceeded(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not available")
