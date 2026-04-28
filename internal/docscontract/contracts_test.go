@@ -51,6 +51,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"`AONOHAKO_MAX_ACTIVE_STREAMS`",
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE`",
+		"Stale per-principal windows are cleaned up after they age out",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`",
 		"`X-Aonohako-Protocol-Version`",
 		`"stream_limit_exceeded"`,

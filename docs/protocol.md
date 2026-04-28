@@ -157,7 +157,8 @@ Both `/compile` and `/execute` share the same bounded queue:
   `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` (default: `0` in `dev`, `60` in
   `cloudrun` or `selfhosted`). This caps `/compile` and `/execute` requests per
   fixed one-minute window for one bearer, platform, or anonymous remote
-  principal.
+  principal. Stale per-principal windows are cleaned up after they age out so
+  high-cardinality principal traffic does not retain rate state indefinitely.
 - **Request body read timeout**: `AONOHAKO_BODY_READ_TIMEOUT_SEC` (default:
   `30`). This bounds the HTTP request-body upload window before the response
   switches to SSE streaming.

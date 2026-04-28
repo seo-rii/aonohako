@@ -439,6 +439,31 @@ func TestExecutePrincipalRequestRateOverflowReturns429(t *testing.T) {
 	_, _ = io.Copy(io.Discard, resp3.Body)
 }
 
+func TestPrincipalRequestRateCleanupDropsStaleWindows(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.MaxPrincipalRequestsPerMinute = 10
+	s := NewWithServices(cfg, compile.New(), execute.New())
+	now := time.Unix(200, 0)
+	s.principalRates = map[string]principalRateWindow{
+		"old":   {start: now.Add(-2 * time.Minute), count: 10},
+		"fresh": {start: now.Add(-30 * time.Second), count: 1},
+	}
+	s.rateLastCleanup = now.Add(-2 * time.Minute)
+
+	if !s.allowPrincipalRequest("new", now) {
+		t.Fatalf("new principal should be allowed")
+	}
+	if _, ok := s.principalRates["old"]; ok {
+		t.Fatalf("stale principal rate window was not cleaned up")
+	}
+	if _, ok := s.principalRates["fresh"]; !ok {
+		t.Fatalf("fresh principal rate window should remain")
+	}
+	if _, ok := s.principalRates["new"]; !ok {
+		t.Fatalf("new principal rate window should be recorded")
+	}
+}
+
 func TestPlatformAuthIgnoresForwardedPrincipalHeaders(t *testing.T) {
 	cfg := configForTest(t)
 	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform}
