@@ -135,6 +135,9 @@
 - Phase 2/18: execute 전용 workspace scanner를 shared package로 옮기고 compile
   watchdog에도 연결해 컴파일 중 total bytes, entry count, directory depth
   초과를 같은 quota signal로 차단하게 했다.
+- Phase 11/18: execute/compile seccomp regression probe에 file-handle,
+  fanotify, keyring, kernel-module, syslog 계열 syscall 확인을 추가해
+  denylist drift 감지를 넓혔다.
 
 ## 작업 원칙
 
