@@ -98,6 +98,9 @@
 - Phase 10/12: unsigned platform trusted-header mode에
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`를 추가하고, source CIDR와
   `X-Aonohako-Principal` 존재를 API layer에서 확인하게 했다.
+- Phase 11/18: execute/compile seccomp regression probe가 modern mount API
+  syscall과 pidfd syscall 차단까지 직접 확인하게 해 denylist drift 감지를
+  넓혔다.
 - Phase 2: execute watchdog이 cgroup `cpu.stat usage_usec`를 읽어 self-hosted
   cgroup opt-in에서 run cgroup 전체 CPU 사용량으로 `cpu_time_ms`와 CPU TLE를
   갱신하게 했다.
