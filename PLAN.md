@@ -176,6 +176,9 @@
 - Phase 11: sandbox wait error를 signal/exit status 판독 뒤에 분류하도록
   조정해 timeout kill 또는 `SIGXCPU`가 `Runtime Error`로 먼저 고정되는
   verdict race를 줄였다.
+- Phase 1/2: deployment-contract selftest가 `AONOHAKO_CGROUP_PARENT`가
+  설정된 self-hosted helper 배포에서 per-run cgroup과 child-process
+  accounting capability를 missing이 아닌 effective capability로 보고하게 했다.
 - Phase 7/12: non-dev `platform` inbound auth에서 unsigned trusted-header
   모드를 제거하고 `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` 서명을 startup
   requirement로 만들었다.

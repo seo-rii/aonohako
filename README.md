@@ -111,9 +111,9 @@ aonohako-selftest deployment-contract
 ```
 
 The deployment contract JSON includes the selected execution shape, whether the
-named security contract is implemented, queue and stream limits, inbound/remote
-auth posture, cgroup parent presence, and whether
-`AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is active.
+named security contract is implemented, effective and missing local
+capabilities, queue and stream limits, inbound/remote auth posture, cgroup
+parent presence, and whether `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is active.
 
 Checked deployment environment examples live under
 [`docs/examples/`](docs/examples/): `cloudrun-runner.env`,
@@ -147,8 +147,11 @@ aonohako-selftest cgroup-preflight
   `embedded-helper-process-hardening`, `remote-control-plane`, and reserved
   `reserved-container-isolation`. The helper contract is process hardening by
   default; self-hosted helpers can opt into per-run cgroup memory, pids, and
-  one-vCPU CPU bandwidth limits, but not mount-namespace, per-run UID, or
-  post-start `execve()` isolation.
+  one-vCPU CPU bandwidth limits. `aonohako-selftest deployment-contract` moves
+  those cgroup-backed capabilities from missing to effective when
+  `AONOHAKO_CGROUP_PARENT` is configured. Mount-namespace, per-run UID, masked
+  `/proc`, and post-start `execve()` isolation remain unavailable in the helper
+  backend.
 - `AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand:
   `cloudrun` → `cloudrun + embedded + helper`
   `local-root` → `selfhosted + embedded + helper`

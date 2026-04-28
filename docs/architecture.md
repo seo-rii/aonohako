@@ -432,7 +432,7 @@ The supported shapes map to an explicit runtime security contract in
 
 | Shape | Contract | Local guarantees | Missing local boundary |
 | --- | --- | --- | --- |
-| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting | per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID, child-process accounting, seccomp allowlist, post-start `execve()` blocking |
+| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting; self-hosted deployments can add per-run cgroup and child-process accounting by setting `AONOHAKO_CGROUP_PARENT` | mount namespace, read-only rootfs, masked `/proc`, per-run UID, seccomp allowlist, post-start `execve()` blocking; per-run cgroup and child-process accounting remain missing unless `AONOHAKO_CGROUP_PARENT` is configured |
 | `remote + none` | `remote-control-plane` | `/compile` and `/execute` are forwarded to the configured runner and no local untrusted compile/run work is performed | isolation is delegated to the downstream runner and its private ingress/auth boundary |
 | `embedded + container` | `reserved-container-isolation` | not implemented | must provide per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID or user namespace, child-process accounting, allowlist-oriented seccomp, and post-start `execve()` blocking before it can be enabled |
 
@@ -507,8 +507,9 @@ The following checks are enforced before the HTTP server starts:
 - Outside `dev`, `/compile` and `/execute` requests are also capped per
   principal in a fixed one-minute window before they enter the run queue.
 - `aonohako-selftest deployment-contract` reports the active execution shape,
-  named contract, whether that contract is implemented, auth posture,
-  queue/stream limits, cgroup parent presence, and
+  named contract, whether that contract is implemented, effective and missing
+  local capabilities, auth posture, queue/stream limits, cgroup parent presence,
+  and
   `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` state as JSON for deployment checks.
 
 Recommended Cloud Run deployment baseline:

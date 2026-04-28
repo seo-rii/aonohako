@@ -38,6 +38,32 @@ type SecurityContract struct {
 	MissingCapabilities       []SecurityCapability
 }
 
+func (contract SecurityContract) WithAvailableCapabilities(caps ...SecurityCapability) SecurityContract {
+	if len(caps) == 0 {
+		return contract
+	}
+	available := make(map[SecurityCapability]bool, len(contract.Capabilities)+len(caps))
+	capabilities := append([]SecurityCapability(nil), contract.Capabilities...)
+	for _, cap := range contract.Capabilities {
+		available[cap] = true
+	}
+	for _, cap := range caps {
+		if !available[cap] {
+			capabilities = append(capabilities, cap)
+			available[cap] = true
+		}
+	}
+	contract.Capabilities = capabilities
+	missing := make([]SecurityCapability, 0, len(contract.MissingCapabilities))
+	for _, cap := range contract.MissingCapabilities {
+		if !available[cap] {
+			missing = append(missing, cap)
+		}
+	}
+	contract.MissingCapabilities = missing
+	return contract
+}
+
 func (opts RuntimeOptions) SecurityContract() (SecurityContract, error) {
 	switch opts.ExecutionTransport {
 	case ExecutionTransportEmbedded:

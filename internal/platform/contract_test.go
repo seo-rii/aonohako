@@ -56,6 +56,30 @@ func TestSecurityContractDescribesEmbeddedHelperBoundary(t *testing.T) {
 	}
 }
 
+func TestSecurityContractMarksConfiguredCapabilitiesAvailable(t *testing.T) {
+	contract, err := (RuntimeOptions{
+		DeploymentTarget:   DeploymentTargetSelfHosted,
+		ExecutionTransport: ExecutionTransportEmbedded,
+		SandboxBackend:     SandboxBackendHelper,
+	}).SecurityContract()
+	if err != nil {
+		t.Fatalf("SecurityContract() error = %v", err)
+	}
+
+	effective := contract.WithAvailableCapabilities(CapabilityPerRunCgroup, CapabilityChildProcessAccounting)
+	for _, want := range []SecurityCapability{CapabilityPerRunCgroup, CapabilityChildProcessAccounting} {
+		if !hasCapability(effective.Capabilities, want) {
+			t.Fatalf("effective contract missing configured capability %q: %+v", want, effective.Capabilities)
+		}
+		if hasCapability(effective.MissingCapabilities, want) {
+			t.Fatalf("effective contract still marks configured capability %q missing: %+v", want, effective.MissingCapabilities)
+		}
+		if !hasCapability(contract.MissingCapabilities, want) {
+			t.Fatalf("base contract should remain unchanged for capability %q: %+v", want, contract.MissingCapabilities)
+		}
+	}
+}
+
 func TestSecurityContractDescribesRemoteControlPlane(t *testing.T) {
 	contract, err := (RuntimeOptions{
 		DeploymentTarget:   DeploymentTargetDev,
