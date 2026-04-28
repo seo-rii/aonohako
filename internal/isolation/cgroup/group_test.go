@@ -95,6 +95,31 @@ func TestValidateParentRejectsGroupWritableParent(t *testing.T) {
 	}
 }
 
+func TestValidateParentRejectsUnwritableParent(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can bypass directory write permissions")
+	}
+	parent := t.TempDir()
+	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids\n")
+	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+	if err := os.Chmod(parent, 0o555); err != nil {
+		t.Fatalf("chmod parent: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(parent, 0o755)
+	})
+	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
+	writeFile(t, mountInfo, "36 25 0:31 / "+parent+" rw - cgroup2 cgroup rw\n")
+
+	err := ValidateParentAt(parent, mountInfo, []string{"cpu", "memory", "pids"})
+	if err == nil {
+		t.Fatalf("ValidateParentAt() error = nil, want writable parent rejection")
+	}
+	if !strings.Contains(err.Error(), "not writable") {
+		t.Fatalf("error %q should mention not writable", err)
+	}
+}
+
 func TestValidateParentRejectsMissingSubtreeControl(t *testing.T) {
 	parent := t.TempDir()
 	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids\n")

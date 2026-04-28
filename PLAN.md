@@ -55,7 +55,8 @@
   create/add-proc/remove primitive를 추가하고 architecture docs contract로
   고정했다.
 - Phase 2: cgroup parent preflight가 group/world-writable delegated parent를
-  reject하도록 강화했다.
+  reject하고 probe run-group create/remove로 실제 writable 상태를 검증하도록
+  강화했다.
 - Phase 2: cgroup accounting reader가 `memory.events`, `pids.events`,
   `cpu.stat`의 limit signal을 노출해 future verdict reason이 RSS polling에만
   의존하지 않게 했다.

@@ -141,9 +141,9 @@ cgroup v2 controls are unavailable.
 
 When `AONOHAKO_CGROUP_PARENT` is set, startup validates that the selected parent
 is under a cgroup v2 mount and has the required controllers and
-`cgroup.subtree_control`, and rejects a group/world-writable parent. The
-compile, execute, and SPJ helper paths then use this write contract for one run
-cgroup:
+`cgroup.subtree_control`, rejects a group/world-writable parent, and verifies a
+probe run-group create/remove cycle. The compile, execute, and SPJ helper paths
+then use this write contract for one run cgroup:
 
 - create a sanitized run group name under the selected parent
 - write positive `memory.max` and `pids.max` values
