@@ -30,6 +30,43 @@ func TestRuntimeDockerfileDeclaresRuntimeBaseBeforeFirstFrom(t *testing.T) {
 	}
 }
 
+func TestDockerfilesPinExternalBaseImagesByDigest(t *testing.T) {
+	requiredArgs := map[string][]string{
+		filepath.Join("..", "..", "Dockerfile"): {
+			"GO_IMAGE",
+			"RUNTIME_BASE",
+			"DOTNET_SDK_IMAGE",
+			"PYTHON_IMAGE",
+		},
+		filepath.Join("..", "..", "docker", "runtime.Dockerfile"): {
+			"GO_IMAGE",
+			"RUNTIME_BASE",
+		},
+	}
+	pinnedArgPattern := regexp.MustCompile(`(?m)^ARG ([A-Z0-9_]+)=[^\s]+@sha256:[0-9a-f]{64}$`)
+	unpinnedDirectFromPattern := regexp.MustCompile(`(?m)^FROM( --platform=\$BUILDPLATFORM)? [^{$\s][^\s@]*:[^\s@]*( AS|$)`)
+	for path, args := range requiredArgs {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile(%q): %v", path, err)
+		}
+		body := string(data)
+		matches := pinnedArgPattern.FindAllStringSubmatch(body, -1)
+		pinned := make(map[string]bool, len(matches))
+		for _, match := range matches {
+			pinned[match[1]] = true
+		}
+		for _, arg := range args {
+			if !pinned[arg] {
+				t.Fatalf("%s must define digest-pinned ARG %s", path, arg)
+			}
+		}
+		if match := unpinnedDirectFromPattern.FindString(body); match != "" {
+			t.Fatalf("%s contains unpinned direct external FROM %q", path, match)
+		}
+	}
+}
+
 func TestRuntimeDockerfileUsesGo126BuilderImage(t *testing.T) {
 	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
 	data, err := os.ReadFile(path)

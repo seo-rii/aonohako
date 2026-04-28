@@ -266,7 +266,8 @@ Per-request execution limits are part of the `/execute` payload:
 
 This repository does not ship cloud-vendor deployment credentials or `gcloud`
 workflow dependencies. The CI policy script fails if common secret-like or
-cloud CLI markers are checked in.
+cloud CLI markers are checked in, and it requires Dockerfile base images to be
+digest-pinned or routed through digest-pinned build arguments.
 
 The local execution path now enforces these invariants:
 

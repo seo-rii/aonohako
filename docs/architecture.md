@@ -667,6 +667,8 @@ The repository verifies the design through:
   SBOM JSON, Grype JSON, summary, image archive, per-archive SHA256 sidecar, and
   consolidated `SHA256SUMS` entries to be present and digest-consistent before
   the summary bundle is uploaded
+- repository policy checks that require Dockerfile base images to be
+  digest-pinned or routed through digest-pinned build arguments
 - regression tests for sandbox escape attempts such as network use, process
   creation, inherited-fd access, and writable scratch bypasses
 - root-backed sandbox regression tests executed inside a runtime container in CI,
