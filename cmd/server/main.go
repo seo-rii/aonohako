@@ -8,12 +8,17 @@ import (
 
 	"aonohako/internal/api"
 	"aonohako/internal/config"
+	"aonohako/internal/processhardening"
 	"aonohako/internal/sandbox"
 )
 
 func main() {
 	if sandbox.MaybeRunFromEnv() {
 		return
+	}
+	if err := processhardening.DisableDumpability(); err != nil {
+		slog.Error("aonohako process hardening failed", "err", err)
+		os.Exit(1)
 	}
 
 	cfg, err := config.Load()

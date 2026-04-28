@@ -116,6 +116,9 @@ as `/execute` when it runs as a root-backed embedded helper:
 The runtime uses a parent/helper/target split:
 
 1. Parent process:
+   - disables its own dumpability at startup with `PR_SET_DUMPABLE=0` so
+     same-container sandbox UIDs cannot use ptrace-style procfs reads against
+     the long-lived API/selftest process
    - prepares the workspace
    - passes the helper request JSON through an inherited pipe file descriptor
    - opens stdout and stderr pipes
