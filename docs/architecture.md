@@ -193,6 +193,7 @@ The seccomp filter denies high-risk operations, including:
 - `open_by_handle_at`, `name_to_handle_at`, `lookup_dcookie`
 - `fanotify_*`, keyring syscalls, module loading, kexec, NFS server control,
   quota control, swap, reboot, syslog
+- `personality`, `clock_settime`, `settimeofday`, `adjtimex`
 - `chmod`, `chown`, `mknod`
 
 The helper must allow the initial `execve()` into the requested runtime or

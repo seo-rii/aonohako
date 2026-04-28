@@ -35,6 +35,8 @@
   조용히 무시하지 않게 했다.
 - Phase 11: post-start `execve()` image surface를 architecture/security
   contract의 explicit gap으로 기록하고 docs contract test로 고정했다.
+- Phase 11: helper seccomp가 `personality`와 시간 변경 syscall을 차단하고
+  compile/execute regression으로 검증한다.
 - Phase 11: workspace entry-count exhaustion과 depth exhaustion을 실제
   root-backed sandbox security suite probe로 추가했다.
 - Phase 11: procfs regression coverage에 `/proc/1/fd` browsing뿐 아니라
