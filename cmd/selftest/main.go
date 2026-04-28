@@ -114,6 +114,13 @@ func runDeploymentContractSuite() error {
 	if err != nil {
 		return fmt.Errorf("security contract lookup failed: %w", err)
 	}
+	cgroupParentConfigured := strings.TrimSpace(cfg.Execution.Cgroup.ParentDir) != ""
+	if cgroupParentConfigured {
+		contract = contract.WithAvailableCapabilities(
+			platform.CapabilityPerRunCgroup,
+			platform.CapabilityChildProcessAccounting,
+		)
+	}
 	summary := struct {
 		DeploymentTarget              platform.DeploymentTarget     `json:"deployment_target"`
 		ExecutionTransport            platform.ExecutionTransport   `json:"execution_transport"`
@@ -169,7 +176,7 @@ func runDeploymentContractSuite() error {
 		PlatformPrincipalHMAC:         strings.TrimSpace(cfg.InboundAuth.PlatformPrincipalHMACSecret) != "",
 		RemoteAuth:                    cfg.Execution.Remote.Auth,
 		RemoteURLConfigured:           strings.TrimSpace(cfg.Execution.Remote.URL) != "",
-		CgroupParentConfigured:        strings.TrimSpace(cfg.Execution.Cgroup.ParentDir) != "",
+		CgroupParentConfigured:        cgroupParentConfigured,
 	}
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")

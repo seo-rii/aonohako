@@ -123,4 +123,8 @@ func TestDeploymentContractSummaryReportsTmpfsRequirement(t *testing.T) {
 	if summary["contract"] != "remote-control-plane" {
 		t.Fatalf("contract = %#v, want remote-control-plane; summary=%s", summary["contract"], string(data))
 	}
+	capabilities, ok := summary["capabilities"].([]any)
+	if !ok || len(capabilities) == 0 {
+		t.Fatalf("capabilities missing from deployment summary: %s", string(data))
+	}
 }

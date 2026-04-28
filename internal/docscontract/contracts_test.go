@@ -241,6 +241,8 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"Supported values are `none` for `dev` only, `bearer`, and\n  `platform`",
 		"aonohako-selftest deployment-contract",
 		"whether the\nnamed security contract is implemented",
+		"effective and missing local\ncapabilities",
+		"moves\n  those cgroup-backed capabilities from missing to effective",
 		"`cloudrun-runner.env`,\n`cloudrun-control-plane.env`, `selfhosted-runner.env`, and\n`dev-control-plane.env`",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is a strict boolean",
