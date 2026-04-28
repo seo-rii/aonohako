@@ -1395,6 +1395,36 @@ int main(void) {
 #ifdef SYS_memfd_create
 	failed |= check("memfd_create", SYS_memfd_create);
 #endif
+#ifdef SYS_open_tree
+	failed |= check("open_tree", SYS_open_tree);
+#endif
+#ifdef SYS_move_mount
+	failed |= check("move_mount", SYS_move_mount);
+#endif
+#ifdef SYS_fsopen
+	failed |= check("fsopen", SYS_fsopen);
+#endif
+#ifdef SYS_fsconfig
+	failed |= check("fsconfig", SYS_fsconfig);
+#endif
+#ifdef SYS_fsmount
+	failed |= check("fsmount", SYS_fsmount);
+#endif
+#ifdef SYS_fspick
+	failed |= check("fspick", SYS_fspick);
+#endif
+#ifdef SYS_mount_setattr
+	failed |= check("mount_setattr", SYS_mount_setattr);
+#endif
+#ifdef SYS_pidfd_open
+	failed |= check("pidfd_open", SYS_pidfd_open);
+#endif
+#ifdef SYS_pidfd_getfd
+	failed |= check("pidfd_getfd", SYS_pidfd_getfd);
+#endif
+#ifdef SYS_pidfd_send_signal
+	failed |= check("pidfd_send_signal", SYS_pidfd_send_signal);
+#endif
 	if (failed != 0) {
 		return 1;
 	}
