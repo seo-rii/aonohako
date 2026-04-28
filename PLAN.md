@@ -35,8 +35,9 @@
   조용히 무시하지 않게 했다.
 - Phase 11: post-start `execve()` image surface를 architecture/security
   contract의 explicit gap으로 기록하고 docs contract test로 고정했다.
-- Phase 11: helper seccomp가 `personality`와 시간 변경 syscall을 차단하고
-  compile/execute regression으로 검증한다.
+- Phase 11: helper seccomp가 시간 변경 syscall을 차단하고 compile/execute
+  regression으로 검증한다. `personality` 차단은 native runtime smoke와의
+  호환성 때문에 제외했다.
 - Phase 11: workspace entry-count exhaustion과 depth exhaustion을 실제
   root-backed sandbox security suite probe로 추가했다.
 - Phase 11: procfs regression coverage에 `/proc/1/fd` browsing뿐 아니라
@@ -135,8 +136,9 @@
   `memory.current` limit signal 해석을 shared helper로 묶어 두 경로의 verdict
   drift를 줄이고 unit test로 고정했다.
 - Phase 6: runtime image hardening의 root-only executable 목록을 build-time
-  package/toolchain manager(`pip`, `npm`, `cargo`, `rustup`, `gem` 등)까지
-  확장하고 image-permission selftest와 docs contract에 반영했다.
+  package/toolchain manager(`pip`, `npm`, `gem` 등)까지 확장하고
+  image-permission selftest와 docs contract에 반영했다. Rust toolchain
+  proxy는 `rustc` smoke 실행에 필요해 예외로 남겼다.
 - Phase 12: production runtime profile docker archive artifact마다 SHA256
   sidecar를 만들고 summary bundle에서 다운로드된 archive 기준 `SHA256SUMS`를
   재계산해 promotion 입력 artifact 무결성 metadata를 남기게 했다.

@@ -193,7 +193,7 @@ The seccomp filter denies high-risk operations, including:
 - `open_by_handle_at`, `name_to_handle_at`, `lookup_dcookie`
 - `fanotify_*`, keyring syscalls, module loading, kexec, NFS server control,
   quota control, swap, reboot, syslog
-- `personality`, `clock_settime`, `settimeofday`, `adjtimex`
+- `clock_settime`, `settimeofday`, `adjtimex`
 - `chmod`, `chown`, `mknod`
 
 The helper must allow the initial `execve()` into the requested runtime or
@@ -206,10 +206,11 @@ allowlist profiles and minimal execute-only images are available.
 Runtime image hardening reduces the reachable surface where it can do so without
 breaking required language tools: package-manager, fetcher, build-time
 toolchain-manager, remote-access, debugger, and network-diagnostic binaries such
-as `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`, `npm`, `cargo`, `rustup`,
-`gem`, `ssh`, `rsync`, `gdb`, `strace`, `tcpdump`, `nmap`, `dig`, `ip`, and
-`ping` are root-only executable, so the sandbox UID cannot use them as
-post-start replacement targets.
+as `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`, `npm`, `gem`, `ssh`, `rsync`,
+`gdb`, `strace`, `tcpdump`, `nmap`, `dig`, `ip`, and `ping` are root-only
+executable, so the sandbox UID cannot use them as post-start replacement
+targets. Rust toolchain shims stay executable because rustup proxy hard links
+are also the `rustc` entrypoint used by the Rust compiler smoke.
 
 Per-request network disable adds seccomp denies for socket-related syscalls:
 

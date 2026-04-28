@@ -338,7 +338,6 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_LANDLOCK_CREATE_RULESET),
 		uint32(unix.SYS_LANDLOCK_ADD_RULE),
 		uint32(unix.SYS_LANDLOCK_RESTRICT_SELF),
-		uint32(unix.SYS_PERSONALITY),
 		uint32(unix.SYS_CLOCK_SETTIME),
 		uint32(unix.SYS_SETTIMEOFDAY),
 		uint32(unix.SYS_ADJTIMEX),

@@ -984,9 +984,6 @@ int main(void) {
 #ifdef SYS_landlock_restrict_self
 	failed |= check("landlock_restrict_self", SYS_landlock_restrict_self);
 #endif
-#ifdef SYS_personality
-	failed |= check("personality", SYS_personality);
-#endif
 #ifdef SYS_clock_settime
 	failed |= check("clock_settime", SYS_clock_settime);
 #endif
