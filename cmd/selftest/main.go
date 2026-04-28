@@ -1618,7 +1618,7 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	toolOut, toolErr, err := runAsSandboxUser(
-		"for p in /usr/bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/bin/apt-config /usr/bin/dpkg /usr/bin/dpkg-query /usr/bin/dpkg-deb /usr/bin/curl /usr/bin/wget; do "+
+		"for p in /usr/bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/bin/apt-config /usr/bin/dpkg /usr/bin/dpkg-query /usr/bin/dpkg-deb /usr/bin/curl /usr/bin/wget /usr/bin/git; do "+
 			"if [ -e \"$p\" ]; then "+
 			"if [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
 			"fi; "+

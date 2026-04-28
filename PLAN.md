@@ -101,6 +101,8 @@
 - Phase 11/18: execute/compile seccomp regression probe가 modern mount API
   syscall과 pidfd syscall 차단까지 직접 확인하게 해 denylist drift 감지를
   넓혔다.
+- Phase 6: runtime image hardening의 root-only executable fetcher 목록에
+  `git`을 추가하고 image-permission selftest와 docs contract에 반영했다.
 - Phase 2: execute watchdog이 cgroup `cpu.stat usage_usec`를 읽어 self-hosted
   cgroup opt-in에서 run cgroup 전체 CPU 사용량으로 `cpu_time_ms`와 CPU TLE를
   갱신하게 했다.
