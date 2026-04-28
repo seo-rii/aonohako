@@ -189,7 +189,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`memfd_create` except for .NET and\n  Wasmtime runtime compatibility") {
 		t.Fatalf("architecture.md must describe memfd_create seccomp policy")
 	}
-	if !strings.Contains(architecture, "`process_madvise`, `process_mrelease`, `pidfd_*`") || !strings.Contains(architecture, "NUMA and memory-policy syscalls") || !strings.Contains(architecture, "`kcmp`, nested `seccomp`, and Landlock") || !strings.Contains(architecture, "`lookup_dcookie`") || !strings.Contains(architecture, "kexec, NFS server control,\n  quota control, swap, reboot, syslog") || !strings.Contains(architecture, "`personality`, `clock_settime`, `settimeofday`, `adjtimex`") {
+	if !strings.Contains(architecture, "`process_madvise`, `process_mrelease`, `pidfd_*`") || !strings.Contains(architecture, "NUMA and memory-policy syscalls") || !strings.Contains(architecture, "`kcmp`, nested `seccomp`, and Landlock") || !strings.Contains(architecture, "`lookup_dcookie`") || !strings.Contains(architecture, "kexec, NFS server control,\n  quota control, swap, reboot, syslog") || !strings.Contains(architecture, "`clock_settime`, `settimeofday`, `adjtimex`") {
 		t.Fatalf("architecture.md must describe extended kernel metadata/process seccomp denies")
 	}
 	if !strings.Contains(architecture, "post-start\n`execve()` surface") || !strings.Contains(architecture, "world-executable binary that is present in the\nruntime image") {
@@ -198,7 +198,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "treat every world-executable binary in the runtime image as reachable by\nsubmissions") || !strings.Contains(architecture, "shells, package\nmanagers, compilers, debuggers, and diagnostics tooling") {
 		t.Fatalf("architecture.md must describe runtime image minimization for execve exposure")
 	}
-	if !strings.Contains(architecture, "package-manager, fetcher, build-time\ntoolchain-manager, remote-access, debugger, and network-diagnostic binaries such\nas `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`, `npm`, `cargo`, `rustup`,\n`gem`, `ssh`, `rsync`, `gdb`, `strace`, `tcpdump`, `nmap`, `dig`, `ip`, and\n`ping` are root-only executable") {
+	if !strings.Contains(architecture, "package-manager, fetcher, build-time\ntoolchain-manager, remote-access, debugger, and network-diagnostic binaries such\nas `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`, `npm`, `gem`, `ssh`, `rsync`,\n`gdb`, `strace`, `tcpdump`, `nmap`, `dig`, `ip`, and `ping` are root-only\nexecutable") || !strings.Contains(architecture, "Rust toolchain shims stay executable") {
 		t.Fatalf("architecture.md must describe runtime package manager/fetcher/toolchain-manager/diagnostic hardening")
 	}
 	if !strings.Contains(architecture, "Syft SBOM") || !strings.Contains(architecture, "every production runtime profile artifact") || !strings.Contains(architecture, "non-blocking Grype JSON scan") {
