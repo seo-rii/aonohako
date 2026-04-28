@@ -2,6 +2,7 @@ package execute
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -68,6 +69,48 @@ func TestRemoteRunnerForwardsSSELogsImagesAndResult(t *testing.T) {
 	}
 	if len(images) != 1 || images[0] != "image/png:Zm9v:123" {
 		t.Fatalf("unexpected image forwarding: %#v", images)
+	}
+}
+
+func TestRemoteRunnerForwardsRuntimeProfile(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/execute" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var req model.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req.RuntimeProfile != "low-memory" {
+			t.Fatalf("runtime_profile = %q, want low-memory", req.RuntimeProfile)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"Accepted\",\"time_ms\":1,\"wall_time_ms\":1,\"cpu_time_ms\":1}\n\n"))
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:           "plain",
+		RuntimeProfile: "low-memory",
+		Binaries:       []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("unexpected response: %+v", resp)
 	}
 }
 
