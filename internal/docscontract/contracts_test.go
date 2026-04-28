@@ -180,6 +180,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`memfd_create` except for .NET and\n  Wasmtime runtime compatibility") {
 		t.Fatalf("architecture.md must describe memfd_create seccomp policy")
 	}
+	if !strings.Contains(architecture, "`process_madvise`, `process_mrelease`, `pidfd_*`") || !strings.Contains(architecture, "`lookup_dcookie`") || !strings.Contains(architecture, "kexec, NFS server control,\n  quota control, swap, reboot, syslog") {
+		t.Fatalf("architecture.md must describe extended kernel metadata/process seccomp denies")
+	}
 	if !strings.Contains(architecture, "post-start\n`execve()` surface") || !strings.Contains(architecture, "world-executable binary that is present in the\nruntime image") {
 		t.Fatalf("architecture.md must describe the remaining execve image surface")
 	}

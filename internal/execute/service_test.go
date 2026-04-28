@@ -1442,6 +1442,9 @@ int main(void) {
 #ifdef SYS_fanotify_mark
 	failed |= check("fanotify_mark", SYS_fanotify_mark);
 #endif
+#ifdef SYS_lookup_dcookie
+	failed |= check("lookup_dcookie", SYS_lookup_dcookie);
+#endif
 #ifdef SYS_add_key
 	failed |= check("add_key", SYS_add_key);
 #endif
@@ -1460,8 +1463,41 @@ int main(void) {
 #ifdef SYS_delete_module
 	failed |= check("delete_module", SYS_delete_module);
 #endif
+#ifdef SYS_kexec_load
+	failed |= check("kexec_load", SYS_kexec_load);
+#endif
+#ifdef SYS_kexec_file_load
+	failed |= check("kexec_file_load", SYS_kexec_file_load);
+#endif
+#ifdef SYS_acct
+	failed |= check("acct", SYS_acct);
+#endif
+#ifdef SYS_nfsservctl
+	failed |= check("nfsservctl", SYS_nfsservctl);
+#endif
+#ifdef SYS_quotactl
+	failed |= check("quotactl", SYS_quotactl);
+#endif
+#ifdef SYS_quotactl_fd
+	failed |= check("quotactl_fd", SYS_quotactl_fd);
+#endif
+#ifdef SYS_process_madvise
+	failed |= check("process_madvise", SYS_process_madvise);
+#endif
+#ifdef SYS_process_mrelease
+	failed |= check("process_mrelease", SYS_process_mrelease);
+#endif
 #ifdef SYS_syslog
 	failed |= check("syslog", SYS_syslog);
+#endif
+#ifdef SYS_reboot
+	failed |= check("reboot", SYS_reboot);
+#endif
+#ifdef SYS_swapon
+	failed |= check("swapon", SYS_swapon);
+#endif
+#ifdef SYS_swapoff
+	failed |= check("swapoff", SYS_swapoff);
 #endif
 #ifdef SYS_memfd_create
 	failed |= check("memfd_create", SYS_memfd_create);

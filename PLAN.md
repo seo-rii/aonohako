@@ -166,6 +166,9 @@
   verifier를 추가해 SBOM JSON, Grype JSON, summary, docker archive, archive
   SHA256 sidecar, consolidated `SHA256SUMS`가 누락되거나 digest mismatch일 때
   summary bundle 업로드 전에 실패하게 했다.
+- Phase 11/18: execute/compile seccomp regression probe와 helper denylist에
+  `lookup_dcookie`, kexec, NFS server control, quota control,
+  `process_madvise`, `process_mrelease`, reboot/swap 계열 syscall을 보강했다.
 
 ## 작업 원칙
 
