@@ -192,6 +192,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "Syft SBOM") || !strings.Contains(architecture, "every production runtime profile artifact") || !strings.Contains(architecture, "non-blocking Grype JSON scan") {
 		t.Fatalf("architecture.md must describe production runtime SBOM and scan artifacts")
 	}
+	if !strings.Contains(architecture, "fail-closed production profile artifact verification step") || !strings.Contains(architecture, "SBOM JSON, Grype JSON, summary, image archive, per-archive SHA256 sidecar, and\n  consolidated `SHA256SUMS` entries") {
+		t.Fatalf("architecture.md must describe production runtime artifact verification")
+	}
 	if !strings.Contains(architecture, "prevention of replacing the running process with another world-executable\n  binary from the runtime image") {
 		t.Fatalf("architecture.md must list execve replacement as a current non-goal")
 	}

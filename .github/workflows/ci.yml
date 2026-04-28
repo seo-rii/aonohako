@@ -214,6 +214,8 @@ jobs:
       - run: |
           find toolchain-artifacts -type f -name '*.docker.tar.gz' -print0 | sort -z | xargs -0 -r sha256sum > toolchain-artifacts/SHA256SUMS
         if: steps.bundle.outputs.has_artifacts == 'true'
+      - run: python3 scripts/verify_toolchain_artifacts.py toolchain-artifacts
+        if: steps.bundle.outputs.has_artifacts == 'true'
       - uses: actions/upload-artifact@v7
         if: steps.bundle.outputs.has_artifacts == 'true'
         with:
