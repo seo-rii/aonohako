@@ -678,6 +678,14 @@ func TestRunNoBinaries(t *testing.T) {
 	}
 }
 
+func TestRunRejectsUnknownRuntimeProfile(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{RuntimeProfile: "missing"}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "unknown runtime_profile") {
+		t.Fatalf("expected unknown runtime profile init fail, got %+v", resp)
+	}
+}
+
 func TestRunEmptyCommand(t *testing.T) {
 	svc := New()
 	req := &model.RunRequest{

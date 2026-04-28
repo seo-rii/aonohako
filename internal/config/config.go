@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/platform"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runtimepolicy"
 )
 
 type RemoteAuthMode string
@@ -47,10 +49,11 @@ type InboundAuthConfig struct {
 }
 
 type ExecutionConfig struct {
-	Platform      platform.RuntimeOptions
-	Remote        RemoteExecutorConfig
-	RuntimeTuning RuntimeTuningConfig
-	Cgroup        CgroupConfig
+	Platform              platform.RuntimeOptions
+	Remote                RemoteExecutorConfig
+	RuntimeTuning         RuntimeTuningConfig
+	RuntimeTuningProfiles map[string]RuntimeTuningConfig
+	Cgroup                CgroupConfig
 }
 
 type CgroupConfig struct {
@@ -247,6 +250,62 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	runtimeTuningProfiles := map[string]RuntimeTuningConfig(nil)
+	if rawProfiles := strings.TrimSpace(os.Getenv("AONOHAKO_RUNTIME_TUNING_PROFILES")); rawProfiles != "" {
+		parsedProfiles := map[string]map[string]int{}
+		if err := json.Unmarshal([]byte(rawProfiles), &parsedProfiles); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_RUNTIME_TUNING_PROFILES must be a JSON object of numeric profile overrides: %w", err)
+		}
+		if len(parsedProfiles) == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_RUNTIME_TUNING_PROFILES must define at least one profile when set")
+		}
+		runtimeTuningProfiles = make(map[string]RuntimeTuningConfig, len(parsedProfiles))
+		for profileName, values := range parsedProfiles {
+			if profileName == "" {
+				return Config{}, fmt.Errorf("AONOHAKO_RUNTIME_TUNING_PROFILES contains an empty profile name")
+			}
+			if err := runtimepolicy.ValidateProfileName(profileName); err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_RUNTIME_TUNING_PROFILES profile %q is invalid: %w", profileName, err)
+			}
+			profileTuning := runtimeTuning
+			for key, value := range values {
+				envName := "AONOHAKO_RUNTIME_TUNING_PROFILES." + profileName + "." + key
+				rawValue := strconv.Itoa(value)
+				switch key {
+				case "jvm_heap_percent":
+					profileTuning.JVMHeapPercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
+				case "go_memory_reserve_mb":
+					profileTuning.GoMemoryReserveMB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
+				case "go_gogc":
+					profileTuning.GoGOGC, err = parseBoundedIntEnv(envName, rawValue, profileTuning.GoGOGC, minGoGOGC, maxGoGOGC)
+				case "erlang_schedulers":
+					profileTuning.ErlangSchedulers, err = parseBoundedIntEnv(envName, rawValue, profileTuning.ErlangSchedulers, minErlangSchedulers, maxErlangSchedulers)
+				case "erlang_async_threads":
+					profileTuning.ErlangAsyncThreads, err = parseBoundedIntEnv(envName, rawValue, profileTuning.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
+				case "dotnet_gc_heap_percent":
+					profileTuning.DotnetGCHeapPercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.DotnetGCHeapPercent, minDotnetGCHeapPercent, maxDotnetGCHeapPercent)
+				case "kotlin_native_compiler_heap_mb":
+					profileTuning.KotlinNativeCompilerHeapMB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB, maxKotlinNativeCompilerHeapMB)
+				case "node_old_space_percent":
+					profileTuning.NodeOldSpacePercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.NodeOldSpacePercent, minNodeOldSpacePercent, maxNodeOldSpacePercent)
+				case "node_max_semi_space_mb":
+					profileTuning.NodeMaxSemiSpaceMB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.NodeMaxSemiSpaceMB, minNodeMaxSemiSpaceMB, maxNodeMaxSemiSpaceMB)
+				case "node_stack_size_kb":
+					profileTuning.NodeStackSizeKB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.NodeStackSizeKB, minNodeStackSizeKB, maxNodeStackSizeKB)
+				case "wasmtime_memory_guard_bytes":
+					profileTuning.WasmtimeMemoryGuardBytes, err = parseBoundedIntEnv(envName, rawValue, profileTuning.WasmtimeMemoryGuardBytes, minWasmtimeMemoryGuardBytes, maxWasmtimeMemoryGuardBytes)
+				case "wasmtime_max_wasm_stack_bytes":
+					profileTuning.WasmtimeMaxWasmStackBytes, err = parseBoundedIntEnv(envName, rawValue, profileTuning.WasmtimeMaxWasmStackBytes, minWasmtimeMaxWasmStackBytes, maxWasmtimeMaxWasmStackBytes)
+				default:
+					return Config{}, fmt.Errorf("AONOHAKO_RUNTIME_TUNING_PROFILES profile %q contains unsupported key %q", profileName, key)
+				}
+				if err != nil {
+					return Config{}, err
+				}
+			}
+			runtimeTuningProfiles[profileName] = profileTuning.WithSafeDefaults()
+		}
+	}
 	execution := ExecutionConfig{
 		Platform: runtimePlatform,
 		Remote: RemoteExecutorConfig{
@@ -256,7 +315,8 @@ func Load() (Config, error) {
 			Audience:       strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUDIENCE")),
 			SSEIdleTimeout: time.Duration(remoteSSEIdleTimeoutSec) * time.Second,
 		},
-		RuntimeTuning: runtimeTuning,
+		RuntimeTuning:         runtimeTuning,
+		RuntimeTuningProfiles: runtimeTuningProfiles,
 		Cgroup: CgroupConfig{
 			ParentDir: strings.TrimSpace(os.Getenv("AONOHAKO_CGROUP_PARENT")),
 		},

@@ -247,6 +247,66 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 	}
 }
 
+func TestLoadRuntimeTuningProfiles(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+	t.Setenv("AONOHAKO_JVM_HEAP_PERCENT", "40")
+	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{"low-memory":{"jvm_heap_percent":35,"node_old_space_percent":45,"node_max_semi_space_mb":2},"default-like":{}}`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	low, ok := cfg.Execution.RuntimeTuningProfiles["low-memory"]
+	if !ok {
+		t.Fatalf("missing low-memory profile in %+v", cfg.Execution.RuntimeTuningProfiles)
+	}
+	if low.JVMHeapPercent != 35 || low.NodeOldSpacePercent != 45 || low.NodeMaxSemiSpaceMB != 2 {
+		t.Fatalf("low-memory profile = %+v", low)
+	}
+	if low.GoGOGC != defaultGoGOGC {
+		t.Fatalf("low-memory profile should inherit safe defaults for omitted fields, got %+v", low)
+	}
+	inherited, ok := cfg.Execution.RuntimeTuningProfiles["default-like"]
+	if !ok {
+		t.Fatalf("missing default-like profile")
+	}
+	if inherited.JVMHeapPercent != 40 {
+		t.Fatalf("empty profile should inherit global tuning, got %+v", inherited)
+	}
+}
+
+func TestLoadRejectsUnsafeRuntimeTuningProfiles(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "invalid json", raw: `[]`, want: "AONOHAKO_RUNTIME_TUNING_PROFILES"},
+		{name: "empty", raw: `{}`, want: "at least one profile"},
+		{name: "invalid profile name", raw: `{"bad name":{"jvm_heap_percent":35}}`, want: "profile \"bad name\""},
+		{name: "unsupported key", raw: `{"low":{"argv":1}}`, want: "unsupported key"},
+		{name: "out of range", raw: `{"low":{"node_old_space_percent":90}}`, want: "node_old_space_percent"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+			t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", tc.raw)
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q validation error, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
 func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 	tests := []struct {
 		key   string
