@@ -492,6 +492,9 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "aonohako-ci-prod:${{ matrix.name }}") {
 		t.Fatalf("ci workflow must build production-profile images in the profile matrix")
 	}
+	if !strings.Contains(body, "docker builder prune -af") || !strings.Contains(body, "docker image prune -f") {
+		t.Fatalf("ci workflow must prune build cache before production-profile SBOM scans to avoid daemon-export disk exhaustion")
+	}
 	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
 		t.Fatalf("ci workflow must include the language list in the profile summaries")
 	}

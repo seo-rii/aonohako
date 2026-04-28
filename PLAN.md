@@ -184,6 +184,9 @@
   서버가 문제 정책으로 bounded runtime profile을 선택할 수 있게 했다. direct
   `runtime_profile` 선택은 non-dev 기본 거부이며, 문제 정책과 충돌하는 profile
   요청은 queue 진입 전에 거부한다.
+- Phase 12: production profile SBOM/Grype scan 전에 Docker build cache와
+  dangling image를 prune해 Swift 같은 대형 profile에서 Syft의 daemon-export가
+  `/tmp` 공간 부족으로 실패하지 않도록 했다.
 
 ## 작업 원칙
 
