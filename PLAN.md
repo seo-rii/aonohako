@@ -109,6 +109,8 @@
   symlink 및 `/proc/1/root/etc/passwd` read attempt를 추가했다.
 - Phase 11: runtime memory smoke에 Go 기반 `uhmlang` interpreter stress를
   추가해 `GOMEMLIMIT`/RSS guardrail 회귀를 언어 이미지에서 확인하게 했다.
+- Phase 11: runtime memory smoke에 Java heap pressure 케이스를 추가해 JVM
+  `-Xmx`/watchdog 조합이 Accepted/TLE로 새지 않게 고정했다.
 - Phase 2: execute watchdog이 cgroup `cpu.stat usage_usec`를 읽어 self-hosted
   cgroup opt-in에서 run cgroup 전체 CPU 사용량으로 `cpu_time_ms`와 CPU TLE를
   갱신하게 했다.

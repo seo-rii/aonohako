@@ -713,6 +713,47 @@ while (true) {
 				return fmt.Errorf("typescript memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
 			covered++
+		case "java":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "JAVA",
+				Sources: []model.Source{{
+					Name: "Main.java",
+					DataB64: encodeScript(`import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+  public static void main(String[] args) {
+    List<byte[]> chunks = new ArrayList<>();
+    while (true) {
+      chunks.add(new byte[8 * 1024 * 1024]);
+    }
+  }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("java memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("java memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "java",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 6000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("java memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("java memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
 		case "wasm":
 			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
 				Lang: "WASM",
