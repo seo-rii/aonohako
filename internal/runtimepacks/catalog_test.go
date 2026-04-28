@@ -459,6 +459,9 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, `docker save "aonohako-ci-prod:${{ matrix.name }}"`) {
 		t.Fatalf("ci workflow must export production-profile images into artifact files")
 	}
+	if !strings.Contains(body, `sha256sum "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"`) || !strings.Contains(body, "toolchain-artifacts/SHA256SUMS") {
+		t.Fatalf("ci workflow must publish SHA256 digest metadata for production-profile image artifacts")
+	}
 	if !strings.Contains(body, "toolchain-summary-bundle") {
 		t.Fatalf("ci workflow must publish a final bundle artifact for toolchain reports")
 	}

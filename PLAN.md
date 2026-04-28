@@ -127,6 +127,9 @@
 - Phase 6: runtime image hardening의 root-only executable 목록을 build-time
   package/toolchain manager(`pip`, `npm`, `cargo`, `rustup`, `gem` 등)까지
   확장하고 image-permission selftest와 docs contract에 반영했다.
+- Phase 12: production runtime profile docker archive artifact마다 SHA256
+  sidecar를 만들고 summary bundle에서 다운로드된 archive 기준 `SHA256SUMS`를
+  재계산해 promotion 입력 artifact 무결성 metadata를 남기게 했다.
 
 ## 작업 원칙
 

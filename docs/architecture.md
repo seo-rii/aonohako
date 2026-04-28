@@ -568,7 +568,10 @@ production profiles in a parallel matrix and runs
 its summary fragment and a `docker save` archive for the image as artifacts. A
 final CI summary job downloads those artifacts, concatenates the per-profile
 reports into one GitHub Actions summary, and republishes the summaries plus
-image archives as a single bundle artifact.
+image archives as a single bundle artifact. Each per-profile archive also emits
+a `.sha256` sidecar, and the final summary bundle includes a recomputed
+`SHA256SUMS` file over the downloaded image archives so promotion can verify the
+exact artifact bytes it consumed.
 
 Debian-based production profiles now use a digest-pinned
 `debian:trixie-slim` base, which raises the baseline Python, PyPy, and GCC
@@ -629,6 +632,7 @@ The repository verifies the design through:
   sandbox regression tests
 - non-blocking Grype scan artifacts in CI for the same sandbox runtime image,
   so runtime CVE drift is visible before promotion
+- SHA256 digest metadata for production profile image archive artifacts
 - regression tests for sandbox escape attempts such as network use, process
   creation, inherited-fd access, and writable scratch bypasses
 - root-backed sandbox regression tests executed inside a runtime container in CI,
