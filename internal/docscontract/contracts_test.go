@@ -111,7 +111,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "post-start `execve()` blocking") {
 		t.Fatalf("architecture.md must include post-start execve blocking in security contract gaps")
 	}
-	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") || !strings.Contains(architecture, "not group/world writable") {
+	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") || !strings.Contains(architecture, "not group/world writable") || !strings.Contains(architecture, "probe run-group create/remove cycle") {
 		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
 	}
 	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "recreates `/tmp/.dotnet`") {

@@ -67,6 +67,11 @@ func ValidateParentAt(parentDir, mountInfoPath string, requiredControllers []str
 	if err := validateCgroup2Mount(parentDir, mountInfoPath); err != nil {
 		return err
 	}
+	probe, err := os.MkdirTemp(parentDir, ".aonohako-cgroup-contract-*")
+	if err != nil {
+		return fmt.Errorf("cgroup parent is not writable: %w", err)
+	}
+	_ = os.Remove(probe)
 	return nil
 }
 
