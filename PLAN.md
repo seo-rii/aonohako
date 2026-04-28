@@ -105,6 +105,8 @@
   `git`을 추가하고 image-permission selftest와 docs contract에 반영했다.
 - Phase 11: execute watchdog regression에 mmap-backed RSS spike 케이스를
   추가해 statm/smaps 기반 MLE 감지를 고정했다.
+- Phase 11: procfs regression에 `/proc/1/root`, `/proc/1/cwd`, `/proc/1/exe`
+  symlink 및 `/proc/1/root/etc/passwd` read attempt를 추가했다.
 - Phase 2: execute watchdog이 cgroup `cpu.stat usage_usec`를 읽어 self-hosted
   cgroup opt-in에서 run cgroup 전체 CPU 사용량으로 `cpu_time_ms`와 CPU TLE를
   갱신하게 했다.
