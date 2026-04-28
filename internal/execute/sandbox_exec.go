@@ -313,6 +313,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	maxCPUTimeMs := int64(0)
 	maxRSSKB := int64(0)
 	maxVmSizeKB := int64(0)
+	var waitErr error
 
 	result := execResult{Status: "OK"}
 	for {
@@ -326,9 +327,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			}
 			goto done
 		case err := <-waitCh:
-			if err != nil && result.Status == "OK" {
-				result.Status = model.RunStatusRE
-			}
+			waitErr = err
 			goto done
 		case <-watchdog.C:
 			if !targetStarted {
@@ -497,6 +496,9 @@ done:
 					}
 				}
 			}
+		}
+		if result.Status == "OK" && waitErr != nil {
+			result.Status = model.RunStatusRE
 		}
 		if sysu, ok := ps.SysUsage().(*syscall.Rusage); ok {
 			if sysu.Maxrss > result.MemoryKB {
