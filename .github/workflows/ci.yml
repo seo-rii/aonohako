@@ -153,7 +153,8 @@ jobs:
       - run: mkdir -p "toolchain-artifacts/${{ matrix.name }}"
       - run: ./scripts/build_runtime_images.sh -mode production -only "${{ matrix.name }}" -tag-prefix "aonohako-ci-prod"
       - run: |
-          rm -rf "${GOCACHE}" "${GOMODCACHE}" /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-*
+          chmod -R u+w "${GOMODCACHE}" 2>/dev/null || true
+          rm -rf "${GOCACHE}" "${GOMODCACHE}" /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* || true
           docker builder prune -af
           docker image prune -f
       - run: >
