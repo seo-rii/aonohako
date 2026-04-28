@@ -76,3 +76,9 @@ func TestSelftestUsageListsDeploymentContract(t *testing.T) {
 		t.Fatalf("selftest usage should list deployment-contract: %s", selftestUsage)
 	}
 }
+
+func TestSelftestUsageListsRuntimeMemory(t *testing.T) {
+	if !strings.Contains(selftestUsage, "runtime-memory") {
+		t.Fatalf("selftest usage should list runtime-memory: %s", selftestUsage)
+	}
+}

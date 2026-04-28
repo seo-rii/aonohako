@@ -46,7 +46,7 @@ type compileExecuteCase struct {
 	sources        []model.Source
 }
 
-const selftestUsage = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|cgroup-preflight|deployment-contract"
+const selftestUsage = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|runtime-memory|cgroup-preflight|deployment-contract"
 
 func main() {
 	if sandbox.MaybeRunFromEnv() {
@@ -76,6 +76,11 @@ func main() {
 		}
 	case "compile-execute":
 		if err := runCompileExecuteSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "runtime-memory":
+		if err := runRuntimeMemorySuite(); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -617,6 +622,221 @@ func runCompileExecuteSuite() error {
 	}
 
 	_, _ = fmt.Fprintln(os.Stdout, "compile execute ok")
+	return nil
+}
+
+func runRuntimeMemorySuite() error {
+	rawLanguages := strings.TrimSpace(os.Getenv("AONOHAKO_LANGUAGES"))
+	if rawLanguages == "" {
+		return fmt.Errorf("AONOHAKO_LANGUAGES is empty")
+	}
+
+	server := api.NewWithServices(
+		config.Config{
+			MaxActiveRuns:     1,
+			MaxPendingQueue:   1,
+			HeartbeatInterval: time.Second,
+		},
+		compile.New(),
+		execute.New(),
+	)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	seen := map[string]struct{}{}
+	covered := 0
+	for _, rawLanguage := range strings.Split(rawLanguages, ",") {
+		language := strings.TrimSpace(rawLanguage)
+		if language == "" {
+			continue
+		}
+		if _, ok := seen[language]; ok {
+			continue
+		}
+		seen[language] = struct{}{}
+
+		switch language {
+		case "javascript":
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang: "javascript",
+				Binaries: []model.Binary{{
+					Name: "Main.js",
+					DataB64: encodeScript(`const chunks = [];
+while (true) {
+  chunks.push(Buffer.alloc(8 * 1024 * 1024, 1));
+}
+`),
+				}},
+				Limits: model.Limits{TimeMs: 4000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("javascript memory request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("javascript memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+		case "typescript":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "TYPESCRIPT",
+				Sources: []model.Source{{
+					Name: "Main.ts",
+					DataB64: encodeScript(`declare const Buffer: any;
+const chunks: any[] = [];
+while (true) {
+  chunks.push(Buffer.alloc(8 * 1024 * 1024, 1));
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("typescript memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("typescript memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "javascript",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 4000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("typescript memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("typescript memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+		case "wasm":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "WASM",
+				Sources: []model.Source{{
+					Name: "Main.wat",
+					DataB64: encodeScript(`(module
+  (memory 1 65536)
+  (export "memory" (memory 0))
+  (func (export "_start")
+    (loop $again
+      i32.const 1
+      memory.grow
+      drop
+      br $again)))
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("wasm memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("wasm memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "wasm",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 4000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("wasm memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("wasm memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+		case "csharp":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "CSHARP",
+				Sources: []model.Source{{
+					Name: "Program.cs",
+					DataB64: encodeScript(`using System;
+using System.Collections.Generic;
+
+public static class Program {
+  public static void Main() {
+    var chunks = new List<byte[]>();
+    while (true) {
+      chunks.Add(new byte[8 * 1024 * 1024]);
+    }
+  }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("csharp memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("csharp memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "csharp",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 8000, MemoryMB: 128, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("csharp memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("csharp memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+		case "fsharp":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "FSHARP",
+				Sources: []model.Source{{
+					Name: "Program.fs",
+					DataB64: encodeScript(`open System.Collections.Generic
+
+[<EntryPoint>]
+let main _ =
+    let chunks = ResizeArray<byte[]>()
+    while true do
+        chunks.Add(Array.zeroCreate<byte> (8 * 1024 * 1024))
+    0
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("fsharp memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("fsharp memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "fsharp",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 8000, MemoryMB: 128, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("fsharp memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("fsharp memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+		}
+	}
+
+	if covered == 0 {
+		_, _ = fmt.Fprintln(os.Stdout, "runtime memory ok (no covered languages)")
+		return nil
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "runtime memory ok (%d cases)\n", covered)
 	return nil
 }
 
