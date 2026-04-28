@@ -404,6 +404,25 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}
+			} else if len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 {
+				host, _, err := net.SplitHostPort(r.RemoteAddr)
+				if err != nil {
+					host = r.RemoteAddr
+				}
+				remoteIP := net.ParseIP(strings.TrimSpace(host))
+				trustedSource := false
+				if remoteIP != nil {
+					for _, cidr := range s.cfg.TrustedPlatformHeaderCIDRs {
+						if _, network, err := net.ParseCIDR(cidr); err == nil && network.Contains(remoteIP) {
+							trustedSource = true
+							break
+						}
+					}
+				}
+				if value == "" || !trustedSource {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
 			}
 			if value != "" {
 				principal = "platform:" + value
