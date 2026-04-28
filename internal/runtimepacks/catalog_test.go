@@ -1,6 +1,8 @@
 package runtimepacks
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -390,6 +392,52 @@ func TestAggregateToolchainSummariesScriptSeparatesVersionConflicts(t *testing.T
 	}
 }
 
+func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testing.T) {
+	root := t.TempDir()
+	profile := "type-a"
+	dir := filepath.Join(root, "toolchain-profile-"+profile)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", dir, err)
+	}
+	archivePath := filepath.Join(dir, profile+".docker.tar.gz")
+	archiveBody := []byte("docker archive fixture")
+	archiveDigest := fmt.Sprintf("%x", sha256.Sum256(archiveBody))
+	for path, body := range map[string][]byte{
+		filepath.Join(dir, "summary.md"):              []byte("## Runtime Toolchain Versions\n"),
+		filepath.Join(dir, profile+".sbom.spdx.json"): []byte(`{"spdxVersion":"SPDX-2.3"}`),
+		filepath.Join(dir, profile+".grype.json"):     []byte(`{"matches":[]}`),
+		archivePath: archiveBody,
+		filepath.Join(dir, profile+".docker.tar.gz.sha256"): []byte(archiveDigest + "  " + archivePath + "\n"),
+		filepath.Join(root, "SHA256SUMS"):                   []byte(archiveDigest + "  " + archivePath + "\n"),
+	} {
+		if err := os.WriteFile(path, body, 0o644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", path, err)
+		}
+	}
+
+	path := filepath.Join("..", "..", "scripts", "verify_toolchain_artifacts.py")
+	cmd := exec.Command("python3", path, root)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("verify_toolchain_artifacts.py: %v\n%s", err, string(out))
+	}
+	if !strings.Contains(string(out), "verified 1 toolchain profile artifact set(s)") {
+		t.Fatalf("verification output missing success line: %q", string(out))
+	}
+
+	if err := os.Remove(filepath.Join(dir, profile+".grype.json")); err != nil {
+		t.Fatalf("Remove grype fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root)
+	out, err = cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("verify_toolchain_artifacts.py unexpectedly succeeded after removing grype report: %s", string(out))
+	}
+	if !strings.Contains(string(out), "missing") || !strings.Contains(string(out), profile+".grype.json") {
+		t.Fatalf("verification failure did not explain missing grype report: %q", string(out))
+	}
+}
+
 func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	path := filepath.Join("..", "..", ".github", "workflows", "ci.yml")
 	data, err := os.ReadFile(path)
@@ -461,6 +509,9 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	}
 	if !strings.Contains(body, `sha256sum "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"`) || !strings.Contains(body, "toolchain-artifacts/SHA256SUMS") {
 		t.Fatalf("ci workflow must publish SHA256 digest metadata for production-profile image artifacts")
+	}
+	if !strings.Contains(summarySection, "python3 scripts/verify_toolchain_artifacts.py toolchain-artifacts") {
+		t.Fatalf("ci workflow must fail closed when production-profile artifacts are incomplete or digest mismatched")
 	}
 	if !strings.Contains(body, "toolchain-summary-bundle") {
 		t.Fatalf("ci workflow must publish a final bundle artifact for toolchain reports")

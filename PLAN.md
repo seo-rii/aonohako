@@ -155,6 +155,17 @@
 - Phase 7/12: non-dev `platform` inbound auth에서 unsigned trusted-header
   모드를 제거하고 `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` 서명을 startup
   requirement로 만들었다.
+- Phase 6: runtime image hardening의 root-only executable 목록을
+  remote-access, debugger, network-diagnostic tool(`ssh`, `rsync`, `gdb`,
+  `strace`, `tcpdump`, `nmap`, `dig`, `ip`, `ping` 등)까지 확장하고
+  image-permission selftest와 docs contract에 반영했다.
+- Phase 3/11: 서버와 selftest parent process도 startup에서
+  `PR_SET_DUMPABLE=0`를 설정해 sandbox UID의 same-container procfs/ptrace
+  style 접근 표면을 줄였다.
+- Phase 12: production runtime profile artifact summary job에 fail-closed
+  verifier를 추가해 SBOM JSON, Grype JSON, summary, docker archive, archive
+  SHA256 sidecar, consolidated `SHA256SUMS`가 누락되거나 digest mismatch일 때
+  summary bundle 업로드 전에 실패하게 했다.
 
 ## 작업 원칙
 

@@ -636,7 +636,10 @@ The repository verifies the design through:
 - non-blocking Grype scan artifacts in CI for the sandbox runtime image and
   every production runtime profile, so runtime CVE drift is visible before
   promotion
-- SHA256 digest metadata for production profile image archive artifacts
+- a fail-closed production profile artifact verification step that requires the
+  SBOM JSON, Grype JSON, summary, image archive, per-archive SHA256 sidecar, and
+  consolidated `SHA256SUMS` entries to be present and digest-consistent before
+  the summary bundle is uploaded
 - regression tests for sandbox escape attempts such as network use, process
   creation, inherited-fd access, and writable scratch bypasses
 - root-backed sandbox regression tests executed inside a runtime container in CI,
