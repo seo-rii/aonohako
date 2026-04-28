@@ -500,7 +500,7 @@
 작업:
 
 - Cloud Run template은 single-slot, denied egress, no secrets in image/env, bounded work root, low-permission service account를 강제하거나 검증한다.
-- `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS`로 required work root가 실제 `tmpfs`인지 선택적으로 startup에서 검증하고 Cloud Run 예시 환경에 고정한다.
+- `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS`로 required work root가 실제 `tmpfs`인지 선택적으로 startup에서 검증하고 Cloud Run 예시 환경/selftest deployment-contract JSON에 고정한다.
 - self-hosted Helm/Terraform/systemd template은 private runner ingress, cgroup v2, mount namespace prerequisites, runner pool scaling을 표현한다.
 - release pipeline에 govulncheck, image scan, SBOM, image signing, digest pinning check를 연결한다.
 - feature flag 또는 config gate로 Cloud Run helper mode와 self-hosted isolated mode를 단계적으로 rollout한다.

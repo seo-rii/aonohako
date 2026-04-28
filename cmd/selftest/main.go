@@ -135,6 +135,7 @@ func runDeploymentContractSuite() error {
 		TrustedRunnerIngress          bool                          `json:"trusted_runner_ingress"`
 		TrustedPlatformHeaders        bool                          `json:"trusted_platform_headers"`
 		TrustedPlatformHeaderCIDRs    []string                      `json:"trusted_platform_header_cidrs,omitempty"`
+		RequireWorkRootTmpfs          bool                          `json:"require_work_root_tmpfs"`
 		InboundAuth                   config.InboundAuthMode        `json:"inbound_auth"`
 		PlatformPrincipalHMAC         bool                          `json:"platform_principal_hmac"`
 		RemoteAuth                    config.RemoteAuthMode         `json:"remote_auth"`
@@ -161,6 +162,7 @@ func runDeploymentContractSuite() error {
 		TrustedRunnerIngress:          cfg.TrustedRunnerIngress,
 		TrustedPlatformHeaders:        cfg.TrustedPlatformHeaders,
 		TrustedPlatformHeaderCIDRs:    cfg.TrustedPlatformHeaderCIDRs,
+		RequireWorkRootTmpfs:          cfg.RequireWorkRootTmpfs,
 		InboundAuth:                   cfg.InboundAuth.Mode,
 		PlatformPrincipalHMAC:         strings.TrimSpace(cfg.InboundAuth.PlatformPrincipalHMACSecret) != "",
 		RemoteAuth:                    cfg.Execution.Remote.Auth,
