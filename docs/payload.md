@@ -106,7 +106,9 @@ rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
 `runtime_profile`, when present, must name a profile configured by the runner
 operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded
-numeric tuning values and cannot pass arbitrary runtime flags.
+numeric tuning values and cannot pass arbitrary runtime flags. Non-dev servers
+accept it only when `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`, so public
+entry points can keep profile selection behind trusted problem policy.
 
 ## `POST /execute` — Response
 

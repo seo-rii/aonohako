@@ -177,6 +177,12 @@ aonohako-selftest cgroup-preflight
   client-supplied `enable_network=true`. It defaults to `true` only for `dev`
   and `false` for `cloudrun` or `selfhosted`; public runners should route
   network-enabled problems to an explicitly opted-in runner pool.
+- `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE` controls whether `/compile` and
+  `/execute` may honor request-supplied `runtime_profile`. It defaults to
+  `true` only for `dev` and `false` for `cloudrun` or `selfhosted`; production
+  control planes should map problems to policy-owned profiles and enable this
+  only on the trusted runner/control-plane boundary that receives those
+  sanitized requests.
 - `AONOHAKO_TRUSTED_RUNNER_INGRESS` asserts that a root-backed embedded helper
   runner is reachable only through trusted/private ingress, Cloud Run IAM, mTLS,
   a gateway, or an equivalent control-plane boundary. It defaults to `true` for
@@ -237,6 +243,11 @@ Per-request execution limits are part of the `/execute` payload:
   allow outbound `AF_INET`/`AF_INET6` client sockets only; listener syscalls and
   host `AF_UNIX` sockets stay blocked. Control-plane instances can forward
   networked workloads to explicitly opted-in runners with `remote` transport.
+- `runtime_profile`
+  Requests may select an operator-defined `AONOHAKO_RUNTIME_TUNING_PROFILES`
+  entry only when `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`. Public entry
+  points should keep this disabled and let a trusted control plane attach the
+  profile after applying problem policy.
 
 ## Security notes
 
@@ -359,7 +370,8 @@ flags through requests:
   profiles as a JSON object. Each profile inherits the global tuning values and
   may override the same bounded numeric keys with snake_case names, for example
   `{"low-memory":{"jvm_heap_percent":35,"node_old_space_percent":45}}`.
-  `/compile` and `/execute` may select one with `runtime_profile`; unknown or
+  `/compile` and `/execute` may select one with `runtime_profile` only when
+  `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`; policy-disabled, unknown, or
   syntactically invalid profile names are rejected.
 
 Invalid values fail startup. These settings only tune memory-related runtime

@@ -173,6 +173,10 @@
   등록한 bounded numeric tuning profile을 `/compile`과 `/execute`의
   `runtime_profile`로 선택할 수 있게 했다. 임의 runtime flag 전달은 계속
   허용하지 않는다.
+- Phase 9/CONF: `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE`을 추가해 non-dev
+  서버에서는 request-supplied `runtime_profile`을 기본 거부하고, trusted
+  control-plane/problem-policy 경계에서 명시적으로 허용한 경우에만 profile을
+  적용하게 했다.
 
 ## 작업 원칙
 

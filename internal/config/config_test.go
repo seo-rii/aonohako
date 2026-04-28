@@ -88,6 +88,18 @@ func TestDefaultAllowRequestNetwork(t *testing.T) {
 	}
 }
 
+func TestDefaultAllowRequestRuntimeProfile(t *testing.T) {
+	if !defaultAllowRequestRuntimeProfile(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}) {
+		t.Fatalf("dev should allow request-selected runtime profiles by default")
+	}
+	if defaultAllowRequestRuntimeProfile(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetSelfHosted}) {
+		t.Fatalf("selfhosted should require explicit runtime profile policy opt-in")
+	}
+	if defaultAllowRequestRuntimeProfile(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetCloudRun}) {
+		t.Fatalf("cloudrun should reject request-selected runtime profiles by default")
+	}
+}
+
 func TestDefaultTrustedRunnerIngress(t *testing.T) {
 	if !defaultTrustedRunnerIngress(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}) {
 		t.Fatalf("dev should trust runner ingress by default")
@@ -589,6 +601,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_BODY_READ_TIMEOUT_SEC", "9")
 	t.Setenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", "4")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
+	t.Setenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "true")
 	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "false")
 	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "false")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
@@ -630,6 +643,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if !cfg.AllowRequestNetwork {
 		t.Fatalf("allow request network should be parsed from env")
 	}
+	if !cfg.AllowRequestRuntimeProfile {
+		t.Fatalf("allow request runtime profile should be parsed from env")
+	}
 	if cfg.TrustedRunnerIngress {
 		t.Fatalf("trusted runner ingress should be parsed from env")
 	}
@@ -665,6 +681,7 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "remote sse idle negative", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "-1"},
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
 		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
+		{name: "allow runtime profile malformed", key: "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", value: "sometimes"},
 		{name: "trusted runner ingress malformed", key: "AONOHAKO_TRUSTED_RUNNER_INGRESS", value: "sometimes"},
 		{name: "trusted platform headers malformed", key: "AONOHAKO_TRUSTED_PLATFORM_HEADERS", value: "sometimes"},
 	}

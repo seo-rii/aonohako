@@ -127,6 +127,7 @@ type Config struct {
 	HeartbeatInterval             time.Duration
 	BodyReadTimeout               time.Duration
 	AllowRequestNetwork           bool
+	AllowRequestRuntimeProfile    bool
 	TrustedRunnerIngress          bool
 	TrustedPlatformHeaders        bool
 	TrustedPlatformHeaderCIDRs    []string
@@ -173,6 +174,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	allowRequestNetwork, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_NETWORK", os.Getenv("AONOHAKO_ALLOW_REQUEST_NETWORK"), defaultAllowRequestNetwork(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	allowRequestRuntimeProfile, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", os.Getenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE"), defaultAllowRequestRuntimeProfile(runtimePlatform))
 	if err != nil {
 		return Config{}, err
 	}
@@ -447,6 +452,7 @@ func Load() (Config, error) {
 		HeartbeatInterval:             time.Duration(heartbeatSec) * time.Second,
 		BodyReadTimeout:               time.Duration(bodyReadTimeoutSec) * time.Second,
 		AllowRequestNetwork:           allowRequestNetwork,
+		AllowRequestRuntimeProfile:    allowRequestRuntimeProfile,
 		TrustedRunnerIngress:          trustedRunnerIngress,
 		TrustedPlatformHeaders:        trustedPlatformHeaders,
 		TrustedPlatformHeaderCIDRs:    trustedPlatformHeaderCIDRs,
@@ -488,6 +494,10 @@ func defaultMaxPrincipalRequestsPerMinute(opts platform.RuntimeOptions) int {
 }
 
 func defaultAllowRequestNetwork(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget == platform.DeploymentTargetDev
+}
+
+func defaultAllowRequestRuntimeProfile(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetDev
 }
 

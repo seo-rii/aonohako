@@ -301,7 +301,8 @@ Memory enforcement uses several layers:
 - optional policy-owned runtime profiles from
   `AONOHAKO_RUNTIME_TUNING_PROFILES`; `/compile` and `/execute` can select a
   named profile with `runtime_profile`, but the profile can only contain the
-  same bounded numeric tuning keys and unknown names fail closed
+  same bounded numeric tuning keys, requires
+  `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`, and unknown names fail closed
 - child `oom_score_adj=1000` as a best-effort fallback so the sandboxed process is preferred over the server if the host/container OOM killer has to choose
 - a native-command-only post-exit address-space proximity check with slack;
   interpreter and managed runtimes rely on RSS/runtime-knob signals to avoid
@@ -463,6 +464,10 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_ALLOW_REQUEST_NETWORK` is strict boolean configuration and defaults
   to `true` only for `dev`; outside `dev`, client-supplied `enable_network=true`
   is rejected unless this is explicitly enabled for a dedicated runner policy
+- `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE` is strict boolean configuration and
+  defaults to `true` only for `dev`; outside `dev`, request-supplied
+  `runtime_profile` is rejected unless an upstream trusted control plane has
+  mapped the problem to an operator-owned runtime tuning profile
 - `AONOHAKO_TRUSTED_RUNNER_INGRESS=true` is required for non-dev
   `embedded + helper` runners, forcing operators to assert a trusted/private
   ingress or platform-auth boundary before starting a root helper parent
