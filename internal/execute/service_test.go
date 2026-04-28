@@ -1535,6 +1535,27 @@ func TestRunBlocksProcEnvironRead(t *testing.T) {
 	}
 }
 
+func TestRunBlocksSensitiveProcSymlinksOutsideSandbox(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name: "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(
+				"from pathlib import Path\nchecks = [\n    ('root-link', lambda: Path('/proc/1/root').readlink()),\n    ('cwd-link', lambda: Path('/proc/1/cwd').readlink()),\n    ('exe-link', lambda: Path('/proc/1/exe').readlink()),\n    ('root-passwd', lambda: Path('/proc/1/root/etc/passwd').read_text()),\n]\nfor name, action in checks:\n    try:\n        action()\n        print(name + ':leaked')\n    except Exception:\n        print(name + ':blocked')\n",
+			)),
+		}},
+		ExpectedStdout: "root-link:blocked\ncwd-link:blocked\nexe-link:blocked\nroot-passwd:blocked\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
 func TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles(t *testing.T) {
 	forceDirectMode(t)
 	svc := New()
