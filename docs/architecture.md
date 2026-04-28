@@ -196,10 +196,12 @@ replace itself with another world-executable binary that is present in the
 runtime image. This is tracked as an image-surface risk until language-family
 allowlist profiles and minimal execute-only images are available.
 Runtime image hardening reduces the reachable surface where it can do so without
-breaking required language tools: package-manager, fetcher, and build-time
-toolchain-manager binaries such as `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`,
-`npm`, `cargo`, `rustup`, and `gem` are root-only executable, so the sandbox UID
-cannot use them as post-start replacement targets.
+breaking required language tools: package-manager, fetcher, build-time
+toolchain-manager, remote-access, debugger, and network-diagnostic binaries such
+as `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`, `npm`, `cargo`, `rustup`,
+`gem`, `ssh`, `rsync`, `gdb`, `strace`, `tcpdump`, `nmap`, `dig`, `ip`, and
+`ping` are root-only executable, so the sandbox UID cannot use them as
+post-start replacement targets.
 
 Per-request network disable adds seccomp denies for socket-related syscalls:
 
