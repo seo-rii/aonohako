@@ -80,7 +80,7 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
     if [[ -d /var/spool ]]; then chmod 0700 /var/spool; fi && \
     if [[ -d /var/mail ]]; then chmod 0700 /var/mail; fi && \
     if [[ -d /etc/ssl/private ]]; then chmod 0700 /etc/ssl/private; fi && \
-    for tool in apt apt-get apt-cache apt-config dpkg dpkg-query dpkg-deb curl wget git pip pip3 npm npx yarn pnpm cargo rustup gem bundle bundler; do \
+    for tool in apt apt-get apt-cache apt-config dpkg dpkg-query dpkg-deb curl wget git pip pip3 npm npx yarn pnpm cargo rustup gem bundle bundler ssh scp sftp rsync nc netcat ncat socat telnet ftp lftp gdb gdbserver strace ltrace tcpdump tshark wireshark nmap dig nslookup host ip ss ifconfig route ping ping6 traceroute tracepath arp arping; do \
       if command -v "${tool}" >/dev/null 2>&1; then chmod 0750 "$(command -v "${tool}")"; fi; \
     done
 

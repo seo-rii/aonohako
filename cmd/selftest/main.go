@@ -1920,7 +1920,17 @@ func runDirectImagePermissionChecks() error {
 			"/usr/local/bin/npm /usr/local/bin/npx /opt/node-*/bin/npm /opt/node-*/bin/npx "+
 			"/usr/local/bin/yarn /usr/local/bin/pnpm "+
 			"/usr/local/bin/cargo /usr/local/cargo/bin/cargo /usr/local/bin/rustup /usr/local/cargo/bin/rustup "+
-			"/usr/bin/gem /usr/local/bin/gem /usr/bin/bundle /usr/bin/bundler /usr/local/bin/bundle /usr/local/bin/bundler; do "+
+			"/usr/bin/gem /usr/local/bin/gem /usr/bin/bundle /usr/bin/bundler /usr/local/bin/bundle /usr/local/bin/bundler "+
+			"/usr/bin/ssh /usr/bin/scp /usr/bin/sftp /usr/local/bin/ssh /usr/local/bin/scp /usr/local/bin/sftp "+
+			"/usr/bin/rsync /usr/local/bin/rsync "+
+			"/bin/nc /usr/bin/nc /usr/local/bin/nc /bin/netcat /usr/bin/netcat /usr/local/bin/netcat /usr/bin/ncat /usr/local/bin/ncat "+
+			"/usr/bin/socat /usr/local/bin/socat /usr/bin/telnet /usr/local/bin/telnet /usr/bin/ftp /usr/local/bin/ftp /usr/bin/lftp /usr/local/bin/lftp "+
+			"/usr/bin/gdb /usr/local/bin/gdb /usr/bin/gdbserver /usr/local/bin/gdbserver /usr/bin/strace /usr/local/bin/strace /usr/bin/ltrace /usr/local/bin/ltrace "+
+			"/usr/bin/tcpdump /usr/local/bin/tcpdump /usr/bin/tshark /usr/local/bin/tshark /usr/bin/wireshark /usr/local/bin/wireshark /usr/bin/nmap /usr/local/bin/nmap "+
+			"/usr/bin/dig /usr/local/bin/dig /usr/bin/nslookup /usr/local/bin/nslookup /usr/bin/host /usr/local/bin/host "+
+			"/bin/ip /usr/bin/ip /usr/local/bin/ip /bin/ss /usr/bin/ss /usr/local/bin/ss /sbin/ifconfig /usr/sbin/ifconfig /usr/bin/ifconfig /usr/local/bin/ifconfig "+
+			"/sbin/route /usr/sbin/route /usr/bin/route /usr/local/bin/route /bin/ping /usr/bin/ping /usr/local/bin/ping /bin/ping6 /usr/bin/ping6 /usr/local/bin/ping6 "+
+			"/usr/bin/traceroute /usr/local/bin/traceroute /usr/bin/tracepath /usr/local/bin/tracepath /usr/bin/arp /usr/local/bin/arp /usr/bin/arping /usr/local/bin/arping; do "+
 			"if [ -e \"$p\" ]; then "+
 			"if [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
 			"fi; "+
