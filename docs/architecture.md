@@ -298,6 +298,10 @@ Memory enforcement uses several layers:
   .NET GC, Kotlin/Native, Node, and Wasmtime
   numeric knobs, with bounded environment variables and startup rejection for
   unsafe values rather than request-controlled arbitrary runtime flags
+- optional policy-owned runtime profiles from
+  `AONOHAKO_RUNTIME_TUNING_PROFILES`; `/compile` and `/execute` can select a
+  named profile with `runtime_profile`, but the profile can only contain the
+  same bounded numeric tuning keys and unknown names fail closed
 - child `oom_score_adj=1000` as a best-effort fallback so the sandboxed process is preferred over the server if the host/container OOM killer has to choose
 - a native-command-only post-exit address-space proximity check with slack;
   interpreter and managed runtimes rely on RSS/runtime-knob signals to avoid

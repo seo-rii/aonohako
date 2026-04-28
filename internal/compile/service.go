@@ -21,6 +21,7 @@ import (
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
 	"aonohako/internal/util"
@@ -43,8 +44,9 @@ const (
 )
 
 type Service struct {
-	runtimeTuning   config.RuntimeTuningConfig
-	cgroupParentDir string
+	runtimeTuning         config.RuntimeTuningConfig
+	runtimeTuningProfiles map[string]config.RuntimeTuningConfig
+	cgroupParentDir       string
 }
 
 func New() *Service {
@@ -58,6 +60,17 @@ func NewWithRuntimeTuning(tuning config.RuntimeTuningConfig) *Service {
 func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.CompileResponse {
 	if req == nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	tuning := s.runtimeTuning.WithSafeDefaults()
+	if req.RuntimeProfile != "" {
+		if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid runtime_profile: " + err.Error()}
+		}
+		profileTuning, ok := s.runtimeTuningProfiles[req.RuntimeProfile]
+		if !ok {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unknown runtime_profile: " + req.RuntimeProfile}
+		}
+		tuning = profileTuning.WithSafeDefaults()
 	}
 	if len(req.Sources) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no sources"}
@@ -124,7 +137,7 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	defer cancel()
 	ctx = withCompileCgroupParent(ctx, s.cgroupParentDir)
 
-	return capCompileResponseOutput(executeBuild(ctx, workDir, profile, target, req, s.runtimeTuning))
+	return capCompileResponseOutput(executeBuild(ctx, workDir, profile, target, req, tuning))
 }
 
 type compileCgroupParentContextKey struct{}

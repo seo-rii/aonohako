@@ -19,7 +19,11 @@ func Build(cfg config.Config) (Runner, error) {
 		if cfg.Execution.Platform.SandboxBackend != platform.SandboxBackendHelper {
 			return nil, fmt.Errorf("embedded execution does not support sandbox backend %s", cfg.Execution.Platform.SandboxBackend)
 		}
-		return &Service{deploymentTarget: cfg.Execution.Platform.DeploymentTarget, runtimeTuning: cfg.Execution.RuntimeTuning.WithSafeDefaults(), cgroupParentDir: cfg.Execution.Cgroup.ParentDir}, nil
+		profiles := make(map[string]config.RuntimeTuningConfig, len(cfg.Execution.RuntimeTuningProfiles))
+		for name, tuning := range cfg.Execution.RuntimeTuningProfiles {
+			profiles[name] = tuning.WithSafeDefaults()
+		}
+		return &Service{deploymentTarget: cfg.Execution.Platform.DeploymentTarget, runtimeTuning: cfg.Execution.RuntimeTuning.WithSafeDefaults(), runtimeTuningProfiles: profiles, cgroupParentDir: cfg.Execution.Cgroup.ParentDir}, nil
 	case platform.ExecutionTransportRemote:
 		if cfg.Execution.Platform.SandboxBackend != platform.SandboxBackendNone {
 			return nil, fmt.Errorf("remote execution requires sandbox backend none")

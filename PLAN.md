@@ -169,6 +169,10 @@
 - Phase 11/18: execute/compile seccomp regression probe와 helper denylist에
   `lookup_dcookie`, kexec, NFS server control, quota control,
   `process_madvise`, `process_mrelease`, reboot/swap 계열 syscall을 보강했다.
+- Phase 9/CONF: `AONOHAKO_RUNTIME_TUNING_PROFILES`를 추가해 운영자가 미리
+  등록한 bounded numeric tuning profile을 `/compile`과 `/execute`의
+  `runtime_profile`로 선택할 수 있게 했다. 임의 runtime flag 전달은 계속
+  허용하지 않는다.
 
 ## 작업 원칙
 

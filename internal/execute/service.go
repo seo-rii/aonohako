@@ -9,6 +9,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/timing"
 )
 
@@ -70,9 +71,10 @@ func (b *cappedBuffer) Truncated() bool {
 }
 
 type Service struct {
-	deploymentTarget platform.DeploymentTarget
-	runtimeTuning    config.RuntimeTuningConfig
-	cgroupParentDir  string
+	deploymentTarget      platform.DeploymentTarget
+	runtimeTuning         config.RuntimeTuningConfig
+	runtimeTuningProfiles map[string]config.RuntimeTuningConfig
+	cgroupParentDir       string
 }
 
 func New() *Service {
@@ -87,6 +89,17 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	startWall := timing.MonotonicNow()
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
+	}
+	tuning := s.runtimeTuning.WithSafeDefaults()
+	if req.RuntimeProfile != "" {
+		if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid runtime_profile: " + err.Error()}
+		}
+		profileTuning, ok := s.runtimeTuningProfiles[req.RuntimeProfile]
+		if !ok {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "unknown runtime_profile: " + req.RuntimeProfile}
+		}
+		tuning = profileTuning.WithSafeDefaults()
 	}
 	if req.EnableNetwork && s.deploymentTarget == platform.DeploymentTargetCloudRun {
 		return model.RunResponse{
@@ -124,12 +137,12 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "materialize failed: " + err.Error()}
 	}
 
-	cmdArgs := buildCommandWithRuntimeTuning(primaryPath, runLang, req, s.runtimeTuning)
+	cmdArgs := buildCommandWithRuntimeTuning(primaryPath, runLang, req, tuning)
 	if len(cmdArgs) == 0 {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "empty command"}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit, s.runtimeTuning, s.cgroupParentDir)
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit, tuning, s.cgroupParentDir)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
 		return model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason}

@@ -12,7 +12,8 @@
     }
   ],
   "target": "Main",                          // optional output binary name (default: "Main")
-  "entry_point": "src/main.c"                // optional submitted source path to validate as the intended entry file
+  "entry_point": "src/main.c",               // optional submitted source path to validate as the intended entry file
+  "runtime_profile": "low-memory"            // optional operator-defined runtime tuning profile
 }
 ```
 
@@ -63,6 +64,7 @@ metadata rather than an argument that drops helper sources.
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..8388608
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
   },
+  "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
   "enable_network": false,                   // outbound network request flag; honored only when server policy allows request-controlled network
   "entry_point": "src/main.py",              // optional submitted file path to run; JVM/BEAM runtimes use class/module entry names
   "spj": {                                   // optional special judge
@@ -102,6 +104,9 @@ boundary. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
 server-side values when `0` or omitted, but values above the hard API caps are
 rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
+`runtime_profile`, when present, must name a profile configured by the runner
+operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded
+numeric tuning values and cannot pass arbitrary runtime flags.
 
 ## `POST /execute` — Response
 

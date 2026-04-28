@@ -355,6 +355,12 @@ flags through requests:
   Allowed range: `65536..16777216`, default `65536`.
 - `AONOHAKO_WASMTIME_MAX_WASM_STACK_BYTES` sets the Wasmtime wasm stack cap.
   Allowed range: `262144..8388608`, default `1048576`.
+- `AONOHAKO_RUNTIME_TUNING_PROFILES` may define named, policy-owned runtime
+  profiles as a JSON object. Each profile inherits the global tuning values and
+  may override the same bounded numeric keys with snake_case names, for example
+  `{"low-memory":{"jvm_heap_percent":35,"node_old_space_percent":45}}`.
+  `/compile` and `/execute` may select one with `runtime_profile`; unknown or
+  syntactically invalid profile names are rejected.
 
 Invalid values fail startup. These settings only tune memory-related runtime
 caps; they do not expose network, filesystem, process, or arbitrary flag

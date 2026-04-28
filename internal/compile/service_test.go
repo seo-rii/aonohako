@@ -90,6 +90,14 @@ func TestRunRejectsInvalidTargetPath(t *testing.T) {
 	}
 }
 
+func TestRunRejectsUnknownRuntimeProfile(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{RuntimeProfile: "missing"})
+	if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, "unknown runtime_profile") {
+		t.Fatalf("expected unknown runtime profile invalid response, got %+v", resp)
+	}
+}
+
 func TestRunRejectsMissingCompileEntrypoint(t *testing.T) {
 	svc := New()
 	resp := svc.Run(context.Background(), &model.CompileRequest{

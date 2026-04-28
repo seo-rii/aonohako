@@ -135,11 +135,11 @@ Client                        aonohako
 Both `/compile` and `/execute` share the same bounded queue:
 
 - `/compile` rejects missing sources, more than 512 sources, source files over
-  16 MiB decoded, and source totals over 48 MiB decoded before acquiring a
-  stream or queue slot.
+  16 MiB decoded, source totals over 48 MiB decoded, and invalid or unknown
+  `runtime_profile` values before acquiring a stream or queue slot.
 - `/execute` rejects oversized `stdin` / `expected_stdout`, out-of-range run
-  limits, and disallowed `enable_network=true` before acquiring a stream or
-  queue slot.
+  limits, invalid or unknown `runtime_profile` values, and disallowed
+  `enable_network=true` before acquiring a stream or queue slot.
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `1` for
   `embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`,
   otherwise `max(1, cpu−2)`). The `embedded + helper` backend rejects values

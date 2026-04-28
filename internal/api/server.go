@@ -26,6 +26,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/queue"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/sse"
 )
 
@@ -122,6 +123,14 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	var req model.CompileRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
+		http.Error(w, "invalid runtime_profile: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.validateRuntimeProfileAllowed(req.RuntimeProfile); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if len(req.Sources) == 0 {
@@ -246,6 +255,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := validateRunRequestFields(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.validateRuntimeProfileAllowed(req.RuntimeProfile); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -529,12 +542,25 @@ func constantTimeEqual(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
+func (s *Server) validateRuntimeProfileAllowed(profile string) error {
+	if profile == "" {
+		return nil
+	}
+	if _, ok := s.cfg.Execution.RuntimeTuningProfiles[profile]; !ok {
+		return fmt.Errorf("unknown runtime_profile: %s", profile)
+	}
+	return nil
+}
+
 func validateRunRequestFields(req *model.RunRequest) error {
 	if len(req.Stdin) > maxRunTextFieldBytes {
 		return fmt.Errorf("stdin too large: max %d bytes", maxRunTextFieldBytes)
 	}
 	if len(req.ExpectedStdout) > maxRunTextFieldBytes {
 		return fmt.Errorf("expected_stdout too large: max %d bytes", maxRunTextFieldBytes)
+	}
+	if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
+		return fmt.Errorf("invalid runtime_profile: %w", err)
 	}
 	if req.Limits.TimeMs <= 0 || req.Limits.TimeMs > maxRunTimeMs {
 		return fmt.Errorf("limits.time_ms must be between 1 and %d", maxRunTimeMs)

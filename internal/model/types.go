@@ -12,10 +12,11 @@ type Artifact struct {
 }
 
 type CompileRequest struct {
-	Lang       string   `json:"lang"`
-	Sources    []Source `json:"sources"`
-	Target     string   `json:"target,omitempty"`
-	EntryPoint string   `json:"entry_point,omitempty"`
+	Lang           string   `json:"lang"`
+	Sources        []Source `json:"sources"`
+	Target         string   `json:"target,omitempty"`
+	EntryPoint     string   `json:"entry_point,omitempty"`
+	RuntimeProfile string   `json:"runtime_profile,omitempty"`
 }
 
 type CompileResponse struct {
@@ -68,6 +69,7 @@ type RunRequest struct {
 	Stdin          string       `json:"stdin"`
 	ExpectedStdout string       `json:"expected_stdout,omitempty"`
 	Limits         Limits       `json:"limits"`
+	RuntimeProfile string       `json:"runtime_profile,omitempty"`
 	EnableNetwork  bool         `json:"enable_network,omitempty"`
 	EntryPoint     string       `json:"entry_point,omitempty"`
 	SPJ            *SPJSpec     `json:"spj,omitempty"`
