@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"runtime"
@@ -125,6 +126,7 @@ type Config struct {
 	AllowRequestNetwork           bool
 	TrustedRunnerIngress          bool
 	TrustedPlatformHeaders        bool
+	TrustedPlatformHeaderCIDRs    []string
 	Execution                     ExecutionConfig
 	InboundAuth                   InboundAuthConfig
 }
@@ -178,6 +180,23 @@ func Load() (Config, error) {
 	trustedPlatformHeaders, err := parseBoolEnv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", os.Getenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS"), defaultTrustedPlatformHeaders(runtimePlatform))
 	if err != nil {
 		return Config{}, err
+	}
+	trustedPlatformHeaderCIDRs := []string(nil)
+	if rawCIDRs := strings.TrimSpace(os.Getenv("AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS")); rawCIDRs != "" {
+		for _, rawCIDR := range strings.Split(rawCIDRs, ",") {
+			cidr := strings.TrimSpace(rawCIDR)
+			if cidr == "" {
+				continue
+			}
+			_, parsed, err := net.ParseCIDR(cidr)
+			if err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS contains invalid CIDR %q: %w", cidr, err)
+			}
+			trustedPlatformHeaderCIDRs = append(trustedPlatformHeaderCIDRs, parsed.String())
+		}
+		if len(trustedPlatformHeaderCIDRs) == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS must contain at least one CIDR when set")
+		}
 	}
 	runtimeTuning := DefaultRuntimeTuningConfig()
 	runtimeTuning.JVMHeapPercent, err = parseBoundedIntEnv("AONOHAKO_JVM_HEAP_PERCENT", os.Getenv("AONOHAKO_JVM_HEAP_PERCENT"), runtimeTuning.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
@@ -313,6 +332,9 @@ func Load() (Config, error) {
 	if inboundAuth.Mode == InboundAuthPlatform && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedPlatformHeaders && inboundAuth.PlatformPrincipalHMACSecret == "" {
 		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=platform outside dev requires AONOHAKO_TRUSTED_PLATFORM_HEADERS=true or AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET")
 	}
+	if inboundAuth.Mode == InboundAuthPlatform && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && inboundAuth.PlatformPrincipalHMACSecret == "" && trustedPlatformHeaders && len(trustedPlatformHeaderCIDRs) == 0 {
+		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=platform with unsigned trusted headers outside dev requires AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS")
+	}
 
 	if contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedRunnerIngress {
 		return Config{}, fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_TRUSTED_RUNNER_INGRESS=true")
@@ -370,6 +392,7 @@ func Load() (Config, error) {
 		AllowRequestNetwork:           allowRequestNetwork,
 		TrustedRunnerIngress:          trustedRunnerIngress,
 		TrustedPlatformHeaders:        trustedPlatformHeaders,
+		TrustedPlatformHeaderCIDRs:    trustedPlatformHeaderCIDRs,
 		Execution:                     execution,
 		InboundAuth:                   inboundAuth,
 	}, nil

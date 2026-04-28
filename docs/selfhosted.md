@@ -23,7 +23,8 @@ Use this when the same process is expected to execute submissions directly:
   authenticates inbound calls
 - `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` when platform-authenticated traffic
   can cross any boundary that is not fully trusted; otherwise
-  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` behind a strip/rewrite proxy
+  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` plus
+  `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` behind a strip/rewrite proxy
 - root parent process
 
 This shape is supported for:

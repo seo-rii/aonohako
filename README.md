@@ -199,6 +199,10 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` is required outside `dev` when
   `AONOHAKO_INBOUND_AUTH=platform` and no HMAC secret is configured, so
   header-trusting deployments make the upstream strip/rewrite boundary explicit.
+- `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` is also required for unsigned
+  trusted-header platform mode outside `dev`. It is a comma-separated CIDR list
+  for proxies allowed to supply `X-Aonohako-Principal`; requests from outside
+  those CIDRs, or without that principal header, are rejected.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_CGROUP_PARENT` is optional and supported only for
@@ -295,7 +299,8 @@ For Cloud Run deployments, use this baseline:
   inbound authentication
 - `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` when using platform auth across any
   boundary that is not fully trusted; otherwise set
-  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` only behind a strip/rewrite proxy
+  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` and
+  `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` only behind a strip/rewrite proxy
 - `AONOHAKO_TRUSTED_RUNNER_INGRESS=true` after configuring private ingress,
   Cloud Run IAM, mTLS, or an equivalent trusted control-plane boundary
 - second-generation execution environment
