@@ -149,9 +149,17 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: docker/setup-buildx-action@v4
-      - run: chmod +x scripts/build_runtime_images.sh scripts/report_toolchain_versions.sh
+      - run: chmod +x scripts/build_runtime_images.sh scripts/report_toolchain_versions.sh scripts/install_anchore_tool.sh
       - run: mkdir -p "toolchain-artifacts/${{ matrix.name }}"
       - run: ./scripts/build_runtime_images.sh -mode production -only "${{ matrix.name }}" -tag-prefix "aonohako-ci-prod"
+      - run: |
+          scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
+          "${RUNNER_TEMP}/anchore-bin/syft" "aonohako-ci-prod:${{ matrix.name }}" -o spdx-json="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.sbom.spdx.json"
+      - run: |
+          scripts/install_anchore_tool.sh grype v0.111.0 "${RUNNER_TEMP}/anchore-bin"
+          if ! "${RUNNER_TEMP}/anchore-bin/grype" "aonohako-ci-prod:${{ matrix.name }}" -o json > "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.grype.json"; then
+            printf '{"error":"grype scan failed"}\n' > "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.grype.json"
+          fi
       - run: >
           AONOHAKO_LANGUAGES="${{ matrix.languages }}"
           bash ./scripts/report_toolchain_versions.sh "aonohako-ci-prod:${{ matrix.name }}"

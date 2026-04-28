@@ -569,13 +569,14 @@ CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the
 production profiles in a parallel matrix and runs
 `scripts/report_toolchain_versions.sh` once per profile. Each matrix leg uploads
-its summary fragment and a `docker save` archive for the image as artifacts. A
-final CI summary job downloads those artifacts, concatenates the per-profile
-reports into one GitHub Actions summary, and republishes the summaries plus
-image archives as a single bundle artifact. Each per-profile archive also emits
-a `.sha256` sidecar, and the final summary bundle includes a recomputed
-`SHA256SUMS` file over the downloaded image archives so promotion can verify the
-exact artifact bytes it consumed.
+its summary fragment, Syft SBOM, non-blocking Grype JSON scan, and a
+`docker save` archive for the image as artifacts. A final CI summary job
+downloads those artifacts, concatenates the per-profile reports into one GitHub
+Actions summary, and republishes the summaries plus image archives as a single
+bundle artifact. Each per-profile archive also emits a `.sha256` sidecar, and
+the final summary bundle includes a recomputed `SHA256SUMS` file over the
+downloaded image archives so promotion can verify the exact artifact bytes it
+consumed.
 
 Debian-based production profiles now use a digest-pinned
 `debian:trixie-slim` base, which raises the baseline Python, PyPy, and GCC
@@ -632,10 +633,11 @@ The repository verifies the design through:
 - selftests embedded in runtime images
 - smoke builds generated from the runtime catalog
 - `govulncheck` in CI for Go dependency and standard-library reachability
-- Syft SBOM generation in CI for the root-backed Python runtime image used by
-  sandbox regression tests
-- non-blocking Grype scan artifacts in CI for the same sandbox runtime image,
-  so runtime CVE drift is visible before promotion
+- Syft SBOM generation in CI for both the root-backed Python runtime image used
+  by sandbox regression tests and every production runtime profile artifact
+- non-blocking Grype scan artifacts in CI for the sandbox runtime image and
+  every production runtime profile, so runtime CVE drift is visible before
+  promotion
 - SHA256 digest metadata for production profile image archive artifacts
 - regression tests for sandbox escape attempts such as network use, process
   creation, inherited-fd access, and writable scratch bypasses

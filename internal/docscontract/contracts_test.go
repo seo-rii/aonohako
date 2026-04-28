@@ -183,6 +183,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "package-manager, fetcher, and build-time\ntoolchain-manager binaries such as `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`,\n`npm`, `cargo`, `rustup`, and `gem` are root-only executable") {
 		t.Fatalf("architecture.md must describe runtime package manager/fetcher/toolchain-manager hardening")
 	}
+	if !strings.Contains(architecture, "Syft SBOM") || !strings.Contains(architecture, "every production runtime profile artifact") || !strings.Contains(architecture, "non-blocking Grype JSON scan") {
+		t.Fatalf("architecture.md must describe production runtime SBOM and scan artifacts")
+	}
 	if !strings.Contains(architecture, "prevention of replacing the running process with another world-executable\n  binary from the runtime image") {
 		t.Fatalf("architecture.md must list execve replacement as a current non-goal")
 	}

@@ -141,6 +141,9 @@
 - Phase 3/18: execute target과 compile helper command가 부모 서버 프로세스의
   token/secret 환경변수를 상속하지 않고 fixed base/workspace/runtime env만
   받는지 regression으로 고정했다.
+- Phase 12: production runtime profile matrix도 Syft SBOM과 non-blocking Grype
+  JSON scan artifact를 각 profile artifact에 포함하게 해 full production
+  matrix의 CVE drift 추적성을 높였다.
 
 ## 작업 원칙
 
