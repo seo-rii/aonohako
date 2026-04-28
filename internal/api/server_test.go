@@ -895,6 +895,90 @@ func TestExecuteRejectsRuntimeProfileWhenPolicyDisabledBeforeQueueing(t *testing
 	}
 }
 
+func TestExecuteAppliesProblemRuntimeProfileBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = false
+	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{"low-memory": config.DefaultRuntimeTuningConfig()}
+	s.cfg.Execution.ProblemRuntimeProfiles = map[string]string{"contest-1/a": "low-memory"}
+	seenProfile := ""
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		seenProfile = req.RuntimeProfile
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	payload := map[string]any{
+		"lang":       "binary",
+		"problem_id": "contest-1/a",
+		"binaries":   []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"limits":     map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for problem runtime profile, got %d", resp.StatusCode)
+	}
+	events := readSSEEvents(resp.Body, t)
+	if len(events) == 0 || events[len(events)-1].Name != "result" {
+		t.Fatalf("expected result event for problem runtime profile, got %#v", events)
+	}
+	if seenProfile != "low-memory" {
+		t.Fatalf("execute runner saw runtime_profile %q", seenProfile)
+	}
+}
+
+func TestExecuteRejectsRuntimeProfileConflictWithProblemPolicyBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = true
+	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{
+		"low-memory": config.DefaultRuntimeTuningConfig(),
+		"jvm-heavy":  config.DefaultRuntimeTuningConfig(),
+	}
+	s.cfg.Execution.ProblemRuntimeProfiles = map[string]string{"contest-1/a": "low-memory"}
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("execute runner should not be called for conflicting problem runtime profile")
+		return model.RunResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	payload := map[string]any{
+		"lang":            "binary",
+		"problem_id":      "contest-1/a",
+		"runtime_profile": "jvm-heavy",
+		"binaries":        []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"limits":          map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for conflicting problem runtime profile, got %d", resp.StatusCode)
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(bodyBytes), "problem policy") {
+		t.Fatalf("response %q should mention problem policy", string(bodyBytes))
+	}
+	active, pending := s.queue.Snapshot()
+	if active != 0 || pending != 0 {
+		t.Fatalf("conflicting problem runtime profile request entered queue: active=%d pending=%d", active, pending)
+	}
+}
+
 func TestExecuteSSESequence(t *testing.T) {
 	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
@@ -1503,6 +1587,85 @@ func TestCompileRejectsRuntimeProfileWhenPolicyDisabledBeforeQueueing(t *testing
 	active, pending := s.queue.Snapshot()
 	if active != 0 || pending != 0 {
 		t.Fatalf("policy-disabled compile runtime_profile request entered queue: active=%d pending=%d", active, pending)
+	}
+}
+
+func TestCompileAppliesProblemRuntimeProfileBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = false
+	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{"low-memory": config.DefaultRuntimeTuningConfig()}
+	s.cfg.Execution.ProblemRuntimeProfiles = map[string]string{"contest-1/a": "low-memory"}
+	seenProfile := ""
+	s.compile = compileRunnerStub{run: func(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
+		seenProfile = req.RuntimeProfile
+		return model.CompileResponse{Status: model.CompileStatusOK}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	payload := map[string]any{
+		"lang":       "python3",
+		"problem_id": "contest-1/a",
+		"sources":    []map[string]any{{"name": "Main.py", "data_b64": "cHJpbnQoJ29rJykK"}},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for problem runtime profile, got %d", resp.StatusCode)
+	}
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	if seenProfile != "low-memory" {
+		t.Fatalf("compile runner saw runtime_profile %q", seenProfile)
+	}
+}
+
+func TestCompileRejectsRuntimeProfileConflictWithProblemPolicyBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = true
+	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{
+		"low-memory": config.DefaultRuntimeTuningConfig(),
+		"jvm-heavy":  config.DefaultRuntimeTuningConfig(),
+	}
+	s.cfg.Execution.ProblemRuntimeProfiles = map[string]string{"contest-1/a": "low-memory"}
+	s.compile = compileRunnerStub{run: func(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
+		t.Fatalf("compile runner should not be called for conflicting problem runtime profile")
+		return model.CompileResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	payload := map[string]any{
+		"lang":            "python3",
+		"problem_id":      "contest-1/a",
+		"runtime_profile": "jvm-heavy",
+		"sources":         []map[string]any{{"name": "Main.py", "data_b64": "cHJpbnQoJ29rJykK"}},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for conflicting problem runtime profile, got %d", resp.StatusCode)
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(bodyBytes), "problem policy") {
+		t.Fatalf("response %q should mention problem policy", string(bodyBytes))
+	}
+	active, pending := s.queue.Snapshot()
+	if active != 0 || pending != 0 {
+		t.Fatalf("conflicting problem runtime profile request entered queue: active=%d pending=%d", active, pending)
 	}
 }
 
