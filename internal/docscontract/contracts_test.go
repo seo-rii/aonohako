@@ -162,6 +162,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "submitted source files are made immutable (`0444`)") || !strings.Contains(architecture, "Python-like compile checks run in isolated startup mode (`-I -S`)") {
 		t.Fatalf("architecture.md must describe compile workspace immutability and isolated Python startup")
 	}
+	if !strings.Contains(architecture, "Compile watchdogs also run the shared workspace\nscanner") || !strings.Contains(architecture, "total bytes, entry count, and directory depth limits apply during\ncompile as well as execute") {
+		t.Fatalf("architecture.md must describe compile workspace quota scanning")
+	}
 	if !strings.Contains(architecture, "`socket()` is limited to `AF_INET` and `AF_INET6`") || !strings.Contains(architecture, "Cloud Run embedded-helper execution rejects `enable_network=true` outright") {
 		t.Fatalf("architecture.md must describe the network-enabled helper boundary")
 	}

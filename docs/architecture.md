@@ -330,7 +330,9 @@ the main way to absorb known JIT or GC cost.
 Compile commands use the same helper process-hardening path. Because compilers
 can legitimately spawn child processes, compile memory enforcement samples the
 helper process tree and kills the compile sandbox when aggregate RSS exceeds the
-compile sandbox memory budget. If `AONOHAKO_CGROUP_PARENT` is configured for a
+compile sandbox memory budget. Compile watchdogs also run the shared workspace
+scanner, so total bytes, entry count, and directory depth limits apply during
+compile as well as execute. If `AONOHAKO_CGROUP_PARENT` is configured for a
 self-hosted helper runner, compile, execute, and SPJ helper processes are also
 placed into per-run cgroups with `memory.max`, `pids.max`, and
 `memory.oom.group=1`.

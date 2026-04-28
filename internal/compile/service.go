@@ -24,6 +24,7 @@ import (
 	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
 	"aonohako/internal/util"
+	"aonohako/internal/workspacequota"
 )
 
 const buildTimeout = 60 * time.Second
@@ -1862,6 +1863,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	defer killSandbox()
 	watchdog := time.NewTicker(25 * time.Millisecond)
 	defer watchdog.Stop()
+	lastWorkspaceScan := time.Time{}
 	for {
 		select {
 		case <-ctx.Done():
@@ -1887,6 +1889,25 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 				killSandbox()
 				<-waitCh
 				return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "memory limit exceeded"
+			}
+			if lastWorkspaceScan.IsZero() || time.Since(lastWorkspaceScan) >= 25*time.Millisecond {
+				lastWorkspaceScan = time.Now()
+				usage, err := workspacequota.Scan(workDir)
+				if errors.Is(err, workspacequota.ErrEntryLimitExceeded) {
+					killSandbox()
+					<-waitCh
+					return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace entry limit exceeded"
+				}
+				if errors.Is(err, workspacequota.ErrDepthExceeded) {
+					killSandbox()
+					<-waitCh
+					return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace depth exceeded"
+				}
+				if usage.Bytes > int64(compileWorkspaceBytes) {
+					killSandbox()
+					<-waitCh
+					return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace quota exceeded"
+				}
 			}
 		case err := <-waitCh:
 			if err != nil {

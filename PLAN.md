@@ -132,6 +132,9 @@
   재계산해 promotion 입력 artifact 무결성 metadata를 남기게 했다.
 - Phase 11: runtime memory smoke에 lightweight `plain` C CPU loop TLE case를
   추가해 runtime image smoke가 CPU-time verdict path도 검증하게 했다.
+- Phase 2/18: execute 전용 workspace scanner를 shared package로 옮기고 compile
+  watchdog에도 연결해 컴파일 중 total bytes, entry count, directory depth
+  초과를 같은 quota signal로 차단하게 했다.
 
 ## 작업 원칙
 

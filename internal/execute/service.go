@@ -17,8 +17,6 @@ const (
 	hardMaxOutputBytes           = 8 << 20
 	defaultWorkspaceBytes        = 128 << 20
 	hardMaxWorkspaceBytes        = 1 << 30
-	maxWorkspaceEntries          = 8192
-	maxWorkspaceDepth            = 32
 	maxBinaryFiles               = 512
 	maxSidecarOutputSpecs        = 64
 	addressSpaceSlackKB          = 8 << 10

@@ -23,6 +23,7 @@ import (
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
 	"aonohako/internal/util"
+	"aonohako/internal/workspacequota"
 )
 
 type execResult struct {
@@ -444,20 +445,20 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 
 			if targetStarted && result.Status == "OK" && (lastWorkspaceScan.IsZero() || time.Since(lastWorkspaceScan) >= 25*time.Millisecond) {
 				lastWorkspaceScan = time.Now()
-				usage, err := scanWorkspaceUsage(ws.RootDir)
-				if errors.Is(err, errWorkspaceEntryLimitExceeded) {
+				usage, err := workspacequota.Scan(ws.RootDir)
+				if errors.Is(err, workspacequota.ErrEntryLimitExceeded) {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace entry limit exceeded"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					continue
 				}
-				if errors.Is(err, errWorkspaceDepthExceeded) {
+				if errors.Is(err, workspacequota.ErrDepthExceeded) {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace depth exceeded"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					continue
 				}
-				if usage.bytes > workspaceLimitBytes {
+				if usage.Bytes > workspaceLimitBytes {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace quota exceeded"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
