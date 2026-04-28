@@ -60,6 +60,69 @@ func TestReadStatsReadsCgroupAccountingFiles(t *testing.T) {
 	if got.CPUThrottleEvents() != 8 {
 		t.Fatalf("CPUThrottleEvents() = %d, want 8", got.CPUThrottleEvents())
 	}
+	if !got.MemoryLimitBreached(2 << 20) {
+		t.Fatalf("MemoryLimitBreached() should detect memory events")
+	}
+	if !got.PidsLimitBreached() {
+		t.Fatalf("PidsLimitBreached() should detect pids max events")
+	}
+}
+
+func TestStatsMemoryLimitBreachedUsesCurrentUsageAndEvents(t *testing.T) {
+	tests := []struct {
+		name       string
+		stats      Stats
+		limitBytes int64
+		want       bool
+	}{
+		{
+			name:       "current over limit",
+			stats:      Stats{MemoryCurrentBytes: 65 << 20, MemoryEvents: map[string]int64{}, PidsEvents: map[string]int64{}},
+			limitBytes: 64 << 20,
+			want:       true,
+		},
+		{
+			name:       "current at limit",
+			stats:      Stats{MemoryCurrentBytes: 64 << 20, MemoryEvents: map[string]int64{}, PidsEvents: map[string]int64{}},
+			limitBytes: 64 << 20,
+			want:       false,
+		},
+		{
+			name:       "memory max event",
+			stats:      Stats{MemoryEvents: map[string]int64{"max": 1}, PidsEvents: map[string]int64{}},
+			limitBytes: 0,
+			want:       true,
+		},
+		{
+			name:       "oom group kill event",
+			stats:      Stats{MemoryEvents: map[string]int64{"oom_group_kill": 1}, PidsEvents: map[string]int64{}},
+			limitBytes: 0,
+			want:       true,
+		},
+		{
+			name:       "below limit",
+			stats:      Stats{MemoryCurrentBytes: 32 << 20, MemoryEvents: map[string]int64{}, PidsEvents: map[string]int64{}},
+			limitBytes: 64 << 20,
+			want:       false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.stats.MemoryLimitBreached(tc.limitBytes); got != tc.want {
+				t.Fatalf("MemoryLimitBreached(%d) = %v, want %v", tc.limitBytes, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStatsPidsLimitBreachedUsesPidsEvents(t *testing.T) {
+	if (Stats{PidsEvents: map[string]int64{"max": 1}}).PidsLimitBreached() != true {
+		t.Fatalf("PidsLimitBreached() should detect max event")
+	}
+	if (Stats{PidsEvents: map[string]int64{"max": 0}}).PidsLimitBreached() != false {
+		t.Fatalf("PidsLimitBreached() should ignore zero max event")
+	}
 }
 
 func TestReadStatsAllowsMissingMemoryPeak(t *testing.T) {

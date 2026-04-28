@@ -121,6 +121,9 @@
 - Phase 2: execute watchdog이 cgroup `cpu.stat usage_usec`를 읽어 self-hosted
   cgroup opt-in에서 run cgroup 전체 CPU 사용량으로 `cpu_time_ms`와 CPU TLE를
   갱신하게 했다.
+- Phase 2: compile/execute watchdog의 cgroup `memory.events`, `pids.events`,
+  `memory.current` limit signal 해석을 shared helper로 묶어 두 경로의 verdict
+  drift를 줄이고 unit test로 고정했다.
 
 ## 작업 원칙
 

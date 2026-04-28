@@ -1871,12 +1871,12 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		case <-watchdog.C:
 			if runGroup.Path != "" {
 				if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
-					if stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.MemoryCurrentBytes > memoryLimitKB*1024 {
+					if stats.MemoryLimitBreached(memoryLimitKB * 1024) {
 						killSandbox()
 						<-waitCh
 						return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "memory limit exceeded"
 					}
-					if stats.PidsMaxEvents() > 0 {
+					if stats.PidsLimitBreached() {
 						killSandbox()
 						<-waitCh
 						return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "process limit exceeded"
