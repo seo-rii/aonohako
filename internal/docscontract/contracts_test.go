@@ -353,9 +353,13 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 	cloudRemote := examples["cloudrun-control-plane.env"]
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_SANDBOX_BACKEND", "none")
+	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	requirePresent("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REMOTE_RUNNER_URL")
 	requirePresent("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_WORK_ROOT")
+
+	cloudRunner := examples["cloudrun-runner.env"]
+	requireEnv("cloudrun-runner.env", cloudRunner, "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
 
 	devRemote := examples["dev-control-plane.env"]
 	requireEnv("dev-control-plane.env", devRemote, "AONOHAKO_DEPLOYMENT_TARGET", "dev")
