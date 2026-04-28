@@ -26,6 +26,7 @@ import (
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/processhardening"
 	"aonohako/internal/profiles"
 	"aonohako/internal/sandbox"
 
@@ -51,6 +52,10 @@ const selftestUsage = "usage: aonohako-selftest image-permissions|permissions|co
 func main() {
 	if sandbox.MaybeRunFromEnv() {
 		return
+	}
+	if err := processhardening.DisableDumpability(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "process hardening failed: %v\n", err)
+		os.Exit(1)
 	}
 
 	if len(os.Args) != 2 {
