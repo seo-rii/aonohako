@@ -45,6 +45,9 @@ func ValidateParentAt(parentDir, mountInfoPath string, requiredControllers []str
 	if !info.IsDir() {
 		return fmt.Errorf("cgroup parent is not a directory: %s", parentDir)
 	}
+	if info.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf("cgroup parent must not be group/world writable: %s", parentDir)
+	}
 	controllers, err := os.ReadFile(filepath.Join(parentDir, "cgroup.controllers"))
 	if err != nil {
 		return fmt.Errorf("read cgroup.controllers: %w", err)

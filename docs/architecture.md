@@ -377,7 +377,8 @@ v2 mount, `cgroup.controllers`, `cgroup.subtree_control`, and the required
 separately because it is useful for future throttling but not required for the
 first hard memory/process boundary. Setting `AONOHAKO_CGROUP_PARENT` is allowed
 only for `selfhosted + embedded + helper`, and startup validates the selected
-parent is under a cgroup v2 mount before request handling.
+parent is under a cgroup v2 mount and is not group/world writable before
+request handling.
 
 The same package owns the low-level run-group write contract used by the
 optional cgroup guardrail and the future isolated backend. Parent cgroups enable
