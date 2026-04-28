@@ -218,7 +218,7 @@ func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.
 		}
 	}
 	for _, marker := range []string{
-		"for tool in apt apt-get apt-cache apt-config dpkg dpkg-query dpkg-deb curl wget git",
+		"for tool in apt apt-get apt-cache apt-config dpkg dpkg-query dpkg-deb curl wget git pip pip3 npm npx yarn pnpm cargo rustup gem bundle bundler",
 		"chmod 0750 \"$(command -v \"",
 	} {
 		if !strings.Contains(body, marker) {

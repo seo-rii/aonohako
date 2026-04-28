@@ -1829,7 +1829,15 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	toolOut, toolErr, err := runAsSandboxUser(
-		"for p in /usr/bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/bin/apt-config /usr/bin/dpkg /usr/bin/dpkg-query /usr/bin/dpkg-deb /usr/bin/curl /usr/bin/wget /usr/bin/git; do "+
+		"for p in "+
+			"/usr/bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/bin/apt-config "+
+			"/usr/bin/dpkg /usr/bin/dpkg-query /usr/bin/dpkg-deb "+
+			"/usr/bin/curl /usr/bin/wget /usr/bin/git /usr/local/bin/git "+
+			"/usr/bin/pip /usr/bin/pip3 /usr/local/bin/pip /usr/local/bin/pip3 "+
+			"/usr/local/bin/npm /usr/local/bin/npx /opt/node-*/bin/npm /opt/node-*/bin/npx "+
+			"/usr/local/bin/yarn /usr/local/bin/pnpm "+
+			"/usr/local/bin/cargo /usr/local/cargo/bin/cargo /usr/local/bin/rustup /usr/local/cargo/bin/rustup "+
+			"/usr/bin/gem /usr/local/bin/gem /usr/bin/bundle /usr/bin/bundler /usr/local/bin/bundle /usr/local/bin/bundler; do "+
 			"if [ -e \"$p\" ]; then "+
 			"if [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
 			"fi; "+

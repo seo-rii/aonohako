@@ -174,8 +174,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "treat every world-executable binary in the runtime image as reachable by\nsubmissions") || !strings.Contains(architecture, "shells, package\nmanagers, compilers, debuggers, and diagnostics tooling") {
 		t.Fatalf("architecture.md must describe runtime image minimization for execve exposure")
 	}
-	if !strings.Contains(architecture, "package-manager and fetcher binaries such as\n`apt`, `dpkg`, `curl`, `wget`, and `git` are root-only executable") {
-		t.Fatalf("architecture.md must describe runtime package manager/fetcher hardening")
+	if !strings.Contains(architecture, "package-manager, fetcher, and build-time\ntoolchain-manager binaries such as `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`,\n`npm`, `cargo`, `rustup`, and `gem` are root-only executable") {
+		t.Fatalf("architecture.md must describe runtime package manager/fetcher/toolchain-manager hardening")
 	}
 	if !strings.Contains(architecture, "prevention of replacing the running process with another world-executable\n  binary from the runtime image") {
 		t.Fatalf("architecture.md must list execve replacement as a current non-goal")

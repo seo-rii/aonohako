@@ -124,6 +124,9 @@
 - Phase 2: compile/execute watchdog의 cgroup `memory.events`, `pids.events`,
   `memory.current` limit signal 해석을 shared helper로 묶어 두 경로의 verdict
   drift를 줄이고 unit test로 고정했다.
+- Phase 6: runtime image hardening의 root-only executable 목록을 build-time
+  package/toolchain manager(`pip`, `npm`, `cargo`, `rustup`, `gem` 등)까지
+  확장하고 image-permission selftest와 docs contract에 반영했다.
 
 ## 작업 원칙
 
