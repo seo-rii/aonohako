@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -80,5 +83,38 @@ func TestSelftestUsageListsDeploymentContract(t *testing.T) {
 func TestSelftestUsageListsRuntimeMemory(t *testing.T) {
 	if !strings.Contains(selftestUsage, "runtime-memory") {
 		t.Fatalf("selftest usage should list runtime-memory: %s", selftestUsage)
+	}
+}
+
+func TestDeploymentContractSummaryReportsTmpfsRequirement(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+	t.Setenv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	err = runDeploymentContractSuite()
+	_ = w.Close()
+	os.Stdout = oldStdout
+	if err != nil {
+		t.Fatalf("runDeploymentContractSuite: %v", err)
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal(data, &summary); err != nil {
+		t.Fatalf("decode deployment summary: %v\n%s", err, string(data))
+	}
+	if summary["require_work_root_tmpfs"] != true {
+		t.Fatalf("require_work_root_tmpfs = %#v, want true; summary=%s", summary["require_work_root_tmpfs"], string(data))
 	}
 }
