@@ -1955,6 +1955,49 @@ int main(void) {
 	}
 }
 
+func TestRunMarksMemoryLimitExceededForMmapRSSSpike(t *testing.T) {
+	forceDirectMode(t)
+
+	code := `
+#include <stdio.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+int main(void) {
+	const size_t bytes = 96 * 1024 * 1024;
+	char *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (p == MAP_FAILED) {
+		perror("mmap");
+		return 2;
+	}
+	for (size_t i = 0; i < bytes; i += 4096) {
+		p[i] = 1;
+	}
+	usleep(200000);
+	puts("survived");
+	return 0;
+}
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "runner",
+			DataB64: buildCTestBinary(t, code),
+			Mode:    "exec",
+		}},
+		Limits: model.Limits{TimeMs: 2000, MemoryMB: 32},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusMLE {
+		t.Fatalf("expected MLE from mmap RSS spike, got %+v", resp)
+	}
+	if resp.MemoryKB <= 32*1024 {
+		t.Fatalf("expected sampled RSS over memory limit, got %+v", resp)
+	}
+}
+
 func TestRunMarksWorkspaceQuotaExceeded(t *testing.T) {
 	forceDirectMode(t)
 
