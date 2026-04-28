@@ -410,16 +410,16 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "image-sbom:") {
 		t.Fatalf("ci workflow must define a dedicated runtime image SBOM job")
 	}
-	if !strings.Contains(body, "anchore/sbom-action@v0.24.0") || !strings.Contains(body, "syft-version: v1.42.4") {
-		t.Fatalf("ci workflow must generate SBOMs with a pinned Syft action and tool version")
+	if !strings.Contains(body, "scripts/install_anchore_tool.sh syft v1.42.4") || !strings.Contains(body, "-o spdx-json=sbom-ci-python.spdx.json") {
+		t.Fatalf("ci workflow must generate SBOMs with a retryable pinned Syft install")
 	}
 	if !strings.Contains(body, "sbom-ci-python.spdx.json") {
 		t.Fatalf("ci workflow must publish a named SBOM artifact for the sandbox runtime image")
 	}
-	if !strings.Contains(body, "anchore/scan-action@v7.4.0") || !strings.Contains(body, "grype-version: v0.111.0") {
-		t.Fatalf("ci workflow must scan the sandbox runtime image with a pinned Grype action and tool version")
+	if !strings.Contains(body, "scripts/install_anchore_tool.sh grype v0.111.0") || !strings.Contains(body, `"${RUNNER_TEMP}/anchore-bin/grype" "aonohako-sbom:ci-python" -o json > grype-ci-python.json`) {
+		t.Fatalf("ci workflow must scan the sandbox runtime image with a retryable pinned Grype install")
 	}
-	if !strings.Contains(body, "fail-build: false") || !strings.Contains(body, "grype-ci-python.json") {
+	if !strings.Contains(body, `printf '{"error":"grype scan failed"}\n' > grype-ci-python.json`) || !strings.Contains(body, "grype-ci-python.json") {
 		t.Fatalf("ci workflow must publish a non-blocking Grype report artifact for the sandbox runtime image")
 	}
 	summarySection := body[strings.Index(body, "toolchain-summary:"):]

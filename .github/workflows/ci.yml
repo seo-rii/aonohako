@@ -54,21 +54,20 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: docker/setup-buildx-action@v4
-      - run: chmod +x scripts/build_runtime_images.sh
+      - run: chmod +x scripts/build_runtime_images.sh scripts/install_anchore_tool.sh
       - run: ./scripts/build_runtime_images.sh -mode ci -only ci-python -tag-prefix "aonohako-sbom"
-      - uses: anchore/sbom-action@v0.24.0
+      - run: |
+          scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
+          "${RUNNER_TEMP}/anchore-bin/syft" "aonohako-sbom:ci-python" -o spdx-json=sbom-ci-python.spdx.json
+      - uses: actions/upload-artifact@v7
         with:
-          image: aonohako-sbom:ci-python
-          format: spdx-json
-          artifact-name: sbom-ci-python.spdx.json
-          syft-version: v1.42.4
-      - uses: anchore/scan-action@v7.4.0
-        with:
-          image: aonohako-sbom:ci-python
-          fail-build: false
-          output-format: json
-          output-file: grype-ci-python.json
-          grype-version: v0.111.0
+          name: sbom-ci-python
+          path: sbom-ci-python.spdx.json
+      - run: |
+          scripts/install_anchore_tool.sh grype v0.111.0 "${RUNNER_TEMP}/anchore-bin"
+          if ! "${RUNNER_TEMP}/anchore-bin/grype" "aonohako-sbom:ci-python" -o json > grype-ci-python.json; then
+            printf '{"error":"grype scan failed"}\n' > grype-ci-python.json
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: grype-ci-python

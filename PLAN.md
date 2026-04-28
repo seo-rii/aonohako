@@ -92,6 +92,9 @@
   Node/TypeScript runtime memory guard, Wasmtime constrained-memory trap,
   .NET GC/RSS guardrail이 언어 이미지별 CI에서 정상 완료나 timeout으로
   새지 않게 했다.
+- Phase 12: Syft/Grype supply-chain CI를 action 내장 downloader 대신
+  checksum 검증과 retry가 있는 로컬 설치 스크립트로 전환해 GitHub release
+  asset의 일시적 5xx에 덜 민감하게 했다.
 - Phase 2: execute watchdog이 cgroup `cpu.stat usage_usec`를 읽어 self-hosted
   cgroup opt-in에서 run cgroup 전체 CPU 사용량으로 `cpu_time_ms`와 CPU TLE를
   갱신하게 했다.
