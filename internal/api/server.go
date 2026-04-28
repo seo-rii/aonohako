@@ -546,6 +546,9 @@ func (s *Server) validateRuntimeProfileAllowed(profile string) error {
 	if profile == "" {
 		return nil
 	}
+	if !s.cfg.AllowRequestRuntimeProfile {
+		return fmt.Errorf("runtime_profile is not allowed by server policy")
+	}
 	if _, ok := s.cfg.Execution.RuntimeTuningProfiles[profile]; !ok {
 		return fmt.Errorf("unknown runtime_profile: %s", profile)
 	}

@@ -24,6 +24,7 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		"`sources` may contain multiple files",
 		"`entry_point` names a source path, it must exactly match one submitted\nsource",
 		"`runtime_profile`, when present, must name a profile configured by the runner\noperator through `AONOHAKO_RUNTIME_TUNING_PROFILES`",
+		"Non-dev servers\naccept it only when `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`",
 		"`binaries` may contain multiple files",
 		"`limits.time_ms` and `limits.memory_mb` are required and bounded at the API\nboundary",
 		"`spj.limits` uses the same\nupper caps",
@@ -62,8 +63,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"keeps the same SSE contract for `/compile` and `/execute`",
 		"forwards `log`, `image`, `error`, and `result`",
 		"Workspace Limit Exceeded",
-		"`/compile` rejects missing sources, more than 512 sources, source files over\n  16 MiB decoded, source totals over 48 MiB decoded, and invalid or unknown\n  `runtime_profile` values before acquiring a stream or queue slot",
-		"`/execute` rejects oversized `stdin` / `expected_stdout`, out-of-range run\n  limits, invalid or unknown `runtime_profile` values, and disallowed\n  `enable_network=true` before acquiring a stream or queue slot",
+		"`/compile` rejects missing sources, more than 512 sources, source files over\n  16 MiB decoded, source totals over 48 MiB decoded, and invalid or unknown\n  `runtime_profile` values, including policy-disabled profile requests, before\n  acquiring a stream or queue slot",
+		"`/execute` rejects oversized `stdin` / `expected_stdout`, out-of-range run\n  limits, invalid or unknown `runtime_profile` values, policy-disabled profile\n  requests, and disallowed `enable_network=true` before acquiring a stream or\n  queue slot",
 		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
 		"`AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
 		"`embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
@@ -175,7 +176,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "Compile watchdogs also run the shared workspace\nscanner") || !strings.Contains(architecture, "total bytes, entry count, and directory depth limits apply during\ncompile as well as execute") {
 		t.Fatalf("architecture.md must describe compile workspace quota scanning")
 	}
-	if !strings.Contains(architecture, "optional policy-owned runtime profiles from\n  `AONOHAKO_RUNTIME_TUNING_PROFILES`") || !strings.Contains(architecture, "`/compile` and `/execute` can select a\n  named profile with `runtime_profile`") {
+	if !strings.Contains(architecture, "optional policy-owned runtime profiles from\n  `AONOHAKO_RUNTIME_TUNING_PROFILES`") || !strings.Contains(architecture, "`/compile` and `/execute` can select a\n  named profile with `runtime_profile`") || !strings.Contains(architecture, "`AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`") {
 		t.Fatalf("architecture.md must describe bounded runtime tuning profiles")
 	}
 	if !strings.Contains(architecture, "`socket()` is limited to `AF_INET` and `AF_INET6`") || !strings.Contains(architecture, "Cloud Run embedded-helper execution rejects `enable_network=true` outright") {
@@ -225,6 +226,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30`",
 		"`AONOHAKO_RUNTIME_TUNING_PROFILES` may define named, policy-owned runtime\n  profiles as a JSON object",
+		"`AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE` controls whether `/compile` and\n  `/execute` may honor request-supplied `runtime_profile`",
 		"`AONOHAKO_TRUSTED_RUNNER_INGRESS` asserts that a root-backed embedded helper",
 		"`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` is required for\n  `AONOHAKO_INBOUND_AUTH=platform` outside `dev`",
 		"unsigned platform headers are not\n  accepted outside `dev`",
@@ -332,6 +334,7 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "16")
 			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "60")
 			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_NETWORK", "false")
+			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "false")
 		}
 	}
 

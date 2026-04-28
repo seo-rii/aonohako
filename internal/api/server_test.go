@@ -819,6 +819,7 @@ func TestExecuteRejectsInvalidRuntimeProfileBeforeQueueing(t *testing.T) {
 
 func TestExecuteAllowsConfiguredRuntimeProfile(t *testing.T) {
 	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = true
 	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{"low-memory": config.DefaultRuntimeTuningConfig()}
 	seenProfile := ""
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
@@ -852,6 +853,45 @@ func TestExecuteAllowsConfiguredRuntimeProfile(t *testing.T) {
 	}
 	if seenProfile != "low-memory" {
 		t.Fatalf("execute runner saw runtime_profile %q", seenProfile)
+	}
+}
+
+func TestExecuteRejectsRuntimeProfileWhenPolicyDisabledBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = false
+	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{"low-memory": config.DefaultRuntimeTuningConfig()}
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("execute runner should not be called when runtime_profile policy is disabled")
+		return model.RunResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	payload := map[string]any{
+		"lang":            "binary",
+		"runtime_profile": "low-memory",
+		"binaries":        []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"limits":          map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for policy-disabled runtime_profile, got %d", resp.StatusCode)
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(bodyBytes), "server policy") {
+		t.Fatalf("response %q should mention server policy", string(bodyBytes))
+	}
+	active, pending := s.queue.Snapshot()
+	if active != 0 || pending != 0 {
+		t.Fatalf("policy-disabled runtime_profile request entered queue: active=%d pending=%d", active, pending)
 	}
 }
 
@@ -1395,6 +1435,7 @@ func TestCompileRejectsInvalidRuntimeProfileBeforeQueueing(t *testing.T) {
 
 func TestCompileAllowsConfiguredRuntimeProfile(t *testing.T) {
 	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = true
 	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{"low-memory": config.DefaultRuntimeTuningConfig()}
 	seenProfile := ""
 	s.compile = compileRunnerStub{run: func(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
@@ -1425,6 +1466,43 @@ func TestCompileAllowsConfiguredRuntimeProfile(t *testing.T) {
 	}
 	if seenProfile != "low-memory" {
 		t.Fatalf("compile runner saw runtime_profile %q", seenProfile)
+	}
+}
+
+func TestCompileRejectsRuntimeProfileWhenPolicyDisabledBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = false
+	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{"low-memory": config.DefaultRuntimeTuningConfig()}
+	s.compile = compileRunnerStub{run: func(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
+		t.Fatalf("compile runner should not be called when runtime_profile policy is disabled")
+		return model.CompileResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	payload := map[string]any{
+		"lang":            "python3",
+		"runtime_profile": "low-memory",
+		"sources":         []map[string]any{{"name": "Main.py", "data_b64": "cHJpbnQoJ29rJykK"}},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for policy-disabled runtime_profile, got %d", resp.StatusCode)
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(bodyBytes), "server policy") {
+		t.Fatalf("response %q should mention server policy", string(bodyBytes))
+	}
+	active, pending := s.queue.Snapshot()
+	if active != 0 || pending != 0 {
+		t.Fatalf("policy-disabled compile runtime_profile request entered queue: active=%d pending=%d", active, pending)
 	}
 }
 
