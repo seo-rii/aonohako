@@ -18,6 +18,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/workspacequota"
 	"golang.org/x/sys/unix"
 )
 
@@ -536,6 +537,27 @@ func TestRunSandboxedCommandCapsCapturedOutput(t *testing.T) {
 	}
 	if len(stderr) != compileOutputCaptureBytes {
 		t.Fatalf("stderr length=%d, want cap %d", len(stderr), compileOutputCaptureBytes)
+	}
+}
+
+func TestRunSandboxedCommandMarksWorkspaceEntryLimitExceeded(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	workDir := sandboxWritableTempDir(t)
+	_, stderr, status, reason := RunSandboxedCommand(
+		context.Background(),
+		workDir,
+		"python3",
+		[]string{
+			"-c",
+			fmt.Sprintf("from pathlib import Path\nimport time\nfor i in range(%d):\n    Path(f'f{i:05d}.txt').touch()\nwhile True:\n    time.sleep(1)\n", workspacequota.MaxEntries+16),
+		},
+		nil,
+	)
+	if status != model.CompileStatusCompileError || !strings.Contains(reason, "workspace entry limit exceeded") {
+		t.Fatalf("status=%q reason=%q stderr=%q", status, reason, stderr)
 	}
 }
 

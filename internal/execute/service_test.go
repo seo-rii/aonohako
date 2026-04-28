@@ -20,6 +20,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/workspacequota"
 )
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
@@ -2042,7 +2043,7 @@ func TestRunMarksWorkspaceQuotaExceeded(t *testing.T) {
 func TestRunMarksWorkspaceEntryLimitExceeded(t *testing.T) {
 	forceDirectMode(t)
 
-	script := fmt.Sprintf("from pathlib import Path\nimport time\nfor i in range(%d):\n    Path(f'f{i:05d}.txt').touch()\nwhile True:\n    time.sleep(1)\n", maxWorkspaceEntries+16)
+	script := fmt.Sprintf("from pathlib import Path\nimport time\nfor i in range(%d):\n    Path(f'f{i:05d}.txt').touch()\nwhile True:\n    time.sleep(1)\n", workspacequota.MaxEntries+16)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "python",
@@ -2065,7 +2066,7 @@ func TestRunMarksWorkspaceEntryLimitExceeded(t *testing.T) {
 func TestRunMarksWorkspaceDepthLimitExceeded(t *testing.T) {
 	forceDirectMode(t)
 
-	script := fmt.Sprintf("from pathlib import Path\nimport time\npath = Path('root')\nfor i in range(%d):\n    path = path / f'd{i:02d}'\npath.mkdir(parents=True)\nwhile True:\n    time.sleep(1)\n", maxWorkspaceDepth+8)
+	script := fmt.Sprintf("from pathlib import Path\nimport time\npath = Path('root')\nfor i in range(%d):\n    path = path / f'd{i:02d}'\npath.mkdir(parents=True)\nwhile True:\n    time.sleep(1)\n", workspacequota.MaxDepth+8)
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "python",
