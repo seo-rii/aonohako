@@ -486,6 +486,8 @@ The following checks are enforced before the HTTP server starts:
 - every required work root must already exist, be a directory, be owned by the
   current server UID, not be group/world writable, and accept a probe
   directory create/remove cycle
+- `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` additionally verifies through
+  `/proc/self/mountinfo` that the required work root is backed by `tmpfs`
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
   executions do not overlap under the shared sandbox UID
@@ -510,7 +512,8 @@ Recommended Cloud Run deployment baseline:
   `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` for platform auth outside `dev`.
 - second-generation execution environment
 - service concurrency `1`
-- bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`
+- bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`, optionally asserted
+  with `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true`
 - separate runner service account with minimal IAM permissions
 - Direct VPC egress with `all-traffic`
 - firewall-denied outbound traffic except for explicitly allowed destinations

@@ -217,6 +217,11 @@ aonohako-selftest cgroup-preflight
   accepted outside `dev`.
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
+- `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is a strict boolean and defaults to
+  `false`. When enabled, startup also verifies through `/proc/self/mountinfo`
+  that a required `AONOHAKO_WORK_ROOT` is backed by `tmpfs`. Use this for
+  Cloud Run memory volumes or self-hosted runners that intentionally place
+  workspaces on bounded tmpfs storage.
 - `AONOHAKO_CGROUP_PARENT` is optional and supported only for
   `selfhosted + embedded + helper`. When set, startup validates that the parent
   directory is under a cgroup v2 mount and exposes `cpu`, `memory`, and `pids`,
@@ -321,7 +326,8 @@ For Cloud Run deployments, use this baseline:
 - second-generation execution environment
 - service concurrency `1`
 - a bounded in-memory volume mounted at a path such as `/work`, with
-  `AONOHAKO_WORK_ROOT=/work`
+  `AONOHAKO_WORK_ROOT=/work`; set `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` when
+  startup should fail unless that path is actually backed by `tmpfs`
 - Direct VPC egress with `all-traffic` routing and firewall-denied outbound
   traffic except for explicitly allowed targets
 - a dedicated service account with no unnecessary IAM permissions and no baked

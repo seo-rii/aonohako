@@ -641,6 +641,56 @@ func TestLoadRejectsGroupWritableDedicatedWorkRoot(t *testing.T) {
 	}
 }
 
+func TestWorkRootFilesystemAtUsesMostSpecificMount(t *testing.T) {
+	root := t.TempDir()
+	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
+	if err := os.WriteFile(mountInfo, []byte(strings.Join([]string{
+		"36 25 0:31 / / rw - ext4 /dev/root rw",
+		"37 36 0:32 / " + root + " rw - tmpfs tmpfs rw",
+		"38 37 0:33 / " + filepath.Join(root, "nested") + " rw - ext4 /dev/loop0 rw",
+	}, "\n")), 0o644); err != nil {
+		t.Fatalf("write mountinfo: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "nested"), 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+
+	fsType, err := workRootFilesystemAt(root, mountInfo)
+	if err != nil {
+		t.Fatalf("workRootFilesystemAt(root): %v", err)
+	}
+	if fsType != "tmpfs" {
+		t.Fatalf("root fs type = %q, want tmpfs", fsType)
+	}
+	fsType, err = workRootFilesystemAt(filepath.Join(root, "nested"), mountInfo)
+	if err != nil {
+		t.Fatalf("workRootFilesystemAt(nested): %v", err)
+	}
+	if fsType != "ext4" {
+		t.Fatalf("nested fs type = %q, want ext4", fsType)
+	}
+}
+
+func TestWorkRootFilesystemAtUnescapesMountPoints(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "work root")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatalf("mkdir root: %v", err)
+	}
+	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
+	escapedRoot := strings.ReplaceAll(root, " ", `\040`)
+	if err := os.WriteFile(mountInfo, []byte("37 36 0:32 / "+escapedRoot+" rw - tmpfs tmpfs rw\n"), 0o644); err != nil {
+		t.Fatalf("write mountinfo: %v", err)
+	}
+
+	fsType, err := workRootFilesystemAt(root, mountInfo)
+	if err != nil {
+		t.Fatalf("workRootFilesystemAt(): %v", err)
+	}
+	if fsType != "tmpfs" {
+		t.Fatalf("fs type = %q, want tmpfs", fsType)
+	}
+}
+
 func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("PORT", "18080")
 	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "3")
@@ -653,6 +703,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", "4")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "true")
+	t.Setenv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
 	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "false")
 	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "false")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
@@ -697,6 +748,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if !cfg.AllowRequestRuntimeProfile {
 		t.Fatalf("allow request runtime profile should be parsed from env")
 	}
+	if !cfg.RequireWorkRootTmpfs {
+		t.Fatalf("require work root tmpfs should be parsed from env")
+	}
 	if cfg.TrustedRunnerIngress {
 		t.Fatalf("trusted runner ingress should be parsed from env")
 	}
@@ -733,6 +787,7 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
 		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
 		{name: "allow runtime profile malformed", key: "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", value: "sometimes"},
+		{name: "require work root tmpfs malformed", key: "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", value: "sometimes"},
 		{name: "trusted runner ingress malformed", key: "AONOHAKO_TRUSTED_RUNNER_INGRESS", value: "sometimes"},
 		{name: "trusted platform headers malformed", key: "AONOHAKO_TRUSTED_PLATFORM_HEADERS", value: "sometimes"},
 	}

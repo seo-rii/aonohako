@@ -1,11 +1,13 @@
 package config
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -129,6 +131,7 @@ type Config struct {
 	BodyReadTimeout               time.Duration
 	AllowRequestNetwork           bool
 	AllowRequestRuntimeProfile    bool
+	RequireWorkRootTmpfs          bool
 	TrustedRunnerIngress          bool
 	TrustedPlatformHeaders        bool
 	TrustedPlatformHeaderCIDRs    []string
@@ -179,6 +182,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	allowRequestRuntimeProfile, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", os.Getenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE"), defaultAllowRequestRuntimeProfile(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	requireWorkRootTmpfs, err := parseBoolEnv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", os.Getenv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS"), false)
 	if err != nil {
 		return Config{}, err
 	}
@@ -468,6 +475,15 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT is not writable: %w", err)
 		}
 		_ = os.RemoveAll(probe)
+		if requireWorkRootTmpfs {
+			fsType, err := workRootFilesystemAt(workRoot, "/proc/self/mountinfo")
+			if err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS validation failed: %w", err)
+			}
+			if fsType != "tmpfs" {
+				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT must be on tmpfs when AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true; got %s", fsType)
+			}
+		}
 	}
 	if contract.RequiresRootParent && os.Geteuid() != 0 {
 		return Config{}, fmt.Errorf("execution backend %s/%s requires root", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
@@ -484,6 +500,7 @@ func Load() (Config, error) {
 		BodyReadTimeout:               time.Duration(bodyReadTimeoutSec) * time.Second,
 		AllowRequestNetwork:           allowRequestNetwork,
 		AllowRequestRuntimeProfile:    allowRequestRuntimeProfile,
+		RequireWorkRootTmpfs:          requireWorkRootTmpfs,
 		TrustedRunnerIngress:          trustedRunnerIngress,
 		TrustedPlatformHeaders:        trustedPlatformHeaders,
 		TrustedPlatformHeaderCIDRs:    trustedPlatformHeaderCIDRs,
@@ -508,6 +525,60 @@ func defaultMaxActiveRuns(opts platform.RuntimeOptions) int {
 		return 1
 	}
 	return v
+}
+
+func workRootFilesystemAt(workRoot, mountInfoPath string) (string, error) {
+	workRoot, err := filepath.Abs(workRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve work root: %w", err)
+	}
+	workRoot, err = filepath.EvalSymlinks(workRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve work root symlinks: %w", err)
+	}
+	mountInfo, err := os.ReadFile(mountInfoPath)
+	if err != nil {
+		return "", fmt.Errorf("read mountinfo: %w", err)
+	}
+	bestMountLen := -1
+	bestFSType := ""
+	scanner := bufio.NewScanner(strings.NewReader(string(mountInfo)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		separator := -1
+		for i, field := range fields {
+			if field == "-" {
+				separator = i
+				break
+			}
+		}
+		if separator < 0 || separator+1 >= len(fields) || len(fields) <= 4 {
+			continue
+		}
+		mountPoint := unescapeMountInfoField(fields[4])
+		if mountPoint == "" {
+			continue
+		}
+		if workRoot != mountPoint && !strings.HasPrefix(workRoot, strings.TrimRight(mountPoint, "/")+"/") {
+			continue
+		}
+		if len(mountPoint) > bestMountLen {
+			bestMountLen = len(mountPoint)
+			bestFSType = fields[separator+1]
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("scan mountinfo: %w", err)
+	}
+	if bestFSType == "" {
+		return "", fmt.Errorf("no mountinfo entry covers %s", workRoot)
+	}
+	return bestFSType, nil
+}
+
+func unescapeMountInfoField(path string) string {
+	replacer := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+	return replacer.Replace(path)
 }
 
 func defaultMaxPrincipalStreams(opts platform.RuntimeOptions) int {

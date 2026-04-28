@@ -236,6 +236,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"aonohako-selftest deployment-contract",
 		"`cloudrun-runner.env`,\n`cloudrun-control-plane.env`, `selfhosted-runner.env`, and\n`dev-control-plane.env`",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
+		"`AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is a strict boolean",
 		"`AONOHAKO_CGROUP_PARENT` is optional and supported only for",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`cloudrun-idtoken`; `none` is allowed only for `dev`",
