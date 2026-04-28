@@ -831,6 +831,29 @@ let main _ =
 				return fmt.Errorf("fsharp memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
 			covered++
+		case "uhmlang":
+			var program strings.Builder
+			program.WriteString("어떻게\n")
+			for i := 1; i <= 4500; i++ {
+				program.WriteString(strings.Repeat("어", i))
+				program.WriteString("엄.\n")
+			}
+			program.WriteString("식.ㅋ\n이 사람이름이냐ㅋㅋ\n")
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang: "uhmlang",
+				Binaries: []model.Binary{{
+					Name:    "Main.uhm",
+					DataB64: encodeScript(program.String()),
+				}},
+				Limits: model.Limits{TimeMs: 6000, MemoryMB: 16, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("uhmlang memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("uhmlang memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
 		}
 	}
 
