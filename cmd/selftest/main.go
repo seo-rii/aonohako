@@ -1928,7 +1928,6 @@ func runDirectImagePermissionChecks() error {
 			"/usr/bin/pip /usr/bin/pip3 /usr/local/bin/pip /usr/local/bin/pip3 "+
 			"/usr/local/bin/npm /usr/local/bin/npx /opt/node-*/bin/npm /opt/node-*/bin/npx "+
 			"/usr/local/bin/yarn /usr/local/bin/pnpm "+
-			"/usr/local/bin/cargo /usr/local/cargo/bin/cargo /usr/local/bin/rustup /usr/local/cargo/bin/rustup "+
 			"/usr/bin/gem /usr/local/bin/gem /usr/bin/bundle /usr/bin/bundler /usr/local/bin/bundle /usr/local/bin/bundler "+
 			"/usr/bin/ssh /usr/bin/scp /usr/bin/sftp /usr/local/bin/ssh /usr/local/bin/scp /usr/local/bin/sftp "+
 			"/usr/bin/rsync /usr/local/bin/rsync "+

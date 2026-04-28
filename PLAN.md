@@ -142,6 +142,8 @@
   package/toolchain manager(`pip`, `npm`, `gem` 등)까지 확장하고
   image-permission selftest와 docs contract에 반영했다. Rust toolchain
   proxy는 `rustc` smoke 실행에 필요해 예외로 남겼다.
+- Phase 6: image-permission selftest도 Rust toolchain proxy 예외를 반영해
+  `cargo`/`rustup` hardening expectation이 `rustc` smoke와 충돌하지 않게 했다.
 - Phase 12: production runtime profile docker archive artifact마다 SHA256
   sidecar를 만들고 summary bundle에서 다운로드된 archive 기준 `SHA256SUMS`를
   재계산해 promotion 입력 artifact 무결성 metadata를 남기게 했다.
