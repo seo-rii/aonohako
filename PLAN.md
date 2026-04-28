@@ -152,6 +152,9 @@
 - Phase 11: runtime memory smoke의 `plain` profile에 native C heap pressure
   케이스를 추가해 기본 `RLIMIT_AS`/RSS watchdog 경로도 이미지 smoke에서
   확인하게 했다.
+- Phase 7/12: non-dev `platform` inbound auth에서 unsigned trusted-header
+  모드를 제거하고 `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` 서명을 startup
+  requirement로 만들었다.
 
 ## 작업 원칙
 

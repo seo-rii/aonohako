@@ -329,11 +329,8 @@ func Load() (Config, error) {
 	if inboundAuth.Mode == InboundAuthNone && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev {
 		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=none is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev; use bearer or platform")
 	}
-	if inboundAuth.Mode == InboundAuthPlatform && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedPlatformHeaders && inboundAuth.PlatformPrincipalHMACSecret == "" {
-		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=platform outside dev requires AONOHAKO_TRUSTED_PLATFORM_HEADERS=true or AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET")
-	}
-	if inboundAuth.Mode == InboundAuthPlatform && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && inboundAuth.PlatformPrincipalHMACSecret == "" && trustedPlatformHeaders && len(trustedPlatformHeaderCIDRs) == 0 {
-		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=platform with unsigned trusted headers outside dev requires AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS")
+	if inboundAuth.Mode == InboundAuthPlatform && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && inboundAuth.PlatformPrincipalHMACSecret == "" {
+		return Config{}, fmt.Errorf("AONOHAKO_INBOUND_AUTH=platform outside dev requires AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET")
 	}
 
 	if contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && !trustedRunnerIngress {

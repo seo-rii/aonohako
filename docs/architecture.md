@@ -436,14 +436,13 @@ The following checks are enforced before the HTTP server starts:
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication
 - `AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`
-- `AONOHAKO_INBOUND_AUTH=platform` outside `dev` requires either
-  `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` or
-  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`; the HMAC path verifies
-  `X-Aonohako-Principal-Signature`, while the trusted-header path forces
-  operators to assert that the upstream layer strips client-supplied identity
-  headers and rewrites `X-Aonohako-Principal`. Unsigned trusted-header mode also
-  requires `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`, and requests must arrive
-  from one of those source CIDRs with `X-Aonohako-Principal` present.
+- `AONOHAKO_INBOUND_AUTH=platform` outside `dev` requires
+  `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`; the application verifies
+  `X-Aonohako-Principal-Signature` over `X-Aonohako-Principal`, so unsigned
+  trusted platform headers are not accepted outside `dev`
+- `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` and
+  `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain optional defense-in-depth
+  assertions for source-CIDR checks in addition to signed platform principals
 - numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
   `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`,
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`,
@@ -470,11 +469,8 @@ The following checks are enforced before the HTTP server starts:
   principal key; platform auth uses the upstream principal header such as
   `X-Aonohako-Principal`. Platform auth ignores generic forwarded identity
   headers. With `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`, the application
-  verifies the principal signature itself; without it, platform auth is safe
-  only behind an upstream identity layer that strips any client-supplied copy of
-  `X-Aonohako-Principal` before rewriting it for the request reaching
-  `aonohako`, and the request source must match
-  `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`.
+  verifies the principal signature itself; outside `dev`, startup rejects
+  platform auth unless that signing secret is configured.
 - Outside `dev`, `/compile` and `/execute` requests are also capped per
   principal in a fixed one-minute window before they enter the run queue.
 
@@ -486,10 +482,7 @@ Recommended Cloud Run deployment baseline:
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, unless
   `AONOHAKO_INBOUND_AUTH=platform` is set because Cloud Run IAM, mTLS, private
   ingress, or a gateway enforces inbound authentication; use
-  `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` when that gateway can sign the
-  principal header. If unsigned trusted headers are used, set
-  `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` plus
-  `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` for the strip/rewrite proxy source.
+  `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` for platform auth outside `dev`.
 - second-generation execution environment
 - service concurrency `1`
 - bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`
