@@ -62,6 +62,7 @@ type Server struct {
 	principalMu      sync.Mutex
 	principalStreams map[string]int
 	principalRates   map[string]principalRateWindow
+	rateLastCleanup  time.Time
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -397,6 +398,14 @@ func (s *Server) allowPrincipalRequest(principal string, now time.Time) bool {
 	defer s.principalMu.Unlock()
 	if s.principalRates == nil {
 		s.principalRates = map[string]principalRateWindow{}
+	}
+	if s.rateLastCleanup.IsZero() || now.Sub(s.rateLastCleanup) >= time.Minute {
+		for key, tracked := range s.principalRates {
+			if !tracked.start.IsZero() && now.Sub(tracked.start) >= time.Minute {
+				delete(s.principalRates, key)
+			}
+		}
+		s.rateLastCleanup = now
 	}
 	window := s.principalRates[principal]
 	if window.start.IsZero() || now.Sub(window.start) >= time.Minute {
