@@ -507,7 +507,8 @@ The following checks are enforced before the HTTP server starts:
 - Outside `dev`, `/compile` and `/execute` requests are also capped per
   principal in a fixed one-minute window before they enter the run queue.
 - `aonohako-selftest deployment-contract` reports the active execution shape,
-  auth posture, queue/stream limits, cgroup parent presence, and
+  named contract, whether that contract is implemented, auth posture,
+  queue/stream limits, cgroup parent presence, and
   `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` state as JSON for deployment checks.
 
 Recommended Cloud Run deployment baseline:

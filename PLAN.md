@@ -45,6 +45,9 @@
 - Phase 12: `aonohako-selftest deployment-contract`를 추가해 현재 env가 어떤
   security contract와 guardrail로 해석되는지 token 없이 JSON으로 확인할 수
   있게 했다.
+- Phase 1/12: deployment-contract selftest가 named security contract뿐 아니라
+  구현 여부도 JSON에 포함해 reserved backend와 구현된 backend를 운영 검증에서
+  구분하게 했다.
 - Phase 12: 루트 Dockerfile과 production runtime Dockerfile의 외부 base image를
   digest-pinned ARG로 강제하고 `rg` 없는 CI runner에서도 동작하는 repo
   policy check에 연결했다.

@@ -110,8 +110,9 @@ Validate the current deployment environment without starting the HTTP server:
 aonohako-selftest deployment-contract
 ```
 
-The deployment contract JSON includes the selected execution shape, queue and
-stream limits, inbound/remote auth posture, cgroup parent presence, and whether
+The deployment contract JSON includes the selected execution shape, whether the
+named security contract is implemented, queue and stream limits, inbound/remote
+auth posture, cgroup parent presence, and whether
 `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is active.
 
 Checked deployment environment examples live under

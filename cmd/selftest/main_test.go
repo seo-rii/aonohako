@@ -117,4 +117,10 @@ func TestDeploymentContractSummaryReportsTmpfsRequirement(t *testing.T) {
 	if summary["require_work_root_tmpfs"] != true {
 		t.Fatalf("require_work_root_tmpfs = %#v, want true; summary=%s", summary["require_work_root_tmpfs"], string(data))
 	}
+	if summary["contract_implemented"] != true {
+		t.Fatalf("contract_implemented = %#v, want true; summary=%s", summary["contract_implemented"], string(data))
+	}
+	if summary["contract"] != "remote-control-plane" {
+		t.Fatalf("contract = %#v, want remote-control-plane; summary=%s", summary["contract"], string(data))
+	}
 }

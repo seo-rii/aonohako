@@ -119,6 +119,7 @@ func runDeploymentContractSuite() error {
 		ExecutionTransport            platform.ExecutionTransport   `json:"execution_transport"`
 		SandboxBackend                platform.SandboxBackend       `json:"sandbox_backend"`
 		Contract                      string                        `json:"contract"`
+		ContractImplemented           bool                          `json:"contract_implemented"`
 		RequiresRootParent            bool                          `json:"requires_root_parent"`
 		RequiresDedicatedWorkRoot     bool                          `json:"requires_dedicated_work_root"`
 		RequiresSingleActiveRun       bool                          `json:"requires_single_active_run"`
@@ -146,6 +147,7 @@ func runDeploymentContractSuite() error {
 		ExecutionTransport:            cfg.Execution.Platform.ExecutionTransport,
 		SandboxBackend:                cfg.Execution.Platform.SandboxBackend,
 		Contract:                      contract.Name,
+		ContractImplemented:           contract.Implemented,
 		RequiresRootParent:            contract.RequiresRootParent,
 		RequiresDedicatedWorkRoot:     contract.RequiresDedicatedWorkRoot,
 		RequiresSingleActiveRun:       contract.RequiresSingleActiveRun,
