@@ -951,6 +951,39 @@ int main(void) {
 #ifdef SYS_process_mrelease
 	failed |= check("process_mrelease", SYS_process_mrelease);
 #endif
+#ifdef SYS_get_mempolicy
+	failed |= check("get_mempolicy", SYS_get_mempolicy);
+#endif
+#ifdef SYS_mbind
+	failed |= check("mbind", SYS_mbind);
+#endif
+#ifdef SYS_set_mempolicy
+	failed |= check("set_mempolicy", SYS_set_mempolicy);
+#endif
+#ifdef SYS_set_mempolicy_home_node
+	failed |= check("set_mempolicy_home_node", SYS_set_mempolicy_home_node);
+#endif
+#ifdef SYS_migrate_pages
+	failed |= check("migrate_pages", SYS_migrate_pages);
+#endif
+#ifdef SYS_move_pages
+	failed |= check("move_pages", SYS_move_pages);
+#endif
+#ifdef SYS_kcmp
+	failed |= check("kcmp", SYS_kcmp);
+#endif
+#ifdef SYS_seccomp
+	failed |= check("seccomp", SYS_seccomp);
+#endif
+#ifdef SYS_landlock_create_ruleset
+	failed |= check("landlock_create_ruleset", SYS_landlock_create_ruleset);
+#endif
+#ifdef SYS_landlock_add_rule
+	failed |= check("landlock_add_rule", SYS_landlock_add_rule);
+#endif
+#ifdef SYS_landlock_restrict_self
+	failed |= check("landlock_restrict_self", SYS_landlock_restrict_self);
+#endif
 #ifdef SYS_syslog
 	failed |= check("syslog", SYS_syslog);
 #endif
