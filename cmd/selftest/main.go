@@ -695,6 +695,51 @@ int main(void) {
 			if resp.Status != model.RunStatusTLE {
 				return fmt.Errorf("plain cpu stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
+
+			compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "C11",
+				Sources: []model.Source{{
+					Name: "Main.c",
+					DataB64: encodeScript(`#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    const size_t step = 8 * 1024 * 1024;
+    volatile uint64_t touched = 0;
+    for (;;) {
+        char *chunk = malloc(step);
+        if (chunk == NULL) {
+            return 75;
+        }
+        memset(chunk, 1, step);
+        touched += (uint8_t)chunk[0];
+    }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("plain memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("plain memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries = binaries[:0]
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err = postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "binary",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 4000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("plain memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("plain memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
 			covered++
 		case "javascript":
 			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{

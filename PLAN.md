@@ -149,6 +149,9 @@
   들어가지 않게 했다.
 - Phase 7: per-principal request-rate window가 만료된 뒤에도 map에 무기한
   남지 않도록 stale window cleanup을 추가했다.
+- Phase 11: runtime memory smoke의 `plain` profile에 native C heap pressure
+  케이스를 추가해 기본 `RLIMIT_AS`/RSS watchdog 경로도 이미지 smoke에서
+  확인하게 했다.
 
 ## 작업 원칙
 
