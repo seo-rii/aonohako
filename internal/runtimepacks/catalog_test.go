@@ -425,6 +425,24 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 		t.Fatalf("verification output missing success line: %q", string(out))
 	}
 
+	for _, path := range []string{
+		archivePath,
+		filepath.Join(dir, profile+".docker.tar.gz.sha256"),
+		filepath.Join(root, "SHA256SUMS"),
+	} {
+		if err := os.Remove(path); err != nil {
+			t.Fatalf("Remove archive fixture %q: %v", path, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".docker.tar.gz.error.json"), []byte(`{"error":"docker archive export failed"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile archive error fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root)
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("verify_toolchain_artifacts.py should accept archive diagnostics: %v\n%s", err, string(out))
+	}
+
 	if err := os.Remove(filepath.Join(dir, profile+".grype.json")); err != nil {
 		t.Fatalf("Remove grype fixture: %v", err)
 	}
@@ -530,8 +548,11 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, `docker save "aonohako-ci-prod:${{ matrix.name }}"`) {
 		t.Fatalf("ci workflow must export production-profile images into artifact files")
 	}
-	if !strings.Contains(body, `sha256sum "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"`) || !strings.Contains(body, "toolchain-artifacts/SHA256SUMS") {
-		t.Fatalf("ci workflow must publish SHA256 digest metadata for production-profile image artifacts")
+	if !strings.Contains(body, `sha256sum "${archive_path}" > "${archive_path}.sha256"`) || !strings.Contains(body, "toolchain-artifacts/SHA256SUMS") {
+		t.Fatalf("ci workflow must publish SHA256 digest metadata for successful production-profile image artifacts")
+	}
+	if !strings.Contains(body, `"${archive_path}.error.json"`) || !strings.Contains(body, "*.docker.tar.gz.error.json") {
+		t.Fatalf("ci workflow must publish archive export diagnostics when runner disk cannot hold an image archive")
 	}
 	if !strings.Contains(summarySection, "python3 scripts/verify_toolchain_artifacts.py toolchain-artifacts") {
 		t.Fatalf("ci workflow must fail closed when production-profile artifacts are incomplete or digest mismatched")

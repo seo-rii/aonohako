@@ -33,8 +33,6 @@ for profile_dir in profile_dirs:
         profile_dir / "summary.md",
         profile_dir / f"{profile}.sbom.spdx.json",
         profile_dir / f"{profile}.grype.json",
-        profile_dir / f"{profile}.docker.tar.gz",
-        profile_dir / f"{profile}.docker.tar.gz.sha256",
     ]
     for path in required:
         if not path.is_file():
@@ -49,10 +47,32 @@ for profile_dir in profile_dirs:
             fail(f"{path} is not valid JSON: {exc}")
 
     archive = profile_dir / f"{profile}.docker.tar.gz"
-    expected_digest = (profile_dir / f"{profile}.docker.tar.gz.sha256").read_text(encoding="utf-8").split()[0]
-    actual_digest = sha256_file(archive)
-    if actual_digest != expected_digest:
-        fail(f"{archive} digest {actual_digest} does not match sidecar {expected_digest}")
+    archive_digest = profile_dir / f"{profile}.docker.tar.gz.sha256"
+    archive_error = profile_dir / f"{profile}.docker.tar.gz.error.json"
+    if archive.is_file():
+        if archive.stat().st_size == 0:
+            fail(f"empty {archive}")
+        if not archive_digest.is_file():
+            fail(f"missing {archive_digest}")
+        if archive_digest.stat().st_size == 0:
+            fail(f"empty {archive_digest}")
+        if archive_error.exists():
+            fail(f"{profile_dir} contains both image archive and archive error diagnostic")
+        expected_digest = archive_digest.read_text(encoding="utf-8").split()[0]
+        actual_digest = sha256_file(archive)
+        if actual_digest != expected_digest:
+            fail(f"{archive} digest {actual_digest} does not match sidecar {expected_digest}")
+    else:
+        if archive_digest.exists():
+            fail(f"{profile_dir} contains archive digest without image archive")
+        if not archive_error.is_file():
+            fail(f"missing {archive} or {archive_error}")
+        if archive_error.stat().st_size == 0:
+            fail(f"empty {archive_error}")
+        try:
+            json.loads(archive_error.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            fail(f"{archive_error} is not valid JSON: {exc}")
 
 bundle = root / "SHA256SUMS"
 if bundle.exists():

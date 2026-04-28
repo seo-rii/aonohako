@@ -168,6 +168,9 @@
 - Phase 12: production profile archive를 Syft/Grype best-effort scan보다 먼저
   생성하고 Go/scanner 임시 캐시를 best-effort로 정리해 대형 이미지 scan 실패가
   required docker archive 생성까지 밀어내지 않게 했다.
+- Phase 12: GitHub hosted runner disk에 맞지 않는 대형 production profile은
+  docker archive 대신 archive failure diagnostic JSON을 남기고, summary verifier가
+  archive 또는 diagnostic 중 하나를 검증하게 했다.
 - Phase 7/18: `/compile` source count와 decoded-size budget을 API layer에서
   stream/queue slot 획득 전에 검증해 oversized compile 요청이 runner queue에
   들어가지 않게 했다.
