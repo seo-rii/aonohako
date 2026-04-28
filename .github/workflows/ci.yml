@@ -161,13 +161,15 @@ jobs:
           AONOHAKO_LANGUAGES="${{ matrix.languages }}"
           bash ./scripts/report_toolchain_versions.sh "aonohako-ci-prod:${{ matrix.name }}"
           > "toolchain-artifacts/${{ matrix.name }}/summary.md"
-      - run: >
-          docker save "aonohako-ci-prod:${{ matrix.name }}"
-          | gzip -1
-          > "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"
-      - run: >
-          sha256sum "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"
-          > "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz.sha256"
+      - run: |
+          archive_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"
+          if docker save "aonohako-ci-prod:${{ matrix.name }}" | gzip -1 > "${archive_path}.tmp"; then
+            mv "${archive_path}.tmp" "${archive_path}"
+            sha256sum "${archive_path}" > "${archive_path}.sha256"
+          else
+            rm -f "${archive_path}.tmp" "${archive_path}" "${archive_path}.sha256"
+            printf '{"error":"docker archive export failed","profile":"%s"}\n' "${{ matrix.name }}" > "${archive_path}.error.json"
+          fi
       - run: |
           scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
           sbom_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.sbom.spdx.json"
@@ -239,6 +241,7 @@ jobs:
             toolchain-artifacts/SHA256SUMS
             toolchain-artifacts/toolchain-profile-*/**/summary.md
             toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz.sha256
+            toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz.error.json
           compression-level: 0
 
   mixin-smoke:
