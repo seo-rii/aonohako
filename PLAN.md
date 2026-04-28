@@ -130,6 +130,8 @@
 - Phase 12: production runtime profile docker archive artifact마다 SHA256
   sidecar를 만들고 summary bundle에서 다운로드된 archive 기준 `SHA256SUMS`를
   재계산해 promotion 입력 artifact 무결성 metadata를 남기게 했다.
+- Phase 11: runtime memory smoke에 lightweight `plain` C CPU loop TLE case를
+  추가해 runtime image smoke가 CPU-time verdict path도 검증하게 했다.
 
 ## 작업 원칙
 

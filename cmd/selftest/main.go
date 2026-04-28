@@ -658,6 +658,44 @@ func runRuntimeMemorySuite() error {
 		seen[language] = struct{}{}
 
 		switch language {
+		case "plain":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "C11",
+				Sources: []model.Source{{
+					Name: "Main.c",
+					DataB64: encodeScript(`#include <stdint.h>
+
+int main(void) {
+    volatile uint64_t x = 0;
+    for (;;) {
+        x++;
+    }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("plain cpu compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("plain cpu compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "binary",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 100, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("plain cpu execute request failed: %w", err)
+			}
+			if resp.Status != model.RunStatusTLE {
+				return fmt.Errorf("plain cpu stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
 		case "javascript":
 			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
 				Lang: "javascript",
@@ -1046,10 +1084,10 @@ let main _ =
 	}
 
 	if covered == 0 {
-		_, _ = fmt.Fprintln(os.Stdout, "runtime memory ok (no covered languages)")
+		_, _ = fmt.Fprintln(os.Stdout, "runtime resource ok (no covered languages)")
 		return nil
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "runtime memory ok (%d cases)\n", covered)
+	_, _ = fmt.Fprintf(os.Stdout, "runtime resource ok (%d cases)\n", covered)
 	return nil
 }
 
