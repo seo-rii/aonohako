@@ -141,8 +141,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`") {
 		t.Fatalf("architecture.md must describe production inbound-auth none rejection")
 	}
-	if !strings.Contains(architecture, "`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Signature`") || !strings.Contains(architecture, "`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`") || !strings.Contains(architecture, "`AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`") {
-		t.Fatalf("architecture.md must describe platform auth HMAC and trusted-header assertions")
+	if !strings.Contains(architecture, "`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Signature`") || !strings.Contains(architecture, "unsigned\n  trusted platform headers are not accepted outside `dev`") || !strings.Contains(architecture, "`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`") || !strings.Contains(architecture, "`AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`") {
+		t.Fatalf("architecture.md must describe signed platform auth and optional trusted-proxy assertions")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_TRUSTED_RUNNER_INGRESS=true` is required for non-dev") {
 		t.Fatalf("architecture.md must describe trusted runner ingress assertion")
@@ -212,9 +212,8 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30`",
 		"`AONOHAKO_TRUSTED_RUNNER_INGRESS` asserts that a root-backed embedded helper",
-		"`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` makes platform mode verify",
-		"`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` is required outside `dev`",
-		"`AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` is also required",
+		"`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` is required for\n  `AONOHAKO_INBOUND_AUTH=platform` outside `dev`",
+		"unsigned platform headers are not\n  accepted outside `dev`",
 		"Supported values are `none` for `dev` only, `bearer`, and\n  `platform`",
 		"aonohako-selftest deployment-contract",
 		"`cloudrun-runner.env`,\n`cloudrun-control-plane.env`, `selfhosted-runner.env`, and\n`dev-control-plane.env`",
