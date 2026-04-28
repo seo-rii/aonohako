@@ -37,6 +37,14 @@ func (s Stats) CPUThrottleEvents() int64 {
 	return s.CPUThrottled
 }
 
+func (s Stats) MemoryLimitBreached(limitBytes int64) bool {
+	return s.OOMEvents() > 0 || s.MemoryMaxEvents() > 0 || (limitBytes > 0 && s.MemoryCurrentBytes > limitBytes)
+}
+
+func (s Stats) PidsLimitBreached() bool {
+	return s.PidsMaxEvents() > 0
+}
+
 func ReadStats(groupPath string) (Stats, error) {
 	memoryCurrent, err := readIntFile(filepath.Join(groupPath, "memory.current"))
 	if err != nil {

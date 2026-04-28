@@ -412,12 +412,12 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 						}
 					}
-					if result.Status == "OK" && memoryLimitKB > 0 && (stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.MemoryCurrentBytes > memoryLimitKB*1024) {
+					if result.Status == "OK" && memoryLimitKB > 0 && stats.MemoryLimitBreached(memoryLimitKB*1024) {
 						result.Status = model.RunStatusMLE
 						result.Reason = "memory limit exceeded"
 						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					}
-					if result.Status == "OK" && stats.PidsMaxEvents() > 0 {
+					if result.Status == "OK" && stats.PidsLimitBreached() {
 						result.Status = model.RunStatusRE
 						result.Reason = "process limit exceeded"
 						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
