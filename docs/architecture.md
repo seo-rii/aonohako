@@ -182,6 +182,9 @@ The seccomp filter denies high-risk operations, including:
 - `clone` without `CLONE_THREAD`
 - `unshare`, `setns`, `chroot`, `mount`, `pivot_root`, and newer mount APIs
 - `ptrace`, `process_vm_*`, `process_madvise`, `process_mrelease`, `pidfd_*`
+- NUMA and memory-policy syscalls such as `get_mempolicy`, `mbind`,
+  `set_mempolicy`, `migrate_pages`, and `move_pages`
+- `kcmp`, nested `seccomp`, and Landlock policy syscalls
 - `kill`, `tkill`, `tgkill`
 - `prlimit64`, `setpriority`
 - `bpf`, `io_uring_*`, `userfaultfd`, `memfd_create` except for .NET and

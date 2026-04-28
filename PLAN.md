@@ -187,6 +187,9 @@
 - Phase 12: production profile SBOM/Grype scan 전에 Docker build cache와
   dangling image를 prune해 Swift 같은 대형 profile에서 Syft의 daemon-export가
   `/tmp` 공간 부족으로 실패하지 않도록 했다.
+- Phase 11/18: helper seccomp denylist와 execute/compile regression probe에
+  NUMA/mempolicy, `kcmp`, nested `seccomp`, Landlock policy syscall 차단을
+  추가해 kernel policy surface drift 감지를 넓혔다.
 
 ## 작업 원칙
 
