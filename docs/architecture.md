@@ -600,14 +600,17 @@ CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the
 production profiles in a parallel matrix and runs
 `scripts/report_toolchain_versions.sh` once per profile. Each matrix leg uploads
-its summary fragment, Syft SBOM, non-blocking Grype JSON scan, and a
-`docker save` archive for the image as artifacts. A final CI summary job
-downloads those artifacts, concatenates the per-profile reports into one GitHub
-Actions summary, and republishes the summaries plus image archives as a single
-bundle artifact. Each per-profile archive also emits a `.sha256` sidecar, and
-the final summary bundle includes a recomputed `SHA256SUMS` file over the
-downloaded image archives so promotion can verify the exact artifact bytes it
-consumed.
+its summary fragment, Syft SBOM JSON or a Syft failure diagnostic JSON,
+non-blocking Grype JSON scan, and a `docker save` archive for the image as
+artifacts. Syft is best-effort in that profile matrix because large language
+images can exhaust GitHub runner scratch space while exporting daemon images;
+the summary verifier still fails closed on missing, empty, non-JSON, or
+digest-mismatched artifact files. A final CI summary job downloads those
+artifacts, concatenates the per-profile reports into one GitHub Actions summary,
+and republishes the summaries plus image archives as a single bundle artifact.
+Each per-profile archive also emits a `.sha256` sidecar, and the final summary
+bundle includes a recomputed `SHA256SUMS` file over the downloaded image
+archives so promotion can verify the exact artifact bytes it consumed.
 
 Debian-based production profiles now use a digest-pinned
 `debian:trixie-slim` base, which raises the baseline Python, PyPy, and GCC
