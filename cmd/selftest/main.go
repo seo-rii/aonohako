@@ -713,6 +713,44 @@ while (true) {
 				return fmt.Errorf("typescript memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
 			covered++
+		case "python":
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang: "python",
+				Binaries: []model.Binary{{
+					Name: "Main.py",
+					DataB64: encodeScript(`chunks = []
+while True:
+    chunks.append(bytearray(8 * 1024 * 1024))
+`),
+				}},
+				Limits: model.Limits{TimeMs: 4000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("python memory request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("python memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+		case "pypy":
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang: "pypy",
+				Binaries: []model.Binary{{
+					Name: "Main.py",
+					DataB64: encodeScript(`chunks = []
+while True:
+    chunks.append(bytearray(8 * 1024 * 1024))
+`),
+				}},
+				Limits: model.Limits{TimeMs: 4000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("pypy memory request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("pypy memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
 		case "java":
 			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
 				Lang: "JAVA",
