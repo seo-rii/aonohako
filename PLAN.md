@@ -45,7 +45,8 @@
   security contract와 guardrail로 해석되는지 token 없이 JSON으로 확인할 수
   있게 했다.
 - Phase 12: 루트 Dockerfile과 production runtime Dockerfile의 외부 base image를
-  digest-pinned ARG로 강제하고 repo policy check에 연결했다.
+  digest-pinned ARG로 강제하고 `rg` 없는 CI runner에서도 동작하는 repo
+  policy check에 연결했다.
 - Phase 12: production 계열 target에서 inbound auth `none`과 remote runner
   auth `none`을 reject하도록 startup validation을 강화했다.
 - Phase 2: cgroup v2 preflight, parent controller enable, per-run group
