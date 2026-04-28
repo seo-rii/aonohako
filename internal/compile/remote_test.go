@@ -27,6 +27,9 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 		if req.EntryPoint != "src/Main.py" {
 			t.Fatalf("unexpected entry_point: %+v", req)
 		}
+		if req.RuntimeProfile != "low-memory" {
+			t.Fatalf("runtime_profile = %q, want low-memory", req.RuntimeProfile)
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: result\n"))
 		_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"from-remote\\n\",\"artifacts\":[{\"name\":\"Main.pyc\",\"data_b64\":\"Ynl0ZWNvZGU=\"}]}\n\n"))
@@ -50,8 +53,9 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 	}
 
 	resp := runner.Run(context.Background(), &model.CompileRequest{
-		Lang:       "PYTHON3",
-		EntryPoint: "src/Main.py",
+		Lang:           "PYTHON3",
+		EntryPoint:     "src/Main.py",
+		RuntimeProfile: "low-memory",
 		Sources: []model.Source{{
 			Name:    "src/Main.py",
 			DataB64: "cHJpbnQoJ29rJykK",

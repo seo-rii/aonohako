@@ -177,6 +177,9 @@
   서버에서는 request-supplied `runtime_profile`을 기본 거부하고, trusted
   control-plane/problem-policy 경계에서 명시적으로 허용한 경우에만 profile을
   적용하게 했다.
+- Phase 9/CONF: remote compile/execute runner가 trusted control-plane에서
+  붙인 `runtime_profile`을 downstream runner 요청 JSON에 보존하는지 regression
+  test로 고정했다.
 
 ## 작업 원칙
 
