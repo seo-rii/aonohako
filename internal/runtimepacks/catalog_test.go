@@ -202,6 +202,9 @@ func TestSmokeScriptRunsSandboxSelftestBeforeLanguageSmoke(t *testing.T) {
 	if !strings.Contains(body, "aonohako-selftest compile-execute") {
 		t.Fatalf("smoke_runtime.sh must run compile-execute smoke through aonohako before legacy language commands")
 	}
+	if !strings.Contains(body, "aonohako-selftest runtime-memory") {
+		t.Fatalf("smoke_runtime.sh must run runtime memory stress through aonohako before legacy language commands")
+	}
 	if !strings.Contains(body, "export AONOHAKO_EXECUTION_MODE=local-root") || !strings.Contains(body, `work_root="${AONOHAKO_SMOKE_WORK_ROOT:-/work}"`) || !strings.Contains(body, `export AONOHAKO_WORK_ROOT="${work_root}"`) {
 		t.Fatalf("smoke_runtime.sh must force a dedicated local-root work root for compile/execute smoke")
 	}

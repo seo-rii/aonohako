@@ -18,6 +18,7 @@ chmod 0755 "${work_root}"
 export AONOHAKO_EXECUTION_MODE=local-root
 export AONOHAKO_WORK_ROOT="${work_root}"
 aonohako-selftest compile-execute
+aonohako-selftest runtime-memory
 
 if [[ -z "${AONOHAKO_SMOKE_COMMAND:-}" ]]; then
   exit 0

@@ -88,6 +88,10 @@
   `cpu.max=100000 100000`을 연결해 run 단위 CPU bandwidth도 1 vCPU로
   제한한다. CPU throttling counter는 아직 verdict source가 아니라
   guardrail/diagnostic으로 유지한다.
+- Phase 11: runtime image smoke에 `aonohako-selftest runtime-memory`를 추가해
+  Node/TypeScript runtime memory guard, Wasmtime constrained-memory trap,
+  .NET GC/RSS guardrail이 언어 이미지별 CI에서 정상 완료나 timeout으로
+  새지 않게 했다.
 - Phase 2: execute watchdog이 cgroup `cpu.stat usage_usec`를 읽어 self-hosted
   cgroup opt-in에서 run cgroup 전체 CPU 사용량으로 `cpu_time_ms`와 CPU TLE를
   갱신하게 했다.
