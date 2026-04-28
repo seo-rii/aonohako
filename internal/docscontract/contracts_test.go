@@ -96,6 +96,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "Server startup validates the deployment contract instead of trusting docs alone.") || !strings.Contains(architecture, "The following checks are enforced before the HTTP server starts") {
 		t.Fatalf("architecture.md must describe startup deployment contract validation")
 	}
+	if !strings.Contains(architecture, "whether that contract is implemented") {
+		t.Fatalf("architecture.md must describe implemented contract state in deployment selftest")
+	}
 	if !strings.Contains(architecture, "`embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1`") {
 		t.Fatalf("architecture.md must describe serialized helper execution")
 	}
@@ -237,6 +240,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"unsigned platform headers are not\n  accepted outside `dev`",
 		"Supported values are `none` for `dev` only, `bearer`, and\n  `platform`",
 		"aonohako-selftest deployment-contract",
+		"whether the\nnamed security contract is implemented",
 		"`cloudrun-runner.env`,\n`cloudrun-control-plane.env`, `selfhosted-runner.env`, and\n`dev-control-plane.env`",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is a strict boolean",
