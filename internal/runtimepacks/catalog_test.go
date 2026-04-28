@@ -474,6 +474,10 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if idx := strings.Index(summarySection, "\n  mixin-smoke:"); idx >= 0 {
 		summarySection = summarySection[:idx]
 	}
+	profileSection := body[strings.Index(body, "toolchain-profile:"):]
+	if idx := strings.Index(profileSection, "\n  toolchain-summary:"); idx >= 0 {
+		profileSection = profileSection[:idx]
+	}
 	if !strings.Contains(body, "production_matrix") {
 		t.Fatalf("ci workflow must publish a production profile matrix")
 	}
@@ -495,8 +499,19 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "docker builder prune -af") || !strings.Contains(body, "docker image prune -f") {
 		t.Fatalf("ci workflow must prune build cache before production-profile SBOM scans to avoid daemon-export disk exhaustion")
 	}
+	if !strings.Contains(body, `rm -rf "${GOCACHE}" "${GOMODCACHE}" /tmp/stereoscope-*`) {
+		t.Fatalf("ci workflow must clean Go caches and stale stereoscope temp files before production-profile exports")
+	}
 	if !strings.Contains(body, `printf '{"error":"syft scan failed","profile":"%s"}\n'`) {
 		t.Fatalf("ci workflow must keep production-profile Syft artifacts non-blocking under runner disk pressure")
+	}
+	archiveIdx := strings.Index(profileSection, `docker save "aonohako-ci-prod:${{ matrix.name }}"`)
+	syftIdx := strings.Index(profileSection, "scripts/install_anchore_tool.sh syft v1.42.4")
+	if archiveIdx < 0 || syftIdx < 0 || archiveIdx > syftIdx {
+		t.Fatalf("ci workflow must create required production-profile archives before best-effort scanner exports")
+	}
+	if !strings.Contains(profileSection, `"${HOME}/.cache/syft"`) || !strings.Contains(profileSection, `"${HOME}/.cache/grype"`) {
+		t.Fatalf("ci workflow must clean scanner caches after production-profile scans")
 	}
 	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
 		t.Fatalf("ci workflow must include the language list in the profile summaries")
