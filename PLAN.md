@@ -144,6 +144,9 @@
 - Phase 12: production runtime profile matrix도 Syft SBOM과 non-blocking Grype
   JSON scan artifact를 각 profile artifact에 포함하게 해 full production
   matrix의 CVE drift 추적성을 높였다.
+- Phase 7/18: `/compile` source count와 decoded-size budget을 API layer에서
+  stream/queue slot 획득 전에 검증해 oversized compile 요청이 runner queue에
+  들어가지 않게 했다.
 
 ## 작업 원칙
 

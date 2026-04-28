@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -29,13 +30,16 @@ import (
 )
 
 const (
-	maxRunTextFieldBytes             = 16 << 20
-	maxRunTimeMs                     = 60_000
-	maxRunMemoryMB                   = 4096
-	maxRunOutputBytes                = 8 << 20
-	maxRunWorkspaceBytes             = 1 << 30
-	platformPrincipalHeader          = "X-Aonohako-Principal"
-	platformPrincipalSignatureHeader = "X-Aonohako-Principal-Signature"
+	maxRunTextFieldBytes              = 16 << 20
+	maxRunTimeMs                      = 60_000
+	maxRunMemoryMB                    = 4096
+	maxRunOutputBytes                 = 8 << 20
+	maxRunWorkspaceBytes              = 1 << 30
+	maxCompileSourceFiles             = 512
+	maxCompileDecodedSourceBytes      = 16 << 20
+	maxCompileDecodedSourceTotalBytes = 48 << 20
+	platformPrincipalHeader           = "X-Aonohako-Principal"
+	platformPrincipalSignatureHeader  = "X-Aonohako-Principal-Signature"
 )
 
 type principalContextKey struct{}
@@ -118,6 +122,37 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
+	}
+	if len(req.Sources) == 0 {
+		http.Error(w, "no sources", http.StatusBadRequest)
+		return
+	}
+	if len(req.Sources) > maxCompileSourceFiles {
+		http.Error(w, fmt.Sprintf("too many sources: max %d", maxCompileSourceFiles), http.StatusBadRequest)
+		return
+	}
+	totalDecodedSourceBytes := 0
+	for i, src := range req.Sources {
+		if len(src.DataB64)%4 != 0 {
+			http.Error(w, fmt.Sprintf("sources[%d].data_b64 invalid base64 length", i), http.StatusBadRequest)
+			return
+		}
+		padding := 0
+		if strings.HasSuffix(src.DataB64, "==") {
+			padding = 2
+		} else if strings.HasSuffix(src.DataB64, "=") {
+			padding = 1
+		}
+		decodedLen := base64.StdEncoding.DecodedLen(len(src.DataB64)) - padding
+		if decodedLen > maxCompileDecodedSourceBytes {
+			http.Error(w, fmt.Sprintf("source too large: max %d bytes decoded", maxCompileDecodedSourceBytes), http.StatusBadRequest)
+			return
+		}
+		totalDecodedSourceBytes += decodedLen
+		if totalDecodedSourceBytes > maxCompileDecodedSourceTotalBytes {
+			http.Error(w, fmt.Sprintf("sources total size exceeded: max %d bytes decoded", maxCompileDecodedSourceTotalBytes), http.StatusBadRequest)
+			return
+		}
 	}
 
 	releaseStream, ok, code := s.acquireStream(principal)
