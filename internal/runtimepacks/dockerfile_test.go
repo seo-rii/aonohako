@@ -2,6 +2,7 @@ package runtimepacks
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -64,6 +65,30 @@ func TestDockerfilesPinExternalBaseImagesByDigest(t *testing.T) {
 		if match := unpinnedDirectFromPattern.FindString(body); match != "" {
 			t.Fatalf("%s contains unpinned direct external FROM %q", path, match)
 		}
+	}
+}
+
+func TestRepositoryPolicyScriptDoesNotRequireRipgrep(t *testing.T) {
+	root := filepath.Join("..", "..")
+	binDir := t.TempDir()
+	for _, tool := range []string{"dirname", "grep"} {
+		target := filepath.Join("/usr/bin", tool)
+		if _, err := os.Stat(target); err != nil {
+			t.Skipf("%s unavailable: %v", target, err)
+		}
+		if err := os.Symlink(target, filepath.Join(binDir, tool)); err != nil {
+			t.Fatalf("symlink %s: %v", tool, err)
+		}
+	}
+	cmd := exec.Command("/usr/bin/bash", filepath.Join("scripts", "check_repo_policy.sh"))
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "PATH="+binDir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("check_repo_policy.sh without rg: %v\n%s", err, string(out))
+	}
+	if !strings.Contains(string(out), "repository policy check passed") {
+		t.Fatalf("policy output missing success line: %q", string(out))
 	}
 }
 
