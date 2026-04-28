@@ -792,6 +792,115 @@ public class Main {
 				return fmt.Errorf("java memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
 			covered++
+		case "groovy":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "GROOVY",
+				Sources: []model.Source{{
+					Name: "Main.groovy",
+					DataB64: encodeScript(`class Main {
+  static void main(String[] args) {
+    def chunks = []
+    while (true) {
+      chunks.add(new byte[32 * 1024 * 1024])
+    }
+  }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("groovy memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("groovy memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "groovy",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 8000, MemoryMB: 768, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("groovy memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("groovy memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+		case "scala":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "SCALA",
+				Sources: []model.Source{{
+					Name: "Main.scala",
+					DataB64: encodeScript(`object Main {
+  def main(args: Array[String]): Unit = {
+    val chunks = new java.util.ArrayList[Array[Byte]]()
+    while (true) {
+      chunks.add(new Array[Byte](32 * 1024 * 1024))
+    }
+  }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("scala memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("scala memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "scala",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 8000, MemoryMB: 768, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("scala memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("scala memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+		case "clojure":
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "CLOJURE",
+				Sources: []model.Source{{
+					Name: "Main.clj",
+					DataB64: encodeScript(`(def chunks (java.util.ArrayList.))
+(while true
+  (.add chunks (byte-array (* 32 1024 1024))))
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("clojure memory compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("clojure memory compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "clojure",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 8000, MemoryMB: 768, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("clojure memory execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("clojure memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
 		case "wasm":
 			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
 				Lang: "WASM",
