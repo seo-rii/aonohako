@@ -60,6 +60,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"keeps the same SSE contract for `/compile` and `/execute`",
 		"forwards `log`, `image`, `error`, and `result`",
 		"Workspace Limit Exceeded",
+		"`/compile` rejects missing sources, more than 512 sources, source files over\n  16 MiB decoded, and source totals over 48 MiB decoded before acquiring a\n  stream or queue slot",
+		"`/execute` rejects oversized `stdin` / `expected_stdout`, out-of-range run\n  limits, and disallowed `enable_network=true` before acquiring a stream or\n  queue slot",
 		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
 		"`AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
 		"`embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",

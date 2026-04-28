@@ -36,6 +36,14 @@ func (s executeRunnerStub) Run(ctx context.Context, req *model.RunRequest, hooks
 	return s.run(ctx, req, hooks)
 }
 
+type compileRunnerStub struct {
+	run func(context.Context, *model.CompileRequest) model.CompileResponse
+}
+
+func (s compileRunnerStub) Run(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
+	return s.run(ctx, req)
+}
+
 type blockingBody struct {
 	started chan struct{}
 	unblock chan struct{}
@@ -1195,6 +1203,58 @@ func TestCompileRejectsTrailingJSONPayload(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400 for trailing compile JSON, got %d", resp.StatusCode)
+	}
+}
+
+func TestCompileRejectsInvalidSourcesBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.compile = compileRunnerStub{run: func(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
+		t.Fatalf("compile runner should not be called for invalid sources")
+		return model.CompileResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	tooManySources := make([]map[string]any, 0, maxCompileSourceFiles+1)
+	for i := 0; i < maxCompileSourceFiles+1; i++ {
+		tooManySources = append(tooManySources, map[string]any{"name": fmt.Sprintf("src/%03d.py", i), "data_b64": "cHJpbnQoJ29rJykK"})
+	}
+	oversizedSource := strings.Repeat("A", base64.StdEncoding.EncodedLen(maxCompileDecodedSourceBytes+1))
+
+	tests := []struct {
+		name    string
+		sources any
+		want    string
+	}{
+		{name: "missing", sources: []map[string]any{}, want: "no sources"},
+		{name: "too many", sources: tooManySources, want: "too many sources"},
+		{name: "invalid base64 length", sources: []map[string]any{{"name": "Main.py", "data_b64": "A"}}, want: "invalid base64 length"},
+		{name: "source too large", sources: []map[string]any{{"name": "Main.py", "data_b64": oversizedSource}}, want: "source too large"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := map[string]any{"lang": "python3", "sources": tc.sources}
+			body, _ := json.Marshal(payload)
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", tc.name, resp.StatusCode)
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			if !strings.Contains(string(bodyBytes), tc.want) {
+				t.Fatalf("response %q should mention %q", string(bodyBytes), tc.want)
+			}
+			active, pending := s.queue.Snapshot()
+			if active != 0 || pending != 0 {
+				t.Fatalf("invalid compile source request entered queue: active=%d pending=%d", active, pending)
+			}
+		})
 	}
 }
 
