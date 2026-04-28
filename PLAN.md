@@ -180,6 +180,10 @@
 - Phase 9/CONF: remote compile/execute runner가 trusted control-plane에서
   붙인 `runtime_profile`을 downstream runner 요청 JSON에 보존하는지 regression
   test로 고정했다.
+- Phase 9/CONF: `problem_id`와 `AONOHAKO_PROBLEM_RUNTIME_PROFILES`를 추가해
+  서버가 문제 정책으로 bounded runtime profile을 선택할 수 있게 했다. direct
+  `runtime_profile` 선택은 non-dev 기본 거부이며, 문제 정책과 충돌하는 profile
+  요청은 queue 진입 전에 거부한다.
 
 ## 작업 원칙
 

@@ -136,10 +136,12 @@ Both `/compile` and `/execute` share the same bounded queue:
 
 - `/compile` rejects missing sources, more than 512 sources, source files over
   16 MiB decoded, source totals over 48 MiB decoded, and invalid or unknown
-  `runtime_profile` values, including policy-disabled profile requests, before
-  acquiring a stream or queue slot.
+  `runtime_profile` values, invalid `problem_id` values, profile conflicts with
+  problem policy, and policy-disabled direct profile requests before acquiring
+  a stream or queue slot.
 - `/execute` rejects oversized `stdin` / `expected_stdout`, out-of-range run
-  limits, invalid or unknown `runtime_profile` values, policy-disabled profile
+  limits, invalid or unknown `runtime_profile` values, invalid `problem_id`
+  values, profile conflicts with problem policy, policy-disabled direct profile
   requests, and disallowed `enable_network=true` before acquiring a stream or
   queue slot.
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `1` for

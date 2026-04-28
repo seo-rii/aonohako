@@ -49,11 +49,12 @@ type InboundAuthConfig struct {
 }
 
 type ExecutionConfig struct {
-	Platform              platform.RuntimeOptions
-	Remote                RemoteExecutorConfig
-	RuntimeTuning         RuntimeTuningConfig
-	RuntimeTuningProfiles map[string]RuntimeTuningConfig
-	Cgroup                CgroupConfig
+	Platform               platform.RuntimeOptions
+	Remote                 RemoteExecutorConfig
+	RuntimeTuning          RuntimeTuningConfig
+	RuntimeTuningProfiles  map[string]RuntimeTuningConfig
+	ProblemRuntimeProfiles map[string]string
+	Cgroup                 CgroupConfig
 }
 
 type CgroupConfig struct {
@@ -311,6 +312,35 @@ func Load() (Config, error) {
 			runtimeTuningProfiles[profileName] = profileTuning.WithSafeDefaults()
 		}
 	}
+	problemRuntimeProfiles := map[string]string(nil)
+	if rawProblemProfiles := strings.TrimSpace(os.Getenv("AONOHAKO_PROBLEM_RUNTIME_PROFILES")); rawProblemProfiles != "" {
+		parsedProblemProfiles := map[string]string{}
+		if err := json.Unmarshal([]byte(rawProblemProfiles), &parsedProblemProfiles); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUNTIME_PROFILES must be a JSON object mapping problem IDs to runtime profile names: %w", err)
+		}
+		if len(parsedProblemProfiles) == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUNTIME_PROFILES must define at least one problem mapping when set")
+		}
+		problemRuntimeProfiles = make(map[string]string, len(parsedProblemProfiles))
+		for problemID, profileName := range parsedProblemProfiles {
+			if problemID == "" {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUNTIME_PROFILES contains an empty problem_id")
+			}
+			if err := runtimepolicy.ValidateProblemID(problemID); err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUNTIME_PROFILES problem_id %q is invalid: %w", problemID, err)
+			}
+			if profileName == "" {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUNTIME_PROFILES problem_id %q maps to an empty runtime_profile", problemID)
+			}
+			if err := runtimepolicy.ValidateProfileName(profileName); err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUNTIME_PROFILES problem_id %q maps to invalid runtime_profile %q: %w", problemID, profileName, err)
+			}
+			if _, ok := runtimeTuningProfiles[profileName]; !ok {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUNTIME_PROFILES problem_id %q maps to unknown runtime_profile %q", problemID, profileName)
+			}
+			problemRuntimeProfiles[problemID] = profileName
+		}
+	}
 	execution := ExecutionConfig{
 		Platform: runtimePlatform,
 		Remote: RemoteExecutorConfig{
@@ -320,8 +350,9 @@ func Load() (Config, error) {
 			Audience:       strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUDIENCE")),
 			SSEIdleTimeout: time.Duration(remoteSSEIdleTimeoutSec) * time.Second,
 		},
-		RuntimeTuning:         runtimeTuning,
-		RuntimeTuningProfiles: runtimeTuningProfiles,
+		RuntimeTuning:          runtimeTuning,
+		RuntimeTuningProfiles:  runtimeTuningProfiles,
+		ProblemRuntimeProfiles: problemRuntimeProfiles,
 		Cgroup: CgroupConfig{
 			ParentDir: strings.TrimSpace(os.Getenv("AONOHAKO_CGROUP_PARENT")),
 		},

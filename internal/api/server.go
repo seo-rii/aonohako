@@ -125,11 +125,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
-		http.Error(w, "invalid runtime_profile: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := s.validateRuntimeProfileAllowed(req.RuntimeProfile); err != nil {
+	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -258,7 +254,7 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.validateRuntimeProfileAllowed(req.RuntimeProfile); err != nil {
+	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -555,6 +551,35 @@ func (s *Server) validateRuntimeProfileAllowed(profile string) error {
 	return nil
 }
 
+func (s *Server) applyRuntimeProfilePolicy(problemID string, runtimeProfile *string) error {
+	if err := runtimepolicy.ValidateProblemID(problemID); err != nil {
+		return fmt.Errorf("invalid problem_id: %w", err)
+	}
+	if err := runtimepolicy.ValidateProfileName(*runtimeProfile); err != nil {
+		return fmt.Errorf("invalid runtime_profile: %w", err)
+	}
+	mappedProfile := ""
+	if problemID != "" {
+		mappedProfile = s.cfg.Execution.ProblemRuntimeProfiles[problemID]
+	}
+	if mappedProfile != "" {
+		if *runtimeProfile != "" {
+			if !s.cfg.AllowRequestRuntimeProfile {
+				return fmt.Errorf("runtime_profile is not allowed by server policy")
+			}
+			if *runtimeProfile != mappedProfile {
+				return fmt.Errorf("runtime_profile conflicts with problem policy")
+			}
+		}
+		if _, ok := s.cfg.Execution.RuntimeTuningProfiles[mappedProfile]; !ok {
+			return fmt.Errorf("problem_id %s maps to unknown runtime_profile: %s", problemID, mappedProfile)
+		}
+		*runtimeProfile = mappedProfile
+		return nil
+	}
+	return s.validateRuntimeProfileAllowed(*runtimeProfile)
+}
+
 func validateRunRequestFields(req *model.RunRequest) error {
 	if len(req.Stdin) > maxRunTextFieldBytes {
 		return fmt.Errorf("stdin too large: max %d bytes", maxRunTextFieldBytes)
@@ -564,6 +589,9 @@ func validateRunRequestFields(req *model.RunRequest) error {
 	}
 	if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
 		return fmt.Errorf("invalid runtime_profile: %w", err)
+	}
+	if err := runtimepolicy.ValidateProblemID(req.ProblemID); err != nil {
+		return fmt.Errorf("invalid problem_id: %w", err)
 	}
 	if req.Limits.TimeMs <= 0 || req.Limits.TimeMs > maxRunTimeMs {
 		return fmt.Errorf("limits.time_ms must be between 1 and %d", maxRunTimeMs)

@@ -16,6 +16,7 @@ type CompileRequest struct {
 	Sources        []Source `json:"sources"`
 	Target         string   `json:"target,omitempty"`
 	EntryPoint     string   `json:"entry_point,omitempty"`
+	ProblemID      string   `json:"problem_id,omitempty"`
 	RuntimeProfile string   `json:"runtime_profile,omitempty"`
 }
 
@@ -69,6 +70,7 @@ type RunRequest struct {
 	Stdin          string       `json:"stdin"`
 	ExpectedStdout string       `json:"expected_stdout,omitempty"`
 	Limits         Limits       `json:"limits"`
+	ProblemID      string       `json:"problem_id,omitempty"`
 	RuntimeProfile string       `json:"runtime_profile,omitempty"`
 	EnableNetwork  bool         `json:"enable_network,omitempty"`
 	EntryPoint     string       `json:"entry_point,omitempty"`

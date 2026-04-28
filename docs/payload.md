@@ -13,6 +13,7 @@
   ],
   "target": "Main",                          // optional output binary name (default: "Main")
   "entry_point": "src/main.c",               // optional submitted source path to validate as the intended entry file
+  "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
   "runtime_profile": "low-memory"            // optional operator-defined runtime tuning profile
 }
 ```
@@ -64,6 +65,7 @@ metadata rather than an argument that drops helper sources.
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..8388608
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
   },
+  "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
   "enable_network": false,                   // outbound network request flag; honored only when server policy allows request-controlled network
   "entry_point": "src/main.py",              // optional submitted file path to run; JVM/BEAM runtimes use class/module entry names
@@ -109,6 +111,9 @@ operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded
 numeric tuning values and cannot pass arbitrary runtime flags. Non-dev servers
 accept it only when `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`, so public
 entry points can keep profile selection behind trusted problem policy.
+`problem_id`, when present, is a policy key looked up in
+`AONOHAKO_PROBLEM_RUNTIME_PROFILES`; mapped problems receive their configured
+profile before the request enters the stream or runner queue.
 
 ## `POST /execute` — Response
 

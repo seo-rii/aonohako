@@ -17,3 +17,16 @@ func TestValidateProfileName(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateProblemID(t *testing.T) {
+	for _, id := range []string{"", "abc1000", "contest-1/a", "tenant:problem.1", "team_2/problem-3"} {
+		if err := ValidateProblemID(id); err != nil {
+			t.Fatalf("ValidateProblemID(%q): %v", id, err)
+		}
+	}
+	for _, id := range []string{"has space", "한글", "semi;colon", "../escape", strings.Repeat("a", MaxProblemIDBytes+1)} {
+		if err := ValidateProblemID(id); err == nil {
+			t.Fatalf("ValidateProblemID(%q) unexpectedly succeeded", id)
+		}
+	}
+}

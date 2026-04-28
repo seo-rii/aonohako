@@ -290,6 +290,57 @@ func TestLoadRuntimeTuningProfiles(t *testing.T) {
 	}
 }
 
+func TestLoadProblemRuntimeProfiles(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{"low-memory":{"jvm_heap_percent":35},"jvm-heavy":{"jvm_heap_percent":70}}`)
+	t.Setenv("AONOHAKO_PROBLEM_RUNTIME_PROFILES", `{"contest-1/a":"low-memory","tenant:abc/problem.2":"jvm-heavy"}`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if got := cfg.Execution.ProblemRuntimeProfiles["contest-1/a"]; got != "low-memory" {
+		t.Fatalf("contest-1/a profile = %q, want low-memory", got)
+	}
+	if got := cfg.Execution.ProblemRuntimeProfiles["tenant:abc/problem.2"]; got != "jvm-heavy" {
+		t.Fatalf("tenant problem profile = %q, want jvm-heavy", got)
+	}
+}
+
+func TestLoadRejectsUnsafeProblemRuntimeProfiles(t *testing.T) {
+	tests := []struct {
+		name     string
+		profiles string
+		mapping  string
+		want     string
+	}{
+		{name: "invalid json", profiles: `{"low":{}}`, mapping: `[]`, want: "AONOHAKO_PROBLEM_RUNTIME_PROFILES"},
+		{name: "empty", profiles: `{"low":{}}`, mapping: `{}`, want: "at least one problem mapping"},
+		{name: "invalid problem id", profiles: `{"low":{}}`, mapping: `{"bad problem":"low"}`, want: "bad problem"},
+		{name: "invalid profile name", profiles: `{"low":{}}`, mapping: `{"problem":"bad profile"}`, want: "invalid runtime_profile"},
+		{name: "unknown profile", profiles: `{"low":{}}`, mapping: `{"problem":"missing"}`, want: "unknown runtime_profile"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+			t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", tc.profiles)
+			t.Setenv("AONOHAKO_PROBLEM_RUNTIME_PROFILES", tc.mapping)
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q validation error, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
 func TestLoadRejectsUnsafeRuntimeTuningProfiles(t *testing.T) {
 	tests := []struct {
 		name string
