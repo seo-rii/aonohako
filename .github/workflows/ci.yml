@@ -157,7 +157,13 @@ jobs:
           docker image prune -f
       - run: |
           scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
-          "${RUNNER_TEMP}/anchore-bin/syft" "aonohako-ci-prod:${{ matrix.name }}" -o spdx-json="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.sbom.spdx.json"
+          sbom_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.sbom.spdx.json"
+          if ! "${RUNNER_TEMP}/anchore-bin/syft" "aonohako-ci-prod:${{ matrix.name }}" -o spdx-json="${sbom_path}.tmp"; then
+            printf '{"error":"syft scan failed","profile":"%s"}\n' "${{ matrix.name }}" > "${sbom_path}"
+            rm -f "${sbom_path}.tmp"
+          else
+            mv "${sbom_path}.tmp" "${sbom_path}"
+          fi
       - run: |
           scripts/install_anchore_tool.sh grype v0.111.0 "${RUNNER_TEMP}/anchore-bin"
           if ! "${RUNNER_TEMP}/anchore-bin/grype" "aonohako-ci-prod:${{ matrix.name }}" -o json > "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.grype.json"; then
