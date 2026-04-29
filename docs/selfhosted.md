@@ -166,6 +166,7 @@ then use this write contract for one run cgroup:
 
 - create a sanitized run group name under the selected parent
 - write positive `memory.max` and `pids.max` values
+- write `memory.swap.max=0` when the kernel exposes it
 - write `memory.oom.group=1`
 - write `cpu.max=100000 100000` to cap sandbox CPU bandwidth at one vCPU
 - move the target process by writing its PID to `cgroup.procs`

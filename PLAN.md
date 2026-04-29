@@ -102,6 +102,9 @@
   `cpu.max=100000 100000`을 연결해 run 단위 CPU bandwidth도 1 vCPU로
   제한한다. CPU throttling counter는 아직 verdict source가 아니라
   guardrail/diagnostic으로 유지한다.
+- Phase 2: self-hosted cgroup opt-in의 run group에서 kernel이
+  `memory.swap.max`를 제공하면 `0`으로 설정해 swap이 run memory budget을
+  우회하지 못하게 했다.
 - Phase 11: runtime image smoke에 `aonohako-selftest runtime-memory`를 추가해
   Node/TypeScript runtime memory guard, Wasmtime constrained-memory trap,
   .NET GC/RSS guardrail이 언어 이미지별 CI에서 정상 완료나 timeout으로

@@ -358,8 +358,8 @@ compile sandbox memory budget. Compile watchdogs also run the shared workspace
 scanner, so total bytes, entry count, and directory depth limits apply during
 compile as well as execute. If `AONOHAKO_CGROUP_PARENT` is configured for a
 self-hosted helper runner, compile, execute, and SPJ helper processes are also
-placed into per-run cgroups with `memory.max`, `pids.max`, and
-`memory.oom.group=1`.
+placed into per-run cgroups with `memory.max`, `pids.max`, `memory.swap.max=0`
+when supported, and `memory.oom.group=1`.
 
 .NET is the main compatibility exception: `dotnet` invocations still disable
 `RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large
@@ -387,9 +387,11 @@ The same package owns the low-level run-group write contract used by the
 optional cgroup guardrail and the future isolated backend. Parent cgroups enable
 child controllers by writing values such as `+cpu +memory +pids` to
 `cgroup.subtree_control`. A run group must then be created with positive
-`memory.max` and `pids.max` values, and `memory.oom.group` is set so the kernel
-treats the run as one OOM domain. Compile, execute, and SPJ run groups also
-write `cpu.max=100000 100000` so one sandbox cannot burst beyond one vCPU when
+`memory.max` and `pids.max` values. When the kernel exposes `memory.swap.max`,
+the guardrail writes `0` so swap cannot extend the run's effective memory
+budget, and `memory.oom.group` is set so the kernel treats the run as one OOM
+domain. Compile, execute, and SPJ run groups also write
+`cpu.max=100000 100000` so one sandbox cannot burst beyond one vCPU when
 the optional cgroup guardrail is enabled. A target process is admitted by
 writing its PID to `cgroup.procs`. Cleanup removes the run cgroup directory
 without recursive deletion so leftover processes or files surface as cleanup
