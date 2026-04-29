@@ -630,8 +630,10 @@ the runtime image directly because they are not published on PyPI.
 
 The runtime Docker image is also hardened to reduce the readable surface for the
 sandbox UID. Non-essential metadata and package-manager paths are made
-root-only, while shared libraries and language runtimes remain readable so the
-interpreter or binary can still start normally.
+root-only, including identity and host metadata such as `/etc/passwd`,
+`/etc/group`, `/etc/hostname`, `/etc/hosts`, and package database paths, while
+shared libraries and language runtimes remain readable so the interpreter or
+binary can still start normally.
 
 Until execute-only images are split from compile images, image maintainers
 should treat every world-executable binary in the runtime image as reachable by

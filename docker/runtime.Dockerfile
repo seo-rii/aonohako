@@ -64,7 +64,7 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
     printf 'runtime-owned\n' > /var/aonohako/protected/probe.txt && \
     chmod 0700 /var/aonohako /var/aonohako/protected && \
     chmod 0600 /var/aonohako/protected/probe.txt && \
-    for path in /etc/debian_version /etc/os-release /etc/issue /etc/issue.net /etc/motd; do \
+    for path in /etc/debian_version /etc/os-release /etc/issue /etc/issue.net /etc/motd /etc/passwd /etc/group /etc/gshadow /etc/shadow /etc/subuid /etc/subgid /etc/hostname /etc/hosts /etc/shells /etc/login.defs; do \
       if [[ -e "${path}" ]]; then chmod 0600 "${path}"; fi; \
     done && \
     for path in /usr/share/doc /usr/share/info /usr/share/man /usr/share/lintian /usr/share/bug /usr/share/common-licenses /usr/share/bash-completion /var/cache/apt /var/cache/debconf /var/lib/apt /var/lib/dpkg /var/lib/systemd /etc/apt; do \
