@@ -172,6 +172,7 @@ func CreateRunGroup(parentDir, name string, limits Limits) (Group, error) {
 		value string
 	}{
 		{file: "memory.max", value: strconv.FormatInt(limits.MemoryMaxBytes, 10)},
+		{file: "memory.swap.max", value: "0"},
 		{file: "memory.oom.group", value: "1"},
 		{file: "pids.max", value: strconv.Itoa(limits.PidsMax)},
 	}
@@ -183,6 +184,9 @@ func CreateRunGroup(parentDir, name string, limits Limits) (Group, error) {
 	}
 	for _, write := range writes {
 		if err := os.WriteFile(filepath.Join(path, write.file), []byte(write.value), 0o644); err != nil {
+			if write.file == "memory.swap.max" && os.IsNotExist(err) {
+				continue
+			}
 			_ = os.RemoveAll(path)
 			return Group{}, fmt.Errorf("write %s: %w", write.file, err)
 		}
