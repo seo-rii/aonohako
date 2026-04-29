@@ -252,6 +252,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`cloudrun-runner.env`,\n`cloudrun-control-plane.env`, `selfhosted-runner.env`, and\n`dev-control-plane.env`",
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is a strict boolean",
+		"`AONOHAKO_WORK_ROOT_MAX_BYTES`, when nonzero",
 		"`AONOHAKO_CGROUP_PARENT` is optional and supported only for",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`cloudrun-idtoken`; `none` is allowed only for `dev`",
@@ -369,12 +370,14 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_SANDBOX_BACKEND", "none")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
+	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_WORK_ROOT_MAX_BYTES", "1073741824")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
 	requirePresent("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REMOTE_RUNNER_URL")
 	requirePresent("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_WORK_ROOT")
 
 	cloudRunner := examples["cloudrun-runner.env"]
 	requireEnv("cloudrun-runner.env", cloudRunner, "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
+	requireEnv("cloudrun-runner.env", cloudRunner, "AONOHAKO_WORK_ROOT_MAX_BYTES", "1073741824")
 
 	devRemote := examples["dev-control-plane.env"]
 	requireEnv("dev-control-plane.env", devRemote, "AONOHAKO_DEPLOYMENT_TARGET", "dev")

@@ -161,6 +161,7 @@ func runDeploymentContractSuite() error {
 		TrustedPlatformHeaders        bool                          `json:"trusted_platform_headers"`
 		TrustedPlatformHeaderCIDRs    []string                      `json:"trusted_platform_header_cidrs,omitempty"`
 		RequireWorkRootTmpfs          bool                          `json:"require_work_root_tmpfs"`
+		WorkRootMaxBytes              int                           `json:"work_root_max_bytes,omitempty"`
 		InboundAuth                   config.InboundAuthMode        `json:"inbound_auth"`
 		PlatformPrincipalHMAC         bool                          `json:"platform_principal_hmac"`
 		RemoteAuth                    config.RemoteAuthMode         `json:"remote_auth"`
@@ -189,6 +190,7 @@ func runDeploymentContractSuite() error {
 		TrustedPlatformHeaders:        cfg.TrustedPlatformHeaders,
 		TrustedPlatformHeaderCIDRs:    cfg.TrustedPlatformHeaderCIDRs,
 		RequireWorkRootTmpfs:          cfg.RequireWorkRootTmpfs,
+		WorkRootMaxBytes:              cfg.WorkRootMaxBytes,
 		InboundAuth:                   cfg.InboundAuth.Mode,
 		PlatformPrincipalHMAC:         strings.TrimSpace(cfg.InboundAuth.PlatformPrincipalHMACSecret) != "",
 		RemoteAuth:                    cfg.Execution.Remote.Auth,

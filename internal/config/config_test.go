@@ -641,6 +641,26 @@ func TestLoadRejectsGroupWritableDedicatedWorkRoot(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsDedicatedWorkRootLargerThanConfiguredMaximum(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET", "secret")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	t.Setenv("AONOHAKO_WORK_ROOT_MAX_BYTES", "1")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected oversized work root filesystem to be rejected")
+	}
+	if !strings.Contains(err.Error(), "AONOHAKO_WORK_ROOT_MAX_BYTES") {
+		t.Fatalf("error %q should mention work root max bytes", err)
+	}
+}
+
 func TestWorkRootFilesystemAtUsesMostSpecificMount(t *testing.T) {
 	root := t.TempDir()
 	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
@@ -704,6 +724,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "true")
 	t.Setenv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
+	t.Setenv("AONOHAKO_WORK_ROOT_MAX_BYTES", "123456789")
 	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "false")
 	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "false")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
@@ -751,6 +772,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if !cfg.RequireWorkRootTmpfs {
 		t.Fatalf("require work root tmpfs should be parsed from env")
 	}
+	if cfg.WorkRootMaxBytes != 123456789 {
+		t.Fatalf("work root max bytes = %d, want 123456789", cfg.WorkRootMaxBytes)
+	}
 	if cfg.TrustedRunnerIngress {
 		t.Fatalf("trusted runner ingress should be parsed from env")
 	}
@@ -788,6 +812,8 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
 		{name: "allow runtime profile malformed", key: "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", value: "sometimes"},
 		{name: "require work root tmpfs malformed", key: "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", value: "sometimes"},
+		{name: "work root max negative", key: "AONOHAKO_WORK_ROOT_MAX_BYTES", value: "-1"},
+		{name: "work root max malformed", key: "AONOHAKO_WORK_ROOT_MAX_BYTES", value: "many"},
 		{name: "trusted runner ingress malformed", key: "AONOHAKO_TRUSTED_RUNNER_INGRESS", value: "sometimes"},
 		{name: "trusted platform headers malformed", key: "AONOHAKO_TRUSTED_PLATFORM_HEADERS", value: "sometimes"},
 	}
