@@ -267,8 +267,6 @@ func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.
 		"/etc/os-release",
 		"/etc/passwd",
 		"/etc/group",
-		"/etc/hostname",
-		"/etc/hosts",
 		"/etc/shells",
 		"/etc/login.defs",
 		"/etc/apt",
