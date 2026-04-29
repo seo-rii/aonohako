@@ -113,7 +113,8 @@ aonohako-selftest deployment-contract
 The deployment contract JSON includes the selected execution shape, whether the
 named security contract is implemented, effective and missing local
 capabilities, queue and stream limits, inbound/remote auth posture, cgroup
-parent presence, and whether `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is active.
+parent presence, whether `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is active, and the
+configured `AONOHAKO_WORK_ROOT_MAX_BYTES` value.
 
 Checked deployment environment examples live under
 [`docs/examples/`](docs/examples/): `cloudrun-runner.env`,
@@ -230,6 +231,8 @@ aonohako-selftest cgroup-preflight
   that a required `AONOHAKO_WORK_ROOT` is backed by `tmpfs`. Use this for
   Cloud Run memory volumes or self-hosted runners that intentionally place
   workspaces on bounded tmpfs storage.
+- `AONOHAKO_WORK_ROOT_MAX_BYTES`, when nonzero, verifies through `statfs` that
+  the required work-root filesystem is bounded to that many bytes or less.
 - `AONOHAKO_CGROUP_PARENT` is optional and supported only for
   `selfhosted + embedded + helper`. When set, startup validates that the parent
   directory is under a cgroup v2 mount and exposes `cpu`, `memory`, and `pids`,
@@ -336,7 +339,8 @@ For Cloud Run deployments, use this baseline:
 - service concurrency `1`
 - a bounded in-memory volume mounted at a path such as `/work`, with
   `AONOHAKO_WORK_ROOT=/work`; set `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` when
-  startup should fail unless that path is actually backed by `tmpfs`
+  startup should fail unless that path is actually backed by `tmpfs`, and set
+  `AONOHAKO_WORK_ROOT_MAX_BYTES` to the intended volume size
 - Direct VPC egress with `all-traffic` routing and firewall-denied outbound
   traffic except for explicitly allowed targets
 - a dedicated service account with no unnecessary IAM permissions and no baked

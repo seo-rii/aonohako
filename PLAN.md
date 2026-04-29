@@ -105,6 +105,9 @@
 - Phase 2: self-hosted cgroup opt-in의 run group에서 kernel이
   `memory.swap.max`를 제공하면 `0`으로 설정해 swap이 run memory budget을
   우회하지 못하게 했다.
+- Phase 3/12: `AONOHAKO_WORK_ROOT_MAX_BYTES`를 추가해 dedicated work root의
+  filesystem 총 크기가 운영자가 설정한 상한을 넘으면 startup에서 fail-closed
+  하도록 했다. Cloud Run 예시는 tmpfs 여부와 1GiB 상한을 함께 명시한다.
 - Phase 11: runtime image smoke에 `aonohako-selftest runtime-memory`를 추가해
   Node/TypeScript runtime memory guard, Wasmtime constrained-memory trap,
   .NET GC/RSS guardrail이 언어 이미지별 CI에서 정상 완료나 timeout으로

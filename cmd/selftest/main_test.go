@@ -99,6 +99,7 @@ func TestDeploymentContractSummaryReportsTmpfsRequirement(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
 	t.Setenv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
+	t.Setenv("AONOHAKO_WORK_ROOT_MAX_BYTES", "12345")
 
 	oldStdout := os.Stdout
 	r, w, err := os.Pipe()
@@ -122,6 +123,9 @@ func TestDeploymentContractSummaryReportsTmpfsRequirement(t *testing.T) {
 	}
 	if summary["require_work_root_tmpfs"] != true {
 		t.Fatalf("require_work_root_tmpfs = %#v, want true; summary=%s", summary["require_work_root_tmpfs"], string(data))
+	}
+	if summary["work_root_max_bytes"] != float64(12345) {
+		t.Fatalf("work_root_max_bytes = %#v, want 12345; summary=%s", summary["work_root_max_bytes"], string(data))
 	}
 	if summary["contract_implemented"] != true {
 		t.Fatalf("contract_implemented = %#v, want true; summary=%s", summary["contract_implemented"], string(data))

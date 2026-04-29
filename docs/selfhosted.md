@@ -62,6 +62,9 @@ multi-slot helper execution:
    `selfhosted + embedded + helper`.
 3. Keep each runner instance at `AONOHAKO_MAX_ACTIVE_RUNS=1`.
 4. Give every runner instance its own dedicated `AONOHAKO_WORK_ROOT`.
+   Set `AONOHAKO_WORK_ROOT_MAX_BYTES` when the work root is backed by a
+   bounded filesystem or tmpfs that should fail startup if it is accidentally
+   replaced by a larger shared volume.
 5. Scale throughput by adding more runner instances, not by increasing helper
    slots inside one process.
 

@@ -132,6 +132,7 @@ type Config struct {
 	AllowRequestNetwork           bool
 	AllowRequestRuntimeProfile    bool
 	RequireWorkRootTmpfs          bool
+	WorkRootMaxBytes              int
 	TrustedRunnerIngress          bool
 	TrustedPlatformHeaders        bool
 	TrustedPlatformHeaderCIDRs    []string
@@ -200,6 +201,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	requireWorkRootTmpfs, err := parseBoolEnv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", os.Getenv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS"), false)
+	if err != nil {
+		return Config{}, err
+	}
+	workRootMaxBytes, err := parseNonNegativeIntEnv("AONOHAKO_WORK_ROOT_MAX_BYTES", os.Getenv("AONOHAKO_WORK_ROOT_MAX_BYTES"), 0)
 	if err != nil {
 		return Config{}, err
 	}
@@ -498,6 +503,19 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT must be on tmpfs when AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true; got %s", fsType)
 			}
 		}
+		if workRootMaxBytes > 0 {
+			var fs syscall.Statfs_t
+			if err := syscall.Statfs(workRoot, &fs); err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT_MAX_BYTES validation failed: %w", err)
+			}
+			if fs.Bsize <= 0 {
+				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT_MAX_BYTES validation failed: invalid filesystem block size %d", fs.Bsize)
+			}
+			totalBytes := fs.Blocks * uint64(fs.Bsize)
+			if totalBytes > uint64(workRootMaxBytes) {
+				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT filesystem size %d exceeds AONOHAKO_WORK_ROOT_MAX_BYTES=%d", totalBytes, workRootMaxBytes)
+			}
+		}
 	}
 	if contract.RequiresRootParent && os.Geteuid() != 0 {
 		return Config{}, fmt.Errorf("execution backend %s/%s requires root", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
@@ -515,6 +533,7 @@ func Load() (Config, error) {
 		AllowRequestNetwork:           allowRequestNetwork,
 		AllowRequestRuntimeProfile:    allowRequestRuntimeProfile,
 		RequireWorkRootTmpfs:          requireWorkRootTmpfs,
+		WorkRootMaxBytes:              workRootMaxBytes,
 		TrustedRunnerIngress:          trustedRunnerIngress,
 		TrustedPlatformHeaders:        trustedPlatformHeaders,
 		TrustedPlatformHeaderCIDRs:    trustedPlatformHeaderCIDRs,

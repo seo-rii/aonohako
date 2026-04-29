@@ -506,6 +506,8 @@ The following checks are enforced before the HTTP server starts:
   directory create/remove cycle
 - `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` additionally verifies through
   `/proc/self/mountinfo` that the required work root is backed by `tmpfs`
+- `AONOHAKO_WORK_ROOT_MAX_BYTES`, when nonzero, verifies through `statfs` that
+  the required work root filesystem is bounded to that many bytes or less
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
   executions do not overlap under the shared sandbox UID
@@ -521,8 +523,8 @@ The following checks are enforced before the HTTP server starts:
 - `aonohako-selftest deployment-contract` reports the active execution shape,
   named contract, whether that contract is implemented, effective and missing
   local capabilities, auth posture, queue/stream limits, cgroup parent presence,
-  and
-  `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` state as JSON for deployment checks.
+  and `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` /
+  `AONOHAKO_WORK_ROOT_MAX_BYTES` state as JSON for deployment checks.
 
 Recommended Cloud Run deployment baseline:
 
@@ -536,7 +538,8 @@ Recommended Cloud Run deployment baseline:
 - second-generation execution environment
 - service concurrency `1`
 - bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`, optionally asserted
-  with `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true`
+  with `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` and
+  `AONOHAKO_WORK_ROOT_MAX_BYTES`
 - separate runner service account with minimal IAM permissions
 - Direct VPC egress with `all-traffic`
 - firewall-denied outbound traffic except for explicitly allowed destinations
