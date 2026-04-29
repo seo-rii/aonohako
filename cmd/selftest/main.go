@@ -290,6 +290,18 @@ func runMountNamespaceProbe() error {
 		return fmt.Errorf("write tmpfs probe: %w", err)
 	}
 
+	procDir := filepath.Join(base, "proc")
+	if err := os.Mkdir(procDir, 0o700); err != nil {
+		return fmt.Errorf("mkdir proc probe: %w", err)
+	}
+	if err := unix.Mount("proc", procDir, "proc", uintptr(unix.MS_NODEV|unix.MS_NOSUID|unix.MS_NOEXEC), "hidepid=2"); err != nil {
+		return fmt.Errorf("mount proc probe with hidepid=2: %w", err)
+	}
+	defer func() { _ = unix.Unmount(procDir, 0) }()
+	if _, err := os.ReadFile(filepath.Join(procDir, "self", "status")); err != nil {
+		return fmt.Errorf("read proc self status probe: %w", err)
+	}
+
 	bindDir := filepath.Join(base, "bind")
 	if err := os.Mkdir(bindDir, 0o700); err != nil {
 		return fmt.Errorf("mkdir bind probe: %w", err)
