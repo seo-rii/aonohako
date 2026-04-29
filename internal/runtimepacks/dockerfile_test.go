@@ -265,6 +265,12 @@ func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.
 	for _, marker := range []string{
 		"/etc/debian_version",
 		"/etc/os-release",
+		"/etc/passwd",
+		"/etc/group",
+		"/etc/hostname",
+		"/etc/hosts",
+		"/etc/shells",
+		"/etc/login.defs",
 		"/etc/apt",
 		"/usr/share/doc",
 		"/usr/share/common-licenses",

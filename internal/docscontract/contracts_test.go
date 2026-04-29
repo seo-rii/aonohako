@@ -204,6 +204,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "package-manager, fetcher, build-time\ntoolchain-manager, remote-access, debugger, and network-diagnostic binaries such\nas `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`, `npm`, `gem`, `ssh`, `rsync`,\n`gdb`, `strace`, `tcpdump`, `nmap`, `dig`, `ip`, and `ping` are root-only\nexecutable") || !strings.Contains(architecture, "Rust toolchain shims stay executable") {
 		t.Fatalf("architecture.md must describe runtime package manager/fetcher/toolchain-manager/diagnostic hardening")
 	}
+	if !strings.Contains(architecture, "identity and host metadata such as `/etc/passwd`,\n`/etc/group`, `/etc/hostname`, `/etc/hosts`, and package database paths") {
+		t.Fatalf("architecture.md must describe identity and host metadata image hardening")
+	}
 	if !strings.Contains(architecture, "Syft SBOM") || !strings.Contains(architecture, "every production runtime profile artifact") || !strings.Contains(architecture, "non-blocking Grype JSON scan") {
 		t.Fatalf("architecture.md must describe production runtime SBOM and scan artifacts")
 	}

@@ -1914,7 +1914,7 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	imageOut, imageErr, err := runAsSandboxUser(
-		"for p in /etc/debian_version /etc/os-release /var/lib/dpkg/status; do if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi; done; "+
+		"for p in /etc/debian_version /etc/os-release /etc/passwd /etc/group /etc/hostname /etc/hosts /etc/shells /etc/login.defs /var/lib/dpkg/status; do if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi; done; "+
 			"for d in /usr/share/doc /usr/share/common-licenses /usr/share/bash-completion /var/cache/debconf /etc/apt; do "+
 			"if cd \"$d\" 2>/dev/null; then echo leaked; else echo blocked; fi; "+
 			"done",
@@ -1923,7 +1923,7 @@ func runDirectImagePermissionChecks() error {
 	if err != nil {
 		return fmt.Errorf("image-metadata-paths-are-not-readable: %w\n%s", err, imageErr)
 	}
-	if imageOut != "blocked\nblocked\nblocked\nblocked\nblocked\nblocked\nblocked\nblocked\n" {
+	if imageOut != strings.Repeat("blocked\n", 14) {
 		return fmt.Errorf("image-metadata-paths-are-not-readable: unexpected stdout %q stderr %q", imageOut, imageErr)
 	}
 
