@@ -1430,6 +1430,9 @@ int main(void) {
 #ifdef SYS_perf_event_open
 	failed |= check("perf_event_open", SYS_perf_event_open);
 #endif
+#ifdef SYS_cachestat
+	failed |= check("cachestat", SYS_cachestat);
+#endif
 #ifdef SYS_open_by_handle_at
 	failed |= check("open_by_handle_at", SYS_open_by_handle_at);
 #endif
@@ -1520,6 +1523,15 @@ int main(void) {
 #ifdef SYS_landlock_restrict_self
 	failed |= check("landlock_restrict_self", SYS_landlock_restrict_self);
 #endif
+#ifdef SYS_lsm_get_self_attr
+	failed |= check("lsm_get_self_attr", SYS_lsm_get_self_attr);
+#endif
+#ifdef SYS_lsm_set_self_attr
+	failed |= check("lsm_set_self_attr", SYS_lsm_set_self_attr);
+#endif
+#ifdef SYS_lsm_list_modules
+	failed |= check("lsm_list_modules", SYS_lsm_list_modules);
+#endif
 #ifdef SYS_clock_settime
 	failed |= check("clock_settime", SYS_clock_settime);
 #endif
@@ -1565,6 +1577,12 @@ int main(void) {
 #ifdef SYS_mount_setattr
 	failed |= check("mount_setattr", SYS_mount_setattr);
 #endif
+#ifdef SYS_statmount
+	failed |= check("statmount", SYS_statmount);
+#endif
+#ifdef SYS_listmount
+	failed |= check("listmount", SYS_listmount);
+#endif
 #ifdef SYS_pidfd_open
 	failed |= check("pidfd_open", SYS_pidfd_open);
 #endif
@@ -1573,6 +1591,9 @@ int main(void) {
 #endif
 #ifdef SYS_pidfd_send_signal
 	failed |= check("pidfd_send_signal", SYS_pidfd_send_signal);
+#endif
+#ifdef SYS_fchmodat2
+	failed |= check("fchmodat2", SYS_fchmodat2);
 #endif
 	if (failed != 0) {
 		return 1;
