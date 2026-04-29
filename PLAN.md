@@ -223,6 +223,9 @@
 - Phase 11/18: helper seccomp denylist와 execute/compile regression probe에
   NUMA/mempolicy, `kcmp`, nested `seccomp`, Landlock policy syscall 차단을
   추가해 kernel policy surface drift 감지를 넓혔다.
+- Phase 11/18: helper seccomp denylist와 execute/compile regression probe에
+  `fchmodat2`, `statmount`, `listmount`, LSM attribute/module syscall,
+  `cachestat` 차단을 추가해 newer-kernel denylist drift를 줄였다.
 - Phase 3/6: runtime image hardening 범위를 `/etc/passwd`, `/etc/group` 같은
   identity metadata와 package database 파일까지 넓히고 image-permission
   selftest와 docs contract에 고정했다. `/etc/hostname`, `/etc/hosts`처럼

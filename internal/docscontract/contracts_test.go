@@ -195,7 +195,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`memfd_create` except for .NET and\n  Wasmtime runtime compatibility") {
 		t.Fatalf("architecture.md must describe memfd_create seccomp policy")
 	}
-	if !strings.Contains(architecture, "`process_madvise`, `process_mrelease`, `pidfd_*`") || !strings.Contains(architecture, "NUMA and memory-policy syscalls") || !strings.Contains(architecture, "`kcmp`, nested `seccomp`, and Landlock") || !strings.Contains(architecture, "`lookup_dcookie`") || !strings.Contains(architecture, "kexec, NFS server control,\n  quota control, swap, reboot, syslog") || !strings.Contains(architecture, "`clock_settime`, `settimeofday`, `adjtimex`") {
+	if !strings.Contains(architecture, "`process_madvise`, `process_mrelease`, `pidfd_*`") || !strings.Contains(architecture, "NUMA and memory-policy syscalls") || !strings.Contains(architecture, "`kcmp`, nested `seccomp`, Landlock") || !strings.Contains(architecture, "LSM attribute/module\n  syscalls") || !strings.Contains(architecture, "`lookup_dcookie`") || !strings.Contains(architecture, "`statmount` and `listmount`") || !strings.Contains(architecture, "`perf_event_open`, `cachestat`") || !strings.Contains(architecture, "`chmod`, `fchmodat2`, `chown`, `mknod`") || !strings.Contains(architecture, "kexec, NFS server control,\n  quota control, swap, reboot, syslog") || !strings.Contains(architecture, "`clock_settime`, `settimeofday`, `adjtimex`") {
 		t.Fatalf("architecture.md must describe extended kernel metadata/process seccomp denies")
 	}
 	if !strings.Contains(architecture, "post-start\n`execve()` surface") || !strings.Contains(architecture, "world-executable binary that is present in the\nruntime image") {

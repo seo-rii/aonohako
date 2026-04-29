@@ -181,20 +181,22 @@ The seccomp filter denies high-risk operations, including:
 - `fork`, `vfork`, and `clone3`
 - `clone` without `CLONE_THREAD`
 - `unshare`, `setns`, `chroot`, `mount`, `pivot_root`, and newer mount APIs
+  including `statmount` and `listmount`
 - `ptrace`, `process_vm_*`, `process_madvise`, `process_mrelease`, `pidfd_*`
 - NUMA and memory-policy syscalls such as `get_mempolicy`, `mbind`,
   `set_mempolicy`, `migrate_pages`, and `move_pages`
-- `kcmp`, nested `seccomp`, and Landlock policy syscalls
+- `kcmp`, nested `seccomp`, Landlock policy syscalls, and LSM attribute/module
+  syscalls
 - `kill`, `tkill`, `tgkill`
 - `prlimit64`, `setpriority`
 - `bpf`, `io_uring_*`, `userfaultfd`, `memfd_create` except for .NET and
   Wasmtime runtime compatibility, memory locking, SysV shared memory,
-  `perf_event_open`
+  `perf_event_open`, `cachestat`
 - `open_by_handle_at`, `name_to_handle_at`, `lookup_dcookie`
 - `fanotify_*`, keyring syscalls, module loading, kexec, NFS server control,
   quota control, swap, reboot, syslog
 - `clock_settime`, `settimeofday`, `adjtimex`
-- `chmod`, `chown`, `mknod`
+- `chmod`, `fchmodat2`, `chown`, `mknod`
 
 The helper must allow the initial `execve()` into the requested runtime or
 compiled binary. In the current denylist profile, that also leaves a post-start
