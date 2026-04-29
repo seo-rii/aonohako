@@ -139,6 +139,25 @@ aonohako-selftest cgroup-preflight
 The command prints the preflight result as JSON and exits non-zero when required
 cgroup v2 controls are unavailable.
 
+## Mount namespace preflight
+
+The reserved container backend will need private mount namespaces, read-only
+bind remounts, and bounded writable tmpfs work areas. That backend is not
+implemented yet, but a self-hosted runner host can be checked for those kernel
+primitives before rollout planning:
+
+```bash
+aonohako-selftest mount-preflight
+```
+
+The command starts a child process so the parent selftest process is not moved
+into a new namespace. The child verifies `unshare(CLONE_NEWNS)`, private mount
+propagation, a bounded tmpfs mount, and a read-only bind remount. It prints JSON
+and exits non-zero when the host/container runtime does not permit those
+operations. A successful preflight is only a prerequisite signal; the current
+helper backend still does not provide mount namespace, read-only rootfs, or
+masked `/proc` isolation.
+
 When `AONOHAKO_CGROUP_PARENT` is set, startup validates that the selected parent
 is under a cgroup v2 mount and has the required controllers and
 `cgroup.subtree_control`, rejects a group/world-writable parent, and verifies a

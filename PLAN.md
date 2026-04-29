@@ -226,6 +226,10 @@
 - Phase 3/6: runtime image hardening 범위를 `/etc/passwd`, `/etc/group`,
   `/etc/hostname`, `/etc/hosts` 같은 identity/host metadata 파일까지
   넓히고 image-permission selftest와 docs contract에 고정했다.
+- Phase 3: `aonohako-selftest mount-preflight`를 추가해 self-hosted 후보
+  runner가 private mount namespace, bounded tmpfs, read-only bind remount를
+  허용하는지 child process에서 비파괴로 확인할 수 있게 했다. 실제
+  mount-isolated backend는 아직 future work로 남는다.
 
 ## 작업 원칙
 

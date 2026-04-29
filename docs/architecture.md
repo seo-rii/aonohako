@@ -436,6 +436,14 @@ The supported shapes map to an explicit runtime security contract in
 | `remote + none` | `remote-control-plane` | `/compile` and `/execute` are forwarded to the configured runner and no local untrusted compile/run work is performed | isolation is delegated to the downstream runner and its private ingress/auth boundary |
 | `embedded + container` | `reserved-container-isolation` | not implemented | must provide per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID or user namespace, child-process accounting, allowlist-oriented seccomp, and post-start `execve()` blocking before it can be enabled |
 
+The future mount-isolated backend is still unavailable, but
+`aonohako-selftest mount-preflight` can probe self-hosted runner hosts without
+mutating the parent process. It starts a child process and verifies
+`unshare(CLONE_NEWNS)`, private mount propagation, a bounded tmpfs mount, and a
+read-only bind remount. This is a prerequisite check only; a successful result
+does not add mount namespace, read-only rootfs, or masked `/proc` capabilities
+to the current helper backend.
+
 Server startup validates the deployment contract instead of trusting docs alone.
 The following checks are enforced before the HTTP server starts:
 
