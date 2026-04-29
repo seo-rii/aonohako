@@ -237,8 +237,8 @@
   selftest와 docs contract에 고정했다. `/etc/hostname`, `/etc/hosts`처럼
   런타임이 마운트하는 host metadata는 mount isolation backlog로 남겼다.
 - Phase 3: `aonohako-selftest mount-preflight`를 추가해 self-hosted 후보
-  runner가 private mount namespace, bounded tmpfs, read-only bind remount를
-  허용하는지 child process에서 비파괴로 확인할 수 있게 했다. 실제
+  runner가 private mount namespace, bounded tmpfs, `hidepid=2` procfs mount,
+  read-only bind remount를 허용하는지 child process에서 비파괴로 확인할 수 있게 했다. 실제
   mount-isolated backend는 아직 future work로 남는다.
 
 ## 작업 원칙

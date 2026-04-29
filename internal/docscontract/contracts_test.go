@@ -114,7 +114,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "post-start `execve()` blocking") {
 		t.Fatalf("architecture.md must include post-start execve blocking in security contract gaps")
 	}
-	if !strings.Contains(architecture, "`aonohako-selftest mount-preflight` can probe self-hosted runner hosts") || !strings.Contains(architecture, "`unshare(CLONE_NEWNS)`, private mount propagation, a bounded tmpfs mount, and a\nread-only bind remount") || !strings.Contains(architecture, "does not add mount namespace, read-only rootfs, or masked `/proc` capabilities") {
+	if !strings.Contains(architecture, "`aonohako-selftest mount-preflight` can probe self-hosted runner hosts") || !strings.Contains(architecture, "`unshare(CLONE_NEWNS)`, private mount propagation, a bounded tmpfs mount, a\nprocfs mount with `hidepid=2`, and a read-only bind remount") || !strings.Contains(architecture, "does not add mount namespace") || !strings.Contains(architecture, "read-only rootfs, or masked `/proc` capabilities") {
 		t.Fatalf("architecture.md must describe mount namespace preflight as a prerequisite-only check")
 	}
 	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") || !strings.Contains(architecture, "not group/world writable") || !strings.Contains(architecture, "probe run-group create/remove cycle") {

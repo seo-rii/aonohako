@@ -155,9 +155,10 @@ aonohako-selftest mount-preflight
 
 The command starts a child process so the parent selftest process is not moved
 into a new namespace. The child verifies `unshare(CLONE_NEWNS)`, private mount
-propagation, a bounded tmpfs mount, and a read-only bind remount. It prints JSON
-and exits non-zero when the host/container runtime does not permit those
-operations. A successful preflight is only a prerequisite signal; the current
+propagation, a bounded tmpfs mount, a procfs mount with `hidepid=2`, and a
+read-only bind remount. It prints JSON and exits non-zero when the
+host/container runtime does not permit those operations. A successful preflight
+is only a prerequisite signal; the current
 helper backend still does not provide mount namespace, read-only rootfs, or
 masked `/proc` isolation.
 

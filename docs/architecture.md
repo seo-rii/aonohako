@@ -443,10 +443,10 @@ The supported shapes map to an explicit runtime security contract in
 The future mount-isolated backend is still unavailable, but
 `aonohako-selftest mount-preflight` can probe self-hosted runner hosts without
 mutating the parent process. It starts a child process and verifies
-`unshare(CLONE_NEWNS)`, private mount propagation, a bounded tmpfs mount, and a
-read-only bind remount. This is a prerequisite check only; a successful result
-does not add mount namespace, read-only rootfs, or masked `/proc` capabilities
-to the current helper backend.
+`unshare(CLONE_NEWNS)`, private mount propagation, a bounded tmpfs mount, a
+procfs mount with `hidepid=2`, and a read-only bind remount. This is a
+prerequisite check only; a successful result does not add mount namespace,
+read-only rootfs, or masked `/proc` capabilities to the current helper backend.
 
 Server startup validates the deployment contract instead of trusting docs alone.
 The following checks are enforced before the HTTP server starts:
