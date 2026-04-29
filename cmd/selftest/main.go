@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -47,10 +49,20 @@ type compileExecuteCase struct {
 	sources        []model.Source
 }
 
-const selftestUsage = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|runtime-memory|cgroup-preflight|deployment-contract"
+const (
+	mountNamespaceProbeEnv = "AONOHAKO_MOUNTNS_PREFLIGHT_PROBE"
+	selftestUsage          = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|runtime-memory|cgroup-preflight|mount-preflight|deployment-contract"
+)
 
 func main() {
 	if sandbox.MaybeRunFromEnv() {
+		return
+	}
+	if os.Getenv(mountNamespaceProbeEnv) == "1" {
+		if err := runMountNamespaceProbe(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 	if err := processhardening.DisableDumpability(); err != nil {
@@ -91,6 +103,11 @@ func main() {
 		}
 	case "cgroup-preflight":
 		if err := runCgroupPreflightSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "mount-preflight":
+		if err := runMountPreflightSuite(); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -192,6 +209,103 @@ func runCgroupPreflightSuite() error {
 	}
 	if !result.Available {
 		return fmt.Errorf("cgroup preflight unavailable: %s", result.Reason)
+	}
+	return nil
+}
+
+type mountPreflightResult struct {
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+func runMountPreflightSuite() error {
+	result := probeMountNamespaceSupport()
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		return fmt.Errorf("encode mount preflight result: %w", err)
+	}
+	if !result.Available {
+		return fmt.Errorf("mount namespace preflight unavailable: %s", result.Reason)
+	}
+	return nil
+}
+
+func probeMountNamespaceSupport() mountPreflightResult {
+	if runtime.GOOS != "linux" {
+		return mountPreflightResult{Available: false, Reason: "mount namespaces require linux"}
+	}
+	if os.Geteuid() != 0 {
+		return mountPreflightResult{Available: false, Reason: "mount namespace preflight requires root"}
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return mountPreflightResult{Available: false, Reason: "resolve selftest executable: " + err.Error()}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, "mount-preflight")
+	cmd.Env = append(os.Environ(), mountNamespaceProbeEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return mountPreflightResult{Available: false, Reason: "mount namespace probe timed out"}
+	}
+	if err != nil {
+		reason := strings.TrimSpace(string(out))
+		if reason == "" {
+			reason = err.Error()
+		}
+		return mountPreflightResult{Available: false, Reason: reason}
+	}
+	return mountPreflightResult{Available: true}
+}
+
+func runMountNamespaceProbe() error {
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("probe requires root")
+	}
+	if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
+		return fmt.Errorf("unshare mount namespace: %w", err)
+	}
+	if err := unix.Mount("", "/", "", uintptr(unix.MS_PRIVATE|unix.MS_REC), ""); err != nil {
+		return fmt.Errorf("make mounts private: %w", err)
+	}
+	base, err := os.MkdirTemp("", "aonohako-mountns-probe-*")
+	if err != nil {
+		return fmt.Errorf("mktemp mount probe: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(base) }()
+
+	tmpfsDir := filepath.Join(base, "tmpfs")
+	if err := os.Mkdir(tmpfsDir, 0o700); err != nil {
+		return fmt.Errorf("mkdir tmpfs probe: %w", err)
+	}
+	if err := unix.Mount("tmpfs", tmpfsDir, "tmpfs", uintptr(unix.MS_NODEV|unix.MS_NOSUID|unix.MS_NOEXEC), "size=1048576,mode=0700"); err != nil {
+		return fmt.Errorf("mount tmpfs probe: %w", err)
+	}
+	defer func() { _ = unix.Unmount(tmpfsDir, 0) }()
+	if err := os.WriteFile(filepath.Join(tmpfsDir, "probe"), []byte("ok\n"), 0o600); err != nil {
+		return fmt.Errorf("write tmpfs probe: %w", err)
+	}
+
+	bindDir := filepath.Join(base, "bind")
+	if err := os.Mkdir(bindDir, 0o700); err != nil {
+		return fmt.Errorf("mkdir bind probe: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(bindDir, "existing"), []byte("ok\n"), 0o600); err != nil {
+		return fmt.Errorf("seed bind probe: %w", err)
+	}
+	if err := unix.Mount(bindDir, bindDir, "", uintptr(unix.MS_BIND), ""); err != nil {
+		return fmt.Errorf("bind mount probe: %w", err)
+	}
+	defer func() { _ = unix.Unmount(bindDir, 0) }()
+	if err := unix.Mount("", bindDir, "", uintptr(unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY), ""); err != nil {
+		return fmt.Errorf("remount bind probe read-only: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(bindDir, "blocked"), []byte("blocked\n"), 0o600); err == nil {
+		return fmt.Errorf("read-only bind probe allowed a write")
+	} else if !errors.Is(err, unix.EROFS) {
+		return fmt.Errorf("read-only bind probe returned %w, want EROFS", err)
 	}
 	return nil
 }
