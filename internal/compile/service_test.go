@@ -603,6 +603,30 @@ func TestRunSandboxedCommandMarksWorkspaceEntryLimitExceeded(t *testing.T) {
 	}
 }
 
+func TestRunSandboxedCommandFailsClosedWhenWorkspaceScanFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can traverse unreadable directories")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	workDir := sandboxWritableTempDir(t)
+	_, stderr, status, reason := RunSandboxedCommand(
+		context.Background(),
+		workDir,
+		"python3",
+		[]string{
+			"-c",
+			"import os, time\nos.mkdir('hidden', 0)\nwhile True:\n    time.sleep(1)\n",
+		},
+		nil,
+	)
+	if status != model.CompileStatusCompileError || !strings.Contains(reason, "workspace scan failed") {
+		t.Fatalf("status=%q reason=%q stderr=%q", status, reason, stderr)
+	}
+}
+
 func TestCapCompileResponseOutputSetsTruncationFlags(t *testing.T) {
 	resp := capCompileResponseOutput(model.CompileResponse{
 		Status: model.CompileStatusCompileError,

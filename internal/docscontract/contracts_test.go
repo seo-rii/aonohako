@@ -183,7 +183,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "submitted source files are made immutable (`0444`)") || !strings.Contains(architecture, "Python-like compile checks run in isolated startup mode (`-I -S`)") {
 		t.Fatalf("architecture.md must describe compile workspace immutability and isolated Python startup")
 	}
-	if !strings.Contains(architecture, "Compile watchdogs also run the shared workspace\nscanner") || !strings.Contains(architecture, "total bytes, entry count, and directory depth limits apply during\ncompile as well as execute") {
+	if !strings.Contains(architecture, "Compile watchdogs also run the shared workspace\nscanner") || !strings.Contains(architecture, "total bytes, entry count, directory depth limits, and fail-closed\nscan-error handling apply during compile as well as execute") {
 		t.Fatalf("architecture.md must describe compile workspace quota scanning")
 	}
 	if !strings.Contains(architecture, "optional policy-owned runtime profiles from\n  `AONOHAKO_RUNTIME_TUNING_PROFILES`") || !strings.Contains(architecture, "`/compile` and `/execute` can select a\n  named profile with `runtime_profile`") || !strings.Contains(architecture, "`AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`") || !strings.Contains(architecture, "optional problem-owned profile mapping from\n  `AONOHAKO_PROBLEM_RUNTIME_PROFILES`") {

@@ -457,6 +457,12 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					continue
 				}
+				if err != nil {
+					result.Status = model.RunStatusWLE
+					result.Reason = "workspace scan failed"
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					continue
+				}
 				if usage.Bytes > workspaceLimitBytes {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace quota exceeded"

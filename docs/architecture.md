@@ -340,7 +340,8 @@ The stable contract is:
   `smaps_rollup` near the limit or when address-space limits are disabled, and
   falls back to `rusage.Maxrss` after exit for reporting
 - workspace limit classification is based on periodic workspace scans for total
-  bytes, entry count, and directory depth
+  bytes, entry count, and directory depth; scanner errors other than disappearing
+  files fail closed as WLE so unreadable subtrees cannot hide quota usage
 - when a watchdog observes TLE, MLE, or WLE, that first resource verdict kills
   the process group and is preserved through process exit
 - after a normal `OK` resource run, non-zero exit becomes `Runtime Error`; then
@@ -358,11 +359,12 @@ Compile commands use the same helper process-hardening path. Because compilers
 can legitimately spawn child processes, compile memory enforcement samples the
 helper process tree and kills the compile sandbox when aggregate RSS exceeds the
 compile sandbox memory budget. Compile watchdogs also run the shared workspace
-scanner, so total bytes, entry count, and directory depth limits apply during
-compile as well as execute. If `AONOHAKO_CGROUP_PARENT` is configured for a
-self-hosted helper runner, compile, execute, and SPJ helper processes are also
-placed into per-run cgroups with `memory.max`, `pids.max`, `memory.swap.max=0`
-when supported, and `memory.oom.group=1`.
+scanner, so total bytes, entry count, directory depth limits, and fail-closed
+scan-error handling apply during compile as well as execute. If
+`AONOHAKO_CGROUP_PARENT` is configured for a self-hosted helper runner, compile,
+execute, and SPJ helper processes are also placed into per-run cgroups with
+`memory.max`, `pids.max`, `memory.swap.max=0` when supported, and
+`memory.oom.group=1`.
 
 .NET is the main compatibility exception: `dotnet` invocations still disable
 `RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large

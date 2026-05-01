@@ -56,3 +56,28 @@ func TestScanRejectsTooMuchDepth(t *testing.T) {
 		t.Fatalf("expected depth error, got %v", err)
 	}
 }
+
+func TestScanReturnsUnreadableDirectoryErrors(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can traverse unreadable directories")
+	}
+
+	root := t.TempDir()
+	hidden := filepath.Join(root, "hidden")
+	if err := os.Mkdir(hidden, 0o700); err != nil {
+		t.Fatalf("mkdir hidden: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hidden, "payload.bin"), []byte("hidden"), 0o600); err != nil {
+		t.Fatalf("write hidden payload: %v", err)
+	}
+	if err := os.Chmod(hidden, 0); err != nil {
+		t.Fatalf("chmod hidden: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(hidden, 0o700)
+	})
+
+	if _, err := Scan(root); err == nil {
+		t.Fatalf("expected unreadable directory to make workspace scan fail")
+	}
+}

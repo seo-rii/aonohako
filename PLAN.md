@@ -164,6 +164,9 @@
 - Phase 2/18: execute 전용 workspace scanner를 shared package로 옮기고 compile
   watchdog에도 연결해 컴파일 중 total bytes, entry count, directory depth
   초과를 같은 quota signal로 차단하게 했다.
+- Phase 2/18: workspace scanner가 사라진 파일은 race로 무시하되 권한 오류 등
+  다른 scan error는 fail-closed WLE/compile error로 처리하게 해 unreadable
+  subtree로 quota 사용량을 숨길 수 없게 했다.
 - Phase 11/18: execute/compile seccomp regression probe에 file-handle,
   fanotify, keyring, kernel-module, syslog 계열 syscall 확인을 추가해
   denylist drift 감지를 넓혔다.

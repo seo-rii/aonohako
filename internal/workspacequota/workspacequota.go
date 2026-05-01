@@ -25,7 +25,13 @@ func Scan(root string) (Usage, error) {
 	usage := Usage{}
 	entries := 0
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info == nil {
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if info == nil {
 			return nil
 		}
 		if path != root {
