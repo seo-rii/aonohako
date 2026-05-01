@@ -904,6 +904,22 @@ static int check(const char *name, long nr) {
 	return 1;
 }
 
+static int check_personality(void) {
+	errno = 0;
+	long query_rc = syscall(SYS_personality, 0xffffffffUL, 0, 0, 0, 0, 0);
+	if (query_rc == -1) {
+		printf("personality_query:%s\n", strerror(errno));
+		return 1;
+	}
+	errno = 0;
+	long set_rc = syscall(SYS_personality, 0, 0, 0, 0, 0, 0);
+	if (set_rc == -1 && errno == EPERM) {
+		return 0;
+	}
+	printf("personality_set:%ld:%s\n", set_rc, strerror(errno));
+	return 1;
+}
+
 int main(void) {
 	int failed = 0;
 #ifdef SYS_bpf
@@ -1082,6 +1098,9 @@ int main(void) {
 #endif
 #ifdef SYS_fchmodat2
 	failed |= check("fchmodat2", SYS_fchmodat2);
+#endif
+#ifdef SYS_personality
+	failed |= check_personality();
 #endif
 	if (failed != 0) {
 		return 1;
