@@ -196,6 +196,8 @@ The seccomp filter denies high-risk operations, including:
 - `fanotify_*`, keyring syscalls, module loading, kexec, NFS server control,
   quota control, swap, reboot, syslog
 - `clock_settime`, `settimeofday`, `adjtimex`
+- `personality` mutations; `personality(0xffffffff)` queries remain allowed for
+  runtime compatibility
 - `chmod`, `fchmodat2`, `chown`, `mknod`
 
 The helper must allow the initial `execve()` into the requested runtime or

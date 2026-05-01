@@ -372,6 +372,11 @@ func MaybeRunFromEnv() bool {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_MEMFD_CREATE), 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 	}
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_PERSONALITY), 0, 4)
+	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0xffffffff, 1, 0)
+	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	appendStmt(unix.BPF_RET|unix.BPF_K, allow)
 
 	if !req.AllowProcessGroups {
 		for _, sysno := range []uint32{
