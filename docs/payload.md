@@ -130,6 +130,7 @@ profile before the request enters the stream or runner queue.
   "stdout_truncated": false,                // true when stdout exceeded the capture cap
   "stderr_truncated": false,                // true when stderr exceeded the capture cap
   "reason": "",                             // human-readable error
+  "verdict_source": "stdout",               // source that selected the final verdict, when known
   "score": null,                            // nullable float 0.0–1.0 (SPJ score)
   "sidecar_outputs": [                      // captured sidecar files
     {"path": "result.txt", "data_b64": "<base64>"}
@@ -276,3 +277,10 @@ When `spj` is provided, the SPJ binary is invoked as:
 - `wall_time_ms` uses `CLOCK_MONOTONIC`
 - `cpu_time_ms` samples the Linux process CPU clock while the submission is running
 - `time_ms` is retained as a compatibility alias for `wall_time_ms`
+- `verdict_source` is diagnostic and non-authoritative. Local helper runners
+  may report values such as `stdout`, `file_output`, `spj`, `exit_code`,
+  `signal`, `wait_status`, `sandbox_init`, `wall_time`, `cpu_time`,
+  `cpu_time_cgroup`, `cpu_rlimit`, `memory_rss`, `memory_cgroup`,
+  `memory_reported`, `address_space`, `pids_cgroup`, `workspace_bytes`,
+  `workspace_entries`, `workspace_depth`, or `workspace_scan` to explain which
+  measurement or judge step selected the final status.

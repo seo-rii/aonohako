@@ -145,11 +145,12 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit, tuning, s.cgroupParentDir)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
-		return model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason}
+		return model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason, VerdictSource: res.VerdictSource}
 	}
 
 	rawOut := res.Stdout
 	judgeOut := rawOut
+	judgeSource := "stdout"
 	fullErr := res.Stderr
 
 	if len(req.FileOutputs) > 0 {
@@ -158,14 +159,16 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 			if res.Status == "OK" {
 				res.Status = model.RunStatusRE
 				res.Reason = "file output capture failed: " + err.Error()
+				res.VerdictSource = "file_output"
 			}
 		} else {
 			judgeOut = captured
+			judgeSource = "file_output"
 		}
 	}
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(ws, req.SidecarOutputs)
-	status, score, evalReason := evaluateRunStatus(ctx, ws, req, res, judgeOut, s.runtimeTuning, s.cgroupParentDir)
+	status, score, evalReason, verdictSource := evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, s.runtimeTuning, s.cgroupParentDir)
 	reason := res.Reason
 	if evalReason != "" {
 		reason = evalReason
@@ -200,6 +203,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		StdoutTruncated: res.StdoutTruncated,
 		StderrTruncated: res.StderrTruncated,
 		Reason:          reason,
+		VerdictSource:   verdictSource,
 		Score:           score,
 		SidecarOutputs:  sidecarOutputs,
 		SidecarErrors:   sidecarErrors,

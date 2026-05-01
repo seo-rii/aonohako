@@ -547,6 +547,9 @@ func TestRunUsesRequestedFileOutputForJudging(t *testing.T) {
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("expected file output to be judged, got %+v", resp)
 	}
+	if resp.VerdictSource != "file_output" {
+		t.Fatalf("verdict_source = %q, want file_output", resp.VerdictSource)
+	}
 }
 
 func TestRunPythonEntrypointReadsAuxiliaryCSVFile(t *testing.T) {
@@ -594,6 +597,74 @@ func TestRunMissingRequestedFileOutputFailsExplicitly(t *testing.T) {
 	}
 	if !strings.Contains(resp.Reason, "file output capture failed") {
 		t.Fatalf("expected explicit file output reason, got %+v", resp)
+	}
+	if resp.VerdictSource != "file_output" {
+		t.Fatalf("verdict_source = %q, want file_output", resp.VerdictSource)
+	}
+}
+
+func TestEvaluateRunStatusReportsVerdictSource(t *testing.T) {
+	exitCode := 1
+	tests := []struct {
+		name        string
+		req         model.RunRequest
+		res         execResult
+		judgeOut    []byte
+		judgeSource string
+		wantStatus  string
+		wantSource  string
+	}{
+		{
+			name:        "stdout accepted",
+			req:         model.RunRequest{ExpectedStdout: "ok\n", Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}},
+			res:         execResult{Status: "OK"},
+			judgeOut:    []byte("ok\n"),
+			judgeSource: "stdout",
+			wantStatus:  model.RunStatusAccepted,
+			wantSource:  "stdout",
+		},
+		{
+			name:        "file output wrong answer",
+			req:         model.RunRequest{ExpectedStdout: "ok\n", Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}},
+			res:         execResult{Status: "OK"},
+			judgeOut:    []byte("bad\n"),
+			judgeSource: "file_output",
+			wantStatus:  model.RunStatusWA,
+			wantSource:  "file_output",
+		},
+		{
+			name:       "reported memory exceeds limit",
+			req:        model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}},
+			res:        execResult{Status: "OK", MemoryKB: 65 * 1024},
+			wantStatus: model.RunStatusMLE,
+			wantSource: "memory_reported",
+		},
+		{
+			name:       "exit code runtime error",
+			req:        model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}},
+			res:        execResult{Status: "OK", ExitCode: &exitCode},
+			wantStatus: model.RunStatusRE,
+			wantSource: "exit_code",
+		},
+		{
+			name:       "resource verdict preserves source",
+			req:        model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}},
+			res:        execResult{Status: model.RunStatusTLE, VerdictSource: "cpu_time", Reason: "cpu time limit exceeded"},
+			wantStatus: model.RunStatusTLE,
+			wantSource: "cpu_time",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			status, _, _, source := evaluateRunStatus(context.Background(), Workspace{}, &tc.req, tc.res, tc.judgeOut, tc.judgeSource, config.DefaultRuntimeTuningConfig(), "")
+			if status != tc.wantStatus {
+				t.Fatalf("status = %q, want %q", status, tc.wantStatus)
+			}
+			if source != tc.wantSource {
+				t.Fatalf("source = %q, want %q", source, tc.wantSource)
+			}
+		})
 	}
 }
 
@@ -2120,6 +2191,9 @@ func TestRunMarksMemoryLimitExceededEvenIfProgramHandlesAllocationFailure(t *tes
 	if resp.Status != model.RunStatusMLE {
 		t.Fatalf("expected MLE, got %+v", resp)
 	}
+	if !strings.HasPrefix(resp.VerdictSource, "memory") {
+		t.Fatalf("verdict_source = %q, want memory-derived source", resp.VerdictSource)
+	}
 	if resp.MemoryKB <= 32*1024 {
 		t.Fatalf("expected rss to exceed configured limit, got %+v", resp)
 	}
@@ -2163,6 +2237,9 @@ int main(void) {
 	if resp.Status != model.RunStatusMLE {
 		t.Fatalf("expected MLE from address-space exhaustion, got %+v", resp)
 	}
+	if resp.VerdictSource != "address_space" {
+		t.Fatalf("verdict_source = %q, want address_space", resp.VerdictSource)
+	}
 }
 
 func TestRunMarksMemoryLimitExceededForMmapRSSSpike(t *testing.T) {
@@ -2203,6 +2280,9 @@ int main(void) {
 	if resp.Status != model.RunStatusMLE {
 		t.Fatalf("expected MLE from mmap RSS spike, got %+v", resp)
 	}
+	if resp.VerdictSource != "memory_rss" && resp.VerdictSource != "memory_reported" {
+		t.Fatalf("verdict_source = %q, want memory_rss or memory_reported", resp.VerdictSource)
+	}
 	if resp.MemoryKB <= 32*1024 {
 		t.Fatalf("expected sampled RSS over memory limit, got %+v", resp)
 	}
@@ -2225,6 +2305,9 @@ func TestRunMarksWorkspaceQuotaExceeded(t *testing.T) {
 
 	if resp.Status != model.RunStatusWLE {
 		t.Fatalf("expected workspace limit status from workspace quota exhaustion, got %+v", resp)
+	}
+	if resp.VerdictSource != "workspace_bytes" {
+		t.Fatalf("verdict_source = %q, want workspace_bytes", resp.VerdictSource)
 	}
 }
 
@@ -2249,6 +2332,9 @@ func TestRunMarksWorkspaceEntryLimitExceeded(t *testing.T) {
 	if !strings.Contains(resp.Reason, "workspace entry limit exceeded") {
 		t.Fatalf("expected workspace entry diagnostic, got %+v", resp)
 	}
+	if resp.VerdictSource != "workspace_entries" {
+		t.Fatalf("verdict_source = %q, want workspace_entries", resp.VerdictSource)
+	}
 }
 
 func TestRunMarksWorkspaceDepthLimitExceeded(t *testing.T) {
@@ -2271,6 +2357,9 @@ func TestRunMarksWorkspaceDepthLimitExceeded(t *testing.T) {
 	}
 	if !strings.Contains(resp.Reason, "workspace depth exceeded") {
 		t.Fatalf("expected workspace depth diagnostic, got %+v", resp)
+	}
+	if resp.VerdictSource != "workspace_depth" {
+		t.Fatalf("verdict_source = %q, want workspace_depth", resp.VerdictSource)
 	}
 }
 
@@ -2297,5 +2386,8 @@ func TestRunFailsClosedWhenWorkspaceScanFails(t *testing.T) {
 	}
 	if !strings.Contains(resp.Reason, "workspace scan failed") {
 		t.Fatalf("expected workspace scan diagnostic, got %+v", resp)
+	}
+	if resp.VerdictSource != "workspace_scan" {
+		t.Fatalf("verdict_source = %q, want workspace_scan", resp.VerdictSource)
 	}
 }

@@ -25,6 +25,10 @@
 
 - Phase 9: SPJ timeout/init failure 같은 judge-owned failure reason을 최종
   `RunResponse.reason`에 보존해 contestant failure와 구분되게 했다.
+- Phase 8: `RunResponse.verdict_source`를 추가해 `stdout`, `file_output`,
+  `spj`, `exit_code`, `cpu_time`, `memory_rss`, `address_space`,
+  `workspace_*`처럼 최종 verdict를 선택한 judge/resource source를
+  API 응답과 문서에서 관찰 가능하게 했다.
 - Phase 10: remote SSE line/event/stream cap에 더해 idle heartbeat timeout을
   추가하고 `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`로 config화했다.
 - Phase 10: `X-Aonohako-Protocol-Version` 응답 헤더를 추가하고, remote
@@ -463,6 +467,8 @@
 작업:
 
 - CPU time vs wall time 정책, time multiplier, JIT/GC runtime 보정 기준을 문서화한다.
+- verdict source diagnostic을 응답에 포함해 deployment/profile 간 drift를
+  비교할 때 어떤 measurement가 결정을 내렸는지 확인할 수 있게 한다.
 - JVM, Node, .NET, Erlang, Kotlin, Wasmtime 등 runtime option을 config schema로 이동한다.
 - config validation에서 sandbox를 약화하는 옵션을 거부한다.
 - output truncation flag와 OLE/WA/RE verdict mapping을 protocol docs와 SSE docs에 맞춘다.

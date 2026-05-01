@@ -36,6 +36,7 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		"| PYPY3 | `pypy` | `pypy3 -I -S -m compileall` |",
 		"at most one path is supported",
 		"capture failure is reported as `Runtime Error`",
+		"`verdict_source` is diagnostic and non-authoritative",
 	}
 
 	for _, want := range wants {
@@ -67,6 +68,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"`/compile` rejects missing sources, more than 512 sources, source files over\n  16 MiB decoded, source totals over 48 MiB decoded, and invalid or unknown\n  `runtime_profile` values, invalid `problem_id` values, profile conflicts with\n  problem policy, and policy-disabled direct profile requests before acquiring\n  a stream or queue slot",
 		"`/execute` rejects oversized `stdin` / `expected_stdout`, out-of-range run\n  limits, invalid or unknown `runtime_profile` values, invalid `problem_id`\n  values, profile conflicts with problem policy, policy-disabled direct profile\n  requests, and disallowed `enable_network=true` before acquiring a stream or\n  queue slot",
 		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
+		"`verdict_source` is optional diagnostic metadata",
 		"`AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
 		"`embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
 		"backend rejects values\n  other than `1`",
@@ -131,6 +133,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	}
 	if !strings.Contains(architecture, "unsupported runtime security contracts fail startup before request handling") {
 		t.Fatalf("architecture.md must describe fail-closed security contract validation")
+	}
+	if !strings.Contains(architecture, "Local helper responses include `verdict_source` diagnostic metadata") || !strings.Contains(architecture, "`cpu_time_cgroup`") || !strings.Contains(architecture, "`workspace_scan`") {
+		t.Fatalf("architecture.md must describe verdict source diagnostics")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_REMOTE_RUNNER_AUTH=none` is rejected outside `dev`") {
 		t.Fatalf("architecture.md must describe production remote-auth none rejection")
@@ -256,6 +261,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero",
 		"`AONOHAKO_CGROUP_PARENT` is optional and supported only for",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
+		"`verdict_source` diagnostics",
 		"`cloudrun-idtoken`; `none` is allowed only for `dev`",
 		"`embedded + helper` backend rejects values other than `1`",
 		"`cloudrun + embedded + helper` is the supported production security target",

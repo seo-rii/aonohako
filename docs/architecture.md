@@ -350,6 +350,17 @@ The stable contract is:
   stdout/file-output or SPJ evaluation decides between `Accepted` and
   `Wrong Answer`
 
+Local helper responses include `verdict_source` diagnostic metadata when the
+runner can identify the source that selected the final status. The field is
+intended for operations and judge debugging, not as a security boundary. Typical
+values identify output comparison (`stdout`, `file_output`, `spj`), process
+exit (`exit_code`, `signal`), time (`wall_time`, `cpu_time`,
+`cpu_time_cgroup`, `cpu_rlimit`), memory (`memory_rss`, `memory_cgroup`,
+`memory_reported`, `address_space`), cgroup pids (`pids_cgroup`), and
+workspace checks (`workspace_bytes`, `workspace_entries`, `workspace_depth`,
+`workspace_scan`). This makes classification drift easier to compare across
+Cloud Run helper, self-hosted helper, and self-hosted cgroup-backed runners.
+
 Operators should compare results within one deployment profile. Cloud Run CPU
 allocation, JIT warmup, GC timing, runtime memory reservations, and procfs
 sampling races can still change the exact boundary between TLE, MLE, WLE, and

@@ -106,6 +106,7 @@ Client                        aonohako
   "stdout_truncated": false,            // true when stdout exceeded the capture cap
   "stderr_truncated": false,            // true when stderr exceeded the capture cap
   "reason": "",                         // failure reason
+  "verdict_source": "stdout",           // diagnostic source that selected the final verdict, when known
   "score": null,                        // nullable float; SPJ score (0.0–1.0)
   "sidecar_outputs": [                  // captured sidecar files
     {"path": "result.txt", "data_b64": "<base64>"}
@@ -127,6 +128,15 @@ Client                        aonohako
 | `Workspace Limit Exceeded` | Workspace file growth exceeded `limits.workspace_bytes` |
 | `Runtime Error` | Non-zero exit or signal |
 | `Container Initialization Failed` | Workspace setup or process start failed |
+
+`verdict_source` is optional diagnostic metadata. Local helper runners use it
+to distinguish output comparison (`stdout`, `file_output`, `spj`), process
+exit (`exit_code`, `signal`, `wait_status`, `sandbox_init`), wall/CPU time
+(`wall_time`, `cpu_time`, `cpu_time_cgroup`, `cpu_rlimit`), memory sources
+(`memory_rss`, `memory_cgroup`, `memory_reported`, `address_space`), pids
+limits (`pids_cgroup`), and workspace sources (`workspace_bytes`,
+`workspace_entries`, `workspace_depth`, `workspace_scan`). Remote runners may
+omit it.
 
 ---
 
