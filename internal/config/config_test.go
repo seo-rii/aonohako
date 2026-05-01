@@ -661,6 +661,26 @@ func TestLoadRejectsDedicatedWorkRootLargerThanConfiguredMaximum(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsDedicatedWorkRootWithTooManyInodes(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET", "secret")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+	t.Setenv("AONOHAKO_WORK_ROOT_MAX_FILES", "1")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected work root filesystem with too many inodes to be rejected")
+	}
+	if !strings.Contains(err.Error(), "AONOHAKO_WORK_ROOT_MAX_FILES") {
+		t.Fatalf("error %q should mention work root max files", err)
+	}
+}
+
 func TestWorkRootFilesystemAtUsesMostSpecificMount(t *testing.T) {
 	root := t.TempDir()
 	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
@@ -725,6 +745,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "true")
 	t.Setenv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT_MAX_BYTES", "123456789")
+	t.Setenv("AONOHAKO_WORK_ROOT_MAX_FILES", "123456")
 	t.Setenv("AONOHAKO_TRUSTED_RUNNER_INGRESS", "false")
 	t.Setenv("AONOHAKO_TRUSTED_PLATFORM_HEADERS", "false")
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
@@ -775,6 +796,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	if cfg.WorkRootMaxBytes != 123456789 {
 		t.Fatalf("work root max bytes = %d, want 123456789", cfg.WorkRootMaxBytes)
 	}
+	if cfg.WorkRootMaxFiles != 123456 {
+		t.Fatalf("work root max files = %d, want 123456", cfg.WorkRootMaxFiles)
+	}
 	if cfg.TrustedRunnerIngress {
 		t.Fatalf("trusted runner ingress should be parsed from env")
 	}
@@ -814,6 +838,8 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "require work root tmpfs malformed", key: "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", value: "sometimes"},
 		{name: "work root max negative", key: "AONOHAKO_WORK_ROOT_MAX_BYTES", value: "-1"},
 		{name: "work root max malformed", key: "AONOHAKO_WORK_ROOT_MAX_BYTES", value: "many"},
+		{name: "work root max files negative", key: "AONOHAKO_WORK_ROOT_MAX_FILES", value: "-1"},
+		{name: "work root max files malformed", key: "AONOHAKO_WORK_ROOT_MAX_FILES", value: "many"},
 		{name: "trusted runner ingress malformed", key: "AONOHAKO_TRUSTED_RUNNER_INGRESS", value: "sometimes"},
 		{name: "trusted platform headers malformed", key: "AONOHAKO_TRUSTED_PLATFORM_HEADERS", value: "sometimes"},
 	}
