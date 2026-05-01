@@ -289,6 +289,7 @@ func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.
 		"/usr/lib/python*/dist-packages/pip",
 		"/usr/local/lib/node_modules/npm",
 		"/opt/node-*/lib/node_modules/npm",
+		"if [[ -e \"${path}\" ]]; then chmod -R go-rwx \"${path}\"; fi",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("runtime.Dockerfile must restrict nonessential runtime tool execution with %q", marker)
