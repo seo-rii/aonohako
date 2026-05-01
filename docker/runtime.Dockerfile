@@ -85,7 +85,7 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
     done && \
     shopt -s nullglob && \
     for path in /usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip /usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip /usr/local/lib/node_modules/npm /opt/node-*/lib/node_modules/npm; do \
-      chmod -R go-rwx "${path}"; \
+      if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
     done
 
 ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
