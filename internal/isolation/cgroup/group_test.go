@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCreateRunGroupWritesRequiredLimits(t *testing.T) {
@@ -55,12 +56,14 @@ func TestValidateParentAcceptsRequiredControllers(t *testing.T) {
 	parent := t.TempDir()
 	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids io\n")
 	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+	writeFile(t, filepath.Join(parent, "cgroup.procs"), "")
 	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
 	writeFile(t, mountInfo, "36 25 0:31 / "+parent+" rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw\n")
 
 	if err := ValidateParentAt(parent, mountInfo, []string{"cpu", "memory", "pids"}); err != nil {
 		t.Fatalf("ValidateParent() error = %v", err)
 	}
+	assertFile(t, filepath.Join(parent, "cgroup.subtree_control"), "+cpu +memory +pids")
 }
 
 func TestValidateParentRejectsMissingController(t *testing.T) {
@@ -103,6 +106,7 @@ func TestValidateParentRejectsUnwritableParent(t *testing.T) {
 	parent := t.TempDir()
 	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids\n")
 	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+	writeFile(t, filepath.Join(parent, "cgroup.procs"), "")
 	if err := os.Chmod(parent, 0o555); err != nil {
 		t.Fatalf("chmod parent: %v", err)
 	}
@@ -134,10 +138,28 @@ func TestValidateParentRejectsMissingSubtreeControl(t *testing.T) {
 	}
 }
 
+func TestValidateParentRejectsNonEmptyParentCgroup(t *testing.T) {
+	parent := t.TempDir()
+	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids\n")
+	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+	writeFile(t, filepath.Join(parent, "cgroup.procs"), "123\n")
+	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
+	writeFile(t, mountInfo, "36 25 0:31 / "+parent+" rw - cgroup2 cgroup rw\n")
+
+	err := ValidateParentAt(parent, mountInfo, []string{"cpu", "memory", "pids"})
+	if err == nil {
+		t.Fatalf("ValidateParentAt() error = nil, want non-empty cgroup rejection")
+	}
+	if !strings.Contains(err.Error(), "must not contain processes") {
+		t.Fatalf("error %q should mention parent processes", err)
+	}
+}
+
 func TestValidateParentRejectsParentOutsideCgroup2Mount(t *testing.T) {
 	parent := t.TempDir()
 	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids\n")
 	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+	writeFile(t, filepath.Join(parent, "cgroup.procs"), "")
 	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
 	writeFile(t, mountInfo, "36 25 0:31 / /sys/fs/cgroup rw - cgroup2 cgroup rw\n")
 
@@ -158,6 +180,7 @@ func TestValidateParentAcceptsNestedCgroupParent(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(parent, "cgroup.controllers"), "cpu memory pids\n")
 	writeFile(t, filepath.Join(parent, "cgroup.subtree_control"), "")
+	writeFile(t, filepath.Join(parent, "cgroup.procs"), "")
 	mountInfo := filepath.Join(t.TempDir(), "mountinfo")
 	writeFile(t, mountInfo, "36 25 0:31 / "+root+" rw - cgroup2 cgroup rw\n")
 
@@ -280,6 +303,35 @@ func TestGroupRemoveRejectsNonEmptyRunGroup(t *testing.T) {
 	writeFile(t, filepath.Join(group.Path, "leftover"), "x")
 	if err := group.Remove(); err == nil {
 		t.Fatalf("Remove() error = nil, want non-empty cgroup rejection")
+	}
+}
+
+func TestGroupRemoveWithRetryWaitsForDelayedCleanup(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-retry", Limits{
+		MemoryMaxBytes: 64 << 20,
+		PidsMax:        16,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+	removeFakeCgroupFiles(t, group)
+	leftover := filepath.Join(group.Path, "leftover")
+	writeFile(t, leftover, "x")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		time.Sleep(20 * time.Millisecond)
+		_ = os.Remove(leftover)
+	}()
+
+	if err := group.RemoveWithRetry(200 * time.Millisecond); err != nil {
+		t.Fatalf("RemoveWithRetry() error = %v", err)
+	}
+	<-done
+	if _, err := os.Stat(group.Path); !os.IsNotExist(err) {
+		t.Fatalf("group path should be removed, stat err=%v", err)
 	}
 }
 

@@ -168,7 +168,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(ws, req.SidecarOutputs)
-	status, score, evalReason, verdictSource := evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, s.runtimeTuning, s.cgroupParentDir)
+	status, score, evalReason, verdictSource := evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, tuning, s.cgroupParentDir)
 	reason := res.Reason
 	if evalReason != "" {
 		reason = evalReason

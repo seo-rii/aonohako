@@ -1,7 +1,6 @@
 package compile
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -163,6 +162,9 @@ func capCompileResponseOutput(resp model.CompileResponse) model.CompileResponse 
 	resp.StdoutTruncated = resp.StdoutTruncated || truncated
 	resp.Stderr, truncated = capCompileOutputValue(resp.Stderr)
 	resp.StderrTruncated = resp.StderrTruncated || truncated
+	if resp.ReasonCode == "" {
+		resp.ReasonCode = compileReasonCode(resp.Status, resp.Reason)
+	}
 	return resp
 }
 
@@ -171,6 +173,76 @@ func capCompileOutputValue(value string) (string, bool) {
 		return value[:compileOutputCaptureBytes], true
 	}
 	return value, false
+}
+
+func compileReasonCode(status, reason string) string {
+	lowerReason := strings.ToLower(reason)
+	switch {
+	case status == model.CompileStatusTimeout || strings.Contains(lowerReason, "context deadline exceeded"):
+		return "timeout"
+	case strings.Contains(lowerReason, "memory limit exceeded"):
+		return "memory_limit_exceeded"
+	case strings.Contains(lowerReason, "workspace limit exceeded") || strings.Contains(lowerReason, "workspace scan failed"):
+		return "workspace_limit_exceeded"
+	case strings.Contains(lowerReason, "pids limit exceeded") || strings.Contains(lowerReason, "process limit exceeded"):
+		return "process_limit_exceeded"
+	case strings.Contains(lowerReason, "file size limit exceeded"):
+		return "file_size_limit_exceeded"
+	case strings.Contains(lowerReason, "cpu time limit exceeded"):
+		return "cpu_time_limit_exceeded"
+	default:
+		return ""
+	}
+}
+
+type cappedTextBuffer struct {
+	limit     int
+	buf       strings.Builder
+	truncated bool
+}
+
+func newCompileOutputBuffer() *cappedTextBuffer {
+	return &cappedTextBuffer{limit: compileOutputCaptureBytes}
+}
+
+func (b *cappedTextBuffer) Append(value string) {
+	if b == nil || value == "" || b.limit <= 0 {
+		return
+	}
+	remaining := b.limit - b.buf.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return
+	}
+	if len(value) > remaining {
+		b.buf.WriteString(value[:remaining])
+		b.truncated = true
+		return
+	}
+	b.buf.WriteString(value)
+}
+
+func (b *cappedTextBuffer) String() string {
+	if b == nil {
+		return ""
+	}
+	return b.buf.String()
+}
+
+func (b *cappedTextBuffer) Truncated() bool {
+	return b != nil && b.truncated
+}
+
+func compileResponseWithCapturedOutput(status string, artifacts []model.Artifact, reason string, stdout, stderr *cappedTextBuffer) model.CompileResponse {
+	return model.CompileResponse{
+		Status:          status,
+		Artifacts:       artifacts,
+		Stdout:          stdout.String(),
+		Stderr:          stderr.String(),
+		StdoutTruncated: stdout.Truncated(),
+		StderrTruncated: stderr.Truncated(),
+		Reason:          reason,
+	}
 }
 
 func resolveProfile(lang string) (profiles.Profile, bool) {
@@ -440,8 +512,8 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "clojure":
 		var checked int
-		var fullOut bytes.Buffer
-		var fullErr bytes.Buffer
+		fullOut := newCompileOutputBuffer()
+		fullErr := newCompileOutputBuffer()
 		for _, src := range req.Sources {
 			if !strings.HasSuffix(strings.ToLower(src.Name), ".clj") {
 				continue
@@ -450,10 +522,10 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			sourcePath := filepath.Join(workDir, filepath.Clean(src.Name))
 			parseExpr := fmt.Sprintf(`(require '[clojure.java.io :as io]) (with-open [r (java.io.PushbackReader. (io/reader %q))] (loop [] (let [form (read {:eof ::eof} r)] (when-not (= form ::eof) (recur)))))`, sourcePath)
 			stdout, stderr, status, reason := runCommand(ctx, workDir, "clojure", []string{"-e", parseExpr}, javaCompileEnv(workDir, 768))
-			fullOut.WriteString(stdout)
-			fullErr.WriteString(stderr)
+			fullOut.Append(stdout)
+			fullErr.Append(stderr)
 			if status != model.CompileStatusOK {
-				return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+				return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
 			}
 		}
 		if checked == 0 {
@@ -461,9 +533,9 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
 		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 	case "racket":
 		return compileScriptCheck(ctx, workDir, req.Sources, "raco", []string{"make"})
 	case "python":
@@ -472,18 +544,18 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compilePythonLike(ctx, workDir, req.Sources, "pypy3")
 	case "r":
 		var checked int
-		var fullOut bytes.Buffer
-		var fullErr bytes.Buffer
+		fullOut := newCompileOutputBuffer()
+		fullErr := newCompileOutputBuffer()
 		for _, src := range req.Sources {
 			if !strings.HasSuffix(strings.ToLower(src.Name), ".r") {
 				continue
 			}
 			checked++
 			stdout, stderr, status, reason := runCommand(ctx, workDir, "/usr/lib/R/bin/exec/R", []string{"--vanilla", "--slave", "-e", "parse(file=commandArgs(TRUE)[1])", "--args", filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
-			fullOut.WriteString(stdout)
-			fullErr.WriteString(stderr)
+			fullOut.Append(stdout)
+			fullErr.Append(stderr)
 			if status != model.CompileStatusOK {
-				return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+				return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
 			}
 		}
 		if checked == 0 {
@@ -491,23 +563,23 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
 		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 	case "prolog":
 		var checked int
-		var fullOut bytes.Buffer
-		var fullErr bytes.Buffer
+		fullOut := newCompileOutputBuffer()
+		fullErr := newCompileOutputBuffer()
 		for _, src := range req.Sources {
 			if !strings.HasSuffix(strings.ToLower(src.Name), ".pl") {
 				continue
 			}
 			checked++
 			stdout, stderr, status, reason := runCommand(ctx, workDir, "swipl", []string{"-q", "-f", "none", "-g", "halt", "-t", "halt", filepath.Join(workDir, filepath.Clean(src.Name))}, nil)
-			fullOut.WriteString(stdout)
-			fullErr.WriteString(stderr)
+			fullOut.Append(stdout)
+			fullErr.Append(stderr)
 			if status != model.CompileStatusOK {
-				return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+				return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
 			}
 		}
 		if checked == 0 {
@@ -515,13 +587,13 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
 		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 	case "lisp":
 		var checked int
-		var fullOut bytes.Buffer
-		var fullErr bytes.Buffer
+		fullOut := newCompileOutputBuffer()
+		fullErr := newCompileOutputBuffer()
 		for _, src := range req.Sources {
 			if !strings.HasSuffix(strings.ToLower(src.Name), ".lisp") && !strings.HasSuffix(strings.ToLower(src.Name), ".lsp") {
 				continue
@@ -532,10 +604,10 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			outputPath := filepath.Join(workDir, ".cache", strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean))+".fasl")
 			eval := fmt.Sprintf(`(handler-case (progn (compile-file %q :output-file %q) (sb-ext:exit :code 0)) (error (e) (format *error-output* "~A~%%" e) (sb-ext:exit :code 1)))`, sourcePath, outputPath)
 			stdout, stderr, status, reason := runCommand(ctx, workDir, "sbcl", []string{"--noinform", "--non-interactive", "--eval", eval}, nil)
-			fullOut.WriteString(stdout)
-			fullErr.WriteString(stderr)
+			fullOut.Append(stdout)
+			fullErr.Append(stderr)
 			if status != model.CompileStatusOK {
-				return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+				return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
 			}
 		}
 		if checked == 0 {
@@ -546,23 +618,23 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return strings.HasSuffix(l, ".lisp") || strings.HasSuffix(l, ".lsp")
 		}, "")
 		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 	case "coq":
 		var checked int
-		var fullOut bytes.Buffer
-		var fullErr bytes.Buffer
+		fullOut := newCompileOutputBuffer()
+		fullErr := newCompileOutputBuffer()
 		for _, src := range req.Sources {
 			if !strings.HasSuffix(strings.ToLower(src.Name), ".v") {
 				continue
 			}
 			checked++
 			stdout, stderr, status, reason := runCommand(ctx, workDir, "coqc", []string{"-q", filepath.Join(workDir, filepath.Clean(src.Name))}, []string{"OCAMLRUNPARAM=" + ocamlCompileRunParam})
-			fullOut.WriteString(stdout)
-			fullErr.WriteString(stderr)
+			fullOut.Append(stdout)
+			fullErr.Append(stderr)
 			if status != model.CompileStatusOK {
-				return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+				return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
 			}
 		}
 		if checked == 0 {
@@ -570,9 +642,9 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		artifacts, err := collectArtifacts(workDir, func(name string) bool { return strings.HasSuffix(strings.ToLower(name), ".v") }, "")
 		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 	case "javascript":
 		return compileScriptCheck(ctx, workDir, req.Sources, "node", []string{"--check"})
 	case "ruby":
@@ -912,8 +984,8 @@ func compilePythonLike(ctx context.Context, workDir string, sources []model.Sour
 }
 
 func compileScriptCheck(ctx context.Context, workDir string, sources []model.Source, bin string, prefix []string) model.CompileResponse {
-	var fullOut bytes.Buffer
-	var fullErr bytes.Buffer
+	fullOut := newCompileOutputBuffer()
+	fullErr := newCompileOutputBuffer()
 	for _, src := range sources {
 		clean, err := util.ValidateRelativePath(src.Name)
 		if err != nil {
@@ -922,17 +994,17 @@ func compileScriptCheck(ctx context.Context, workDir string, sources []model.Sou
 		abs := filepath.Join(workDir, clean)
 		args := append(append([]string{}, prefix...), abs)
 		stdout, stderr, status, reason := runCommand(ctx, workDir, bin, args, nil)
-		fullOut.WriteString(stdout)
-		fullErr.WriteString(stderr)
+		fullOut.Append(stdout)
+		fullErr.Append(stderr)
 		if status != model.CompileStatusOK {
-			return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+			return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
 		}
 	}
 	artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
 	if err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 	}
-	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 }
 
 func compileTypeScript(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
@@ -1361,8 +1433,8 @@ func compileOCaml(ctx context.Context, workDir, target string, sources []model.S
 }
 
 func compileElixir(ctx context.Context, workDir string, sources []model.Source, tuning config.RuntimeTuningConfig) model.CompileResponse {
-	var fullOut bytes.Buffer
-	var fullErr bytes.Buffer
+	fullOut := newCompileOutputBuffer()
+	fullErr := newCompileOutputBuffer()
 	var checked int
 	tuning = tuning.WithSafeDefaults()
 	for _, src := range sources {
@@ -1382,10 +1454,10 @@ func compileElixir(ctx context.Context, workDir string, sources []model.Source, 
 			[]string{"-e", "Code.string_to_quoted!(File.read!(hd(System.argv())), file: hd(System.argv()))", filepath.Join(workDir, clean)},
 			[]string{"ERL_AFLAGS=" + erlangAFlags(tuning)},
 		)
-		fullOut.WriteString(stdout)
-		fullErr.WriteString(stderr)
+		fullOut.Append(stdout)
+		fullErr.Append(stderr)
 		if status != model.CompileStatusOK {
-			return model.CompileResponse{Status: status, Stdout: fullOut.String(), Stderr: fullErr.String(), Reason: reason}
+			return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
 		}
 	}
 	if checked == 0 {
@@ -1393,9 +1465,9 @@ func compileElixir(ctx context.Context, workDir string, sources []model.Source, 
 	}
 	artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
 	if err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: fullOut.String(), Stderr: fullErr.String()}
+		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 	}
-	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: fullOut.String(), Stderr: fullErr.String()}
+	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 }
 
 func erlangAFlags(tuning config.RuntimeTuningConfig) string {
@@ -1770,11 +1842,11 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		if err := runGroup.AddProc(cmd.Process.Pid); err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			_ = cmd.Wait()
-			_ = runGroup.Remove()
+			_ = runGroup.RemoveWithRetry(250 * time.Millisecond)
 			return "", "", model.CompileStatusInternal, "cgroup add process failed: " + err.Error()
 		}
 		defer func() {
-			_ = runGroup.Remove()
+			_ = runGroup.RemoveWithRetry(250 * time.Millisecond)
 		}()
 	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)

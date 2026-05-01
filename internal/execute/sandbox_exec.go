@@ -245,14 +245,14 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		if err := runGroup.AddProc(cmd.Process.Pid); err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			_ = cmd.Wait()
-			_ = runGroup.Remove()
+			_ = runGroup.RemoveWithRetry(250 * time.Millisecond)
 			return execResult{Status: model.RunStatusInitFail, Reason: "cgroup add process failed: " + err.Error()}
 		}
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			cgroupCPUBaselineMicros = stats.CPUUsageMicros
 		}
 		defer func() {
-			_ = runGroup.Remove()
+			_ = runGroup.RemoveWithRetry(250 * time.Millisecond)
 		}()
 	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)

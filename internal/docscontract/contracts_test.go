@@ -24,6 +24,7 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		"`sources` may contain multiple files",
 		"`entry_point` names a source path, it must exactly match one submitted\nsource",
 		"`runtime_profile`, when present, must name a profile configured by the runner\noperator through `AONOHAKO_RUNTIME_TUNING_PROFILES`",
+		`"reason_code": ""                          // optional machine-readable reason`,
 		"Non-dev servers\naccept it only when `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`",
 		"`problem_id`, when present, is a policy key looked up in\n`AONOHAKO_PROBLEM_RUNTIME_PROFILES`",
 		"`binaries` may contain multiple files",
@@ -62,6 +63,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		`"principal_stream_limit_exceeded"`,
 		`"principal_rate_limited"`,
 		"buffered stdout / stderr payloads emitted before `result`",
+		`"reason_code": ""                      // optional machine-readable reason`,
 		"keeps the same SSE contract for `/compile` and `/execute`",
 		"forwards `log`, `image`, `error`, and `result`",
 		"Workspace Limit Exceeded",
@@ -119,13 +121,13 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`aonohako-selftest mount-preflight` can probe self-hosted runner hosts") || !strings.Contains(architecture, "`unshare(CLONE_NEWNS)`, private mount propagation, a bounded tmpfs mount, a\nprocfs mount with `hidepid=2`, and a read-only bind remount") || !strings.Contains(architecture, "does not add mount namespace") || !strings.Contains(architecture, "read-only rootfs, or masked `/proc` capabilities") {
 		t.Fatalf("architecture.md must describe mount namespace preflight as a prerequisite-only check")
 	}
-	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") || !strings.Contains(architecture, "not group/world writable") || !strings.Contains(architecture, "probe run-group create/remove cycle") {
+	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") || !strings.Contains(architecture, "not group/world writable") || !strings.Contains(architecture, "probe run-group create/remove cycle") || !strings.Contains(architecture, "parent `cgroup.procs` to be empty") || !strings.Contains(architecture, "`cgroup.subtree_control` at startup") {
 		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
 	}
 	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "recreates `/tmp/.dotnet`") {
 		t.Fatalf("architecture.md must describe dotnet rlimit and shared-state compatibility exceptions")
 	}
-	if !strings.Contains(architecture, "writing values such as `+cpu +memory +pids` to\n`cgroup.subtree_control`") || !strings.Contains(architecture, "positive\n`memory.max` and `pids.max` values") || !strings.Contains(architecture, "`memory.swap.max`") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "`cpu.max=100000 100000`") || !strings.Contains(architecture, "writing its PID to `cgroup.procs`") || !strings.Contains(architecture, "without recursive deletion") {
+	if !strings.Contains(architecture, "writing values such as `+cpu +memory +pids` to\n`cgroup.subtree_control`") || !strings.Contains(architecture, "positive\n`memory.max` and `pids.max` values") || !strings.Contains(architecture, "`memory.swap.max`") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "`cpu.max=100000 100000`") || !strings.Contains(architecture, "writing its PID to `cgroup.procs`") || !strings.Contains(architecture, "without recursive deletion") || !strings.Contains(architecture, "short retry window") {
 		t.Fatalf("architecture.md must describe cgroup run-group write contract")
 	}
 	if !strings.Contains(architecture, "reads `memory.current`, `memory.peak` when present,\n`memory.events`, `pids.current`, `pids.events`, and `cpu.stat`") || !strings.Contains(architecture, "`oom_group_kill`, plus `pids.events` `max`") || !strings.Contains(architecture, "`cpu.stat` `usage_usec`") {

@@ -564,9 +564,6 @@ func (s *Server) applyRuntimeProfilePolicy(problemID string, runtimeProfile *str
 	}
 	if mappedProfile != "" {
 		if *runtimeProfile != "" {
-			if !s.cfg.AllowRequestRuntimeProfile {
-				return fmt.Errorf("runtime_profile is not allowed by server policy")
-			}
 			if *runtimeProfile != mappedProfile {
 				return fmt.Errorf("runtime_profile conflicts with problem policy")
 			}

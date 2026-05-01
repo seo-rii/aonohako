@@ -64,7 +64,17 @@ func ValidateParentAt(parentDir, mountInfoPath string, requiredControllers []str
 	if _, err := os.Stat(filepath.Join(parentDir, "cgroup.subtree_control")); err != nil {
 		return fmt.Errorf("stat cgroup.subtree_control: %w", err)
 	}
+	procs, err := os.ReadFile(filepath.Join(parentDir, "cgroup.procs"))
+	if err != nil {
+		return fmt.Errorf("read cgroup.procs: %w", err)
+	}
+	if strings.TrimSpace(string(procs)) != "" {
+		return fmt.Errorf("cgroup parent must not contain processes; use an empty delegated parent")
+	}
 	if err := validateCgroup2Mount(parentDir, mountInfoPath); err != nil {
+		return err
+	}
+	if err := EnableControllers(parentDir, requiredControllers); err != nil {
 		return err
 	}
 	probe, err := os.MkdirTemp(parentDir, ".aonohako-cgroup-contract-*")
@@ -217,4 +227,26 @@ func (g Group) Remove() error {
 		return fmt.Errorf("remove cgroup %s: %w", g.Path, err)
 	}
 	return nil
+}
+
+func (g Group) RemoveWithRetry(deadline time.Duration) error {
+	if strings.TrimSpace(g.Path) == "" {
+		return nil
+	}
+	if deadline <= 0 {
+		return g.Remove()
+	}
+	until := time.Now().Add(deadline)
+	var lastErr error
+	for {
+		if err := g.Remove(); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if !time.Now().Before(until) {
+			return lastErr
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
