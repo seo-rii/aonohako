@@ -508,6 +508,8 @@ The following checks are enforced before the HTTP server starts:
   `/proc/self/mountinfo` that the required work root is backed by `tmpfs`
 - `AONOHAKO_WORK_ROOT_MAX_BYTES`, when nonzero, verifies through `statfs` that
   the required work root filesystem is bounded to that many bytes or less
+- `AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero, verifies through `statfs` that
+  the required work root filesystem exposes no more than that many inodes
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
   executions do not overlap under the shared sandbox UID
@@ -524,7 +526,8 @@ The following checks are enforced before the HTTP server starts:
   named contract, whether that contract is implemented, effective and missing
   local capabilities, auth posture, queue/stream limits, cgroup parent presence,
   and `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` /
-  `AONOHAKO_WORK_ROOT_MAX_BYTES` state as JSON for deployment checks.
+  `AONOHAKO_WORK_ROOT_MAX_BYTES` / `AONOHAKO_WORK_ROOT_MAX_FILES` state as JSON
+  for deployment checks.
 
 Recommended Cloud Run deployment baseline:
 
@@ -539,7 +542,7 @@ Recommended Cloud Run deployment baseline:
 - service concurrency `1`
 - bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`, optionally asserted
   with `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` and
-  `AONOHAKO_WORK_ROOT_MAX_BYTES`
+  `AONOHAKO_WORK_ROOT_MAX_BYTES` / `AONOHAKO_WORK_ROOT_MAX_FILES`
 - separate runner service account with minimal IAM permissions
 - Direct VPC egress with `all-traffic`
 - firewall-denied outbound traffic except for explicitly allowed destinations

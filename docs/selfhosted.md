@@ -64,7 +64,8 @@ multi-slot helper execution:
 4. Give every runner instance its own dedicated `AONOHAKO_WORK_ROOT`.
    Set `AONOHAKO_WORK_ROOT_MAX_BYTES` when the work root is backed by a
    bounded filesystem or tmpfs that should fail startup if it is accidentally
-   replaced by a larger shared volume.
+   replaced by a larger shared volume. Set `AONOHAKO_WORK_ROOT_MAX_FILES` when
+   the filesystem inode budget should be checked the same way.
 5. Scale throughput by adding more runner instances, not by increasing helper
    slots inside one process.
 

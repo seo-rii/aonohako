@@ -253,6 +253,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root",
 		"`AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is a strict boolean",
 		"`AONOHAKO_WORK_ROOT_MAX_BYTES`, when nonzero",
+		"`AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero",
 		"`AONOHAKO_CGROUP_PARENT` is optional and supported only for",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`cloudrun-idtoken`; `none` is allowed only for `dev`",

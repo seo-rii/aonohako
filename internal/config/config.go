@@ -133,6 +133,7 @@ type Config struct {
 	AllowRequestRuntimeProfile    bool
 	RequireWorkRootTmpfs          bool
 	WorkRootMaxBytes              int
+	WorkRootMaxFiles              int
 	TrustedRunnerIngress          bool
 	TrustedPlatformHeaders        bool
 	TrustedPlatformHeaderCIDRs    []string
@@ -205,6 +206,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	workRootMaxBytes, err := parseNonNegativeIntEnv("AONOHAKO_WORK_ROOT_MAX_BYTES", os.Getenv("AONOHAKO_WORK_ROOT_MAX_BYTES"), 0)
+	if err != nil {
+		return Config{}, err
+	}
+	workRootMaxFiles, err := parseNonNegativeIntEnv("AONOHAKO_WORK_ROOT_MAX_FILES", os.Getenv("AONOHAKO_WORK_ROOT_MAX_FILES"), 0)
 	if err != nil {
 		return Config{}, err
 	}
@@ -503,17 +508,27 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT must be on tmpfs when AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true; got %s", fsType)
 			}
 		}
-		if workRootMaxBytes > 0 {
+		if workRootMaxBytes > 0 || workRootMaxFiles > 0 {
 			var fs syscall.Statfs_t
 			if err := syscall.Statfs(workRoot, &fs); err != nil {
-				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT_MAX_BYTES validation failed: %w", err)
+				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT statfs validation failed: %w", err)
 			}
-			if fs.Bsize <= 0 {
-				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT_MAX_BYTES validation failed: invalid filesystem block size %d", fs.Bsize)
+			if workRootMaxBytes > 0 {
+				if fs.Bsize <= 0 {
+					return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT_MAX_BYTES validation failed: invalid filesystem block size %d", fs.Bsize)
+				}
+				totalBytes := fs.Blocks * uint64(fs.Bsize)
+				if totalBytes > uint64(workRootMaxBytes) {
+					return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT filesystem size %d exceeds AONOHAKO_WORK_ROOT_MAX_BYTES=%d", totalBytes, workRootMaxBytes)
+				}
 			}
-			totalBytes := fs.Blocks * uint64(fs.Bsize)
-			if totalBytes > uint64(workRootMaxBytes) {
-				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT filesystem size %d exceeds AONOHAKO_WORK_ROOT_MAX_BYTES=%d", totalBytes, workRootMaxBytes)
+			if workRootMaxFiles > 0 {
+				if fs.Files == 0 {
+					return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT_MAX_FILES validation failed: filesystem inode count is unavailable")
+				}
+				if fs.Files > uint64(workRootMaxFiles) {
+					return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT filesystem inode count %d exceeds AONOHAKO_WORK_ROOT_MAX_FILES=%d", fs.Files, workRootMaxFiles)
+				}
 			}
 		}
 	}
@@ -534,6 +549,7 @@ func Load() (Config, error) {
 		AllowRequestRuntimeProfile:    allowRequestRuntimeProfile,
 		RequireWorkRootTmpfs:          requireWorkRootTmpfs,
 		WorkRootMaxBytes:              workRootMaxBytes,
+		WorkRootMaxFiles:              workRootMaxFiles,
 		TrustedRunnerIngress:          trustedRunnerIngress,
 		TrustedPlatformHeaders:        trustedPlatformHeaders,
 		TrustedPlatformHeaderCIDRs:    trustedPlatformHeaderCIDRs,
