@@ -151,6 +151,9 @@
   package/toolchain manager(`pip`, `npm`, `gem` 등)까지 확장하고
   image-permission selftest와 docs contract에 반영했다. Rust toolchain
   proxy는 `rustc` smoke 실행에 필요해 예외로 남겼다.
+- Phase 6: Python `pip`와 Node `npm`의 module entrypoint directory도
+  root-only로 잠가 `python3 -m pip`나 `node .../npm-cli.js` 우회를
+  image-permission selftest와 docs contract에 반영했다.
 - Phase 6: image-permission selftest도 Rust toolchain proxy 예외를 반영해
   `cargo`/`rustup` hardening expectation이 `rustc` smoke와 충돌하지 않게 했다.
 - Phase 12: production runtime profile docker archive artifact마다 SHA256

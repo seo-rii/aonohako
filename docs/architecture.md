@@ -211,8 +211,11 @@ toolchain-manager, remote-access, debugger, and network-diagnostic binaries such
 as `apt`, `dpkg`, `curl`, `wget`, `git`, `pip`, `npm`, `gem`, `ssh`, `rsync`,
 `gdb`, `strace`, `tcpdump`, `nmap`, `dig`, `ip`, and `ping` are root-only
 executable, so the sandbox UID cannot use them as post-start replacement
-targets. Rust toolchain shims stay executable because rustup proxy hard links
-are also the `rustc` entrypoint used by the Rust compiler smoke.
+targets. Package-manager module directories such as Python `pip` and Node
+`npm` are also root-only so submissions cannot invoke them through
+interpreter-level entrypoints such as `python3 -m pip` or `node .../npm-cli.js`.
+Rust toolchain shims stay executable because rustup proxy hard links are also
+the `rustc` entrypoint used by the Rust compiler smoke.
 
 Per-request network disable adds seccomp denies for socket-related syscalls:
 
@@ -649,10 +652,11 @@ the runtime image directly because they are not published on PyPI.
 The runtime Docker image is also hardened to reduce the readable surface for the
 sandbox UID. Non-essential metadata and package-manager paths are made
 root-only, including identity metadata such as `/etc/passwd`, `/etc/group`, and
-package database paths, while shared libraries and language runtimes remain
-readable so the interpreter or binary can still start normally. Runtime-mounted
-host files such as `/etc/hostname` and `/etc/hosts` are not image-hardened and
-remain part of the mount isolation backlog.
+package database paths, and package-manager module entrypoint directories such
+as Python `pip` and Node `npm`, while shared libraries and language runtimes
+remain readable so the interpreter or binary can still start normally.
+Runtime-mounted host files such as `/etc/hostname` and `/etc/hosts` are not
+image-hardened and remain part of the mount isolation backlog.
 
 Until execute-only images are split from compile images, image maintainers
 should treat every world-executable binary in the runtime image as reachable by

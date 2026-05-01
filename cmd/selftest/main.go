@@ -2095,6 +2095,30 @@ func runDirectImagePermissionChecks() error {
 		}
 	}
 
+	moduleOut, moduleErr, err := runAsSandboxUser(
+		"for p in "+
+			"/usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip "+
+			"/usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip "+
+			"/usr/local/lib/node_modules/npm /opt/node-*/lib/node_modules/npm; do "+
+			"if [ -e \"$p\" ]; then "+
+			"if [ -r \"$p\" ] || [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
+			"fi; "+
+			"done",
+		"",
+	)
+	if err != nil {
+		return fmt.Errorf("image-package-module-paths-are-not-readable: %w\n%s", err, moduleErr)
+	}
+	moduleFields := strings.Fields(strings.TrimSpace(moduleOut))
+	if len(moduleFields)%2 != 0 {
+		return fmt.Errorf("image-package-module-paths-are-not-readable: unexpected stdout %q stderr %q", moduleOut, moduleErr)
+	}
+	for i := 0; i+1 < len(moduleFields); i += 2 {
+		if moduleFields[i+1] != "blocked" {
+			return fmt.Errorf("image-package-module-paths-are-not-readable: unexpected stdout %q stderr %q", moduleOut, moduleErr)
+		}
+	}
+
 	scratchOut, scratchErr, err := runAsSandboxUser(
 		"for p in /tmp /var/tmp /run/lock; do "+
 			"if [ -e \"$p\" ]; then "+
