@@ -399,7 +399,10 @@ separately because it is useful for future throttling but not required for the
 first hard memory/process boundary. Setting `AONOHAKO_CGROUP_PARENT` is allowed
 only for `selfhosted + embedded + helper`, and startup validates the selected
 parent is under a cgroup v2 mount, is not group/world writable, and accepts a
-probe run-group create/remove cycle before request handling.
+probe run-group create/remove cycle before request handling. It also requires
+the parent `cgroup.procs` to be empty and writes the requested controllers to
+`cgroup.subtree_control` at startup, so delegation failures are reported before
+the runner accepts work.
 
 The same package owns the low-level run-group write contract used by the
 optional cgroup guardrail and the future isolated backend. Parent cgroups enable
@@ -413,7 +416,7 @@ domain. Compile, execute, and SPJ run groups also write
 the optional cgroup guardrail is enabled. A target process is admitted by
 writing its PID to `cgroup.procs`. Cleanup removes the run cgroup directory
 without recursive deletion so leftover processes or files surface as cleanup
-errors.
+errors, with a short retry window for kernel-side process cleanup races.
 
 The accounting reader reads `memory.current`, `memory.peak` when present,
 `memory.events`, `pids.current`, `pids.events`, and `cpu.stat`. When a run

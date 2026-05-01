@@ -51,7 +51,8 @@ Client                        aonohako
   "stderr": "",                          // compiler stderr, capped at 1 MiB
   "stdout_truncated": false,             // true when stdout exceeded the compile capture cap
   "stderr_truncated": false,             // true when stderr exceeded the compile capture cap
-  "reason": ""                           // human-readable failure reason
+  "reason": "",                          // human-readable failure reason
+  "reason_code": ""                      // optional machine-readable reason, e.g. "memory_limit_exceeded"
 }
 ```
 

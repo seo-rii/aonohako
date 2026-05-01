@@ -935,6 +935,47 @@ func TestExecuteAppliesProblemRuntimeProfileBeforeQueueing(t *testing.T) {
 	}
 }
 
+func TestExecuteAllowsForwardedProblemRuntimeProfileWhenRequestProfilesDisabled(t *testing.T) {
+	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = false
+	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{"low-memory": config.DefaultRuntimeTuningConfig()}
+	s.cfg.Execution.ProblemRuntimeProfiles = map[string]string{"contest-1/a": "low-memory"}
+	seenProfile := ""
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		seenProfile = req.RuntimeProfile
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	payload := map[string]any{
+		"lang":            "binary",
+		"problem_id":      "contest-1/a",
+		"runtime_profile": "low-memory",
+		"binaries":        []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"limits":          map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for forwarded problem runtime profile, got %d", resp.StatusCode)
+	}
+	events := readSSEEvents(resp.Body, t)
+	if len(events) == 0 || events[len(events)-1].Name != "result" {
+		t.Fatalf("expected result event for forwarded problem runtime profile, got %#v", events)
+	}
+	if seenProfile != "low-memory" {
+		t.Fatalf("execute runner saw runtime_profile %q", seenProfile)
+	}
+}
+
 func TestExecuteRejectsRuntimeProfileConflictWithProblemPolicyBeforeQueueing(t *testing.T) {
 	s := newServerForTest(t)
 	s.cfg.AllowRequestRuntimeProfile = true
@@ -1618,6 +1659,44 @@ func TestCompileAppliesProblemRuntimeProfileBeforeQueueing(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 for problem runtime profile, got %d", resp.StatusCode)
+	}
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	if seenProfile != "low-memory" {
+		t.Fatalf("compile runner saw runtime_profile %q", seenProfile)
+	}
+}
+
+func TestCompileAllowsForwardedProblemRuntimeProfileWhenRequestProfilesDisabled(t *testing.T) {
+	s := newServerForTest(t)
+	s.cfg.AllowRequestRuntimeProfile = false
+	s.cfg.Execution.RuntimeTuningProfiles = map[string]config.RuntimeTuningConfig{"low-memory": config.DefaultRuntimeTuningConfig()}
+	s.cfg.Execution.ProblemRuntimeProfiles = map[string]string{"contest-1/a": "low-memory"}
+	seenProfile := ""
+	s.compile = compileRunnerStub{run: func(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
+		seenProfile = req.RuntimeProfile
+		return model.CompileResponse{Status: model.CompileStatusOK}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	payload := map[string]any{
+		"lang":            "python3",
+		"problem_id":      "contest-1/a",
+		"runtime_profile": "low-memory",
+		"sources":         []map[string]any{{"name": "Main.py", "data_b64": "cHJpbnQoJ29rJykK"}},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for forwarded problem runtime profile, got %d", resp.StatusCode)
 	}
 	if _, err := io.ReadAll(resp.Body); err != nil {
 		t.Fatalf("read response body: %v", err)

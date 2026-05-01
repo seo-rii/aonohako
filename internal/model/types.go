@@ -28,6 +28,7 @@ type CompileResponse struct {
 	StdoutTruncated bool       `json:"stdout_truncated,omitempty"`
 	StderrTruncated bool       `json:"stderr_truncated,omitempty"`
 	Reason          string     `json:"reason,omitempty"`
+	ReasonCode      string     `json:"reason_code,omitempty"`
 }
 
 type Binary struct {

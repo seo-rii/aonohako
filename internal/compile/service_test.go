@@ -647,6 +647,40 @@ func TestCapCompileResponseOutputSetsTruncationFlags(t *testing.T) {
 	}
 }
 
+func TestCapCompileResponseOutputSetsResourceReasonCode(t *testing.T) {
+	resp := capCompileResponseOutput(model.CompileResponse{
+		Status: model.CompileStatusCompileError,
+		Reason: "memory limit exceeded",
+	})
+	if resp.ReasonCode != "memory_limit_exceeded" {
+		t.Fatalf("ReasonCode=%q, want memory_limit_exceeded", resp.ReasonCode)
+	}
+
+	resp = capCompileResponseOutput(model.CompileResponse{
+		Status:     model.CompileStatusCompileError,
+		Reason:     "memory limit exceeded",
+		ReasonCode: "custom",
+	})
+	if resp.ReasonCode != "custom" {
+		t.Fatalf("existing ReasonCode overwritten with %q", resp.ReasonCode)
+	}
+}
+
+func TestCappedTextBufferCapsAggregation(t *testing.T) {
+	buf := newCompileOutputBuffer()
+	buf.Append(strings.Repeat("x", compileOutputCaptureBytes-1))
+	buf.Append("yyy")
+	if len(buf.String()) != compileOutputCaptureBytes {
+		t.Fatalf("buffer length=%d, want cap %d", len(buf.String()), compileOutputCaptureBytes)
+	}
+	if !buf.Truncated() {
+		t.Fatal("Truncated=false, want true")
+	}
+	if got := buf.String()[compileOutputCaptureBytes-1:]; got != "y" {
+		t.Fatalf("tail = %q, want first byte from overflowing append", got)
+	}
+}
+
 func TestRunSandboxedCommandAllowsWritesBesideNestedCompileSources(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("requires root to drop compile helper to sandbox user")

@@ -165,9 +165,11 @@ masked `/proc` isolation.
 
 When `AONOHAKO_CGROUP_PARENT` is set, startup validates that the selected parent
 is under a cgroup v2 mount and has the required controllers and
-`cgroup.subtree_control`, rejects a group/world-writable parent, and verifies a
-probe run-group create/remove cycle. The compile, execute, and SPJ helper paths
-then use this write contract for one run cgroup:
+`cgroup.subtree_control`, rejects a group/world-writable parent, requires an
+empty `cgroup.procs`, writes `+cpu +memory +pids` to
+`cgroup.subtree_control`, and verifies a probe run-group create/remove cycle.
+The compile, execute, and SPJ helper paths then use this write contract for one
+run cgroup:
 
 - create a sanitized run group name under the selected parent
 - write positive `memory.max` and `pids.max` values
@@ -175,6 +177,8 @@ then use this write contract for one run cgroup:
 - write `memory.oom.group=1`
 - write `cpu.max=100000 100000` to cap sandbox CPU bandwidth at one vCPU
 - move the target process by writing its PID to `cgroup.procs`
+- remove the run cgroup without recursive deletion, using a short retry window
+  for process cleanup races
 
 The same package also defines the read contract used by the optional cgroup
 watchdog and the future isolated backend:
