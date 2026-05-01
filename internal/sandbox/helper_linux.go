@@ -159,6 +159,10 @@ func MaybeRunFromEnv() bool {
 		}
 		nprocLimit = uint64(currentCount + threadLimit + 8)
 	}
+	stackLimitBytes := req.StackLimitBytes
+	if stackLimitBytes == 0 {
+		stackLimitBytes = 8 * 1024 * 1024
+	}
 	limits := []struct {
 		resource int
 		value    uint64
@@ -167,7 +171,7 @@ func MaybeRunFromEnv() bool {
 		{unix.RLIMIT_NOFILE, 64},
 		{unix.RLIMIT_NPROC, nprocLimit},
 		{unix.RLIMIT_CORE, 0},
-		{unix.RLIMIT_STACK, 8 * 1024 * 1024},
+		{unix.RLIMIT_STACK, stackLimitBytes},
 		{unix.RLIMIT_MEMLOCK, 0},
 		{unix.RLIMIT_MSGQUEUE, 0},
 	}

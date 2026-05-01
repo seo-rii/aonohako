@@ -1760,6 +1760,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		},
 		ThreadLimit:              compileSandboxThreadLimit,
 		OpenFileLimit:            openFileLimit,
+		StackLimitBytes:          security.StackLimitForCommand(command[0]),
 		FileSizeLimitBytes:       security.FileSizeLimitForCommand(command[0], compileWorkspaceBytes),
 		EnableNetwork:            false,
 		AllowUnixSockets:         true,

@@ -163,7 +163,7 @@ The Linux helper applies:
 | --- | --- | --- |
 | CPU hard limit | `RLIMIT_CPU` | helper-side hard stop |
 | Address space limit | `RLIMIT_AS` | based on request memory plus language-specific virtual-memory headroom; .NET remains the compatibility exception |
-| Stack size | `RLIMIT_STACK=8MiB` | bounds native stack growth and argument/environment footprint |
+| Stack size | `RLIMIT_STACK=8MiB` by default; `dotnet` receives `64MiB` | bounds native stack growth and argument/environment footprint while leaving enough stack for CoreCLR/F# compiler startup |
 | Locked memory | `RLIMIT_MEMLOCK=0` | prevents `mlock`-style RAM pinning |
 | POSIX message queue bytes | `RLIMIT_MSGQUEUE=0` | prevents message-queue allocation by the sandbox UID |
 | Open files | `RLIMIT_NOFILE=64` | keeps fd surface small |
