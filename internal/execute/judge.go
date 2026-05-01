@@ -17,13 +17,16 @@ import (
 	"aonohako/internal/util"
 )
 
-func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string) {
+func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource string, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
 	status := res.Status
+	source := res.VerdictSource
 	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
 		status = model.RunStatusMLE
+		source = "memory_reported"
 	}
 	if status == "OK" && res.ExitCode != nil && *res.ExitCode != 0 {
 		status = model.RunStatusRE
+		source = "exit_code"
 	}
 
 	var score *float64
@@ -40,6 +43,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 				if status == "OK" {
 					status = model.RunStatusRE
 					reason = spjErr.Error()
+					source = "spj"
 					if !strings.HasPrefix(reason, "spj ") {
 						reason = "spj failed: " + reason
 					}
@@ -53,6 +57,13 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	}
 
 	if status == "OK" && evaluateOutputs {
+		if hasSPJ(req) {
+			source = "spj"
+		} else if judgeSource != "" {
+			source = judgeSource
+		} else {
+			source = "stdout"
+		}
 		if outputOK {
 			status = model.RunStatusAccepted
 		} else {
@@ -67,7 +78,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 		}
 		score = &v
 	}
-	return status, score, reason
+	return status, score, reason, source
 }
 
 func captureFileOutput(ws Workspace, spec model.OutputFile) ([]byte, error) {

@@ -37,6 +37,7 @@ type execResult struct {
 	WallTimeMs      int64
 	CPUTimeMs       int64
 	Reason          string
+	VerdictSource   string
 }
 
 func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
@@ -324,6 +325,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 			if result.Status == "OK" {
 				result.Status = model.RunStatusTLE
 				result.Reason = "wall time limit exceeded"
+				result.VerdictSource = "wall_time"
 			}
 			goto done
 		case err := <-waitCh:
@@ -386,6 +388,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 				if result.Status == "OK" && memoryLimitKB > 0 && maxRSSKB > memoryLimitKB {
 					result.Status = model.RunStatusMLE
 					result.Reason = "memory limit exceeded"
+					result.VerdictSource = "memory_rss"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 				}
 			}
@@ -409,17 +412,20 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 						if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
 							result.Status = model.RunStatusTLE
 							result.Reason = "cpu time limit exceeded"
+							result.VerdictSource = "cpu_time_cgroup"
 							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 						}
 					}
 					if result.Status == "OK" && memoryLimitKB > 0 && stats.MemoryLimitBreached(memoryLimitKB*1024) {
 						result.Status = model.RunStatusMLE
 						result.Reason = "memory limit exceeded"
+						result.VerdictSource = "memory_cgroup"
 						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					}
 					if result.Status == "OK" && stats.PidsLimitBreached() {
 						result.Status = model.RunStatusRE
 						result.Reason = "process limit exceeded"
+						result.VerdictSource = "pids_cgroup"
 						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					}
 				}
@@ -437,6 +443,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 					if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
 						result.Status = model.RunStatusTLE
 						result.Reason = "cpu time limit exceeded"
+						result.VerdictSource = "cpu_time"
 						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					}
 				}
@@ -448,24 +455,28 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 				if errors.Is(err, workspacequota.ErrEntryLimitExceeded) {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace entry limit exceeded"
+					result.VerdictSource = "workspace_entries"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					continue
 				}
 				if errors.Is(err, workspacequota.ErrDepthExceeded) {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace depth exceeded"
+					result.VerdictSource = "workspace_depth"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					continue
 				}
 				if err != nil {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace scan failed"
+					result.VerdictSource = "workspace_scan"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 					continue
 				}
 				if usage.Bytes > workspaceLimitBytes {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace quota exceeded"
+					result.VerdictSource = "workspace_bytes"
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 				}
 			}
@@ -497,14 +508,23 @@ done:
 				if result.Status == "OK" {
 					if ws.Signal() == syscall.SIGKILL || ws.Signal() == syscall.SIGXCPU {
 						result.Status = model.RunStatusTLE
+						if ctx.Err() != nil {
+							result.VerdictSource = "wall_time"
+						} else if ws.Signal() == syscall.SIGXCPU {
+							result.VerdictSource = "cpu_rlimit"
+						} else {
+							result.VerdictSource = "signal"
+						}
 					} else {
 						result.Status = model.RunStatusRE
+						result.VerdictSource = "signal"
 					}
 				}
 			}
 		}
 		if result.Status == "OK" && waitErr != nil {
 			result.Status = model.RunStatusRE
+			result.VerdictSource = "wait_status"
 		}
 		if sysu, ok := ps.SysUsage().(*syscall.Rusage); ok {
 			if sysu.Maxrss > result.MemoryKB {
@@ -518,13 +538,16 @@ done:
 	if addressSpaceProximityCanClassifyMLE(runtimeBase) && !disableAddressSpaceLimit && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
 		result.Status = model.RunStatusMLE
 		result.Reason = "memory limit exceeded"
+		result.VerdictSource = "address_space"
 	}
 	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
 		result.Status = model.RunStatusInitFail
 		result.Reason = clipUTF8(result.Stderr, outputLimitBytes)
+		result.VerdictSource = "sandbox_init"
 	}
 	if result.Status == "OK" && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		result.Status = model.RunStatusTLE
+		result.VerdictSource = "wall_time"
 	}
 	return result
 }

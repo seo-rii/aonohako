@@ -92,6 +92,7 @@ type RunResponse struct {
 	StdoutTruncated bool            `json:"stdout_truncated,omitempty"`
 	StderrTruncated bool            `json:"stderr_truncated,omitempty"`
 	Reason          string          `json:"reason,omitempty"`
+	VerdictSource   string          `json:"verdict_source,omitempty"`
 	Score           *float64        `json:"score,omitempty"`
 	SidecarOutputs  []SidecarOutput `json:"sidecar_outputs,omitempty"`
 	SidecarErrors   []SidecarError  `json:"sidecar_errors,omitempty"`
