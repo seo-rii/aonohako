@@ -1916,6 +1916,11 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 					<-waitCh
 					return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace depth exceeded"
 				}
+				if err != nil {
+					killSandbox()
+					<-waitCh
+					return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace scan failed"
+				}
 				if usage.Bytes > int64(compileWorkspaceBytes) {
 					killSandbox()
 					<-waitCh

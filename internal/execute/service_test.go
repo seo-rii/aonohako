@@ -2254,3 +2254,29 @@ func TestRunMarksWorkspaceDepthLimitExceeded(t *testing.T) {
 		t.Fatalf("expected workspace depth diagnostic, got %+v", resp)
 	}
 }
+
+func TestRunFailsClosedWhenWorkspaceScanFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can traverse unreadable directories")
+	}
+	forceDirectMode(t)
+
+	script := "import os, time\nos.mkdir('hidden', 0)\nwhile True:\n    time.sleep(1)\n"
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(script)),
+		}},
+		ExpectedStdout: "",
+		Limits:         model.Limits{TimeMs: 12000, MemoryMB: 256, WorkspaceBytes: defaultWorkspaceBytes},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusWLE {
+		t.Fatalf("expected workspace limit status from scan failure, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "workspace scan failed") {
+		t.Fatalf("expected workspace scan diagnostic, got %+v", resp)
+	}
+}
