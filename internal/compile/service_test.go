@@ -226,7 +226,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"crystal":       {compileKind: "crystal", runLang: "binary"},
 		"vlang":         {compileKind: "vlang", runLang: "binary"},
 		"odin":          {compileKind: "odin", runLang: "binary"},
-		"c3":            {compileKind: "c3", runLang: "binary"},
+		"c3":            {compileKind: "c3", runLang: "c3"},
 		"hare":          {compileKind: "hare", runLang: "binary"},
 		"vbnet":         {compileKind: "vbnet", runLang: "vbnet"},
 		"gleam":         {compileKind: "gleam", runLang: "gleam"},
@@ -810,6 +810,31 @@ func TestRunCommandRejectsNetworkSockets(t *testing.T) {
 	)
 	if status != model.CompileStatusOK {
 		t.Fatalf("expected socket denial probe to exit cleanly, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
+func TestRunCommandAllowsIsabelleUnixSocketChannelWithoutInetSockets(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	binDir := t.TempDir()
+	if err := os.Chmod(binDir, 0o755); err != nil {
+		t.Fatalf("chmod bin dir: %v", err)
+	}
+	if err := os.Symlink(python, filepath.Join(binDir, "isabelle")); err != nil {
+		t.Fatalf("symlink isabelle probe: %v", err)
+	}
+	script := "import errno, os, socket\npath = os.path.join(os.environ['TMPDIR'], 'isabelle.sock')\nserver = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\nserver.bind(path)\nserver.listen(1)\nclient = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\nclient.connect(path)\nconn, _ = server.accept()\nclient.sendall(b'ok')\nprint(conn.recv(2).decode())\ntry:\n    socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n    print('inet-open')\nexcept OSError as exc:\n    print('inet-blocked' if exc.errno in (errno.EPERM, errno.EACCES) else f'unexpected:{exc.errno}')\n"
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		sandboxWritableTempDir(t),
+		"isabelle",
+		[]string{"-c", script},
+		[]string{"PATH=" + binDir + ":/usr/local/bin:/usr/bin:/bin"},
+	)
+	if status != model.CompileStatusOK || stdout != "ok\ninet-blocked\n" {
+		t.Fatalf("expected isabelle unix channel support without inet sockets, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
 	}
 }
 

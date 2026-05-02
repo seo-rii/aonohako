@@ -1915,7 +1915,53 @@ func compileIsabelle(ctx context.Context, workDir string, sources []model.Source
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 		}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "isabelle", []string{"build", "-D", "."}, isabelleCompileEnv())
+	homeDir := filepath.Join(workDir, ".home")
+	tmpDir := filepath.Join(workDir, ".tmp")
+	isabelleSettingDirs := []string{
+		filepath.Join(homeDir, ".isabelle", "etc"),
+		filepath.Join(homeDir, ".isabelle", "Isabelle2025-2", "etc"),
+	}
+	if bin, err := exec.LookPath("isabelle"); err == nil {
+		if realBin, err := filepath.EvalSymlinks(bin); err == nil {
+			identifierPath := filepath.Clean(filepath.Join(filepath.Dir(realBin), "..", "etc", "ISABELLE_IDENTIFIER"))
+			if data, err := os.ReadFile(identifierPath); err == nil {
+				if identifier := strings.TrimSpace(string(data)); identifier != "" {
+					isabelleSettingDirs = append(isabelleSettingDirs, filepath.Join(homeDir, ".isabelle", identifier, "etc"))
+				}
+			}
+		}
+	}
+	isabelleSettings := fmt.Sprintf(
+		"ISABELLE_TMP_PREFIX=\"%[1]s/isabelle\"\n"+
+			"ISABELLE_SETUP_CLASSPATH=\"$ISABELLE_HOME/lib/classes/isabelle.jar:$ISABELLE_HOME/src/Tools/Demo/lib/demo.jar:$ISABELLE_HOME/lib/classes/isabelle_graphbrowser.jar\"\n"+
+			"ISABELLE_SETUP_JAR=\"\"\n"+
+			"ISABELLE_TOOL_JAVA_OPTIONS=\"-Djava.awt.headless=true -Djava.io.tmpdir=%[1]s -Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m\"\n"+
+			"ISABELLE_JAVA_SYSTEM_OPTIONS=\"-server -Dfile.encoding=UTF-8 -Djava.io.tmpdir=%[1]s -Disabelle.threads=1 -Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m\"\n"+
+			"ISABELLE_JAVA_OPTIONS=\"-Djava.io.tmpdir=%[1]s -Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC\"\n",
+		tmpDir,
+	)
+	seenSettings := map[string]struct{}{}
+	for _, settingsDir := range isabelleSettingDirs {
+		if _, ok := seenSettings[settingsDir]; ok {
+			continue
+		}
+		seenSettings[settingsDir] = struct{}{}
+		if err := os.MkdirAll(settingsDir, 0o777); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+		for dir := settingsDir; strings.HasPrefix(dir, homeDir+string(os.PathSeparator)); dir = filepath.Dir(dir) {
+			if err := os.Chmod(dir, 0o777); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+			}
+			if dir == homeDir {
+				break
+			}
+		}
+		if err := os.WriteFile(filepath.Join(settingsDir, "settings"), []byte(isabelleSettings), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "isabelle", []string{"process_theories", "-o", "naproche_server=false", "-D", "."}, isabelleCompileEnv(workDir))
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -2262,12 +2308,14 @@ func javaCompileEnv(workDir string, xmxMB int) []string {
 	}
 }
 
-func isabelleCompileEnv() []string {
+func isabelleCompileEnv(workDir string) []string {
+	tmp := filepath.Join(workDir, ".tmp")
 	return []string{
-		"JAVA_TOOL_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m",
+		fmt.Sprintf("JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=%s -Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m", tmp),
 		"ISABELLE_JAVA_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
 		"ISABELLE_TOOL_JAVA_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
 		"ISABELLE_JAVA_SYSTEM_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
+		"ISABELLE_TMP_PREFIX=" + tmp,
 	}
 }
 
@@ -2386,6 +2434,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	commandName := filepath.Base(command[0])
 	isDotnet := commandName == "dotnet"
 	isDotnetLike := isDotnet || commandName == "dafny"
+	isIsabelle := commandName == "isabelle"
 	if isDotnetLike {
 		if err := security.ResetDotnetSharedState(); err != nil {
 			return "", "", model.CompileStatusInternal, "dotnet state cleanup failed: " + err.Error()
@@ -2394,9 +2443,9 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS and RLIMIT_FSIZE values can fail before user
 	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
-	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno" || commandName == "isabelle"
-	allowProcessGroups := commandName == "swiftc" || commandName == "hare"
-	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || commandName == "isabelle"
+	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno" || isIsabelle
+	allowProcessGroups := commandName == "swiftc" || commandName == "hare" || isIsabelle
+	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || isIsabelle
 	allowExecveat := commandName == "hare"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
@@ -2426,10 +2475,13 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		FileSizeLimitBytes:       security.FileSizeLimitForCommand(command[0], compileWorkspaceBytes),
 		EnableNetwork:            false,
 		AllowUnixSockets:         true,
+		AllowSocketBind:          isIsabelle,
+		AllowSocketConnect:       isIsabelle,
+		AllowSocketServer:        isIsabelle,
 		AllowProcesses:           true,
 		AllowProcessGroups:       allowProcessGroups,
-		AllowMemfdCreate:         isDotnetLike,
-		AllowNumaPolicy:          isDotnetLike,
+		AllowMemfdCreate:         isDotnetLike || isIsabelle,
+		AllowNumaPolicy:          isDotnetLike || isIsabelle,
 		AllowChmod:               allowChmod,
 		AllowExecveat:            allowExecveat,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,

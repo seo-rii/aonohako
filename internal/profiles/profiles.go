@@ -63,7 +63,7 @@ var profiles = map[string]Profile{
 	"CRYSTAL":       {SourceLang: "CRYSTAL", Extension: "cr", DefaultTarget: "Main", CompileKind: "crystal", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"VLANG":         {SourceLang: "VLANG", Extension: "v", DefaultTarget: "Main", CompileKind: "vlang", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"ODIN":          {SourceLang: "ODIN", Extension: "odin", DefaultTarget: "Main", CompileKind: "odin", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
-	"C3":            {SourceLang: "C3", Extension: "c3", DefaultTarget: "Main", CompileKind: "c3", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"C3":            {SourceLang: "C3", Extension: "c3", DefaultTarget: "Main", CompileKind: "c3", RunLang: "c3", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"HARE":          {SourceLang: "HARE", Extension: "ha", DefaultTarget: "Main", CompileKind: "hare", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"VBNET":         {SourceLang: "VBNET", Extension: "vb", CompileKind: "vbnet", RunLang: "vbnet", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 16},
 	"VB":            {SourceLang: "VB", Extension: "vb", CompileKind: "vbnet", RunLang: "vbnet", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 16},
@@ -134,7 +134,7 @@ func Resolve(language string) (Profile, bool) {
 func NormalizeRunLang(language string) string {
 	key := strings.ToLower(strings.TrimSpace(language))
 	switch key {
-	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "brainfuck", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "gdl", "octave", "vhdl", "verilog", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet", "aheui":
+	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "brainfuck", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet", "aheui":
 		return key
 	case "coq":
 		return "rocq"
