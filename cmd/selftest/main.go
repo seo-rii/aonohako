@@ -1569,7 +1569,10 @@ ok = tt`),
 VARIABLE x
 Init == x = 0
 Next == x' = x
+Spec == Init /\ [][Next]_x
 ====`),
+				source("Main.cfg", `SPECIFICATION Spec
+`),
 			},
 		},
 		"why3": {
@@ -2190,7 +2193,7 @@ end architecture;`),
 				source("Main.v", `module main;
   initial begin
     $display("ok");
-    $finish;
+    $finish(0);
   end
 endmodule`),
 			},
@@ -2204,7 +2207,7 @@ endmodule`),
   logic ok = 1'b1;
   initial begin
     if (ok) $display("ok");
-    $finish;
+    $finish(0);
   end
 endmodule`),
 			},

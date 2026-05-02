@@ -66,7 +66,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if _, err := normalizeJVMMainClass(req.EntryPoint, "Main"); err != nil {
 			return "", "", err
 		}
-	case "erlang":
+	case "erlang", "vhdl":
 	default:
 		if rawEntryPoint := strings.TrimSpace(req.EntryPoint); rawEntryPoint != "" {
 			clean, err := util.ValidateRelativePath(rawEntryPoint)
