@@ -160,7 +160,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"awk", "/tmp/sol.awk", "gawk", true},
 		{"gdl", "/tmp/sol.pro", "aonohako-gdl-run", true},
 		{"octave", "/tmp/sol.m", "octave-cli", true},
-		{"vhdl", "/tmp/box", "ghdl", false},
+		{"vhdl", "/tmp/box", "aonohako-vhdl-run", true},
 		{"verilog", "/tmp/Main.vvp", "vvp", true},
 		{"erlang", "/tmp/beam", "erl", true},
 		{"prolog", "/tmp/sol.pl", "swipl", true},

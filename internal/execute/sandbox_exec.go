@@ -129,7 +129,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
 	allowProcesses := false
 	switch runtimeBase {
-	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-why3-prove", "ghdl", "vvp":
+	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-vhdl-run", "aonohako-why3-prove", "ghdl", "vvp":
 		allowProcesses = true
 	}
 	if isDotnet {
@@ -163,6 +163,19 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		if err := os.Chmod(ws.BoxDir, 0o777|os.ModeSticky); err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
 		}
+		if runtimeBase == "aonohako-gleam-run" {
+			if err := filepath.WalkDir(ws.BoxDir, func(path string, entry os.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if entry.Type()&os.ModeSymlink != 0 {
+					return fmt.Errorf("workspace path contains a symlink: %s", path)
+				}
+				return os.Chown(path, sandboxUID, sandboxGID)
+			}); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
+			}
+		}
 		for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
 			if err := os.Chmod(dir, 0o700); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
@@ -186,7 +199,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		AllowProcesses:           allowProcesses,
 		AllowMemfdCreate:         allowMemfdCreate,
 		AllowNumaPolicy:          isDotnet || isTLA,
-		AllowChmod:               isTLA,
+		AllowChmod:               isTLA || runtimeBase == "aonohako-gleam-run",
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     isDotnet,
 	}

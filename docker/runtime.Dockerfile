@@ -63,6 +63,7 @@ COPY --chmod=0755 scripts/duckdb_run.sh /usr/local/bin/aonohako-duckdb-run
 COPY --chmod=0755 scripts/gleam_run.sh /usr/local/bin/aonohako-gleam-run
 COPY --chmod=0755 scripts/graphql_run.py /usr/local/bin/aonohako-graphql-run
 COPY --chmod=0755 scripts/tla_run.sh /usr/local/bin/aonohako-tla-run
+COPY --chmod=0755 scripts/vhdl_run.sh /usr/local/bin/aonohako-vhdl-run
 COPY --chmod=0755 scripts/vb6_run.rb /usr/local/bin/aonohako-vb6-run
 COPY --chmod=0755 scripts/golfscript_sandboxed.rb /usr/local/lib/aonohako/golfscript_sandboxed.rb
 COPY python/ /usr/local/lib/aonohako/python/

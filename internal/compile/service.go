@@ -1171,7 +1171,10 @@ func compileVHDL(ctx context.Context, workDir string, sources []model.Source, en
 	if elabStatus != model.CompileStatusOK {
 		return model.CompileResponse{Status: elabStatus, Stdout: stdout, Stderr: stderr, Reason: elabReason}
 	}
-	artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
+	artifacts, err := collectArtifacts(workDir, func(name string) bool {
+		ext := strings.ToLower(filepath.Ext(name))
+		return ext == ".vhd" || ext == ".vhdl"
+	}, "")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
@@ -2392,7 +2395,8 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
 	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno"
 	allowProcessGroups := commandName == "swiftc" || commandName == "hare"
-	allowChmod := isDotnetLike || commandName == "hare" || commandName == "isabelle"
+	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || commandName == "isabelle"
+	allowExecveat := commandName == "hare"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
 	if commandName == "kotlinc-native" {
@@ -2426,6 +2430,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		AllowMemfdCreate:         isDotnetLike,
 		AllowNumaPolicy:          isDotnetLike,
 		AllowChmod:               allowChmod,
+		AllowExecveat:            allowExecveat,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     isDotnetLike,
 	}

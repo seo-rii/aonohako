@@ -83,7 +83,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		if top == "" {
 			top = "main_tb"
 		}
-		return []string{"ghdl", "-r", "--std=08", top, "--assert-level=error", "--stop-time=1ms"}
+		return []string{"aonohako-vhdl-run", primaryPath, top}
 	case "verilog":
 		return []string{"vvp", primaryPath}
 	case "erlang":
