@@ -124,7 +124,11 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	runtimeBase := sandboxCommandBase(finalCommand)
 	isDotnet := runtimeBase == "dotnet"
 	allowMemfdCreate := isDotnet || runtimeBase == "wasmtime"
-	allowProcesses := runtimeBase == "aonohako-why3-prove"
+	allowProcesses := false
+	switch runtimeBase {
+	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-why3-prove":
+		allowProcesses = true
+	}
 	if isDotnet {
 		if heapLimit := dotnetGCHeapHardLimitHex(req.Limits.MemoryMB, tuning); heapLimit != "" {
 			innerEnv = append(innerEnv, "DOTNET_GCHeapHardLimit="+heapLimit)

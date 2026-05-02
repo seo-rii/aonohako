@@ -25,6 +25,7 @@ type ExecRequest struct {
 	AllowProcesses           bool         `json:"allow_processes,omitempty"`
 	AllowProcessGroups       bool         `json:"allow_process_groups,omitempty"`
 	AllowMemfdCreate         bool         `json:"allow_memfd_create,omitempty"`
+	AllowChmod               bool         `json:"allow_chmod,omitempty"`
 	DisableFileSizeLimit     bool         `json:"disable_file_size_limit,omitempty"`
 	DisableAddressSpaceLimit bool         `json:"disable_address_space_limit,omitempty"`
 }

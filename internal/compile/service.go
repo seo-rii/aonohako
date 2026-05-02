@@ -891,7 +891,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "mojo":
 		return compileMojo(ctx, workDir, target, req.Sources)
 	case "deno":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check", "--cached-only"}, nil)
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check"}, nil)
 	case "kotlin-jvm":
 		return compileKotlinJVM(ctx, workDir, target, req.Sources, tuning)
 	case "duckdb":
@@ -1625,7 +1625,7 @@ func compileVBNet(ctx context.Context, workDir string, sources []model.Source) m
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 	}
 	var projectPath string
-	var hasVB bool
+	var vbFiles []string
 	for _, src := range sources {
 		clean, err := util.ValidateRelativePath(src.Name)
 		if err != nil {
@@ -1636,29 +1636,62 @@ func compileVBNet(ctx context.Context, workDir string, sources []model.Source) m
 			projectPath = filepath.Join(projectDir, clean)
 		}
 		if strings.HasSuffix(lower, ".vb") {
-			hasVB = true
+			vbFiles = append(vbFiles, clean)
 		}
 	}
-	if projectPath == "" && !hasVB {
+	if projectPath == "" && len(vbFiles) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no vbnet sources"}
 	}
 	if err := materializeSources(projectDir, sources); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 	}
 	if projectPath == "" {
-		projectPath = filepath.Join(projectDir, "App.vbproj")
-		project := `<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-    <UseAppHost>false</UseAppHost>
-    <ImplicitUsings>disable</ImplicitUsings>
-  </PropertyGroup>
-</Project>
-`
-		if err := os.WriteFile(projectPath, []byte(project), 0o644); err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		sdkDirs, err := filepath.Glob("/opt/dotnet/sdk/*")
+		if err != nil || len(sdkDirs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet sdk not found"}
 		}
+		sort.Strings(sdkDirs)
+		vbcPath := filepath.Join(sdkDirs[len(sdkDirs)-1], "Roslyn", "bincore", "vbc.dll")
+		if _, err := os.Stat(vbcPath); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "vb compiler not found"}
+		}
+		refDirs, err := filepath.Glob("/opt/dotnet/packs/Microsoft.NETCore.App.Ref/*/ref/net8.0")
+		if err != nil || len(refDirs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet reference pack not found"}
+		}
+		sort.Strings(refDirs)
+		refDLLs, err := filepath.Glob(filepath.Join(refDirs[len(refDirs)-1], "*.dll"))
+		if err != nil || len(refDLLs) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet reference assemblies not found"}
+		}
+		sort.Strings(refDLLs)
+		outDLL := filepath.Join(workDir, "App.dll")
+		args := []string{vbcPath, "-nologo", "-target:exe", "-optimize+", "-out:" + outDLL}
+		for _, refDLL := range refDLLs {
+			args = append(args, "-r:"+refDLL)
+		}
+		for _, file := range vbFiles {
+			args = append(args, filepath.Join(projectDir, file))
+		}
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, nil)
+		if status != model.CompileStatusOK {
+			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		}
+		runtimeConfig, err := dotnetRuntimeConfig()
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		if err := os.WriteFile(filepath.Join(workDir, "App.runtimeconfig.json"), runtimeConfig, 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		artifacts, err := collectArtifacts(workDir, func(name string) bool {
+			lower := strings.ToLower(name)
+			return lower == "app.dll" || lower == "app.runtimeconfig.json"
+		}, "")
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	}
 	outDir := filepath.Join(workDir, "publish")
 	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false"}
@@ -1707,7 +1740,14 @@ func compileGleam(ctx context.Context, workDir string, sources []model.Source) m
 			}
 		}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "gleam", []string{"build"}, []string{
+	if _, err := os.Stat(filepath.Join(workDir, "manifest.toml")); err != nil {
+		if data, readErr := os.ReadFile("/usr/local/lib/aonohako/gleam-manifest.toml"); readErr == nil {
+			if writeErr := os.WriteFile(filepath.Join(workDir, "manifest.toml"), data, 0o644); writeErr != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: writeErr.Error()}
+			}
+		}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "gleam", []string{"build", "--offline"}, []string{
 		"ERL_AFLAGS=" + erlangAFlags(config.DefaultRuntimeTuningConfig()),
 		"HOME=/usr/local/lib/aonohako/gleam-home",
 	})
@@ -1828,7 +1868,7 @@ func compileIsabelle(ctx context.Context, workDir string, sources []model.Source
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 		}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "isabelle", []string{"build", "-D", "."}, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "isabelle", []string{"build", "-D", "."}, isabelleCompileEnv())
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -2175,6 +2215,12 @@ func javaCompileEnv(workDir string, xmxMB int) []string {
 	}
 }
 
+func isabelleCompileEnv() []string {
+	return []string{
+		"ISABELLE_JAVA_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
+	}
+}
+
 func collectDotnetPublishArtifacts(root, assemblyName string) ([]model.Artifact, error) {
 	artifacts, err := collectArtifacts(root, func(name string) bool {
 		l := strings.ToLower(name)
@@ -2289,7 +2335,8 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	}
 	commandName := filepath.Base(command[0])
 	isDotnet := commandName == "dotnet"
-	if isDotnet {
+	isDotnetLike := isDotnet || commandName == "dafny"
+	if isDotnetLike {
 		if err := security.ResetDotnetSharedState(); err != nil {
 			return "", "", model.CompileStatusInternal, "dotnet state cleanup failed: " + err.Error()
 		}
@@ -2297,11 +2344,15 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS and RLIMIT_FSIZE values can fail before user
 	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
-	disableAddressSpaceLimit := isDotnet || commandName == "c3c" || commandName == "carbon"
+	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc"
 	allowProcessGroups := commandName == "swiftc"
+	allowChmod := isDotnetLike || commandName == "hare" || commandName == "isabelle"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
 	if commandName == "kotlinc-native" {
+		memoryLimitMB = 4096
+	}
+	if commandName == "kotlinc" || commandName == "dafny" || commandName == "isabelle" {
 		memoryLimitMB = 4096
 	}
 	memoryLimitKB := int64(memoryLimitMB) * 1024
@@ -2322,9 +2373,10 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		AllowUnixSockets:         true,
 		AllowProcesses:           true,
 		AllowProcessGroups:       allowProcessGroups,
-		AllowMemfdCreate:         isDotnet,
+		AllowMemfdCreate:         isDotnetLike,
+		AllowChmod:               allowChmod,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
-		DisableFileSizeLimit:     isDotnet,
+		DisableFileSizeLimit:     isDotnetLike,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {

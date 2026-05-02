@@ -357,10 +357,6 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_SWAPOFF),
 		uint32(unix.SYS_SETHOSTNAME),
 		uint32(unix.SYS_SETDOMAINNAME),
-		uint32(unix.SYS_CHMOD),
-		uint32(unix.SYS_FCHMOD),
-		uint32(unix.SYS_FCHMODAT),
-		uint32(unix.SYS_FCHMODAT2),
 		uint32(unix.SYS_CHOWN),
 		uint32(unix.SYS_FCHOWN),
 		uint32(unix.SYS_LCHOWN),
@@ -371,6 +367,17 @@ func MaybeRunFromEnv() bool {
 	} {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	}
+	if !req.AllowChmod {
+		for _, sysno := range []uint32{
+			uint32(unix.SYS_CHMOD),
+			uint32(unix.SYS_FCHMOD),
+			uint32(unix.SYS_FCHMODAT),
+			uint32(unix.SYS_FCHMODAT2),
+		} {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
 	}
 	if !req.AllowMemfdCreate {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_MEMFD_CREATE), 0, 1)

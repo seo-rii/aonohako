@@ -77,7 +77,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		}
 		return []string{"aonohako-gdl-run", primaryPath, entry}
 	case "octave":
-		return []string{"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-all", primaryPath}
+		return []string{"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-init-path", primaryPath}
 	case "vhdl":
 		top := strings.TrimSpace(req.EntryPoint)
 		if top == "" {
@@ -302,7 +302,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "golfscript":
 		return []string{"ruby", "/usr/local/lib/aonohako/golfscript_sandboxed.rb", primaryPath}
 	case "deno":
-		return []string{"deno", "run", "--no-prompt", "--cached-only", primaryPath}
+		return []string{"deno", "run", "--no-prompt", primaryPath}
 	case "kotlin-jvm":
 		return []string{"java", "-jar", primaryPath}
 	case "duckdb":

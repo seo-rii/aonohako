@@ -822,7 +822,7 @@ languages:
         - -lc
         - |
           printf '%s\n' 'disp("ok")' > Main.m
-          octave-cli --quiet --no-gui --no-history --no-init-all Main.m | grep '^ok$'
+          octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path Main.m | grep '^ok$'
 
   vhdl:
     install:
@@ -863,7 +863,7 @@ languages:
           module main;
             initial begin
               $display("ok");
-              $finish;
+              $finish(0);
             end
           endmodule
           VERILOG
@@ -884,7 +884,7 @@ languages:
             logic ok = 1'b1;
             initial begin
               if (ok) $display("ok");
-              $finish;
+              $finish(0);
             end
           endmodule
           SV
@@ -953,6 +953,9 @@ languages:
             fmt.println("ok")
           }
           ODIN
+          work="$(mktemp -d)"
+          mv main.odin "${work}/main.odin"
+          cd "${work}"
           odin build . -out:Main
           ./Main | grep '^ok$'
 
@@ -1360,8 +1363,9 @@ languages:
         - printf '%s\n' 'name = "warmup"' 'version = "1.0.0"' '' '[dependencies]' 'gleam_stdlib = "~> 0.44"' > /tmp/gleam-warmup/gleam.toml
         - printf '%s\n' 'import gleam/io' 'pub fn main() {' '  io.println("ok")' '}' > /tmp/gleam-warmup/src/main.gleam
         - (cd /tmp/gleam-warmup && env HOME=/usr/local/lib/aonohako/gleam-home gleam build)
+        - cp /tmp/gleam-warmup/manifest.toml /usr/local/lib/aonohako/gleam-manifest.toml
         - rm -rf /tmp/gleam-warmup
-        - chmod -R a+rX /usr/local/lib/aonohako/gleam-home
+        - chmod -R a+rX /usr/local/lib/aonohako/gleam-home /usr/local/lib/aonohako/gleam-manifest.toml
     smoke:
       command:
         - bash
@@ -1370,7 +1374,8 @@ languages:
           mkdir -p src
           printf '%s\n' 'name = "smoke"' 'version = "1.0.0"' '' '[dependencies]' 'gleam_stdlib = "~> 0.44"' > gleam.toml
           printf '%s\n' 'import gleam/io' 'pub fn main() {' '  io.println("ok")' '}' > src/main.gleam
-          env HOME=/usr/local/lib/aonohako/gleam-home gleam build
+          cp /usr/local/lib/aonohako/gleam-manifest.toml manifest.toml
+          env HOME=/usr/local/lib/aonohako/gleam-home gleam build --offline
           aonohako-gleam-run . | grep '^ok$'
 
   cuda-ocelot:
@@ -1395,6 +1400,7 @@ languages:
         - cd /opt/gpuocelot-src && git checkout "${GPUOCELOT_COMMIT}" && git submodule update --init --recursive
         - cmake -S /opt/gpuocelot-src/ocelot -B /opt/gpuocelot-src/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/gpuocelot
         - cmake --build /opt/gpuocelot-src/build --target install
+        - ln -sfn /usr/local/cuda/bin/nvcc /usr/local/bin/nvcc
         - install -d -m 0755 /usr/local/share/aonohako/ocelot
         - >-
           printf '%s\n' 'executive: {' '  devices: ["emulated"]' '  preferredISA: "nvidia"' '}'
@@ -1536,8 +1542,10 @@ languages:
           VARIABLE x
           Init == x = 0
           Next == x' = x
+          Spec == Init /\ [][Next]_x
           ====
           TLA
+          printf '%s\n' 'SPECIFICATION Spec' > Main.cfg
           aonohako-tla-run Main.tla
 
   why3:
@@ -1587,7 +1595,7 @@ languages:
           theorem ok: True by simp
           end
           THY
-          isabelle build -D . >/dev/null
+          env ISABELLE_JAVA_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC' isabelle build -D . >/dev/null
 
   vb6:
     install:
@@ -1675,8 +1683,8 @@ languages:
         - -lc
         - |
           printf '%s\n' 'console.log("ok");' > Main.ts
-          deno check --cached-only Main.ts
-          deno run --no-prompt --cached-only Main.ts | grep '^ok$'
+          deno check Main.ts
+          deno run --no-prompt Main.ts | grep '^ok$'
 
   kotlin-jvm:
     install:
@@ -1791,7 +1799,8 @@ languages:
         - curl -fsSL "https://github.com/janet-lang/janet/releases/download/v${JANET_VERSION}/janet-v${JANET_VERSION}-linux-x64.tar.gz" -o /tmp/janet.tar.gz
         - mkdir -p /opt/janet
         - tar -xzf /tmp/janet.tar.gz -C /opt/janet --strip-components=1
-        - ln -sfn /opt/janet/bin/janet /usr/local/bin/janet
+        - export JANET_BIN="$(find /opt/janet -type f -name janet | head -n1)"
+        - test -n "${JANET_BIN}" && ln -sfn "${JANET_BIN}" /usr/local/bin/janet
         - rm -f /tmp/janet.tar.gz
     smoke:
       command:
