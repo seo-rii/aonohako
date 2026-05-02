@@ -1535,6 +1535,65 @@ Proof. reflexivity. Qed.`),
 Proof. reflexivity. Qed.`),
 			},
 		},
+		"lean4": {
+			compileLang: "LEAN4",
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.lean", `theorem ok : True := by trivial`),
+			},
+		},
+		"agda": {
+			compileLang: "AGDA",
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.agda", `module Main where
+data Unit : Set where
+  tt : Unit
+ok : Unit
+ok = tt`),
+			},
+		},
+		"dafny": {
+			compileLang: "DAFNY",
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.dfy", `method Main() ensures true {
+}`),
+			},
+		},
+		"tla": {
+			compileLang: "TLA",
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.tla", `---- MODULE Main ----
+VARIABLE x
+Init == x = 0
+Next == x' = x
+====`),
+			},
+		},
+		"why3": {
+			compileLang: "WHY3",
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.mlw", `theory Main
+  goal G: true
+end`),
+			},
+		},
+		"isabelle": {
+			compileLang: "ISABELLE",
+			limits:      model.Limits{TimeMs: 30000, MemoryMB: 3072},
+			sources: []model.Source{
+				source("ROOT", `session Aonohako = HOL +
+  theories Aonohako_Main`),
+				source("Aonohako_Main.thy", `theory Aonohako_Main
+  imports Main
+begin
+theorem ok: True by simp
+end`),
+			},
+		},
 		"csharp": {
 			compileLang:    "CSHARP",
 			expectedStdout: "ok\n",
@@ -1552,39 +1611,48 @@ Console.WriteLine(System.IO.File.ReadAllText("same-folder.txt"));`),
 				source("Main.cr", `puts "ok"`),
 			},
 		},
-		"cuda-lite": {
-			compileLang:    "CUDA_LITE",
+		"vlang": {
+			compileLang:    "VLANG",
 			expectedStdout: "ok\n",
 			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.cu", `#include <cstdio>
-
-__global__ void add(const int *a, const int *b, int *c) {
-    int i = static_cast<int>(threadIdx.x);
-    c[i] = a[i] + b[i];
-}
-
-int main() {
-    int a[1] = {1};
-    int b[1] = {1};
-    int c[1] = {0};
-    int *da = nullptr;
-    int *db = nullptr;
-    int *dc = nullptr;
-    cudaMalloc(reinterpret_cast<void **>(&da), sizeof(a));
-    cudaMalloc(reinterpret_cast<void **>(&db), sizeof(b));
-    cudaMalloc(reinterpret_cast<void **>(&dc), sizeof(c));
-    cudaMemcpy(da, a, sizeof(a), cudaMemcpyHostToDevice);
-    cudaMemcpy(db, b, sizeof(b), cudaMemcpyHostToDevice);
-    CUDA_LAUNCH(add, dim3(1), dim3(1), da, db, dc);
-    cudaDeviceSynchronize();
-    cudaMemcpy(c, dc, sizeof(c), cudaMemcpyDeviceToHost);
-    cudaFree(da);
-    cudaFree(db);
-    cudaFree(dc);
-    std::puts(c[0] == 2 ? "ok" : "bad");
-    return c[0] == 2 ? 0 : 1;
+				source("Main.v", `fn main() {
+  println('ok')
 }`),
+			},
+		},
+		"odin": {
+			compileLang:    "ODIN",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("main.odin", `package main
+import "core:fmt"
+main :: proc() {
+  fmt.println("ok")
+}`),
+			},
+		},
+		"c3": {
+			compileLang:    "C3",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.c3", `import std::io;
+fn void main() {
+  io::printfn("ok");
+}`),
+			},
+		},
+		"hare": {
+			compileLang:    "HARE",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.ha", `use fmt;
+export fn main() void = {
+  fmt::println("ok")!;
+};`),
 			},
 		},
 		"d": {
@@ -1676,6 +1744,17 @@ let main _ =
 			sources: []model.Source{
 				source("Main.pro", `pro main
 end`),
+			},
+		},
+		"gleam": {
+			compileLang:    "GLEAM",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.gleam", `import gleam/io
+pub fn main() {
+  io.println("ok")
+}`),
 			},
 		},
 		"go": {
@@ -2076,6 +2155,16 @@ Module Program
 End Module`),
 			},
 		},
+		"vb6": {
+			compileLang:    "VB6",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.bas", `Sub Main()
+Print "ok"
+End Sub`),
+			},
+		},
 		"vhdl": {
 			compileLang: "VHDL",
 			entryPoint:  "main_tb",
@@ -2118,6 +2207,117 @@ endmodule`),
     $finish;
   end
 endmodule`),
+			},
+		},
+		"cuda-ocelot": {
+			compileLang:    "CUDA_OCELOT",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 15000, MemoryMB: 2048},
+			sources: []model.Source{
+				source("Main.cu", `#include <cstdio>
+int main() {
+    std::puts("ok");
+    return 0;
+}`),
+			},
+		},
+		"carbon": {
+			compileLang: "CARBON",
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.carbon", `package Main api;
+fn Run() {}`),
+			},
+		},
+		"graphql": {
+			compileLang:    "GRAPHQL",
+			expectedStdout: "{\"data\":{\"ok\":\"ok\"}}\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.graphql", `query { ok }`),
+			},
+		},
+		"smalltalk": {
+			compileLang:    "SMALLTALK",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.st", `'ok' displayNl`),
+			},
+		},
+		"golfscript": {
+			compileLang:    "GOLFSCRIPT",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.gs", `"ok\n"`),
+			},
+		},
+		"mojo": {
+			compileLang:    "MOJO",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.mojo", `def main():
+    print("ok")`),
+			},
+		},
+		"deno": {
+			compileLang:    "DENO",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.ts", `console.log("ok");`),
+			},
+		},
+		"kotlin-jvm": {
+			compileLang:    "KOTLIN_JVM",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.kt", `fun main() {
+  println("ok")
+}`),
+			},
+		},
+		"duckdb": {
+			compileLang:    "DUCKDB",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.sql", `select 'ok';`),
+			},
+		},
+		"bqn": {
+			compileLang:    "BQN",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.bqn", `•Out "ok"`),
+			},
+		},
+		"apl": {
+			compileLang:    "APL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.apl", `⎕←'ok'`),
+			},
+		},
+		"uiua": {
+			compileLang:    "UIUA",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.ua", `&p "ok"`),
+			},
+		},
+		"janet": {
+			compileLang:    "JANET",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.janet", `(print "ok")`),
 			},
 		},
 		"wasm": {

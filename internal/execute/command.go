@@ -156,17 +156,17 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "graphql":
 		return []string{"aonohako-graphql-run", primaryPath}
 	case "lean4":
-		return []string{"lean", primaryPath}
+		return []string{"sh", "-c", `exec lean "$1" >/dev/null`, "aonohako-lean-run", primaryPath}
 	case "agda":
-		return []string{"agda", primaryPath}
+		return []string{"sh", "-c", `exec agda "$1" >/dev/null`, "aonohako-agda-run", primaryPath}
 	case "dafny":
-		return []string{"dafny", "verify", primaryPath}
+		return []string{"sh", "-c", `exec dafny verify "$1" >/dev/null`, "aonohako-dafny-run", primaryPath}
 	case "tla":
 		return []string{"aonohako-tla-run", primaryPath}
 	case "why3":
-		return []string{"why3", "prove", "-P", "alt-ergo", primaryPath}
+		return []string{"sh", "-c", `exec why3 prove -P alt-ergo "$1" >/dev/null`, "aonohako-why3-run", primaryPath}
 	case "isabelle":
-		return []string{"isabelle", "build", "-D", "."}
+		return []string{"sh", "-c", `cd "$1" && exec isabelle build -D . >/dev/null`, "aonohako-isabelle-run", primaryPath}
 	case "groovy":
 		mainClass, err := normalizeJVMMainClass(req.EntryPoint, "Main")
 		if err != nil {
@@ -315,7 +315,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "duckdb":
 		return []string{"aonohako-duckdb-run", primaryPath}
 	case "bqn":
-		return []string{"node", "/usr/local/lib/aonohako/bqn.js", primaryPath}
+		return []string{"bqn", primaryPath}
 	case "apl":
 		return []string{"apl", "--script", primaryPath}
 	case "uiua":
