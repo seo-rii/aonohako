@@ -232,7 +232,7 @@ languages:
         - xz-utils
       script:
         - export NODE_VERSION=24.15.0
-        - curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
         - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
         - mkdir -p /opt
         - tar -xJf /tmp/node.tar.xz -C /opt
@@ -257,7 +257,7 @@ languages:
         - xz-utils
       script:
         - export NODE_VERSION=24.15.0
-        - curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
         - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
         - mkdir -p /opt
         - tar -xJf /tmp/node.tar.xz -C /opt
@@ -548,7 +548,7 @@ languages:
         - xz-utils
       script:
         - export WASMTIME_VERSION=44.0.0
-        - curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
         - install -d /tmp/wasmtime
         - tar -xJf /tmp/wasmtime.tar.xz -C /tmp/wasmtime --strip-components=1
         - install -m 0755 /tmp/wasmtime/wasmtime /usr/local/bin/wasmtime
@@ -630,7 +630,7 @@ languages:
         - xz-utils
       script:
         - export ZIG_VERSION=0.14.0
-        - curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
         - mkdir -p /opt
         - tar -xJf /tmp/zig.tar.xz -C /opt
         - ln -sfn "/opt/zig-linux-x86_64-${ZIG_VERSION}/zig" /usr/local/bin/zig
@@ -936,7 +936,7 @@ languages:
         - lld
       script:
         - export ODIN_VERSION=dev-2026-04
-        - curl -fsSL "https://github.com/odin-lang/Odin/releases/download/${ODIN_VERSION}/odin-linux-amd64-${ODIN_VERSION}.tar.gz" -o /tmp/odin.tar.gz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/odin-lang/Odin/releases/download/${ODIN_VERSION}/odin-linux-amd64-${ODIN_VERSION}.tar.gz" -o /tmp/odin.tar.gz
         - mkdir -p /opt/odin
         - tar -xzf /tmp/odin.tar.gz -C /opt/odin --strip-components=1
         - ln -sfn /opt/odin/odin /usr/local/bin/odin
@@ -965,7 +965,7 @@ languages:
         - curl
       script:
         - export C3_VERSION=0.7.11
-        - curl -fsSL "https://github.com/c3lang/c3c/releases/download/v${C3_VERSION}/c3-linux.tar.gz" -o /tmp/c3.tar.gz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/c3lang/c3c/releases/download/v${C3_VERSION}/c3-linux.tar.gz" -o /tmp/c3.tar.gz
         - mkdir -p /opt
         - tar -xzf /tmp/c3.tar.gz -C /opt
         - ln -sfn /opt/c3/c3c /usr/local/bin/c3c
@@ -1036,7 +1036,7 @@ languages:
         - xz-utils
       script:
         - export KONAN_VERSION=1.8.10
-        - curl -fsSL "https://github.com/JetBrains/kotlin/releases/download/v${KONAN_VERSION}/kotlin-native-linux-x86_64-${KONAN_VERSION}.tar.gz" -o /tmp/kotlin-native.tar.gz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/JetBrains/kotlin/releases/download/v${KONAN_VERSION}/kotlin-native-linux-x86_64-${KONAN_VERSION}.tar.gz" -o /tmp/kotlin-native.tar.gz
         - mkdir -p /opt
         - tar -xzf /tmp/kotlin-native.tar.gz -C /opt
         - ln -sfn "/opt/kotlin-native-linux-x86_64-${KONAN_VERSION}/bin/kotlinc-native" /usr/local/bin/kotlinc-native
@@ -1216,7 +1216,7 @@ languages:
         - unzip
       script:
         - export DART_VERSION=3.11.5
-        - curl -fsSL "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dartsdk.zip
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dartsdk.zip
         - rm -rf /opt/dart-sdk
         - unzip -q /tmp/dartsdk.zip -d /opt
         - ln -sfn /opt/dart-sdk/bin/dart /usr/local/bin/dart
@@ -1250,7 +1250,7 @@ languages:
         - libicu76
       script:
         - mkdir -p /opt/dotnet
-        - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
         - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
         - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
         - rm -f /tmp/dotnet-install.sh
@@ -1272,7 +1272,7 @@ languages:
         - libicu76
       script:
         - mkdir -p /opt/dotnet
-        - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
         - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
         - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
         - rm -f /tmp/dotnet-install.sh
@@ -1311,7 +1311,7 @@ languages:
         - libicu76
       script:
         - mkdir -p /opt/dotnet
-        - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
         - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
         - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
         - rm -f /tmp/dotnet-install.sh
@@ -1355,7 +1355,7 @@ languages:
         - erlang-parsetools
       script:
         - export GLEAM_VERSION=1.16.0
-        - curl -fsSL "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/gleam.tar.gz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/gleam.tar.gz
         - tar -xzf /tmp/gleam.tar.gz -C /usr/local/bin gleam
         - rm -f /tmp/gleam.tar.gz
         - install -d -m 0755 /usr/local/lib/aonohako/gleam-home
@@ -1432,7 +1432,7 @@ languages:
         - curl
       script:
         - export CARBON_VERSION=0.0.0-0.nightly.2026.05.02
-        - curl -fsSL "https://github.com/carbon-language/carbon-lang/releases/download/v${CARBON_VERSION}/carbon_toolchain-${CARBON_VERSION}.tar.gz" -o /tmp/carbon.tar.gz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/carbon-language/carbon-lang/releases/download/v${CARBON_VERSION}/carbon_toolchain-${CARBON_VERSION}.tar.gz" -o /tmp/carbon.tar.gz
         - mkdir -p /opt/carbon
         - tar -xzf /tmp/carbon.tar.gz -C /opt/carbon --strip-components=1
         - ln -sfn /opt/carbon/bin/carbon /usr/local/bin/carbon
@@ -1522,7 +1522,7 @@ languages:
         - -lc
         - |
           printf '%s\n' 'method Main() ensures true {' '}' > Main.dfy
-          env DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_PROCESSOR_COUNT=1 COMPlus_ThreadPool_ForceMinWorkerThreads=1 dafny verify Main.dfy >/dev/null
+          env DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_PROCESSOR_COUNT=1 COMPlus_ThreadPool_ForceMinWorkerThreads=1 dafny verify --cores 1 Main.dfy >/dev/null
 
   tla:
     install:
@@ -1640,7 +1640,7 @@ languages:
         - zip
       script:
         - export GST_VERSION=3.2.5
-        - curl -fsSL "https://ftp.gnu.org/gnu/smalltalk/smalltalk-${GST_VERSION}.tar.gz" -o /tmp/smalltalk.tar.gz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://ftp.gnu.org/gnu/smalltalk/smalltalk-${GST_VERSION}.tar.gz" -o /tmp/smalltalk.tar.gz
         - tar -xzf /tmp/smalltalk.tar.gz -C /tmp
         - sed -i 's/const char \*inbuf;/char *inbuf;/' "/tmp/smalltalk-${GST_VERSION}/packages/iconv/iconv.c"
         - (cd "/tmp/smalltalk-${GST_VERSION}" && CC=/usr/bin/gcc-14 ./configure --prefix=/usr/local && make -j1 && make install)
@@ -1691,7 +1691,7 @@ languages:
         - unzip
       script:
         - export DENO_VERSION=2.7.14
-        - curl -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
         - unzip -q /tmp/deno.zip -d /usr/local/bin
         - chmod 0755 /usr/local/bin/deno
         - rm -f /tmp/deno.zip
@@ -1712,7 +1712,7 @@ languages:
         - unzip
       script:
         - export KOTLIN_JVM_VERSION=2.3.21
-        - curl -fsSL "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_JVM_VERSION}/kotlin-compiler-${KOTLIN_JVM_VERSION}.zip" -o /tmp/kotlin-compiler.zip
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_JVM_VERSION}/kotlin-compiler-${KOTLIN_JVM_VERSION}.zip" -o /tmp/kotlin-compiler.zip
         - unzip -q /tmp/kotlin-compiler.zip -d /opt
         - ln -sfn /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc
         - rm -f /tmp/kotlin-compiler.zip
@@ -1732,7 +1732,7 @@ languages:
         - unzip
       script:
         - export DUCKDB_VERSION=1.5.2
-        - curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip" -o /tmp/duckdb.zip
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip" -o /tmp/duckdb.zip
         - unzip -q /tmp/duckdb.zip -d /usr/local/bin
         - chmod 0755 /usr/local/bin/duckdb
         - rm -f /tmp/duckdb.zip
@@ -1770,7 +1770,7 @@ languages:
         - xz-utils
       script:
         - export NODE_VERSION=24.15.0
-        - curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
         - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
         - mkdir -p /opt
         - tar -xJf /tmp/node.tar.xz -C /opt
@@ -1796,7 +1796,7 @@ languages:
         - unzip
       script:
         - export UIUA_VERSION=0.18.1
-        - curl -fsSL "https://github.com/uiua-lang/uiua/releases/download/${UIUA_VERSION}/uiua-bin-x86_64-unknown-linux-gnu-no-audio.zip" -o /tmp/uiua.zip
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/uiua-lang/uiua/releases/download/${UIUA_VERSION}/uiua-bin-x86_64-unknown-linux-gnu-no-audio.zip" -o /tmp/uiua.zip
         - unzip -q /tmp/uiua.zip -d /usr/local/bin
         - chmod 0755 /usr/local/bin/uiua
         - rm -f /tmp/uiua.zip
@@ -1814,7 +1814,7 @@ languages:
         - curl
       script:
         - export JANET_VERSION=1.41.2
-        - curl -fsSL "https://github.com/janet-lang/janet/releases/download/v${JANET_VERSION}/janet-v${JANET_VERSION}-linux-x64.tar.gz" -o /tmp/janet.tar.gz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/janet-lang/janet/releases/download/v${JANET_VERSION}/janet-v${JANET_VERSION}-linux-x64.tar.gz" -o /tmp/janet.tar.gz
         - mkdir -p /opt/janet
         - tar -xzf /tmp/janet.tar.gz -C /opt/janet --strip-components=1
         - export JANET_BIN="$(find /opt/janet -type f -name janet | head -n1)"

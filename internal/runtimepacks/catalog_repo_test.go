@@ -192,7 +192,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"clojure":       {"PushbackReader", "Main.clj"},
 		"crystal":       {"crystal build Main.cr", "Broken.cr"},
 		"cuda-ocelot":   {"GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99", "libfl-dev", "libzstd-dev", "aonohako-cuda-ocelot-build Main.cu Main"},
-		"dafny":         {"DAFNY_VERSION=4.11.0", "curl --retry 6", "wget --tries=6", "dafny verify Main.dfy"},
+		"dafny":         {"DAFNY_VERSION=4.11.0", "curl --retry 6", "wget --tries=6", "dafny verify --cores 1 Main.dfy"},
 		"dart":          {"dart compile exe", "Broken.dart"},
 		"deno":          {"DENO_VERSION=2.7.14", "deno check Main.ts", "deno run --no-prompt Main.ts"},
 		"duckdb":        {"DUCKDB_VERSION=1.5.2", "aonohako-duckdb-run Main.sql"},
