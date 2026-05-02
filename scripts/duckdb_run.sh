@@ -14,5 +14,6 @@ fi
 
 {
   printf '%s\n' '.mode list'
+  printf '%s\n' '.headers off'
   cat "${src}"
 } | duckdb -batch ':memory:'
