@@ -1377,8 +1377,10 @@ languages:
     install:
       apt:
         - build-essential
+        - bison
         - clang-15
         - cmake
+        - flex
         - git
         - libboost-all-dev
         - llvm-15
@@ -1452,7 +1454,7 @@ languages:
         - unzip
       script:
         - export LEAN_VERSION=4.29.1
-        - curl -fsSL "https://github.com/leanprover/lean4/releases/download/v${LEAN_VERSION}/lean-${LEAN_VERSION}-linux.zip" -o /tmp/lean.zip
+        - curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "https://github.com/leanprover/lean4/releases/download/v${LEAN_VERSION}/lean-${LEAN_VERSION}-linux.zip" -o /tmp/lean.zip
         - rm -rf /opt/lean
         - unzip -q /tmp/lean.zip -d /opt
         - mv "/opt/lean-${LEAN_VERSION}-linux" /opt/lean
@@ -1492,7 +1494,7 @@ languages:
         - unzip
       script:
         - export DAFNY_VERSION=4.11.0
-        - curl -fsSL "https://github.com/dafny-lang/dafny/releases/download/v${DAFNY_VERSION}/dafny-${DAFNY_VERSION}-x64-ubuntu-22.04.zip" -o /tmp/dafny.zip
+        - curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "https://github.com/dafny-lang/dafny/releases/download/v${DAFNY_VERSION}/dafny-${DAFNY_VERSION}-x64-ubuntu-22.04.zip" -o /tmp/dafny.zip
         - rm -rf /opt/dafny
         - unzip -q /tmp/dafny.zip -d /opt/dafny
         - ln -sfn /opt/dafny/dafny/dafny /usr/local/bin/dafny
@@ -1512,7 +1514,7 @@ languages:
         - default-jre-headless
       script:
         - export TLA_VERSION=1.7.4
-        - curl -fsSL "https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar" -o /usr/local/lib/aonohako/tla2tools.jar
+        - curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar" -o /usr/local/lib/aonohako/tla2tools.jar
         - chmod 0644 /usr/local/lib/aonohako/tla2tools.jar
     smoke:
       command:
@@ -1553,7 +1555,7 @@ languages:
         - tar
       script:
         - export ISABELLE_VERSION=Isabelle2025-2
-        - curl -fsSL "https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz" -o /tmp/isabelle.tar.gz
+        - curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz" -o /tmp/isabelle.tar.gz
         - tar -xzf /tmp/isabelle.tar.gz -C /opt
         - ln -sfn "/opt/${ISABELLE_VERSION}/bin/isabelle" /usr/local/bin/isabelle
         - rm -f /tmp/isabelle.tar.gz
