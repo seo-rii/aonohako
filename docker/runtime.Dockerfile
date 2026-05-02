@@ -53,6 +53,8 @@ COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
+COPY --chmod=0755 scripts/apl_kanapl_runner.js /usr/local/bin/apl
+COPY --chmod=0755 scripts/why3_prove_z3.sh /usr/local/bin/aonohako-why3-prove
 COPY --chmod=0755 scripts/gdl_run.sh /usr/local/bin/aonohako-gdl-run
 COPY --chmod=0755 scripts/carbon_run.sh /usr/local/bin/aonohako-carbon-run
 COPY --chmod=0755 scripts/cuda_ocelot_build.sh /usr/local/bin/aonohako-cuda-ocelot-build

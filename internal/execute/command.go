@@ -164,7 +164,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "tla":
 		return []string{"aonohako-tla-run", primaryPath}
 	case "why3":
-		return []string{"sh", "-c", `exec why3 prove -P alt-ergo "$1" >/dev/null`, "aonohako-why3-run", primaryPath}
+		return []string{"aonohako-why3-prove", primaryPath}
 	case "isabelle":
 		return []string{"sh", "-c", `cd "$1" && exec isabelle build -D . >/dev/null`, "aonohako-isabelle-run", primaryPath}
 	case "groovy":
@@ -317,7 +317,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "bqn":
 		return []string{"bqn", primaryPath}
 	case "apl":
-		return []string{"apl", "--script", primaryPath}
+		return []string{"node", "/usr/local/bin/apl", "--script", "-f", primaryPath}
 	case "uiua":
 		return []string{"uiua", "run", primaryPath, "--no-format"}
 	case "janet":

@@ -655,7 +655,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "tla":
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".tla", ".cfg"}, "no tla sources")
 	case "why3":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".mlw"}, "no why3 sources", "why3", []string{"prove", "-P", "alt-ergo"}, nil)
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".mlw"}, "no why3 sources", "aonohako-why3-prove", nil, nil)
 	case "isabelle":
 		return compileIsabelle(ctx, workDir, req.Sources)
 	case "python":
@@ -2287,7 +2287,8 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 		command[0] = path
 	}
-	isDotnet := filepath.Base(command[0]) == "dotnet"
+	commandName := filepath.Base(command[0])
+	isDotnet := commandName == "dotnet"
 	if isDotnet {
 		if err := security.ResetDotnetSharedState(); err != nil {
 			return "", "", model.CompileStatusInternal, "dotnet state cleanup failed: " + err.Error()
@@ -2296,11 +2297,11 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS and RLIMIT_FSIZE values can fail before user
 	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
-	disableAddressSpaceLimit := isDotnet
-	allowProcessGroups := filepath.Base(command[0]) == "swiftc"
+	disableAddressSpaceLimit := isDotnet || commandName == "c3c"
+	allowProcessGroups := commandName == "swiftc"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
-	if filepath.Base(command[0]) == "kotlinc-native" {
+	if commandName == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
 	memoryLimitKB := int64(memoryLimitMB) * 1024
