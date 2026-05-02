@@ -1574,8 +1574,22 @@ languages:
         - wget
       script:
         - export ISABELLE_VERSION=Isabelle2025-2
-        - export ISABELLE_URL="https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz"
-        - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$ISABELLE_URL" -o /tmp/isabelle.tar.gz || wget --tries=6 --waitretry=2 -O /tmp/isabelle.tar.gz "$ISABELLE_URL"
+        - export ISABELLE_SHA256=a20a507bc7c1270d8be96a9f3fbec06345387789d2dc2c4d3df6260d47bfb33c
+        - >-
+          downloaded=0;
+          for url in
+          "https://www.cl.cam.ac.uk/research/hvg/Isabelle/dist/${ISABELLE_VERSION}_linux.tar.gz"
+          "https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz";
+          do
+            rm -f /tmp/isabelle.tar.gz;
+            if curl --retry 8 --retry-all-errors --retry-delay 3 --connect-timeout 20 -fL "$url" -o /tmp/isabelle.tar.gz ||
+               wget --tries=8 --waitretry=3 --timeout=20 -O /tmp/isabelle.tar.gz "$url"; then
+              printf '%s  %s\n' "$ISABELLE_SHA256" /tmp/isabelle.tar.gz | sha256sum -c -;
+              downloaded=1;
+              break;
+            fi;
+          done;
+          test "$downloaded" = 1
         - tar -xzf /tmp/isabelle.tar.gz -C /opt
         - ln -sfn "/opt/${ISABELLE_VERSION}/bin/isabelle" /usr/local/bin/isabelle
         - rm -f /tmp/isabelle.tar.gz
