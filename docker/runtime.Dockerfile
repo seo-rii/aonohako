@@ -39,7 +39,7 @@ RUN if [[ -n "${PIP_PACKAGES}" ]]; then \
 COPY --from=builder /usr/local/go /usr/local/go
 
 RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
-      /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
+      env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
     fi
 
 RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
