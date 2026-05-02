@@ -12,6 +12,9 @@ func TestOpenFileLimitForCommandKeepsDotnetCompatible(t *testing.T) {
 	if got := OpenFileLimitForCommand("/usr/local/bin/aonohako-tla-run"); got != 512 {
 		t.Fatalf("tla open file limit = %d, want 512", got)
 	}
+	if got := OpenFileLimitForCommand("/usr/local/bin/isabelle"); got != 512 {
+		t.Fatalf("isabelle open file limit = %d, want 512", got)
+	}
 	if got := OpenFileLimitForCommand("/usr/bin/python3"); got != 64 {
 		t.Fatalf("python open file limit = %d, want 64", got)
 	}
@@ -35,6 +38,9 @@ func TestStackLimitForCommandKeepsDotnetCompatible(t *testing.T) {
 	}
 	if got := StackLimitForCommand("/usr/local/bin/aonohako-tla-run"); got != 64*1024*1024 {
 		t.Fatalf("tla stack limit = %d, want 64MiB", got)
+	}
+	if got := StackLimitForCommand("/usr/local/bin/isabelle"); got != 64*1024*1024 {
+		t.Fatalf("isabelle stack limit = %d, want 64MiB", got)
 	}
 	if got := StackLimitForCommand("/usr/bin/python3"); got != 8*1024*1024 {
 		t.Fatalf("python stack limit = %d, want 8MiB", got)

@@ -117,6 +117,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"OCAML":      "ocaml",
 		"ELIXIR":     "elixir",
 		"FORTRAN":    "binary",
+		"C3":         "c3",
 		"D":          "binary",
 		"COQ":        "rocq",
 		"HASKELL":    "binary",

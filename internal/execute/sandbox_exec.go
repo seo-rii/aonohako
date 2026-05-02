@@ -84,6 +84,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 
 	runLang := profiles.NormalizeRunLang(req.Lang)
+	isC3 := runLang == "c3"
 	allowUnixSockets := false
 	switch runLang {
 	case "ocaml":
@@ -144,7 +145,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS values can fail before user code.
-	disableAddressSpaceLimit := isDotnet || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "deno" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
+	disableAddressSpaceLimit := isDotnet || isC3 || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "deno" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
 	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)

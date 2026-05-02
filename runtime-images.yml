@@ -1576,6 +1576,7 @@ languages:
     install:
       apt:
         - curl
+        - fontconfig
         - perl
         - tar
         - wget
@@ -1599,6 +1600,9 @@ languages:
           test "$downloaded" = 1
         - tar -xzf /tmp/isabelle.tar.gz -C /opt
         - ln -sfn "/opt/${ISABELLE_VERSION}/bin/isabelle" /usr/local/bin/isabelle
+        - sed -i 's/val channel = System_Channel()/val channel = System_Channel(unix_domain = true)/' "/opt/${ISABELLE_VERSION}/src/Pure/System/isabelle_process.scala"
+        - sed -i '/isabelle.Bash[$]Handler/d' "/opt/${ISABELLE_VERSION}/etc/build.props"
+        - env JAVA_TOOL_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m' ISABELLE_JAVA_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC' ISABELLE_TOOL_JAVA_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC' ISABELLE_JAVA_SYSTEM_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC' isabelle scala_build
         - rm -f /tmp/isabelle.tar.gz
     smoke:
       command:

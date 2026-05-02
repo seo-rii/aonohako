@@ -166,14 +166,14 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if !ok {
 			return "", "", fmt.Errorf("entry_point not found in binaries: %s", entryPointPath)
 		}
-		if lang == "binary" && !submittedExec[entryPointPath] {
+		if (lang == "binary" || lang == "c3") && !submittedExec[entryPointPath] {
 			return "", "", fmt.Errorf("entry_point is not executable: %s", entryPointPath)
 		}
 		return selected, lang, nil
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "aheui", "cuda-ocelot":
+	case "binary", "c3", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "aheui", "cuda-ocelot":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {

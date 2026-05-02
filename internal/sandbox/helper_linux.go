@@ -452,12 +452,25 @@ func MaybeRunFromEnv() bool {
 				appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 			}
 		}
+		if !req.AllowSocketConnect {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CONNECT), 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
+		if !req.AllowSocketBind {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_BIND), 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
+		if !req.AllowSocketServer {
+			for _, sysno := range []uint32{
+				uint32(unix.SYS_LISTEN),
+				uint32(unix.SYS_ACCEPT),
+				uint32(unix.SYS_ACCEPT4),
+			} {
+				appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+				appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+			}
+		}
 		for _, sysno := range []uint32{
-			uint32(unix.SYS_CONNECT),
-			uint32(unix.SYS_BIND),
-			uint32(unix.SYS_LISTEN),
-			uint32(unix.SYS_ACCEPT),
-			uint32(unix.SYS_ACCEPT4),
 			uint32(unix.SYS_SHUTDOWN),
 			uint32(unix.SYS_SENDMMSG),
 			uint32(unix.SYS_RECVMMSG),

@@ -22,6 +22,9 @@ type ExecRequest struct {
 	EnableNetwork            bool         `json:"enable_network"`
 	AllowUnixSockets         bool         `json:"allow_unix_sockets,omitempty"`
 	AllowUnixSocketMessages  bool         `json:"allow_unix_socket_messages,omitempty"`
+	AllowSocketBind          bool         `json:"allow_socket_bind,omitempty"`
+	AllowSocketConnect       bool         `json:"allow_socket_connect,omitempty"`
+	AllowSocketServer        bool         `json:"allow_socket_server,omitempty"`
 	AllowProcesses           bool         `json:"allow_processes,omitempty"`
 	AllowProcessGroups       bool         `json:"allow_process_groups,omitempty"`
 	AllowMemfdCreate         bool         `json:"allow_memfd_create,omitempty"`
