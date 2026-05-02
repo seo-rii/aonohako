@@ -1364,8 +1364,10 @@ languages:
         - printf '%s\n' 'import gleam/io' 'pub fn main() {' '  io.println("ok")' '}' > /tmp/gleam-warmup/src/main.gleam
         - (cd /tmp/gleam-warmup && env HOME=/usr/local/lib/aonohako/gleam-home gleam build)
         - cp /tmp/gleam-warmup/manifest.toml /usr/local/lib/aonohako/gleam-manifest.toml
+        - mkdir -p /usr/local/lib/aonohako/gleam-packages
+        - cp -a /tmp/gleam-warmup/build/packages/. /usr/local/lib/aonohako/gleam-packages/
         - rm -rf /tmp/gleam-warmup
-        - chmod -R a+rX /usr/local/lib/aonohako/gleam-home /usr/local/lib/aonohako/gleam-manifest.toml
+        - chmod -R a+rX /usr/local/lib/aonohako/gleam-home /usr/local/lib/aonohako/gleam-manifest.toml /usr/local/lib/aonohako/gleam-packages
     smoke:
       command:
         - bash
@@ -1375,6 +1377,8 @@ languages:
           printf '%s\n' 'name = "smoke"' 'version = "1.0.0"' '' '[dependencies]' 'gleam_stdlib = "~> 0.44"' > gleam.toml
           printf '%s\n' 'import gleam/io' 'pub fn main() {' '  io.println("ok")' '}' > src/main.gleam
           cp /usr/local/lib/aonohako/gleam-manifest.toml manifest.toml
+          mkdir -p build/packages
+          cp -a /usr/local/lib/aonohako/gleam-packages/. build/packages/
           env HOME=/usr/local/lib/aonohako/gleam-home gleam build
           aonohako-gleam-run . | grep '^ok$'
 
@@ -1518,7 +1522,7 @@ languages:
         - -lc
         - |
           printf '%s\n' 'method Main() ensures true {' '}' > Main.dfy
-          dafny verify Main.dfy >/dev/null
+          env DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 dafny verify Main.dfy >/dev/null
 
   tla:
     install:
