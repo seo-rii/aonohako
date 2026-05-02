@@ -125,7 +125,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 	runtimeBase := sandboxCommandBase(finalCommand)
 	isDotnet := runtimeBase == "dotnet"
-	allowMemfdCreate := isDotnet || runtimeBase == "wasmtime"
+	isTLA := runtimeBase == "aonohako-tla-run"
+	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
 	allowProcesses := false
 	switch runtimeBase {
 	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-why3-prove", "ghdl", "vvp":
@@ -184,7 +185,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		AllowUnixSocketMessages:  allowUnixSockets,
 		AllowProcesses:           allowProcesses,
 		AllowMemfdCreate:         allowMemfdCreate,
-		AllowNumaPolicy:          isDotnet,
+		AllowNumaPolicy:          isDotnet || isTLA,
+		AllowChmod:               isTLA,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     isDotnet,
 	}
