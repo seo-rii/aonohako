@@ -163,13 +163,8 @@ jobs:
           > "toolchain-artifacts/${{ matrix.name }}/summary.md"
       - run: |
           archive_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"
-          if docker save "aonohako-ci-prod:${{ matrix.name }}" | gzip -1 > "${archive_path}.tmp"; then
-            mv "${archive_path}.tmp" "${archive_path}"
-            sha256sum "${archive_path}" > "${archive_path}.sha256"
-          else
-            rm -f "${archive_path}.tmp" "${archive_path}" "${archive_path}.sha256"
-            printf '{"error":"docker archive export failed","profile":"%s"}\n' "${{ matrix.name }}" > "${archive_path}.error.json"
-          fi
+          rm -f "${archive_path}.tmp" "${archive_path}" "${archive_path}.sha256"
+          printf '{"skipped":"docker archive export skipped to conserve CI storage","profile":"%s"}\n' "${{ matrix.name }}" > "${archive_path}.error.json"
       - run: |
           scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
           sbom_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.sbom.spdx.json"
@@ -186,6 +181,8 @@ jobs:
             printf '{"error":"grype scan failed"}\n' > "toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.grype.json"
           fi
           rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/grype"
+          docker image rm "aonohako-ci-prod:${{ matrix.name }}" || true
+          docker image prune -f
       - uses: actions/upload-artifact@v7
         with:
           name: toolchain-profile-${{ matrix.name }}
