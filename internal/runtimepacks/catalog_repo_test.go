@@ -18,20 +18,20 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 14 {
-		t.Fatalf("expected 14 production images, got %d", len(production))
+	if len(production) != 16 {
+		t.Fatalf("expected 16 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "awk", "bf", "elixir", "erlang", "haskell", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "ruby", "scheme", "sqlite", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bf", "bqn", "elixir", "erlang", "gleam", "golfscript", "haskell", "janet", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "ruby", "scheme", "smalltalk", "sqlite", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "groovy", "java", "javascript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "deno", "graphql", "groovy", "java", "javascript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "crystal", "cuda-lite", "d", "fortran", "go", "nasm", "nim", "pascal", "rust", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "crystal", "d", "fortran", "go", "hare", "mojo", "nasm", "nim", "odin", "pascal", "rust", "vlang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
-	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin"}) {
+	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
 		t.Fatalf("type-d production image = %+v", production[3])
 	}
 	if production[4].Name != "type-e" || !reflect.DeepEqual(production[4].Languages, []string{"csharp", "fsharp", "vbnet"}) {
@@ -49,7 +49,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"java", "plain", "python"}) {
 		t.Fatalf("type-i production image = %+v", production[8])
 	}
-	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"coq", "rocq"}) {
+	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"agda", "coq", "dafny", "isabelle", "lean4", "rocq", "tla", "why3"}) {
 		t.Fatalf("type-j production image = %+v", production[9])
 	}
 	if production[10].Name != "type-k" || !reflect.DeepEqual(production[10].Languages, []string{"dart"}) {
@@ -58,11 +58,17 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[11].Name != "type-l" || !reflect.DeepEqual(production[11].Languages, []string{"python"}) {
 		t.Fatalf("type-l production image = %+v", production[11])
 	}
-	if production[12].Name != "type-m" || !reflect.DeepEqual(production[12].Languages, []string{"gdl", "octave"}) {
+	if production[12].Name != "type-m" || !reflect.DeepEqual(production[12].Languages, []string{"duckdb", "gdl", "octave"}) {
 		t.Fatalf("type-m production image = %+v", production[12])
 	}
 	if production[13].Name != "type-n" || !reflect.DeepEqual(production[13].Languages, []string{"systemverilog", "verilog", "vhdl"}) {
 		t.Fatalf("type-n production image = %+v", production[13])
+	}
+	if production[14].Name != "type-o" || !reflect.DeepEqual(production[14].Languages, []string{"cuda-ocelot"}) {
+		t.Fatalf("type-o production image = %+v", production[14])
+	}
+	if production[15].Name != "type-p" || !reflect.DeepEqual(production[15].Languages, []string{"carbon", "vb6"}) {
+		t.Fatalf("type-p production image = %+v", production[15])
 	}
 
 	ci, err := catalog.CILanguageImages()
@@ -75,35 +81,53 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	}
 	if !reflect.DeepEqual(names, []string{
 		"ci-ada",
+		"ci-agda",
 		"ci-aheui",
+		"ci-apl",
 		"ci-asm",
 		"ci-awk",
 		"ci-bf",
+		"ci-bqn",
+		"ci-c3",
+		"ci-carbon",
 		"ci-clojure",
 		"ci-coq",
 		"ci-crystal",
 		"ci-csharp",
-		"ci-cuda-lite",
+		"ci-cuda-ocelot",
 		"ci-d",
+		"ci-dafny",
 		"ci-dart",
+		"ci-deno",
+		"ci-duckdb",
 		"ci-elixir",
 		"ci-erlang",
 		"ci-fortran",
 		"ci-fsharp",
 		"ci-gdl",
+		"ci-gleam",
 		"ci-go",
+		"ci-golfscript",
+		"ci-graphql",
 		"ci-groovy",
+		"ci-hare",
 		"ci-haskell",
+		"ci-isabelle",
+		"ci-janet",
 		"ci-java",
 		"ci-javascript",
 		"ci-julia",
 		"ci-kotlin",
+		"ci-kotlin-jvm",
+		"ci-lean4",
 		"ci-lisp",
 		"ci-lua",
+		"ci-mojo",
 		"ci-nasm",
 		"ci-nim",
 		"ci-ocaml",
 		"ci-octave",
+		"ci-odin",
 		"ci-pascal",
 		"ci-perl",
 		"ci-php",
@@ -118,16 +142,22 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-rust",
 		"ci-scala",
 		"ci-scheme",
+		"ci-smalltalk",
 		"ci-sqlite",
 		"ci-swift",
 		"ci-systemverilog",
+		"ci-tla",
 		"ci-typescript",
 		"ci-uhmlang",
+		"ci-uiua",
+		"ci-vb6",
 		"ci-vbnet",
 		"ci-verilog",
 		"ci-vhdl",
+		"ci-vlang",
 		"ci-wasm",
 		"ci-whitespace",
+		"ci-why3",
 		"ci-zig",
 	}) {
 		t.Fatalf("ci image names = %v", names)
@@ -143,24 +173,48 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 	tests := map[string][]string{
 		"aheui":         {"Hello, World!", "Main.aheui"},
 		"ada":           {"gnatmake", "Broken.adb"},
+		"agda":          {"agda Main.agda", "data Unit : Set"},
+		"apl":           {"GNU_APL_VERSION=1.8", "apl --script Main.apl"},
 		"asm":           {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
 		"awk":           {"gawk --sandbox", "Main.awk"},
+		"bqn":           {"CBQN_COMMIT=d56147be877693eaed351745782c258bd7424de7", "bqn Main.bqn"},
+		"c3":            {"C3_VERSION=0.7.11", "c3c compile Main.c3"},
+		"carbon":        {"CARBON_VERSION=0.0.0-0.nightly.2026.05.02", "carbon compile --phase=check Main.carbon"},
 		"clojure":       {"PushbackReader", "Main.clj"},
 		"crystal":       {"crystal build Main.cr", "Broken.cr"},
-		"cuda-lite":     {"CUDA_LAUNCH(add", "cuda_lite.hpp"},
+		"cuda-ocelot":   {"GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99", "aonohako-cuda-ocelot-build Main.cu Main"},
+		"dafny":         {"DAFNY_VERSION=4.11.0", "dafny verify Main.dfy"},
 		"dart":          {"dart compile exe", "Broken.dart"},
+		"deno":          {"DENO_VERSION=2.7.14", "deno run --no-prompt --cached-only Main.ts"},
+		"duckdb":        {"DUCKDB_VERSION=1.5.2", "aonohako-duckdb-run Main.sql"},
 		"erlang":        {"Broken.erl", "erlc"},
 		"gdl":           {"aonohako-gdl-run", "Main.pro"},
+		"gleam":         {"GLEAM_VERSION=1.16.0", "aonohako-gleam-run ."},
+		"golfscript":    {"golfscript_sandboxed.rb", "Main.gs"},
+		"graphql":       {"graphql-core==3.2.6", "aonohako-graphql-run Main.graphql"},
+		"hare":          {"hare build -o Main Main.ha", "fmt::println"},
+		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "isabelle build -D ."},
+		"janet":         {"JANET_VERSION=1.41.2", "janet Main.janet"},
+		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "kotlinc Main.kt -include-runtime -d Main.jar"},
+		"lean4":         {"LEAN_VERSION=4.29.1", "lean Main.lean"},
+		"mojo":          {"mojo==0.26.2.0", "mojo build Main.mojo"},
 		"nim":           {"nim c", "Broken.nim"},
 		"octave":        {"octave-cli --quiet", "Main.m"},
+		"odin":          {"ODIN_VERSION=dev-2026-04", "odin build . -out:Main"},
 		"pascal":        {"fpc", "Broken.pas"},
 		"racket":        {"raco make", "Broken.rkt"},
 		"rocq":          {"rocq c Main.v", "coqc -q Main.v"},
 		"scheme":        {"chibi-scheme Main.scm", "(scheme base)"},
+		"smalltalk":     {"GST_VERSION=3.2.5", "gst -q Main.st"},
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
+		"tla":           {"TLA_VERSION=1.7.4", "aonohako-tla-run Main.tla"},
+		"uiua":          {"UIUA_VERSION=0.18.1", "uiua run Main.ua --no-format"},
+		"vb6":           {"aonohako-vb6-run Main.bas", "Sub Main()"},
 		"vbnet":         {"App.vbproj", "dotnet publish App.vbproj"},
 		"verilog":       {"iverilog -g2012", "Main.v"},
 		"vhdl":          {"ghdl -a --std=08", "main_tb"},
+		"vlang":         {"V_COMMIT=e632a84cd573bb05f3f72a0ae0cb9bbcaae404da", "v -o Main Main.v"},
+		"why3":          {"why3 prove -P alt-ergo Main.mlw", "goal G: true"},
 		"zig":           {"Broken.zig", "zig build-exe"},
 		"r":             {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
 		"fortran":       {"Broken.f90", "gfortran"},
@@ -180,7 +234,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing language %q in catalog", language)
 		}
-		body := strings.Join(spec.Smoke.Command, "\n")
+		body := strings.Join(append(append(append(append([]string{}, spec.Install.Apt...), spec.Install.Pip...), spec.Install.NPM...), append(spec.Install.Script, spec.Smoke.Command...)...), "\n")
 		for _, pattern := range patterns {
 			if !strings.Contains(body, pattern) {
 				t.Fatalf("language %q smoke command must contain %q, got %q", language, pattern, body)
@@ -238,7 +292,7 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 	}
 
 	const pinnedTrixie = "debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a"
-	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n"} {
+	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n", "type-p"} {
 		profile, ok := catalog.Profiles[profileName]
 		if !ok {
 			t.Fatalf("profile %q missing from catalog", profileName)
@@ -252,6 +306,9 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 	}
 	if profile := catalog.Profiles["type-h"]; profile.BaseImage != "swift:6.2.1-bookworm@sha256:73f569f5536fe3c9ad5109eb4622c5560af7424d55304955190e5fbccc047b86" {
 		t.Fatalf("type-h base image = %q, want digest-pinned swift image", profile.BaseImage)
+	}
+	if profile := catalog.Profiles["type-o"]; profile.BaseImage != "nvidia/cuda:11.8.0-devel-ubuntu22.04@sha256:94fd755736cb58979173d491504f0b573247b1745250249415b07fefc738e41f" {
+		t.Fatalf("type-o base image = %q, want digest-pinned CUDA 11.8 image", profile.BaseImage)
 	}
 	for profileName, profile := range catalog.Profiles {
 		if !strings.Contains(profile.BaseImage, "@sha256:") {
@@ -328,6 +385,9 @@ func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
 	}
 
 	for _, profileName := range sortedKeys(catalog.Profiles) {
+		if profileName == "type-o" {
+			continue
+		}
 		profile := catalog.Profiles[profileName]
 		installScript := strings.Join(profile.Install.Script, "\n")
 		for _, marker := range []string{

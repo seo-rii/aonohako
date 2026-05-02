@@ -53,13 +53,21 @@ COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
-COPY --chmod=0644 scripts/cuda_lite.hpp /usr/local/lib/aonohako/cuda_lite.hpp
 COPY --chmod=0755 scripts/gdl_run.sh /usr/local/bin/aonohako-gdl-run
+COPY --chmod=0755 scripts/carbon_run.sh /usr/local/bin/aonohako-carbon-run
+COPY --chmod=0755 scripts/cuda_ocelot_build.sh /usr/local/bin/aonohako-cuda-ocelot-build
+COPY --chmod=0755 scripts/cuda_ocelot_run.sh /usr/local/bin/aonohako-cuda-ocelot-run
+COPY --chmod=0755 scripts/duckdb_run.sh /usr/local/bin/aonohako-duckdb-run
+COPY --chmod=0755 scripts/gleam_run.sh /usr/local/bin/aonohako-gleam-run
+COPY --chmod=0755 scripts/graphql_run.py /usr/local/bin/aonohako-graphql-run
+COPY --chmod=0755 scripts/tla_run.sh /usr/local/bin/aonohako-tla-run
+COPY --chmod=0755 scripts/vb6_run.rb /usr/local/bin/aonohako-vb6-run
+COPY --chmod=0755 scripts/golfscript_sandboxed.rb /usr/local/lib/aonohako/golfscript_sandboxed.rb
 COPY python/ /usr/local/lib/aonohako/python/
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
 RUN chmod 0755 /usr/local/lib/aonohako && \
-    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/cuda_lite.hpp && \
+    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py && \
     find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
     find /usr/local/lib/aonohako/python -type f -exec chmod 0644 {} + && \
     install -d -m 0700 /var/aonohako /var/aonohako/protected && \

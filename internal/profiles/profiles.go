@@ -69,7 +69,6 @@ var profiles = map[string]Profile{
 	"VB":            {SourceLang: "VB", Extension: "vb", CompileKind: "vbnet", RunLang: "vbnet", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 16},
 	"GLEAM":         {SourceLang: "GLEAM", Extension: "gleam", CompileKind: "gleam", RunLang: "gleam", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"CUDA_OCELOT":   {SourceLang: "CUDA_OCELOT", Extension: "cu", DefaultTarget: "Main", CompileKind: "cuda-ocelot", RunLang: "cuda-ocelot", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
-	"CUDA_LITE":     {SourceLang: "CUDA_LITE", Extension: "cu", DefaultTarget: "Main", CompileKind: "cuda-lite", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"CARBON":        {SourceLang: "CARBON", Extension: "carbon", CompileKind: "carbon", RunLang: "carbon", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"GRAPHQL":       {SourceLang: "GRAPHQL", Extension: "graphql", CompileKind: "graphql", RunLang: "graphql", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"ROCQ":          {SourceLang: "ROCQ", Extension: "v", CompileKind: "rocq", RunLang: "rocq", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
@@ -149,8 +148,6 @@ func NormalizeRunLang(language string) string {
 		return "gdl"
 	case "systemverilog":
 		return "verilog"
-	case "cuda-lite", "cuda-cpu":
-		return "binary"
 	case "lean":
 		return "lean4"
 	case "tlaplus":

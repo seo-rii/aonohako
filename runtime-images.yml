@@ -906,47 +906,99 @@ languages:
           printf '%s\n' 'puts(' > Broken.cr
           if crystal build Broken.cr --release --no-debug -o Broken >/dev/null 2>&1; then exit 1; fi
 
-  cuda-lite:
+  vlang:
     install:
       apt:
         - g++
+        - gcc
+        - git
         - libc6-dev
+        - make
+      script:
+        - export V_COMMIT=e632a84cd573bb05f3f72a0ae0cb9bbcaae404da
+        - git clone https://github.com/vlang/v /opt/v
+        - cd /opt/v && git checkout "${V_COMMIT}" && make
+        - ln -sfn /opt/v/v /usr/local/bin/v
     smoke:
       command:
         - bash
         - -lc
         - |
-          cat > Main.cu <<'CUDA'
-          #include <cstdio>
+          printf '%s\n' "fn main() {" "  println('ok')" "}" > Main.v
+          v -o Main Main.v
+          ./Main | grep '^ok$'
 
-          __global__ void add(const int *a, const int *b, int *c) {
-              int i = static_cast<int>(threadIdx.x);
-              c[i] = a[i] + b[i];
+  odin:
+    install:
+      apt:
+        - clang
+        - curl
+        - lld
+      script:
+        - export ODIN_VERSION=dev-2026-04
+        - curl -fsSL "https://github.com/odin-lang/Odin/releases/download/${ODIN_VERSION}/odin-linux-amd64-${ODIN_VERSION}.tar.gz" -o /tmp/odin.tar.gz
+        - mkdir -p /opt/odin
+        - tar -xzf /tmp/odin.tar.gz -C /opt/odin --strip-components=1
+        - ln -sfn /opt/odin/odin /usr/local/bin/odin
+        - rm -f /tmp/odin.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > main.odin <<'ODIN'
+          package main
+          import "core:fmt"
+          main :: proc() {
+            fmt.println("ok")
           }
+          ODIN
+          odin build . -out:Main
+          ./Main | grep '^ok$'
 
-          int main() {
-              int a[1] = {1};
-              int b[1] = {1};
-              int c[1] = {0};
-              int *da = nullptr;
-              int *db = nullptr;
-              int *dc = nullptr;
-              cudaMalloc(reinterpret_cast<void **>(&da), sizeof(a));
-              cudaMalloc(reinterpret_cast<void **>(&db), sizeof(b));
-              cudaMalloc(reinterpret_cast<void **>(&dc), sizeof(c));
-              cudaMemcpy(da, a, sizeof(a), cudaMemcpyHostToDevice);
-              cudaMemcpy(db, b, sizeof(b), cudaMemcpyHostToDevice);
-              CUDA_LAUNCH(add, dim3(1), dim3(1), da, db, dc);
-              cudaDeviceSynchronize();
-              cudaMemcpy(c, dc, sizeof(c), cudaMemcpyDeviceToHost);
-              cudaFree(da);
-              cudaFree(db);
-              cudaFree(dc);
-              std::puts(c[0] == 2 ? "ok" : "bad");
-              return c[0] == 2 ? 0 : 1;
+  c3:
+    install:
+      apt:
+        - curl
+      script:
+        - export C3_VERSION=0.7.11
+        - curl -fsSL "https://github.com/c3lang/c3c/releases/download/v${C3_VERSION}/c3-linux.tar.gz" -o /tmp/c3.tar.gz
+        - mkdir -p /opt
+        - tar -xzf /tmp/c3.tar.gz -C /opt
+        - ln -sfn /opt/c3/c3c /usr/local/bin/c3c
+        - rm -f /tmp/c3.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.c3 <<'C3'
+          import std::io;
+          fn void main() {
+            io::printfn("ok");
           }
-          CUDA
-          g++ -O2 -std=c++17 -include /usr/local/lib/aonohako/cuda_lite.hpp -x c++ Main.cu -o Main
+          C3
+          c3c compile Main.c3 -o Main
+          ./Main | grep '^ok$'
+
+  hare:
+    install:
+      script:
+        - apt-get update -o APT::Get::List-Cleanup=false
+        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid hare
+        - find /var/lib/apt/lists -mindepth 1 -delete
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.ha <<'HARE'
+          use fmt;
+          export fn main() void = {
+            fmt::println("ok")!;
+          };
+          HARE
+          hare build -o Main Main.ha
           ./Main | grep '^ok$'
 
   rust:
@@ -1291,6 +1343,438 @@ languages:
           env HOME=/tmp/vbnet-home DOTNET_CLI_HOME=/tmp/vbnet-home NUGET_PACKAGES=/tmp/vbnet-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.vbproj --configuration Release -o publish -p:UseAppHost=false
           dotnet ./publish/App.dll | grep '^ok$'
 
+  gleam:
+    install:
+      apt:
+        - curl
+        - erlang-base
+        - erlang-dev
+        - erlang-parsetools
+      script:
+        - export GLEAM_VERSION=1.16.0
+        - curl -fsSL "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/gleam.tar.gz
+        - tar -xzf /tmp/gleam.tar.gz -C /usr/local/bin gleam
+        - rm -f /tmp/gleam.tar.gz
+        - install -d -m 0755 /usr/local/lib/aonohako/gleam-home
+        - mkdir -p /tmp/gleam-warmup/src
+        - printf '%s\n' 'name = "warmup"' 'version = "1.0.0"' '' '[dependencies]' 'gleam_stdlib = "~> 0.44"' > /tmp/gleam-warmup/gleam.toml
+        - printf '%s\n' 'import gleam/io' 'pub fn main() {' '  io.println("ok")' '}' > /tmp/gleam-warmup/src/main.gleam
+        - cd /tmp/gleam-warmup && env HOME=/usr/local/lib/aonohako/gleam-home gleam build
+        - rm -rf /tmp/gleam-warmup
+        - chmod -R a+rX /usr/local/lib/aonohako/gleam-home
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          mkdir -p src
+          printf '%s\n' 'name = "smoke"' 'version = "1.0.0"' '' '[dependencies]' 'gleam_stdlib = "~> 0.44"' > gleam.toml
+          printf '%s\n' 'import gleam/io' 'pub fn main() {' '  io.println("ok")' '}' > src/main.gleam
+          env HOME=/usr/local/lib/aonohako/gleam-home gleam build
+          aonohako-gleam-run . | grep '^ok$'
+
+  cuda-ocelot:
+    install:
+      apt:
+        - build-essential
+        - clang-15
+        - cmake
+        - git
+        - libboost-all-dev
+        - llvm-15
+        - llvm-15-dev
+        - ninja-build
+      script:
+        - export GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99
+        - git clone https://github.com/gpuocelot/gpuocelot /opt/gpuocelot-src
+        - cd /opt/gpuocelot-src && git checkout "${GPUOCELOT_COMMIT}"
+        - cmake -S /opt/gpuocelot-src -B /opt/gpuocelot-src/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/gpuocelot
+        - cmake --build /opt/gpuocelot-src/build --target install
+        - install -d -m 0755 /usr/local/share/aonohako/ocelot
+        - >-
+          printf '%s\n' 'executive: {' '  devices: ["emulated"]' '  preferredISA: "nvidia"' '}'
+          'cuda: {' '  implementation: "cuda"' '}'
+          > /usr/local/share/aonohako/ocelot/configure.ocelot
+        - rm -rf /opt/gpuocelot-src
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.cu <<'CUDA'
+          #include <cstdio>
+          int main() {
+            std::puts("ok");
+            return 0;
+          }
+          CUDA
+          aonohako-cuda-ocelot-build Main.cu Main
+          aonohako-cuda-ocelot-run ./Main | grep '^ok$'
+
+  carbon:
+    install:
+      apt:
+        - curl
+        - libgcc-11-dev
+      script:
+        - export CARBON_VERSION=0.0.0-0.nightly.2026.05.02
+        - curl -fsSL "https://github.com/carbon-language/carbon-lang/releases/download/v${CARBON_VERSION}/carbon_toolchain-${CARBON_VERSION}.tar.gz" -o /tmp/carbon.tar.gz
+        - mkdir -p /opt/carbon
+        - tar -xzf /tmp/carbon.tar.gz -C /opt/carbon --strip-components=1
+        - ln -sfn /opt/carbon/bin/carbon /usr/local/bin/carbon
+        - rm -f /tmp/carbon.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'package Main api;' 'fn Run() {}' > Main.carbon
+          carbon compile --phase=check Main.carbon >/dev/null
+
+  graphql:
+    install:
+      apt:
+        - python3
+        - python3-pip
+      pip:
+        - graphql-core==3.2.6
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'query { ok }' > Main.graphql
+          aonohako-graphql-run Main.graphql | grep '{"data":{"ok":"ok"}}'
+
+  lean4:
+    install:
+      apt:
+        - curl
+        - unzip
+      script:
+        - export LEAN_VERSION=4.29.1
+        - curl -fsSL "https://github.com/leanprover/lean4/releases/download/v${LEAN_VERSION}/lean-${LEAN_VERSION}-linux.zip" -o /tmp/lean.zip
+        - rm -rf /opt/lean
+        - unzip -q /tmp/lean.zip -d /opt
+        - mv "/opt/lean-${LEAN_VERSION}-linux" /opt/lean
+        - ln -sfn /opt/lean/bin/lean /usr/local/bin/lean
+        - ln -sfn /opt/lean/bin/lake /usr/local/bin/lake
+        - rm -f /tmp/lean.zip
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'theorem ok : True := by trivial' > Main.lean
+          lean Main.lean
+
+  agda:
+    install:
+      apt:
+        - agda
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.agda <<'AGDA'
+          module Main where
+          data Unit : Set where
+            tt : Unit
+          ok : Unit
+          ok = tt
+          AGDA
+          agda Main.agda >/dev/null
+
+  dafny:
+    install:
+      apt:
+        - curl
+        - unzip
+      script:
+        - export DAFNY_VERSION=4.11.0
+        - curl -fsSL "https://github.com/dafny-lang/dafny/releases/download/v${DAFNY_VERSION}/dafny-${DAFNY_VERSION}-x64-ubuntu-22.04.zip" -o /tmp/dafny.zip
+        - rm -rf /opt/dafny
+        - unzip -q /tmp/dafny.zip -d /opt/dafny
+        - ln -sfn /opt/dafny/dafny/dafny /usr/local/bin/dafny
+        - rm -f /tmp/dafny.zip
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'method Main() ensures true {' '}' > Main.dfy
+          dafny verify Main.dfy >/dev/null
+
+  tla:
+    install:
+      apt:
+        - curl
+        - default-jre-headless
+      script:
+        - export TLA_VERSION=1.7.4
+        - curl -fsSL "https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar" -o /usr/local/lib/aonohako/tla2tools.jar
+        - chmod 0644 /usr/local/lib/aonohako/tla2tools.jar
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.tla <<'TLA'
+          ---- MODULE Main ----
+          VARIABLE x
+          Init == x = 0
+          Next == x' = x
+          ====
+          TLA
+          aonohako-tla-run Main.tla
+
+  why3:
+    install:
+      apt:
+        - alt-ergo
+        - why3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'theory Main' '  goal G: true' 'end' > Main.mlw
+          why3 prove -P alt-ergo Main.mlw >/dev/null
+
+  isabelle:
+    install:
+      apt:
+        - curl
+        - perl
+        - tar
+      script:
+        - export ISABELLE_VERSION=Isabelle2025-2
+        - curl -fsSL "https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz" -o /tmp/isabelle.tar.gz
+        - tar -xzf /tmp/isabelle.tar.gz -C /opt
+        - ln -sfn "/opt/${ISABELLE_VERSION}/bin/isabelle" /usr/local/bin/isabelle
+        - rm -f /tmp/isabelle.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > ROOT <<'ROOT'
+          session Aonohako = HOL +
+            theories Aonohako_Main
+          ROOT
+          cat > Aonohako_Main.thy <<'THY'
+          theory Aonohako_Main
+            imports Main
+          begin
+          theorem ok: True by simp
+          end
+          THY
+          isabelle build -D . >/dev/null
+
+  vb6:
+    install:
+      apt:
+        - ruby
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'Sub Main()' 'Print "ok"' 'End Sub' > Main.bas
+          aonohako-vb6-run Main.bas | grep '^ok$'
+
+  smalltalk:
+    install:
+      apt:
+        - build-essential
+        - curl
+        - libffi-dev
+        - libreadline-dev
+        - libsigsegv-dev
+      script:
+        - export GST_VERSION=3.2.5
+        - curl -fsSL "https://ftp.gnu.org/gnu/smalltalk/smalltalk-${GST_VERSION}.tar.gz" -o /tmp/smalltalk.tar.gz
+        - tar -xzf /tmp/smalltalk.tar.gz -C /tmp
+        - cd "/tmp/smalltalk-${GST_VERSION}" && ./configure --prefix=/usr/local && make -j"$(nproc)" && make install
+        - rm -rf "/tmp/smalltalk-${GST_VERSION}" /tmp/smalltalk.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' "'ok' displayNl" > Main.st
+          gst -q Main.st | grep '^ok$'
+
+  golfscript:
+    install:
+      apt:
+        - ruby
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s' '"ok\n"' > Main.gs
+          ruby /usr/local/lib/aonohako/golfscript_sandboxed.rb Main.gs | grep '^ok$'
+
+  mojo:
+    install:
+      apt:
+        - curl
+        - python3
+        - python3-venv
+      script:
+        - python3 -m venv /opt/mojo-venv
+        - /opt/mojo-venv/bin/pip install --no-cache-dir --extra-index-url https://modular.gateway.scarf.sh/simple/ mojo==0.26.2.0
+        - ln -sfn /opt/mojo-venv/bin/mojo /usr/local/bin/mojo
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'def main():' '    print("ok")' > Main.mojo
+          mojo build Main.mojo -o Main
+          ./Main | grep '^ok$'
+
+  deno:
+    install:
+      apt:
+        - curl
+        - unzip
+      script:
+        - export DENO_VERSION=2.7.14
+        - curl -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+        - unzip -q /tmp/deno.zip -d /usr/local/bin
+        - chmod 0755 /usr/local/bin/deno
+        - rm -f /tmp/deno.zip
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'console.log("ok");' > Main.ts
+          deno check --cached-only Main.ts
+          deno run --no-prompt --cached-only Main.ts | grep '^ok$'
+
+  kotlin-jvm:
+    install:
+      apt:
+        - curl
+        - default-jre-headless
+        - unzip
+      script:
+        - export KOTLIN_JVM_VERSION=2.3.21
+        - curl -fsSL "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_JVM_VERSION}/kotlin-compiler-${KOTLIN_JVM_VERSION}.zip" -o /tmp/kotlin-compiler.zip
+        - unzip -q /tmp/kotlin-compiler.zip -d /opt
+        - ln -sfn /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc
+        - rm -f /tmp/kotlin-compiler.zip
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'fun main() {' '  println("ok")' '}' > Main.kt
+          kotlinc Main.kt -include-runtime -d Main.jar
+          java -jar Main.jar | grep '^ok$'
+
+  duckdb:
+    install:
+      apt:
+        - curl
+        - unzip
+      script:
+        - export DUCKDB_VERSION=1.5.2
+        - curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip" -o /tmp/duckdb.zip
+        - unzip -q /tmp/duckdb.zip -d /usr/local/bin
+        - chmod 0755 /usr/local/bin/duckdb
+        - rm -f /tmp/duckdb.zip
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' "select 'ok';" > Main.sql
+          aonohako-duckdb-run Main.sql | grep '^ok$'
+
+  bqn:
+    install:
+      apt:
+        - build-essential
+        - git
+        - libffi-dev
+      script:
+        - export CBQN_COMMIT=d56147be877693eaed351745782c258bd7424de7
+        - git clone --recursive https://github.com/dzaima/CBQN /opt/cbqn
+        - cd /opt/cbqn && git checkout "${CBQN_COMMIT}" && git submodule update --init --recursive && make REPLXX=0
+        - install -m 0755 /opt/cbqn/BQN /usr/local/bin/bqn
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' '•Out "ok"' > Main.bqn
+          bqn Main.bqn | grep '^ok$'
+
+  apl:
+    install:
+      apt:
+        - build-essential
+        - curl
+        - libreadline-dev
+        - libsqlite3-dev
+      script:
+        - export GNU_APL_VERSION=1.8
+        - curl -fsSL "https://ftp.gnu.org/gnu/apl/apl-${GNU_APL_VERSION}.tar.gz" -o /tmp/apl.tar.gz
+        - tar -xzf /tmp/apl.tar.gz -C /tmp
+        - cd "/tmp/apl-${GNU_APL_VERSION}" && ./configure --prefix=/usr/local && make -j"$(nproc)" && make install
+        - rm -rf "/tmp/apl-${GNU_APL_VERSION}" /tmp/apl.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' "⎕←'ok'" > Main.apl
+          apl --script Main.apl | grep '^ok$'
+
+  uiua:
+    install:
+      apt:
+        - curl
+        - unzip
+      script:
+        - export UIUA_VERSION=0.18.1
+        - curl -fsSL "https://github.com/uiua-lang/uiua/releases/download/${UIUA_VERSION}/uiua-bin-x86_64-unknown-linux-gnu-no-audio.zip" -o /tmp/uiua.zip
+        - unzip -q /tmp/uiua.zip -d /usr/local/bin
+        - chmod 0755 /usr/local/bin/uiua
+        - rm -f /tmp/uiua.zip
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' '&p "ok"' > Main.ua
+          uiua run Main.ua --no-format | grep '^ok$'
+
+  janet:
+    install:
+      apt:
+        - curl
+      script:
+        - export JANET_VERSION=1.41.2
+        - curl -fsSL "https://github.com/janet-lang/janet/releases/download/v${JANET_VERSION}/janet-v${JANET_VERSION}-linux-x64.tar.gz" -o /tmp/janet.tar.gz
+        - mkdir -p /opt/janet
+        - tar -xzf /tmp/janet.tar.gz -C /opt/janet --strip-components=1
+        - ln -sfn /opt/janet/bin/janet /usr/local/bin/janet
+        - rm -f /tmp/janet.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' '(print "ok")' > Main.janet
+          janet Main.janet | grep '^ok$'
+
   uhmlang:
     install:
       apt:
@@ -1325,11 +1809,16 @@ profiles:
         - ln -sfn /usr/bin/g++-16 /usr/local/bin/c++
     languages:
       - aheui
+      - apl
       - awk
       - bf
+      - bqn
       - elixir
       - erlang
+      - gleam
+      - golfscript
       - haskell
+      - janet
       - lisp
       - lua
       - ocaml
@@ -1342,7 +1831,9 @@ profiles:
       - racket
       - ruby
       - scheme
+      - smalltalk
       - sqlite
+      - uiua
       - wasm
       - whitespace
   type-b:
@@ -1350,6 +1841,8 @@ profiles:
     install: *gcc16_profile
     languages:
       - clojure
+      - deno
+      - graphql
       - groovy
       - java
       - javascript
@@ -1361,21 +1854,26 @@ profiles:
     languages:
       - ada
       - asm
+      - c3
       - crystal
-      - cuda-lite
       - d
       - fortran
       - go
+      - hare
+      - mojo
       - nasm
       - nim
+      - odin
       - pascal
       - rust
+      - vlang
       - zig
   type-d:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
       - kotlin
+      - kotlin-jvm
   type-e:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
@@ -1409,8 +1907,14 @@ profiles:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
+      - agda
       - coq
+      - dafny
+      - isabelle
+      - lean4
       - rocq
+      - tla
+      - why3
   type-k:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
@@ -1425,6 +1929,7 @@ profiles:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
+      - duckdb
       - gdl
       - octave
   type-n:
@@ -1434,3 +1939,13 @@ profiles:
       - systemverilog
       - verilog
       - vhdl
+  type-o:
+    base_image: nvidia/cuda:11.8.0-devel-ubuntu22.04@sha256:94fd755736cb58979173d491504f0b573247b1745250249415b07fefc738e41f
+    languages:
+      - cuda-ocelot
+  type-p:
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    install: *gcc16_profile
+    languages:
+      - carbon
+      - vb6

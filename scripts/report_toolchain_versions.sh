@@ -187,7 +187,16 @@ if has_language "typescript"; then
     report_once "TypeScript" tsc --version
 fi
 
-if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure"; then
+if has_language "deno"; then
+    report_once "Deno" deno --version
+fi
+
+if has_language "graphql"; then
+    report_once "Python" python3 --version
+    report_python_pkg_once "GraphQL Core" "graphql-core"
+fi
+
+if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure" || has_language "kotlin-jvm" || has_language "tla"; then
     report_once "Java compiler" javac -version
     report_once "Java runtime" java -version
 fi
@@ -200,7 +209,7 @@ if has_language "scala"; then
     report_once "Scala" scala -version
 fi
 
-if has_language "plain" || has_language "asm" || has_language "nasm" || has_language "cuda-lite"; then
+if has_language "plain" || has_language "asm" || has_language "nasm"; then
     report_once "GCC" gcc -dumpfullversion -dumpversion
     report_once "G++" g++ -dumpfullversion -dumpversion
 fi
@@ -221,12 +230,36 @@ if has_language "rust"; then
     report_once "Rust" rustc --version
 fi
 
+if has_language "vlang"; then
+    report_once "V" v version
+fi
+
+if has_language "odin"; then
+    report_once "Odin" odin version
+fi
+
+if has_language "c3"; then
+    report_once "C3" c3c --version
+fi
+
+if has_language "hare"; then
+    report_once "Hare" hare version
+fi
+
+if has_language "mojo"; then
+    report_once "Mojo" mojo --version
+fi
+
 if has_language "swift"; then
     report_once "Swift" swift --version
 fi
 
 if has_language "kotlin"; then
     report_once "Kotlin/Native" kotlinc-native -version
+fi
+
+if has_language "kotlin-jvm"; then
+    report_once "Kotlin/JVM" kotlinc -version
 fi
 
 if has_language "pascal"; then
@@ -253,12 +286,20 @@ if has_language "awk"; then
     report_once "GNU awk" gawk --version
 fi
 
+if has_language "gleam"; then
+    report_once "Gleam" gleam --version
+fi
+
 if has_language "gdl"; then
     report_once "GNU Data Language" gdl --version
 fi
 
 if has_language "octave"; then
     report_once "GNU Octave" octave-cli --version
+fi
+
+if has_language "duckdb"; then
+    report_once "DuckDB" duckdb --version
 fi
 
 if has_language "vhdl"; then
@@ -272,6 +313,14 @@ fi
 
 if has_language "crystal"; then
     report_once "Crystal" crystal --version
+fi
+
+if has_language "cuda-ocelot"; then
+    report_once "NVIDIA CUDA compiler" nvcc --version
+fi
+
+if has_language "carbon"; then
+    report_once "Carbon" carbon --version
 fi
 
 if has_language "ada"; then
@@ -310,6 +359,14 @@ if has_language "ruby"; then
     report_once "Ruby" ruby -e "print RUBY_VERSION, \"\n\""
 fi
 
+if has_language "vb6" || has_language "golfscript"; then
+    report_once "Ruby" ruby -e "print RUBY_VERSION, \"\n\""
+fi
+
+if has_language "smalltalk"; then
+    report_once "GNU Smalltalk" gst --version
+fi
+
 if has_language "php"; then
     report_once "PHP" php --version
 fi
@@ -335,6 +392,47 @@ if has_language "coq" || has_language "rocq"; then
         report_once "Rocq" rocq --version
     fi
     report_once "Coq" coqc --version
+fi
+
+if has_language "lean4"; then
+    report_once "Lean" lean --version
+fi
+
+if has_language "agda"; then
+    report_once "Agda" agda --version
+fi
+
+if has_language "dafny"; then
+    report_once "Dafny" dafny --version
+fi
+
+if has_language "tla"; then
+    report_once "TLA+ TLC" java -cp /usr/local/lib/aonohako/tla2tools.jar tlc2.TLC -version
+fi
+
+if has_language "why3"; then
+    report_once "Why3" why3 --version
+    report_once "Alt-Ergo" alt-ergo --version
+fi
+
+if has_language "isabelle"; then
+    report_once "Isabelle" isabelle version
+fi
+
+if has_language "bqn"; then
+    report_once "CBQN" sh -c 'command -v bqn >/dev/null && printf installed'
+fi
+
+if has_language "apl"; then
+    report_once "GNU APL" apl --version
+fi
+
+if has_language "uiua"; then
+    report_once "Uiua" uiua --version
+fi
+
+if has_language "janet"; then
+    report_once "Janet" janet -v
 fi
 
 if has_language "wasm"; then

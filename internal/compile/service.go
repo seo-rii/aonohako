@@ -310,8 +310,6 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "GLEAM"
 	case "cuda-ocelot":
 		l = "CUDA_OCELOT"
-	case "cuda-lite", "cuda-cpu":
-		l = "CUDA_LITE"
 	case "carbon":
 		l = "CARBON"
 	case "graphql":
@@ -642,8 +640,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileGleam(ctx, workDir, req.Sources)
 	case "cuda-ocelot":
 		return compileCUDAOcelot(ctx, workDir, target, req.Sources)
-	case "cuda-lite":
-		return compileCUDALite(ctx, workDir, target, req.Sources)
 	case "carbon":
 		return compileCheckedSources(ctx, workDir, req.Sources, []string{".carbon"}, "no carbon sources", "carbon", []string{"compile", "--phase=check"}, nil)
 	case "graphql":
@@ -1711,7 +1707,10 @@ func compileGleam(ctx context.Context, workDir string, sources []model.Source) m
 			}
 		}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "gleam", []string{"build"}, []string{"ERL_AFLAGS=" + erlangAFlags(config.DefaultRuntimeTuningConfig())})
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "gleam", []string{"build"}, []string{
+		"ERL_AFLAGS=" + erlangAFlags(config.DefaultRuntimeTuningConfig()),
+		"HOME=/usr/local/lib/aonohako/gleam-home",
+	})
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1728,25 +1727,6 @@ func compileCUDAOcelot(ctx context.Context, workDir, target string, sources []mo
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no cuda-ocelot sources"}
 	}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "aonohako-cuda-ocelot-build", []string{rootSource, filepath.Join(workDir, target)}, nil)
-	if status != model.CompileStatusOK {
-		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
-	}
-	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
-	if err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
-	}
-	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
-}
-
-func compileCUDALite(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
-	cudaFiles := sourcePathsByExt(workDir, sources, ".cu", ".cpp", ".cc", ".cxx")
-	if len(cudaFiles) == 0 {
-		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no cuda-lite sources"}
-	}
-	args := []string{"-O2", "-std=c++17", "-DONLINE_JUDGE", "-include", "/usr/local/lib/aonohako/cuda_lite.hpp", "-x", "c++"}
-	args = append(args, cudaFiles...)
-	args = append(args, "-o", filepath.Join(workDir, target), "-lm")
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "g++", args, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
