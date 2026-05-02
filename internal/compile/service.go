@@ -1781,7 +1781,10 @@ func compileGleam(ctx context.Context, workDir string, sources []model.Source) m
 				if err != nil {
 					return err
 				}
-				return os.WriteFile(target, data, 0o666)
+				if err := os.WriteFile(target, data, 0o666); err != nil {
+					return err
+				}
+				return os.Chmod(target, 0o666)
 			}); walkErr != nil {
 				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: walkErr.Error()}
 			}
@@ -2485,7 +2488,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 		group, err := cgroup.CreateRunGroup(cgroupParentDir, cgroup.RunName("compile"), cgroup.Limits{
 			MemoryMaxBytes:  memoryLimitKB * 1024,
-			PidsMax:         compileSandboxThreadLimit + 32,
+			PidsMax:         threadLimit + 32,
 			CPUQuotaMicros:  cgroup.SingleCPUQuotaMicros,
 			CPUPeriodMicros: cgroup.DefaultCPUPeriodMicros,
 		})
