@@ -141,8 +141,11 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			dynamicSpaceMB = 512
 		}
 		return []string{"sbcl", "--noinform", "--dynamic-space-size", fmt.Sprintf("%d", dynamicSpaceMB), "--script", primaryPath}
-	case "rocq", "coq":
-		return []string{"sh", "-c", "if command -v rocq >/dev/null 2>&1; then exec rocq c \"$1\"; fi; exec coqc -q \"$1\"", "aonohako-rocq-run", primaryPath}
+	case "rocq", "coq", "lean4", "agda", "dafny", "why3", "isabelle":
+		// These are proof/check profiles. The compile phase already performed
+		// the verification step, so execute only preserves the compile/execute
+		// API contract.
+		return []string{"true"}
 	case "vbnet":
 		return []string{"dotnet", primaryPath}
 	case "vb6":
@@ -155,18 +158,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"aonohako-carbon-run", primaryPath}
 	case "graphql":
 		return []string{"aonohako-graphql-run", primaryPath}
-	case "lean4":
-		return []string{"sh", "-c", `exec lean "$1" >/dev/null`, "aonohako-lean-run", primaryPath}
-	case "agda":
-		return []string{"sh", "-c", `exec agda "$1" >/dev/null`, "aonohako-agda-run", primaryPath}
-	case "dafny":
-		return []string{"sh", "-c", `exec dafny verify "$1" >/dev/null`, "aonohako-dafny-run", primaryPath}
 	case "tla":
 		return []string{"aonohako-tla-run", primaryPath}
-	case "why3":
-		return []string{"aonohako-why3-prove", primaryPath}
-	case "isabelle":
-		return []string{"sh", "-c", `cd "$1" && exec isabelle build -D . >/dev/null`, "aonohako-isabelle-run", primaryPath}
 	case "groovy":
 		mainClass, err := normalizeJVMMainClass(req.EntryPoint, "Main")
 		if err != nil {

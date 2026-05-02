@@ -150,7 +150,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"binary", "/tmp/a.out", "/tmp/a.out", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
 		{"clojure", "/tmp/sol.clj", "java", true},
-		{"coq", "/tmp/Main.v", "sh", true},
+		{"coq", "/tmp/Main.v", "true", false},
 		{"ocaml", "/tmp/sol", "env", true},
 		{"elixir", "/tmp/sol.exs", "env", true},
 		{"python", "/tmp/sol.py", "python3", true},
@@ -186,13 +186,13 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"cuda-ocelot", "/tmp/Main", "aonohako-cuda-ocelot-run", true},
 		{"carbon", "/tmp/Main.carbon", "aonohako-carbon-run", true},
 		{"graphql", "/tmp/Main.graphql", "aonohako-graphql-run", true},
-		{"rocq", "/tmp/Main.v", "sh", true},
-		{"lean4", "/tmp/Main.lean", "sh", true},
-		{"agda", "/tmp/Main.agda", "sh", true},
-		{"dafny", "/tmp/Main.dfy", "sh", true},
+		{"rocq", "/tmp/Main.v", "true", false},
+		{"lean4", "/tmp/Main.lean", "true", false},
+		{"agda", "/tmp/Main.agda", "true", false},
+		{"dafny", "/tmp/Main.dfy", "true", false},
 		{"tla", "/tmp/Main.tla", "aonohako-tla-run", true},
-		{"why3", "/tmp/Main.mlw", "aonohako-why3-prove", false},
-		{"isabelle", "/tmp/box", "sh", true},
+		{"why3", "/tmp/Main.mlw", "true", false},
+		{"isabelle", "/tmp/box", "true", false},
 		{"smalltalk", "/tmp/Main.st", "gst", true},
 		{"golfscript", "/tmp/Main.gs", "ruby", true},
 		{"deno", "/tmp/Main.ts", "deno", true},
@@ -350,7 +350,7 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 96}}
 
 	coqArgs := buildCommand("/tmp/Main.v", "rocq", req)
-	if !reflect.DeepEqual(coqArgs, []string{"sh", "-c", "if command -v rocq >/dev/null 2>&1; then exec rocq c \"$1\"; fi; exec coqc -q \"$1\"", "aonohako-rocq-run", "/tmp/Main.v"}) {
+	if !reflect.DeepEqual(coqArgs, []string{"true"}) {
 		t.Fatalf("coq command = %v", coqArgs)
 	}
 
