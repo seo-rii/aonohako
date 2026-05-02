@@ -62,6 +62,7 @@ func TestOpenFileLimitForCommandRaisesKnownRuntimeNeeds(t *testing.T) {
 		want    int
 	}{
 		{"/opt/dotnet/dotnet", 512},
+		{"/usr/local/bin/aonohako-tla-run", 512},
 		{"/usr/bin/Rscript", 256},
 		{"/usr/lib/R/bin/exec/R", 256},
 		{"/usr/bin/python3", 64},
