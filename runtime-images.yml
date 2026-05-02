@@ -1359,7 +1359,7 @@ languages:
         - mkdir -p /tmp/gleam-warmup/src
         - printf '%s\n' 'name = "warmup"' 'version = "1.0.0"' '' '[dependencies]' 'gleam_stdlib = "~> 0.44"' > /tmp/gleam-warmup/gleam.toml
         - printf '%s\n' 'import gleam/io' 'pub fn main() {' '  io.println("ok")' '}' > /tmp/gleam-warmup/src/main.gleam
-        - cd /tmp/gleam-warmup && env HOME=/usr/local/lib/aonohako/gleam-home gleam build
+        - (cd /tmp/gleam-warmup && env HOME=/usr/local/lib/aonohako/gleam-home gleam build)
         - rm -rf /tmp/gleam-warmup
         - chmod -R a+rX /usr/local/lib/aonohako/gleam-home
     smoke:
@@ -1383,6 +1383,7 @@ languages:
         - flex
         - git
         - libboost-all-dev
+        - libglew-dev
         - llvm-15
         - llvm-15-dev
         - ninja-build
@@ -1429,7 +1430,7 @@ languages:
         - bash
         - -lc
         - |
-          printf '%s\n' 'package Main api;' 'fn Run() {}' > Main.carbon
+          printf '%s\n' 'fn Run() {}' > Main.carbon
           carbon compile --phase=check Main.carbon >/dev/null
 
   graphql:
@@ -1916,7 +1917,6 @@ profiles:
       - java
   type-j:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
-    install: *gcc16_profile
     languages:
       - agda
       - coq

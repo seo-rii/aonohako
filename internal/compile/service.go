@@ -2297,7 +2297,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS and RLIMIT_FSIZE values can fail before user
 	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
-	disableAddressSpaceLimit := isDotnet || commandName == "c3c"
+	disableAddressSpaceLimit := isDotnet || commandName == "c3c" || commandName == "carbon"
 	allowProcessGroups := commandName == "swiftc"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB

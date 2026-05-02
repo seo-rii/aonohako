@@ -385,7 +385,7 @@ func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
 	}
 
 	for _, profileName := range sortedKeys(catalog.Profiles) {
-		if profileName == "type-o" {
+		if profileName == "type-j" || profileName == "type-o" {
 			continue
 		}
 		profile := catalog.Profiles[profileName]
