@@ -525,13 +525,16 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, `printf '{"error":"syft scan failed","profile":"%s"}\n'`) {
 		t.Fatalf("ci workflow must keep production-profile Syft artifacts non-blocking under runner disk pressure")
 	}
-	archiveIdx := strings.Index(profileSection, `docker save "aonohako-ci-prod:${{ matrix.name }}"`)
+	archiveIdx := strings.Index(profileSection, `docker archive export skipped to conserve CI storage`)
 	syftIdx := strings.Index(profileSection, "scripts/install_anchore_tool.sh syft v1.42.4")
 	if archiveIdx < 0 || syftIdx < 0 || archiveIdx > syftIdx {
-		t.Fatalf("ci workflow must create required production-profile archives before best-effort scanner exports")
+		t.Fatalf("ci workflow must write production-profile archive diagnostics before best-effort scanner exports")
 	}
 	if !strings.Contains(profileSection, `"${HOME}/.cache/syft"`) || !strings.Contains(profileSection, `"${HOME}/.cache/grype"`) {
 		t.Fatalf("ci workflow must clean scanner caches after production-profile scans")
+	}
+	if !strings.Contains(profileSection, `docker image rm "aonohako-ci-prod:${{ matrix.name }}" || true`) {
+		t.Fatalf("ci workflow must remove production-profile images after scanner reports are generated")
 	}
 	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
 		t.Fatalf("ci workflow must include the language list in the profile summaries")
@@ -545,11 +548,11 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(summarySection, "      - uses: actions/checkout@v6") {
 		t.Fatalf("toolchain summary job must check out the repository before running aggregation scripts")
 	}
-	if !strings.Contains(body, `docker save "aonohako-ci-prod:${{ matrix.name }}"`) {
-		t.Fatalf("ci workflow must export production-profile images into artifact files")
+	if strings.Contains(body, `docker save "aonohako-ci-prod:${{ matrix.name }}"`) {
+		t.Fatalf("ci workflow must not export full production-profile images into artifacts")
 	}
-	if !strings.Contains(body, `sha256sum "${archive_path}" > "${archive_path}.sha256"`) || !strings.Contains(body, "toolchain-artifacts/SHA256SUMS") {
-		t.Fatalf("ci workflow must publish SHA256 digest metadata for successful production-profile image artifacts")
+	if !strings.Contains(body, `docker archive export skipped to conserve CI storage`) || !strings.Contains(body, "toolchain-artifacts/SHA256SUMS") {
+		t.Fatalf("ci workflow must record archive skip diagnostics and keep summary SHA256 aggregation available")
 	}
 	if !strings.Contains(body, `"${archive_path}.error.json"`) || !strings.Contains(body, "*.docker.tar.gz.error.json") {
 		t.Fatalf("ci workflow must publish archive export diagnostics when runner disk cannot hold an image archive")
