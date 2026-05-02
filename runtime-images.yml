@@ -1384,6 +1384,7 @@ languages:
         - git
         - libboost-all-dev
         - libglew-dev
+        - libzstd-dev
         - llvm-15
         - llvm-15-dev
         - ninja-build
@@ -1453,9 +1454,11 @@ languages:
       apt:
         - curl
         - unzip
+        - wget
       script:
         - export LEAN_VERSION=4.29.1
-        - curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "https://github.com/leanprover/lean4/releases/download/v${LEAN_VERSION}/lean-${LEAN_VERSION}-linux.zip" -o /tmp/lean.zip
+        - export LEAN_URL="https://github.com/leanprover/lean4/releases/download/v${LEAN_VERSION}/lean-${LEAN_VERSION}-linux.zip"
+        - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$LEAN_URL" -o /tmp/lean.zip || wget --tries=6 --waitretry=2 -O /tmp/lean.zip "$LEAN_URL"
         - rm -rf /opt/lean
         - unzip -q /tmp/lean.zip -d /opt
         - mv "/opt/lean-${LEAN_VERSION}-linux" /opt/lean
@@ -1491,11 +1494,13 @@ languages:
   dafny:
     install:
       apt:
+        - curl
         - wget
         - unzip
       script:
         - export DAFNY_VERSION=4.11.0
-        - wget --tries=6 --waitretry=2 -O /tmp/dafny.zip "https://github.com/dafny-lang/dafny/releases/download/v${DAFNY_VERSION}/dafny-${DAFNY_VERSION}-x64-ubuntu-22.04.zip"
+        - export DAFNY_URL="https://github.com/dafny-lang/dafny/releases/download/v${DAFNY_VERSION}/dafny-${DAFNY_VERSION}-x64-ubuntu-22.04.zip"
+        - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$DAFNY_URL" -o /tmp/dafny.zip || wget --tries=6 --waitretry=2 -O /tmp/dafny.zip "$DAFNY_URL"
         - rm -rf /opt/dafny
         - unzip -q /tmp/dafny.zip -d /opt/dafny
         - ln -sfn /opt/dafny/dafny/dafny /usr/local/bin/dafny
@@ -1551,12 +1556,14 @@ languages:
   isabelle:
     install:
       apt:
+        - curl
         - perl
         - tar
         - wget
       script:
         - export ISABELLE_VERSION=Isabelle2025-2
-        - wget --tries=6 --waitretry=2 -O /tmp/isabelle.tar.gz "https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz"
+        - export ISABELLE_URL="https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz"
+        - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$ISABELLE_URL" -o /tmp/isabelle.tar.gz || wget --tries=6 --waitretry=2 -O /tmp/isabelle.tar.gz "$ISABELLE_URL"
         - tar -xzf /tmp/isabelle.tar.gz -C /opt
         - ln -sfn "/opt/${ISABELLE_VERSION}/bin/isabelle" /usr/local/bin/isabelle
         - rm -f /tmp/isabelle.tar.gz
@@ -1923,7 +1930,6 @@ profiles:
     languages:
       - agda
       - coq
-      - lean4
       - rocq
       - tla
       - why3
@@ -1969,3 +1975,7 @@ profiles:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     languages:
       - isabelle
+  type-s:
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    languages:
+      - lean4

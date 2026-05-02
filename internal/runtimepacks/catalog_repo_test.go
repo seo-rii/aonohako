@@ -18,8 +18,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 18 {
-		t.Fatalf("expected 18 production images, got %d", len(production))
+	if len(production) != 19 {
+		t.Fatalf("expected 19 production images, got %d", len(production))
 	}
 
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bf", "bqn", "elixir", "erlang", "gleam", "golfscript", "haskell", "janet", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "ruby", "scheme", "smalltalk", "sqlite", "uiua", "wasm", "whitespace"}) {
@@ -49,7 +49,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"java", "plain", "python"}) {
 		t.Fatalf("type-i production image = %+v", production[8])
 	}
-	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"agda", "coq", "lean4", "rocq", "tla", "why3"}) {
+	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"agda", "coq", "rocq", "tla", "why3"}) {
 		t.Fatalf("type-j production image = %+v", production[9])
 	}
 	if production[10].Name != "type-k" || !reflect.DeepEqual(production[10].Languages, []string{"dart"}) {
@@ -75,6 +75,9 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	}
 	if production[17].Name != "type-r" || !reflect.DeepEqual(production[17].Languages, []string{"isabelle"}) {
 		t.Fatalf("type-r production image = %+v", production[17])
+	}
+	if production[18].Name != "type-s" || !reflect.DeepEqual(production[18].Languages, []string{"lean4"}) {
+		t.Fatalf("type-s production image = %+v", production[18])
 	}
 
 	ci, err := catalog.CILanguageImages()
@@ -188,8 +191,8 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"carbon":        {"CARBON_VERSION=0.0.0-0.nightly.2026.05.02", "carbon compile --phase=check Main.carbon"},
 		"clojure":       {"PushbackReader", "Main.clj"},
 		"crystal":       {"crystal build Main.cr", "Broken.cr"},
-		"cuda-ocelot":   {"GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99", "aonohako-cuda-ocelot-build Main.cu Main"},
-		"dafny":         {"DAFNY_VERSION=4.11.0", "dafny verify Main.dfy"},
+		"cuda-ocelot":   {"GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99", "libzstd-dev", "aonohako-cuda-ocelot-build Main.cu Main"},
+		"dafny":         {"DAFNY_VERSION=4.11.0", "curl --retry 6", "wget --tries=6", "dafny verify Main.dfy"},
 		"dart":          {"dart compile exe", "Broken.dart"},
 		"deno":          {"DENO_VERSION=2.7.14", "deno run --no-prompt --cached-only Main.ts"},
 		"duckdb":        {"DUCKDB_VERSION=1.5.2", "aonohako-duckdb-run Main.sql"},
@@ -199,10 +202,10 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"golfscript":    {"golfscript_sandboxed.rb", "Main.gs"},
 		"graphql":       {"graphql-core==3.2.6", "aonohako-graphql-run Main.graphql"},
 		"hare":          {"hare build -o Main Main.ha", "fmt::println"},
-		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "isabelle build -D ."},
+		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "curl --retry 6", "wget --tries=6", "isabelle build -D ."},
 		"janet":         {"JANET_VERSION=1.41.2", "janet Main.janet"},
 		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "kotlinc Main.kt -include-runtime -d Main.jar"},
-		"lean4":         {"LEAN_VERSION=4.29.1", "lean Main.lean"},
+		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
 		"mojo":          {"mojo==0.26.2.0", "mojo build Main.mojo"},
 		"nim":           {"nim c", "Broken.nim"},
 		"octave":        {"octave-cli --quiet", "Main.m"},
@@ -298,7 +301,7 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 	}
 
 	const pinnedTrixie = "debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a"
-	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n", "type-p", "type-q", "type-r"} {
+	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n", "type-p", "type-q", "type-r", "type-s"} {
 		profile, ok := catalog.Profiles[profileName]
 		if !ok {
 			t.Fatalf("profile %q missing from catalog", profileName)
@@ -391,7 +394,7 @@ func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
 	}
 
 	for _, profileName := range sortedKeys(catalog.Profiles) {
-		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" {
+		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" {
 			continue
 		}
 		profile := catalog.Profiles[profileName]
