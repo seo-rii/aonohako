@@ -362,9 +362,12 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_FCHOWNAT),
 		uint32(unix.SYS_MKNOD),
 		uint32(unix.SYS_MKNODAT),
-		uint32(unix.SYS_EXECVEAT),
 	} {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	}
+	if !req.AllowExecveat {
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_EXECVEAT), 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 	}
 	if !req.AllowNumaPolicy {

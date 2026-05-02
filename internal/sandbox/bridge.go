@@ -27,6 +27,7 @@ type ExecRequest struct {
 	AllowMemfdCreate         bool         `json:"allow_memfd_create,omitempty"`
 	AllowNumaPolicy          bool         `json:"allow_numa_policy,omitempty"`
 	AllowChmod               bool         `json:"allow_chmod,omitempty"`
+	AllowExecveat            bool         `json:"allow_execveat,omitempty"`
 	DisableFileSizeLimit     bool         `json:"disable_file_size_limit,omitempty"`
 	DisableAddressSpaceLimit bool         `json:"disable_address_space_limit,omitempty"`
 }

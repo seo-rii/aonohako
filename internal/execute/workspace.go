@@ -106,6 +106,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			}
 		}
 		mode := os.FileMode(0o444)
+		if lang == "gleam" {
+			mode = 0o666
+		}
 		if b.Mode == "exec" || isLikelyExec(clean) {
 			mode = 0o555
 		}
