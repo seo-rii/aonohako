@@ -1383,6 +1383,7 @@ languages:
         - flex
         - git
         - libboost-all-dev
+        - libfl-dev
         - libglew-dev
         - libzstd-dev
         - llvm-15
@@ -1518,9 +1519,12 @@ languages:
       apt:
         - curl
         - default-jre-headless
+        - wget
       script:
         - export TLA_VERSION=1.7.4
-        - curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar" -o /usr/local/lib/aonohako/tla2tools.jar
+        - export TLA_URL="https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar"
+        - install -d -m 0755 /usr/local/lib/aonohako
+        - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$TLA_URL" -o /usr/local/lib/aonohako/tla2tools.jar || wget --tries=6 --waitretry=2 -O /usr/local/lib/aonohako/tla2tools.jar "$TLA_URL"
         - chmod 0644 /usr/local/lib/aonohako/tla2tools.jar
     smoke:
       command:
