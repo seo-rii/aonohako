@@ -51,8 +51,14 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var jarPath string
 	var pyPath string
 	var clojurePath string
-	var coqPath string
+	var rocqPath string
 	var racketPath string
+	var schemePath string
+	var awkPath string
+	var gdlPath string
+	var octavePath string
+	var verilogPath string
+	var sourcePath string
 	classFiles := make([]string, 0)
 	entryPointPath := ""
 	switch lang {
@@ -120,13 +126,35 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(strings.ToLower(clean), ".clj") && clojurePath == "" {
 			clojurePath = dest
 		}
-		if strings.HasSuffix(strings.ToLower(clean), ".v") && coqPath == "" {
-			coqPath = dest
+		lowerClean := strings.ToLower(clean)
+		if strings.HasSuffix(lowerClean, ".v") && rocqPath == "" {
+			rocqPath = dest
 		}
-		if strings.HasSuffix(strings.ToLower(clean), ".rkt") && racketPath == "" {
+		if strings.HasSuffix(lowerClean, ".rkt") && racketPath == "" {
 			racketPath = dest
 		}
-		if strings.HasSuffix(strings.ToLower(clean), ".class") {
+		if strings.HasSuffix(lowerClean, ".scm") && schemePath == "" {
+			schemePath = dest
+		}
+		if strings.HasSuffix(lowerClean, ".awk") && awkPath == "" {
+			awkPath = dest
+		}
+		if strings.HasSuffix(lowerClean, ".pro") && gdlPath == "" {
+			gdlPath = dest
+		}
+		if strings.HasSuffix(lowerClean, ".m") && octavePath == "" {
+			octavePath = dest
+		}
+		if strings.HasSuffix(lowerClean, ".vvp") && verilogPath == "" {
+			verilogPath = dest
+		}
+		for _, ext := range []string{".bas", ".carbon", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ua", ".janet"} {
+			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
+				sourcePath = dest
+				break
+			}
+		}
+		if strings.HasSuffix(lowerClean, ".class") {
 			classFiles = append(classFiles, clean)
 		}
 	}
@@ -142,7 +170,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "aheui":
+	case "binary", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "aheui", "cuda-ocelot":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
@@ -154,16 +182,38 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			clojurePath = primaryPath
 		}
 		return clojurePath, lang, nil
-	case "coq":
-		if coqPath == "" {
-			coqPath = primaryPath
-		}
-		return coqPath, lang, nil
 	case "racket":
 		if racketPath == "" {
 			racketPath = primaryPath
 		}
 		return racketPath, lang, nil
+	case "scheme":
+		if schemePath == "" {
+			schemePath = primaryPath
+		}
+		return schemePath, lang, nil
+	case "awk":
+		if awkPath == "" {
+			awkPath = primaryPath
+		}
+		return awkPath, lang, nil
+	case "gdl":
+		if gdlPath == "" {
+			gdlPath = primaryPath
+		}
+		return gdlPath, lang, nil
+	case "octave":
+		if octavePath == "" {
+			octavePath = primaryPath
+		}
+		return octavePath, lang, nil
+	case "vhdl", "gleam", "isabelle":
+		return ws.BoxDir, lang, nil
+	case "verilog":
+		if verilogPath == "" {
+			verilogPath = primaryPath
+		}
+		return verilogPath, lang, nil
 	case "erlang":
 		hasBeam := false
 		for _, binary := range req.Binaries {
@@ -195,6 +245,16 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", fmt.Errorf("groovy requires .class files")
 		}
 		return ws.BoxDir, lang, nil
+	case "rocq":
+		if rocqPath == "" {
+			rocqPath = primaryPath
+		}
+		return rocqPath, lang, nil
+	case "vb6", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet":
+		if sourcePath == "" {
+			sourcePath = primaryPath
+		}
+		return sourcePath, lang, nil
 	default:
 		return "", "", fmt.Errorf("unsupported run lang: %s", lang)
 	}

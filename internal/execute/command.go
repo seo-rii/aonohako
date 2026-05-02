@@ -66,6 +66,26 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"pypy3", primaryPath}
 	case "racket":
 		return []string{"racket", primaryPath}
+	case "scheme":
+		return []string{"chibi-scheme", primaryPath}
+	case "awk":
+		return []string{"gawk", "--sandbox", "-f", primaryPath}
+	case "gdl":
+		entry := strings.TrimSpace(req.EntryPoint)
+		if entry == "" {
+			entry = "main"
+		}
+		return []string{"aonohako-gdl-run", primaryPath, entry}
+	case "octave":
+		return []string{"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-all", primaryPath}
+	case "vhdl":
+		top := strings.TrimSpace(req.EntryPoint)
+		if top == "" {
+			top = "main_tb"
+		}
+		return []string{"ghdl", "-r", "--std=08", top, "--assert-level=error", "--stop-time=1ms"}
+	case "verilog":
+		return []string{"vvp", primaryPath}
 	case "erlang":
 		schedulerArg := fmt.Sprintf("%d:%d", tuning.ErlangSchedulers, tuning.ErlangSchedulers)
 		asyncThreadsArg := fmt.Sprintf("%d", tuning.ErlangAsyncThreads)
@@ -121,8 +141,32 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			dynamicSpaceMB = 512
 		}
 		return []string{"sbcl", "--noinform", "--dynamic-space-size", fmt.Sprintf("%d", dynamicSpaceMB), "--script", primaryPath}
-	case "coq":
-		return []string{"true"}
+	case "rocq", "coq":
+		return []string{"sh", "-c", "if command -v rocq >/dev/null 2>&1; then exec rocq c \"$1\"; fi; exec coqc -q \"$1\"", "aonohako-rocq-run", primaryPath}
+	case "vbnet":
+		return []string{"dotnet", primaryPath}
+	case "vb6":
+		return []string{"aonohako-vb6-run", primaryPath}
+	case "gleam":
+		return []string{"aonohako-gleam-run", primaryPath}
+	case "cuda-ocelot":
+		return []string{"aonohako-cuda-ocelot-run", primaryPath}
+	case "carbon":
+		return []string{"aonohako-carbon-run", primaryPath}
+	case "graphql":
+		return []string{"aonohako-graphql-run", primaryPath}
+	case "lean4":
+		return []string{"lean", primaryPath}
+	case "agda":
+		return []string{"agda", primaryPath}
+	case "dafny":
+		return []string{"dafny", "verify", primaryPath}
+	case "tla":
+		return []string{"aonohako-tla-run", primaryPath}
+	case "why3":
+		return []string{"why3", "prove", "-P", "alt-ergo", primaryPath}
+	case "isabelle":
+		return []string{"isabelle", "build", "-D", "."}
 	case "groovy":
 		mainClass, err := normalizeJVMMainClass(req.EntryPoint, "Main")
 		if err != nil {
@@ -260,6 +304,24 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			return []string{"dotnet", primaryPath}
 		}
 		return []string{primaryPath}
+	case "smalltalk":
+		return []string{"gst", "-q", primaryPath}
+	case "golfscript":
+		return []string{"ruby", "/usr/local/lib/aonohako/golfscript_sandboxed.rb", primaryPath}
+	case "deno":
+		return []string{"deno", "run", "--no-prompt", "--cached-only", primaryPath}
+	case "kotlin-jvm":
+		return []string{"java", "-jar", primaryPath}
+	case "duckdb":
+		return []string{"aonohako-duckdb-run", primaryPath}
+	case "bqn":
+		return []string{"node", "/usr/local/lib/aonohako/bqn.js", primaryPath}
+	case "apl":
+		return []string{"apl", "--script", primaryPath}
+	case "uiua":
+		return []string{"uiua", "run", primaryPath, "--no-format"}
+	case "janet":
+		return []string{"janet", primaryPath}
 	case "whitespace":
 		return []string{"python3", "/usr/local/lib/aonohako/whitespace.py", primaryPath}
 	case "brainfuck":

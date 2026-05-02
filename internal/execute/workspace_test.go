@@ -211,8 +211,8 @@ func TestMaterializeFilesPrefersCoqSourceAsPrimary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materializeFiles: %v", err)
 	}
-	if lang != "coq" {
-		t.Fatalf("lang = %q, want coq", lang)
+	if lang != "rocq" {
+		t.Fatalf("lang = %q, want rocq", lang)
 	}
 	if got := filepath.Base(primary); got != "Main.v" {
 		t.Fatalf("primary file = %q, want Main.v", got)
