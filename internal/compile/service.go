@@ -1667,13 +1667,14 @@ func compileVBNet(ctx context.Context, workDir string, sources []model.Source) m
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet reference pack not found"}
 		}
 		sort.Strings(refDirs)
-		refDLLs, err := filepath.Glob(filepath.Join(refDirs[len(refDirs)-1], "*.dll"))
+		refDir := refDirs[len(refDirs)-1]
+		refDLLs, err := filepath.Glob(filepath.Join(refDir, "*.dll"))
 		if err != nil || len(refDLLs) == 0 {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "dotnet reference assemblies not found"}
 		}
 		sort.Strings(refDLLs)
 		outDLL := filepath.Join(workDir, "App.dll")
-		args := []string{vbcPath, "-nologo", "-nostdlib", "-target:exe", "-optimize+", "-out:" + outDLL}
+		args := []string{vbcPath, "-nologo", "-nostdlib", "-sdkpath:" + refDir, "-vbruntime*", "-target:exe", "-optimize+", "-out:" + outDLL}
 		for _, refDLL := range refDLLs {
 			args = append(args, "-r:"+refDLL)
 		}
@@ -2393,7 +2394,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS and RLIMIT_FSIZE values can fail before user
 	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
-	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno"
+	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno" || commandName == "isabelle"
 	allowProcessGroups := commandName == "swiftc" || commandName == "hare"
 	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || commandName == "isabelle"
 	allowExecveat := commandName == "hare"
