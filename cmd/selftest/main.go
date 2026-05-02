@@ -2225,8 +2225,7 @@ int main() {
 			compileLang: "CARBON",
 			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.carbon", `package Main api;
-fn Run() {}`),
+				source("Main.carbon", `fn Run() {}`),
 			},
 		},
 		"graphql": {
