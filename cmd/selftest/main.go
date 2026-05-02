@@ -1472,6 +1472,14 @@ int main(void) {
 				source("Main.aheui", "밞바밤밣받밞밞밞밦밞바밝밣바박박밦밞받밞받밞발밣받뱔희밞땨몋드떠받볋"),
 			},
 		},
+		"awk": {
+			compileLang:    "AWK",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.awk", `BEGIN { print "ok" }`),
+			},
+		},
 		"asm": {
 			compileLang:    "ASM",
 			expectedStdout: "ok\n",
@@ -1519,6 +1527,14 @@ msg:
 Proof. reflexivity. Qed.`),
 			},
 		},
+		"rocq": {
+			compileLang: "ROCQ",
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.v", `Theorem same_folder_ok : 1 = 1.
+Proof. reflexivity. Qed.`),
+			},
+		},
 		"csharp": {
 			compileLang:    "CSHARP",
 			expectedStdout: "ok\n",
@@ -1526,6 +1542,49 @@ Proof. reflexivity. Qed.`),
 			sources: []model.Source{
 				source("Program.cs", `System.IO.File.WriteAllText("same-folder.txt", "ok");
 Console.WriteLine(System.IO.File.ReadAllText("same-folder.txt"));`),
+			},
+		},
+		"crystal": {
+			compileLang:    "CRYSTAL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.cr", `puts "ok"`),
+			},
+		},
+		"cuda-lite": {
+			compileLang:    "CUDA_LITE",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.cu", `#include <cstdio>
+
+__global__ void add(const int *a, const int *b, int *c) {
+    int i = static_cast<int>(threadIdx.x);
+    c[i] = a[i] + b[i];
+}
+
+int main() {
+    int a[1] = {1};
+    int b[1] = {1};
+    int c[1] = {0};
+    int *da = nullptr;
+    int *db = nullptr;
+    int *dc = nullptr;
+    cudaMalloc(reinterpret_cast<void **>(&da), sizeof(a));
+    cudaMalloc(reinterpret_cast<void **>(&db), sizeof(b));
+    cudaMalloc(reinterpret_cast<void **>(&dc), sizeof(c));
+    cudaMemcpy(da, a, sizeof(a), cudaMemcpyHostToDevice);
+    cudaMemcpy(db, b, sizeof(b), cudaMemcpyHostToDevice);
+    CUDA_LAUNCH(add, dim3(1), dim3(1), da, db, dc);
+    cudaDeviceSynchronize();
+    cudaMemcpy(c, dc, sizeof(c), cudaMemcpyDeviceToHost);
+    cudaFree(da);
+    cudaFree(db);
+    cudaFree(dc);
+    std::puts(c[0] == 2 ? "ok" : "bad");
+    return c[0] == 2 ? 0 : 1;
+}`),
 			},
 		},
 		"d": {
@@ -1609,6 +1668,14 @@ let main _ =
     File.WriteAllText("same-folder.txt", "ok")
     printfn "%s" (File.ReadAllText("same-folder.txt"))
     0`),
+			},
+		},
+		"gdl": {
+			compileLang: "GDL",
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.pro", `pro main
+end`),
 			},
 		},
 		"go": {
@@ -1785,6 +1852,14 @@ echo readFile("same-folder.txt").strip()`),
   close_in input`),
 			},
 		},
+		"octave": {
+			compileLang:    "OCTAVE",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.m", `disp("ok")`),
+			},
+		},
 		"pascal": {
 			compileLang:    "PASCAL",
 			expectedStdout: "ok\n",
@@ -1947,6 +2022,16 @@ insert into numbers(v) values (1),(2),(3);
 select sum(v) from numbers;`),
 			},
 		},
+		"scheme": {
+			compileLang:    "SCHEME",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.scm", `(import (scheme base) (scheme write))
+(display "ok")
+(newline)`),
+			},
+		},
 		"swift": {
 			compileLang:    "SWIFT",
 			expectedStdout: "ok\n",
@@ -1975,6 +2060,64 @@ console.log(fs.readFileSync('same-folder.txt', 'utf8'));`),
 			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.uhm", "어떻게\n식........... ........ㅋ\n이 사람이름이냐ㅋㅋ\n"),
+			},
+		},
+		"vbnet": {
+			compileLang:    "VBNET",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Program.vb", `Imports System
+
+Module Program
+  Sub Main()
+    Console.WriteLine("ok")
+  End Sub
+End Module`),
+			},
+		},
+		"vhdl": {
+			compileLang: "VHDL",
+			entryPoint:  "main_tb",
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.vhd", `entity main_tb is
+end entity;
+
+architecture sim of main_tb is
+begin
+  process
+  begin
+    wait;
+  end process;
+end architecture;`),
+			},
+		},
+		"verilog": {
+			compileLang:    "VERILOG",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.v", `module main;
+  initial begin
+    $display("ok");
+    $finish;
+  end
+endmodule`),
+			},
+		},
+		"systemverilog": {
+			compileLang:    "SYSTEMVERILOG",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.sv", `module main;
+  logic ok = 1'b1;
+  initial begin
+    if (ok) $display("ok");
+    $finish;
+  end
+endmodule`),
 			},
 		},
 		"wasm": {

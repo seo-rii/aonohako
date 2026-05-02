@@ -200,7 +200,7 @@ if has_language "scala"; then
     report_once "Scala" scala -version
 fi
 
-if has_language "plain" || has_language "asm" || has_language "nasm"; then
+if has_language "plain" || has_language "asm" || has_language "nasm" || has_language "cuda-lite"; then
     report_once "GCC" gcc -dumpfullversion -dumpversion
     report_once "G++" g++ -dumpfullversion -dumpversion
 fi
@@ -243,6 +243,35 @@ fi
 
 if has_language "racket"; then
     report_once "Racket" racket --version
+fi
+
+if has_language "scheme"; then
+    report_once "Chibi Scheme" chibi-scheme -V
+fi
+
+if has_language "awk"; then
+    report_once "GNU awk" gawk --version
+fi
+
+if has_language "gdl"; then
+    report_once "GNU Data Language" gdl --version
+fi
+
+if has_language "octave"; then
+    report_once "GNU Octave" octave-cli --version
+fi
+
+if has_language "vhdl"; then
+    report_once "GHDL" ghdl --version
+fi
+
+if has_language "verilog" || has_language "systemverilog"; then
+    report_once "Icarus Verilog" iverilog -V
+    report_once "VVP" vvp -V
+fi
+
+if has_language "crystal"; then
+    report_once "Crystal" crystal --version
 fi
 
 if has_language "ada"; then
@@ -297,11 +326,14 @@ if has_language "sqlite"; then
     report_once "SQLite" sqlite3 --version
 fi
 
-if has_language "csharp" || has_language "fsharp"; then
+if has_language "csharp" || has_language "fsharp" || has_language "vbnet"; then
     report_once ".NET" dotnet --version
 fi
 
-if has_language "coq"; then
+if has_language "coq" || has_language "rocq"; then
+    if command -v rocq >/dev/null 2>&1; then
+        report_once "Rocq" rocq --version
+    fi
     report_once "Coq" coqc --version
 fi
 

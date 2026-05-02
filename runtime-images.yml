@@ -739,6 +739,216 @@ languages:
           COQ
           if coqc -q Broken.v >/dev/null 2>&1; then exit 1; fi
 
+  rocq:
+    install:
+      apt:
+        - coq
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.v <<'COQ'
+          Theorem same_folder_ok : 1 = 1.
+          Proof. reflexivity. Qed.
+          COQ
+          if command -v rocq >/dev/null 2>&1; then
+            rocq c Main.v
+          else
+            coqc -q Main.v
+          fi
+          [ -f Main.vo ]
+
+  scheme:
+    install:
+      apt:
+        - build-essential
+        - git
+        - make
+      script:
+        - export CHIBI_COMMIT=97faa0bf2d123c558d7ab79216906567c44cb03c
+        - git clone https://github.com/ashinn/chibi-scheme /opt/chibi-scheme
+        - cd /opt/chibi-scheme && git checkout "${CHIBI_COMMIT}" && make && make install
+        - chibi-scheme -V
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.scm <<'SCM'
+          (import (scheme base) (scheme write))
+          (display "ok")
+          (newline)
+          SCM
+          chibi-scheme Main.scm | grep '^ok$'
+
+  awk:
+    install:
+      apt:
+        - gawk
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'BEGIN { print "ok" }' > Main.awk
+          gawk --sandbox -f Main.awk | grep '^ok$'
+
+  gdl:
+    install:
+      apt:
+        - gnudatalanguage
+        - graphicsmagick
+        - imagemagick
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.pro <<'GDL'
+          pro main
+            print, 'ok'
+          end
+          GDL
+          aonohako-gdl-run Main.pro main | grep 'ok'
+
+  octave:
+    install:
+      apt:
+        - octave
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'disp("ok")' > Main.m
+          octave-cli --quiet --no-gui --no-history --no-init-all Main.m | grep '^ok$'
+
+  vhdl:
+    install:
+      apt:
+        - ghdl
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.vhd <<'VHDL'
+          entity main_tb is
+          end entity;
+
+          architecture sim of main_tb is
+          begin
+            process
+            begin
+              assert 1 = 1 report "ok" severity note;
+              wait;
+            end process;
+          end architecture;
+          VHDL
+          ghdl -a --std=08 Main.vhd
+          ghdl -e --std=08 main_tb
+          ghdl -r --std=08 main_tb --assert-level=error --stop-time=1ms
+
+  verilog:
+    install:
+      apt:
+        - iverilog
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.v <<'VERILOG'
+          module main;
+            initial begin
+              $display("ok");
+              $finish;
+            end
+          endmodule
+          VERILOG
+          iverilog -g2012 -o sim.vvp Main.v
+          vvp sim.vvp | grep '^ok$'
+
+  systemverilog:
+    install:
+      apt:
+        - iverilog
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.sv <<'SV'
+          module main;
+            logic ok = 1'b1;
+            initial begin
+              if (ok) $display("ok");
+              $finish;
+            end
+          endmodule
+          SV
+          iverilog -g2012 -o sim.vvp Main.sv
+          vvp sim.vvp | grep '^ok$'
+
+  crystal:
+    install:
+      apt:
+        - crystal
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'puts "ok"' > Main.cr
+          crystal build Main.cr --release --no-debug -o Main
+          ./Main | grep '^ok$'
+          printf '%s\n' 'puts(' > Broken.cr
+          if crystal build Broken.cr --release --no-debug -o Broken >/dev/null 2>&1; then exit 1; fi
+
+  cuda-lite:
+    install:
+      apt:
+        - g++
+        - libc6-dev
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.cu <<'CUDA'
+          #include <cstdio>
+
+          __global__ void add(const int *a, const int *b, int *c) {
+              int i = static_cast<int>(threadIdx.x);
+              c[i] = a[i] + b[i];
+          }
+
+          int main() {
+              int a[1] = {1};
+              int b[1] = {1};
+              int c[1] = {0};
+              int *da = nullptr;
+              int *db = nullptr;
+              int *dc = nullptr;
+              cudaMalloc(reinterpret_cast<void **>(&da), sizeof(a));
+              cudaMalloc(reinterpret_cast<void **>(&db), sizeof(b));
+              cudaMalloc(reinterpret_cast<void **>(&dc), sizeof(c));
+              cudaMemcpy(da, a, sizeof(a), cudaMemcpyHostToDevice);
+              cudaMemcpy(db, b, sizeof(b), cudaMemcpyHostToDevice);
+              CUDA_LAUNCH(add, dim3(1), dim3(1), da, db, dc);
+              cudaDeviceSynchronize();
+              cudaMemcpy(c, dc, sizeof(c), cudaMemcpyDeviceToHost);
+              cudaFree(da);
+              cudaFree(db);
+              cudaFree(dc);
+              std::puts(c[0] == 2 ? "ok" : "bad");
+              return c[0] == 2 ? 0 : 1;
+          }
+          CUDA
+          g++ -O2 -std=c++17 -include /usr/local/lib/aonohako/cuda_lite.hpp -x c++ Main.cu -o Main
+          ./Main | grep '^ok$'
+
   rust:
     install:
       apt:
@@ -1039,6 +1249,48 @@ languages:
           env HOME=/tmp/fsharp-home DOTNET_CLI_HOME=/tmp/fsharp-home NUGET_PACKAGES=/tmp/fsharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.fsproj --configuration Release -o publish -p:UseAppHost=false
           dotnet ./publish/App.dll | grep '^ok$'
 
+  vbnet:
+    install:
+      apt:
+        - curl
+        - libicu76
+      script:
+        - mkdir -p /opt/dotnet
+        - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+        - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
+        - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
+        - rm -f /tmp/dotnet-install.sh
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          mkdir -p /tmp/vbnet-home /tmp/vbnet-packages
+          cat > App.vbproj <<'VBPROJ'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net8.0</TargetFramework>
+              <UseAppHost>false</UseAppHost>
+              <ImplicitUsings>disable</ImplicitUsings>
+            </PropertyGroup>
+            <ItemGroup>
+              <Compile Include="Program.vb" />
+            </ItemGroup>
+          </Project>
+          VBPROJ
+          cat > Program.vb <<'VB'
+          Imports System
+
+          Module Program
+            Sub Main()
+              Console.WriteLine("ok")
+            End Sub
+          End Module
+          VB
+          env HOME=/tmp/vbnet-home DOTNET_CLI_HOME=/tmp/vbnet-home NUGET_PACKAGES=/tmp/vbnet-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.vbproj --configuration Release -o publish -p:UseAppHost=false
+          dotnet ./publish/App.dll | grep '^ok$'
+
   uhmlang:
     install:
       apt:
@@ -1073,6 +1325,7 @@ profiles:
         - ln -sfn /usr/bin/g++-16 /usr/local/bin/c++
     languages:
       - aheui
+      - awk
       - bf
       - elixir
       - erlang
@@ -1088,6 +1341,7 @@ profiles:
       - r
       - racket
       - ruby
+      - scheme
       - sqlite
       - wasm
       - whitespace
@@ -1107,6 +1361,8 @@ profiles:
     languages:
       - ada
       - asm
+      - crystal
+      - cuda-lite
       - d
       - fortran
       - go
@@ -1126,6 +1382,7 @@ profiles:
     languages:
       - csharp
       - fsharp
+      - vbnet
   type-f:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
@@ -1153,6 +1410,7 @@ profiles:
     install: *gcc16_profile
     languages:
       - coq
+      - rocq
   type-k:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
@@ -1163,3 +1421,16 @@ profiles:
     install: *gcc16_profile
     languages:
       - python
+  type-m:
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    install: *gcc16_profile
+    languages:
+      - gdl
+      - octave
+  type-n:
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    install: *gcc16_profile
+    languages:
+      - systemverilog
+      - verilog
+      - vhdl

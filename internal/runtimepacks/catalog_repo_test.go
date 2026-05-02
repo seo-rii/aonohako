@@ -18,23 +18,23 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 12 {
-		t.Fatalf("expected 12 production images, got %d", len(production))
+	if len(production) != 14 {
+		t.Fatalf("expected 14 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "bf", "elixir", "erlang", "haskell", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "ruby", "sqlite", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "awk", "bf", "elixir", "erlang", "haskell", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "ruby", "scheme", "sqlite", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "groovy", "java", "javascript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "d", "fortran", "go", "nasm", "nim", "pascal", "rust", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "crystal", "cuda-lite", "d", "fortran", "go", "nasm", "nim", "pascal", "rust", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin"}) {
 		t.Fatalf("type-d production image = %+v", production[3])
 	}
-	if production[4].Name != "type-e" || !reflect.DeepEqual(production[4].Languages, []string{"csharp", "fsharp"}) {
+	if production[4].Name != "type-e" || !reflect.DeepEqual(production[4].Languages, []string{"csharp", "fsharp", "vbnet"}) {
 		t.Fatalf("type-e production image = %+v", production[4])
 	}
 	if production[5].Name != "type-f" || !reflect.DeepEqual(production[5].Languages, []string{"uhmlang"}) {
@@ -49,7 +49,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"java", "plain", "python"}) {
 		t.Fatalf("type-i production image = %+v", production[8])
 	}
-	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"coq"}) {
+	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"coq", "rocq"}) {
 		t.Fatalf("type-j production image = %+v", production[9])
 	}
 	if production[10].Name != "type-k" || !reflect.DeepEqual(production[10].Languages, []string{"dart"}) {
@@ -57,6 +57,12 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	}
 	if production[11].Name != "type-l" || !reflect.DeepEqual(production[11].Languages, []string{"python"}) {
 		t.Fatalf("type-l production image = %+v", production[11])
+	}
+	if production[12].Name != "type-m" || !reflect.DeepEqual(production[12].Languages, []string{"gdl", "octave"}) {
+		t.Fatalf("type-m production image = %+v", production[12])
+	}
+	if production[13].Name != "type-n" || !reflect.DeepEqual(production[13].Languages, []string{"systemverilog", "verilog", "vhdl"}) {
+		t.Fatalf("type-n production image = %+v", production[13])
 	}
 
 	ci, err := catalog.CILanguageImages()
@@ -71,16 +77,20 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-ada",
 		"ci-aheui",
 		"ci-asm",
+		"ci-awk",
 		"ci-bf",
 		"ci-clojure",
 		"ci-coq",
+		"ci-crystal",
 		"ci-csharp",
+		"ci-cuda-lite",
 		"ci-d",
 		"ci-dart",
 		"ci-elixir",
 		"ci-erlang",
 		"ci-fortran",
 		"ci-fsharp",
+		"ci-gdl",
 		"ci-go",
 		"ci-groovy",
 		"ci-haskell",
@@ -93,6 +103,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-nasm",
 		"ci-nim",
 		"ci-ocaml",
+		"ci-octave",
 		"ci-pascal",
 		"ci-perl",
 		"ci-php",
@@ -102,13 +113,19 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-python",
 		"ci-r",
 		"ci-racket",
+		"ci-rocq",
 		"ci-ruby",
 		"ci-rust",
 		"ci-scala",
+		"ci-scheme",
 		"ci-sqlite",
 		"ci-swift",
+		"ci-systemverilog",
 		"ci-typescript",
 		"ci-uhmlang",
+		"ci-vbnet",
+		"ci-verilog",
+		"ci-vhdl",
 		"ci-wasm",
 		"ci-whitespace",
 		"ci-zig",
@@ -124,27 +141,38 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 	}
 
 	tests := map[string][]string{
-		"aheui":      {"Hello, World!", "Main.aheui"},
-		"ada":        {"gnatmake", "Broken.adb"},
-		"asm":        {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
-		"clojure":    {"PushbackReader", "Main.clj"},
-		"dart":       {"dart compile exe", "Broken.dart"},
-		"erlang":     {"Broken.erl", "erlc"},
-		"nim":        {"nim c", "Broken.nim"},
-		"pascal":     {"fpc", "Broken.pas"},
-		"racket":     {"raco make", "Broken.rkt"},
-		"zig":        {"Broken.zig", "zig build-exe"},
-		"r":          {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
-		"fortran":    {"Broken.f90", "gfortran"},
-		"d":          {"Broken.d", "ldc2"},
-		"groovy":     {"Broken.groovy", "groovyc"},
-		"prolog":     {"Broken.pl", "swipl"},
-		"lisp":       {"Broken.lisp", "sbcl"},
-		"nasm":       {"Main.asm", "Broken.asm", "nasm -felf64"},
-		"coq":        {"Broken.v", "coqc"},
-		"python":     {"import qiskit", "import robot_judge", "from jungol_robot import Direction, Position"},
-		"typescript": {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist"},
-		"wasm":       {"-W max-memory-size=33554432", "-W max-wasm-stack=1048576", "-W trap-on-grow-failure=y"},
+		"aheui":         {"Hello, World!", "Main.aheui"},
+		"ada":           {"gnatmake", "Broken.adb"},
+		"asm":           {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
+		"awk":           {"gawk --sandbox", "Main.awk"},
+		"clojure":       {"PushbackReader", "Main.clj"},
+		"crystal":       {"crystal build Main.cr", "Broken.cr"},
+		"cuda-lite":     {"CUDA_LAUNCH(add", "cuda_lite.hpp"},
+		"dart":          {"dart compile exe", "Broken.dart"},
+		"erlang":        {"Broken.erl", "erlc"},
+		"gdl":           {"aonohako-gdl-run", "Main.pro"},
+		"nim":           {"nim c", "Broken.nim"},
+		"octave":        {"octave-cli --quiet", "Main.m"},
+		"pascal":        {"fpc", "Broken.pas"},
+		"racket":        {"raco make", "Broken.rkt"},
+		"rocq":          {"rocq c Main.v", "coqc -q Main.v"},
+		"scheme":        {"chibi-scheme Main.scm", "(scheme base)"},
+		"systemverilog": {"iverilog -g2012", "Main.sv"},
+		"vbnet":         {"App.vbproj", "dotnet publish App.vbproj"},
+		"verilog":       {"iverilog -g2012", "Main.v"},
+		"vhdl":          {"ghdl -a --std=08", "main_tb"},
+		"zig":           {"Broken.zig", "zig build-exe"},
+		"r":             {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
+		"fortran":       {"Broken.f90", "gfortran"},
+		"d":             {"Broken.d", "ldc2"},
+		"groovy":        {"Broken.groovy", "groovyc"},
+		"prolog":        {"Broken.pl", "swipl"},
+		"lisp":          {"Broken.lisp", "sbcl"},
+		"nasm":          {"Main.asm", "Broken.asm", "nasm -felf64"},
+		"coq":           {"Broken.v", "coqc"},
+		"python":        {"import qiskit", "import robot_judge", "from jungol_robot import Direction, Position"},
+		"typescript":    {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist"},
+		"wasm":          {"-W max-memory-size=33554432", "-W max-wasm-stack=1048576", "-W trap-on-grow-failure=y"},
 	}
 
 	for language, patterns := range tests {
@@ -210,7 +238,7 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 	}
 
 	const pinnedTrixie = "debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a"
-	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l"} {
+	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n"} {
 		profile, ok := catalog.Profiles[profileName]
 		if !ok {
 			t.Fatalf("profile %q missing from catalog", profileName)
@@ -231,7 +259,7 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 		}
 	}
 
-	for _, language := range []string{"csharp", "fsharp"} {
+	for _, language := range []string{"csharp", "fsharp", "vbnet"} {
 		spec, ok := catalog.Languages[language]
 		if !ok {
 			t.Fatalf("language %q missing from catalog", language)
