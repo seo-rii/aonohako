@@ -1522,7 +1522,7 @@ languages:
         - -lc
         - |
           printf '%s\n' 'method Main() ensures true {' '}' > Main.dfy
-          env DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 dafny verify Main.dfy >/dev/null
+          env DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_PROCESSOR_COUNT=1 COMPlus_ThreadPool_ForceMinWorkerThreads=1 dafny verify Main.dfy >/dev/null
 
   tla:
     install:
@@ -1613,7 +1613,7 @@ languages:
           theorem ok: True by simp
           end
           THY
-          env ISABELLE_JAVA_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC' isabelle build -D . >/dev/null
+          env JAVA_TOOL_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m' ISABELLE_JAVA_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC' ISABELLE_TOOL_JAVA_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC' ISABELLE_JAVA_SYSTEM_OPTIONS='-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC' isabelle build -D . >/dev/null
 
   vb6:
     install:
