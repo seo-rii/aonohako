@@ -150,12 +150,18 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"binary", "/tmp/a.out", "/tmp/a.out", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
 		{"clojure", "/tmp/sol.clj", "java", true},
-		{"coq", "/tmp/Main.v", "true", false},
+		{"coq", "/tmp/Main.v", "sh", true},
 		{"ocaml", "/tmp/sol", "env", true},
 		{"elixir", "/tmp/sol.exs", "env", true},
 		{"python", "/tmp/sol.py", "python3", true},
 		{"pypy", "/tmp/sol.py", "pypy3", true},
 		{"racket", "/tmp/sol.rkt", "racket", true},
+		{"scheme", "/tmp/sol.scm", "chibi-scheme", true},
+		{"awk", "/tmp/sol.awk", "gawk", true},
+		{"gdl", "/tmp/sol.pro", "aonohako-gdl-run", true},
+		{"octave", "/tmp/sol.m", "octave-cli", true},
+		{"vhdl", "/tmp/box", "ghdl", false},
+		{"verilog", "/tmp/Main.vvp", "vvp", true},
 		{"erlang", "/tmp/beam", "erl", true},
 		{"prolog", "/tmp/sol.pl", "swipl", true},
 		{"groovy", "/tmp/classes", "java", false},
@@ -174,6 +180,28 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"perl", "/tmp/sol.pl", "perl", true},
 		{"sqlite", "/tmp/sol.sql", "sh", true},
 		{"uhmlang", "/tmp/sol.umm", "env", true},
+		{"vbnet", "/tmp/App.dll", "dotnet", true},
+		{"vb6", "/tmp/Main.bas", "aonohako-vb6-run", true},
+		{"gleam", "/tmp/gleam-project", "aonohako-gleam-run", true},
+		{"cuda-ocelot", "/tmp/Main", "aonohako-cuda-ocelot-run", true},
+		{"carbon", "/tmp/Main.carbon", "aonohako-carbon-run", true},
+		{"graphql", "/tmp/Main.graphql", "aonohako-graphql-run", true},
+		{"rocq", "/tmp/Main.v", "sh", true},
+		{"lean4", "/tmp/Main.lean", "lean", true},
+		{"agda", "/tmp/Main.agda", "agda", true},
+		{"dafny", "/tmp/Main.dfy", "dafny", true},
+		{"tla", "/tmp/Main.tla", "aonohako-tla-run", true},
+		{"why3", "/tmp/Main.mlw", "why3", true},
+		{"isabelle", "/tmp/box", "isabelle", false},
+		{"smalltalk", "/tmp/Main.st", "gst", true},
+		{"golfscript", "/tmp/Main.gs", "ruby", true},
+		{"deno", "/tmp/Main.ts", "deno", true},
+		{"kotlin-jvm", "/tmp/Main.jar", "java", true},
+		{"duckdb", "/tmp/Main.sql", "aonohako-duckdb-run", true},
+		{"bqn", "/tmp/Main.bqn", "node", true},
+		{"apl", "/tmp/Main.apl", "apl", true},
+		{"uiua", "/tmp/Main.ua", "uiua", true},
+		{"janet", "/tmp/Main.janet", "janet", true},
 		{"text", "/tmp/data.txt", "cat", true},
 		{"unknown_lang", "/tmp/a.out", "/tmp/a.out", true},
 	}
@@ -321,8 +349,8 @@ func TestBuildCommandNormalizesManagedRuntimeEntryPoints(t *testing.T) {
 func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 96}}
 
-	coqArgs := buildCommand("/tmp/Main.v", "coq", req)
-	if !reflect.DeepEqual(coqArgs, []string{"true"}) {
+	coqArgs := buildCommand("/tmp/Main.v", "rocq", req)
+	if !reflect.DeepEqual(coqArgs, []string{"sh", "-c", "if command -v rocq >/dev/null 2>&1; then exec rocq c \"$1\"; fi; exec coqc -q \"$1\"", "aonohako-rocq-run", "/tmp/Main.v"}) {
 		t.Fatalf("coq command = %v", coqArgs)
 	}
 

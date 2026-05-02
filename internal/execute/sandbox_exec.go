@@ -91,7 +91,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	case "elixir":
 		innerEnv = append(innerEnv, "ERL_AFLAGS="+erlangAFlags(tuning))
 		allowUnixSockets = true
-	case "erlang", "wasm":
+	case "erlang", "gleam", "wasm":
 		allowUnixSockets = true
 	case "uhmlang":
 		innerEnv = append(innerEnv, fmt.Sprintf("GOMEMLIMIT=%dMiB", goMemoryLimitMB(req.Limits.MemoryMB, tuning)), fmt.Sprintf("GOGC=%d", tuning.GoGOGC))

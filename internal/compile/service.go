@@ -270,8 +270,16 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "NIM"
 	case "clojure":
 		l = "CLOJURE"
-	case "racket", "scheme":
+	case "racket":
 		l = "RACKET"
+	case "scheme":
+		l = "SCHEME"
+	case "awk", "gawk":
+		l = "AWK"
+	case "gdl", "gnudatalanguage":
+		l = "GDL"
+	case "octave":
+		l = "OCTAVE"
 	case "ada":
 		l = "ADA"
 	case "dart":
@@ -280,8 +288,50 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "FORTRAN"
 	case "d":
 		l = "D"
+	case "vhdl":
+		l = "VHDL"
+	case "verilog":
+		l = "VERILOG"
+	case "systemverilog":
+		l = "SYSTEMVERILOG"
+	case "crystal":
+		l = "CRYSTAL"
+	case "vlang":
+		l = "VLANG"
+	case "odin":
+		l = "ODIN"
+	case "c3":
+		l = "C3"
+	case "hare":
+		l = "HARE"
+	case "vb", "vbnet":
+		l = "VBNET"
+	case "gleam":
+		l = "GLEAM"
+	case "cuda-ocelot":
+		l = "CUDA_OCELOT"
+	case "cuda-lite", "cuda-cpu":
+		l = "CUDA_LITE"
+	case "carbon":
+		l = "CARBON"
+	case "graphql":
+		l = "GRAPHQL"
+	case "rocq":
+		l = "ROCQ"
 	case "coq":
 		l = "COQ"
+	case "lean", "lean4":
+		l = "LEAN4"
+	case "agda":
+		l = "AGDA"
+	case "dafny":
+		l = "DAFNY"
+	case "tla", "tlaplus":
+		l = "TLA"
+	case "why3", "whyml":
+		l = "WHY3"
+	case "isabelle":
+		l = "ISABELLE"
 	case "lisp":
 		l = "LISP"
 	case "c", "c11":
@@ -302,6 +352,32 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "SCALA"
 	case "f#", "fsharp":
 		l = "FSHARP"
+	case "vb6":
+		l = "VB6"
+	case "classic-basic":
+		l = "CLASSIC_BASIC"
+	case "qbasic":
+		l = "QBASIC"
+	case "smalltalk", "gst":
+		l = "SMALLTALK"
+	case "golfscript":
+		l = "GOLFSCRIPT"
+	case "mojo":
+		l = "MOJO"
+	case "deno":
+		l = "DENO"
+	case "kotlin-jvm":
+		l = "KOTLIN_JVM"
+	case "duckdb":
+		l = "DUCKDB"
+	case "bqn":
+		l = "BQN"
+	case "apl", "gnu-apl":
+		l = "APL"
+	case "uiua":
+		l = "UIUA"
+	case "janet":
+		l = "JANET"
 	case "whitespace":
 		l = "WHITESPACE"
 	case "bf", "brainfuck":
@@ -538,6 +614,54 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 	case "racket":
 		return compileScriptCheck(ctx, workDir, req.Sources, "raco", []string{"make"})
+	case "scheme":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".scm"}, "no scheme sources")
+	case "awk":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".awk"}, "no awk sources", "gawk", []string{"--sandbox", "--lint", "-f"}, nil)
+	case "gdl":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".pro"}, "no gdl sources")
+	case "octave":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".m"}, "no octave sources")
+	case "vhdl":
+		return compileVHDL(ctx, workDir, req.Sources, req.EntryPoint)
+	case "verilog":
+		return compileVerilog(ctx, workDir, target, req.Sources)
+	case "crystal":
+		return compileCrystal(ctx, workDir, target, req.Sources)
+	case "vlang":
+		return compileVLang(ctx, workDir, target, req.Sources)
+	case "odin":
+		return compileOdin(ctx, workDir, target, req.Sources)
+	case "c3":
+		return compileC3(ctx, workDir, target, req.Sources)
+	case "hare":
+		return compileHare(ctx, workDir, target, req.Sources)
+	case "vbnet":
+		return compileVBNet(ctx, workDir, req.Sources)
+	case "gleam":
+		return compileGleam(ctx, workDir, req.Sources)
+	case "cuda-ocelot":
+		return compileCUDAOcelot(ctx, workDir, target, req.Sources)
+	case "cuda-lite":
+		return compileCUDALite(ctx, workDir, target, req.Sources)
+	case "carbon":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".carbon"}, "no carbon sources", "carbon", []string{"compile", "--phase=check"}, nil)
+	case "graphql":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".graphql"}, "no graphql sources")
+	case "rocq":
+		return compileRocq(ctx, workDir, req.Sources)
+	case "lean4":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".lean"}, "no lean sources", "lean", nil, nil)
+	case "agda":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".agda"}, "no agda sources", "agda", nil, nil)
+	case "dafny":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".dfy"}, "no dafny sources", "dafny", []string{"verify"}, nil)
+	case "tla":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".tla", ".cfg"}, "no tla sources")
+	case "why3":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".mlw"}, "no why3 sources", "why3", []string{"prove", "-P", "alt-ergo"}, nil)
+	case "isabelle":
+		return compileIsabelle(ctx, workDir, req.Sources)
 	case "python":
 		return compilePythonLike(ctx, workDir, req.Sources, "python3")
 	case "pypy":
@@ -617,30 +741,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			l := strings.ToLower(name)
 			return strings.HasSuffix(l, ".lisp") || strings.HasSuffix(l, ".lsp")
 		}, "")
-		if err != nil {
-			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
-		}
-		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
-	case "coq":
-		var checked int
-		fullOut := newCompileOutputBuffer()
-		fullErr := newCompileOutputBuffer()
-		for _, src := range req.Sources {
-			if !strings.HasSuffix(strings.ToLower(src.Name), ".v") {
-				continue
-			}
-			checked++
-			stdout, stderr, status, reason := runCommand(ctx, workDir, "coqc", []string{"-q", filepath.Join(workDir, filepath.Clean(src.Name))}, []string{"OCAMLRUNPARAM=" + ocamlCompileRunParam})
-			fullOut.Append(stdout)
-			fullErr.Append(stderr)
-			if status != model.CompileStatusOK {
-				return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
-			}
-		}
-		if checked == 0 {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no coq sources"}
-		}
-		artifacts, err := collectArtifacts(workDir, func(name string) bool { return strings.HasSuffix(strings.ToLower(name), ".v") }, "")
 		if err != nil {
 			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
@@ -784,6 +884,30 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileScala(ctx, workDir, req.Sources)
 	case "fsharp":
 		return compileFSharp(ctx, workDir, req.Sources)
+	case "vb6":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".bas", ".frm", ".cls"}, "no vb6 sources")
+	case "classic-basic":
+		return compileClassicBasic(ctx, workDir, target, req.Sources)
+	case "smalltalk":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".st"}, "no smalltalk sources")
+	case "golfscript":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".gs"}, "no golfscript sources")
+	case "mojo":
+		return compileMojo(ctx, workDir, target, req.Sources)
+	case "deno":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check", "--cached-only"}, nil)
+	case "kotlin-jvm":
+		return compileKotlinJVM(ctx, workDir, target, req.Sources, tuning)
+	case "duckdb":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".sql"}, "no duckdb sources")
+	case "bqn":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".bqn"}, "no bqn sources")
+	case "apl":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".apl"}, "no apl sources")
+	case "uiua":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".ua"}, "no uiua sources")
+	case "janet":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".janet"}, "no janet sources")
 	case "whitespace":
 		return compileWhitespace(workDir, req.Sources)
 	case "brainfuck":
@@ -846,6 +970,90 @@ func gatherByExt(sources []model.Source, exts ...string) []string {
 		}
 	}
 	return out
+}
+
+func sourcePathsByExt(workDir string, sources []model.Source, exts ...string) []string {
+	allowed := make(map[string]struct{}, len(exts))
+	for _, ext := range exts {
+		allowed[strings.ToLower(ext)] = struct{}{}
+	}
+	var out []string
+	for _, src := range sources {
+		if _, ok := allowed[strings.ToLower(filepath.Ext(src.Name))]; ok {
+			out = append(out, filepath.Join(workDir, filepath.Clean(src.Name)))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func selectPrimarySource(workDir string, sources []model.Source, exts []string, preferredBases ...string) string {
+	allowed := make(map[string]struct{}, len(exts))
+	for _, ext := range exts {
+		allowed[strings.ToLower(ext)] = struct{}{}
+	}
+	preferred := make(map[string]int, len(preferredBases))
+	for i, base := range preferredBases {
+		preferred[strings.ToLower(base)] = i + 1
+	}
+	bestRank := len(preferredBases) + 1
+	var selected string
+	for _, src := range sources {
+		if _, ok := allowed[strings.ToLower(filepath.Ext(src.Name))]; !ok {
+			continue
+		}
+		clean := filepath.Clean(src.Name)
+		rank := bestRank
+		if value, ok := preferred[strings.ToLower(filepath.Base(clean))]; ok {
+			rank = value
+		}
+		if selected == "" || rank < bestRank || (rank == bestRank && clean < selected) {
+			selected = clean
+			bestRank = rank
+		}
+	}
+	if selected == "" {
+		return ""
+	}
+	return filepath.Join(workDir, selected)
+}
+
+func compilePassThroughIfExt(workDir string, sources []model.Source, exts []string, noSourceReason string) model.CompileResponse {
+	if len(sourcePathsByExt(workDir, sources, exts...)) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: noSourceReason}
+	}
+	return passThroughArtifacts(workDir, sources)
+}
+
+func compileCheckedSources(ctx context.Context, workDir string, sources []model.Source, exts []string, noSourceReason, bin string, prefix, env []string) model.CompileResponse {
+	paths := sourcePathsByExt(workDir, sources, exts...)
+	if len(paths) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: noSourceReason}
+	}
+	fullOut := newCompileOutputBuffer()
+	fullErr := newCompileOutputBuffer()
+	for _, path := range paths {
+		args := append(append([]string{}, prefix...), path)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, bin, args, env)
+		fullOut.Append(stdout)
+		fullErr.Append(stderr)
+		if status != model.CompileStatusOK {
+			return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
+		}
+	}
+	artifacts, err := collectArtifacts(workDir, func(name string) bool {
+		ext := strings.ToLower(filepath.Ext(name))
+		for _, allowed := range exts {
+			if ext == strings.ToLower(allowed) {
+				return true
+			}
+		}
+		return false
+	}, "")
+	if err != nil {
+		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
+	}
+	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 }
 
 func compileNative(ctx context.Context, workDir, target string, srcRel []string, compiler string, flags []string) model.CompileResponse {
@@ -932,6 +1140,134 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 		"GOTOOLCHAIN=local",
 	)
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "go", args, env)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileVHDL(ctx context.Context, workDir string, sources []model.Source, entryPoint string) model.CompileResponse {
+	vhdlFiles := sourcePathsByExt(workDir, sources, ".vhd", ".vhdl")
+	if len(vhdlFiles) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no vhdl sources"}
+	}
+	analyzeArgs := []string{"-a", "--std=08"}
+	analyzeArgs = append(analyzeArgs, vhdlFiles...)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "ghdl", analyzeArgs, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	top := strings.TrimSpace(entryPoint)
+	if top == "" {
+		top = "main_tb"
+	}
+	elabOut, elabErr, elabStatus, elabReason := runCommand(ctx, workDir, "ghdl", []string{"-e", "--std=08", top}, nil)
+	stdout += elabOut
+	stderr += elabErr
+	if elabStatus != model.CompileStatusOK {
+		return model.CompileResponse{Status: elabStatus, Stdout: stdout, Stderr: stderr, Reason: elabReason}
+	}
+	artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileVerilog(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	verilogFiles := sourcePathsByExt(workDir, sources, ".v", ".sv")
+	if len(verilogFiles) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no verilog sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(target), ".vvp") {
+		target += ".vvp"
+	}
+	args := []string{"-g2012", "-o", filepath.Join(workDir, target)}
+	args = append(args, verilogFiles...)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "iverilog", args, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileCrystal(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".cr"}, "Main.cr")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no crystal sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "crystal", []string{"build", rootSource, "--release", "--no-debug", "-o", filepath.Join(workDir, target)}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileVLang(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".v"}, "Main.v")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no vlang sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "v", []string{"-o", filepath.Join(workDir, target), rootSource}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileOdin(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	if len(sourcePathsByExt(workDir, sources, ".odin")) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no odin sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "odin", []string{"build", ".", "-out:" + filepath.Join(workDir, target)}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileC3(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".c3"}, "Main.c3")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no c3 sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "c3c", []string{"compile", rootSource, "-o", filepath.Join(workDir, target)}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileHare(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".ha"}, "Main.ha")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no hare sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "hare", []string{"build", "-o", filepath.Join(workDir, target), rootSource}, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1281,6 +1617,245 @@ func compileFSharp(ctx context.Context, workDir string, sources []model.Source) 
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
 	artifacts, err := collectDotnetPublishArtifacts(outDir, strings.TrimSuffix(filepath.Base(projectPath), filepath.Ext(projectPath)))
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileVBNet(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+	projectDir := filepath.Join(workDir, "vbproj")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	var projectPath string
+	var hasVB bool
+	for _, src := range sources {
+		clean, err := util.ValidateRelativePath(src.Name)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		lower := strings.ToLower(clean)
+		if strings.HasSuffix(lower, ".vbproj") && projectPath == "" {
+			projectPath = filepath.Join(projectDir, clean)
+		}
+		if strings.HasSuffix(lower, ".vb") {
+			hasVB = true
+		}
+	}
+	if projectPath == "" && !hasVB {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no vbnet sources"}
+	}
+	if err := materializeSources(projectDir, sources); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+	}
+	if projectPath == "" {
+		projectPath = filepath.Join(projectDir, "App.vbproj")
+		project := `<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <UseAppHost>false</UseAppHost>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+</Project>
+`
+		if err := os.WriteFile(projectPath, []byte(project), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+	}
+	outDir := filepath.Join(workDir, "publish")
+	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false"}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := collectDotnetPublishArtifacts(outDir, strings.TrimSuffix(filepath.Base(projectPath), filepath.Ext(projectPath)))
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileGleam(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+	gleamFiles := sourcePathsByExt(workDir, sources, ".gleam")
+	if len(gleamFiles) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no gleam sources"}
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "gleam.toml")); err != nil {
+		project := "name = \"aonohako_submission\"\nversion = \"1.0.0\"\n\n[dependencies]\ngleam_stdlib = \"~> 0.44\"\n"
+		if err := os.WriteFile(filepath.Join(workDir, "gleam.toml"), []byte(project), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+	}
+	hasSrcMain := false
+	for _, path := range gleamFiles {
+		rel, err := filepath.Rel(workDir, path)
+		if err == nil && strings.HasPrefix(filepath.ToSlash(rel), "src/") {
+			hasSrcMain = true
+			break
+		}
+	}
+	if !hasSrcMain {
+		rootSource := selectPrimarySource(workDir, sources, []string{".gleam"}, "Main.gleam", "main.gleam")
+		if rootSource != "" {
+			if err := os.MkdirAll(filepath.Join(workDir, "src"), 0o755); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+			}
+			data, err := os.ReadFile(rootSource)
+			if err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+			}
+			if err := os.WriteFile(filepath.Join(workDir, "src", "main.gleam"), data, 0o644); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+			}
+		}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "gleam", []string{"build"}, []string{"ERL_AFLAGS=" + erlangAFlags(config.DefaultRuntimeTuningConfig())})
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileCUDAOcelot(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".cu"}, "Main.cu")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no cuda-ocelot sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "aonohako-cuda-ocelot-build", []string{rootSource, filepath.Join(workDir, target)}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileCUDALite(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	cudaFiles := sourcePathsByExt(workDir, sources, ".cu", ".cpp", ".cc", ".cxx")
+	if len(cudaFiles) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no cuda-lite sources"}
+	}
+	args := []string{"-O2", "-std=c++17", "-DONLINE_JUDGE", "-include", "/usr/local/lib/aonohako/cuda_lite.hpp", "-x", "c++"}
+	args = append(args, cudaFiles...)
+	args = append(args, "-o", filepath.Join(workDir, target), "-lm")
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "g++", args, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileClassicBasic(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".bas"}, "Main.bas")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no classic-basic sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "fbc", []string{"-lang", "qb", "-x", filepath.Join(workDir, target), rootSource}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileMojo(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".mojo"}, "Main.mojo")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no mojo sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "mojo", []string{"build", rootSource, "-o", filepath.Join(workDir, target)}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileKotlinJVM(ctx context.Context, workDir, target string, sources []model.Source, tuning config.RuntimeTuningConfig) model.CompileResponse {
+	kt := sourcePathsByExt(workDir, sources, ".kt")
+	if len(kt) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no kotlin-jvm sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(target), ".jar") {
+		target += ".jar"
+	}
+	tuning = tuning.WithSafeDefaults()
+	args := []string{
+		"-J-Xms64m",
+		fmt.Sprintf("-J-Xmx%dm", max(512, tuning.KotlinNativeCompilerHeapMB)),
+		"-J-Xss1m",
+		"-J-XX:+UseSerialGC",
+		"-include-runtime",
+		"-d",
+		filepath.Join(workDir, target),
+	}
+	args = append(args, kt...)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "kotlinc", args, javaCompileEnv(workDir, max(512, tuning.KotlinNativeCompilerHeapMB)))
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileRocq(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+	bin := "rocq"
+	prefix := []string{"c"}
+	if _, err := exec.LookPath("rocq"); err != nil {
+		bin = "coqc"
+		prefix = []string{"-q"}
+	}
+	return compileCheckedSources(ctx, workDir, sources, []string{".v"}, "no rocq sources", bin, prefix, []string{"OCAMLRUNPARAM=" + ocamlCompileRunParam})
+}
+
+func compileIsabelle(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+	thyFiles := sourcePathsByExt(workDir, sources, ".thy")
+	if len(thyFiles) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no isabelle sources"}
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "ROOT")); err != nil {
+		theories := make([]string, 0, len(thyFiles))
+		for _, path := range thyFiles {
+			theories = append(theories, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
+		}
+		sort.Strings(theories)
+		root := "session Aonohako = HOL +\n  theories\n"
+		for _, theory := range theories {
+			root += "    " + theory + "\n"
+		}
+		if err := os.WriteFile(filepath.Join(workDir, "ROOT"), []byte(root), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "isabelle", []string{"build", "-D", "."}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := collectArtifacts(workDir, func(name string) bool {
+		lower := strings.ToLower(name)
+		return lower == "root" || strings.HasSuffix(lower, ".thy")
+	}, "")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
