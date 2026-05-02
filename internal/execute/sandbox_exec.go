@@ -95,6 +95,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		allowUnixSockets = true
 	case "uhmlang":
 		innerEnv = append(innerEnv, fmt.Sprintf("GOMEMLIMIT=%dMiB", goMemoryLimitMB(req.Limits.MemoryMB, tuning)), fmt.Sprintf("GOGC=%d", tuning.GoGOGC))
+	case "deno":
+		allowUnixSockets = true
 	}
 
 	finalCommand := append([]string(nil), command...)
@@ -126,7 +128,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	allowMemfdCreate := isDotnet || runtimeBase == "wasmtime"
 	allowProcesses := false
 	switch runtimeBase {
-	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-why3-prove":
+	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-why3-prove", "ghdl", "vvp":
 		allowProcesses = true
 	}
 	if isDotnet {
@@ -141,7 +143,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS values can fail before user code.
-	disableAddressSpaceLimit := isDotnet || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "deno"
+	disableAddressSpaceLimit := isDotnet || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "deno" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
 	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)

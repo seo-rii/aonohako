@@ -9,4 +9,4 @@ if [[ -f "${cfg}" ]]; then
 fi
 args+=("${src}")
 
-exec java -Xms32m -Xmx256m -Xss1m -XX:+UseSerialGC -cp /usr/local/lib/aonohako/tla2tools.jar tlc2.TLC "${args[@]}" >/dev/null
+exec java -Xms32m -Xmx256m -Xss1m -XX:+UseSerialGC -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -cp /usr/local/lib/aonohako/tla2tools.jar tlc2.TLC "${args[@]}" >/dev/null

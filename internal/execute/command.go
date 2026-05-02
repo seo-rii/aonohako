@@ -304,7 +304,17 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "deno":
 		return []string{"deno", "run", "--no-prompt", primaryPath}
 	case "kotlin-jvm":
-		return []string{"java", "-jar", primaryPath}
+		return []string{
+			"java",
+			"-Xms64m",
+			fmt.Sprintf("-Xmx%dm", jvmHeapMB(req.Limits.MemoryMB, tuning)),
+			"-Xss1m",
+			"-XX:+UseSerialGC",
+			"-XX:CompressedClassSpaceSize=64m",
+			"-XX:ReservedCodeCacheSize=32m",
+			"-jar",
+			primaryPath,
+		}
 	case "duckdb":
 		return []string{"aonohako-duckdb-run", primaryPath}
 	case "bqn":

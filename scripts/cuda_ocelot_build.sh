@@ -7,7 +7,7 @@ out="${2:-Main}"
 exec nvcc \
   -std=c++17 \
   -O2 \
-  -arch=sm_20 \
+  -arch=sm_35 \
   -Xptxas -v \
   "${src}" \
   -o "${out}" \

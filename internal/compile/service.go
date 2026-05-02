@@ -651,7 +651,11 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "agda":
 		return compileCheckedSources(ctx, workDir, req.Sources, []string{".agda"}, "no agda sources", "agda", nil, nil)
 	case "dafny":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".dfy"}, "no dafny sources", "dafny", []string{"verify"}, []string{"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1"})
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".dfy"}, "no dafny sources", "dafny", []string{"verify"}, []string{
+			"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
+			"DOTNET_PROCESSOR_COUNT=1",
+			"COMPlus_ThreadPool_ForceMinWorkerThreads=1",
+		})
 	case "tla":
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".tla", ".cfg"}, "no tla sources")
 	case "why3":
@@ -1666,7 +1670,7 @@ func compileVBNet(ctx context.Context, workDir string, sources []model.Source) m
 		}
 		sort.Strings(refDLLs)
 		outDLL := filepath.Join(workDir, "App.dll")
-		args := []string{vbcPath, "-nologo", "-target:exe", "-optimize+", "-out:" + outDLL}
+		args := []string{vbcPath, "-nologo", "-nostdlib", "-target:exe", "-optimize+", "-out:" + outDLL}
 		for _, refDLL := range refDLLs {
 			args = append(args, "-r:"+refDLL)
 		}
@@ -1765,7 +1769,10 @@ func compileGleam(ctx context.Context, workDir string, sources []model.Source) m
 					return err
 				}
 				if entry.IsDir() {
-					return os.MkdirAll(target, info.Mode().Perm())
+					if err := os.MkdirAll(target, 0o777); err != nil {
+						return err
+					}
+					return os.Chmod(target, 0o777)
 				}
 				if info.Mode().Type() != 0 {
 					return nil
@@ -1774,7 +1781,7 @@ func compileGleam(ctx context.Context, workDir string, sources []model.Source) m
 				if err != nil {
 					return err
 				}
-				return os.WriteFile(target, data, info.Mode().Perm())
+				return os.WriteFile(target, data, 0o666)
 			}); walkErr != nil {
 				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: walkErr.Error()}
 			}
@@ -2250,7 +2257,10 @@ func javaCompileEnv(workDir string, xmxMB int) []string {
 
 func isabelleCompileEnv() []string {
 	return []string{
+		"JAVA_TOOL_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m",
 		"ISABELLE_JAVA_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
+		"ISABELLE_TOOL_JAVA_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
+		"ISABELLE_JAVA_SYSTEM_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
 	}
 }
 
@@ -2378,7 +2388,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// startup, so finite RLIMIT_AS and RLIMIT_FSIZE values can fail before user
 	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
 	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno"
-	allowProcessGroups := commandName == "swiftc"
+	allowProcessGroups := commandName == "swiftc" || commandName == "hare"
 	allowChmod := isDotnetLike || commandName == "hare" || commandName == "isabelle"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
@@ -2389,6 +2399,10 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		memoryLimitMB = 4096
 	}
 	memoryLimitKB := int64(memoryLimitMB) * 1024
+	threadLimit := compileSandboxThreadLimit
+	if commandName == "dafny" {
+		threadLimit = 1024
+	}
 	helperReq := sandbox.ExecRequest{
 		Command: append([]string(nil), command...),
 		Dir:     workDir,
@@ -2398,7 +2412,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			MemoryMB:       memoryLimitMB,
 			WorkspaceBytes: compileWorkspaceBytes,
 		},
-		ThreadLimit:              compileSandboxThreadLimit,
+		ThreadLimit:              threadLimit,
 		OpenFileLimit:            openFileLimit,
 		StackLimitBytes:          security.StackLimitForCommand(command[0]),
 		FileSizeLimitBytes:       security.FileSizeLimitForCommand(command[0], compileWorkspaceBytes),
