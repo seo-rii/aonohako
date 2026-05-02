@@ -651,7 +651,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "agda":
 		return compileCheckedSources(ctx, workDir, req.Sources, []string{".agda"}, "no agda sources", "agda", nil, nil)
 	case "dafny":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".dfy"}, "no dafny sources", "dafny", []string{"verify"}, []string{
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".dfy"}, "no dafny sources", "dafny", []string{"verify", "--cores", "1"}, []string{
 			"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
 			"DOTNET_PROCESSOR_COUNT=1",
 			"COMPlus_ThreadPool_ForceMinWorkerThreads=1",
@@ -2424,6 +2424,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		AllowProcesses:           true,
 		AllowProcessGroups:       allowProcessGroups,
 		AllowMemfdCreate:         isDotnetLike,
+		AllowNumaPolicy:          isDotnetLike,
 		AllowChmod:               allowChmod,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     isDotnetLike,

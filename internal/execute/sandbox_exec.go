@@ -184,6 +184,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		AllowUnixSocketMessages:  allowUnixSockets,
 		AllowProcesses:           allowProcesses,
 		AllowMemfdCreate:         allowMemfdCreate,
+		AllowNumaPolicy:          isDotnet,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     isDotnet,
 	}

@@ -334,7 +334,6 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_QUOTACTL_FD),
 		uint32(unix.SYS_PROCESS_MADVISE),
 		uint32(unix.SYS_PROCESS_MRELEASE),
-		uint32(unix.SYS_GET_MEMPOLICY),
 		uint32(unix.SYS_MBIND),
 		uint32(unix.SYS_SET_MEMPOLICY),
 		uint32(unix.SYS_SET_MEMPOLICY_HOME_NODE),
@@ -366,6 +365,10 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_EXECVEAT),
 	} {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	}
+	if !req.AllowNumaPolicy {
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_GET_MEMPOLICY), 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 	}
 	if !req.AllowChmod {
