@@ -202,7 +202,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"golfscript":    {"golfscript_sandboxed.rb", "Main.gs"},
 		"graphql":       {"graphql-core==3.2.6", "aonohako-graphql-run Main.graphql"},
 		"hare":          {"hare build -o Main Main.ha", "fmt::println"},
-		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "curl --retry 6", "wget --tries=6", "isabelle build -D ."},
+		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle build -D ."},
 		"janet":         {"JANET_VERSION=1.41.2", "janet Main.janet"},
 		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "kotlinc Main.kt -include-runtime -d Main.jar"},
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
