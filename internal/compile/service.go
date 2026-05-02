@@ -1747,7 +1747,7 @@ func compileGleam(ctx context.Context, workDir string, sources []model.Source) m
 			}
 		}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "gleam", []string{"build", "--offline"}, []string{
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "gleam", []string{"build"}, []string{
 		"ERL_AFLAGS=" + erlangAFlags(config.DefaultRuntimeTuningConfig()),
 		"HOME=/usr/local/lib/aonohako/gleam-home",
 	})
