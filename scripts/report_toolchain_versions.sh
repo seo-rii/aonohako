@@ -412,7 +412,7 @@ fi
 
 if has_language "why3"; then
     report_once "Why3" why3 --version
-    report_once "Alt-Ergo" alt-ergo --version
+    report_once "Z3" z3 --version
 fi
 
 if has_language "isabelle"; then
@@ -424,7 +424,7 @@ if has_language "bqn"; then
 fi
 
 if has_language "apl"; then
-    report_once "GNU APL" apl --version
+    report_once "APL" apl --version
 fi
 
 if has_language "uiua"; then

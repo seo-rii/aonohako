@@ -124,6 +124,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	runtimeBase := sandboxCommandBase(finalCommand)
 	isDotnet := runtimeBase == "dotnet"
 	allowMemfdCreate := isDotnet || runtimeBase == "wasmtime"
+	allowProcesses := runtimeBase == "aonohako-why3-prove"
 	if isDotnet {
 		if heapLimit := dotnetGCHeapHardLimitHex(req.Limits.MemoryMB, tuning); heapLimit != "" {
 			innerEnv = append(innerEnv, "DOTNET_GCHeapHardLimit="+heapLimit)
@@ -175,6 +176,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		EnableNetwork:            req.EnableNetwork,
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  allowUnixSockets,
+		AllowProcesses:           allowProcesses,
 		AllowMemfdCreate:         allowMemfdCreate,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     isDotnet,

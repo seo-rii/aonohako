@@ -1388,7 +1388,7 @@ languages:
         - export GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99
         - git clone https://github.com/gpuocelot/gpuocelot /opt/gpuocelot-src
         - cd /opt/gpuocelot-src && git checkout "${GPUOCELOT_COMMIT}"
-        - cmake -S /opt/gpuocelot-src -B /opt/gpuocelot-src/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/gpuocelot
+        - cmake -S /opt/gpuocelot-src/ocelot -B /opt/gpuocelot-src/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/gpuocelot
         - cmake --build /opt/gpuocelot-src/build --target install
         - install -d -m 0755 /usr/local/share/aonohako/ocelot
         - >-
@@ -1415,7 +1415,6 @@ languages:
     install:
       apt:
         - curl
-        - libgcc-11-dev
       script:
         - export CARBON_VERSION=0.0.0-0.nightly.2026.05.02
         - curl -fsSL "https://github.com/carbon-language/carbon-lang/releases/download/v${CARBON_VERSION}/carbon_toolchain-${CARBON_VERSION}.tar.gz" -o /tmp/carbon.tar.gz
@@ -1532,15 +1531,19 @@ languages:
   why3:
     install:
       apt:
-        - alt-ergo
         - why3
+        - z3
+      script:
+        - install -d -m 0755 /usr/local/lib/aonohako/why3-home
+        - env HOME=/usr/local/lib/aonohako/why3-home why3 config detect
+        - chmod -R a+rX /usr/local/lib/aonohako/why3-home
     smoke:
       command:
         - bash
         - -lc
         - |
           printf '%s\n' 'theory Main' '  goal G: true' 'end' > Main.mlw
-          why3 prove -P alt-ergo Main.mlw >/dev/null
+          aonohako-why3-prove Main.mlw
 
   isabelle:
     install:
@@ -1589,6 +1592,7 @@ languages:
       apt:
         - build-essential
         - curl
+        - file
         - libffi-dev
         - libreadline-dev
         - libsigsegv-dev
@@ -1596,7 +1600,7 @@ languages:
         - export GST_VERSION=3.2.5
         - curl -fsSL "https://ftp.gnu.org/gnu/smalltalk/smalltalk-${GST_VERSION}.tar.gz" -o /tmp/smalltalk.tar.gz
         - tar -xzf /tmp/smalltalk.tar.gz -C /tmp
-        - cd "/tmp/smalltalk-${GST_VERSION}" && ./configure --prefix=/usr/local && make -j"$(nproc)" && make install
+        - (cd "/tmp/smalltalk-${GST_VERSION}" && ./configure --prefix=/usr/local && make -j"$(nproc)" && make install)
         - rm -rf "/tmp/smalltalk-${GST_VERSION}" /tmp/smalltalk.tar.gz
     smoke:
       command:
@@ -1719,23 +1723,28 @@ languages:
   apl:
     install:
       apt:
-        - build-essential
         - curl
-        - libreadline-dev
-        - libsqlite3-dev
+        - xz-utils
       script:
-        - export GNU_APL_VERSION=1.8
-        - curl -fsSL "https://ftp.gnu.org/gnu/apl/apl-${GNU_APL_VERSION}.tar.gz" -o /tmp/apl.tar.gz
-        - tar -xzf /tmp/apl.tar.gz -C /tmp
-        - cd "/tmp/apl-${GNU_APL_VERSION}" && ./configure --prefix=/usr/local && make -j"$(nproc)" && make install
-        - rm -rf "/tmp/apl-${GNU_APL_VERSION}" /tmp/apl.tar.gz
+        - export NODE_VERSION=24.15.0
+        - curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
+        - mkdir -p /opt
+        - tar -xJf /tmp/node.tar.xz -C /opt
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
+        - rm -f /tmp/node.tar.xz
+      npm:
+        - kanapl@0.0.0
     smoke:
       command:
         - bash
         - -lc
         - |
           printf '%s\n' "⎕←'ok'" > Main.apl
-          apl --script Main.apl | grep '^ok$'
+          apl --script -f Main.apl | grep '^ok$'
 
   uiua:
     install:
