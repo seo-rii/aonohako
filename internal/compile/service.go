@@ -651,7 +651,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "agda":
 		return compileCheckedSources(ctx, workDir, req.Sources, []string{".agda"}, "no agda sources", "agda", nil, nil)
 	case "dafny":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".dfy"}, "no dafny sources", "dafny", []string{"verify"}, nil)
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".dfy"}, "no dafny sources", "dafny", []string{"verify"}, []string{"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1"})
 	case "tla":
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".tla", ".cfg"}, "no tla sources")
 	case "why3":
@@ -1747,6 +1747,39 @@ func compileGleam(ctx context.Context, workDir string, sources []model.Source) m
 			}
 		}
 	}
+	if _, err := os.Stat(filepath.Join(workDir, "build", "packages", "gleam_stdlib")); err != nil {
+		packageRoot := "/usr/local/lib/aonohako/gleam-packages"
+		if info, statErr := os.Stat(packageRoot); statErr == nil && info.IsDir() {
+			targetRoot := filepath.Join(workDir, "build", "packages")
+			if walkErr := filepath.WalkDir(packageRoot, func(path string, entry fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				rel, err := filepath.Rel(packageRoot, path)
+				if err != nil {
+					return err
+				}
+				target := filepath.Join(targetRoot, rel)
+				info, err := entry.Info()
+				if err != nil {
+					return err
+				}
+				if entry.IsDir() {
+					return os.MkdirAll(target, info.Mode().Perm())
+				}
+				if info.Mode().Type() != 0 {
+					return nil
+				}
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				return os.WriteFile(target, data, info.Mode().Perm())
+			}); walkErr != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: walkErr.Error()}
+			}
+		}
+	}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "gleam", []string{"build"}, []string{
 		"ERL_AFLAGS=" + erlangAFlags(config.DefaultRuntimeTuningConfig()),
 		"HOME=/usr/local/lib/aonohako/gleam-home",
@@ -2344,7 +2377,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS and RLIMIT_FSIZE values can fail before user
 	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
-	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc"
+	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno"
 	allowProcessGroups := commandName == "swiftc"
 	allowChmod := isDotnetLike || commandName == "hare" || commandName == "isabelle"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
@@ -2352,7 +2385,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if commandName == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
-	if commandName == "kotlinc" || commandName == "dafny" || commandName == "isabelle" {
+	if commandName == "kotlinc" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" {
 		memoryLimitMB = 4096
 	}
 	memoryLimitKB := int64(memoryLimitMB) * 1024
