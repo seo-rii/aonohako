@@ -156,6 +156,9 @@ func TestRuntimeDockerfileSupportsInstallScriptBuildArg(t *testing.T) {
 	if !strings.Contains(body, "if [[ -n \"${INSTALL_SCRIPT}\" ]]") {
 		t.Fatalf("runtime.Dockerfile must execute INSTALL_SCRIPT when provided")
 	}
+	if !strings.Contains(body, "env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"") {
+		t.Fatalf("runtime.Dockerfile must keep INSTALL_SCRIPT out of child build environments")
+	}
 }
 
 func TestRuntimeDockerfileAllowsSystemPipPackagesForPythonRuntime(t *testing.T) {
@@ -180,7 +183,7 @@ func TestRuntimeDockerfileCopiesGoBeforeStrictInstallScript(t *testing.T) {
 
 	body := string(data)
 	goCopyIndex := strings.Index(body, "COPY --from=builder /usr/local/go /usr/local/go")
-	installRunIndex := strings.Index(body, "/bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"")
+	installRunIndex := strings.Index(body, "env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"")
 	if goCopyIndex == -1 || installRunIndex == -1 {
 		t.Fatalf("runtime.Dockerfile is missing go toolchain copy or strict install script execution")
 	}
@@ -197,7 +200,7 @@ func TestRuntimeDockerfileInstallsNpmPackagesAfterInstallScript(t *testing.T) {
 	}
 
 	body := string(data)
-	installRunIndex := strings.Index(body, "/bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"")
+	installRunIndex := strings.Index(body, "env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"")
 	npmRunIndex := strings.Index(body, "env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}")
 	if installRunIndex == -1 || npmRunIndex == -1 {
 		t.Fatalf("runtime.Dockerfile is missing INSTALL_SCRIPT or npm package installation")

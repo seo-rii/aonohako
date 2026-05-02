@@ -18,8 +18,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 16 {
-		t.Fatalf("expected 16 production images, got %d", len(production))
+	if len(production) != 18 {
+		t.Fatalf("expected 18 production images, got %d", len(production))
 	}
 
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bf", "bqn", "elixir", "erlang", "gleam", "golfscript", "haskell", "janet", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "ruby", "scheme", "smalltalk", "sqlite", "uiua", "wasm", "whitespace"}) {
@@ -49,7 +49,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"java", "plain", "python"}) {
 		t.Fatalf("type-i production image = %+v", production[8])
 	}
-	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"agda", "coq", "dafny", "isabelle", "lean4", "rocq", "tla", "why3"}) {
+	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"agda", "coq", "lean4", "rocq", "tla", "why3"}) {
 		t.Fatalf("type-j production image = %+v", production[9])
 	}
 	if production[10].Name != "type-k" || !reflect.DeepEqual(production[10].Languages, []string{"dart"}) {
@@ -69,6 +69,12 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	}
 	if production[15].Name != "type-p" || !reflect.DeepEqual(production[15].Languages, []string{"carbon", "vb6"}) {
 		t.Fatalf("type-p production image = %+v", production[15])
+	}
+	if production[16].Name != "type-q" || !reflect.DeepEqual(production[16].Languages, []string{"dafny"}) {
+		t.Fatalf("type-q production image = %+v", production[16])
+	}
+	if production[17].Name != "type-r" || !reflect.DeepEqual(production[17].Languages, []string{"isabelle"}) {
+		t.Fatalf("type-r production image = %+v", production[17])
 	}
 
 	ci, err := catalog.CILanguageImages()
@@ -205,7 +211,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"racket":        {"raco make", "Broken.rkt"},
 		"rocq":          {"rocq c Main.v", "coqc -q Main.v"},
 		"scheme":        {"chibi-scheme Main.scm", "(scheme base)"},
-		"smalltalk":     {"GST_VERSION=3.2.5", "gst -q Main.st"},
+		"smalltalk":     {"GST_VERSION=3.2.5", "sed -i 's/const char \\*inbuf;/char *inbuf;/'", "CC=/usr/bin/gcc-14 ./configure", "make -j1", "gst -q Main.st"},
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tla":           {"TLA_VERSION=1.7.4", "aonohako-tla-run Main.tla"},
 		"uiua":          {"UIUA_VERSION=0.18.1", "uiua run Main.ua --no-format"},
@@ -292,7 +298,7 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 	}
 
 	const pinnedTrixie = "debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a"
-	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n", "type-p"} {
+	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n", "type-p", "type-q", "type-r"} {
 		profile, ok := catalog.Profiles[profileName]
 		if !ok {
 			t.Fatalf("profile %q missing from catalog", profileName)
@@ -385,7 +391,7 @@ func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
 	}
 
 	for _, profileName := range sortedKeys(catalog.Profiles) {
-		if profileName == "type-j" || profileName == "type-o" {
+		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" {
 			continue
 		}
 		profile := catalog.Profiles[profileName]

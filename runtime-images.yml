@@ -1389,8 +1389,8 @@ languages:
         - ninja-build
       script:
         - export GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99
-        - git clone https://github.com/gpuocelot/gpuocelot /opt/gpuocelot-src
-        - cd /opt/gpuocelot-src && git checkout "${GPUOCELOT_COMMIT}"
+        - git clone --recursive https://github.com/gpuocelot/gpuocelot /opt/gpuocelot-src
+        - cd /opt/gpuocelot-src && git checkout "${GPUOCELOT_COMMIT}" && git submodule update --init --recursive
         - cmake -S /opt/gpuocelot-src/ocelot -B /opt/gpuocelot-src/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/gpuocelot
         - cmake --build /opt/gpuocelot-src/build --target install
         - install -d -m 0755 /usr/local/share/aonohako/ocelot
@@ -1491,11 +1491,11 @@ languages:
   dafny:
     install:
       apt:
-        - curl
+        - wget
         - unzip
       script:
         - export DAFNY_VERSION=4.11.0
-        - curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "https://github.com/dafny-lang/dafny/releases/download/v${DAFNY_VERSION}/dafny-${DAFNY_VERSION}-x64-ubuntu-22.04.zip" -o /tmp/dafny.zip
+        - wget --tries=6 --waitretry=2 -O /tmp/dafny.zip "https://github.com/dafny-lang/dafny/releases/download/v${DAFNY_VERSION}/dafny-${DAFNY_VERSION}-x64-ubuntu-22.04.zip"
         - rm -rf /opt/dafny
         - unzip -q /tmp/dafny.zip -d /opt/dafny
         - ln -sfn /opt/dafny/dafny/dafny /usr/local/bin/dafny
@@ -1551,12 +1551,12 @@ languages:
   isabelle:
     install:
       apt:
-        - curl
         - perl
         - tar
+        - wget
       script:
         - export ISABELLE_VERSION=Isabelle2025-2
-        - curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz" -o /tmp/isabelle.tar.gz
+        - wget --tries=6 --waitretry=2 -O /tmp/isabelle.tar.gz "https://isabelle.in.tum.de/website-Isabelle2025-2/dist/${ISABELLE_VERSION}_linux.tar.gz"
         - tar -xzf /tmp/isabelle.tar.gz -C /opt
         - ln -sfn "/opt/${ISABELLE_VERSION}/bin/isabelle" /usr/local/bin/isabelle
         - rm -f /tmp/isabelle.tar.gz
@@ -1596,14 +1596,17 @@ languages:
         - build-essential
         - curl
         - file
+        - gawk
         - libffi-dev
         - libreadline-dev
         - libsigsegv-dev
+        - zip
       script:
         - export GST_VERSION=3.2.5
         - curl -fsSL "https://ftp.gnu.org/gnu/smalltalk/smalltalk-${GST_VERSION}.tar.gz" -o /tmp/smalltalk.tar.gz
         - tar -xzf /tmp/smalltalk.tar.gz -C /tmp
-        - (cd "/tmp/smalltalk-${GST_VERSION}" && ./configure --prefix=/usr/local && make -j"$(nproc)" && make install)
+        - sed -i 's/const char \*inbuf;/char *inbuf;/' "/tmp/smalltalk-${GST_VERSION}/packages/iconv/iconv.c"
+        - (cd "/tmp/smalltalk-${GST_VERSION}" && CC=/usr/bin/gcc-14 ./configure --prefix=/usr/local && make -j1 && make install)
         - rm -rf "/tmp/smalltalk-${GST_VERSION}" /tmp/smalltalk.tar.gz
     smoke:
       command:
@@ -1920,8 +1923,6 @@ profiles:
     languages:
       - agda
       - coq
-      - dafny
-      - isabelle
       - lean4
       - rocq
       - tla
@@ -1960,3 +1961,11 @@ profiles:
     languages:
       - carbon
       - vb6
+  type-q:
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    languages:
+      - dafny
+  type-r:
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    languages:
+      - isabelle
