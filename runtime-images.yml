@@ -1375,7 +1375,7 @@ languages:
           printf '%s\n' 'name = "smoke"' 'version = "1.0.0"' '' '[dependencies]' 'gleam_stdlib = "~> 0.44"' > gleam.toml
           printf '%s\n' 'import gleam/io' 'pub fn main() {' '  io.println("ok")' '}' > src/main.gleam
           cp /usr/local/lib/aonohako/gleam-manifest.toml manifest.toml
-          env HOME=/usr/local/lib/aonohako/gleam-home gleam build --offline
+          env HOME=/usr/local/lib/aonohako/gleam-home gleam build
           aonohako-gleam-run . | grep '^ok$'
 
   cuda-ocelot:
