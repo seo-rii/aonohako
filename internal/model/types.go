@@ -13,6 +13,7 @@ type Artifact struct {
 
 type CompileRequest struct {
 	Lang           string   `json:"lang"`
+	Version        string   `json:"version,omitempty"`
 	Sources        []Source `json:"sources"`
 	Target         string   `json:"target,omitempty"`
 	EntryPoint     string   `json:"entry_point,omitempty"`

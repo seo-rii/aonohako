@@ -81,6 +81,11 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	if !ok {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unsupported lang: " + req.Lang}
 	}
+	versionedProfile, err := applyRequestedVersion(profile, req.Version)
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+	}
+	profile = versionedProfile
 	if entryPoint := strings.TrimSpace(req.EntryPoint); entryPoint != "" {
 		cleanEntryPoint, err := util.ValidateRelativePath(entryPoint)
 		if err != nil {
@@ -334,8 +339,14 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "LISP"
 	case "c", "c11":
 		l = "C11"
+	case "c89", "c90":
+		l = "C89"
 	case "c99":
 		l = "C99"
+	case "c17", "c18":
+		l = "C17"
+	case "c23":
+		l = "C23"
 	case "cpp", "c++":
 		l = "CPP17"
 	case "java":
@@ -384,6 +395,137 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "WASM"
 	}
 	return profiles.Resolve(l)
+}
+
+func applyRequestedVersion(profile profiles.Profile, raw string) (profiles.Profile, error) {
+	version := normalizeRequestedVersion(raw)
+	if version == "" {
+		return profile, nil
+	}
+
+	switch profile.CompileKind {
+	case "c":
+		std, ok := cStandardVersion(version)
+		if !ok {
+			return profile, fmt.Errorf("unsupported C version: %s", raw)
+		}
+		profile.CompileStd = std
+	case "cpp":
+		std, ok := cppStandardVersion(version)
+		if !ok {
+			return profile, fmt.Errorf("unsupported C++ version: %s", raw)
+		}
+		profile.CompileStd = std
+	case "java":
+		release, ok := javaReleaseVersion(version)
+		if !ok {
+			return profile, fmt.Errorf("unsupported Java version: %s", raw)
+		}
+		profile.JavaRelease = release
+	case "rust":
+		edition, ok := rustEditionVersion(version)
+		if !ok {
+			return profile, fmt.Errorf("unsupported Rust edition: %s", raw)
+		}
+		profile.RustEdition = edition
+	default:
+		return profile, fmt.Errorf("version is not supported for %s", profile.SourceLang)
+	}
+	return profile, nil
+}
+
+func normalizeRequestedVersion(raw string) string {
+	version := strings.ToLower(strings.TrimSpace(raw))
+	version = strings.TrimPrefix(version, "std=")
+	version = strings.TrimPrefix(version, "--std=")
+	version = strings.TrimPrefix(version, "release=")
+	version = strings.TrimPrefix(version, "--release=")
+	version = strings.TrimPrefix(version, "edition=")
+	version = strings.TrimPrefix(version, "--edition=")
+	return strings.ReplaceAll(version, "_", "")
+}
+
+func cStandardVersion(version string) (string, bool) {
+	switch version {
+	case "89", "90", "ansi", "c89", "c90", "iso9899:1990":
+		return "c90", true
+	case "gnu89", "gnu90":
+		return "gnu90", true
+	case "99", "c99", "iso9899:1999":
+		return "c99", true
+	case "gnu99":
+		return "gnu99", true
+	case "11", "c11", "iso9899:2011":
+		return "c11", true
+	case "gnu11":
+		return "gnu11", true
+	case "17", "18", "c17", "c18", "iso9899:2017", "iso9899:2018":
+		return "c17", true
+	case "gnu17", "gnu18":
+		return "gnu17", true
+	case "23", "c23", "c2x", "iso9899:2024":
+		return "c23", true
+	case "gnu23", "gnu2x":
+		return "gnu23", true
+	default:
+		return "", false
+	}
+}
+
+func cppStandardVersion(version string) (string, bool) {
+	switch version {
+	case "03", "98", "cpp03", "cpp98", "c++03", "c++98":
+		return "c++03", true
+	case "gnu++03", "gnu++98":
+		return "gnu++03", true
+	case "11", "cpp11", "c++11":
+		return "c++11", true
+	case "gnu++11":
+		return "gnu++11", true
+	case "14", "cpp14", "c++14":
+		return "c++14", true
+	case "gnu++14":
+		return "gnu++14", true
+	case "17", "cpp17", "c++17":
+		return "c++17", true
+	case "gnu++17":
+		return "gnu++17", true
+	case "20", "cpp20", "c++20":
+		return "c++20", true
+	case "gnu++20":
+		return "gnu++20", true
+	case "23", "cpp23", "c++23":
+		return "c++23", true
+	case "gnu++23":
+		return "gnu++23", true
+	case "26", "cpp26", "c++26":
+		return "c++26", true
+	case "gnu++26":
+		return "gnu++26", true
+	default:
+		return "", false
+	}
+}
+
+func javaReleaseVersion(version string) (string, bool) {
+	version = strings.TrimPrefix(version, "java")
+	switch version {
+	case "8", "11", "15", "17", "21":
+		return version, true
+	default:
+		return "", false
+	}
+}
+
+func rustEditionVersion(version string) (string, bool) {
+	version = strings.TrimPrefix(version, "rust")
+	version = strings.TrimPrefix(version, "edition")
+	switch version {
+	case "2015", "2018", "2021", "2024":
+		return version, true
+	default:
+		return "", false
+	}
 }
 
 func materializeSources(root string, sources []model.Source) error {
