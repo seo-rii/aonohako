@@ -55,6 +55,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var racketPath string
 	var schemePath string
 	var awkPath string
+	var tclPath string
 	var gdlPath string
 	var octavePath string
 	var verilogPath string
@@ -142,6 +143,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(lowerClean, ".awk") && awkPath == "" {
 			awkPath = dest
 		}
+		if strings.HasSuffix(lowerClean, ".tcl") && tclPath == "" {
+			tclPath = dest
+		}
 		if strings.HasSuffix(lowerClean, ".pro") && gdlPath == "" {
 			gdlPath = dest
 		}
@@ -151,7 +155,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(lowerClean, ".vvp") && verilogPath == "" {
 			verilogPath = dest
 		}
-		for _, ext := range []string{".bas", ".carbon", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ua", ".janet"} {
+		for _, ext := range []string{".bas", ".carbon", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".fs", ".fth", ".4th"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -200,6 +204,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			awkPath = primaryPath
 		}
 		return awkPath, lang, nil
+	case "tcl":
+		if tclPath == "" {
+			tclPath = primaryPath
+		}
+		return tclPath, lang, nil
 	case "gdl":
 		if gdlPath == "" {
 			gdlPath = primaryPath
@@ -253,7 +262,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			rocqPath = primaryPath
 		}
 		return rocqPath, lang, nil
-	case "vb6", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet":
+	case "haxe":
+		return primaryPath, lang, nil
+	case "vb6", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "forth", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet":
 		if sourcePath == "" {
 			sourcePath = primaryPath
 		}

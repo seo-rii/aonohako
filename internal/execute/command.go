@@ -70,6 +70,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"chibi-scheme", primaryPath}
 	case "awk":
 		return []string{"gawk", "--sandbox", "-f", primaryPath}
+	case "tcl":
+		return []string{"tclsh", primaryPath}
 	case "gdl":
 		entry := strings.TrimSpace(req.EntryPoint)
 		if entry == "" {
@@ -301,6 +303,18 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"gst", "-q", primaryPath}
 	case "golfscript":
 		return []string{"ruby", "/usr/local/lib/aonohako/golfscript_sandboxed.rb", primaryPath}
+	case "haxe":
+		return []string{"neko", primaryPath}
+	case "coffeescript":
+		return []string{"coffee", primaryPath}
+	case "raku":
+		return []string{"raku", primaryPath}
+	case "sed":
+		return []string{"sed", "-f", primaryPath}
+	case "bc":
+		return []string{"bc", "-q", primaryPath}
+	case "forth":
+		return []string{"gforth", primaryPath, "-e", "bye"}
 	case "deno":
 		return []string{"deno", "run", "--no-prompt", primaryPath}
 	case "kotlin-jvm":

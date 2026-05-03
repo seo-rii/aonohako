@@ -201,21 +201,29 @@ When `spj` is provided, the SPJ binary is invoked as:
 | SCALA | `scala` | `scalac -d <dir>` |
 | CLOJURE | `clojure` | `clojure` reader parse loop |
 | RACKET | `racket` | `raco make` |
+| TCL | `tcl` | Pass-through artifacts (requires at least one `.tcl`) |
 | PYTHON3 | `python` | `python3 -I -S -m compileall` |
 | PYPY3 | `pypy` | `pypy3 -I -S -m compileall` |
 | JAVASCRIPT | `javascript` | `node --check` |
+| COFFEESCRIPT | `coffeescript` | `coffee --compile --bare` |
 | TYPESCRIPT | `typescript` | `tsc` |
 | KOTLIN | `kotlin` | `kotlinc-native` |
 | PASCAL | `pascal` | `fpc -O2 -Xs` |
 | NIM | `nim` | `nim c -d:release --opt:speed` |
 | ADA | `ada` | `gnatmake -O2` |
+| COBOL, GNUCOBOL | `cobol` | `cobc -x -free -O2` |
+| CYTHON | `cython` | `cython3 --embed` + `gcc` |
 | DART | `dart` | `dart compile exe` |
 | FORTRAN | `fortran` | `gfortran -O2 -pipe` |
 | D | `d` | `ldc2 -O3 -release` |
+| OBJECTIVE_C, OBJC | `objective-c` | `clang -x objective-c -lobjc` |
+| OBJECTIVE_CPP, OBJCPP | `objective-cpp` | `clang++ -x objective-c++ -lobjc` |
 | HASKELL | `haskell` | `ghc -O2` |
+| HAXE | `haxe` | `haxe -main Main -neko <target>` |
 | SWIFT | `swift` | `swiftc -O` |
 | SQLITE | `sqlite` | Pass-through artifacts (requires at least one `.sql`) |
 | JULIA | `julia` | Pass-through artifacts (requires at least one `.jl`) |
+| RAKU | `raku` | `raku -c` |
 | R | `r` | `Rscript --vanilla -e parse(...)` |
 | ERLANG | `erlang` | `erlc -o <dir>` |
 | PROLOG | `prolog` | `swipl -q -f none -g halt -t halt` |
@@ -229,6 +237,11 @@ When `spj` is provided, the SPJ binary is invoked as:
 | PHP | `php` | `php -l` |
 | LUA | `lua` | `luac5.4 -p` |
 | PERL | `perl` | `perl -c` |
+| FREEBASIC | `freebasic` | `fbc -x` |
+| CLASSIC_BASIC, QBASIC | `classic-basic` | `fbc -lang qb -x` |
+| SED | `sed` | `sed -n -f` syntax check |
+| BC | `bc` | Pass-through artifacts (requires at least one `.bc`) |
+| FORTH, GFORTH | `forth` | Pass-through artifacts (requires `.fs`, `.fth`, or `.4th`) |
 | WHITESPACE | `whitespace` | Structural validation (whitespace-only source) |
 | BF | `brainfuck` | Bracket-balance validation |
 | WASM | `wasm` | `wat2wasm` or `wasm-validate` |
@@ -242,6 +255,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `binary` | Direct execution |
 | `clojure` | `clojure <file>` |
 | `racket` | `racket <file>` |
+| `tcl` | `tclsh <file>` |
 | `python` | `python3 <file>` |
 | `pypy` | `pypy3 <file>` |
 | `groovy` | `groovy -cp <dir> <MainClass>` |
@@ -252,14 +266,20 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `lisp` | `sbcl --script <file>` |
 | `coq` | `coqc -q <file>` |
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
+| `coffeescript` | `coffee <file>` |
 | `r` | `Rscript --vanilla <file>` |
+| `raku` | `raku <file>` |
 | `ruby` | `ruby <file>` |
 | `php` | `php <file>` |
 | `lua` | `lua5.4 <file>` |
 | `perl` | `perl <file>` |
 | `ocaml` | `env OCAMLRUNPARAM=s=32k <file>` |
 | `elixir` | `env ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 elixir <file>` |
+| `haxe` | `neko <file>` |
 | `sqlite` | `sqlite3 <workspace-db> < <file>` |
+| `sed` | `sed -f <file>` |
+| `bc` | `bc -q <file>` |
+| `forth` | `gforth <file> -e bye` |
 | `julia` | `julia --startup-file=no --history-file=no <file>` |
 | `uhmlang` | `env GOMEMLIMIT=... GOGC=... /usr/bin/umjunsik-lang-go <file>` |
 | `csharp`, `fsharp` | `dotnet <file>` or direct |

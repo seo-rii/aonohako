@@ -57,12 +57,20 @@ var profiles = map[string]Profile{
 	"RACKET":        {SourceLang: "RACKET", Extension: "rkt", CompileKind: "racket", RunLang: "racket", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"SCHEME":        {SourceLang: "SCHEME", Extension: "scm", CompileKind: "scheme", RunLang: "scheme", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"AWK":           {SourceLang: "AWK", Extension: "awk", CompileKind: "awk", RunLang: "awk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"TCL":           {SourceLang: "TCL", Extension: "tcl", CompileKind: "tcl", RunLang: "tcl", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"GDL":           {SourceLang: "GDL", Extension: "pro", CompileKind: "gdl", RunLang: "gdl", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"OCTAVE":        {SourceLang: "OCTAVE", Extension: "m", CompileKind: "octave", RunLang: "octave", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"ADA":           {SourceLang: "ADA", Extension: "adb", DefaultTarget: "Main", CompileKind: "ada", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"COBOL":         {SourceLang: "COBOL", Extension: "cob", DefaultTarget: "Main", CompileKind: "cobol", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"GNUCOBOL":      {SourceLang: "GNUCOBOL", Extension: "cob", DefaultTarget: "Main", CompileKind: "cobol", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"CYTHON":        {SourceLang: "CYTHON", Extension: "pyx", DefaultTarget: "Main", CompileKind: "cython", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"DART":          {SourceLang: "DART", Extension: "dart", DefaultTarget: "Main", CompileKind: "dart", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"FORTRAN":       {SourceLang: "FORTRAN", Extension: "f90", DefaultTarget: "Main", CompileKind: "fortran", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"D":             {SourceLang: "D", Extension: "d", DefaultTarget: "Main", CompileKind: "d", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"OBJC":          {SourceLang: "OBJC", Extension: "m", DefaultTarget: "Main", CompileKind: "objective-c", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"OBJECTIVE_C":   {SourceLang: "OBJECTIVE_C", Extension: "m", DefaultTarget: "Main", CompileKind: "objective-c", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"OBJCPP":        {SourceLang: "OBJCPP", Extension: "mm", DefaultTarget: "Main", CompileKind: "objective-cpp", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"OBJECTIVE_CPP": {SourceLang: "OBJECTIVE_CPP", Extension: "mm", DefaultTarget: "Main", CompileKind: "objective-cpp", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"VHDL":          {SourceLang: "VHDL", Extension: "vhd", DefaultTarget: "main_tb", CompileKind: "vhdl", RunLang: "vhdl", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"VERILOG":       {SourceLang: "VERILOG", Extension: "v", DefaultTarget: "Main.vvp", CompileKind: "verilog", RunLang: "verilog", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"SYSTEMVERILOG": {SourceLang: "SYSTEMVERILOG", Extension: "sv", DefaultTarget: "Main.vvp", CompileKind: "verilog", RunLang: "verilog", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
@@ -89,10 +97,12 @@ var profiles = map[string]Profile{
 	"WHYML":         {SourceLang: "WHYML", Extension: "mlw", CompileKind: "why3", RunLang: "why3", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"ISABELLE":      {SourceLang: "ISABELLE", Extension: "thy", CompileKind: "isabelle", RunLang: "isabelle", TimeMultiplier: 4, TimeOffsetMs: 3000, MemoryMultiplier: 3, MemoryOffsetMB: 2048},
 	"HASKELL":       {SourceLang: "HASKELL", Extension: "hs", DefaultTarget: "Main", CompileKind: "haskell", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"HAXE":          {SourceLang: "HAXE", Extension: "hx", DefaultTarget: "Main.n", CompileKind: "haxe", RunLang: "haxe", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LISP":          {SourceLang: "LISP", Extension: "lisp", CompileKind: "lisp", RunLang: "lisp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"SWIFT":         {SourceLang: "SWIFT", Extension: "swift", DefaultTarget: "Main", CompileKind: "swift", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"SQLITE":        {SourceLang: "SQLITE", Extension: "sql", CompileKind: "sqlite", RunLang: "sqlite", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"JULIA":         {SourceLang: "JULIA", Extension: "jl", CompileKind: "julia", RunLang: "julia", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"RAKU":          {SourceLang: "RAKU", Extension: "raku", CompileKind: "raku", RunLang: "raku", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"ERLANG":        {SourceLang: "ERLANG", Extension: "erl", CompileKind: "erlang", RunLang: "erlang", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"PROLOG":        {SourceLang: "PROLOG", Extension: "pl", CompileKind: "prolog", RunLang: "prolog", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"SCALA":         {SourceLang: "SCALA", Extension: "scala", CompileKind: "scala", RunLang: "scala", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
@@ -102,6 +112,7 @@ var profiles = map[string]Profile{
 	"WASM":          {SourceLang: "WASM", Extension: "wat", DefaultTarget: "Main.wasm", CompileKind: "wasm", RunLang: "wasm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"OCAML":         {SourceLang: "OCAML", Extension: "ml", DefaultTarget: "Main", CompileKind: "ocaml", RunLang: "ocaml", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"ELIXIR":        {SourceLang: "ELIXIR", Extension: "exs", CompileKind: "elixir", RunLang: "elixir", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1536},
+	"COFFEESCRIPT":  {SourceLang: "COFFEESCRIPT", Extension: "coffee", DefaultTarget: "Main.js", CompileKind: "coffeescript", RunLang: "javascript", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"CSHARP":        {SourceLang: "CSHARP", Extension: "cs", CompileKind: "csharp", RunLang: "csharp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 16},
 	"R":             {SourceLang: "R", Extension: "R", CompileKind: "r", RunLang: "r", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"PYTHON3":       {SourceLang: "PYTHON3", Extension: "py", CompileKind: "python", RunLang: "python", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 32},
@@ -113,6 +124,7 @@ var profiles = map[string]Profile{
 	"LUA":           {SourceLang: "LUA", Extension: "lua", CompileKind: "lua", RunLang: "lua", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PERL":          {SourceLang: "PERL", Extension: "pl", CompileKind: "perl", RunLang: "perl", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"VB6":           {SourceLang: "VB6", Extension: "bas", CompileKind: "vb6", RunLang: "vb6", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"FREEBASIC":     {SourceLang: "FREEBASIC", Extension: "bas", DefaultTarget: "Main", CompileKind: "freebasic", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"CLASSIC_BASIC": {SourceLang: "CLASSIC_BASIC", Extension: "bas", DefaultTarget: "Main", CompileKind: "classic-basic", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"QBASIC":        {SourceLang: "QBASIC", Extension: "bas", DefaultTarget: "Main", CompileKind: "classic-basic", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"SMALLTALK":     {SourceLang: "SMALLTALK", Extension: "st", CompileKind: "smalltalk", RunLang: "smalltalk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
@@ -127,6 +139,10 @@ var profiles = map[string]Profile{
 	"GNU_APL":       {SourceLang: "GNU_APL", Extension: "apl", CompileKind: "apl", RunLang: "apl", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"UIUA":          {SourceLang: "UIUA", Extension: "ua", CompileKind: "uiua", RunLang: "uiua", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"JANET":         {SourceLang: "JANET", Extension: "janet", CompileKind: "janet", RunLang: "janet", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
+	"SED":           {SourceLang: "SED", Extension: "sed", CompileKind: "sed", RunLang: "sed", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
+	"BC":            {SourceLang: "BC", Extension: "bc", CompileKind: "bc", RunLang: "bc", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
+	"FORTH":         {SourceLang: "FORTH", Extension: "fs", CompileKind: "forth", RunLang: "forth", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
+	"GFORTH":        {SourceLang: "GFORTH", Extension: "fs", CompileKind: "forth", RunLang: "forth", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"UHMLANG":       {SourceLang: "UHMLANG", Extension: "uhm", CompileKind: "none", RunLang: "uhmlang", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"TEXT":          {SourceLang: "TEXT", Extension: "txt", CompileKind: "none", RunLang: "text", TimeMultiplier: 1, MemoryMultiplier: 1},
 }
@@ -140,7 +156,7 @@ func Resolve(language string) (Profile, bool) {
 func NormalizeRunLang(language string) string {
 	key := strings.ToLower(strings.TrimSpace(language))
 	switch key {
-	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "brainfuck", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet", "aheui":
+	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "brainfuck", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet", "aheui", "haxe", "coffeescript", "raku", "sed", "bc", "forth":
 		return key
 	case "coq":
 		return "rocq"
@@ -164,6 +180,12 @@ func NormalizeRunLang(language string) string {
 		return "smalltalk"
 	case "gnu-apl":
 		return "apl"
+	case "gnucobol":
+		return "binary"
+	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic":
+		return "binary"
+	case "gforth":
+		return "forth"
 	}
 	if p, ok := Resolve(language); ok {
 		return p.RunLang

@@ -44,6 +44,7 @@ type suiteCase struct {
 type compileExecuteCase struct {
 	compileLang    string
 	entryPoint     string
+	stdin          string
 	expectedStdout string
 	limits         model.Limits
 	sources        []model.Source
@@ -758,6 +759,7 @@ func runCompileExecuteSuite() error {
 			Lang:           profile.RunLang,
 			Binaries:       binaries,
 			EntryPoint:     tc.entryPoint,
+			Stdin:          tc.stdin,
 			ExpectedStdout: tc.expectedStdout,
 			Limits:         limits,
 		})
@@ -1480,6 +1482,14 @@ int main(void) {
 				source("Main.awk", `BEGIN { print "ok" }`),
 			},
 		},
+		"tcl": {
+			compileLang:    "TCL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.tcl", `puts ok`),
+			},
+		},
 		"asm": {
 			compileLang:    "ASM",
 			expectedStdout: "ok\n",
@@ -1612,6 +1622,62 @@ Console.WriteLine(System.IO.File.ReadAllText("same-folder.txt"));`),
 			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.cr", `puts "ok"`),
+			},
+		},
+		"cobol": {
+			compileLang:    "COBOL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.cob", `IDENTIFICATION DIVISION.
+PROGRAM-ID. Main.
+PROCEDURE DIVISION.
+    DISPLAY "ok".
+    STOP RUN.`),
+			},
+		},
+		"gnucobol": {
+			compileLang:    "GNUCOBOL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.cob", `IDENTIFICATION DIVISION.
+PROGRAM-ID. Main.
+PROCEDURE DIVISION.
+    DISPLAY "ok".
+    STOP RUN.`),
+			},
+		},
+		"cython": {
+			compileLang:    "CYTHON",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.pyx", `print("ok")`),
+			},
+		},
+		"objective-c": {
+			compileLang:    "OBJECTIVE_C",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.m", `#include <stdio.h>
+int main(void) {
+    puts("ok");
+    return 0;
+}`),
+			},
+		},
+		"objective-cpp": {
+			compileLang:    "OBJECTIVE_CPP",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.mm", `#include <iostream>
+int main() {
+    std::cout << "ok\n";
+    return 0;
+}`),
 			},
 		},
 		"vlang": {
@@ -1808,6 +1874,18 @@ main = do
   readFile "same-folder.txt" >>= putStrLn`),
 			},
 		},
+		"haxe": {
+			compileLang:    "HAXE",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 10000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.hx", `class Main {
+  static public function main() {
+    Sys.println("ok");
+  }
+}`),
+			},
+		},
 		"java": {
 			compileLang:    "JAVA11",
 			expectedStdout: "ok\n",
@@ -1833,6 +1911,14 @@ public class Main {
 				source("Main.js", `const fs = require('fs');
 fs.writeFileSync('same-folder.txt', 'ok');
 console.log(fs.readFileSync('same-folder.txt', 'utf8'));`),
+			},
+		},
+		"coffeescript": {
+			compileLang:    "COFFEESCRIPT",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.coffee", `console.log 'ok'`),
 			},
 		},
 		"julia": {
@@ -2045,6 +2131,14 @@ print(pathlib.Path("same-folder.txt").read_text(encoding="utf-8"))`),
 cat(readLines("same-folder.txt"), sep = "\n")`),
 			},
 		},
+		"raku": {
+			compileLang:    "RAKU",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.raku", `say "ok";`),
+			},
+		},
 		"racket": {
 			compileLang:    "RACKET",
 			expectedStdout: "ok\n",
@@ -2102,6 +2196,23 @@ fn main() {
 				source("Main.sql", `create table numbers(v integer);
 insert into numbers(v) values (1),(2),(3);
 select sum(v) from numbers;`),
+			},
+		},
+		"sed": {
+			compileLang:    "SED",
+			stdin:          "x\n",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.sed", `s/.*/ok/`),
+			},
+		},
+		"bc": {
+			compileLang:    "BC",
+			expectedStdout: "2\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.bc", `1 + 1`),
 			},
 		},
 		"scheme": {
@@ -2166,6 +2277,30 @@ End Module`),
 				source("Main.bas", `Sub Main()
 Print "ok"
 End Sub`),
+			},
+		},
+		"freebasic": {
+			compileLang:    "FREEBASIC",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.bas", `print "ok"`),
+			},
+		},
+		"classic-basic": {
+			compileLang:    "CLASSIC_BASIC",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.bas", `PRINT "ok"`),
+			},
+		},
+		"qbasic": {
+			compileLang:    "QBASIC",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.bas", `PRINT "ok"`),
 			},
 		},
 		"vhdl": {
@@ -2320,6 +2455,22 @@ int main() {
 			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.janet", `(print "ok")`),
+			},
+		},
+		"forth": {
+			compileLang:    "FORTH",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.fs", `." ok" cr`),
+			},
+		},
+		"gforth": {
+			compileLang:    "GFORTH",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.fs", `." ok" cr`),
 			},
 		},
 		"wasm": {
