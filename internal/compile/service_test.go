@@ -299,6 +299,56 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 	}
 }
 
+func TestApplyRequestedVersionOverridesLanguageDefaults(t *testing.T) {
+	tests := []struct {
+		name      string
+		lang      string
+		version   string
+		wantStd   string
+		wantJava  string
+		wantRust  string
+		wantError bool
+	}{
+		{name: "c standard", lang: "C11", version: "c23", wantStd: "c23"},
+		{name: "c gnu standard", lang: "C11", version: "gnu17", wantStd: "gnu17"},
+		{name: "cpp standard", lang: "CPP17", version: "20", wantStd: "c++20"},
+		{name: "cpp gnu standard", lang: "CPP17", version: "gnu++23", wantStd: "gnu++23"},
+		{name: "java release", lang: "JAVA11", version: "17", wantJava: "17"},
+		{name: "java release prefix", lang: "JAVA11", version: "java21", wantJava: "21"},
+		{name: "rust edition", lang: "RUST2021", version: "edition2024", wantRust: "2024"},
+		{name: "unsupported versioned language", lang: "PYTHON3", version: "3.13", wantError: true},
+		{name: "unsupported version value", lang: "RUST2021", version: "2030", wantError: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			profile, ok := resolveProfile(tc.lang)
+			if !ok {
+				t.Fatalf("resolveProfile(%q) reported unsupported language", tc.lang)
+			}
+			got, err := applyRequestedVersion(profile, tc.version)
+			if tc.wantError {
+				if err == nil {
+					t.Fatalf("applyRequestedVersion(%q, %q) succeeded, want error", tc.lang, tc.version)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("applyRequestedVersion(%q, %q) returned error: %v", tc.lang, tc.version, err)
+			}
+			if tc.wantStd != "" && got.CompileStd != tc.wantStd {
+				t.Fatalf("CompileStd = %q, want %q", got.CompileStd, tc.wantStd)
+			}
+			if tc.wantJava != "" && got.JavaRelease != tc.wantJava {
+				t.Fatalf("JavaRelease = %q, want %q", got.JavaRelease, tc.wantJava)
+			}
+			if tc.wantRust != "" && got.RustEdition != tc.wantRust {
+				t.Fatalf("RustEdition = %q, want %q", got.RustEdition, tc.wantRust)
+			}
+		})
+	}
+}
+
 func TestRunRejectsInvalidWhitespaceProgram(t *testing.T) {
 	svc := New()
 	resp := svc.Run(context.Background(), &model.CompileRequest{

@@ -5,6 +5,7 @@
 ```jsonc
 {
   "lang": "CPP17",                           // language identifier (see Supported Languages)
+  "version": "20",                           // optional C/C++ std, Java --release, or Rust edition override
   "sources": [                               // source files to compile (max 512 entries)
     {
       "name": "Main.cpp",                   // filename (relative, no path traversal allowed)
@@ -24,6 +25,13 @@ When `entry_point` names a source path, it must exactly match one submitted
 source after path cleaning. Native multi-file compilers such as C/C++ still
 compile all source files of the language, so `entry_point` is validation
 metadata rather than an argument that drops helper sources.
+
+`version` is optional and currently applies to C, C++, Java, and Rust compile
+profiles. C/C++ values select the language standard (`"c99"`, `"c23"`,
+`"17"`, `"gnu++23"`), Java values select `javac --release` (`"8"`, `"11"`,
+`"17"`, `"21"`), and Rust values select the edition (`"2018"`, `"2021"`,
+`"2024"`). Existing language aliases such as `C11`, `CPP20`, `JAVA17`, and
+`RUST2021` remain supported.
 
 ## `POST /compile` — Response
 
@@ -181,14 +189,14 @@ When `spj` is provided, the SPJ binary is invoked as:
 
 | Language key | Compile kind | Compiler / tool |
 |---|---|---|
-| C, C99, C11, C18 | `c` | `gcc -O2 -Wall -lm --static` |
+| C, C89, C99, C11, C17, C18, C23 | `c` | `gcc -O2 -Wall -lm --static` |
 | CPP, CPP03–CPP26 | `cpp` | `g++ -O2 -Wall -lm --static -pipe` |
-| RUST, RUST2018–2024 | `rust` | `rustc --edition <ed> -O` |
+| RUST, RUST2015–2024 | `rust` | `rustc --edition <ed> -O` |
 | GO | `go` | `go build` |
 | ZIG | `zig` | `zig build-exe -O ReleaseSafe` |
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |
 | NASM | `binary` | `nasm -felf64` + `gcc -nostdlib -static -no-pie` |
-| JAVA, JAVA8–15 | `java` | `javac --release <v>` |
+| JAVA, JAVA8–21 | `java` | `javac --release <v>` |
 | GROOVY | `groovy` | `groovyc -d <dir>` |
 | SCALA | `scala` | `scalac -d <dir>` |
 | CLOJURE | `clojure` | `clojure` reader parse loop |
