@@ -990,9 +990,9 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "objective-c":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".m"), "clang", []string{"-O2", "-pipe", "-lobjc"})
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".m"), "clang", []string{"-O2", "-pipe", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"})
 	case "objective-cpp":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".mm"), "clang++", []string{"-O2", "-pipe", "-lobjc"})
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".mm"), "clang++", []string{"-O2", "-pipe", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"})
 	case "nasm":
 		var rootSource string
 		for _, src := range req.Sources {

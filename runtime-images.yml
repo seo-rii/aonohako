@@ -762,7 +762,10 @@ languages:
     install:
       apt:
         - clang
-        - libobjc-14-dev
+      script: &objective_c_libobjc16_install
+        - apt-get update -o APT::Get::List-Cleanup=false
+        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid libobjc-16-dev
+        - find /var/lib/apt/lists -mindepth 1 -delete
     smoke:
       command:
         - bash
@@ -775,14 +778,14 @@ languages:
               return 0;
           }
           OBJC
-          clang -x objective-c -O2 -pipe Main.m -o Main -lobjc
+          clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc
           ./Main | grep '^ok$'
 
   objective-cpp:
     install:
       apt:
         - clang
-        - libobjc-14-dev
+      script: *objective_c_libobjc16_install
     smoke:
       command:
         - bash
@@ -795,7 +798,7 @@ languages:
               return 0;
           }
           OBJCPP
-          clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -lobjc
+          clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc
           ./Main | grep '^ok$'
 
   coq:
