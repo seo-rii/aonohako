@@ -1795,7 +1795,7 @@ languages:
         - apt-get update -o APT::Get::List-Cleanup=false
         - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libtinfo5
         - rm -f /etc/apt/sources.list.d/aonohako-freebasic-bullseye.list
-        - find /var/lib/apt/lists -mindepth 1 -delete
+        - rm -f /var/lib/apt/lists/deb.debian.org_debian_dists_bullseye_*
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://downloads.sourceforge.net/project/fbc/FreeBASIC-${FREEBASIC_VERSION}/Binaries-Linux/FreeBASIC-${FREEBASIC_VERSION}-linux-x86_64.tar.gz" -o /tmp/freebasic.tar.gz
         - rm -rf /opt/freebasic
         - mkdir -p /opt/freebasic
