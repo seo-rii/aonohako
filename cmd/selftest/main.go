@@ -2212,7 +2212,7 @@ select sum(v) from numbers;`),
 			expectedStdout: "2\n",
 			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.bc", `1 + 1`),
+				source("Main.bc", "1 + 1\n"),
 			},
 		},
 		"scheme": {

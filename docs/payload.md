@@ -216,8 +216,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 | DART | `dart` | `dart compile exe` |
 | FORTRAN | `fortran` | `gfortran -O2 -pipe` |
 | D | `d` | `ldc2 -O3 -release` |
-| OBJECTIVE_C, OBJC | `objective-c` | `clang -x objective-c -lobjc` |
-| OBJECTIVE_CPP, OBJCPP | `objective-cpp` | `clang++ -x objective-c++ -lobjc` |
+| OBJECTIVE_C, OBJC | `objective-c` | `clang -x objective-c -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc` |
+| OBJECTIVE_CPP, OBJCPP | `objective-cpp` | `clang++ -x objective-c++ -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc` |
 | HASKELL | `haskell` | `ghc -O2` |
 | HAXE | `haxe` | `haxe -main Main -neko <target>` |
 | SWIFT | `swift` | `swiftc -O` |
