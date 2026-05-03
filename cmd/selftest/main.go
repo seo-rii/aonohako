@@ -50,9 +50,18 @@ type compileExecuteCase struct {
 	sources        []model.Source
 }
 
+type languageSecurityCase struct {
+	name           string
+	compileLang    string
+	entryPoint     string
+	expectedStdout string
+	limits         model.Limits
+	sources        []model.Source
+}
+
 const (
 	mountNamespaceProbeEnv = "AONOHAKO_MOUNTNS_PREFLIGHT_PROBE"
-	selftestUsage          = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|runtime-memory|cgroup-preflight|mount-preflight|deployment-contract"
+	selftestUsage          = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|language-security|runtime-memory|cgroup-preflight|mount-preflight|deployment-contract"
 )
 
 func main() {
@@ -94,6 +103,11 @@ func main() {
 		}
 	case "compile-execute":
 		if err := runCompileExecuteSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "language-security":
+		if err := runLanguageSecuritySuite(); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -775,6 +789,120 @@ func runCompileExecuteSuite() error {
 	return nil
 }
 
+func runLanguageSecuritySuite() error {
+	rawLanguages := strings.TrimSpace(os.Getenv("AONOHAKO_LANGUAGES"))
+	if rawLanguages == "" {
+		return fmt.Errorf("AONOHAKO_LANGUAGES is empty")
+	}
+
+	networkListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return fmt.Errorf("listen network escape probe: %w", err)
+	}
+	defer networkListener.Close()
+	go func() {
+		for {
+			conn, err := networkListener.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.Close()
+		}
+	}()
+	tcpAddr, ok := networkListener.Addr().(*net.TCPAddr)
+	if !ok {
+		return fmt.Errorf("network escape probe did not get a TCP address: %s", networkListener.Addr())
+	}
+
+	server := api.NewWithServices(
+		config.Config{
+			MaxActiveRuns:     1,
+			MaxPendingQueue:   1,
+			HeartbeatInterval: time.Second,
+		},
+		compile.New(),
+		execute.New(),
+	)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	cases := languageSecurityCases(tcpAddr.Port)
+	seen := map[string]struct{}{}
+	covered := 0
+	for _, rawLanguage := range strings.Split(rawLanguages, ",") {
+		language := strings.TrimSpace(rawLanguage)
+		if language == "" {
+			continue
+		}
+		if _, ok := seen[language]; ok {
+			continue
+		}
+		seen[language] = struct{}{}
+
+		languageCases := cases[language]
+		for _, tc := range languageCases {
+			profile, ok := profiles.Resolve(tc.compileLang)
+			if !ok {
+				return fmt.Errorf("%s %s security selftest could not resolve compile profile %q", language, tc.name, tc.compileLang)
+			}
+
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang:       tc.compileLang,
+				Sources:    tc.sources,
+				EntryPoint: tc.entryPoint,
+			})
+			if err != nil {
+				return fmt.Errorf("%s %s security compile request failed: %w", language, tc.name, err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("%s %s security compile failed: status=%s reason=%s stdout=%q stderr=%q", language, tc.name, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+
+			limits := tc.limits
+			if limits.TimeMs <= 0 {
+				limits.TimeMs = 6000
+			}
+			if limits.MemoryMB <= 0 {
+				limits.MemoryMB = 512
+			}
+			if limits.OutputBytes <= 0 {
+				limits.OutputBytes = 4096
+			}
+
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{
+					Name:    artifact.Name,
+					DataB64: artifact.DataB64,
+					Mode:    artifact.Mode,
+				})
+			}
+
+			runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:           profile.RunLang,
+				Binaries:       binaries,
+				EntryPoint:     tc.entryPoint,
+				ExpectedStdout: tc.expectedStdout,
+				Limits:         limits,
+			})
+			if err != nil {
+				return fmt.Errorf("%s %s security execute request failed: %w", language, tc.name, err)
+			}
+			if runResp.Status != model.RunStatusAccepted {
+				return fmt.Errorf("%s %s security execute failed: status=%s reason=%s stdout=%q stderr=%q", language, tc.name, runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
+			}
+			covered++
+		}
+	}
+
+	if covered == 0 {
+		_, _ = fmt.Fprintln(os.Stdout, "language security ok (no covered languages)")
+		return nil
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "language security ok (%d cases)\n", covered)
+	return nil
+}
+
 func runRuntimeMemorySuite() error {
 	rawLanguages := strings.TrimSpace(os.Getenv("AONOHAKO_LANGUAGES"))
 	if rawLanguages == "" {
@@ -1377,6 +1505,440 @@ func postSSEJSON[T any](url string, payload any) (T, error) {
 		return zero, fmt.Errorf("stream ended without result: %s", lastErr)
 	}
 	return zero, fmt.Errorf("stream ended without result")
+}
+
+func languageSecurityCases(tcpPort int) map[string][]languageSecurityCase {
+	source := func(name, body string) model.Source {
+		return model.Source{Name: name, DataB64: encodeScript(body)}
+	}
+	limits := model.Limits{TimeMs: 6000, MemoryMB: 512, OutputBytes: 4096}
+	managedLimits := model.Limits{TimeMs: 10000, MemoryMB: 1024, OutputBytes: 4096}
+	expectedProcessNetwork := "process:blocked\nnetwork:blocked\n"
+	expectedNative := "network:blocked\nfork:blocked\nunshare:blocked\n"
+	expectedNativeProcess := "network:blocked\nprocess:blocked\nunshare:blocked\n"
+	pythonProcessNetwork := fmt.Sprintf(`import socket
+import subprocess
+
+try:
+    subprocess.run(["/bin/true"], check=True)
+    print("process:leaked")
+except Exception:
+    print("process:blocked")
+
+try:
+    s = socket.create_connection(("127.0.0.1", %d), timeout=0.5)
+    s.close()
+    print("network:leaked")
+except OSError:
+    print("network:blocked")
+`, tcpPort)
+	nodeProcessNetwork := fmt.Sprintf(`const cp = require('child_process');
+const net = require('net');
+
+const result = cp.spawnSync('/bin/true');
+console.log('process:' + (result.error ? 'blocked' : 'leaked'));
+
+let finished = false;
+function finish(label) {
+  if (finished) {
+    return;
+  }
+  finished = true;
+  console.log('network:' + label);
+  process.exit(0);
+}
+
+const socket = net.connect({ host: '127.0.0.1', port: %d }, () => {
+  socket.destroy();
+  finish('leaked');
+});
+socket.on('error', () => finish('blocked'));
+setTimeout(() => {
+  socket.destroy();
+  finish('blocked');
+}, 500);
+`, tcpPort)
+
+	return map[string][]languageSecurityCase{
+		"plain": {
+			{
+				name:           "native-syscall-denies",
+				compileLang:    "C11",
+				expectedStdout: expectedNative,
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.c", `#define _GNU_SOURCE
+#include <errno.h>
+#include <sched.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+static void print_check(const char *name, int blocked) {
+    printf("%s:%s\n", name, blocked ? "blocked" : "leaked");
+}
+
+int main(void) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd >= 0) {
+        close(fd);
+        print_check("network", 0);
+    } else {
+        print_check("network", 1);
+    }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        _exit(0);
+    }
+    if (pid > 0) {
+        int status = 0;
+        waitpid(pid, &status, 0);
+        print_check("fork", 0);
+    } else {
+        print_check("fork", 1);
+    }
+
+    if (unshare(CLONE_NEWNS) == 0) {
+        print_check("unshare", 0);
+    } else {
+        print_check("unshare", 1);
+    }
+    return 0;
+}`),
+				},
+			},
+		},
+		"go": {
+			{
+				name:           "native-syscall-denies",
+				compileLang:    "GO",
+				expectedStdout: expectedNativeProcess,
+				limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536, OutputBytes: 4096},
+				sources: []model.Source{
+					source("Main.go", `package main
+
+import (
+	"fmt"
+	"os/exec"
+	"syscall"
+)
+
+func printCheck(name string, blocked bool) {
+	state := "leaked"
+	if blocked {
+		state = "blocked"
+	}
+	fmt.Printf("%s:%s\n", name, state)
+}
+
+func main() {
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if err == nil {
+		_ = syscall.Close(fd)
+		printCheck("network", false)
+	} else {
+		printCheck("network", true)
+	}
+
+	if err := exec.Command("/bin/true").Run(); err == nil {
+		printCheck("process", false)
+	} else {
+		printCheck("process", true)
+	}
+
+	_, _, errno := syscall.RawSyscall(syscall.SYS_UNSHARE, uintptr(0x00020000), 0, 0)
+	printCheck("unshare", errno != 0)
+}`),
+				},
+			},
+		},
+		"rust": {
+			{
+				name:           "native-syscall-denies",
+				compileLang:    "RUST2021",
+				expectedStdout: expectedNative,
+				limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024, OutputBytes: 4096},
+				sources: []model.Source{
+					source("Main.rs", `use std::ffi::c_int;
+
+const AF_INET: c_int = 2;
+const SOCK_STREAM: c_int = 1;
+const CLONE_NEWNS: c_int = 0x00020000;
+
+extern "C" {
+    fn socket(domain: c_int, typ: c_int, protocol: c_int) -> c_int;
+    fn close(fd: c_int) -> c_int;
+    fn fork() -> c_int;
+    fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
+    fn unshare(flags: c_int) -> c_int;
+    fn _exit(status: c_int) -> !;
+}
+
+fn print_check(name: &str, blocked: bool) {
+    println!("{}:{}", name, if blocked { "blocked" } else { "leaked" });
+}
+
+fn main() {
+    unsafe {
+        let fd = socket(AF_INET, SOCK_STREAM, 0);
+        if fd >= 0 {
+            close(fd);
+            print_check("network", false);
+        } else {
+            print_check("network", true);
+        }
+
+        let pid = fork();
+        if pid == 0 {
+            _exit(0);
+        }
+        if pid > 0 {
+            let mut status = 0;
+            waitpid(pid, &mut status, 0);
+            print_check("fork", false);
+        } else {
+            print_check("fork", true);
+        }
+
+        print_check("unshare", unshare(CLONE_NEWNS) != 0);
+    }
+}`),
+				},
+			},
+		},
+		"python": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "PYTHON3",
+				expectedStdout: expectedProcessNetwork,
+				limits:         limits,
+				sources:        []model.Source{source("Main.py", pythonProcessNetwork)},
+			},
+		},
+		"pypy": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "PYPY3",
+				expectedStdout: expectedProcessNetwork,
+				limits:         managedLimits,
+				sources:        []model.Source{source("Main.py", pythonProcessNetwork)},
+			},
+		},
+		"javascript": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "JAVASCRIPT",
+				expectedStdout: expectedProcessNetwork,
+				limits:         managedLimits,
+				sources:        []model.Source{source("Main.js", nodeProcessNetwork)},
+			},
+		},
+		"typescript": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "TYPESCRIPT",
+				expectedStdout: expectedProcessNetwork,
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.ts", `declare const require: any;
+declare const process: any;
+declare function setTimeout(fn: () => void, ms: number): unknown;
+
+`+nodeProcessNetwork),
+				},
+			},
+		},
+		"coffeescript": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "COFFEESCRIPT",
+				expectedStdout: expectedProcessNetwork,
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.coffee", fmt.Sprintf(`cp = require 'child_process'
+net = require 'net'
+
+result = cp.spawnSync '/bin/true'
+console.log 'process:' + (if result.error then 'blocked' else 'leaked')
+
+finished = false
+finish = (label) ->
+  return if finished
+  finished = true
+  console.log 'network:' + label
+  process.exit 0
+
+socket = net.connect {host: '127.0.0.1', port: %d}, ->
+  socket.destroy()
+  finish 'leaked'
+socket.on 'error', ->
+  finish 'blocked'
+setTimeout (->
+  socket.destroy()
+  finish 'blocked'
+), 500
+`, tcpPort)),
+				},
+			},
+		},
+		"deno": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "DENO",
+				expectedStdout: expectedProcessNetwork,
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.ts", fmt.Sprintf(`let processBlocked = false;
+try {
+  new Deno.Command("/bin/true").outputSync();
+} catch (_) {
+  processBlocked = true;
+}
+console.log(`+"`process:${processBlocked ? \"blocked\" : \"leaked\"}`"+`);
+
+let networkBlocked = false;
+try {
+  const conn = await Deno.connect({ hostname: "127.0.0.1", port: %d });
+  conn.close();
+} catch (_) {
+  networkBlocked = true;
+}
+console.log(`+"`network:${networkBlocked ? \"blocked\" : \"leaked\"}`"+`);
+`, tcpPort)),
+				},
+			},
+		},
+		"java": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "JAVA11",
+				expectedStdout: expectedProcessNetwork,
+				limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024, OutputBytes: 4096},
+				sources: []model.Source{
+					source("Main.java", fmt.Sprintf(`import java.net.InetSocketAddress;
+import java.net.Socket;
+
+public class Main {
+  public static void main(String[] args) {
+    try {
+      new ProcessBuilder("/bin/true").start().waitFor();
+      System.out.println("process:leaked");
+    } catch (Throwable t) {
+      System.out.println("process:blocked");
+    }
+
+    try {
+      Socket s = new Socket();
+      s.connect(new InetSocketAddress("127.0.0.1", %d), 500);
+      s.close();
+      System.out.println("network:leaked");
+    } catch (Throwable t) {
+      System.out.println("network:blocked");
+    }
+  }
+}
+`, tcpPort)),
+				},
+			},
+		},
+		"ruby": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "RUBY",
+				expectedStdout: expectedProcessNetwork,
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.rb", fmt.Sprintf(`require 'socket'
+
+begin
+  ok = system('/bin/true')
+  puts "process:#{ok ? 'leaked' : 'blocked'}"
+rescue
+  puts 'process:blocked'
+end
+
+begin
+  s = TCPSocket.new('127.0.0.1', %d)
+  s.close
+  puts 'network:leaked'
+rescue
+  puts 'network:blocked'
+end
+`, tcpPort)),
+				},
+			},
+		},
+		"perl": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "PERL",
+				expectedStdout: expectedProcessNetwork,
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.pl", fmt.Sprintf(`use IO::Socket::INET;
+
+my $rc = system('/bin/true');
+print 'process:' . ($rc == 0 ? 'leaked' : 'blocked') . "\n";
+
+my $s = IO::Socket::INET->new(PeerAddr => '127.0.0.1', PeerPort => %d, Proto => 'tcp', Timeout => 1);
+print 'network:' . ($s ? 'leaked' : 'blocked') . "\n";
+`, tcpPort)),
+				},
+			},
+		},
+		"php": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "PHP",
+				expectedStdout: expectedProcessNetwork,
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.php", fmt.Sprintf(`<?php
+$out = [];
+$rc = 0;
+@exec('/bin/true', $out, $rc);
+echo 'process:' . ($rc === 0 ? 'leaked' : 'blocked') . "\n";
+
+$errno = 0;
+$errstr = '';
+$s = @fsockopen('127.0.0.1', %d, $errno, $errstr, 1.0);
+if ($s) {
+    fclose($s);
+    echo "network:leaked\n";
+} else {
+    echo "network:blocked\n";
+}
+`, tcpPort)),
+				},
+			},
+		},
+		"tcl": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "TCL",
+				expectedStdout: expectedProcessNetwork,
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.tcl", fmt.Sprintf(`if {[catch {exec /bin/true}]} {
+  puts "process:blocked"
+} else {
+  puts "process:leaked"
+}
+
+if {[catch {socket 127.0.0.1 %d} s]} {
+  puts "network:blocked"
+} else {
+  close $s
+  puts "network:leaked"
+}
+`, tcpPort)),
+				},
+			},
+		},
+	}
 }
 
 func compileExecuteCases() map[string]compileExecuteCase {

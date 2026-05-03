@@ -68,6 +68,59 @@ func TestCompileExecuteCasesResolveProfilesAndSources(t *testing.T) {
 	}
 }
 
+func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
+	cases := languageSecurityCases(1)
+	for _, language := range []string{
+		"plain",
+		"go",
+		"rust",
+		"python",
+		"pypy",
+		"javascript",
+		"typescript",
+		"coffeescript",
+		"deno",
+		"java",
+		"ruby",
+		"perl",
+		"php",
+		"tcl",
+	} {
+		if len(cases[language]) == 0 {
+			t.Fatalf("language-security cases are missing language %q", language)
+		}
+	}
+}
+
+func TestLanguageSecurityCasesResolveProfilesAndSources(t *testing.T) {
+	cases := languageSecurityCases(1)
+	for language, languageCases := range cases {
+		for _, tc := range languageCases {
+			profile, ok := profiles.Resolve(tc.compileLang)
+			if !ok {
+				t.Fatalf("language %q security case %q uses unknown compile profile %q", language, tc.name, tc.compileLang)
+			}
+			if profile.RunLang == "" {
+				t.Fatalf("language %q security case %q resolved profile %q without run language", language, tc.name, tc.compileLang)
+			}
+			if strings.TrimSpace(tc.name) == "" {
+				t.Fatalf("language %q has a security case without a name", language)
+			}
+			if strings.TrimSpace(tc.expectedStdout) == "" {
+				t.Fatalf("language %q security case %q has no expected stdout", language, tc.name)
+			}
+			if len(tc.sources) == 0 {
+				t.Fatalf("language %q security case %q has no sources", language, tc.name)
+			}
+			for _, src := range tc.sources {
+				if strings.TrimSpace(src.Name) == "" || strings.TrimSpace(src.DataB64) == "" {
+					t.Fatalf("language %q security case %q contains an empty source entry: %+v", language, tc.name, src)
+				}
+			}
+		}
+	}
+}
+
 func TestSelftestUsageListsCgroupPreflight(t *testing.T) {
 	if !strings.Contains(selftestUsage, "cgroup-preflight") {
 		t.Fatalf("selftest usage should list cgroup-preflight: %s", selftestUsage)
@@ -89,6 +142,12 @@ func TestSelftestUsageListsDeploymentContract(t *testing.T) {
 func TestSelftestUsageListsRuntimeMemory(t *testing.T) {
 	if !strings.Contains(selftestUsage, "runtime-memory") {
 		t.Fatalf("selftest usage should list runtime-memory: %s", selftestUsage)
+	}
+}
+
+func TestSelftestUsageListsLanguageSecurity(t *testing.T) {
+	if !strings.Contains(selftestUsage, "language-security") {
+		t.Fatalf("selftest usage should list language-security: %s", selftestUsage)
 	}
 }
 
