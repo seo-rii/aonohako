@@ -244,6 +244,19 @@ languages:
           fs.writeFileSync('same-folder.txt', 'ok');
           console.log(fs.readFileSync('same-folder.txt', 'utf8'));
 
+  coffeescript:
+    install:
+      apt:
+        - coffeescript
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' "fs = require 'fs'" "fs.writeFileSync 'same-folder.txt', 'ok'" "console.log fs.readFileSync('same-folder.txt', 'utf8')" > Main.coffee
+          coffee --compile --bare --output . Main.coffee
+          node Main.js | grep '^ok$'
+
   typescript:
     install:
       apt:
@@ -352,6 +365,26 @@ languages:
           ghc -O2 -o Main Main.hs
           ./Main | grep '^ok$'
 
+  haxe:
+    install:
+      apt:
+        - haxe
+        - neko
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.hx <<'HAXE'
+          class Main {
+            static public function main() {
+              Sys.println("ok");
+            }
+          }
+          HAXE
+          haxe -main Main -neko Main.n
+          neko Main.n | grep '^ok$'
+
   lisp:
     install:
       apt:
@@ -416,6 +449,19 @@ languages:
               write(io, string(mean([1, 2, 3])))
           end
           println(read("same-folder.txt", String))
+
+  raku:
+    install:
+      apt:
+        - raku
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'spurt "same-folder.txt", "ok";' 'say slurp("same-folder.txt").trim;' > Main.raku
+          raku -c Main.raku >/dev/null
+          raku Main.raku | grep '^ok$'
 
   r:
     install:
@@ -712,6 +758,46 @@ languages:
           D
           if ldc2 Broken.d -O3 -release -of=Broken >/dev/null 2>&1; then exit 1; fi
 
+  objective-c:
+    install:
+      apt:
+        - clang
+        - libobjc-14-dev
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.m <<'OBJC'
+          #include <stdio.h>
+          int main(void) {
+              puts("ok");
+              return 0;
+          }
+          OBJC
+          clang -x objective-c -O2 -pipe Main.m -o Main -lobjc
+          ./Main | grep '^ok$'
+
+  objective-cpp:
+    install:
+      apt:
+        - clang
+        - libobjc-14-dev
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.mm <<'OBJCPP'
+          #include <iostream>
+          int main() {
+              std::cout << "ok\n";
+              return 0;
+          }
+          OBJCPP
+          clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -lobjc
+          ./Main | grep '^ok$'
+
   coq:
     install:
       apt:
@@ -787,6 +873,18 @@ languages:
         - |
           printf '%s\n' 'BEGIN { print "ok" }' > Main.awk
           gawk --sandbox -f Main.awk | grep '^ok$'
+
+  tcl:
+    install:
+      apt:
+        - tcl
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'puts "ok"' > Main.tcl
+          tclsh Main.tcl | grep '^ok$'
 
   gdl:
     install:
@@ -1202,6 +1300,61 @@ languages:
           end Broken;
           ADA
           if gnatmake -O2 -o Broken Broken.adb >/dev/null 2>&1; then exit 1; fi
+
+  cobol:
+    install:
+      apt:
+        - gnucobol
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.cob <<'COB'
+          IDENTIFICATION DIVISION.
+          PROGRAM-ID. Main.
+          PROCEDURE DIVISION.
+              DISPLAY "ok".
+              STOP RUN.
+          COB
+          cobc -x -free -O2 -o Main Main.cob
+          ./Main | grep '^ok$'
+
+  gnucobol:
+    install:
+      apt:
+        - gnucobol
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.cob <<'COB'
+          IDENTIFICATION DIVISION.
+          PROGRAM-ID. Main.
+          PROCEDURE DIVISION.
+              DISPLAY "ok".
+              STOP RUN.
+          COB
+          cobc -x -free -O2 -o Main Main.cob
+          ./Main | grep '^ok$'
+
+  cython:
+    install:
+      apt:
+        - cython3
+        - gcc
+        - libc6-dev
+        - python3-dev
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'print("ok")' > Main.pyx
+          cython3 --embed -3 -o Main.c Main.pyx
+          gcc -O2 -pipe Main.c -o Main $(python3-config --includes --ldflags --embed)
+          ./Main | grep '^ok$'
 
   dart:
     install:
@@ -1628,6 +1781,59 @@ languages:
           printf '%s\n' 'Sub Main()' 'Print "ok"' 'End Sub' > Main.bas
           aonohako-vb6-run Main.bas | grep '^ok$'
 
+  freebasic:
+    install: &freebasic_install
+      apt:
+        - curl
+        - gcc
+        - g++
+        - libc6-dev
+        - libncurses-dev
+      script:
+        - export FREEBASIC_VERSION=1.10.1
+        - echo 'deb http://deb.debian.org/debian bullseye main' > /etc/apt/sources.list.d/aonohako-freebasic-bullseye.list
+        - apt-get update -o APT::Get::List-Cleanup=false
+        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libtinfo5
+        - rm -f /etc/apt/sources.list.d/aonohako-freebasic-bullseye.list
+        - find /var/lib/apt/lists -mindepth 1 -delete
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://downloads.sourceforge.net/project/fbc/FreeBASIC-${FREEBASIC_VERSION}/Binaries-Linux/FreeBASIC-${FREEBASIC_VERSION}-linux-x86_64.tar.gz" -o /tmp/freebasic.tar.gz
+        - rm -rf /opt/freebasic
+        - mkdir -p /opt/freebasic
+        - tar -xzf /tmp/freebasic.tar.gz -C /opt/freebasic --strip-components=1
+        - printf '%s\n' '#!/usr/bin/env bash' 'exec /opt/freebasic/bin/fbc "$@"' > /usr/local/bin/fbc
+        - chmod 0755 /usr/local/bin/fbc
+        - rm -f /tmp/freebasic.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'print "ok"' > Main.bas
+          fbc -x Main Main.bas
+          ./Main | grep '^ok$'
+
+  classic-basic:
+    install: *freebasic_install
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'PRINT "ok"' > Main.bas
+          fbc -lang qb -x Main Main.bas
+          ./Main | grep '^ok$'
+
+  qbasic:
+    install: *freebasic_install
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'PRINT "ok"' > Main.bas
+          fbc -lang qb -x Main Main.bas
+          ./Main | grep '^ok$'
+
   smalltalk:
     install:
       apt:
@@ -1829,6 +2035,55 @@ languages:
           printf '%s\n' '(print "ok")' > Main.janet
           janet Main.janet | grep '^ok$'
 
+  sed:
+    install:
+      apt:
+        - sed
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 's/^/ok/' > Main.sed
+          printf '%s\n' '' | sed -f Main.sed | grep '^ok$'
+
+  bc:
+    install:
+      apt:
+        - bc
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' '1 + 1' > Main.bc
+          bc -q Main.bc | grep '^2$'
+
+  forth:
+    install: &gforth_install
+      script:
+        - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list.d/aonohako-gforth-sid.list
+        - apt-get update -o APT::Get::List-Cleanup=false
+        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid gforth
+        - find /var/lib/apt/lists -mindepth 1 -delete
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' '." ok" cr' > Main.fs
+          gforth Main.fs -e bye | grep '^ok$'
+
+  gforth:
+    install: *gforth_install
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' '." ok" cr' > Main.fs
+          gforth Main.fs -e bye | grep '^ok$'
+
   uhmlang:
     install:
       apt:
@@ -1865,10 +2120,13 @@ profiles:
       - aheui
       - apl
       - awk
+      - bc
       - bf
       - bqn
       - elixir
       - erlang
+      - forth
+      - gforth
       - gleam
       - golfscript
       - haskell
@@ -1882,11 +2140,14 @@ profiles:
       - prolog
       - pypy
       - r
+      - raku
       - racket
       - ruby
       - scheme
+      - sed
       - smalltalk
       - sqlite
+      - tcl
       - uiua
       - wasm
       - whitespace
@@ -1895,9 +2156,11 @@ profiles:
     install: *gcc16_profile
     languages:
       - clojure
+      - coffeescript
       - deno
       - graphql
       - groovy
+      - haxe
       - java
       - javascript
       - scala
@@ -1909,16 +2172,24 @@ profiles:
       - ada
       - asm
       - c3
+      - classic-basic
+      - cobol
       - crystal
+      - cython
       - d
+      - freebasic
       - fortran
       - go
+      - gnucobol
       - hare
       - mojo
       - nasm
       - nim
+      - objective-c
+      - objective-cpp
       - odin
       - pascal
+      - qbasic
       - rust
       - vlang
       - zig

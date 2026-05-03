@@ -176,7 +176,7 @@ if has_language "pypy"; then
     report_once "PyPy" pypy3 --version
 fi
 
-if has_language "javascript" || has_language "typescript"; then
+if has_language "javascript" || has_language "typescript" || has_language "coffeescript"; then
     report_once "Node.js" node --version
     report_once "npm" npm --version
 fi
@@ -187,6 +187,15 @@ fi
 
 if has_language "deno"; then
     report_once "Deno" deno --version
+fi
+
+if has_language "coffeescript"; then
+    report_once "CoffeeScript" coffee --version
+fi
+
+if has_language "haxe"; then
+    report_once "Haxe" haxe --version
+    report_once "Neko" neko -version
 fi
 
 if has_language "graphql"; then
@@ -207,9 +216,17 @@ if has_language "scala"; then
     report_once "Scala" scala -version
 fi
 
-if has_language "plain" || has_language "asm" || has_language "nasm"; then
+if has_language "plain" || has_language "asm" || has_language "nasm" || has_language "objective-c" || has_language "objective-cpp"; then
     report_once "GCC" gcc -dumpfullversion -dumpversion
     report_once "G++" g++ -dumpfullversion -dumpversion
+fi
+
+if has_language "objective-c"; then
+    report_once "Clang" clang --version
+fi
+
+if has_language "objective-cpp"; then
+    report_once "Clang++" clang++ --version
 fi
 
 if has_language "asm"; then
@@ -284,6 +301,10 @@ if has_language "awk"; then
     report_once "GNU awk" gawk --version
 fi
 
+if has_language "tcl"; then
+    report_once "Tcl" sh -c 'printf "puts [info patchlevel]\n" | tclsh'
+fi
+
 if has_language "gleam"; then
     report_once "Gleam" gleam --version
 fi
@@ -325,6 +346,15 @@ if has_language "ada"; then
     report_once "Ada" gnatmake -v
 fi
 
+if has_language "cobol" || has_language "gnucobol"; then
+    report_once "GnuCOBOL" cobc --version
+fi
+
+if has_language "cython"; then
+    report_once "Python" python3 --version
+    report_once "Cython" cython3 --version
+fi
+
 if has_language "dart"; then
     report_once "Dart" dart --version
 fi
@@ -335,6 +365,10 @@ fi
 
 if has_language "r"; then
     report_once "R" Rscript --version
+fi
+
+if has_language "raku"; then
+    report_once "Raku" raku --version
 fi
 
 if has_language "erlang"; then
@@ -361,6 +395,10 @@ if has_language "vb6" || has_language "golfscript"; then
     report_once "Ruby" ruby -e "print RUBY_VERSION, \"\n\""
 fi
 
+if has_language "freebasic" || has_language "classic-basic" || has_language "qbasic"; then
+    report_once "FreeBASIC" fbc -version
+fi
+
 if has_language "smalltalk"; then
     report_once "GNU Smalltalk" gst --version
 fi
@@ -379,6 +417,18 @@ fi
 
 if has_language "sqlite"; then
     report_once "SQLite" sqlite3 --version
+fi
+
+if has_language "sed"; then
+    report_once "GNU sed" sed --version
+fi
+
+if has_language "bc"; then
+    report_once "bc" bc --version
+fi
+
+if has_language "forth" || has_language "gforth"; then
+    report_once "Gforth" gforth --version
 fi
 
 if has_language "csharp" || has_language "fsharp" || has_language "vbnet"; then

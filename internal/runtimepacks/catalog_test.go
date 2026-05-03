@@ -286,6 +286,18 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "Clojure" clojure -e "(println (clojure-version))"`,
 		`report_once "Racket" racket --version`,
 		`report_once "Dart" dart --version`,
+		`report_once "Tcl" sh -c 'printf "puts [info patchlevel]\n" | tclsh'`,
+		`report_once "GnuCOBOL" cobc --version`,
+		`report_once "Cython" cython3 --version`,
+		`report_once "Haxe" haxe --version`,
+		`report_once "CoffeeScript" coffee --version`,
+		`report_once "Raku" raku --version`,
+		`report_once "Clang" clang --version`,
+		`report_once "Clang++" clang++ --version`,
+		`report_once "FreeBASIC" fbc -version`,
+		`report_once "GNU sed" sed --version`,
+		`report_once "bc" bc --version`,
+		`report_once "Gforth" gforth --version`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("report_toolchain_versions.sh must contain %q", marker)

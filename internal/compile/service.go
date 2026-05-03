@@ -281,18 +281,30 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "SCHEME"
 	case "awk", "gawk":
 		l = "AWK"
+	case "tcl":
+		l = "TCL"
 	case "gdl", "gnudatalanguage":
 		l = "GDL"
 	case "octave":
 		l = "OCTAVE"
 	case "ada":
 		l = "ADA"
+	case "cobol":
+		l = "COBOL"
+	case "gnucobol":
+		l = "GNUCOBOL"
+	case "cython":
+		l = "CYTHON"
 	case "dart":
 		l = "DART"
 	case "fortran", "fortan":
 		l = "FORTRAN"
 	case "d":
 		l = "D"
+	case "objective-c", "objc":
+		l = "OBJC"
+	case "objective-cpp", "objcpp":
+		l = "OBJCPP"
 	case "vhdl":
 		l = "VHDL"
 	case "verilog":
@@ -337,6 +349,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "ISABELLE"
 	case "lisp":
 		l = "LISP"
+	case "haxe":
+		l = "HAXE"
 	case "c", "c11":
 		l = "C11"
 	case "c89", "c90":
@@ -353,6 +367,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "JAVA11"
 	case "groovy":
 		l = "GROOVY"
+	case "raku":
+		l = "RAKU"
 	case "erlang":
 		l = "ERLANG"
 	case "prolog":
@@ -363,6 +379,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "FSHARP"
 	case "vb6":
 		l = "VB6"
+	case "freebasic":
+		l = "FREEBASIC"
 	case "classic-basic":
 		l = "CLASSIC_BASIC"
 	case "qbasic":
@@ -387,6 +405,16 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "UIUA"
 	case "janet":
 		l = "JANET"
+	case "coffeescript", "coffee":
+		l = "COFFEESCRIPT"
+	case "sed":
+		l = "SED"
+	case "bc":
+		l = "BC"
+	case "forth":
+		l = "FORTH"
+	case "gforth":
+		l = "GFORTH"
 	case "whitespace":
 		l = "WHITESPACE"
 	case "bf", "brainfuck":
@@ -758,6 +786,8 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".scm"}, "no scheme sources")
 	case "awk":
 		return compileCheckedSources(ctx, workDir, req.Sources, []string{".awk"}, "no awk sources", "gawk", []string{"--sandbox", "--lint", "-f"}, nil)
+	case "tcl":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".tcl"}, "no tcl sources")
 	case "gdl":
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".pro"}, "no gdl sources")
 	case "octave":
@@ -929,6 +959,10 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+	case "cobol":
+		return compileCobol(ctx, workDir, target, req.Sources)
+	case "cython":
+		return compileCython(ctx, workDir, target, req.Sources)
 	case "d":
 		var rootSource string
 		for _, src := range req.Sources {
@@ -955,6 +989,10 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+	case "objective-c":
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".m"), "clang", []string{"-O2", "-pipe", "-lobjc"})
+	case "objective-cpp":
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".mm"), "clang++", []string{"-O2", "-pipe", "-lobjc"})
 	case "nasm":
 		var rootSource string
 		for _, src := range req.Sources {
@@ -990,12 +1028,16 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "haskell":
 		return compileHaskell(ctx, workDir, target, req.Sources)
+	case "haxe":
+		return compileHaxe(ctx, workDir, target, req.Sources)
 	case "swift":
 		return compileSwift(ctx, workDir, target, req.Sources)
 	case "sqlite":
 		return compileSQLite(workDir, req.Sources)
 	case "julia":
 		return compileJulia(workDir, req.Sources)
+	case "raku":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".raku", ".rakumod", ".p6", ".pl6"}, "no raku sources", "raku", []string{"-c"}, nil)
 	case "erlang":
 		var erlangFiles []string
 		for _, src := range req.Sources {
@@ -1028,8 +1070,10 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileFSharp(ctx, workDir, req.Sources)
 	case "vb6":
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".bas", ".frm", ".cls"}, "no vb6 sources")
+	case "freebasic":
+		return compileFreeBasic(ctx, workDir, target, req.Sources, nil, "no freebasic sources")
 	case "classic-basic":
-		return compileClassicBasic(ctx, workDir, target, req.Sources)
+		return compileFreeBasic(ctx, workDir, target, req.Sources, []string{"-lang", "qb"}, "no classic-basic sources")
 	case "smalltalk":
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".st"}, "no smalltalk sources")
 	case "golfscript":
@@ -1050,6 +1094,14 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".ua"}, "no uiua sources")
 	case "janet":
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".janet"}, "no janet sources")
+	case "coffeescript":
+		return compileCoffeeScript(ctx, workDir, target, req.Sources)
+	case "sed":
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".sed"}, "no sed sources", "sed", []string{"-n", "-f"}, nil)
+	case "bc":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".bc"}, "no bc sources")
+	case "forth":
+		return compilePassThroughIfExt(workDir, req.Sources, []string{".fs", ".fth", ".4th"}, "no forth sources")
 	case "whitespace":
 		return compileWhitespace(workDir, req.Sources)
 	case "brainfuck":
@@ -1966,12 +2018,92 @@ func compileCUDAOcelot(ctx context.Context, workDir, target string, sources []mo
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
-func compileClassicBasic(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+func compileCobol(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".cob", ".cbl", ".cobol"}, "Main.cob")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no cobol sources"}
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "cobc", []string{"-x", "-free", "-O2", "-o", filepath.Join(workDir, target), rootSource}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileCython(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".pyx"}, "Main.pyx")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no cython sources"}
+	}
+	cPath := filepath.Join(workDir, ".aonohako-cython.c")
+	outPath := filepath.Join(workDir, target)
+	script := `cython3 --embed -3 -o "$2" "$1" && gcc -O2 -pipe "$2" -o "$3" $(python3-config --includes --ldflags --embed)`
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "sh", []string{"-c", script, "aonohako-cython", rootSource, cPath, outPath}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileHaxe(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	if len(sourcePathsByExt(workDir, sources, ".hx")) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no haxe sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(target), ".n") {
+		target += ".n"
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "haxe", []string{"-main", "Main", "-neko", filepath.Join(workDir, target)}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileCoffeeScript(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+	rootSource := selectPrimarySource(workDir, sources, []string{".coffee"}, "Main.coffee")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no coffeescript sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(target), ".js") {
+		target += ".js"
+	}
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "coffee", []string{"--compile", "--bare", "--output", workDir, rootSource}, nil)
+	if status != model.CompileStatusOK {
+		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	}
+	compiledName := strings.TrimSuffix(filepath.Base(rootSource), filepath.Ext(rootSource)) + ".js"
+	if compiledName != target {
+		if err := os.Rename(filepath.Join(workDir, compiledName), filepath.Join(workDir, target)); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		}
+	}
+	artifacts, err := readSingleArtifact(workDir, target, target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+func compileFreeBasic(ctx context.Context, workDir, target string, sources []model.Source, dialectArgs []string, noSourceReason string) model.CompileResponse {
 	rootSource := selectPrimarySource(workDir, sources, []string{".bas"}, "Main.bas")
 	if rootSource == "" {
-		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no classic-basic sources"}
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: noSourceReason}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "fbc", []string{"-lang", "qb", "-x", filepath.Join(workDir, target), rootSource}, nil)
+	args := append([]string{}, dialectArgs...)
+	args = append(args, "-x", filepath.Join(workDir, target), rootSource)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "fbc", args, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
