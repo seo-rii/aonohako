@@ -769,9 +769,7 @@ languages:
       apt:
         - clang
       script: &objective_c_libobjc16_install
-        - apt-get update -o APT::Get::List-Cleanup=false
-        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid libobjc-16-dev
-        - find /var/lib/apt/lists -mindepth 1 -delete
+        - apt-get update -o APT::Get::List-Cleanup=false && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid libobjc-16-dev && find /var/lib/apt/lists -mindepth 1 -delete
     smoke:
       command:
         - bash
