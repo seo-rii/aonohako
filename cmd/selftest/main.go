@@ -1552,12 +1552,16 @@ const socket = net.connect({ host: '127.0.0.1', port: %d }, () => {
   socket.destroy();
   finish('leaked');
 });
-socket.on('error', () => finish('blocked'));
-setTimeout(() => {
-  socket.destroy();
-  finish('blocked');
-}, 500);
-`, tcpPort)
+	socket.on('error', () => finish('blocked'));
+	setTimeout(() => {
+	  socket.destroy();
+	  finish('blocked');
+	}, 500);
+	`, tcpPort)
+	typedNodeProcessNetwork := "declare const require: any;\n" +
+		"declare const process: any;\n" +
+		"declare function setTimeout(fn: () => void, ms: number): unknown;\n\n" +
+		strings.ReplaceAll(nodeProcessNetwork, "function finish(label) {", "function finish(label: string) {")
 
 	return map[string][]languageSecurityCase{
 		"plain": {
@@ -1743,11 +1747,7 @@ fn main() {
 				expectedStdout: expectedProcessNetwork,
 				limits:         managedLimits,
 				sources: []model.Source{
-					source("Main.ts", `declare const require: any;
-declare const process: any;
-declare function setTimeout(fn: () => void, ms: number): unknown;
-
-`+nodeProcessNetwork),
+					source("Main.ts", typedNodeProcessNetwork),
 				},
 			},
 		},
@@ -2982,7 +2982,7 @@ int main() {
 		"duckdb": {
 			compileLang:    "DUCKDB",
 			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.sql", `select 'ok';`),
 			},

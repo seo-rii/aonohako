@@ -302,7 +302,15 @@ if has_language "awk"; then
 fi
 
 if has_language "tcl"; then
-    report_once "Tcl" sh -c 'printf "puts [info patchlevel]\n" | tclsh'
+    if [ -z "${reported_tools[Tcl]:-}" ] && command -v tclsh >/dev/null 2>&1; then
+        reported_tools["Tcl"]=1
+        output="$(printf 'puts [info patchlevel]\n' | tclsh 2>&1 || printf '<command failed>')"
+        output="$(printf "%s" "${output}" | tr -d '\r' | sed -n '/./{s/|/\\|/g;p;q;}')"
+        if [ -z "${output}" ]; then
+            output="<no version output>"
+        fi
+        printf '| Tcl | `%s` |\n' "${output}"
+    fi
 fi
 
 if has_language "gleam"; then
