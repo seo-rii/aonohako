@@ -21,6 +21,14 @@ type Stats struct {
 	PidsEvents         map[string]int64
 }
 
+type LimitBreach string
+
+const (
+	LimitBreachNone   LimitBreach = ""
+	LimitBreachMemory LimitBreach = "memory"
+	LimitBreachPids   LimitBreach = "pids"
+)
+
 func (s Stats) OOMEvents() int64 {
 	return s.MemoryEvents["oom"] + s.MemoryEvents["oom_kill"] + s.MemoryEvents["oom_group_kill"]
 }
@@ -43,6 +51,16 @@ func (s Stats) MemoryLimitBreached(limitBytes int64) bool {
 
 func (s Stats) PidsLimitBreached() bool {
 	return s.PidsMaxEvents() > 0
+}
+
+func (s Stats) FirstLimitBreach(memoryLimitBytes int64) LimitBreach {
+	if s.MemoryLimitBreached(memoryLimitBytes) {
+		return LimitBreachMemory
+	}
+	if s.PidsLimitBreached() {
+		return LimitBreachPids
+	}
+	return LimitBreachNone
 }
 
 func ReadStats(groupPath string) (Stats, error) {
