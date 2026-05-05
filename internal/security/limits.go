@@ -2,6 +2,8 @@ package security
 
 import "path/filepath"
 
+const DotnetFileSizeLimitBytes uint64 = 2 << 40
+
 func OpenFileLimitForCommand(command string) int {
 	switch filepath.Base(command) {
 	case "aonohako-tla-run", "dafny", "dotnet", "isabelle":
@@ -14,7 +16,15 @@ func OpenFileLimitForCommand(command string) int {
 }
 
 func FileSizeLimitForCommand(command string, workspaceBytes int64) uint64 {
-	return 0
+	switch filepath.Base(command) {
+	case "dafny", "dotnet":
+		if workspaceBytes > 0 && uint64(workspaceBytes) > DotnetFileSizeLimitBytes {
+			return uint64(workspaceBytes)
+		}
+		return DotnetFileSizeLimitBytes
+	default:
+		return 0
+	}
 }
 
 func StackLimitForCommand(command string) uint64 {

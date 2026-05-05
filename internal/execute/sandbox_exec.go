@@ -144,7 +144,8 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		}
 	}
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
-	// startup, so finite RLIMIT_AS values can fail before user code.
+	// startup, so finite RLIMIT_AS values can fail before user code. It also
+	// needs a high finite RLIMIT_FSIZE floor to start reliably.
 	disableAddressSpaceLimit := isDotnet || isC3 || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "deno" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
@@ -202,7 +203,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		AllowNumaPolicy:          isDotnet || isTLA,
 		AllowChmod:               isTLA || runtimeBase == "aonohako-gleam-run",
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
-		DisableFileSizeLimit:     isDotnet,
+		DisableFileSizeLimit:     false,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
