@@ -167,7 +167,9 @@ When `AONOHAKO_CGROUP_PARENT` is set, startup validates that the selected parent
 is under a cgroup v2 mount and has the required controllers and
 `cgroup.subtree_control`, rejects a group/world-writable parent, requires an
 empty `cgroup.procs`, writes `+cpu +memory +pids` to
-`cgroup.subtree_control`, and verifies a probe run-group create/remove cycle.
+`cgroup.subtree_control`, and verifies a probe run-group create/remove cycle
+through the same `memory.max`, `memory.swap.max`, `memory.oom.group`,
+`pids.max`, and `cpu.max` writes used by real runs.
 The compile, execute, and SPJ helper paths then use this write contract for one
 run cgroup:
 

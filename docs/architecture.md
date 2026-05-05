@@ -355,8 +355,9 @@ runner can identify the source that selected the final status. The field is
 intended for operations and judge debugging, not as a security boundary. Typical
 values identify output comparison (`stdout`, `file_output`, `spj`), process
 exit (`exit_code`, `signal`), time (`wall_time`, `cpu_time`,
-`cpu_time_cgroup`, `cpu_rlimit`), memory (`memory_rss`, `memory_cgroup`,
-`memory_reported`, `address_space`), cgroup pids (`pids_cgroup`), and
+`cpu_time_final`, `cpu_time_cgroup`, `cpu_time_cgroup_final`, `cpu_rlimit`),
+memory (`memory_rss`, `memory_cgroup`, `memory_reported`, `address_space`),
+cgroup pids (`pids_cgroup`), and
 workspace checks (`workspace_bytes`, `workspace_entries`, `workspace_depth`,
 `workspace_scan`). This makes classification drift easier to compare across
 Cloud Run helper, self-hosted helper, and self-hosted cgroup-backed runners.
@@ -387,7 +388,10 @@ invocations still disable `RLIMIT_AS` because CoreCLR reserves a very large
 memfd-backed double-mapped region before user code starts. Lower file-size
 rlimits can also break CoreCLR/F# startup, so `dotnet` and `dafny` receive a
 high finite 2 TiB `RLIMIT_FSIZE` floor instead of disabling the file-size rlimit
-entirely. The helper still applies a request-memory-derived
+entirely. That floor is a compatibility guard, not the effective workspace
+quota: .NET/Dafny disk burst protection still comes from workspace scanning,
+bounded `AONOHAKO_WORK_ROOT` storage, optional self-hosted cgroups, and the
+outer container or filesystem limit. The helper still applies a request-memory-derived
 `DOTNET_GCHeapHardLimit`, RSS watchdogs, workspace byte accounting, output caps,
 open-file limits, thread limits, OOM-victim preference, and single-slot
 execution. Before each sandboxed `dotnet` invocation, the runner recreates `/tmp/.dotnet`
@@ -402,10 +406,10 @@ separately because it is useful for future throttling but not required for the
 first hard memory/process boundary. Setting `AONOHAKO_CGROUP_PARENT` is allowed
 only for `selfhosted + embedded + helper`, and startup validates the selected
 parent is under a cgroup v2 mount, is not group/world writable, and accepts a
-probe run-group create/remove cycle before request handling. It also requires
-the parent `cgroup.procs` to be empty and writes the requested controllers to
-`cgroup.subtree_control` at startup, so delegation failures are reported before
-the runner accepts work.
+probe run-group create/remove cycle before request handling. The probe uses the
+same `memory.max`, `memory.swap.max`, `memory.oom.group`, `pids.max`, and
+`cpu.max` write path as real runs. It also requires the parent `cgroup.procs` to be empty and writes the requested controllers to `cgroup.subtree_control` at startup,
+so delegation failures are reported before the runner accepts work.
 
 The same package owns the low-level run-group write contract used by the
 optional cgroup guardrail and the future isolated backend. Parent cgroups enable
@@ -502,8 +506,10 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`
 - `AONOHAKO_INBOUND_AUTH=platform` outside `dev` requires
   `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`; the application verifies
-  `X-Aonohako-Principal-Signature` over `X-Aonohako-Principal`, so unsigned
-  trusted platform headers are not accepted outside `dev`
+  `X-Aonohako-Principal-Signature` and
+  `X-Aonohako-Principal-Timestamp` over the request method, path, principal,
+  and RFC3339 timestamp with a five-minute replay window, so unsigned trusted
+  platform headers are not accepted outside `dev`
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` and
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain optional defense-in-depth
   assertions for source-CIDR checks in addition to signed platform principals

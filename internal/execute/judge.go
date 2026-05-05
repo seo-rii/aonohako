@@ -20,6 +20,8 @@ import (
 func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource string, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
 	status := res.Status
 	source := res.VerdictSource
+	reason := ""
+	status, reason, source = applyFinalCPUTimeStatus(status, reason, source, res.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(source, "cpu_time_cgroup"))
 	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
 		status = model.RunStatusMLE
 		source = "memory_reported"
@@ -30,7 +32,6 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	}
 
 	var score *float64
-	reason := ""
 	outputOK := false
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
 	if evaluateOutputs {
@@ -79,6 +80,20 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 		score = &v
 	}
 	return status, score, reason, source
+}
+
+func applyFinalCPUTimeStatus(status, reason, source string, cpuTimeMs int64, limitMs int, cgroupBacked bool) (string, string, string) {
+	if limitMs <= 0 || cpuTimeMs <= int64(limitMs) {
+		return status, reason, source
+	}
+	if status != "OK" && status != model.RunStatusAccepted {
+		return status, reason, source
+	}
+	source = "cpu_time_final"
+	if cgroupBacked {
+		source = "cpu_time_cgroup_final"
+	}
+	return model.RunStatusTLE, "cpu time limit exceeded", source
 }
 
 func captureFileOutput(ws Workspace, spec model.OutputFile) ([]byte, error) {

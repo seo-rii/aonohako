@@ -114,6 +114,41 @@ func TestRemoteRunnerForwardsRuntimeProfile(t *testing.T) {
 	}
 }
 
+func TestRemoteRunnerClassifiesAcceptedCPUOverrun(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"Accepted\",\"time_ms\":1,\"wall_time_ms\":1,\"cpu_time_ms\":101}\n\n"))
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{URL: remote.URL},
+		},
+	})
+
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:     "plain",
+		Binaries: []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+		Limits:   model.Limits{TimeMs: 100, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusTLE {
+		t.Fatalf("status = %q, want TLE; resp=%+v", resp.Status, resp)
+	}
+	if resp.Reason != "cpu time limit exceeded" {
+		t.Fatalf("reason = %q, want cpu limit reason", resp.Reason)
+	}
+	if resp.VerdictSource != "cpu_time_final" {
+		t.Fatalf("source = %q, want cpu_time_final", resp.VerdictSource)
+	}
+}
+
 func TestRemoteRunnerSendsBearerToken(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {

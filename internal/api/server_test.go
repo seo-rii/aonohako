@@ -69,10 +69,10 @@ func (b *blockingBody) Close() error {
 	return nil
 }
 
-func platformPrincipalSignatureForTest(secret, principal string) string {
+func platformPrincipalSignatureForTest(secret, method, path, principal, timestamp string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(principal))
-	return "v1=" + hex.EncodeToString(mac.Sum(nil))
+	_, _ = mac.Write([]byte(method + "\n" + path + "\n" + principal + "\n" + timestamp))
+	return "v2=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
@@ -519,21 +519,32 @@ func TestPlatformAuthRequiresValidPrincipalSignatureWhenConfigured(t *testing.T)
 	defer ts.Close()
 
 	body := executePayload(t)
+	now := time.Now().UTC()
+	validTimestamp := now.Format(time.RFC3339)
+	staleTimestamp := now.Add(-10 * time.Minute).Format(time.RFC3339)
 	for _, tc := range []struct {
 		name      string
 		principal string
+		timestamp string
 		signature string
 		want      int
 	}{
 		{name: "missing signature", principal: "alice", want: http.StatusUnauthorized},
-		{name: "bad signature", principal: "alice", signature: "v1=bad", want: http.StatusUnauthorized},
-		{name: "valid signature", principal: "alice", signature: platformPrincipalSignatureForTest("platform-secret", "alice"), want: http.StatusOK},
+		{name: "missing timestamp", principal: "alice", signature: "v2=bad", want: http.StatusUnauthorized},
+		{name: "stale timestamp", principal: "alice", timestamp: staleTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", staleTimestamp), want: http.StatusUnauthorized},
+		{name: "legacy principal only signature", principal: "alice", timestamp: validTimestamp, signature: "v1=bad", want: http.StatusUnauthorized},
+		{name: "bad signature", principal: "alice", timestamp: validTimestamp, signature: "v2=bad", want: http.StatusUnauthorized},
+		{name: "wrong path signature", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/compile", "alice", validTimestamp), want: http.StatusUnauthorized},
+		{name: "valid signature", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", validTimestamp), want: http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			if tc.principal != "" {
 				req.Header.Set(platformPrincipalHeader, tc.principal)
+			}
+			if tc.timestamp != "" {
+				req.Header.Set(platformPrincipalTimestampHeader, tc.timestamp)
 			}
 			if tc.signature != "" {
 				req.Header.Set(platformPrincipalSignatureHeader, tc.signature)

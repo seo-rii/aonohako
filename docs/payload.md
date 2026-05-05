@@ -296,7 +296,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `prlimit --cpu` | CPU seconds (time_ms / 1000 + 1) |
 | `prlimit --as` | Virtual address space (memory_mb + 64 MB, min 512 MB) |
 | `prlimit --nofile` | Max open file descriptors (64) |
-| `prlimit --fsize` | Max file size (workspace_bytes when set, otherwise 128 MB); .NET/Dafny get a high finite 2 TiB floor for CoreCLR/F# compatibility |
+| `prlimit --fsize` | Max file size (workspace_bytes when set, otherwise 128 MB); .NET/Dafny get a high finite 2 TiB floor for CoreCLR/F# compatibility, so their practical disk-burst guard is workspace scanning plus bounded work-root/container storage |
 | workspace scanner | Total file bytes plus entry count/depth caps |
 | `taskset -c 0` | Pin to single CPU core |
 | Context timeout | Wall-clock kill via SIGKILL to process group |
@@ -309,8 +309,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 - `verdict_source` is diagnostic and non-authoritative. Local helper runners
   may report values such as `stdout`, `file_output`, `spj`, `exit_code`,
   `signal`, `wait_status`, `sandbox_init`, `wall_time`, `cpu_time`,
-  `cpu_time_cgroup`, `cpu_rlimit`, `memory_rss`, `memory_cgroup`,
-  `memory_cgroup_final`, `memory_reported`, `address_space`, `pids_cgroup`,
-  `pids_cgroup_final`, `workspace_bytes`, `workspace_entries`,
+  `cpu_time_final`, `cpu_time_cgroup`, `cpu_time_cgroup_final`, `cpu_rlimit`,
+  `memory_rss`, `memory_cgroup`, `memory_cgroup_final`, `memory_reported`,
+  `address_space`, `pids_cgroup`, `pids_cgroup_final`, `workspace_bytes`, `workspace_entries`,
   `workspace_depth`, or `workspace_scan` to explain which measurement or judge
   step selected the final status.

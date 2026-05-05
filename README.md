@@ -221,8 +221,11 @@ aonohako-selftest cgroup-preflight
   application. Do not expose platform mode directly to the public internet.
 - `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` is required for
   `AONOHAKO_INBOUND_AUTH=platform` outside `dev`. It makes platform mode verify
-  `X-Aonohako-Principal-Signature: v1=<hex-hmac-sha256>` over the principal
-  header before accepting the request.
+  `X-Aonohako-Principal-Signature: v2=<hex-hmac-sha256>` over
+  `method + "\n" + path + "\n" + principal + "\n" + timestamp` before accepting
+  the request. The timestamp comes from
+  `X-Aonohako-Principal-Timestamp` in RFC3339 format and must be within five
+  minutes of the server clock.
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS` and
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain available only as optional
   defense-in-depth assertions for deployments that want source-CIDR checks in
@@ -386,7 +389,10 @@ flags through requests:
   Erlang/Elixir. Allowed range: `0..4`, default `1`.
 - `AONOHAKO_DOTNET_GC_HEAP_PERCENT` controls the .NET GC heap hard-limit share
   of request memory; the runner converts it to `DOTNET_GCHeapHardLimit`.
-  Allowed range: `25..80`, default `60`.
+  Allowed range: `25..80`, default `60`. .NET/Dafny use a high finite 2 TiB
+  `RLIMIT_FSIZE` floor for CoreCLR/F# compatibility, so their practical
+  disk-burst guard is workspace scanning plus bounded work-root/container
+  storage rather than a tight file-size rlimit.
 - `AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB` controls Kotlin/Native compiler
   JVM heap. Allowed range: `256..1536`, default `1024`.
 - `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of

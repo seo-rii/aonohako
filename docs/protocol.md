@@ -133,7 +133,8 @@ Client                        aonohako
 `verdict_source` is optional diagnostic metadata. Local helper runners use it
 to distinguish output comparison (`stdout`, `file_output`, `spj`), process
 exit (`exit_code`, `signal`, `wait_status`, `sandbox_init`), wall/CPU time
-(`wall_time`, `cpu_time`, `cpu_time_cgroup`, `cpu_rlimit`), memory sources
+(`wall_time`, `cpu_time`, `cpu_time_final`, `cpu_time_cgroup`,
+`cpu_time_cgroup_final`, `cpu_rlimit`), memory sources
 (`memory_rss`, `memory_cgroup`, `memory_cgroup_final`, `memory_reported`,
 `address_space`), pids limits (`pids_cgroup`, `pids_cgroup_final`), and
 workspace sources (`workspace_bytes`, `workspace_entries`, `workspace_depth`,

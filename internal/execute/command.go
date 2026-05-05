@@ -227,7 +227,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "java":
 		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
 		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss1m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
-	case "javascript":
+	case "javascript", "apl", "coffeescript":
 		limitMB := max(64, req.Limits.MemoryMB)
 		oldSpaceMB := max(32, (limitMB*tuning.NodeOldSpacePercent)/100)
 		semiSpaceMB := limitMB / 64
@@ -237,13 +237,20 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		if semiSpaceMB > tuning.NodeMaxSemiSpaceMB {
 			semiSpaceMB = tuning.NodeMaxSemiSpaceMB
 		}
-		return []string{
+		args := []string{
 			"node",
 			"--disable-wasm-trap-handler",
 			fmt.Sprintf("--max-old-space-size=%d", oldSpaceMB),
 			fmt.Sprintf("--max-semi-space-size=%d", semiSpaceMB),
 			fmt.Sprintf("--stack-size=%d", tuning.NodeStackSizeKB),
-			primaryPath,
+		}
+		switch lang {
+		case "apl":
+			return append(args, "/usr/local/bin/apl", "--script", "-f", primaryPath)
+		case "coffeescript":
+			return append(args, "/usr/local/bin/coffee", primaryPath)
+		default:
+			return append(args, primaryPath)
 		}
 	case "julia":
 		return []string{"julia", "--startup-file=no", "--history-file=no", "--compiled-modules=no", "--color=no", primaryPath}
@@ -305,8 +312,6 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"ruby", "/usr/local/lib/aonohako/golfscript_sandboxed.rb", primaryPath}
 	case "haxe":
 		return []string{"neko", primaryPath}
-	case "coffeescript":
-		return []string{"coffee", primaryPath}
 	case "raku":
 		return []string{"raku", primaryPath}
 	case "sed":
@@ -333,8 +338,6 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"aonohako-duckdb-run", primaryPath}
 	case "bqn":
 		return []string{"bqn", primaryPath}
-	case "apl":
-		return []string{"node", "/usr/local/bin/apl", "--script", "-f", primaryPath}
 	case "uiua":
 		return []string{"uiua", "run", primaryPath, "--no-format"}
 	case "janet":
