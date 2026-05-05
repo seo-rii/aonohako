@@ -2715,8 +2715,9 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		}
 	}
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
-	// startup, so finite RLIMIT_AS and RLIMIT_FSIZE values can fail before user
-	// code. Dotnet still has RSS, workspace, stdout/stderr, fd, and thread caps.
+	// startup, so finite RLIMIT_AS values can fail before user code. Dotnet-like
+	// commands get a high finite RLIMIT_FSIZE floor because lower file-size
+	// rlimits can break CoreCLR/F# startup before user code.
 	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno" || isIsabelle
 	allowProcessGroups := commandName == "swiftc" || commandName == "hare" || isIsabelle
 	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || isIsabelle
@@ -2759,7 +2760,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		AllowChmod:               allowChmod,
 		AllowExecveat:            allowExecveat,
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
-		DisableFileSizeLimit:     isDotnetLike,
+		DisableFileSizeLimit:     false,
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
