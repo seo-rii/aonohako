@@ -77,11 +77,38 @@ func ValidateParentAt(parentDir, mountInfoPath string, requiredControllers []str
 	if err := EnableControllers(parentDir, requiredControllers); err != nil {
 		return err
 	}
-	probe, err := os.MkdirTemp(parentDir, ".aonohako-cgroup-contract-*")
+	probe, err := CreateRunGroup(parentDir, RunName("probe"), Limits{
+		MemoryMaxBytes:  64 << 20,
+		PidsMax:         16,
+		CPUQuotaMicros:  SingleCPUQuotaMicros,
+		CPUPeriodMicros: DefaultCPUPeriodMicros,
+	})
 	if err != nil {
-		return fmt.Errorf("cgroup parent is not writable: %w", err)
+		return fmt.Errorf("cgroup run-group write probe failed: %w", err)
 	}
-	_ = os.Remove(probe)
+	if err := removeProbeRunGroup(probe); err != nil {
+		return fmt.Errorf("cgroup run-group remove probe failed: %w", err)
+	}
+	return nil
+}
+
+func removeProbeRunGroup(group Group) error {
+	err := group.RemoveWithRetry(250 * time.Millisecond)
+	if err == nil {
+		return nil
+	}
+	// Unit tests exercise this package on a normal filesystem where the
+	// pseudo cgroup control files are regular files. Real cgroupfs rejects
+	// unlinking those files, so this fallback only helps the fake-FS path.
+	for _, name := range []string{"memory.max", "memory.swap.max", "memory.oom.group", "pids.max", "cpu.max"} {
+		removeErr := os.Remove(filepath.Join(group.Path, name))
+		if removeErr != nil && !os.IsNotExist(removeErr) {
+			return err
+		}
+	}
+	if retryErr := group.RemoveWithRetry(250 * time.Millisecond); retryErr != nil {
+		return err
+	}
 	return nil
 }
 

@@ -64,6 +64,15 @@ func TestValidateParentAcceptsRequiredControllers(t *testing.T) {
 		t.Fatalf("ValidateParent() error = %v", err)
 	}
 	assertFile(t, filepath.Join(parent, "cgroup.subtree_control"), "+cpu +memory +pids")
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatalf("ReadDir(parent): %v", err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "probe-") {
+			t.Fatalf("ValidateParentAt left probe cgroup behind: %s", entry.Name())
+		}
+	}
 }
 
 func TestValidateParentRejectsMissingController(t *testing.T) {
@@ -120,8 +129,8 @@ func TestValidateParentRejectsUnwritableParent(t *testing.T) {
 	if err == nil {
 		t.Fatalf("ValidateParentAt() error = nil, want writable parent rejection")
 	}
-	if !strings.Contains(err.Error(), "not writable") {
-		t.Fatalf("error %q should mention not writable", err)
+	if !strings.Contains(err.Error(), "run-group write probe") {
+		t.Fatalf("error %q should mention run-group write probe", err)
 	}
 }
 

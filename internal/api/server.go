@@ -41,6 +41,8 @@ const (
 	maxCompileDecodedSourceTotalBytes = 48 << 20
 	platformPrincipalHeader           = "X-Aonohako-Principal"
 	platformPrincipalSignatureHeader  = "X-Aonohako-Principal-Signature"
+	platformPrincipalTimestampHeader  = "X-Aonohako-Principal-Timestamp"
+	platformPrincipalSignatureSkew    = 5 * time.Minute
 )
 
 type principalContextKey struct{}
@@ -453,7 +455,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			principal := ""
 			value := strings.TrimSpace(r.Header.Get(platformPrincipalHeader))
 			if s.cfg.InboundAuth.PlatformPrincipalHMACSecret != "" {
-				if value == "" || !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, value, r.Header.Get(platformPrincipalSignatureHeader)) {
+				if value == "" || !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.Path, value, r.Header.Get(platformPrincipalTimestampHeader), r.Header.Get(platformPrincipalSignatureHeader), time.Now()) {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}
@@ -517,16 +519,26 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
-func verifyPlatformPrincipalSignature(secret, principal, signature string) bool {
+func verifyPlatformPrincipalSignature(secret, method, path, principal, timestamp, signature string, now time.Time) bool {
+	timestamp = strings.TrimSpace(timestamp)
+	parsedTimestamp, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		return false
+	}
+	if now.Sub(parsedTimestamp) > platformPrincipalSignatureSkew || parsedTimestamp.Sub(now) > platformPrincipalSignatureSkew {
+		return false
+	}
 	signature = strings.TrimSpace(signature)
-	if strings.HasPrefix(signature, "v1=") {
-		signature = strings.TrimPrefix(signature, "v1=")
+	if strings.HasPrefix(signature, "v2=") {
+		signature = strings.TrimPrefix(signature, "v2=")
+	} else {
+		return false
 	}
 	if signature == "" {
 		return false
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(principal))
+	_, _ = mac.Write([]byte(method + "\n" + path + "\n" + principal + "\n" + timestamp))
 	want := hex.EncodeToString(mac.Sum(nil))
 	return constantTimeEqual(strings.ToLower(signature), want)
 }

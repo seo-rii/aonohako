@@ -170,7 +170,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"scala", "/tmp/classes", "java", false},
 		{"fsharp", "/tmp/App.dll", "dotnet", true},
 		{"javascript", "/tmp/sol.js", "node", true},
-		{"coffeescript", "/tmp/sol.coffee", "coffee", true},
+		{"coffeescript", "/tmp/sol.coffee", "node", true},
 		{"julia", "/tmp/sol.jl", "julia", true},
 		{"raku", "/tmp/sol.raku", "raku", true},
 		{"r", "/tmp/sol.R", "/usr/lib/R/bin/exec/R", true},
@@ -381,6 +381,34 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 		"/tmp/Main.js",
 	}) {
 		t.Fatalf("javascript command = %v", jsArgs)
+	}
+
+	aplArgs := buildCommand("/tmp/Main.apl", "apl", req)
+	if !reflect.DeepEqual(aplArgs, []string{
+		"node",
+		"--disable-wasm-trap-handler",
+		"--max-old-space-size=57",
+		"--max-semi-space-size=1",
+		"--stack-size=2048",
+		"/usr/local/bin/apl",
+		"--script",
+		"-f",
+		"/tmp/Main.apl",
+	}) {
+		t.Fatalf("apl command = %v", aplArgs)
+	}
+
+	coffeeArgs := buildCommand("/tmp/Main.coffee", "coffeescript", req)
+	if !reflect.DeepEqual(coffeeArgs, []string{
+		"node",
+		"--disable-wasm-trap-handler",
+		"--max-old-space-size=57",
+		"--max-semi-space-size=1",
+		"--stack-size=2048",
+		"/usr/local/bin/coffee",
+		"/tmp/Main.coffee",
+	}) {
+		t.Fatalf("coffeescript command = %v", coffeeArgs)
 	}
 
 	wasmArgs := buildCommand("/tmp/Main.wasm", "wasm", req)
@@ -668,6 +696,21 @@ func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) 
 	}
 	if !addressSpaceProximityCanClassifyMLE("runner") {
 		t.Fatalf("native runner should use address-space proximity for MLE classification")
+	}
+}
+
+func TestEvaluateRunStatusClassifiesFinalCPUOverrun(t *testing.T) {
+	req := &model.RunRequest{ExpectedStdout: "ok\n", Limits: model.Limits{TimeMs: 100, MemoryMB: 64}}
+	res := execResult{Status: "OK", CPUTimeMs: 101}
+	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("ok\n"), "stdout", config.DefaultRuntimeTuningConfig(), "")
+	if status != model.RunStatusTLE {
+		t.Fatalf("status = %q, want TLE", status)
+	}
+	if reason != "cpu time limit exceeded" {
+		t.Fatalf("reason = %q, want cpu limit reason", reason)
+	}
+	if source != "cpu_time_final" {
+		t.Fatalf("source = %q, want cpu_time_final", source)
 	}
 }
 

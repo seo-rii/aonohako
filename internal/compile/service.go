@@ -2925,6 +2925,44 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 				_ = syscall.Kill(pid, syscall.SIGKILL)
 			}
 		}
+		entries, err := os.ReadDir("/proc")
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			pid, err := strconv.Atoi(entry.Name())
+			if err != nil || pid == pgid || descendants[pid] {
+				continue
+			}
+			status, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "status"))
+			if err != nil {
+				continue
+			}
+			sandboxUID := false
+			for _, line := range strings.Split(string(status), "\n") {
+				if !strings.HasPrefix(line, "Uid:") {
+					continue
+				}
+				fields := strings.Fields(line)
+				if len(fields) >= 2 && fields[1] == "65532" {
+					sandboxUID = true
+				}
+				break
+			}
+			if !sandboxUID {
+				continue
+			}
+			cwd, err := os.Readlink(filepath.Join("/proc", entry.Name(), "cwd"))
+			if err != nil {
+				continue
+			}
+			if cwd == workDir || strings.HasPrefix(cwd, strings.TrimRight(workDir, string(os.PathSeparator))+string(os.PathSeparator)) {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
 	}
 	waitCh := make(chan error, 1)
 	go func() { waitCh <- cmd.Wait() }()

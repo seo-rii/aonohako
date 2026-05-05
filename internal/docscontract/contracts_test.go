@@ -124,7 +124,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") || !strings.Contains(architecture, "not group/world writable") || !strings.Contains(architecture, "probe run-group create/remove cycle") || !strings.Contains(architecture, "parent `cgroup.procs` to be empty") || !strings.Contains(architecture, "`cgroup.subtree_control` at startup") {
 		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
 	}
-	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "recreates `/tmp/.dotnet`") {
+	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "not the effective workspace\nquota") || !strings.Contains(architecture, "recreates `/tmp/.dotnet`") {
 		t.Fatalf("architecture.md must describe dotnet rlimit and shared-state compatibility exceptions")
 	}
 	if !strings.Contains(architecture, "writing values such as `+cpu +memory +pids` to\n`cgroup.subtree_control`") || !strings.Contains(architecture, "positive\n`memory.max` and `pids.max` values") || !strings.Contains(architecture, "`memory.swap.max`") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "`cpu.max=100000 100000`") || !strings.Contains(architecture, "writing its PID to `cgroup.procs`") || !strings.Contains(architecture, "without recursive deletion") || !strings.Contains(architecture, "short retry window") {
@@ -136,7 +136,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "unsupported runtime security contracts fail startup before request handling") {
 		t.Fatalf("architecture.md must describe fail-closed security contract validation")
 	}
-	if !strings.Contains(architecture, "Local helper responses include `verdict_source` diagnostic metadata") || !strings.Contains(architecture, "`cpu_time_cgroup`") || !strings.Contains(architecture, "`workspace_scan`") {
+	if !strings.Contains(architecture, "Local helper responses include `verdict_source` diagnostic metadata") || !strings.Contains(architecture, "`cpu_time_final`") || !strings.Contains(architecture, "`cpu_time_cgroup_final`") || !strings.Contains(architecture, "`workspace_scan`") {
 		t.Fatalf("architecture.md must describe verdict source diagnostics")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_REMOTE_RUNNER_AUTH=none` is rejected outside `dev`") {
@@ -163,7 +163,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`") {
 		t.Fatalf("architecture.md must describe production inbound-auth none rejection")
 	}
-	if !strings.Contains(architecture, "`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Signature`") || !strings.Contains(architecture, "unsigned\n  trusted platform headers are not accepted outside `dev`") || !strings.Contains(architecture, "`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`") || !strings.Contains(architecture, "`AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`") {
+	if !strings.Contains(architecture, "`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Signature`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Timestamp`") || !strings.Contains(architecture, "five-minute replay window") || !strings.Contains(architecture, "unsigned trusted\n  platform headers are not accepted outside `dev`") || !strings.Contains(architecture, "`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`") || !strings.Contains(architecture, "`AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`") {
 		t.Fatalf("architecture.md must describe signed platform auth and optional trusted-proxy assertions")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_TRUSTED_RUNNER_INGRESS=true` is required for non-dev") {

@@ -527,7 +527,7 @@ done:
 	result.StderrTruncated = stderrBuf.Truncated()
 	result.MemoryKB = maxRSSKB
 
-	if runGroup.Path != "" && result.Status == "OK" {
+	if runGroup.Path != "" {
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			if stats.MemoryCurrentBytes > 0 && stats.MemoryCurrentBytes/1024 > result.MemoryKB {
 				result.MemoryKB = stats.MemoryCurrentBytes / 1024
@@ -535,15 +535,26 @@ done:
 			if stats.MemoryPeakBytes > 0 && stats.MemoryPeakBytes/1024 > result.MemoryKB {
 				result.MemoryKB = stats.MemoryPeakBytes / 1024
 			}
-			switch stats.FirstLimitBreach(memoryLimitKB * 1024) {
-			case cgroup.LimitBreachMemory:
-				result.Status = model.RunStatusMLE
-				result.Reason = "memory limit exceeded"
-				result.VerdictSource = "memory_cgroup_final"
-			case cgroup.LimitBreachPids:
-				result.Status = model.RunStatusRE
-				result.Reason = "process limit exceeded"
-				result.VerdictSource = "pids_cgroup_final"
+			if stats.CPUUsageMicros > 0 {
+				cpuUsageMicros := stats.CPUUsageMicros
+				if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
+					cpuUsageMicros -= cgroupCPUBaselineMicros
+				}
+				if cpuTimeMs := cpuUsageMicros / 1000; cpuTimeMs > result.CPUTimeMs {
+					result.CPUTimeMs = cpuTimeMs
+				}
+			}
+			if result.Status == "OK" {
+				switch stats.FirstLimitBreach(memoryLimitKB * 1024) {
+				case cgroup.LimitBreachMemory:
+					result.Status = model.RunStatusMLE
+					result.Reason = "memory limit exceeded"
+					result.VerdictSource = "memory_cgroup_final"
+				case cgroup.LimitBreachPids:
+					result.Status = model.RunStatusRE
+					result.Reason = "process limit exceeded"
+					result.VerdictSource = "pids_cgroup_final"
+				}
 			}
 		}
 	}
@@ -590,6 +601,7 @@ done:
 		result.Reason = "memory limit exceeded"
 		result.VerdictSource = "address_space"
 	}
+	result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatus(result.Status, result.Reason, result.VerdictSource, result.CPUTimeMs, timeLimitMs, runGroup.Path != "")
 	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
 		result.Status = model.RunStatusInitFail
 		result.Reason = clipUTF8(result.Stderr, outputLimitBytes)

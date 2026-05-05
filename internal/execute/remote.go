@@ -171,6 +171,7 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if err := json.Unmarshal([]byte(event.Data), &result); err != nil {
 				result = model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote result decode failed: " + err.Error()}
 			}
+			result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatus(result.Status, result.Reason, result.VerdictSource, result.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(result.VerdictSource, "cpu_time_cgroup"))
 			return result
 		}
 	}
