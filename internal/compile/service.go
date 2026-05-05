@@ -2950,12 +2950,12 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		case <-watchdog.C:
 			if runGroup.Path != "" {
 				if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
-					if stats.MemoryLimitBreached(memoryLimitKB * 1024) {
+					switch stats.FirstLimitBreach(memoryLimitKB * 1024) {
+					case cgroup.LimitBreachMemory:
 						killSandbox()
 						<-waitCh
 						return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "memory limit exceeded"
-					}
-					if stats.PidsLimitBreached() {
+					case cgroup.LimitBreachPids:
 						killSandbox()
 						<-waitCh
 						return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "process limit exceeded"
@@ -2992,6 +2992,16 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 				}
 			}
 		case err := <-waitCh:
+			if runGroup.Path != "" {
+				if stats, statsErr := cgroup.ReadStats(runGroup.Path); statsErr == nil {
+					switch stats.FirstLimitBreach(memoryLimitKB * 1024) {
+					case cgroup.LimitBreachMemory:
+						return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "memory limit exceeded"
+					case cgroup.LimitBreachPids:
+						return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "process limit exceeded"
+					}
+				}
+			}
 			if err != nil {
 				reason := err.Error()
 				if ps := cmd.ProcessState; ps != nil {

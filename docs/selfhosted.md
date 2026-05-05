@@ -181,7 +181,7 @@ run cgroup:
   for process cleanup races
 
 The same package also defines the read contract used by the optional cgroup
-watchdog and the future isolated backend:
+watchdog, final post-exit classification, and the future isolated backend:
 
 - `memory.current`
 - `memory.peak` when the kernel exposes it
@@ -189,6 +189,11 @@ watchdog and the future isolated backend:
 - `pids.current`
 - `cpu.stat`
 - `pids.events`
+
+Execute and compile read these files before removing the run cgroup, so
+kernel-side `memory.max` OOM kills and `pids.max` events still classify as
+memory or process limits even when `cmd.Wait()` wins the race against the
+watchdog tick.
 
 If that backend is added later, it should only be enabled after it can provide
 all of the following at the same time:

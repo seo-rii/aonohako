@@ -125,6 +125,32 @@ func TestStatsPidsLimitBreachedUsesPidsEvents(t *testing.T) {
 	}
 }
 
+func TestStatsFirstLimitBreachPrioritizesMemoryOverPids(t *testing.T) {
+	stats := Stats{
+		MemoryEvents: map[string]int64{"oom_kill": 1},
+		PidsEvents:   map[string]int64{"max": 1},
+	}
+	if got := stats.FirstLimitBreach(64 << 20); got != LimitBreachMemory {
+		t.Fatalf("FirstLimitBreach() = %q, want %q", got, LimitBreachMemory)
+	}
+
+	stats = Stats{
+		MemoryEvents: map[string]int64{},
+		PidsEvents:   map[string]int64{"max": 1},
+	}
+	if got := stats.FirstLimitBreach(64 << 20); got != LimitBreachPids {
+		t.Fatalf("FirstLimitBreach() = %q, want %q", got, LimitBreachPids)
+	}
+
+	stats = Stats{
+		MemoryEvents: map[string]int64{},
+		PidsEvents:   map[string]int64{},
+	}
+	if got := stats.FirstLimitBreach(64 << 20); got != LimitBreachNone {
+		t.Fatalf("FirstLimitBreach() = %q, want %q", got, LimitBreachNone)
+	}
+}
+
 func TestReadStatsAllowsMissingMemoryPeak(t *testing.T) {
 	group := t.TempDir()
 	writeFile(t, filepath.Join(group, "memory.current"), "1\n")

@@ -377,7 +377,10 @@ scan-error handling apply during compile as well as execute. If
 `AONOHAKO_CGROUP_PARENT` is configured for a self-hosted helper runner, compile,
 execute, and SPJ helper processes are also placed into per-run cgroups with
 `memory.max`, `pids.max`, `memory.swap.max=0` when supported, and
-`memory.oom.group=1`.
+`memory.oom.group=1`. Execute and compile read final cgroup stats after the
+sandbox process exits and before signal fallback classification, so a kernel
+`memory.max` OOM kill is reported as memory-limit exceeded instead of being
+misclassified as a generic `SIGKILL` timeout or runtime error.
 
 .NET is the main compatibility exception: `dotnet` invocations still disable
 `RLIMIT_AS` and `RLIMIT_FSIZE` because CoreCLR reserves a very large
@@ -422,10 +425,12 @@ The accounting reader reads `memory.current`, `memory.peak` when present,
 `memory.events`, `pids.current`, `pids.events`, and `cpu.stat`. When a run
 cgroup is present, watchdogs prefer `memory.events` `max`, `oom`, `oom_kill`,
 and `oom_group_kill`, plus `pids.events` `max`, over RSS polling for hard memory
-and pids-limit classification. Execute watchdogs also use `cpu.stat` `usage_usec`
-to update reported CPU time and classify CPU-time TLE for the whole run cgroup.
-CPU throttling counters remain diagnostic; the current cgroup CPU setting is a
-bandwidth guardrail, not a separate verdict classification source.
+and pids-limit classification. Final stats are read before cleanup so late
+kernel OOM/pids events that beat the watchdog tick still take priority over
+signal-based fallback classification. Execute watchdogs also use `cpu.stat`
+`usage_usec` to update reported CPU time and classify CPU-time TLE for the whole
+run cgroup. CPU throttling counters remain diagnostic; the current cgroup CPU
+setting is a bandwidth guardrail, not a separate verdict classification source.
 
 ## Deployment Contract
 
@@ -486,6 +491,11 @@ The following checks are enforced before the HTTP server starts:
   and fail closed when present with an unsupported value
 - malformed remote `log`, `image`, `error`, or `result` events fail the remote
   request as a protocol error instead of being silently ignored
+- when a control plane maps `problem_id` to `runtime_profile` and forwards the
+  selected profile, downstream remote runners must receive the same
+  `AONOHAKO_RUNTIME_TUNING_PROFILES` and `AONOHAKO_PROBLEM_RUNTIME_PROFILES`
+  config, or must be otherwise configured as a trusted internal boundary that
+  accepts those policy-selected profiles
 - inbound `/compile` and `/execute` authentication defaults to bearer tokens
   outside `dev`; `AONOHAKO_INBOUND_AUTH=platform` must be explicit when an
   upstream platform layer owns inbound authentication

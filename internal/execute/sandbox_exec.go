@@ -442,17 +442,19 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 						}
 					}
-					if result.Status == "OK" && memoryLimitKB > 0 && stats.MemoryLimitBreached(memoryLimitKB*1024) {
-						result.Status = model.RunStatusMLE
-						result.Reason = "memory limit exceeded"
-						result.VerdictSource = "memory_cgroup"
-						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-					}
-					if result.Status == "OK" && stats.PidsLimitBreached() {
-						result.Status = model.RunStatusRE
-						result.Reason = "process limit exceeded"
-						result.VerdictSource = "pids_cgroup"
-						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					if result.Status == "OK" {
+						switch stats.FirstLimitBreach(memoryLimitKB * 1024) {
+						case cgroup.LimitBreachMemory:
+							result.Status = model.RunStatusMLE
+							result.Reason = "memory limit exceeded"
+							result.VerdictSource = "memory_cgroup"
+							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+						case cgroup.LimitBreachPids:
+							result.Status = model.RunStatusRE
+							result.Reason = "process limit exceeded"
+							result.VerdictSource = "pids_cgroup"
+							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+						}
 					}
 				}
 			}
@@ -523,6 +525,27 @@ done:
 	result.StdoutTruncated = stdoutBuf.Truncated()
 	result.StderrTruncated = stderrBuf.Truncated()
 	result.MemoryKB = maxRSSKB
+
+	if runGroup.Path != "" && result.Status == "OK" {
+		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
+			if stats.MemoryCurrentBytes > 0 && stats.MemoryCurrentBytes/1024 > result.MemoryKB {
+				result.MemoryKB = stats.MemoryCurrentBytes / 1024
+			}
+			if stats.MemoryPeakBytes > 0 && stats.MemoryPeakBytes/1024 > result.MemoryKB {
+				result.MemoryKB = stats.MemoryPeakBytes / 1024
+			}
+			switch stats.FirstLimitBreach(memoryLimitKB * 1024) {
+			case cgroup.LimitBreachMemory:
+				result.Status = model.RunStatusMLE
+				result.Reason = "memory limit exceeded"
+				result.VerdictSource = "memory_cgroup_final"
+			case cgroup.LimitBreachPids:
+				result.Status = model.RunStatusRE
+				result.Reason = "process limit exceeded"
+				result.VerdictSource = "pids_cgroup_final"
+			}
+		}
+	}
 
 	if ps := cmd.ProcessState; ps != nil {
 		if ws, ok := ps.Sys().(syscall.WaitStatus); ok {

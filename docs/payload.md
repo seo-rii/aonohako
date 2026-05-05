@@ -310,6 +310,7 @@ When `spj` is provided, the SPJ binary is invoked as:
   may report values such as `stdout`, `file_output`, `spj`, `exit_code`,
   `signal`, `wait_status`, `sandbox_init`, `wall_time`, `cpu_time`,
   `cpu_time_cgroup`, `cpu_rlimit`, `memory_rss`, `memory_cgroup`,
-  `memory_reported`, `address_space`, `pids_cgroup`, `workspace_bytes`,
-  `workspace_entries`, `workspace_depth`, or `workspace_scan` to explain which
-  measurement or judge step selected the final status.
+  `memory_cgroup_final`, `memory_reported`, `address_space`, `pids_cgroup`,
+  `pids_cgroup_final`, `workspace_bytes`, `workspace_entries`,
+  `workspace_depth`, or `workspace_scan` to explain which measurement or judge
+  step selected the final status.

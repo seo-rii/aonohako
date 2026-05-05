@@ -197,6 +197,9 @@ aonohako-selftest cgroup-preflight
   request `problem_id` values to named `AONOHAKO_RUNTIME_TUNING_PROFILES`.
   The server applies the mapped profile before stream or queue acquisition, so
   public entry points can keep direct `runtime_profile` selection disabled.
+  With `remote` transport, deploy the same profile definitions and
+  `problem_id` mapping to the downstream runner whenever the control plane
+  forwards policy-selected `runtime_profile` values.
 - `AONOHAKO_TRUSTED_RUNNER_INGRESS` asserts that a root-backed embedded helper
   runner is reachable only through trusted/private ingress, Cloud Run IAM, mTLS,
   a gateway, or an equivalent control-plane boundary. It defaults to `true` for
@@ -406,7 +409,9 @@ flags through requests:
 - `AONOHAKO_PROBLEM_RUNTIME_PROFILES` maps bounded `problem_id` strings to
   those named profiles, for example `{"contest-1/a":"low-memory"}`. A mapped
   `problem_id` applies the profile even when direct request profile selection
-  is disabled; conflicting `runtime_profile` values are rejected.
+  is disabled; conflicting `runtime_profile` values are rejected. Remote runner
+  pools should receive the same runtime profile config as the control plane
+  when forwarded requests include policy-selected profiles.
 
 Invalid values fail startup. These settings only tune memory-related runtime
 caps; they do not expose network, filesystem, process, or arbitrary flag
