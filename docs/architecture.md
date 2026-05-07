@@ -642,7 +642,7 @@ Production profiles currently group languages like this:
 | `type-a` | `aheui`, `bf`, `elixir`, `erlang`, `haskell`, `lisp`, `lua`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `r`, `racket`, `ruby`, `sqlite`, `wasm`, `whitespace` |
 | `type-b` | `clojure`, `groovy`, `java`, `javascript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `d`, `fortran`, `go`, `nasm`, `nim`, `pascal`, `rust`, `zig` |
-| `type-d` | `kotlin` |
+| `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp` |
 | `type-f` | `uhmlang` |
 | `type-g` | `julia` |

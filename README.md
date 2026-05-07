@@ -28,7 +28,7 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   `aheui`, `racket`, `bf`, `whitespace`, `wasm`, and other lighter scripting runtimes),
   `type-b` (`clojure`, `java`, `javascript`, `scala`, `typescript`), `type-c`
   (`ada`, `asm`, `d`, `fortran`, `go`, `nasm`, `nim`, `pascal`, `rust`, `zig`),
-  `type-e` (`csharp`, `fsharp`), and the mixin validation profile `type-i` (`plain`,
+  `type-d` (`kotlin`, `kotlin-jvm`), `type-e` (`csharp`, `fsharp`), and the mixin validation profile `type-i` (`plain`,
   `python`, `java`), plus dedicated profiles where a toolchain needs its own
   base image or install path such as `python` judge libraries (`type-l`),
   `swift`, `julia`, `coq`, or `dart`.

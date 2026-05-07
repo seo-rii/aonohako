@@ -5,7 +5,7 @@
 ```jsonc
 {
   "lang": "CPP17",                           // language identifier (see Supported Languages)
-  "version": "20",                           // optional C/C++ std, Java --release, or Rust edition override
+  "version": "20",                           // optional C/C++ std, Java/Kotlin-JVM release, or Rust edition override
   "sources": [                               // source files to compile (max 512 entries)
     {
       "name": "Main.cpp",                   // filename (relative, no path traversal allowed)
@@ -26,12 +26,14 @@ source after path cleaning. Native multi-file compilers such as C/C++ still
 compile all source files of the language, so `entry_point` is validation
 metadata rather than an argument that drops helper sources.
 
-`version` is optional and currently applies to C, C++, Java, and Rust compile
-profiles. C/C++ values select the language standard (`"c99"`, `"c23"`,
-`"17"`, `"gnu++23"`), Java values select `javac --release` (`"8"`, `"11"`,
-`"17"`, `"21"`), and Rust values select the edition (`"2018"`, `"2021"`,
-`"2024"`). Existing language aliases such as `C11`, `CPP20`, `JAVA17`, and
-`RUST2021` remain supported.
+`version` is optional and currently applies to C, C++, Java, Kotlin/JVM, and
+Rust compile profiles. C/C++ values select the language standard (`"c99"`,
+`"c23"`, `"17"`, `"gnu++23"`), Java values select `javac --release` (`"8"`,
+`"11"`, `"17"`, `"21"`), Kotlin/JVM values select the matching
+`kotlinc -jvm-target` and Java-source `javac --release` (`"17"` or
+`"jvm-target=17"`), and Rust values select the edition (`"2018"`, `"2021"`,
+`"2024"`). Existing language aliases such as `C11`, `CPP20`, `JAVA17`,
+`KOTLIN_JVM17`, and `RUST2021` remain supported.
 
 ## `POST /compile` — Response
 
@@ -58,7 +60,7 @@ profiles. C/C++ values select the language standard (`"c99"`, `"c23"`,
 
 ```jsonc
 {
-  "lang": "binary",                          // runtime language: binary|python|pypy|java|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|fsharp|text|clojure|racket|groovy|scala|erlang|prolog|lisp|coq|r|whitespace|brainfuck|wasm|aheui
+  "lang": "binary",                          // runtime language: binary|python|pypy|java|kotlin-jvm|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|fsharp|text|clojure|racket|groovy|scala|erlang|prolog|lisp|coq|r|whitespace|brainfuck|wasm|aheui
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
@@ -208,6 +210,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | COFFEESCRIPT | `coffeescript` | `coffee --compile --bare` |
 | TYPESCRIPT | `typescript` | `tsc` |
 | KOTLIN | `kotlin` | `kotlinc-native` |
+| KOTLIN_JVM, KOTLIN_JAVA, KOTLIN_JVM8–21, KOTLIN_JAVA8–21 | `kotlin-jvm` | `kotlinc -jvm-target <v>` plus `javac --release <v>` for submitted `.java` files |
 | PASCAL | `pascal` | `fpc -O2 -Xs` |
 | NIM | `nim` | `nim c -d:release --opt:speed` |
 | ADA | `ada` | `gnatmake -O2` |
@@ -261,6 +264,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `groovy` | `groovy -cp <dir> <MainClass>` |
 | `scala` | `scala -classpath <dir> <MainClass>` |
 | `java` | `java -jar <file>` |
+| `kotlin-jvm` | `java -jar <file>` |
 | `erlang` | `erl -noshell -pa <dir> -s <module> <function> -s init stop` |
 | `prolog` | `swipl -q -f <file> -g main -t halt` |
 | `lisp` | `sbcl --script <file>` |

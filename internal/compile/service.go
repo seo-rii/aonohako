@@ -393,8 +393,16 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "MOJO"
 	case "deno":
 		l = "DENO"
-	case "kotlin-jvm":
+	case "kotlin-jvm", "kotlin_java", "kotlin-java", "kotlin/java", "kotlinjava":
 		l = "KOTLIN_JVM"
+	case "kotlin-jvm8", "kotlin-java8", "kotlin/java8":
+		l = "KOTLIN_JVM8"
+	case "kotlin-jvm11", "kotlin-java11", "kotlin/java11":
+		l = "KOTLIN_JVM11"
+	case "kotlin-jvm17", "kotlin-java17", "kotlin/java17":
+		l = "KOTLIN_JVM17"
+	case "kotlin-jvm21", "kotlin-java21", "kotlin/java21":
+		l = "KOTLIN_JVM21"
 	case "duckdb":
 		l = "DUCKDB"
 	case "bqn":
@@ -450,6 +458,12 @@ func applyRequestedVersion(profile profiles.Profile, raw string) (profiles.Profi
 			return profile, fmt.Errorf("unsupported Java version: %s", raw)
 		}
 		profile.JavaRelease = release
+	case "kotlin-jvm":
+		release, ok := javaReleaseVersion(version)
+		if !ok {
+			return profile, fmt.Errorf("unsupported Kotlin/JVM target: %s", raw)
+		}
+		profile.JavaRelease = release
 	case "rust":
 		edition, ok := rustEditionVersion(version)
 		if !ok {
@@ -468,6 +482,12 @@ func normalizeRequestedVersion(raw string) string {
 	version = strings.TrimPrefix(version, "--std=")
 	version = strings.TrimPrefix(version, "release=")
 	version = strings.TrimPrefix(version, "--release=")
+	version = strings.TrimPrefix(version, "jvm=")
+	version = strings.TrimPrefix(version, "jvmtarget=")
+	version = strings.TrimPrefix(version, "jvm_target=")
+	version = strings.TrimPrefix(version, "jvm-target=")
+	version = strings.TrimPrefix(version, "--jvm-target=")
+	version = strings.TrimPrefix(version, "--jvm_target=")
 	version = strings.TrimPrefix(version, "edition=")
 	version = strings.TrimPrefix(version, "--edition=")
 	return strings.ReplaceAll(version, "_", "")
@@ -538,6 +558,8 @@ func cppStandardVersion(version string) (string, bool) {
 func javaReleaseVersion(version string) (string, bool) {
 	version = strings.TrimPrefix(version, "java")
 	switch version {
+	case "1.8":
+		return "8", true
 	case "8", "11", "15", "17", "21":
 		return version, true
 	default:
@@ -1083,7 +1105,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "deno":
 		return compileCheckedSources(ctx, workDir, req.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check"}, nil)
 	case "kotlin-jvm":
-		return compileKotlinJVM(ctx, workDir, target, req.Sources, tuning)
+		return compileKotlinJVM(ctx, workDir, target, req.Sources, profile.JavaRelease, tuning)
 	case "duckdb":
 		return compilePassThroughIfExt(workDir, req.Sources, []string{".sql"}, "no duckdb sources")
 	case "bqn":
@@ -2130,34 +2152,70 @@ func compileMojo(ctx context.Context, workDir, target string, sources []model.So
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
-func compileKotlinJVM(ctx context.Context, workDir, target string, sources []model.Source, tuning config.RuntimeTuningConfig) model.CompileResponse {
+func compileKotlinJVM(ctx context.Context, workDir, target string, sources []model.Source, javaRelease string, tuning config.RuntimeTuningConfig) model.CompileResponse {
 	kt := sourcePathsByExt(workDir, sources, ".kt")
 	if len(kt) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no kotlin-jvm sources"}
 	}
+	javaPaths := sourcePathsByExt(workDir, sources, ".java")
 	if !strings.HasSuffix(strings.ToLower(target), ".jar") {
 		target += ".jar"
 	}
+	if javaRelease == "" {
+		javaRelease = "8"
+	}
+	jvmTarget := javaRelease
+	if javaRelease == "8" {
+		jvmTarget = "1.8"
+	}
 	tuning = tuning.WithSafeDefaults()
+	heapMB := max(512, tuning.KotlinNativeCompilerHeapMB)
+	fullOut := newCompileOutputBuffer()
+	fullErr := newCompileOutputBuffer()
 	args := []string{
 		"-J-Xms64m",
-		fmt.Sprintf("-J-Xmx%dm", max(512, tuning.KotlinNativeCompilerHeapMB)),
+		fmt.Sprintf("-J-Xmx%dm", heapMB),
 		"-J-Xss1m",
 		"-J-XX:+UseSerialGC",
+		"-jvm-target",
+		jvmTarget,
 		"-include-runtime",
 		"-d",
 		filepath.Join(workDir, target),
 	}
 	args = append(args, kt...)
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "kotlinc", args, javaCompileEnv(workDir, max(512, tuning.KotlinNativeCompilerHeapMB)))
+	args = append(args, javaPaths...)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "kotlinc", args, javaCompileEnv(workDir, heapMB))
+	fullOut.Append(stdout)
+	fullErr.Append(stderr)
 	if status != model.CompileStatusOK {
-		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+		return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
+	}
+	if len(javaPaths) > 0 {
+		javaClassesDir := filepath.Join(workDir, ".aonohako-java-classes")
+		if err := os.MkdirAll(javaClassesDir, 0o777|os.ModeSticky); err != nil {
+			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
+		}
+		javacArgs := []string{"--release", javaRelease, "-encoding", "UTF-8", "-cp", filepath.Join(workDir, target), "-d", javaClassesDir}
+		javacArgs = append(javacArgs, javaPaths...)
+		stdout, stderr, status, reason = runCommand(ctx, workDir, "javac", javacArgs, javaCompileEnv(workDir, heapMB))
+		fullOut.Append(stdout)
+		fullErr.Append(stderr)
+		if status != model.CompileStatusOK {
+			return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
+		}
+		stdout, stderr, status, reason = runCommand(ctx, workDir, "jar", []string{"uf", filepath.Join(workDir, target), "-C", javaClassesDir, "."}, javaCompileEnv(workDir, heapMB))
+		fullOut.Append(stdout)
+		fullErr.Append(stderr)
+		if status != model.CompileStatusOK {
+			return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
+		}
 	}
 	artifacts, err := readSingleArtifact(workDir, target, target, "")
 	if err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 	}
-	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 }
 
 func compileRocq(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
