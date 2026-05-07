@@ -132,7 +132,16 @@ var profiles = map[string]Profile{
 	"GOLFSCRIPT":    {SourceLang: "GOLFSCRIPT", Extension: "gs", CompileKind: "golfscript", RunLang: "golfscript", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"MOJO":          {SourceLang: "MOJO", Extension: "mojo", DefaultTarget: "Main", CompileKind: "mojo", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"DENO":          {SourceLang: "DENO", Extension: "ts", CompileKind: "deno", RunLang: "deno", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
-	"KOTLIN_JVM":    {SourceLang: "KOTLIN_JVM", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JVM":    {SourceLang: "KOTLIN_JVM", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "8", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JVM8":   {SourceLang: "KOTLIN_JVM8", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "8", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JVM11":  {SourceLang: "KOTLIN_JVM11", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "11", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JVM17":  {SourceLang: "KOTLIN_JVM17", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "17", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JVM21":  {SourceLang: "KOTLIN_JVM21", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "21", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JAVA":   {SourceLang: "KOTLIN_JAVA", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "8", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JAVA8":  {SourceLang: "KOTLIN_JAVA8", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "8", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JAVA11": {SourceLang: "KOTLIN_JAVA11", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "11", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JAVA17": {SourceLang: "KOTLIN_JAVA17", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "17", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"KOTLIN_JAVA21": {SourceLang: "KOTLIN_JAVA21", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "21", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"DUCKDB":        {SourceLang: "DUCKDB", Extension: "sql", CompileKind: "duckdb", RunLang: "duckdb", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"BQN":           {SourceLang: "BQN", Extension: "bqn", CompileKind: "bqn", RunLang: "bqn", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"APL":           {SourceLang: "APL", Extension: "apl", CompileKind: "apl", RunLang: "apl", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
@@ -160,6 +169,8 @@ func NormalizeRunLang(language string) string {
 		return key
 	case "coq":
 		return "rocq"
+	case "kotlin-java", "kotlin/java", "kotlinjava", "kotlin-jvm8", "kotlin-jvm11", "kotlin-jvm17", "kotlin-jvm21", "kotlin-java8", "kotlin-java11", "kotlin-java17", "kotlin-java21", "kotlin/java8", "kotlin/java11", "kotlin/java17", "kotlin/java21":
+		return "kotlin-jvm"
 	case "bf":
 		return "brainfuck"
 	case "vb":

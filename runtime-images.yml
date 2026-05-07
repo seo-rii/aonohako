@@ -1916,7 +1916,7 @@ languages:
     install:
       apt:
         - curl
-        - default-jre-headless
+        - default-jdk-headless
         - unzip
       script:
         - export KOTLIN_JVM_VERSION=2.3.21
@@ -1929,8 +1929,11 @@ languages:
         - bash
         - -lc
         - |
-          printf '%s\n' 'fun main() {' '  println("ok")' '}' > Main.kt
-          kotlinc Main.kt -include-runtime -d Main.jar
+          printf '%s\n' 'final class Helper {' '  static String value() {' '    return "ok";' '  }' '}' > Helper.java
+          printf '%s\n' 'fun main() {' '  println(Helper.value())' '}' > Main.kt
+          kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar
+          javac --release 8 -cp Main.jar Helper.java
+          jar uf Main.jar Helper.class
           java -jar Main.jar | grep '^ok$'
 
   duckdb:

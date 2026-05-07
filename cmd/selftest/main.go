@@ -2975,7 +2975,12 @@ int main() {
 			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.kt", `fun main() {
-  println("ok")
+  println(Helper.value())
+}`),
+				source("Helper.java", `final class Helper {
+  static String value() {
+    return "ok";
+  }
 }`),
 			},
 		},

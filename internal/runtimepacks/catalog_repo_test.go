@@ -230,7 +230,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"haxe":          {"haxe -main Main -neko Main.n", "neko Main.n"},
 		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle build -D ."},
 		"janet":         {"JANET_VERSION=1.41.2", "janet Main.janet"},
-		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "kotlinc Main.kt -include-runtime -d Main.jar"},
+		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "default-jdk-headless", "kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar", "javac --release 8 -cp Main.jar Helper.java", "jar uf Main.jar Helper.class"},
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
 		"mojo":          {"mojo==0.26.2.0", "mojo build Main.mojo"},
 		"nim":           {"nim c", "Broken.nim"},

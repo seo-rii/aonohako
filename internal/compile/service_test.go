@@ -257,6 +257,9 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"mojo":          {compileKind: "mojo", runLang: "binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
 		"kotlin-jvm":    {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},
+		"kotlin-java":   {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},
+		"kotlin/java":   {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},
+		"kotlin-java17": {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},
 		"duckdb":        {compileKind: "duckdb", runLang: "duckdb"},
 		"bqn":           {compileKind: "bqn", runLang: "bqn"},
 		"apl":           {compileKind: "apl", runLang: "apl"},
@@ -304,6 +307,7 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"gst":             "smalltalk",
 		"gnu-apl":         "apl",
 		"coffee":          "coffeescript",
+		"kotlin_java":     "kotlin-jvm",
 	}
 
 	for input, wantCompileKind := range tests {
@@ -333,9 +337,15 @@ func TestApplyRequestedVersionOverridesLanguageDefaults(t *testing.T) {
 		{name: "cpp gnu standard", lang: "CPP17", version: "gnu++23", wantStd: "gnu++23"},
 		{name: "java release", lang: "JAVA11", version: "17", wantJava: "17"},
 		{name: "java release prefix", lang: "JAVA11", version: "java21", wantJava: "21"},
+		{name: "kotlin jvm release alias", lang: "KOTLIN_JVM17", wantJava: "17"},
+		{name: "kotlin jvm release", lang: "KOTLIN_JVM", version: "17", wantJava: "17"},
+		{name: "kotlin java release prefix", lang: "KOTLIN_JAVA11", version: "java21", wantJava: "21"},
+		{name: "kotlin jvm target prefix", lang: "KOTLIN_JVM", version: "jvm-target=11", wantJava: "11"},
+		{name: "kotlin jvm 1.8 target", lang: "KOTLIN_JVM", version: "jvm_target=1.8", wantJava: "8"},
 		{name: "rust edition", lang: "RUST2021", version: "edition2024", wantRust: "2024"},
 		{name: "unsupported versioned language", lang: "PYTHON3", version: "3.13", wantError: true},
 		{name: "unsupported version value", lang: "RUST2021", version: "2030", wantError: true},
+		{name: "unsupported kotlin jvm target", lang: "KOTLIN_JVM", version: "2030", wantError: true},
 	}
 
 	for _, tc := range tests {
