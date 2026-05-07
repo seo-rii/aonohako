@@ -655,12 +655,15 @@ Production profiles currently group languages like this:
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the
 production profiles in a parallel matrix and runs
-`scripts/report_toolchain_versions.sh` once per profile. Each matrix leg tries
-to create a `docker save` archive and SHA256 sidecar before best-effort scanner
-exports; if the runner cannot hold the archive, it writes an archive failure
-diagnostic JSON instead. It then uploads its summary fragment, Syft SBOM JSON or
-a Syft failure diagnostic JSON, non-blocking Grype JSON scan, and image archive
-or archive diagnostic as artifacts.
+`scripts/report_toolchain_versions.sh` once per profile. The generated fragment
+contains the compiler/runtime version table and a language-specific compile
+options table so CI summaries show both the installed toolchain and the flags or
+compile pipeline used by the service. Each matrix leg tries to create a
+`docker save` archive and SHA256 sidecar before best-effort scanner exports; if
+the runner cannot hold the archive, it writes an archive failure diagnostic JSON
+instead. It then uploads its summary fragment, Syft SBOM JSON or a Syft failure
+diagnostic JSON, non-blocking Grype JSON scan, and image archive or archive
+diagnostic as artifacts.
 Syft and Grype are best-effort in that profile matrix because large language
 images can exhaust GitHub runner scratch space while exporting daemon images;
 the workflow prunes build cache, Go caches, and scanner temp/cache directories

@@ -36,9 +36,10 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   smoke job validates a single toolchain in isolation. A separate CI job builds
   the production profiles in parallel, runs
   [`scripts/report_toolchain_versions.sh`](scripts/report_toolchain_versions.sh)
-  once per profile, and uploads both the profile summary fragment and a
-  `docker save` archive for that image as artifacts. A final CI job downloads
-  those artifacts, publishes one consolidated GitHub Actions summary, and
+  once per profile, records both toolchain versions and language-specific
+  compile options, and uploads the profile summary fragment plus a `docker save`
+  archive for that image as artifacts. A final CI job downloads those artifacts,
+  publishes one consolidated GitHub Actions summary, and
   re-uploads the collected summaries plus image archives as a single bundle.
 - The current catalog covers native binaries, Python plus bundled judge
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,

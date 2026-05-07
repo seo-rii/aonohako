@@ -21,7 +21,9 @@ if not summary_paths:
 profile_order = {}
 profiles = []
 rows = []
+option_rows = []
 row_re = re.compile(r"^\|\s*(.*?)\s*\|\s*`(.*)`\s*\|$")
+option_re = re.compile(r"^\|\s*`?(.*?)`?\s*\|\s*`(.*)`\s*\|$")
 
 for index, summary_path in enumerate(summary_paths):
     profile = summary_path.parent.name
@@ -29,11 +31,27 @@ for index, summary_path in enumerate(summary_paths):
         profile = profile[len("toolchain-profile-") :]
     profile_order[profile] = index
     profiles.append(profile)
+    section = None
     for raw_line in summary_path.read_text(encoding="utf-8").splitlines():
-        match = row_re.match(raw_line)
-        if match is None or match.group(1) == "Tool":
+        if raw_line == "## Runtime Toolchain Versions":
+            section = "versions"
             continue
-        rows.append((profile, match.group(1), match.group(2)))
+        if raw_line == "## Runtime Compile Options":
+            section = "compile_options"
+            continue
+        if raw_line.startswith("## "):
+            section = None
+            continue
+        if section == "versions":
+            match = row_re.match(raw_line)
+            if match is None or match.group(1) == "Tool":
+                continue
+            rows.append((profile, match.group(1), match.group(2)))
+        elif section == "compile_options":
+            match = option_re.match(raw_line)
+            if match is None or match.group(1) == "Language":
+                continue
+            option_rows.append((profile, match.group(1).strip("`"), match.group(2)))
 
 versions_by_tool = {}
 for profile, tool, version in rows:
@@ -80,3 +98,55 @@ if conflicts:
     print("| --- | --- | --- |")
     for tool, version, tool_profiles in conflicts:
         print(f"| {tool} | `{version}` | {', '.join(f'`{profile}`' for profile in tool_profiles)} |")
+
+options_by_language = {}
+for profile, language, options in option_rows:
+    options_by_language.setdefault(language, {}).setdefault(options, []).append(profile)
+
+if options_by_language:
+    print()
+    print("## Runtime Compile Options")
+    print()
+
+    option_consistent = []
+    option_conflicts = []
+    for language in sorted(options_by_language, key=str.lower):
+        options_map = options_by_language[language]
+        if len(options_map) == 1:
+            options = next(iter(options_map))
+            option_consistent.append(
+                (
+                    language,
+                    options,
+                    sorted(set(options_map[options]), key=lambda item: profile_order[item]),
+                )
+            )
+            continue
+        for options in sorted(options_map):
+            option_conflicts.append(
+                (
+                    language,
+                    options,
+                    sorted(set(options_map[options]), key=lambda item: profile_order[item]),
+                )
+            )
+
+    if option_consistent:
+        print("| Language | Compile options | Profiles |")
+        print("| --- | --- | --- |")
+        for language, options, option_profiles in option_consistent:
+            print(
+                f"| `{language}` | `{options}` | {', '.join(f'`{profile}`' for profile in option_profiles)} |"
+            )
+
+    if option_conflicts:
+        if option_consistent:
+            print()
+        print("### Compile Option Differences")
+        print()
+        print("| Language | Compile options | Profiles |")
+        print("| --- | --- | --- |")
+        for language, options, option_profiles in option_conflicts:
+            print(
+                f"| `{language}` | `{options}` | {', '.join(f'`{profile}`' for profile in option_profiles)} |"
+            )

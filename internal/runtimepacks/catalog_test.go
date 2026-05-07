@@ -300,6 +300,11 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "GNU sed" sed --version`,
 		`report_once "bc" bc --version`,
 		`report_once "Gforth" gforth --version`,
+		`echo "## Runtime Compile Options"`,
+		`report_compile_option "java" "javac --release 11 -encoding UTF-8"`,
+		`report_compile_option "kotlin-jvm" "kotlinc -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"`,
+		`report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"`,
+		`report_compile_option "rust" "rustc --edition 2018 -O -o <target>"`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("report_toolchain_versions.sh must contain %q", marker)
@@ -315,11 +320,11 @@ func TestAggregateToolchainSummariesScriptMergesConsistentVersions(t *testing.T)
 	}{
 		{
 			profile: "type-a",
-			body:    "## Runtime Toolchain Versions\n\n- Image: `a`\n\n| Tool | Version |\n| --- | --- |\n| GCC | `14.2.0` |\n| Python | `3.13.3` |\n",
+			body:    "## Runtime Toolchain Versions\n\n- Image: `a`\n\n| Tool | Version |\n| --- | --- |\n| GCC | `14.2.0` |\n| Python | `3.13.3` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n| `python` | `python3 -I -S -m compileall -b .` |\n",
 		},
 		{
 			profile: "type-b",
-			body:    "## Runtime Toolchain Versions\n\n- Image: `b`\n\n| Tool | Version |\n| --- | --- |\n| GCC | `14.2.0` |\n| Swift | `6.1` |\n",
+			body:    "## Runtime Toolchain Versions\n\n- Image: `b`\n\n| Tool | Version |\n| --- | --- |\n| GCC | `14.2.0` |\n| Swift | `6.1` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n| `java` | `javac --release 11 -encoding UTF-8` |\n",
 		},
 	} {
 		dir := filepath.Join(root, "toolchain-profile-"+fixture.profile)
@@ -345,6 +350,9 @@ func TestAggregateToolchainSummariesScriptMergesConsistentVersions(t *testing.T)
 		"| GCC | `14.2.0` | `type-a`, `type-b` |",
 		"| Python | `3.13.3` | `type-a` |",
 		"| Swift | `6.1` | `type-b` |",
+		"## Runtime Compile Options",
+		"| `java` | `javac --release 11 -encoding UTF-8` | `type-b` |",
+		"| `python` | `python3 -I -S -m compileall -b .` | `type-a` |",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("aggregate summary missing %q in %q", want, body)
