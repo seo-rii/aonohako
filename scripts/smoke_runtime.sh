@@ -18,6 +18,7 @@ chmod 0755 "${work_root}"
 export AONOHAKO_EXECUTION_MODE=local-root
 export AONOHAKO_WORK_ROOT="${work_root}"
 aonohako-selftest compile-execute
+aonohako-selftest two-step
 aonohako-selftest language-security
 aonohako-selftest runtime-memory
 

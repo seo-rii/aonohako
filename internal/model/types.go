@@ -56,6 +56,48 @@ type OutputFile struct {
 	Path string `json:"path"`
 }
 
+type RunProgram struct {
+	ID            string   `json:"id"`
+	Lang          string   `json:"lang"`
+	Binaries      []Binary `json:"binaries"`
+	EntryPoint    string   `json:"entry_point,omitempty"`
+	EnableNetwork bool     `json:"enable_network,omitempty"`
+}
+
+type StepHandoff struct {
+	ID       string `json:"id"`
+	From     string `json:"from,omitempty"`
+	Path     string `json:"path,omitempty"`
+	MaxBytes int64  `json:"max_bytes,omitempty"`
+}
+
+type RunStep struct {
+	ID        string       `json:"id"`
+	ProgramID string       `json:"program_id"`
+	Stdin     string       `json:"stdin,omitempty"`
+	StdinFrom string       `json:"stdin_from,omitempty"`
+	Limits    Limits       `json:"limits"`
+	Handoff   *StepHandoff `json:"handoff,omitempty"`
+}
+
+type StepResult struct {
+	ID              string `json:"id"`
+	ProgramID       string `json:"program_id,omitempty"`
+	Status          string `json:"status"`
+	TimeMs          int64  `json:"time_ms"`
+	WallTimeMs      int64  `json:"wall_time_ms"`
+	CPUTimeMs       int64  `json:"cpu_time_ms"`
+	MemoryKB        int64  `json:"memory_kb"`
+	ExitCode        *int   `json:"exit_code,omitempty"`
+	Stdout          string `json:"stdout,omitempty"`
+	Stderr          string `json:"stderr,omitempty"`
+	StdoutTruncated bool   `json:"stdout_truncated,omitempty"`
+	StderrTruncated bool   `json:"stderr_truncated,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	VerdictSource   string `json:"verdict_source,omitempty"`
+	HandoffBytes    int64  `json:"handoff_bytes,omitempty"`
+}
+
 type SidecarOutput struct {
 	Path    string `json:"path"`
 	DataB64 string `json:"data_b64"`
@@ -69,6 +111,8 @@ type SidecarError struct {
 type RunRequest struct {
 	Lang           string       `json:"lang"`
 	Binaries       []Binary     `json:"binaries"`
+	Programs       []RunProgram `json:"programs,omitempty"`
+	Steps          []RunStep    `json:"steps,omitempty"`
 	Stdin          string       `json:"stdin"`
 	ExpectedStdout string       `json:"expected_stdout,omitempty"`
 	Limits         Limits       `json:"limits"`
@@ -96,6 +140,7 @@ type RunResponse struct {
 	Reason          string          `json:"reason,omitempty"`
 	VerdictSource   string          `json:"verdict_source,omitempty"`
 	Score           *float64        `json:"score,omitempty"`
+	Steps           []StepResult    `json:"steps,omitempty"`
 	SidecarOutputs  []SidecarOutput `json:"sidecar_outputs,omitempty"`
 	SidecarErrors   []SidecarError  `json:"sidecar_errors,omitempty"`
 }

@@ -552,6 +552,169 @@ func TestRunUsesRequestedFileOutputForJudging(t *testing.T) {
 	}
 }
 
+func TestRunTwoStepPipelineAcceptsStdoutHandoff(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "encode.sh",
+					DataB64: b64("#!/bin/sh\nsed 's/^/encoded:/'\n"),
+					Mode:    "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "decode.sh",
+					DataB64: b64("#!/bin/sh\nsed 's/^encoded://'\n"),
+					Mode:    "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				Stdin:     "answer\n",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+				Handoff:   &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 1024},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinFrom: "encoded",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		ExpectedStdout: "answer\n",
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+	if resp.VerdictSource != "step:decode:stdout" {
+		t.Fatalf("verdict_source = %q, want step:decode:stdout", resp.VerdictSource)
+	}
+	if len(resp.Steps) != 2 {
+		t.Fatalf("expected two step results, got %+v", resp.Steps)
+	}
+	if resp.Steps[0].Status != "OK" || resp.Steps[0].HandoffBytes == 0 {
+		t.Fatalf("unexpected first step result: %+v", resp.Steps[0])
+	}
+	if resp.Steps[1].Status != model.RunStatusAccepted {
+		t.Fatalf("unexpected final step result: %+v", resp.Steps[1])
+	}
+}
+
+func TestRunTwoStepPipelineAcceptsFileHandoff(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "encode.sh",
+					DataB64: b64("#!/bin/sh\nprintf 'encoded-file\\n' > encoded.txt\n"),
+					Mode:    "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "decode.sh",
+					DataB64: b64("#!/bin/sh\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+				Handoff:   &model.StepHandoff{ID: "encoded", From: "file", Path: "encoded.txt", MaxBytes: 1024},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinFrom: "encoded",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		ExpectedStdout: "encoded-file\n",
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+	if resp.Steps[0].HandoffBytes != int64(len("encoded-file\n")) {
+		t.Fatalf("handoff bytes = %d", resp.Steps[0].HandoffBytes)
+	}
+}
+
+func TestRunTwoStepPipelineRejectsOversizedHandoff(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "encode.sh",
+					DataB64: b64("#!/bin/sh\nprintf 'abcdef\\n'\n"),
+					Mode:    "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "decode.sh",
+					DataB64: b64("#!/bin/sh\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+				Handoff:   &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 3},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinFrom: "encoded",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		ExpectedStdout: "abcdef\n",
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusRE {
+		t.Fatalf("expected handoff runtime error, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "handoff exceeded") {
+		t.Fatalf("unexpected reason: %+v", resp)
+	}
+	if len(resp.Steps) != 1 {
+		t.Fatalf("decoder should not run after handoff failure, got steps %+v", resp.Steps)
+	}
+}
+
 func TestRunPythonEntrypointReadsAuxiliaryCSVFile(t *testing.T) {
 	requireSandboxSupport(t)
 	if _, err := exec.LookPath("python3"); err != nil {
