@@ -319,7 +319,7 @@ func TestExecuteAcceptsTwoStepPipelineShape(t *testing.T) {
 		return model.RunResponse{
 			Status: model.RunStatusAccepted,
 			Steps: []model.StepResult{
-				{ID: "encode", Status: "OK", HandoffBytes: 8},
+				{ID: "encode", Status: model.RunStatusAccepted, HandoffBytes: 8},
 				{ID: "decode", Status: model.RunStatusAccepted},
 			},
 		}

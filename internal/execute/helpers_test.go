@@ -137,6 +137,31 @@ func TestBuildCommandJavaAlwaysHasJarFlag(t *testing.T) {
 	}
 }
 
+func TestBuildCommandJavaBoundsOffHeapMemory(t *testing.T) {
+	tests := []struct {
+		name          string
+		memoryMB      int
+		wantDirect    string
+		wantMetaspace string
+	}{
+		{"small_memory_floors", 64, "-XX:MaxDirectMemorySize=16m", "-XX:MaxMetaspaceSize=64m"},
+		{"medium_memory_scales", 512, "-XX:MaxDirectMemorySize=64m", "-XX:MaxMetaspaceSize=128m"},
+		{"large_memory_caps_metaspace", 2048, "-XX:MaxDirectMemorySize=256m", "-XX:MaxMetaspaceSize=192m"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &model.RunRequest{Limits: model.Limits{MemoryMB: tc.memoryMB}}
+			args := buildCommand("/tmp/Main.jar", "java", req)
+			if !containsArg(args, tc.wantDirect) {
+				t.Fatalf("java command missing %s: %v", tc.wantDirect, args)
+			}
+			if !containsArg(args, tc.wantMetaspace) {
+				t.Fatalf("java command missing %s: %v", tc.wantMetaspace, args)
+			}
+		})
+	}
+}
+
 // --------------- buildCommand all languages ---------------
 
 func TestBuildCommandAllLanguages(t *testing.T) {
@@ -255,8 +280,14 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			if tc.lang == "clojure" && !containsArg(args, "-XX:CompressedClassSpaceSize=64m") {
 				t.Errorf("buildCommand(%s) missing clojure JVM class-space guard in %v", tc.lang, args)
 			}
+			if tc.lang == "java" && (!containsArg(args, "-XX:MaxDirectMemorySize=16m") || !containsArg(args, "-XX:MaxMetaspaceSize=64m")) {
+				t.Errorf("buildCommand(%s) missing Java off-heap guards in %v", tc.lang, args)
+			}
 			if tc.lang == "groovy" && !containsArg(args, "-XX:CompressedClassSpaceSize=64m") {
 				t.Errorf("buildCommand(%s) missing groovy JVM class-space guard in %v", tc.lang, args)
+			}
+			if tc.lang == "kotlin-jvm" && (!containsArg(args, "-XX:MaxDirectMemorySize=16m") || !containsArg(args, "-XX:MaxMetaspaceSize=64m")) {
+				t.Errorf("buildCommand(%s) missing Kotlin/JVM off-heap guards in %v", tc.lang, args)
 			}
 			if tc.lang == "elixir" && !containsArg(args, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 +MMscs 0") {
 				t.Errorf("buildCommand(%s) missing ERL_AFLAGS in %v", tc.lang, args)
@@ -464,6 +495,9 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	javaArgs := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java", req, tuning)
 	if !containsArg(javaArgs, "-Xmx102m") {
 		t.Fatalf("java command with tuning = %v", javaArgs)
+	}
+	if !containsArg(javaArgs, "-XX:MaxDirectMemorySize=32m") || !containsArg(javaArgs, "-XX:MaxMetaspaceSize=64m") {
+		t.Fatalf("java command with tuning missing off-heap guards = %v", javaArgs)
 	}
 
 	erlangArgs := buildCommandWithRuntimeTuning("/tmp/beam", "erlang", req, tuning)

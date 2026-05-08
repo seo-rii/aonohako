@@ -11,6 +11,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/runtimepolicy"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/timing"
 )
 
@@ -20,8 +21,6 @@ const (
 	defaultWorkspaceBytes        = 128 << 20
 	hardMaxWorkspaceBytes        = 1 << 30
 	maxBinaryFiles               = 512
-	maxRunPrograms               = 8
-	maxRunSteps                  = 2
 	maxSidecarOutputSpecs        = 64
 	addressSpaceSlackKB          = 8 << 10
 	sandboxThreadLimit           = 128
@@ -29,7 +28,6 @@ const (
 	maxBinaryTotalBytes          = 48 << 20
 	maxCapturedFileBytes         = 8 << 20
 	maxCapturedSidecarTotalBytes = 16 << 20
-	maxStepHandoffBytes          = hardMaxOutputBytes
 	maxImageStreamBytes          = 8 << 20
 	maxImageReadChunkBytes       = 256 << 10
 	maxImageEventBytes           = 1 << 20
@@ -109,7 +107,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		}
 		tuning = profileTuning.WithSafeDefaults()
 	}
-	if runRequestUsesSteps(req) {
+	if runvalidation.UsesSteps(req) {
 		return s.runStepPipeline(ctx, req, hooks, tuning)
 	}
 	return s.runOne(ctx, req, hooks, tuning, true).response
@@ -234,7 +232,7 @@ func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks
 }
 
 func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
-	if err := validateStepPipelineRequest(req); err != nil {
+	if err := runvalidation.ValidateStepPipeline(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	programs := make(map[string]model.RunProgram, len(req.Programs))
@@ -308,106 +306,15 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 	return model.RunResponse{Status: model.RunStatusInitFail, Reason: "steps did not run"}
 }
 
-func runRequestUsesSteps(req *model.RunRequest) bool {
-	return len(req.Programs) > 0 || len(req.Steps) > 0
-}
-
-func validateStepPipelineRequest(req *model.RunRequest) error {
-	if len(req.Programs) == 0 || len(req.Steps) == 0 {
-		return fmt.Errorf("programs and steps must be provided together")
-	}
-	if strings.TrimSpace(req.Lang) != "" || len(req.Binaries) > 0 || strings.TrimSpace(req.Stdin) != "" || strings.TrimSpace(req.EntryPoint) != "" || req.EnableNetwork || !limitsAreZero(req.Limits) {
-		return fmt.Errorf("legacy execute fields cannot be combined with programs/steps")
-	}
-	if len(req.Programs) > maxRunPrograms {
-		return fmt.Errorf("too many programs: max %d", maxRunPrograms)
-	}
-	if len(req.Steps) != maxRunSteps {
-		return fmt.Errorf("exactly %d steps are supported", maxRunSteps)
-	}
-	if len(req.FileOutputs) > 1 {
-		return fmt.Errorf("at most one file output is supported")
-	}
-	if len(req.SidecarOutputs) > maxSidecarOutputSpecs {
-		return fmt.Errorf("too many sidecar outputs: max %d", maxSidecarOutputSpecs)
-	}
-	programs := make(map[string]struct{}, len(req.Programs))
-	for _, program := range req.Programs {
-		if strings.TrimSpace(program.ID) == "" {
-			return fmt.Errorf("program id is required")
-		}
-		if _, exists := programs[program.ID]; exists {
-			return fmt.Errorf("duplicate program id: %s", program.ID)
-		}
-		if len(program.Binaries) == 0 {
-			return fmt.Errorf("program %s has no binaries", program.ID)
-		}
-		if len(program.Binaries) > maxBinaryFiles {
-			return fmt.Errorf("program %s has too many binaries: max %d", program.ID, maxBinaryFiles)
-		}
-		programs[program.ID] = struct{}{}
-	}
-	seenSteps := map[string]struct{}{}
-	handoffID := ""
-	for i, step := range req.Steps {
-		if strings.TrimSpace(step.ID) == "" {
-			return fmt.Errorf("steps[%d].id is required", i)
-		}
-		if _, exists := seenSteps[step.ID]; exists {
-			return fmt.Errorf("duplicate step id: %s", step.ID)
-		}
-		seenSteps[step.ID] = struct{}{}
-		if _, ok := programs[step.ProgramID]; !ok {
-			return fmt.Errorf("step %s references unknown program_id: %s", step.ID, step.ProgramID)
-		}
-		if step.Limits.TimeMs <= 0 || step.Limits.MemoryMB <= 0 {
-			return fmt.Errorf("step %s limits.time_ms and limits.memory_mb are required", step.ID)
-		}
-		if i == 0 {
-			if strings.TrimSpace(step.StdinFrom) != "" {
-				return fmt.Errorf("first step cannot use stdin_from")
-			}
-			if step.Handoff == nil {
-				return fmt.Errorf("first step handoff is required")
-			}
-			if strings.TrimSpace(step.Handoff.ID) == "" {
-				return fmt.Errorf("first step handoff.id is required")
-			}
-			from := strings.ToLower(strings.TrimSpace(step.Handoff.From))
-			if from == "" {
-				from = "stdout"
-			}
-			if from != "stdout" && from != "file" && from != "file_output" {
-				return fmt.Errorf("first step handoff.from must be stdout or file")
-			}
-			if (from == "file" || from == "file_output") && strings.TrimSpace(step.Handoff.Path) == "" {
-				return fmt.Errorf("first step handoff.path is required for file handoff")
-			}
-			if step.Handoff.MaxBytes < 0 || step.Handoff.MaxBytes > maxStepHandoffBytes {
-				return fmt.Errorf("first step handoff.max_bytes must be between 0 and %d", maxStepHandoffBytes)
-			}
-			handoffID = step.Handoff.ID
-			continue
-		}
-		if strings.TrimSpace(step.StdinFrom) != handoffID {
-			return fmt.Errorf("second step stdin_from must reference first step handoff id")
-		}
-		if step.Handoff != nil {
-			return fmt.Errorf("second step handoff is not supported")
-		}
-	}
-	return nil
-}
-
-func limitsAreZero(l model.Limits) bool {
-	return l.TimeMs == 0 && l.MemoryMB == 0 && l.OutputBytes == 0 && l.WorkspaceBytes == 0
-}
-
 func stepResultFromResponse(id, programID string, resp model.RunResponse) model.StepResult {
+	status := resp.Status
+	if status == "OK" {
+		status = model.RunStatusAccepted
+	}
 	return model.StepResult{
 		ID:              id,
 		ProgramID:       programID,
-		Status:          resp.Status,
+		Status:          status,
 		TimeMs:          resp.TimeMs,
 		WallTimeMs:      resp.WallTimeMs,
 		CPUTimeMs:       resp.CPUTimeMs,

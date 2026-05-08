@@ -197,6 +197,13 @@ kernel-side `memory.max` OOM kills and `pids.max` events still classify as
 memory or process limits even when `cmd.Wait()` wins the race against the
 watchdog tick.
 
+Without `AONOHAKO_CGROUP_PARENT`, compile cleanup still depends on process
+group kill plus best-effort descendant and sandbox-UID sweeps. Most compiler
+paths keep that model tight, but `swiftc`, `hare`, and `isabelle` need limited
+process-group operations for toolchain compatibility. Public runners that
+support those compile targets should route them to cgroup-enabled self-hosted
+workers or disable them on no-cgroup workers.
+
 If that backend is added later, it should only be enabled after it can provide
 all of the following at the same time:
 

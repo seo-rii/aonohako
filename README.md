@@ -382,8 +382,10 @@ The default runtime memory profile is locked down for public judge runners.
 Operators can narrow selected numeric knobs without passing arbitrary runtime
 flags through requests:
 
-- `AONOHAKO_JVM_HEAP_PERCENT` controls the Java/Clojure/Groovy/Scala `-Xmx`
-  share of the request memory limit. Allowed range: `25..75`, default `50`.
+- `AONOHAKO_JVM_HEAP_PERCENT` controls the Java/Kotlin-JVM/Clojure/Groovy/Scala
+  `-Xmx` share of the request memory limit. Java-family launchers also set
+  direct-memory and metaspace/class-space caps from the request memory limit.
+  Allowed range: `25..75`, default `50`.
 - `AONOHAKO_GO_MEMORY_RESERVE_MB` subtracts reserved host/runtime memory from
   Go-based interpreter `GOMEMLIMIT`. Allowed range: `0..256`, default `32`.
 - `AONOHAKO_GO_GOGC` controls Go GC aggressiveness for Go-based interpreters.

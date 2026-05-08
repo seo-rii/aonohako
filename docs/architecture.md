@@ -119,7 +119,9 @@ other filesystem state is shared between the workspaces. Final output
 comparison, file-output judging, sidecar capture, `ignore_tle`, and SPJ
 evaluation apply only to the second step. The top-level response reports
 aggregate wall/CPU time, peak memory across steps, and a per-step diagnostic
-summary.
+summary. Intermediate step success is exposed as the public `Accepted` status;
+the internal sandbox-only `OK` marker is not part of the step response
+contract.
 
 ## Sandbox Process Model
 
@@ -315,7 +317,7 @@ Memory enforcement uses several layers:
 - live RSS sampling from `/proc/<pid>/statm`
 - `/proc/<pid>/smaps_rollup` confirmation when RSS reaches 80% of the limit or when the runtime cannot use address-space limits
 - `RLIMIT_AS` to constrain virtual address space growth; native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Deno, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps
-- runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Deno receives a V8 old-space cap through `--v8-flags`; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
+- runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Deno receives a V8 old-space cap through `--v8-flags`; Java-family launchers receive heap, stack, direct-memory, metaspace/class-space, and code-cache caps as applicable; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
 - deployment-validated runtime tuning for selected JVM, Go, Erlang/Elixir,
   .NET GC, Kotlin/Native, Deno, Node, and Wasmtime
   numeric knobs, with bounded environment variables and startup rejection for

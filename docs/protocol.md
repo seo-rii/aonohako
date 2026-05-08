@@ -113,7 +113,7 @@ Client                        aonohako
     {
       "id": "encode",
       "program_id": "encoder",
-      "status": "OK",
+      "status": "Accepted",
       "wall_time_ms": 12,
       "cpu_time_ms": 8,
       "memory_kb": 4096,

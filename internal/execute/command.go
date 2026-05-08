@@ -46,12 +46,14 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		}
 	case "clojure":
 		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
+		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
 		return []string{
 			"java",
 			fmt.Sprintf("-Xmx%dm", xmx),
 			"-Xss1m",
 			"-XX:+UseSerialGC",
 			"-XX:ReservedCodeCacheSize=32m",
+			fmt.Sprintf("-XX:MaxDirectMemorySize=%dm", directMB),
 			"-XX:MaxMetaspaceSize=192m",
 			"-XX:CompressedClassSpaceSize=64m",
 			"-Dfile.encoding=UTF-8",
@@ -185,12 +187,14 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			)
 		}
 		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
+		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
 		return []string{
 			"java",
 			fmt.Sprintf("-Xmx%dm", xmx),
 			"-Xss1m",
 			"-XX:+UseSerialGC",
 			"-XX:ReservedCodeCacheSize=32m",
+			fmt.Sprintf("-XX:MaxDirectMemorySize=%dm", directMB),
 			"-XX:MaxMetaspaceSize=192m",
 			"-XX:CompressedClassSpaceSize=64m",
 			"-Dfile.encoding=UTF-8",
@@ -211,12 +215,14 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			scalaClasspath = append(scalaClasspath, "/usr/share/java/scala-library.jar")
 		}
 		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
+		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
 		return []string{
 			"java",
 			fmt.Sprintf("-Xmx%dm", xmx),
 			"-Xss1m",
 			"-XX:+UseSerialGC",
 			"-XX:ReservedCodeCacheSize=32m",
+			fmt.Sprintf("-XX:MaxDirectMemorySize=%dm", directMB),
 			"-XX:MaxMetaspaceSize=192m",
 			"-XX:CompressedClassSpaceSize=64m",
 			"-Dfile.encoding=UTF-8",
@@ -226,7 +232,22 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		}
 	case "java":
 		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
-		return []string{"java", "-XX:ReservedCodeCacheSize=64m", "-XX:-UseCompressedClassPointers", fmt.Sprintf("-Xmx%dm", xmx), "-Xss1m", "-Dfile.encoding=UTF-8", "-XX:+UseSerialGC", "-DONLINE_JUDGE=1", "-jar", primaryPath}
+		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
+		metaspaceMB := jvmMetaspaceMB(req.Limits.MemoryMB)
+		return []string{
+			"java",
+			"-XX:ReservedCodeCacheSize=64m",
+			"-XX:-UseCompressedClassPointers",
+			fmt.Sprintf("-Xmx%dm", xmx),
+			"-Xss1m",
+			fmt.Sprintf("-XX:MaxDirectMemorySize=%dm", directMB),
+			fmt.Sprintf("-XX:MaxMetaspaceSize=%dm", metaspaceMB),
+			"-Dfile.encoding=UTF-8",
+			"-XX:+UseSerialGC",
+			"-DONLINE_JUDGE=1",
+			"-jar",
+			primaryPath,
+		}
 	case "javascript", "apl", "coffeescript":
 		limitMB := max(64, req.Limits.MemoryMB)
 		oldSpaceMB := max(32, (limitMB*tuning.NodeOldSpacePercent)/100)
@@ -323,12 +344,16 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "deno":
 		return []string{"deno", "run", "--no-prompt", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(req.Limits.MemoryMB, tuning)), primaryPath}
 	case "kotlin-jvm":
+		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
+		metaspaceMB := jvmMetaspaceMB(req.Limits.MemoryMB)
 		return []string{
 			"java",
 			"-Xms64m",
 			fmt.Sprintf("-Xmx%dm", jvmHeapMB(req.Limits.MemoryMB, tuning)),
 			"-Xss1m",
 			"-XX:+UseSerialGC",
+			fmt.Sprintf("-XX:MaxDirectMemorySize=%dm", directMB),
+			fmt.Sprintf("-XX:MaxMetaspaceSize=%dm", metaspaceMB),
 			"-XX:CompressedClassSpaceSize=64m",
 			"-XX:ReservedCodeCacheSize=32m",
 			"-jar",
@@ -379,6 +404,18 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 func jvmHeapMB(memoryMB int, tuning config.RuntimeTuningConfig) int {
 	tuning = tuning.WithSafeDefaults()
 	return max(32, (max(0, memoryMB)*tuning.JVMHeapPercent)/100)
+}
+
+func jvmDirectMemoryMB(memoryMB int) int {
+	return max(16, max(0, memoryMB)/8)
+}
+
+func jvmMetaspaceMB(memoryMB int) int {
+	metaspaceMB := max(64, max(0, memoryMB)/4)
+	if metaspaceMB > 192 {
+		return 192
+	}
+	return metaspaceMB
 }
 
 func goMemoryLimitMB(memoryMB int, tuning config.RuntimeTuningConfig) int {

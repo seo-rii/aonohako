@@ -604,7 +604,7 @@ func TestRunTwoStepPipelineAcceptsStdoutHandoff(t *testing.T) {
 	if len(resp.Steps) != 2 {
 		t.Fatalf("expected two step results, got %+v", resp.Steps)
 	}
-	if resp.Steps[0].Status != "OK" || resp.Steps[0].HandoffBytes == 0 {
+	if resp.Steps[0].Status != model.RunStatusAccepted || resp.Steps[0].HandoffBytes == 0 {
 		t.Fatalf("unexpected first step result: %+v", resp.Steps[0])
 	}
 	if resp.Steps[1].Status != model.RunStatusAccepted {
