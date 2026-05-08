@@ -42,6 +42,7 @@ type RemoteExecutorConfig struct {
 	BearerToken    string
 	Audience       string
 	SSEIdleTimeout time.Duration
+	StrictProtocol bool
 }
 
 type InboundAuthConfig struct {
@@ -71,6 +72,7 @@ type RuntimeTuningConfig struct {
 	ErlangAsyncThreads         int
 	DotnetGCHeapPercent        int
 	KotlinNativeCompilerHeapMB int
+	DenoOldSpacePercent        int
 	NodeOldSpacePercent        int
 	NodeMaxSemiSpaceMB         int
 	NodeStackSizeKB            int
@@ -103,6 +105,9 @@ const (
 	defaultKotlinNativeCompilerHeapMB = 1024
 	minKotlinNativeCompilerHeapMB     = 256
 	maxKotlinNativeCompilerHeapMB     = 1536
+	defaultDenoOldSpacePercent        = 60
+	minDenoOldSpacePercent            = 30
+	maxDenoOldSpacePercent            = 75
 	defaultNodeOldSpacePercent        = 60
 	minNodeOldSpacePercent            = 30
 	maxNodeOldSpacePercent            = 75
@@ -193,6 +198,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	remoteStrictProtocol, err := parseBoolEnv("AONOHAKO_REMOTE_STRICT_PROTOCOL", os.Getenv("AONOHAKO_REMOTE_STRICT_PROTOCOL"), defaultRemoteStrictProtocol(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
 	allowRequestNetwork, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_NETWORK", os.Getenv("AONOHAKO_ALLOW_REQUEST_NETWORK"), defaultAllowRequestNetwork(runtimePlatform))
 	if err != nil {
 		return Config{}, err
@@ -267,6 +276,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	runtimeTuning.DenoOldSpacePercent, err = parseBoundedIntEnv("AONOHAKO_DENO_OLD_SPACE_PERCENT", os.Getenv("AONOHAKO_DENO_OLD_SPACE_PERCENT"), runtimeTuning.DenoOldSpacePercent, minDenoOldSpacePercent, maxDenoOldSpacePercent)
+	if err != nil {
+		return Config{}, err
+	}
 	runtimeTuning.NodeOldSpacePercent, err = parseBoundedIntEnv("AONOHAKO_NODE_OLD_SPACE_PERCENT", os.Getenv("AONOHAKO_NODE_OLD_SPACE_PERCENT"), runtimeTuning.NodeOldSpacePercent, minNodeOldSpacePercent, maxNodeOldSpacePercent)
 	if err != nil {
 		return Config{}, err
@@ -323,6 +336,8 @@ func Load() (Config, error) {
 					profileTuning.DotnetGCHeapPercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.DotnetGCHeapPercent, minDotnetGCHeapPercent, maxDotnetGCHeapPercent)
 				case "kotlin_native_compiler_heap_mb":
 					profileTuning.KotlinNativeCompilerHeapMB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB, maxKotlinNativeCompilerHeapMB)
+				case "deno_old_space_percent":
+					profileTuning.DenoOldSpacePercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.DenoOldSpacePercent, minDenoOldSpacePercent, maxDenoOldSpacePercent)
 				case "node_old_space_percent":
 					profileTuning.NodeOldSpacePercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.NodeOldSpacePercent, minNodeOldSpacePercent, maxNodeOldSpacePercent)
 				case "node_max_semi_space_mb":
@@ -380,6 +395,7 @@ func Load() (Config, error) {
 			BearerToken:    strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_TOKEN")),
 			Audience:       strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUDIENCE")),
 			SSEIdleTimeout: time.Duration(remoteSSEIdleTimeoutSec) * time.Second,
+			StrictProtocol: remoteStrictProtocol,
 		},
 		RuntimeTuning:          runtimeTuning,
 		RuntimeTuningProfiles:  runtimeTuningProfiles,
@@ -660,6 +676,10 @@ func defaultTrustedPlatformHeaders(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetDev
 }
 
+func defaultRemoteStrictProtocol(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget != platform.DeploymentTargetDev
+}
+
 func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 	return RuntimeTuningConfig{
 		JVMHeapPercent:             defaultJVMHeapPercent,
@@ -669,6 +689,7 @@ func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 		ErlangAsyncThreads:         defaultErlangAsyncThreads,
 		DotnetGCHeapPercent:        defaultDotnetGCHeapPercent,
 		KotlinNativeCompilerHeapMB: defaultKotlinNativeCompilerHeapMB,
+		DenoOldSpacePercent:        defaultDenoOldSpacePercent,
 		NodeOldSpacePercent:        defaultNodeOldSpacePercent,
 		NodeMaxSemiSpaceMB:         defaultNodeMaxSemiSpaceMB,
 		NodeStackSizeKB:            defaultNodeStackSizeKB,
@@ -736,6 +757,15 @@ func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	if c.KotlinNativeCompilerHeapMB > maxKotlinNativeCompilerHeapMB {
 		c.KotlinNativeCompilerHeapMB = maxKotlinNativeCompilerHeapMB
 	}
+	if c.DenoOldSpacePercent == 0 {
+		c.DenoOldSpacePercent = defaults.DenoOldSpacePercent
+	}
+	if c.DenoOldSpacePercent < minDenoOldSpacePercent {
+		c.DenoOldSpacePercent = minDenoOldSpacePercent
+	}
+	if c.DenoOldSpacePercent > maxDenoOldSpacePercent {
+		c.DenoOldSpacePercent = maxDenoOldSpacePercent
+	}
 	if c.NodeOldSpacePercent == 0 {
 		c.NodeOldSpacePercent = defaults.NodeOldSpacePercent
 	}
@@ -782,6 +812,19 @@ func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 		c.WasmtimeMaxWasmStackBytes = maxWasmtimeMaxWasmStackBytes
 	}
 	return c
+}
+
+func DenoOldSpaceMB(memoryMB int, tuning RuntimeTuningConfig) int {
+	tuning = tuning.WithSafeDefaults()
+	limitMB := memoryMB
+	if limitMB < 64 {
+		limitMB = 64
+	}
+	oldSpaceMB := (limitMB * tuning.DenoOldSpacePercent) / 100
+	if oldSpaceMB < 32 {
+		oldSpaceMB = 32
+	}
+	return oldSpaceMB
 }
 
 func getenv(key, fallback string) string {

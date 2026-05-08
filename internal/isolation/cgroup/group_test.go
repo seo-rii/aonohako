@@ -344,9 +344,63 @@ func TestGroupRemoveWithRetryWaitsForDelayedCleanup(t *testing.T) {
 	}
 }
 
+func TestGroupKillWritesCgroupKillWhenAvailable(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-kill", Limits{
+		MemoryMaxBytes: 64 << 20,
+		PidsMax:        16,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+	writeFile(t, filepath.Join(group.Path, "cgroup.kill"), "")
+
+	if err := group.Kill(); err != nil {
+		t.Fatalf("Kill() error = %v", err)
+	}
+	assertFile(t, filepath.Join(group.Path, "cgroup.kill"), "1")
+}
+
+func TestGroupKillIgnoresMissingCgroupKill(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-no-kill", Limits{
+		MemoryMaxBytes: 64 << 20,
+		PidsMax:        16,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+
+	if err := group.Kill(); err != nil {
+		t.Fatalf("Kill() with missing cgroup.kill should be ignored, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(group.Path, "cgroup.kill")); !os.IsNotExist(err) {
+		t.Fatalf("Kill should not create fake cgroup.kill, stat err=%v", err)
+	}
+}
+
+func TestGroupKillAndRemoveWithRetryRemovesFakeGroup(t *testing.T) {
+	parent := t.TempDir()
+	group, err := CreateRunGroup(parent, "run-kill-remove", Limits{
+		MemoryMaxBytes: 64 << 20,
+		PidsMax:        16,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunGroup() error = %v", err)
+	}
+	removeFakeCgroupFiles(t, group)
+
+	if err := group.KillAndRemoveWithRetry(200 * time.Millisecond); err != nil {
+		t.Fatalf("KillAndRemoveWithRetry() error = %v", err)
+	}
+	if _, err := os.Stat(group.Path); !os.IsNotExist(err) {
+		t.Fatalf("group path should be removed, stat err=%v", err)
+	}
+}
+
 func removeFakeCgroupFiles(t *testing.T, group Group) {
 	t.Helper()
-	for _, name := range []string{"memory.max", "memory.swap.max", "memory.oom.group", "pids.max", "cpu.max"} {
+	for _, name := range []string{"memory.max", "memory.swap.max", "memory.oom.group", "pids.max", "cpu.max", "cgroup.kill"} {
 		err := os.Remove(filepath.Join(group.Path, name))
 		if err != nil && !os.IsNotExist(err) {
 			t.Fatalf("remove fake cgroup file %s: %v", name, err)

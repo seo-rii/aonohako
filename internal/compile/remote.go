@@ -27,6 +27,7 @@ type remoteRunner struct {
 	audience    string
 	metadataURL string
 	idleTimeout time.Duration
+	strictProto bool
 }
 
 func newRemoteRunner(cfg config.Config) Runner {
@@ -42,6 +43,7 @@ func newRemoteRunner(cfg config.Config) Runner {
 		audience:    cfg.Execution.Remote.Audience,
 		metadataURL: cloudRunMetadataIdentityURL,
 		idleTimeout: cfg.Execution.Remote.SSEIdleTimeout,
+		strictProto: cfg.Execution.Remote.StrictProtocol,
 	}
 }
 
@@ -96,7 +98,7 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 	if contentType := resp.Header.Get("Content-Type"); !strings.Contains(strings.ToLower(contentType), "text/event-stream") {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("remote compile returned unexpected content type: %s", contentType)}
 	}
-	if err := remoteio.CheckProtocolVersion(resp.Header); err != nil {
+	if err := remoteio.CheckProtocolVersionWithPolicy(resp.Header, r.strictProto); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile protocol mismatch: " + err.Error()}
 	}
 

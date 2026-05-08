@@ -321,7 +321,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "forth":
 		return []string{"gforth", primaryPath, "-e", "bye"}
 	case "deno":
-		return []string{"deno", "run", "--no-prompt", primaryPath}
+		return []string{"deno", "run", "--no-prompt", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(req.Limits.MemoryMB, tuning)), primaryPath}
 	case "kotlin-jvm":
 		return []string{
 			"java",

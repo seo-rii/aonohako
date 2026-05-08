@@ -18,6 +18,19 @@ func TestCheckProtocolVersionAllowsMissingOrCurrentHeader(t *testing.T) {
 	}
 }
 
+func TestCheckProtocolVersionStrictRejectsMissingHeader(t *testing.T) {
+	err := CheckProtocolVersionStrict(http.Header{})
+	if err == nil || !strings.Contains(err.Error(), "missing remote protocol version header") {
+		t.Fatalf("expected missing protocol header error, got %v", err)
+	}
+
+	headers := http.Header{}
+	headers.Set(ProtocolVersionHeader, ProtocolVersion)
+	if err := CheckProtocolVersionStrict(headers); err != nil {
+		t.Fatalf("current protocol version should be accepted in strict mode: %v", err)
+	}
+}
+
 func TestCheckProtocolVersionRejectsMismatchedHeader(t *testing.T) {
 	headers := http.Header{}
 	headers.Set(ProtocolVersionHeader, "1900-01-01")

@@ -36,6 +36,19 @@ func TestFileSizeLimitForCommandKeepsDotnetFinite(t *testing.T) {
 	}
 }
 
+func TestDotnetFileSizeLimitIsCompatibilityCapNotWorkspaceQuota(t *testing.T) {
+	workspaceLimit := int64(512 << 20)
+	for _, command := range []string{"dotnet", "dafny"} {
+		got := FileSizeLimitForCommand(command, workspaceLimit)
+		if got != DotnetFileSizeLimitBytes {
+			t.Fatalf("%s file size limit = %d, want compatibility cap %d", command, got, DotnetFileSizeLimitBytes)
+		}
+		if got <= uint64(workspaceLimit) {
+			t.Fatalf("%s file size limit should remain above workspace quota so CoreCLR startup is not bounded by workspace bytes", command)
+		}
+	}
+}
+
 func TestStackLimitForCommandKeepsDotnetCompatible(t *testing.T) {
 	if got := StackLimitForCommand("/opt/dotnet/dotnet"); got != 64*1024*1024 {
 		t.Fatalf("dotnet stack limit = %d, want 64MiB", got)
