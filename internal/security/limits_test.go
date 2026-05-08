@@ -49,6 +49,18 @@ func TestDotnetFileSizeLimitIsCompatibilityCapNotWorkspaceQuota(t *testing.T) {
 	}
 }
 
+func TestDotnetFileSizeCompatibilityCapExceedsDefaultWorkspaceQuota(t *testing.T) {
+	defaultWorkspaceLimit := int64(128 << 20)
+	if DotnetFileSizeLimitBytes <= uint64(defaultWorkspaceLimit) {
+		t.Fatalf("dotnet compatibility cap should stay above default workspace quota")
+	}
+	for _, command := range []string{"dotnet", "dafny"} {
+		if got := FileSizeLimitForCommand(command, defaultWorkspaceLimit); got != DotnetFileSizeLimitBytes {
+			t.Fatalf("%s file size limit = %d, want compatibility cap %d", command, got, DotnetFileSizeLimitBytes)
+		}
+	}
+}
+
 func TestStackLimitForCommandKeepsDotnetCompatible(t *testing.T) {
 	if got := StackLimitForCommand("/opt/dotnet/dotnet"); got != 64*1024*1024 {
 		t.Fatalf("dotnet stack limit = %d, want 64MiB", got)
