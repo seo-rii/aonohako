@@ -308,6 +308,112 @@ func TestExecuteRejectsRequestControlledNetworkWhenPolicyDisabled(t *testing.T) 
 	}
 }
 
+func TestExecuteAcceptsTwoStepPipelineShape(t *testing.T) {
+	cfg := configForTest(t)
+	called := false
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		called = true
+		if len(req.Programs) != 2 || len(req.Steps) != 2 {
+			t.Fatalf("unexpected two-step payload: %+v", req)
+		}
+		return model.RunResponse{
+			Status: model.RunStatusAccepted,
+			Steps: []model.StepResult{
+				{ID: "encode", Status: "OK", HandoffBytes: 8},
+				{ID: "decode", Status: model.RunStatusAccepted},
+			},
+		}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	body, _ := json.Marshal(twoStepPayloadForTest(false))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body=%s", resp.StatusCode, string(raw))
+	}
+	events := readSSEEvents(resp.Body, t)
+	if len(events) == 0 || events[len(events)-1].Name != "result" {
+		t.Fatalf("missing result event: %+v", events)
+	}
+	if status, _ := events[len(events)-1].JSON["status"].(string); status != model.RunStatusAccepted {
+		t.Fatalf("status = %q, want Accepted", status)
+	}
+	if !called {
+		t.Fatalf("runner was not called")
+	}
+}
+
+func TestExecuteRejectsTwoStepProgramNetworkWhenPolicyDisabled(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.AllowRequestNetwork = false
+	called := false
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		called = true
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	body, _ := json.Marshal(twoStepPayloadForTest(true))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body=%s", resp.StatusCode, string(raw))
+	}
+	if called {
+		t.Fatalf("runner should not be called when a step program requests network")
+	}
+}
+
+func twoStepPayloadForTest(enableNetwork bool) map[string]any {
+	return map[string]any{
+		"programs": []map[string]any{
+			{
+				"id":             "encoder",
+				"lang":           "binary",
+				"enable_network": enableNetwork,
+				"binaries":       []map[string]any{{"name": "encode.sh", "data_b64": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\ncat\n")), "mode": "exec"}},
+			},
+			{
+				"id":       "decoder",
+				"lang":     "binary",
+				"binaries": []map[string]any{{"name": "decode.sh", "data_b64": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\ncat\n")), "mode": "exec"}},
+			},
+		},
+		"steps": []map[string]any{
+			{
+				"id":         "encode",
+				"program_id": "encoder",
+				"stdin":      "payload\n",
+				"limits":     map[string]any{"time_ms": 1000, "memory_mb": 64},
+				"handoff":    map[string]any{"id": "encoded", "from": "stdout", "max_bytes": 1024},
+			},
+			{
+				"id":         "decode",
+				"program_id": "decoder",
+				"stdin_from": "encoded",
+				"limits":     map[string]any{"time_ms": 1000, "memory_mb": 64},
+			},
+		},
+		"expected_stdout": "payload\n",
+	}
+}
+
 func TestExecutePrincipalStreamOverflowReturns429(t *testing.T) {
 	cfg := configForTest(t)
 	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform}

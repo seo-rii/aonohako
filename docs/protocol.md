@@ -109,6 +109,25 @@ Client                        aonohako
   "reason": "",                         // failure reason
   "verdict_source": "stdout",           // diagnostic source that selected the final verdict, when known
   "score": null,                        // nullable float; SPJ score (0.0–1.0)
+  "steps": [                            // present for two-step `/execute` requests
+    {
+      "id": "encode",
+      "program_id": "encoder",
+      "status": "OK",
+      "wall_time_ms": 12,
+      "cpu_time_ms": 8,
+      "memory_kb": 4096,
+      "handoff_bytes": 128
+    },
+    {
+      "id": "decode",
+      "program_id": "decoder",
+      "status": "Accepted",
+      "wall_time_ms": 30,
+      "cpu_time_ms": 22,
+      "memory_kb": 8192
+    }
+  ],
   "sidecar_outputs": [                  // captured sidecar files
     {"path": "result.txt", "data_b64": "<base64>"}
   ],

@@ -36,6 +36,9 @@ const (
 	maxRunMemoryMB                    = 4096
 	maxRunOutputBytes                 = 8 << 20
 	maxRunWorkspaceBytes              = 1 << 30
+	maxRunPrograms                    = 8
+	maxRunSteps                       = 2
+	maxRunStepHandoffBytes            = maxRunOutputBytes
 	maxCompileSourceFiles             = 512
 	maxCompileDecodedSourceBytes      = 16 << 20
 	maxCompileDecodedSourceTotalBytes = 48 << 20
@@ -260,7 +263,7 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.EnableNetwork && !s.cfg.AllowRequestNetwork {
+	if (req.EnableNetwork || requestProgramsEnableNetwork(&req)) && !s.cfg.AllowRequestNetwork {
 		http.Error(w, "enable_network is not allowed by server policy", http.StatusBadRequest)
 		return
 	}
@@ -602,33 +605,147 @@ func validateRunRequestFields(req *model.RunRequest) error {
 	if err := runtimepolicy.ValidateProblemID(req.ProblemID); err != nil {
 		return fmt.Errorf("invalid problem_id: %w", err)
 	}
-	if req.Limits.TimeMs <= 0 || req.Limits.TimeMs > maxRunTimeMs {
-		return fmt.Errorf("limits.time_ms must be between 1 and %d", maxRunTimeMs)
-	}
-	if req.Limits.MemoryMB <= 0 || req.Limits.MemoryMB > maxRunMemoryMB {
-		return fmt.Errorf("limits.memory_mb must be between 1 and %d", maxRunMemoryMB)
-	}
-	if req.Limits.OutputBytes < 0 || req.Limits.OutputBytes > maxRunOutputBytes {
-		return fmt.Errorf("limits.output_bytes must be between 0 and %d", maxRunOutputBytes)
-	}
-	if req.Limits.WorkspaceBytes < 0 || req.Limits.WorkspaceBytes > maxRunWorkspaceBytes {
-		return fmt.Errorf("limits.workspace_bytes must be between 0 and %d", maxRunWorkspaceBytes)
+	if len(req.Programs) > 0 || len(req.Steps) > 0 {
+		if err := validateStepRunRequestFields(req); err != nil {
+			return err
+		}
+	} else {
+		if err := validateRequiredRunLimits("limits", req.Limits); err != nil {
+			return err
+		}
 	}
 	if req.SPJ != nil && req.SPJ.Limits != nil {
-		if req.SPJ.Limits.TimeMs < 0 || req.SPJ.Limits.TimeMs > maxRunTimeMs {
-			return fmt.Errorf("spj.limits.time_ms must be between 0 and %d", maxRunTimeMs)
-		}
-		if req.SPJ.Limits.MemoryMB < 0 || req.SPJ.Limits.MemoryMB > maxRunMemoryMB {
-			return fmt.Errorf("spj.limits.memory_mb must be between 0 and %d", maxRunMemoryMB)
-		}
-		if req.SPJ.Limits.OutputBytes < 0 || req.SPJ.Limits.OutputBytes > maxRunOutputBytes {
-			return fmt.Errorf("spj.limits.output_bytes must be between 0 and %d", maxRunOutputBytes)
-		}
-		if req.SPJ.Limits.WorkspaceBytes < 0 || req.SPJ.Limits.WorkspaceBytes > maxRunWorkspaceBytes {
-			return fmt.Errorf("spj.limits.workspace_bytes must be between 0 and %d", maxRunWorkspaceBytes)
+		if err := validateOptionalRunLimits("spj.limits", *req.SPJ.Limits); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func validateStepRunRequestFields(req *model.RunRequest) error {
+	if len(req.Programs) == 0 || len(req.Steps) == 0 {
+		return fmt.Errorf("programs and steps must be provided together")
+	}
+	if strings.TrimSpace(req.Lang) != "" || len(req.Binaries) > 0 || strings.TrimSpace(req.Stdin) != "" || strings.TrimSpace(req.EntryPoint) != "" || req.EnableNetwork || !limitsAreZero(req.Limits) {
+		return fmt.Errorf("legacy execute fields cannot be combined with programs/steps")
+	}
+	if len(req.Programs) > maxRunPrograms {
+		return fmt.Errorf("too many programs: max %d", maxRunPrograms)
+	}
+	if len(req.Steps) != maxRunSteps {
+		return fmt.Errorf("exactly %d steps are supported", maxRunSteps)
+	}
+	if len(req.FileOutputs) > 1 {
+		return fmt.Errorf("at most one file output is supported")
+	}
+	programs := make(map[string]struct{}, len(req.Programs))
+	for i, program := range req.Programs {
+		if strings.TrimSpace(program.ID) == "" {
+			return fmt.Errorf("programs[%d].id is required", i)
+		}
+		if _, exists := programs[program.ID]; exists {
+			return fmt.Errorf("duplicate program id: %s", program.ID)
+		}
+		if strings.TrimSpace(program.Lang) == "" {
+			return fmt.Errorf("program %s lang is required", program.ID)
+		}
+		if len(program.Binaries) == 0 {
+			return fmt.Errorf("program %s has no binaries", program.ID)
+		}
+		programs[program.ID] = struct{}{}
+	}
+	handoffID := ""
+	seenSteps := map[string]struct{}{}
+	for i, step := range req.Steps {
+		if strings.TrimSpace(step.ID) == "" {
+			return fmt.Errorf("steps[%d].id is required", i)
+		}
+		if _, exists := seenSteps[step.ID]; exists {
+			return fmt.Errorf("duplicate step id: %s", step.ID)
+		}
+		seenSteps[step.ID] = struct{}{}
+		if _, ok := programs[step.ProgramID]; !ok {
+			return fmt.Errorf("step %s references unknown program_id: %s", step.ID, step.ProgramID)
+		}
+		if len(step.Stdin) > maxRunTextFieldBytes {
+			return fmt.Errorf("step %s stdin too large: max %d bytes", step.ID, maxRunTextFieldBytes)
+		}
+		if err := validateRequiredRunLimits("step "+step.ID+" limits", step.Limits); err != nil {
+			return err
+		}
+		if i == 0 {
+			if strings.TrimSpace(step.StdinFrom) != "" {
+				return fmt.Errorf("first step cannot use stdin_from")
+			}
+			if step.Handoff == nil {
+				return fmt.Errorf("first step handoff is required")
+			}
+			if strings.TrimSpace(step.Handoff.ID) == "" {
+				return fmt.Errorf("first step handoff.id is required")
+			}
+			from := strings.ToLower(strings.TrimSpace(step.Handoff.From))
+			if from == "" {
+				from = "stdout"
+			}
+			if from != "stdout" && from != "file" && from != "file_output" {
+				return fmt.Errorf("first step handoff.from must be stdout or file")
+			}
+			if (from == "file" || from == "file_output") && strings.TrimSpace(step.Handoff.Path) == "" {
+				return fmt.Errorf("first step handoff.path is required for file handoff")
+			}
+			if step.Handoff.MaxBytes < 0 || step.Handoff.MaxBytes > maxRunStepHandoffBytes {
+				return fmt.Errorf("first step handoff.max_bytes must be between 0 and %d", maxRunStepHandoffBytes)
+			}
+			handoffID = step.Handoff.ID
+			continue
+		}
+		if strings.TrimSpace(step.StdinFrom) != handoffID {
+			return fmt.Errorf("second step stdin_from must reference first step handoff id")
+		}
+		if step.Handoff != nil {
+			return fmt.Errorf("second step handoff is not supported")
+		}
+	}
+	return nil
+}
+
+func validateRequiredRunLimits(name string, limits model.Limits) error {
+	if limits.TimeMs <= 0 || limits.TimeMs > maxRunTimeMs {
+		return fmt.Errorf("%s.time_ms must be between 1 and %d", name, maxRunTimeMs)
+	}
+	if limits.MemoryMB <= 0 || limits.MemoryMB > maxRunMemoryMB {
+		return fmt.Errorf("%s.memory_mb must be between 1 and %d", name, maxRunMemoryMB)
+	}
+	return validateOptionalRunLimits(name, limits)
+}
+
+func validateOptionalRunLimits(name string, limits model.Limits) error {
+	if limits.TimeMs < 0 || limits.TimeMs > maxRunTimeMs {
+		return fmt.Errorf("%s.time_ms must be between 0 and %d", name, maxRunTimeMs)
+	}
+	if limits.MemoryMB < 0 || limits.MemoryMB > maxRunMemoryMB {
+		return fmt.Errorf("%s.memory_mb must be between 0 and %d", name, maxRunMemoryMB)
+	}
+	if limits.OutputBytes < 0 || limits.OutputBytes > maxRunOutputBytes {
+		return fmt.Errorf("%s.output_bytes must be between 0 and %d", name, maxRunOutputBytes)
+	}
+	if limits.WorkspaceBytes < 0 || limits.WorkspaceBytes > maxRunWorkspaceBytes {
+		return fmt.Errorf("%s.workspace_bytes must be between 0 and %d", name, maxRunWorkspaceBytes)
+	}
+	return nil
+}
+
+func requestProgramsEnableNetwork(req *model.RunRequest) bool {
+	for _, program := range req.Programs {
+		if program.EnableNetwork {
+			return true
+		}
+	}
+	return false
+}
+
+func limitsAreZero(l model.Limits) bool {
+	return l.TimeMs == 0 && l.MemoryMB == 0 && l.OutputBytes == 0 && l.WorkspaceBytes == 0
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {

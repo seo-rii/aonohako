@@ -18,18 +18,7 @@ import (
 )
 
 func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource string, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
-	status := res.Status
-	source := res.VerdictSource
-	reason := ""
-	status, reason, source = applyFinalCPUTimeStatus(status, reason, source, res.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(source, "cpu_time_cgroup"))
-	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
-		status = model.RunStatusMLE
-		source = "memory_reported"
-	}
-	if status == "OK" && res.ExitCode != nil && *res.ExitCode != 0 {
-		status = model.RunStatusRE
-		source = "exit_code"
-	}
+	status, reason, source := classifyRunStatusWithoutOutput(req, res)
 
 	var score *float64
 	outputOK := false
@@ -80,6 +69,22 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 		score = &v
 	}
 	return status, score, reason, source
+}
+
+func classifyRunStatusWithoutOutput(req *model.RunRequest, res execResult) (string, string, string) {
+	status := res.Status
+	source := res.VerdictSource
+	reason := ""
+	status, reason, source = applyFinalCPUTimeStatus(status, reason, source, res.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(source, "cpu_time_cgroup"))
+	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
+		status = model.RunStatusMLE
+		source = "memory_reported"
+	}
+	if status == "OK" && res.ExitCode != nil && *res.ExitCode != 0 {
+		status = model.RunStatusRE
+		source = "exit_code"
+	}
+	return status, reason, source
 }
 
 func applyFinalCPUTimeStatus(status, reason, source string, cpuTimeMs int64, limitMs int, cgroupBacked bool) (string, string, string) {

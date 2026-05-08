@@ -126,6 +126,60 @@ entry points can keep profile selection behind trusted problem policy.
 `AONOHAKO_PROBLEM_RUNTIME_PROFILES`; mapped problems receive their configured
 profile before the request enters the stream or runner queue.
 
+### Two-step execute mode
+
+`/execute` also accepts a two-step pipeline shape without a separate endpoint.
+When `programs` or `steps` is present, the legacy top-level `lang`, `binaries`,
+`stdin`, `limits`, `entry_point`, and `enable_network` fields must be omitted.
+Top-level `expected_stdout`, `spj`, `file_outputs`, `sidecar_outputs`,
+`ignore_tle`, `problem_id`, and `runtime_profile` still apply to the final
+step.
+
+```jsonc
+{
+  "programs": [
+    {
+      "id": "encoder",
+      "lang": "binary",
+      "binaries": [{"name": "encoder", "data_b64": "<base64>", "mode": "exec"}]
+    },
+    {
+      "id": "decoder",
+      "lang": "python",
+      "binaries": [{"name": "decoder.py", "data_b64": "<base64>"}],
+      "entry_point": "decoder.py"
+    }
+  ],
+  "steps": [
+    {
+      "id": "encode",
+      "program_id": "encoder",
+      "stdin": "original input\n",
+      "limits": {"time_ms": 1000, "memory_mb": 256},
+      "handoff": {
+        "id": "encoded",
+        "from": "stdout",
+        "max_bytes": 1048576
+      }
+    },
+    {
+      "id": "decode",
+      "program_id": "decoder",
+      "stdin_from": "encoded",
+      "limits": {"time_ms": 1000, "memory_mb": 256}
+    }
+  ],
+  "expected_stdout": "answer\n"
+}
+```
+
+The current API intentionally supports exactly two steps. Each step runs in a
+fresh sandbox workspace; only the first step handoff is copied into the second
+step stdin. `handoff.from` defaults to `stdout`; `file`/`file_output` handoff
+requires `handoff.path` and captures that file through the same symlink-safe
+output path as `file_outputs`. `handoff.max_bytes` defaults to the step output
+capture limit and is capped at 8 MiB.
+
 ## `POST /execute` — Response
 
 ```jsonc
@@ -143,6 +197,25 @@ profile before the request enters the stream or runner queue.
   "reason": "",                             // human-readable error
   "verdict_source": "stdout",               // source that selected the final verdict, when known
   "score": null,                            // nullable float 0.0–1.0 (SPJ score)
+  "steps": [                                // present for two-step execute mode
+    {
+      "id": "encode",
+      "program_id": "encoder",
+      "status": "OK",
+      "wall_time_ms": 12,
+      "cpu_time_ms": 8,
+      "memory_kb": 4096,
+      "handoff_bytes": 128
+    },
+    {
+      "id": "decode",
+      "program_id": "decoder",
+      "status": "Accepted",
+      "wall_time_ms": 30,
+      "cpu_time_ms": 22,
+      "memory_kb": 8192
+    }
+  ],
   "sidecar_outputs": [                      // captured sidecar files
     {"path": "result.txt", "data_b64": "<base64>"}
   ],

@@ -111,6 +111,16 @@ as `/execute` when it runs as a root-backed embedded helper:
     optional sidecar image output when running locally.
 11. The parent compares output or runs an SPJ and returns the final result.
 
+Two-step problems use the same `/execute` endpoint with `programs` and `steps`
+fields instead of a separate API path. The runner executes exactly two step
+requests sequentially, each in its own fresh sandbox workspace. The first step
+may hand off capped stdout or one captured file to the second step stdin; no
+other filesystem state is shared between the workspaces. Final output
+comparison, file-output judging, sidecar capture, `ignore_tle`, and SPJ
+evaluation apply only to the second step. The top-level response reports
+aggregate wall/CPU time, peak memory across steps, and a per-step diagnostic
+summary.
+
 ## Sandbox Process Model
 
 The runtime uses a parent/helper/target split:

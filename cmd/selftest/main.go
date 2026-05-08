@@ -61,7 +61,7 @@ type languageSecurityCase struct {
 
 const (
 	mountNamespaceProbeEnv = "AONOHAKO_MOUNTNS_PREFLIGHT_PROBE"
-	selftestUsage          = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|language-security|runtime-memory|cgroup-preflight|mount-preflight|deployment-contract"
+	selftestUsage          = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|two-step|language-security|runtime-memory|cgroup-preflight|mount-preflight|deployment-contract"
 )
 
 func main() {
@@ -103,6 +103,11 @@ func main() {
 		}
 	case "compile-execute":
 		if err := runCompileExecuteSuite(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "two-step":
+		if err := runTwoStepSuite(); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -786,6 +791,79 @@ func runCompileExecuteSuite() error {
 	}
 
 	_, _ = fmt.Fprintln(os.Stdout, "compile execute ok")
+	return nil
+}
+
+func runTwoStepSuite() error {
+	server := api.NewWithServices(
+		config.Config{
+			MaxActiveRuns:     1,
+			MaxPendingQueue:   1,
+			HeartbeatInterval: time.Second,
+		},
+		compile.New(),
+		execute.New(),
+	)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name: "encode.sh",
+					DataB64: encodeScript(`#!/bin/sh
+while IFS= read -r line; do
+  printf 'encoded:%s\n' "$line"
+done
+`),
+					Mode: "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name: "decode.sh",
+					DataB64: encodeScript(`#!/bin/sh
+while IFS= read -r line; do
+  printf '%s\n' "${line#encoded:}"
+done
+`),
+					Mode: "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				Stdin:     "two-step-ok\n",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+				Handoff:   &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 4096},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinFrom: "encoded",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		ExpectedStdout: "two-step-ok\n",
+	})
+	if err != nil {
+		return fmt.Errorf("two-step execute request failed: %w", err)
+	}
+	if resp.Status != model.RunStatusAccepted {
+		return fmt.Errorf("two-step execute failed: status=%s reason=%s stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+	}
+	if len(resp.Steps) != 2 || resp.Steps[0].Status != "OK" || resp.Steps[1].Status != model.RunStatusAccepted {
+		return fmt.Errorf("two-step execute returned unexpected step results: %+v", resp.Steps)
+	}
+
+	_, _ = fmt.Fprintln(os.Stdout, "two step ok")
 	return nil
 }
 
