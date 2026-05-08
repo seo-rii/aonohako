@@ -254,6 +254,8 @@ languages:
     install:
       apt:
         - coffeescript
+      script:
+        - ln -sfn /usr/bin/coffee /usr/local/bin/coffee
     smoke:
       command:
         - bash
@@ -261,7 +263,7 @@ languages:
         - |
           printf '%s\n' "fs = require 'fs'" "fs.writeFileSync 'same-folder.txt', 'ok'" "console.log fs.readFileSync('same-folder.txt', 'utf8')" > Main.coffee
           coffee --compile --bare --output . Main.coffee
-          node Main.js | grep '^ok$'
+          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/coffee Main.coffee | grep '^ok$'
 
   typescript:
     install:
@@ -1915,8 +1917,8 @@ languages:
         - -lc
         - |
           printf '%s\n' 'console.log("ok");' > Main.ts
-          deno check Main.ts
-          deno run --no-prompt Main.ts | grep '^ok$'
+          deno check --v8-flags=--max-old-space-size=512 Main.ts
+          deno run --no-prompt --v8-flags=--max-old-space-size=128 Main.ts | grep '^ok$'
 
   kotlin-jvm:
     install:

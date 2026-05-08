@@ -441,6 +441,7 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 		ErlangSchedulers:          2,
 		ErlangAsyncThreads:        3,
 		DotnetGCHeapPercent:       50,
+		DenoOldSpacePercent:       50,
 		NodeOldSpacePercent:       50,
 		NodeMaxSemiSpaceMB:        2,
 		NodeStackSizeKB:           1024,
@@ -472,6 +473,17 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 
 	if got := dotnetGCHeapHardLimitHex(256, tuning); got != "8000000" {
 		t.Fatalf("dotnet GC heap hard limit = %s, want 8000000", got)
+	}
+
+	denoArgs := buildCommandWithRuntimeTuning("/tmp/Main.ts", "deno", req, tuning)
+	if !reflect.DeepEqual(denoArgs, []string{
+		"deno",
+		"run",
+		"--no-prompt",
+		"--v8-flags=--max-old-space-size=128",
+		"/tmp/Main.ts",
+	}) {
+		t.Fatalf("deno command with tuning = %v", denoArgs)
 	}
 
 	uhmArgs := buildCommandWithRuntimeTuning("/tmp/Main.umm", "uhmlang", req, tuning)
@@ -664,6 +676,7 @@ func TestAddressSpaceLimitBytes(t *testing.T) {
 		{"pypy_interpreter_virtual_cap", "pypy3", 128, 1024 * 1024 * 1024},
 		{"node_high_virtual_cap", "node", 128, 1024 * 1024 * 1024},
 		{"node_scaled_virtual_cap", "node", 512, 2560 * 1024 * 1024},
+		{"deno_virtual_cap", "deno", 256, 2048 * 1024 * 1024},
 		{"wasmtime_virtual_cap", "wasmtime", 256, 2048 * 1024 * 1024},
 		{"go_interpreter_virtual_cap", "umjunsik-lang-go", 128, 1024 * 1024 * 1024},
 		{"dotnet_virtual_cap", "dotnet", 256, 3584 * 1024 * 1024},
@@ -689,7 +702,7 @@ func TestAddressSpaceLimitBytesAlwaysAtLeast512MB(t *testing.T) {
 }
 
 func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) {
-	for _, commandBase := range []string{"dotnet", "node", "pypy3", "python3", "umjunsik-lang-go", "wasmtime"} {
+	for _, commandBase := range []string{"deno", "dotnet", "node", "pypy3", "python3", "umjunsik-lang-go", "wasmtime"} {
 		if addressSpaceProximityCanClassifyMLE(commandBase) {
 			t.Fatalf("%s should not use address-space proximity for MLE classification", commandBase)
 		}

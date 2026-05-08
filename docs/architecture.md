@@ -304,10 +304,10 @@ Memory enforcement uses several layers:
 
 - live RSS sampling from `/proc/<pid>/statm`
 - `/proc/<pid>/smaps_rollup` confirmation when RSS reaches 80% of the limit or when the runtime cannot use address-space limits
-- `RLIMIT_AS` to constrain virtual address space growth; native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps
-- runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
+- `RLIMIT_AS` to constrain virtual address space growth; native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Deno, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps
+- runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Deno receives a V8 old-space cap through `--v8-flags`; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
 - deployment-validated runtime tuning for selected JVM, Go, Erlang/Elixir,
-  .NET GC, Kotlin/Native, Node, and Wasmtime
+  .NET GC, Kotlin/Native, Deno, Node, and Wasmtime
   numeric knobs, with bounded environment variables and startup rejection for
   unsafe values rather than request-controlled arbitrary runtime flags
 - optional policy-owned runtime profiles from
@@ -378,7 +378,9 @@ scan-error handling apply during compile as well as execute. If
 `AONOHAKO_CGROUP_PARENT` is configured for a self-hosted helper runner, compile,
 execute, and SPJ helper processes are also placed into per-run cgroups with
 `memory.max`, `pids.max`, `memory.swap.max=0` when supported, and
-`memory.oom.group=1`. Execute and compile read final cgroup stats after the
+`memory.oom.group=1`. Cleanup uses `cgroup.kill` when the kernel exposes it
+before retrying run-group removal, and cleanup failures are logged so leaked
+cgroups are visible operationally. Execute and compile read final cgroup stats after the
 sandbox process exits and before signal fallback classification, so a kernel
 `memory.max` OOM kill is reported as memory-limit exceeded instead of being
 misclassified as a generic `SIGKILL` timeout or runtime error.
@@ -520,6 +522,9 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_HEARTBEAT_INTERVAL_SEC`, and
   `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` are strict; malformed or out-of-range
   values fail startup
+- `AONOHAKO_REMOTE_STRICT_PROTOCOL` is a strict boolean; it defaults to `true`
+  outside `dev` so remote responses without `X-Aonohako-Protocol-Version` are
+  rejected in production remote fleets
 - non-dev deployments also reject `0` for pending queue, global stream,
   per-principal stream, and per-principal request-rate caps so unlimited queue
   or stream settings stay development-only

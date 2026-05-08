@@ -209,6 +209,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | JAVASCRIPT | `javascript` | `node --check` |
 | COFFEESCRIPT | `coffeescript` | `coffee --compile --bare` |
 | TYPESCRIPT | `typescript` | `tsc` |
+| DENO | `deno` | `deno check --v8-flags=--max-old-space-size=...` |
 | KOTLIN | `kotlin` | `kotlinc-native` |
 | KOTLIN_JVM, KOTLIN_JAVA, KOTLIN_JVM8–21, KOTLIN_JAVA8–21 | `kotlin-jvm` | `kotlinc -jvm-target <v>` plus `javac --release <v>` for submitted `.java` files |
 | PASCAL | `pascal` | `fpc -O2 -Xs` |
@@ -270,7 +271,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `lisp` | `sbcl --script <file>` |
 | `coq` | `coqc -q <file>` |
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
-| `coffeescript` | `coffee <file>` |
+| `coffeescript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 /usr/local/bin/coffee <file>` |
+| `deno` | `deno run --no-prompt --v8-flags=--max-old-space-size=... <file>` |
 | `r` | `Rscript --vanilla <file>` |
 | `raku` | `raku <file>` |
 | `ruby` | `ruby <file>` |

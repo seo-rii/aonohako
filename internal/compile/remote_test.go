@@ -218,6 +218,32 @@ func TestRemoteRunnerCompileRejectsProtocolVersionMismatch(t *testing.T) {
 	}
 }
 
+func TestRemoteRunnerCompileStrictProtocolRejectsMissingVersion(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"compiled\\n\"}\n\n"))
+	}))
+	defer remote.Close()
+
+	runner := &remoteRunner{
+		client:      remote.Client(),
+		compileURL:  remote.URL + "/compile",
+		strictProto: true,
+	}
+
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "missing remote protocol version header") {
+		t.Fatalf("expected missing protocol header failure, got %+v", resp)
+	}
+}
+
 func TestRemoteRunnerCompileRejectsMalformedErrorEvents(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

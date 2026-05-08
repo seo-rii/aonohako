@@ -86,13 +86,13 @@ func ValidateParentAt(parentDir, mountInfoPath string, requiredControllers []str
 	if err != nil {
 		return fmt.Errorf("cgroup run-group write probe failed: %w", err)
 	}
-	if err := removeProbeRunGroup(probe); err != nil {
+	if err := removeRunGroupWithFakeFallback(probe); err != nil {
 		return fmt.Errorf("cgroup run-group remove probe failed: %w", err)
 	}
 	return nil
 }
 
-func removeProbeRunGroup(group Group) error {
+func removeRunGroupWithFakeFallback(group Group) error {
 	err := group.RemoveWithRetry(250 * time.Millisecond)
 	if err == nil {
 		return nil
@@ -100,7 +100,7 @@ func removeProbeRunGroup(group Group) error {
 	// Unit tests exercise this package on a normal filesystem where the
 	// pseudo cgroup control files are regular files. Real cgroupfs rejects
 	// unlinking those files, so this fallback only helps the fake-FS path.
-	for _, name := range []string{"memory.max", "memory.swap.max", "memory.oom.group", "pids.max", "cpu.max"} {
+	for _, name := range []string{"memory.max", "memory.swap.max", "memory.oom.group", "pids.max", "cpu.max", "cgroup.kill"} {
 		removeErr := os.Remove(filepath.Join(group.Path, name))
 		if removeErr != nil && !os.IsNotExist(removeErr) {
 			return err
@@ -224,7 +224,7 @@ func CreateRunGroup(parentDir, name string, limits Limits) (Group, error) {
 			if write.file == "memory.swap.max" && os.IsNotExist(err) {
 				continue
 			}
-			_ = os.RemoveAll(path)
+			_ = removeRunGroupWithFakeFallback(Group{Path: path})
 			return Group{}, fmt.Errorf("write %s: %w", write.file, err)
 		}
 	}
@@ -254,6 +254,38 @@ func (g Group) Remove() error {
 		return fmt.Errorf("remove cgroup %s: %w", g.Path, err)
 	}
 	return nil
+}
+
+func (g Group) Kill() error {
+	if strings.TrimSpace(g.Path) == "" {
+		return nil
+	}
+	killPath := filepath.Join(g.Path, "cgroup.kill")
+	if _, err := os.Stat(killPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat cgroup.kill: %w", err)
+	}
+	if err := os.WriteFile(killPath, []byte("1"), 0o644); err != nil {
+		return fmt.Errorf("write cgroup.kill: %w", err)
+	}
+	return nil
+}
+
+func (g Group) KillAndRemoveWithRetry(deadline time.Duration) error {
+	if strings.TrimSpace(g.Path) == "" {
+		return nil
+	}
+	killErr := g.Kill()
+	removeErr := g.RemoveWithRetry(deadline)
+	if killErr != nil && removeErr != nil {
+		return fmt.Errorf("%v; %w", killErr, removeErr)
+	}
+	if killErr != nil {
+		return killErr
+	}
+	return removeErr
 }
 
 func (g Group) RemoveWithRetry(deadline time.Duration) error {

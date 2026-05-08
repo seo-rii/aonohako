@@ -181,6 +181,10 @@ Both `/compile` and `/execute` share the same bounded queue:
 - **Remote SSE idle timeout**: `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` (default:
   `30`). This bounds how long a remote `/compile` or `/execute` stream may stay
   silent before the control plane cancels it.
+- **Remote protocol strictness**: `AONOHAKO_REMOTE_STRICT_PROTOCOL` defaults to
+  `true` outside `dev` and requires remote SSE responses to include
+  `X-Aonohako-Protocol-Version` with the current protocol value. Set it to
+  `false` only for explicitly backward-compatible runner rollouts.
 
 Numeric queue/timing environment variables are strict: malformed values,
 negative values, or zero values where a positive integer is required fail server

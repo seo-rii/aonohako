@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -146,7 +147,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS values can fail before user code. It also
 	// needs a high finite RLIMIT_FSIZE floor to start reliably.
-	disableAddressSpaceLimit := isDotnet || isC3 || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "deno" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
+	disableAddressSpaceLimit := isDotnet || isC3 || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
 	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)
@@ -272,14 +273,14 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		if err := runGroup.AddProc(cmd.Process.Pid); err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			_ = cmd.Wait()
-			_ = runGroup.RemoveWithRetry(250 * time.Millisecond)
+			cleanupSandboxCgroup("execute", runGroup)
 			return execResult{Status: model.RunStatusInitFail, Reason: "cgroup add process failed: " + err.Error()}
 		}
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			cgroupCPUBaselineMicros = stats.CPUUsageMicros
 		}
 		defer func() {
-			_ = runGroup.RemoveWithRetry(250 * time.Millisecond)
+			cleanupSandboxCgroup("execute", runGroup)
 		}()
 	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
@@ -612,6 +613,15 @@ done:
 		result.VerdictSource = "wall_time"
 	}
 	return result
+}
+
+func cleanupSandboxCgroup(scope string, group cgroup.Group) {
+	if strings.TrimSpace(group.Path) == "" {
+		return
+	}
+	if err := group.KillAndRemoveWithRetry(250 * time.Millisecond); err != nil {
+		slog.Warn("sandbox cgroup cleanup failed", "scope", scope, "path", group.Path, "err", err)
+	}
 }
 
 func ioCopy(dst interface{ Write([]byte) (int, error) }, src any) (int64, error) {

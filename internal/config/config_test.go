@@ -131,6 +131,18 @@ func TestDefaultTrustedPlatformHeaders(t *testing.T) {
 	}
 }
 
+func TestDefaultRemoteStrictProtocol(t *testing.T) {
+	if defaultRemoteStrictProtocol(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}) {
+		t.Fatalf("dev should allow backward-compatible missing remote protocol headers by default")
+	}
+	if !defaultRemoteStrictProtocol(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetCloudRun}) {
+		t.Fatalf("cloudrun should require remote protocol headers by default")
+	}
+	if !defaultRemoteStrictProtocol(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetSelfHosted}) {
+		t.Fatalf("selfhosted should require remote protocol headers by default")
+	}
+}
+
 func TestLoadRejectsCloudRunMarkersWithoutExplicitTarget(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "")
 	t.Setenv("K_SERVICE", "aonohako")
@@ -230,6 +242,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 	t.Setenv("AONOHAKO_ERLANG_ASYNC_THREADS", "3")
 	t.Setenv("AONOHAKO_DOTNET_GC_HEAP_PERCENT", "55")
 	t.Setenv("AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", "768")
+	t.Setenv("AONOHAKO_DENO_OLD_SPACE_PERCENT", "45")
 	t.Setenv("AONOHAKO_NODE_OLD_SPACE_PERCENT", "50")
 	t.Setenv("AONOHAKO_NODE_MAX_SEMI_SPACE_MB", "2")
 	t.Setenv("AONOHAKO_NODE_STACK_SIZE_KB", "1024")
@@ -248,6 +261,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 		ErlangAsyncThreads:         3,
 		DotnetGCHeapPercent:        55,
 		KotlinNativeCompilerHeapMB: 768,
+		DenoOldSpacePercent:        45,
 		NodeOldSpacePercent:        50,
 		NodeMaxSemiSpaceMB:         2,
 		NodeStackSizeKB:            1024,
@@ -265,7 +279,7 @@ func TestLoadRuntimeTuningProfiles(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
 	t.Setenv("AONOHAKO_JVM_HEAP_PERCENT", "40")
-	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{"low-memory":{"jvm_heap_percent":35,"node_old_space_percent":45,"node_max_semi_space_mb":2},"default-like":{}}`)
+	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{"low-memory":{"jvm_heap_percent":35,"deno_old_space_percent":40,"node_old_space_percent":45,"node_max_semi_space_mb":2},"default-like":{}}`)
 
 	cfg, err := Load()
 	if err != nil {
@@ -275,7 +289,7 @@ func TestLoadRuntimeTuningProfiles(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing low-memory profile in %+v", cfg.Execution.RuntimeTuningProfiles)
 	}
-	if low.JVMHeapPercent != 35 || low.NodeOldSpacePercent != 45 || low.NodeMaxSemiSpaceMB != 2 {
+	if low.JVMHeapPercent != 35 || low.DenoOldSpacePercent != 40 || low.NodeOldSpacePercent != 45 || low.NodeMaxSemiSpaceMB != 2 {
 		t.Fatalf("low-memory profile = %+v", low)
 	}
 	if low.GoGOGC != defaultGoGOGC {
@@ -382,6 +396,7 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 		{key: "AONOHAKO_ERLANG_ASYNC_THREADS", value: "8"},
 		{key: "AONOHAKO_DOTNET_GC_HEAP_PERCENT", value: "90"},
 		{key: "AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB", value: "2048"},
+		{key: "AONOHAKO_DENO_OLD_SPACE_PERCENT", value: "90"},
 		{key: "AONOHAKO_NODE_OLD_SPACE_PERCENT", value: "90"},
 		{key: "AONOHAKO_NODE_MAX_SEMI_SPACE_MB", value: "64"},
 		{key: "AONOHAKO_NODE_STACK_SIZE_KB", value: "64"},
@@ -414,6 +429,7 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 		ErlangAsyncThreads:         99,
 		DotnetGCHeapPercent:        1,
 		KotlinNativeCompilerHeapMB: 1,
+		DenoOldSpacePercent:        1,
 		NodeOldSpacePercent:        1,
 		NodeMaxSemiSpaceMB:         99,
 		NodeStackSizeKB:            64,
@@ -445,6 +461,9 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	if got.KotlinNativeCompilerHeapMB != minKotlinNativeCompilerHeapMB {
 		t.Fatalf("KotlinNativeCompilerHeapMB = %d, want %d", got.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB)
 	}
+	if got.DenoOldSpacePercent != minDenoOldSpacePercent {
+		t.Fatalf("DenoOldSpacePercent = %d, want %d", got.DenoOldSpacePercent, minDenoOldSpacePercent)
+	}
 	if got.NodeMaxSemiSpaceMB != maxNodeMaxSemiSpaceMB {
 		t.Fatalf("NodeMaxSemiSpaceMB = %d, want %d", got.NodeMaxSemiSpaceMB, maxNodeMaxSemiSpaceMB)
 	}
@@ -456,6 +475,17 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	}
 	if got.WasmtimeMaxWasmStackBytes != maxWasmtimeMaxWasmStackBytes {
 		t.Fatalf("WasmtimeMaxWasmStackBytes = %d, want %d", got.WasmtimeMaxWasmStackBytes, maxWasmtimeMaxWasmStackBytes)
+	}
+}
+
+func TestDenoOldSpaceMBUsesBoundedRuntimeTuning(t *testing.T) {
+	got := DenoOldSpaceMB(128, RuntimeTuningConfig{DenoOldSpacePercent: 50})
+	if got != 64 {
+		t.Fatalf("DenoOldSpaceMB = %d, want 64", got)
+	}
+	got = DenoOldSpaceMB(16, RuntimeTuningConfig{DenoOldSpacePercent: 10})
+	if got != 32 {
+		t.Fatalf("DenoOldSpaceMB low memory floor = %d, want 32", got)
 	}
 }
 
@@ -495,6 +525,29 @@ func TestLoadAllowsCloudRunRemoteControlPlaneWithWorkRoot(t *testing.T) {
 	}
 	if cfg.Execution.Platform.SandboxBackend != platform.SandboxBackendNone {
 		t.Fatalf("sandbox backend mismatch: %+v", cfg.Execution.Platform)
+	}
+	if !cfg.Execution.Remote.StrictProtocol {
+		t.Fatalf("cloudrun remote control plane should use strict protocol by default")
+	}
+}
+
+func TestLoadAllowsExplicitRemoteProtocolCompatibilityMode(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "cloudrun")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")
+	t.Setenv("AONOHAKO_REMOTE_STRICT_PROTOCOL", "false")
+	t.Setenv("AONOHAKO_INBOUND_AUTH", "platform")
+	t.Setenv("AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET", "secret")
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Execution.Remote.StrictProtocol {
+		t.Fatalf("explicit compatibility mode should disable strict remote protocol")
 	}
 }
 

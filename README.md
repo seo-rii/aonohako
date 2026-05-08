@@ -184,6 +184,10 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30` and bounds how long
   a remote `/compile` or `/execute` SSE response may stay silent before the
   control plane cancels it.
+- `AONOHAKO_REMOTE_STRICT_PROTOCOL` controls whether remote responses must carry
+  `X-Aonohako-Protocol-Version`. It defaults to `true` outside `dev` and
+  `false` in `dev`, so production remote fleets fail closed on unversioned
+  runner responses while local compatibility testing can still accept them.
 - `AONOHAKO_ALLOW_REQUEST_NETWORK` controls whether `/execute` may honor
   client-supplied `enable_network=true`. It defaults to `true` only for `dev`
   and `false` for `cloudrun` or `selfhosted`; public runners should route
@@ -396,6 +400,9 @@ flags through requests:
   storage rather than a tight file-size rlimit.
 - `AONOHAKO_KOTLIN_NATIVE_COMPILER_HEAP_MB` controls Kotlin/Native compiler
   JVM heap. Allowed range: `256..1536`, default `1024`.
+- `AONOHAKO_DENO_OLD_SPACE_PERCENT` controls the Deno/V8 old-space share used
+  for `--v8-flags=--max-old-space-size=...`. Allowed range: `30..75`, default
+  `60`.
 - `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of
   the request memory limit. Allowed range: `30..75`, default `60`.
 - `AONOHAKO_NODE_MAX_SEMI_SPACE_MB` caps Node/V8 semi-space. Allowed range:

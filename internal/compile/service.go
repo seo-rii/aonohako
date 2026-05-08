@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1103,7 +1104,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	case "mojo":
 		return compileMojo(ctx, workDir, target, req.Sources)
 	case "deno":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check"}, nil)
+		return compileCheckedSources(ctx, workDir, req.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(compileSandboxMemoryMB, tuning))}, nil)
 	case "kotlin-jvm":
 		return compileKotlinJVM(ctx, workDir, target, req.Sources, profile.JavaRelease, tuning)
 	case "duckdb":
@@ -2776,7 +2777,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// startup, so finite RLIMIT_AS values can fail before user code. Dotnet-like
 	// commands get a high finite RLIMIT_FSIZE floor because lower file-size
 	// rlimits can break CoreCLR/F# startup before user code.
-	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "deno" || isIsabelle
+	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || isIsabelle
 	allowProcessGroups := commandName == "swiftc" || commandName == "hare" || isIsabelle
 	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || isIsabelle
 	allowExecveat := commandName == "hare"
@@ -2893,11 +2894,11 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		if err := runGroup.AddProc(cmd.Process.Pid); err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			_ = cmd.Wait()
-			_ = runGroup.RemoveWithRetry(250 * time.Millisecond)
+			cleanupCompileCgroup(runGroup)
 			return "", "", model.CompileStatusInternal, "cgroup add process failed: " + err.Error()
 		}
 		defer func() {
-			_ = runGroup.RemoveWithRetry(250 * time.Millisecond)
+			cleanupCompileCgroup(runGroup)
 		}()
 	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
@@ -3114,6 +3115,15 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			}
 			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusOK, ""
 		}
+	}
+}
+
+func cleanupCompileCgroup(group cgroup.Group) {
+	if strings.TrimSpace(group.Path) == "" {
+		return
+	}
+	if err := group.KillAndRemoveWithRetry(250 * time.Millisecond); err != nil {
+		slog.Warn("compile cgroup cleanup failed", "path", group.Path, "err", err)
 	}
 }
 
