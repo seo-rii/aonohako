@@ -110,12 +110,14 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 
 	workDir, err := util.CreateWorkDir("aonohako-compile-*")
 	if err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "mkdtemp failed: " + err.Error()}
+		slog.Warn("compile work directory creation failed", "err", err)
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "work directory creation failed"}
 	}
 	defer os.RemoveAll(workDir)
 	for _, dir := range security.WorkspaceScopedDirs(workDir) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace prep failed: " + err.Error()}
+			slog.Warn("compile workspace preparation failed", "err", err)
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace preparation failed"}
 		}
 	}
 
@@ -123,7 +125,8 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 	}
 	if err := hardenCompileWorkspace(workDir); err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace ownership failed: " + err.Error()}
+		slog.Warn("compile workspace hardening failed", "err", err)
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "workspace hardening failed"}
 	}
 
 	target := strings.TrimSpace(req.Target)
@@ -2693,7 +2696,8 @@ func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
 	for _, dir := range security.WorkspaceScopedDirs(workDir) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+			slog.Warn("compile sandbox workspace preparation failed", "err", err)
+			return "", "", model.CompileStatusInternal, "workspace preparation failed"
 		}
 	}
 	if os.Geteuid() == 0 {
@@ -2715,14 +2719,17 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			}
 			return os.Chmod(path, 0o777|os.ModeSticky)
 		}); err != nil {
-			return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+			slog.Warn("compile sandbox workspace permission walk failed", "err", err)
+			return "", "", model.CompileStatusInternal, "workspace preparation failed"
 		}
 		for _, dir := range security.WorkspaceScopedDirs(workDir) {
 			if err := os.Chown(dir, 65532, 65532); err != nil {
-				return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+				slog.Warn("compile sandbox workspace ownership failed", "err", err)
+				return "", "", model.CompileStatusInternal, "workspace preparation failed"
 			}
 			if err := os.Chmod(dir, 0o700); err != nil {
-				return "", "", model.CompileStatusInternal, "workspace prep failed: " + err.Error()
+				slog.Warn("compile sandbox workspace chmod failed", "err", err)
+				return "", "", model.CompileStatusInternal, "workspace preparation failed"
 			}
 		}
 	}

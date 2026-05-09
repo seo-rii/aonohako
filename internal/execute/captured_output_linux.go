@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"aonohako/internal/util"
@@ -36,7 +37,11 @@ func openWorkspaceReadOnly(ws Workspace, rel string) (workspaceReadOnlyFile, err
 		Flags:   unix.O_RDONLY | unix.O_CLOEXEC,
 		Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_XDEV,
 	}
-	for _, root := range []string{ws.BoxDir, ws.RootDir} {
+	roots := []string{ws.BoxDir}
+	if strings.HasPrefix(filepath.ToSlash(clean), "__img__/") {
+		roots = append(roots, ws.RootDir)
+	}
+	for _, root := range roots {
 		dirfd, err := unix.Open(root, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 		if err != nil {
 			continue

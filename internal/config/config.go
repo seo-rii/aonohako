@@ -700,118 +700,33 @@ func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 
 func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	defaults := DefaultRuntimeTuningConfig()
-	if c.JVMHeapPercent == 0 {
-		c.JVMHeapPercent = defaults.JVMHeapPercent
-	}
-	if c.JVMHeapPercent < minJVMHeapPercent {
-		c.JVMHeapPercent = minJVMHeapPercent
-	}
-	if c.JVMHeapPercent > maxJVMHeapPercent {
-		c.JVMHeapPercent = maxJVMHeapPercent
-	}
-	if c.GoMemoryReserveMB < minGoMemoryReserveMB {
-		c.GoMemoryReserveMB = minGoMemoryReserveMB
-	}
-	if c.GoMemoryReserveMB > maxGoMemoryReserveMB {
-		c.GoMemoryReserveMB = maxGoMemoryReserveMB
-	}
-	if c.GoGOGC == 0 {
-		c.GoGOGC = defaults.GoGOGC
-	}
-	if c.GoGOGC < minGoGOGC {
-		c.GoGOGC = minGoGOGC
-	}
-	if c.GoGOGC > maxGoGOGC {
-		c.GoGOGC = maxGoGOGC
-	}
-	if c.ErlangSchedulers == 0 {
-		c.ErlangSchedulers = defaults.ErlangSchedulers
-	}
-	if c.ErlangSchedulers < minErlangSchedulers {
-		c.ErlangSchedulers = minErlangSchedulers
-	}
-	if c.ErlangSchedulers > maxErlangSchedulers {
-		c.ErlangSchedulers = maxErlangSchedulers
-	}
-	if c.ErlangAsyncThreads < minErlangAsyncThreads {
-		c.ErlangAsyncThreads = minErlangAsyncThreads
-	}
-	if c.ErlangAsyncThreads > maxErlangAsyncThreads {
-		c.ErlangAsyncThreads = maxErlangAsyncThreads
-	}
-	if c.DotnetGCHeapPercent == 0 {
-		c.DotnetGCHeapPercent = defaults.DotnetGCHeapPercent
-	}
-	if c.DotnetGCHeapPercent < minDotnetGCHeapPercent {
-		c.DotnetGCHeapPercent = minDotnetGCHeapPercent
-	}
-	if c.DotnetGCHeapPercent > maxDotnetGCHeapPercent {
-		c.DotnetGCHeapPercent = maxDotnetGCHeapPercent
-	}
-	if c.KotlinNativeCompilerHeapMB == 0 {
-		c.KotlinNativeCompilerHeapMB = defaults.KotlinNativeCompilerHeapMB
-	}
-	if c.KotlinNativeCompilerHeapMB < minKotlinNativeCompilerHeapMB {
-		c.KotlinNativeCompilerHeapMB = minKotlinNativeCompilerHeapMB
-	}
-	if c.KotlinNativeCompilerHeapMB > maxKotlinNativeCompilerHeapMB {
-		c.KotlinNativeCompilerHeapMB = maxKotlinNativeCompilerHeapMB
-	}
-	if c.DenoOldSpacePercent == 0 {
-		c.DenoOldSpacePercent = defaults.DenoOldSpacePercent
-	}
-	if c.DenoOldSpacePercent < minDenoOldSpacePercent {
-		c.DenoOldSpacePercent = minDenoOldSpacePercent
-	}
-	if c.DenoOldSpacePercent > maxDenoOldSpacePercent {
-		c.DenoOldSpacePercent = maxDenoOldSpacePercent
-	}
-	if c.NodeOldSpacePercent == 0 {
-		c.NodeOldSpacePercent = defaults.NodeOldSpacePercent
-	}
-	if c.NodeOldSpacePercent < minNodeOldSpacePercent {
-		c.NodeOldSpacePercent = minNodeOldSpacePercent
-	}
-	if c.NodeOldSpacePercent > maxNodeOldSpacePercent {
-		c.NodeOldSpacePercent = maxNodeOldSpacePercent
-	}
-	if c.NodeMaxSemiSpaceMB == 0 {
-		c.NodeMaxSemiSpaceMB = defaults.NodeMaxSemiSpaceMB
-	}
-	if c.NodeMaxSemiSpaceMB < minNodeMaxSemiSpaceMB {
-		c.NodeMaxSemiSpaceMB = minNodeMaxSemiSpaceMB
-	}
-	if c.NodeMaxSemiSpaceMB > maxNodeMaxSemiSpaceMB {
-		c.NodeMaxSemiSpaceMB = maxNodeMaxSemiSpaceMB
-	}
-	if c.NodeStackSizeKB == 0 {
-		c.NodeStackSizeKB = defaults.NodeStackSizeKB
-	}
-	if c.NodeStackSizeKB < minNodeStackSizeKB {
-		c.NodeStackSizeKB = minNodeStackSizeKB
-	}
-	if c.NodeStackSizeKB > maxNodeStackSizeKB {
-		c.NodeStackSizeKB = maxNodeStackSizeKB
-	}
-	if c.WasmtimeMemoryGuardBytes == 0 {
-		c.WasmtimeMemoryGuardBytes = defaults.WasmtimeMemoryGuardBytes
-	}
-	if c.WasmtimeMemoryGuardBytes < minWasmtimeMemoryGuardBytes {
-		c.WasmtimeMemoryGuardBytes = minWasmtimeMemoryGuardBytes
-	}
-	if c.WasmtimeMemoryGuardBytes > maxWasmtimeMemoryGuardBytes {
-		c.WasmtimeMemoryGuardBytes = maxWasmtimeMemoryGuardBytes
-	}
-	if c.WasmtimeMaxWasmStackBytes == 0 {
-		c.WasmtimeMaxWasmStackBytes = defaults.WasmtimeMaxWasmStackBytes
-	}
-	if c.WasmtimeMaxWasmStackBytes < minWasmtimeMaxWasmStackBytes {
-		c.WasmtimeMaxWasmStackBytes = minWasmtimeMaxWasmStackBytes
-	}
-	if c.WasmtimeMaxWasmStackBytes > maxWasmtimeMaxWasmStackBytes {
-		c.WasmtimeMaxWasmStackBytes = maxWasmtimeMaxWasmStackBytes
-	}
+	c.JVMHeapPercent = clampWithDefault(c.JVMHeapPercent, defaults.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
+	c.GoMemoryReserveMB = clampWithDefault(c.GoMemoryReserveMB, defaults.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
+	c.GoGOGC = clampWithDefault(c.GoGOGC, defaults.GoGOGC, minGoGOGC, maxGoGOGC)
+	c.ErlangSchedulers = clampWithDefault(c.ErlangSchedulers, defaults.ErlangSchedulers, minErlangSchedulers, maxErlangSchedulers)
+	c.ErlangAsyncThreads = clampWithDefault(c.ErlangAsyncThreads, defaults.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
+	c.DotnetGCHeapPercent = clampWithDefault(c.DotnetGCHeapPercent, defaults.DotnetGCHeapPercent, minDotnetGCHeapPercent, maxDotnetGCHeapPercent)
+	c.KotlinNativeCompilerHeapMB = clampWithDefault(c.KotlinNativeCompilerHeapMB, defaults.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB, maxKotlinNativeCompilerHeapMB)
+	c.DenoOldSpacePercent = clampWithDefault(c.DenoOldSpacePercent, defaults.DenoOldSpacePercent, minDenoOldSpacePercent, maxDenoOldSpacePercent)
+	c.NodeOldSpacePercent = clampWithDefault(c.NodeOldSpacePercent, defaults.NodeOldSpacePercent, minNodeOldSpacePercent, maxNodeOldSpacePercent)
+	c.NodeMaxSemiSpaceMB = clampWithDefault(c.NodeMaxSemiSpaceMB, defaults.NodeMaxSemiSpaceMB, minNodeMaxSemiSpaceMB, maxNodeMaxSemiSpaceMB)
+	c.NodeStackSizeKB = clampWithDefault(c.NodeStackSizeKB, defaults.NodeStackSizeKB, minNodeStackSizeKB, maxNodeStackSizeKB)
+	c.WasmtimeMemoryGuardBytes = clampWithDefault(c.WasmtimeMemoryGuardBytes, defaults.WasmtimeMemoryGuardBytes, minWasmtimeMemoryGuardBytes, maxWasmtimeMemoryGuardBytes)
+	c.WasmtimeMaxWasmStackBytes = clampWithDefault(c.WasmtimeMaxWasmStackBytes, defaults.WasmtimeMaxWasmStackBytes, minWasmtimeMaxWasmStackBytes, maxWasmtimeMaxWasmStackBytes)
 	return c
+}
+
+func clampWithDefault(value, fallback, minValue, maxValue int) int {
+	if value == 0 {
+		value = fallback
+	}
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
 }
 
 func DenoOldSpaceMB(memoryMB int, tuning RuntimeTuningConfig) int {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -92,6 +93,19 @@ func New() *Service {
 	return &Service{deploymentTarget: opts.DeploymentTarget, runtimeTuning: config.DefaultRuntimeTuningConfig()}
 }
 
+func NewWithConfig(cfg config.Config) *Service {
+	profiles := make(map[string]config.RuntimeTuningConfig, len(cfg.Execution.RuntimeTuningProfiles))
+	for name, tuning := range cfg.Execution.RuntimeTuningProfiles {
+		profiles[name] = tuning.WithSafeDefaults()
+	}
+	return &Service{
+		deploymentTarget:      cfg.Execution.Platform.DeploymentTarget,
+		runtimeTuning:         cfg.Execution.RuntimeTuning.WithSafeDefaults(),
+		runtimeTuningProfiles: profiles,
+		cgroupParentDir:       cfg.Execution.Cgroup.ParentDir,
+	}
+}
+
 func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
@@ -137,18 +151,21 @@ func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks
 
 	workDir, err := createRunWorkDir()
 	if err != nil {
-		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "mkdtemp failed: " + err.Error()}}
+		slog.Warn("execute work directory creation failed", "err", err)
+		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "work directory creation failed"}}
 	}
 	defer os.RemoveAll(workDir)
 
 	ws, err := prepareWorkspaceDirs(workDir)
 	if err != nil {
-		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "workspace prep failed: " + err.Error()}}
+		slog.Warn("execute workspace preparation failed", "err", err)
+		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "workspace preparation failed"}}
 	}
 
 	primaryPath, runLang, err := materializeFiles(ws, req)
 	if err != nil {
-		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "materialize failed: " + err.Error()}}
+		slog.Warn("execute file materialization failed", "err", err)
+		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "file materialization failed"}}
 	}
 
 	cmdArgs := buildCommandWithRuntimeTuning(primaryPath, runLang, req, tuning)

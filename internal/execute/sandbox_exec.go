@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -625,50 +626,30 @@ func cleanupSandboxCgroup(scope string, group cgroup.Group) {
 }
 
 func ioCopy(dst interface{ Write([]byte) (int, error) }, src any) (int64, error) {
-	switch r := src.(type) {
-	case *os.File:
-		var n int64
-		buf := make([]byte, 16*1024)
-		for {
-			k, err := r.Read(buf)
-			if k > 0 {
-				nn, _ := dst.Write(buf[:k])
-				n += int64(nn)
-			}
-			if err != nil {
-				if errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "file already closed") {
-					return n, nil
-				}
-				if err.Error() == "EOF" {
-					return n, nil
-				}
-				return n, nil
-			}
-		}
-	case interface{ Read([]byte) (int, error) }:
-		var n int64
-		buf := make([]byte, 16*1024)
-		for {
-			k, err := r.Read(buf)
-			if k > 0 {
-				nn, _ := dst.Write(buf[:k])
-				n += int64(nn)
-			}
-			if err != nil {
-				if errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "file already closed") {
-					return n, nil
-				}
-				if errors.Is(err, context.Canceled) {
-					return n, nil
-				}
-				if err.Error() == "EOF" {
-					return n, nil
-				}
-				return n, nil
-			}
-		}
-	default:
+	r, ok := src.(interface{ Read([]byte) (int, error) })
+	if !ok {
 		return 0, nil
+	}
+	var n int64
+	buf := make([]byte, 16*1024)
+	for {
+		k, readErr := r.Read(buf)
+		if k > 0 {
+			nn, writeErr := dst.Write(buf[:k])
+			n += int64(nn)
+			if writeErr != nil {
+				return n, writeErr
+			}
+			if nn != k {
+				return n, io.ErrShortWrite
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) || errors.Is(readErr, os.ErrClosed) || errors.Is(readErr, context.Canceled) || strings.Contains(readErr.Error(), "file already closed") {
+				return n, nil
+			}
+			return n, readErr
+		}
 	}
 }
 
@@ -684,7 +665,17 @@ func outputLimitBytes(req *model.RunRequest) int {
 
 func firstImagePath(paths []model.OutputFile) string {
 	for _, p := range paths {
-		if strings.Contains(strings.ToLower(p.Path), "image") || strings.Contains(strings.ToLower(p.Path), "img") {
+		clean := filepath.ToSlash(strings.ToLower(strings.TrimSpace(p.Path)))
+		if !strings.HasPrefix(clean, "__img__/") {
+			continue
+		}
+		base := filepath.Base(clean)
+		ext := filepath.Ext(base)
+		if ext != ".jsonl" && ext != ".ndjson" {
+			continue
+		}
+		name := strings.TrimSuffix(base, ext)
+		if name == "image" || name == "images" || name == "img" || strings.HasPrefix(name, "image-") || strings.HasPrefix(name, "img-") || strings.HasPrefix(name, "frame-") {
 			return p.Path
 		}
 	}
@@ -804,7 +795,7 @@ func ioReadAll(r *bufio.Reader) ([]byte, error) {
 			_, _ = out.Write(chunk)
 		}
 		if err != nil {
-			if strings.Contains(err.Error(), "EOF") {
+			if errors.Is(err, io.EOF) {
 				return out.Bytes(), nil
 			}
 			return out.Bytes(), err

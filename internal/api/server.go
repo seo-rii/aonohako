@@ -24,6 +24,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
+	"aonohako/internal/platform"
 	"aonohako/internal/queue"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimepolicy"
@@ -460,7 +461,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}
-			} else if len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 {
+			} else if len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 && s.cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetDev {
 				host, _, err := net.SplitHostPort(r.RemoteAddr)
 				if err != nil {
 					host = r.RemoteAddr
@@ -479,6 +480,9 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}
+			} else if s.cfg.Execution.Platform.DeploymentTarget != platform.DeploymentTargetDev {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
 			}
 			if value != "" {
 				principal = "platform:" + value
@@ -545,10 +549,11 @@ func verifyPlatformPrincipalSignature(secret, method, path, principal, timestamp
 }
 
 func constantTimeEqual(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+	aSum := sha256.Sum256([]byte(a))
+	bSum := sha256.Sum256([]byte(b))
+	sameDigest := subtle.ConstantTimeCompare(aSum[:], bSum[:])
+	sameLength := subtle.ConstantTimeEq(int32(len(a)), int32(len(b)))
+	return sameDigest&sameLength == 1
 }
 
 func (s *Server) validateRuntimeProfileAllowed(profile string) error {

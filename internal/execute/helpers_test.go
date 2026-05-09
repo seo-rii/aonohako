@@ -3,6 +3,7 @@ package execute
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,22 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 )
+
+type failingWriter struct {
+	err error
+}
+
+func (w failingWriter) Write([]byte) (int, error) {
+	return 0, w.err
+}
+
+type failingReader struct {
+	err error
+}
+
+func (r failingReader) Read([]byte) (int, error) {
+	return 0, r.err
+}
 
 func forceDirectMode(t *testing.T) {
 	t.Helper()
@@ -632,6 +649,29 @@ func TestBuildCommandEmpty(t *testing.T) {
 	}
 }
 
+func TestIOCopyPropagatesUnexpectedErrors(t *testing.T) {
+	readErr := errors.New("read failed")
+	if _, err := ioCopy(&cappedBuffer{limit: 16}, failingReader{err: readErr}); !errors.Is(err, readErr) {
+		t.Fatalf("ioCopy read error = %v, want %v", err, readErr)
+	}
+
+	writeErr := errors.New("write failed")
+	if _, err := ioCopy(failingWriter{err: writeErr}, strings.NewReader("payload")); !errors.Is(err, writeErr) {
+		t.Fatalf("ioCopy write error = %v, want %v", err, writeErr)
+	}
+}
+
+func TestFirstImagePathRequiresImageSidecarPath(t *testing.T) {
+	paths := []model.OutputFile{
+		{Path: "my_images_data.csv"},
+		{Path: "__img__/metrics.jsonl"},
+		{Path: "__img__/images.jsonl"},
+	}
+	if got := firstImagePath(paths); got != "__img__/images.jsonl" {
+		t.Fatalf("firstImagePath = %q, want __img__/images.jsonl", got)
+	}
+}
+
 // --------------- clipUTF8 ---------------
 
 func TestClipUTF8(t *testing.T) {
@@ -765,23 +805,6 @@ func TestSandboxCommandBaseSkipsEnvAssignments(t *testing.T) {
 	got := sandboxCommandBase([]string{"/usr/bin/env", "GOMEMLIMIT=64MiB", "/usr/bin/umjunsik-lang-go", "/tmp/Main.umm"})
 	if got != "umjunsik-lang-go" {
 		t.Fatalf("sandboxCommandBase returned %q", got)
-	}
-}
-
-// --------------- max ---------------
-
-func TestMaxHelper(t *testing.T) {
-	if got := max(3, 5); got != 5 {
-		t.Errorf("max(3,5) = %d", got)
-	}
-	if got := max(5, 3); got != 5 {
-		t.Errorf("max(5,3) = %d", got)
-	}
-	if got := max(-1, 0); got != 0 {
-		t.Errorf("max(-1,0) = %d", got)
-	}
-	if got := max(7, 7); got != 7 {
-		t.Errorf("max(7,7) = %d", got)
 	}
 }
 

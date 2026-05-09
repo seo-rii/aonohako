@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"aonohako/internal/api"
@@ -39,7 +43,33 @@ func main() {
 		ReadTimeout:       cfg.BodyReadTimeout,
 	}
 	slog.Info("aonohako listening", "addr", httpServer.Addr, "active", cfg.MaxActiveRuns, "pending", cfg.MaxPendingQueue)
-	if err := httpServer.ListenAndServe(); err != nil {
-		slog.Error("aonohako server stopped", "err", err)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- httpServer.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("aonohako server stopped", "err", err)
+			os.Exit(1)
+		}
+	case <-ctx.Done():
+		stop()
+		slog.Info("aonohako shutdown requested")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			slog.Error("aonohako graceful shutdown failed", "err", err)
+			_ = httpServer.Close()
+			os.Exit(1)
+		}
+		if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("aonohako server stopped", "err", err)
+			os.Exit(1)
+		}
 	}
 }
