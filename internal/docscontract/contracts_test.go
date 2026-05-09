@@ -16,8 +16,8 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 	wants := []string{
 		`"exec" → chmod 0555; otherwise chmod 0444`,
 		`Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Workspace Limit Exceeded|Runtime Error|Container Initialization Failed`,
-		"`prlimit --as` | Virtual address space (memory_mb + 64 MB, min 512 MB)",
-		"`prlimit --fsize` | Max file size (workspace_bytes when set, otherwise 128 MB)",
+		"`RLIMIT_AS` | Virtual address space using language-specific headroom",
+		"`RLIMIT_FSIZE` | Per-file growth tied to workspace policy",
 		`"sources": [                               // source files to compile (max 512 entries)`,
 		`"binaries": [                              // files to place in work directory (max 512 entries)`,
 		`"sidecar_outputs": [                       // capture extra files after execution (max 64 paths)`,
@@ -154,7 +154,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "remote runner SSE responses are parsed with bounded line, event, and stream\n  sizes") || !strings.Contains(architecture, "SSE idle heartbeat timeouts") {
 		t.Fatalf("architecture.md must describe remote SSE bounds and idle timeout")
 	}
-	if !strings.Contains(architecture, "protocol-version headers are backward compatible when absent") || !strings.Contains(architecture, "fail closed when present with an unsupported value") {
+	if !strings.Contains(architecture, "protocol-version headers fail closed when missing or unsupported\n  in strict mode") || !strings.Contains(architecture, "backward-compatible policy that accepts\n  missing headers while still rejecting unsupported present values") {
 		t.Fatalf("architecture.md must describe remote protocol version mismatch handling")
 	}
 	if !strings.Contains(architecture, "malformed remote `log`, `image`, `error`, or `result` events fail") {
