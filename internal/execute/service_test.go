@@ -2230,6 +2230,44 @@ raise SystemExit(0)
 	}
 }
 
+func TestRunSPJUsesFileArgumentsWithoutDuplicatingStdoutOnStdin(t *testing.T) {
+	requireSandboxSupport(t)
+
+	spj := `#!/usr/bin/env python3
+import sys
+
+stdin = sys.stdin.read()
+with open(sys.argv[3], "r", encoding="utf-8") as handle:
+    output = handle.read()
+if stdin:
+    raise SystemExit(3)
+if output != "42\n":
+    raise SystemExit(4)
+raise SystemExit(0)
+`
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte("print('42')\n")),
+		}},
+		ExpectedStdout: "42\n",
+		SPJ: &model.SPJSpec{
+			Binary: &model.Binary{
+				Name:    "spj.py",
+				DataB64: base64.StdEncoding.EncodeToString([]byte(spj)),
+			},
+			Lang: "python",
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected SPJ to accept without stdin duplication, got %+v", resp)
+	}
+}
+
 func TestRunSPJUsesDedicatedLimits(t *testing.T) {
 	requireSandboxSupport(t)
 

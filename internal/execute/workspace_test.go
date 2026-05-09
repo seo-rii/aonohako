@@ -305,6 +305,21 @@ func TestCaptureFileOutputPrefersBoxContentOverWorkspaceRoot(t *testing.T) {
 	}
 }
 
+func TestCaptureFileOutputIgnoresWorkspaceRootForOrdinaryOutputs(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(ws.RootDir, "result.txt"), []byte("workspace-root"), 0o644); err != nil {
+		t.Fatalf("write workspace root result: %v", err)
+	}
+	if _, err := captureFileOutput(ws, model.OutputFile{Path: "result.txt"}); err == nil {
+		t.Fatalf("ordinary file output should not fall back to workspace root")
+	}
+}
+
 func TestCaptureSidecarOutputsSkipsEscapingOrSymlinkedPaths(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

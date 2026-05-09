@@ -225,7 +225,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	spjReq := &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false}
 	args := buildCommandWithRuntimeTuning(spjPath, spjLang, spjReq, tuning)
 	args = append(args, inputPath, solutionPath, outputPath)
-	res := runCommandWithSandbox(ctx, spjWS, args, &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false, Stdin: userStdout}, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)
+	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
@@ -307,31 +307,30 @@ func existingWorkspacePath(ws Workspace, rel string) (string, error) {
 }
 
 func workspacePathCandidates(ws Workspace, rel string) []string {
-	return []string{
-		filepath.Join(ws.BoxDir, rel),
-		filepath.Join(ws.RootDir, rel),
+	candidates := []string{filepath.Join(ws.BoxDir, rel)}
+	if strings.HasPrefix(filepath.ToSlash(rel), "__img__/") {
+		candidates = append(candidates, filepath.Join(ws.RootDir, rel))
 	}
+	return candidates
 }
 
 func clipUTF8(b []byte, n int) string {
-	if len(b) <= n {
-		if utf8.Valid(b) {
-			return string(b)
-		}
-		k := len(b)
-		for k > 0 && !utf8.Valid(b[:k]) {
-			k--
-		}
-		return string(b[:k])
-	}
-	k := n
-	for k > 0 && !utf8.Valid(b[:k]) {
-		k--
-	}
-	if k == 0 {
+	if n <= 0 {
 		return ""
 	}
-	return string(b[:k])
+	if n > len(b) {
+		n = len(b)
+	}
+	validEnd := 0
+	for i := 0; i < n; {
+		r, size := utf8.DecodeRune(b[i:n])
+		if r == utf8.RuneError && size == 1 {
+			break
+		}
+		i += size
+		validEnd = i
+	}
+	return string(b[:validEnd])
 }
 
 func sandboxCommandBase(command []string) string {
@@ -380,11 +379,4 @@ func addressSpaceProximityCanClassifyMLE(commandBase string) bool {
 	default:
 		return true
 	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

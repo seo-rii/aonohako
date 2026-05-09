@@ -8,7 +8,7 @@ ARG PYTHON_IMAGE=python:3.13-slim-trixie@sha256:a0779d7c12fc20be6ec6b4ddc901a4fd
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
 WORKDIR /src
 COPY go.mod go.sum* ./
-RUN go mod download || true
+RUN go mod download
 COPY . .
 ARG TARGETOS TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \

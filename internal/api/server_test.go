@@ -75,6 +75,18 @@ func platformPrincipalSignatureForTest(secret, method, path, principal, timestam
 	return "v2=" + hex.EncodeToString(mac.Sum(nil))
 }
 
+func TestConstantTimeEqualRequiresDigestAndLengthMatch(t *testing.T) {
+	if !constantTimeEqual("same-token", "same-token") {
+		t.Fatalf("constantTimeEqual should accept identical values")
+	}
+	if constantTimeEqual("same-token", "same-token-extra") {
+		t.Fatalf("constantTimeEqual should reject different lengths")
+	}
+	if constantTimeEqual("same-token", "xxxx-token") {
+		t.Fatalf("constantTimeEqual should reject different values")
+	}
+}
+
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
 	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
@@ -683,6 +695,7 @@ func TestPlatformAuthEnforcesTrustedProxyCIDRsForUnsignedHeaders(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := configForTest(t)
 			cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform}
+			cfg.Execution.Platform.DeploymentTarget = platform.DeploymentTargetDev
 			cfg.TrustedPlatformHeaderCIDRs = tc.cidrs
 			cfg.MaxActiveRuns = 4
 			cfg.MaxPendingQueue = 8
@@ -709,6 +722,31 @@ func TestPlatformAuthEnforcesTrustedProxyCIDRsForUnsignedHeaders(t *testing.T) {
 			}
 			_, _ = io.Copy(io.Discard, resp.Body)
 		})
+	}
+}
+
+func TestPlatformAuthRejectsUnsignedCIDRHeadersOutsideDev(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform}
+	cfg.Execution.Platform.DeploymentTarget = platform.DeploymentTargetCloudRun
+	cfg.TrustedPlatformHeaderCIDRs = []string{"127.0.0.1/32", "::1/128"}
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("runner should not be called for unsigned platform principal outside dev")
+		return model.RunResponse{}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(executePayload(t)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(platformPrincipalHeader, "alice")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 }
 
@@ -1395,7 +1433,17 @@ func configForTest(t *testing.T) config.Config {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "helper")
-	return config.Config{Port: "0", MaxActiveRuns: 1, MaxPendingQueue: 1, HeartbeatInterval: 100 * time.Millisecond}
+	return config.Config{
+		Port:              "0",
+		MaxActiveRuns:     1,
+		MaxPendingQueue:   1,
+		HeartbeatInterval: 100 * time.Millisecond,
+		Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
+			DeploymentTarget:   platform.DeploymentTargetDev,
+			ExecutionTransport: platform.ExecutionTransportEmbedded,
+			SandboxBackend:     platform.SandboxBackendHelper,
+		}},
+	}
 }
 
 func executePayload(t *testing.T) []byte {

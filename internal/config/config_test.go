@@ -478,6 +478,13 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	}
 }
 
+func TestRuntimeTuningWithSafeDefaultsAppliesFallbacks(t *testing.T) {
+	got := (RuntimeTuningConfig{}).WithSafeDefaults()
+	if got != DefaultRuntimeTuningConfig() {
+		t.Fatalf("zero runtime tuning = %+v, want defaults %+v", got, DefaultRuntimeTuningConfig())
+	}
+}
+
 func TestDenoOldSpaceMBUsesBoundedRuntimeTuning(t *testing.T) {
 	got := DenoOldSpaceMB(128, RuntimeTuningConfig{DenoOldSpacePercent: 50})
 	if got != 64 {
