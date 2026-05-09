@@ -122,7 +122,7 @@ per-run UID, or seccomp allowlist. It does give the kernel a run-level
 memory/pids boundary and one-vCPU bandwidth guardrail that are stronger than
 RSS polling alone.
 
-The non-mutating cgroup preflight in `internal/isolation/cgroup` checks that:
+The standalone cgroup preflight in `internal/isolation/cgroup` checks that:
 
 - the intended root is mounted as `cgroup2`
 - `cgroup.controllers` exists
@@ -163,13 +163,14 @@ is only a prerequisite signal; the current
 helper backend still does not provide mount namespace, read-only rootfs, or
 masked `/proc` isolation.
 
-When `AONOHAKO_CGROUP_PARENT` is set, startup validates that the selected parent
-is under a cgroup v2 mount and has the required controllers and
-`cgroup.subtree_control`, rejects a group/world-writable parent, requires an
-empty `cgroup.procs`, writes `+cpu +memory +pids` to
-`cgroup.subtree_control`, and verifies a probe run-group create/remove cycle
-through the same `memory.max`, `memory.swap.max`, `memory.oom.group`,
-`pids.max`, and `cpu.max` writes used by real runs.
+When `AONOHAKO_CGROUP_PARENT` is set, startup performs the mutating validation
+that a real runner needs: it verifies that the selected parent is under a
+cgroup v2 mount and has the required controllers and `cgroup.subtree_control`,
+rejects a group/world-writable parent, requires an empty `cgroup.procs`, writes
+`+cpu +memory +pids` to `cgroup.subtree_control`, and verifies a probe
+run-group create/remove cycle through the same `memory.max`,
+`memory.swap.max`, `memory.oom.group`, `pids.max`, and `cpu.max` writes used by
+real runs.
 The compile, execute, and SPJ helper paths then use this write contract for one
 run cgroup:
 
@@ -179,8 +180,9 @@ run cgroup:
 - write `memory.oom.group=1`
 - write `cpu.max=100000 100000` to cap sandbox CPU bandwidth at one vCPU
 - move the target process by writing its PID to `cgroup.procs`
-- remove the run cgroup without recursive deletion, using a short retry window
-  for process cleanup races
+- kill any remaining run-cgroup members with `cgroup.kill` when the kernel
+  exposes it, then remove the run cgroup without recursive deletion, using a
+  short retry window for process cleanup races
 
 The same package also defines the read contract used by the optional cgroup
 watchdog, final post-exit classification, and the future isolated backend:

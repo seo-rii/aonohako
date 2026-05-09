@@ -60,7 +60,7 @@ Rust compile profiles. C/C++ values select the language standard (`"c99"`,
 
 ```jsonc
 {
-  "lang": "binary",                          // runtime language: binary|python|pypy|java|kotlin-jvm|javascript|ruby|php|lua|perl|ocaml|elixir|sqlite|julia|uhmlang|csharp|fsharp|text|clojure|racket|groovy|scala|erlang|prolog|lisp|coq|r|whitespace|brainfuck|wasm|aheui
+  "lang": "binary",                          // runtime language key (see Supported Languages)
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
@@ -188,7 +188,7 @@ capture limit and is capped at 8 MiB.
   "time_ms": 42,                            // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                       // wall-clock time from CLOCK_MONOTONIC (ms)
   "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
-  "memory_kb": 8192,                        // peak RSS from getrusage (KB)
+  "memory_kb": 8192,                        // best observed peak memory (RSS/cgroup/rusage, KB)
   "exit_code": 0,                           // nullable; process exit code
   "stdout": "",                             // truncated stdout (up to limits.output_bytes, on WA/RE only)
   "stderr": "",                             // truncated stderr (up to limits.output_bytes, on non-zero exit only)
@@ -254,7 +254,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 - The input, expected output, and user output files are read-only for the SPJ
 - The SPJ uses `spj.limits` when provided; otherwise it defaults to a fixed
   1000 ms / 256 MiB policy instead of inheriting contestant limits
-- User output is also piped to SPJ's stdin
+- User output is passed through the third argv file path, not duplicated on
+  SPJ stdin
 - Exit code 0 → accepted; non-zero → wrong answer
 - If `emit_score: true`, SPJ should print a float (0.0–1.0) to stdout
 
@@ -264,13 +265,13 @@ When `spj` is provided, the SPJ binary is invoked as:
 
 | Language key | Compile kind | Compiler / tool |
 |---|---|---|
-| C, C89, C99, C11, C17, C18, C23 | `c` | `gcc -O2 -Wall -lm --static` |
-| CPP, CPP03–CPP26 | `cpp` | `g++ -O2 -Wall -lm --static -pipe` |
-| RUST, RUST2015–2024 | `rust` | `rustc --edition <ed> -O` |
-| GO | `go` | `go build` |
+| C, C89, C99, C11, C17, C18, C23 | `c` | `gcc -O2 -Wall -lm --static -DONLINE_JUDGE=1 -std=<std>` |
+| CPP, CPP03–CPP26 | `cpp` | `g++ -O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=<std>` |
+| RUST, RUST2015–2024 | `rust` | `rustc --edition <ed> -O --cfg ONLINE_JUDGE` |
+| GO | `go` | `go build -tags=online_judge,ONLINE_JUDGE` |
 | ZIG | `zig` | `zig build-exe -O ReleaseSafe` |
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |
-| NASM | `binary` | `nasm -felf64` + `gcc -nostdlib -static -no-pie` |
+| NASM | `binary` | `nasm -felf64 -dONLINE_JUDGE=1` + `gcc -nostdlib -static -no-pie` |
 | JAVA, JAVA8–21 | `java` | `javac --release <v>` |
 | GROOVY | `groovy` | `groovyc -d <dir>` |
 | SCALA | `scala` | `scalac -d <dir>` |
@@ -285,40 +286,69 @@ When `spj` is provided, the SPJ binary is invoked as:
 | DENO | `deno` | `deno check --v8-flags=--max-old-space-size=...` |
 | KOTLIN | `kotlin` | `kotlinc-native` |
 | KOTLIN_JVM, KOTLIN_JAVA, KOTLIN_JVM8–21, KOTLIN_JAVA8–21 | `kotlin-jvm` | `kotlinc -jvm-target <v>` plus `javac --release <v>` for submitted `.java` files |
-| PASCAL | `pascal` | `fpc -O2 -Xs` |
-| NIM | `nim` | `nim c -d:release --opt:speed` |
+| PASCAL | `pascal` | `fpc -O2 -Xs -dONLINE_JUDGE` |
+| NIM | `nim` | `nim c -d:release -d:ONLINE_JUDGE --opt:speed` |
 | ADA | `ada` | `gnatmake -O2` |
 | COBOL, GNUCOBOL | `cobol` | `cobc -x -free -O2` |
-| CYTHON | `cython` | `cython3 --embed` + `gcc` |
-| DART | `dart` | `dart compile exe` |
+| CYTHON | `cython` | `cython3 --embed` + `gcc -O2 -pipe -DONLINE_JUDGE=1` |
+| DART | `dart` | `dart compile exe -D ONLINE_JUDGE=true` |
 | FORTRAN | `fortran` | `gfortran -O2 -pipe` |
-| D | `d` | `ldc2 -O3 -release` |
-| OBJECTIVE_C, OBJC | `objective-c` | `clang -x objective-c -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc` |
-| OBJECTIVE_CPP, OBJCPP | `objective-cpp` | `clang++ -x objective-c++ -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc` |
+| D | `d` | `ldc2 -O3 -release --d-version=ONLINE_JUDGE` |
+| OBJECTIVE_C, OBJC | `objective-c` | `clang -x objective-c -O2 -pipe -DONLINE_JUDGE=1 -lobjc` |
+| OBJECTIVE_CPP, OBJCPP | `objective-cpp` | `clang++ -x objective-c++ -O2 -pipe -DONLINE_JUDGE=1 -lobjc` |
 | HASKELL | `haskell` | `ghc -O2` |
-| HAXE | `haxe` | `haxe -main Main -neko <target>` |
-| SWIFT | `swift` | `swiftc -O` |
+| HAXE | `haxe` | `haxe -D ONLINE_JUDGE -main Main -neko <target>` |
+| SWIFT | `swift` | `swiftc -O -D ONLINE_JUDGE` |
 | SQLITE | `sqlite` | Pass-through artifacts (requires at least one `.sql`) |
+| DUCKDB | `duckdb` | Pass-through artifacts (requires at least one `.sql`) |
 | JULIA | `julia` | Pass-through artifacts (requires at least one `.jl`) |
 | RAKU | `raku` | `raku -c` |
 | R | `r` | `Rscript --vanilla -e parse(...)` |
 | ERLANG | `erlang` | `erlc -o <dir>` |
 | PROLOG | `prolog` | `swipl -q -f none -g halt -t halt` |
 | LISP | `lisp` | `sbcl --load ... --eval '(quit)'` |
-| COQ | `coq` | `coqc -q` |
+| COQ, ROCQ | `rocq` | `coqc -q` / Rocq-compatible proof check |
+| LEAN, LEAN4 | `lean4` | `lean` check |
+| AGDA | `agda` | `agda` check |
+| DAFNY | `dafny` | `dafny build` |
+| TLA, TLAPLUS | `tla` | TLA+ model/tooling pass-through plus runner wrapper |
+| WHY3, WHYML | `why3` | `why3` proof wrapper |
+| ISABELLE | `isabelle` | Isabelle theory build |
 | OCAML | `ocaml` | `ocamlopt` |
 | ELIXIR | `elixir` | `elixir` parse check |
-| CSHARP | `csharp` | `dotnet publish` |
-| FSHARP | `fsharp` | `dotnet publish` |
+| CSHARP | `csharp` | `dotnet publish -p:DefineConstants=ONLINE_JUDGE` or direct `csc -define:ONLINE_JUDGE` |
+| FSHARP | `fsharp` | `dotnet publish -p:DefineConstants=ONLINE_JUDGE` or direct `fsc --define:ONLINE_JUDGE` |
+| VBNET, VB | `vbnet` | `dotnet publish -p:DefineConstants=ONLINE_JUDGE` or direct `vbc -define:ONLINE_JUDGE=True` |
 | RUBY | `ruby` | `ruby -c` |
 | PHP | `php` | `php -l` |
 | LUA | `lua` | `luac5.4 -p` |
 | PERL | `perl` | `perl -c` |
-| FREEBASIC | `freebasic` | `fbc -x` |
-| CLASSIC_BASIC, QBASIC | `classic-basic` | `fbc -lang qb -x` |
+| VB6 | `vb6` | Pass-through VB6 source artifacts |
+| FREEBASIC | `freebasic` | `fbc -d ONLINE_JUDGE -x` |
+| CLASSIC_BASIC, QBASIC | `classic-basic` | `fbc -lang qb -d ONLINE_JUDGE -x` |
+| SMALLTALK, GST | `smalltalk` | Pass-through Smalltalk source artifacts |
+| GOLFSCRIPT | `golfscript` | Pass-through GolfScript source artifacts |
+| MOJO | `mojo` | `mojo build -o <target>` |
+| GLEAM | `gleam` | `gleam build` |
+| CUDA_OCELOT | `cuda-ocelot` | `aonohako-cuda-ocelot-build` |
+| CARBON | `carbon` | `carbon compile --phase=check` |
+| GRAPHQL | `graphql` | Pass-through `.graphql` artifacts |
+| GDL | `gdl` | Pass-through `.pro` artifacts |
+| OCTAVE | `octave` | Pass-through `.m` artifacts |
+| VHDL | `vhdl` | `ghdl -a`, `ghdl -e` |
+| VERILOG, SYSTEMVERILOG | `verilog` | `iverilog -g2012 -DONLINE_JUDGE=1` |
+| CRYSTAL | `crystal` | `crystal build --release --no-debug --define ONLINE_JUDGE` |
+| VLANG | `vlang` | `v -d ONLINE_JUDGE -o <target>` |
+| ODIN | `odin` | `odin build . -define:ONLINE_JUDGE=true` |
+| C3 | `c3` | `c3c compile -D ONLINE_JUDGE` |
+| HARE | `hare` | `hare build -o <target>` |
 | SED | `sed` | `sed -n -f` syntax check |
 | BC | `bc` | Pass-through artifacts (requires at least one `.bc`) |
 | FORTH, GFORTH | `forth` | Pass-through artifacts (requires `.fs`, `.fth`, or `.4th`) |
+| BQN | `bqn` | Pass-through BQN source artifacts |
+| APL, GNU_APL | `apl` | Pass-through APL source artifacts |
+| UIUA | `uiua` | Pass-through Uiua source artifacts |
+| JANET | `janet` | Pass-through Janet source artifacts |
 | WHITESPACE | `whitespace` | Structural validation (whitespace-only source) |
 | BF | `brainfuck` | Bracket-balance validation |
 | WASM | `wasm` | `wat2wasm` or `wasm-validate` |
@@ -332,6 +362,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `binary` | Direct execution |
 | `clojure` | `clojure <file>` |
 | `racket` | `racket <file>` |
+| `scheme` | `chibi-scheme <file>` |
+| `awk` | `gawk --sandbox -f <file>` |
 | `tcl` | `tclsh <file>` |
 | `python` | `python3 <file>` |
 | `pypy` | `pypy3 <file>` |
@@ -342,10 +374,18 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `erlang` | `erl -noshell -pa <dir> -s <module> <function> -s init stop` |
 | `prolog` | `swipl -q -f <file> -g main -t halt` |
 | `lisp` | `sbcl --script <file>` |
-| `coq` | `coqc -q <file>` |
+| `rocq` | `coqc -q <file>` |
+| `lean4` | `lean <file>` |
+| `agda` | `agda <file>` |
+| `dafny` | `dafny run <file>` |
+| `tla` | `aonohako-tla-run <file>` |
+| `why3` | `aonohako-why3-prove <file>` |
+| `isabelle` | `isabelle build` / theory runner wrapper |
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
 | `coffeescript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 /usr/local/bin/coffee <file>` |
 | `deno` | `deno run --no-prompt --v8-flags=--max-old-space-size=... <file>` |
+| `gdl` | `gdl <file>` |
+| `octave` | `octave --quiet <file>` |
 | `r` | `Rscript --vanilla <file>` |
 | `raku` | `raku <file>` |
 | `ruby` | `ruby <file>` |
@@ -354,14 +394,29 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `perl` | `perl <file>` |
 | `ocaml` | `env OCAMLRUNPARAM=s=32k <file>` |
 | `elixir` | `env ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 elixir <file>` |
+| `gleam` | `gleam run` wrapper |
 | `haxe` | `neko <file>` |
 | `sqlite` | `sqlite3 <workspace-db> < <file>` |
+| `duckdb` | `duckdb <workspace-db> < <file>` |
 | `sed` | `sed -f <file>` |
 | `bc` | `bc -q <file>` |
 | `forth` | `gforth <file> -e bye` |
 | `julia` | `julia --startup-file=no --history-file=no <file>` |
 | `uhmlang` | `env GOMEMLIMIT=... GOGC=... /usr/bin/umjunsik-lang-go <file>` |
-| `csharp`, `fsharp` | `dotnet <file>` or direct |
+| `csharp`, `fsharp`, `vbnet` | `dotnet <file>` or direct |
+| `vb6` | `aonohako-vb6-run <file>` |
+| `vhdl` | `ghdl -r <entity>` |
+| `verilog` | `vvp <file>` |
+| `c3` | direct compiled binary execution with C3 runtime allowances |
+| `cuda-ocelot` | CUDA Ocelot emulator wrapper |
+| `carbon` | Carbon phase-check artifact runner |
+| `graphql` | GraphQL validation wrapper |
+| `smalltalk` | `gst <file>` |
+| `golfscript` | GolfScript runner wrapper |
+| `bqn` | `bqn <file>` |
+| `apl` | `apl --script -f <file>` |
+| `uiua` | `uiua run <file> --no-format` |
+| `janet` | `janet <file>` |
 | `whitespace` | `python3 /usr/local/lib/aonohako/whitespace.py <file>` |
 | `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |
 | `wasm` | `wasmtime run --dir=. -O memory-reservation=... -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=... -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-wasm-stack=1048576 <file>` |
@@ -372,18 +427,22 @@ When `spj` is provided, the SPJ binary is invoked as:
 
 | Mechanism | What it limits |
 |---|---|
-| `prlimit --cpu` | CPU seconds (time_ms / 1000 + 1) |
-| `prlimit --as` | Virtual address space (memory_mb + 64 MB, min 512 MB) |
-| `prlimit --nofile` | Max open file descriptors (64) |
-| `prlimit --fsize` | Max file size (workspace_bytes when set, otherwise 128 MB); .NET/Dafny get a high finite 2 TiB floor for CoreCLR/F# compatibility, so their practical disk-burst guard is workspace scanning plus bounded work-root/container storage |
+| `RLIMIT_CPU` | CPU seconds (`time_ms / 1000 + 1`) as a helper-side hard stop |
+| `RLIMIT_AS` | Virtual address space using language-specific headroom; .NET remains the compatibility exception |
+| `RLIMIT_STACK` | Native stack and argument/environment footprint (`8 MiB` by default, higher for .NET) |
+| `RLIMIT_NOFILE` | Max open file descriptors (64 by default, raised only for known runtime needs) |
+| `RLIMIT_NPROC` | Sandbox UID task count sized from the configured thread limit |
+| `RLIMIT_FSIZE` | Per-file growth tied to workspace policy; .NET/Dafny get a high finite 2 TiB floor for CoreCLR/F# compatibility, so their practical disk-burst guard is workspace scanning plus bounded work-root/container storage |
+| procfs RSS watchdog | Live RSS sampling through `statm`, refined with `smaps_rollup` near limits |
+| optional cgroup v2 | `memory.max`, `pids.max`, `memory.swap.max=0` when available, `memory.oom.group=1`, and `cpu.max=100000 100000` |
 | workspace scanner | Total file bytes plus entry count/depth caps |
-| `taskset -c 0` | Pin to single CPU core |
-| Context timeout | Wall-clock kill via SIGKILL to process group |
+| context timeout | Wall-clock kill via SIGKILL to process group |
 
 ### Runtime Measurements
 
 - `wall_time_ms` uses `CLOCK_MONOTONIC`
-- `cpu_time_ms` samples the Linux process CPU clock while the submission is running
+- `cpu_time_ms` samples the Linux process CPU clock while the submission is
+  running and uses cgroup `cpu.stat` when per-run cgroups are enabled
 - `time_ms` is retained as a compatibility alias for `wall_time_ms`
 - `verdict_source` is diagnostic and non-authoritative. Local helper runners
   may report values such as `stdout`, `file_output`, `spj`, `exit_code`,

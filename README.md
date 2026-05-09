@@ -24,14 +24,13 @@ binary, configurable runtime images, and testable build metadata.
 
 The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
 
-- Production mode builds grouped images such as `type-a` (`plain`, `pypy`,
-  `aheui`, `racket`, `bf`, `whitespace`, `wasm`, and other lighter scripting runtimes),
-  `type-b` (`clojure`, `java`, `javascript`, `scala`, `typescript`), `type-c`
-  (`ada`, `asm`, `d`, `fortran`, `go`, `nasm`, `nim`, `pascal`, `rust`, `zig`),
-  `type-d` (`kotlin`, `kotlin-jvm`), `type-e` (`csharp`, `fsharp`), and the mixin validation profile `type-i` (`plain`,
-  `python`, `java`), plus dedicated profiles where a toolchain needs its own
-  base image or install path such as `python` judge libraries (`type-l`),
-  `swift`, `julia`, `coq`, or `dart`.
+- Production mode builds grouped images such as `type-a` for lighter scripting
+  and esolang runtimes, `type-b` for JVM/Node/Web tooling, `type-c` for native
+  and systems toolchains, `type-d` for Kotlin, `type-e` for .NET languages, and
+  dedicated profiles for larger or isolated toolchains such as Julia, Swift,
+  proof assistants, Dart, DuckDB/GDL/Octave, HDL simulators, CUDA Ocelot, Dafny,
+  Isabelle, and Lean. The full production profile table is maintained in
+  [docs/architecture.md](docs/architecture.md#runtime-image-model).
 - CI mode expands the same catalog into one image per language so that each
   smoke job validates a single toolchain in isolation. A separate CI job builds
   the production profiles in parallel, runs
@@ -44,14 +43,23 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
 - The current catalog covers native binaries, Python plus bundled judge
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), plus vendored
-  `jungol_robot` and `robot_judge` helpers, PyPy, Java, Groovy, Scala,
-  Clojure, JavaScript/TypeScript, Ruby, PHP, Lua, Perl, Elixir, Haskell,
-  OCaml, SQLite, Go, Rust, Zig, Nim, Pascal, Ada, GNU assembly, NASM, Kotlin,
-  C#, F#, Julia, Swift, R, Racket, Erlang, Prolog, Brainfuck, Whitespace,
-  WASM, Coq, Aheui, Dart, and UHMLANG. C/C++ and assembly submitters compile
-  into binaries and should target the `plain` runtime image rather than
-  dedicated native runtime images. Add new languages by extending the YAML file
-  instead of editing shell loops or workflow matrices.
+  `jungol_robot` and `robot_judge` helpers, PyPy, Java/Kotlin/JVM languages,
+  Node/Deno/TypeScript/CoffeeScript, .NET languages, Ruby, PHP, Lua, Perl,
+  Elixir/Erlang/Gleam, Haskell, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
+  Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare,
+  Mojo, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Prolog,
+  Lisp/Smalltalk/GolfScript, Brainfuck, Whitespace, WASM, Coq/Rocq, Lean, Agda,
+  TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
+  Carbon, VB6, Dafny, BQN/APL/UIUA/Janet, and UHMLANG. C/C++ and assembly
+  submitters compile into binaries and should target the `plain` runtime image
+  rather than dedicated native runtime images. Add new languages by extending
+  the YAML file instead of editing shell loops or workflow matrices.
+- Compile and execute environments set `ONLINE_JUDGE=1`. Languages with
+  compiler-supported defines or build tags also receive an `ONLINE_JUDGE`
+  compile flag where appropriate, such as C/C++/Objective-C, NASM, Rust, Go,
+  Pascal, Nim, D, Dart, Verilog, Crystal, V, Odin, C3, Swift, .NET, Cython,
+  Haxe, and FreeBASIC/QBasic. JVM-family runtime launchers also pass
+  `-DONLINE_JUDGE=1`.
 - Debian-based production profiles track `debian:trixie-slim`, which raises the
   default Python, PyPy, and GCC toolchain versions for both production and
   single-language CI runtime images.

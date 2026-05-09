@@ -4,8 +4,8 @@
 짧은 방어 패치는 이미 여러 커밋으로 일부 처리됐고, 여기서는 backend 경계, kernel isolation, 운영 quota, runtime image, regression 체계처럼 별도 설계와 단계적 rollout이 필요한 작업만 다룬다.
 
 - 기준 브랜치: `main`
-- 작성일: 2026-04-24
-- 기준 커밋: `c853208 fix: stabilize dotnet sandbox smoke`
+- 최근 갱신일: 2026-05-10
+- 기준 커밋: `f6b1ac8 feat: enable online judge flags`
 
 ## 최근 완료된 단기 배치
 
@@ -18,6 +18,13 @@
 - workspace file count/depth cap, `.NET` finite file-size override, benign `..` filename 허용
 - `execveat` seccomp 차단 regression
 - compile threat model 문서화, `govulncheck` CI job 추가
+- Java/Kotlin-JVM release 선택과 Kotlin/Native/JVM edition 분리
+- `/execute` two-step pipeline shape (`programs` + exactly two `steps`)
+- compile/execute environment and supported compiler flags expose
+  `ONLINE_JUDGE`
+- graceful HTTP shutdown on SIGINT/SIGTERM
+- CoffeeScript/Deno runtime memory/path regression fixes and cgroup cleanup
+  strengthening
 
 ## 최근 완료된 장기 Phase 조각
 
@@ -31,9 +38,9 @@
   API 응답과 문서에서 관찰 가능하게 했다.
 - Phase 10: remote SSE line/event/stream cap에 더해 idle heartbeat timeout을
   추가하고 `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`로 config화했다.
-- Phase 10: `X-Aonohako-Protocol-Version` 응답 헤더를 추가하고, remote
-  runner가 누락된 헤더는 backward-compatible로 허용하되 mismatched header는
-  fail-closed 처리하게 했다.
+- Phase 10: `X-Aonohako-Protocol-Version` 응답 헤더를 추가하고, non-dev
+  remote runner strict protocol에서는 누락/불일치 header를 fail-closed
+  처리하며 dev 호환 모드에서만 누락 header를 허용하게 했다.
 - Phase 10: malformed remote `log`, `image`, `error`, `result` event를
   protocol error로 실패 처리해 compromised/misconfigured runner stream을
   조용히 무시하지 않게 했다.

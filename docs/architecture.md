@@ -152,6 +152,9 @@ The runtime uses a parent/helper/target split:
    - runs with a request-specific environment built from fixed base variables,
      workspace-scoped tool/cache directories, and explicit per-runtime entries;
      it does not inherit the server process environment
+   - receives `ONLINE_JUDGE=1`; languages with compiler-supported define,
+     build-tag, or config flags also receive a compile-time `ONLINE_JUDGE`
+     marker from the compile service
    - inherits the helper's limits and seccomp filter
    - stays in the same process group for cleanup
 
@@ -505,8 +508,9 @@ The following checks are enforced before the HTTP server starts:
 - remote runner SSE responses are parsed with bounded line, event, and stream
   sizes, and the remote HTTP transport sets dial, TLS handshake, response
   header, idle connection, and SSE idle heartbeat timeouts
-- remote runner protocol-version headers are backward compatible when absent
-  and fail closed when present with an unsupported value
+- remote runner protocol-version headers fail closed when missing or unsupported
+  in strict mode; `dev` can opt into the backward-compatible policy that accepts
+  missing headers while still rejecting unsupported present values
 - malformed remote `log`, `image`, `error`, or `result` events fail the remote
   request as a protocol error instead of being silently ignored
 - when a control plane maps `problem_id` to `runtime_profile` and forwards the
@@ -656,18 +660,25 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `bf`, `elixir`, `erlang`, `haskell`, `lisp`, `lua`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `r`, `racket`, `ruby`, `sqlite`, `wasm`, `whitespace` |
-| `type-b` | `clojure`, `groovy`, `java`, `javascript`, `scala`, `typescript` |
-| `type-c` | `ada`, `asm`, `d`, `fortran`, `go`, `nasm`, `nim`, `pascal`, `rust`, `zig` |
+| `type-a` | `aheui`, `apl`, `awk`, `bc`, `bf`, `bqn`, `elixir`, `erlang`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `janet`, `lisp`, `lua`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
+| `type-b` | `clojure`, `coffeescript`, `deno`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `scala`, `typescript` |
+| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `odin`, `pascal`, `qbasic`, `rust`, `vlang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
-| `type-e` | `csharp`, `fsharp` |
+| `type-e` | `csharp`, `fsharp`, `vbnet` |
 | `type-f` | `uhmlang` |
 | `type-g` | `julia` |
 | `type-h` | `swift` |
-| `type-i` | `plain`, `python`, `java` |
-| `type-j` | `coq` |
+| `type-i` | `java`, `plain`, `python` |
+| `type-j` | `agda`, `coq`, `rocq`, `tla`, `why3` |
 | `type-k` | `dart` |
 | `type-l` | `python` |
+| `type-m` | `duckdb`, `gdl`, `octave` |
+| `type-n` | `systemverilog`, `verilog`, `vhdl` |
+| `type-o` | `cuda-ocelot` |
+| `type-p` | `carbon`, `vb6` |
+| `type-q` | `dafny` |
+| `type-r` | `isabelle` |
+| `type-s` | `lean4` |
 
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the

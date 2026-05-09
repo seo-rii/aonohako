@@ -100,7 +100,7 @@ Client                        aonohako
   "time_ms": 42,                        // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                   // wall-clock execution time (ms)
   "cpu_time_ms": 17,                    // CPU time from process CPU clock (ms)
-  "memory_kb": 8192,                    // peak RSS (KB, from getrusage)
+  "memory_kb": 8192,                    // best observed peak memory (RSS/cgroup/rusage, KB)
   "exit_code": 0,                       // nullable; process exit code
   "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)
   "stderr": "",                         // truncated stderr (up to `limits.output_bytes`; on non-zero exit)
@@ -259,6 +259,8 @@ Callers should implement exponential backoff on 429.
 | `X-Accel-Buffering` | `no` |
 | `X-Aonohako-Protocol-Version` | `2026-04-24` |
 
-Remote control planes accept missing protocol-version headers for older
-runners, but reject a present `X-Aonohako-Protocol-Version` value that does not
-match the current protocol.
+Remote control planes use the configured protocol policy. In the default
+non-dev strict mode, missing or mismatched `X-Aonohako-Protocol-Version`
+headers fail the remote request. In backward-compatible `dev` mode, missing
+headers are accepted for older runners, but a present header value that does not
+match the current protocol still fails closed.
