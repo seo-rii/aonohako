@@ -665,9 +665,9 @@ func validateTargetName(raw string) (string, error) {
 func executeBuild(ctx context.Context, workDir string, profile profiles.Profile, target string, req *model.CompileRequest, tuning config.RuntimeTuningConfig) model.CompileResponse {
 	switch profile.CompileKind {
 	case "c":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".c", ".h"), "gcc", []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE", "-std=" + profile.CompileStd})
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".c", ".h"), "gcc", []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + profile.CompileStd})
 	case "cpp":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".cpp", ".cc", ".cxx", ".h", ".hpp"), "g++", []string{"-O2", "-Wall", "-lm", "--static", "-pipe", "-DONLINE_JUDGE", "-std=" + profile.CompileStd})
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".cpp", ".cc", ".cxx", ".h", ".hpp"), "g++", []string{"-O2", "-Wall", "-lm", "--static", "-pipe", "-DONLINE_JUDGE=1", "-std=" + profile.CompileStd})
 	case "asm":
 		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".s"), "gcc", []string{"-nostdlib", "-static", "-no-pie"})
 	case "pascal":
@@ -687,7 +687,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if rootSource == "" {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no pascal sources"}
 		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "fpc", []string{"-O2", "-Xs", "-o" + filepath.Join(workDir, target), rootSource}, nil)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "fpc", []string{"-O2", "-Xs", "-dONLINE_JUDGE", "-o" + filepath.Join(workDir, target), rootSource}, nil)
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -713,7 +713,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if rootSource == "" {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no nim sources"}
 		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "nim", []string{"c", "-d:release", "--opt:speed", "--out:" + filepath.Join(workDir, target), rootSource}, nil)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "nim", []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--out:" + filepath.Join(workDir, target), rootSource}, nil)
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -1006,7 +1006,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if rootSource == "" {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no d sources"}
 		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "ldc2", []string{rootSource, "-O3", "-release", "-of=" + filepath.Join(workDir, target)}, nil)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "ldc2", []string{rootSource, "-O3", "-release", "--d-version=ONLINE_JUDGE", "-of=" + filepath.Join(workDir, target)}, nil)
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -1016,9 +1016,9 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		}
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "objective-c":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".m"), "clang", []string{"-O2", "-pipe", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"})
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".m"), "clang", []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"})
 	case "objective-cpp":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".mm"), "clang++", []string{"-O2", "-pipe", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"})
+		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".mm"), "clang++", []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"})
 	case "nasm":
 		var rootSource string
 		for _, src := range req.Sources {
@@ -1037,7 +1037,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no nasm sources"}
 		}
 		objectPath := filepath.Join(workDir, target+".o")
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "nasm", []string{"-felf64", rootSource, "-o", objectPath}, nil)
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "nasm", []string{"-felf64", "-dONLINE_JUDGE=1", rootSource, "-o", objectPath}, nil)
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -1157,7 +1157,7 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		if rootSource == "" {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no dart sources"}
 		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "dart", []string{"compile", "exe", rootSource, "-o", filepath.Join(workDir, target)}, []string{"DART_SUPPRESS_ANALYTICS=true"})
+		stdout, stderr, status, reason := runCommand(ctx, workDir, "dart", []string{"compile", "exe", "-D", "ONLINE_JUDGE=true", rootSource, "-o", filepath.Join(workDir, target)}, []string{"DART_SUPPRESS_ANALYTICS=true"})
 		if status != model.CompileStatusOK {
 			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 		}
@@ -1310,7 +1310,7 @@ func compileRust(ctx context.Context, workDir, target string, sources []model.So
 	if primary == "" {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no rust sources"}
 	}
-	args := []string{"--edition", edition, "-O", "-o", target, primary}
+	args := []string{"--edition", edition, "-O", "--cfg", "ONLINE_JUDGE", "-o", target, primary}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "rustc", args, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
@@ -1345,7 +1345,7 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "mkdir failed: " + err.Error()}
 		}
 	}
-	args := []string{"build", "-o", target}
+	args := []string{"build", "-tags=online_judge,ONLINE_JUDGE", "-o", target}
 	if hasMod {
 		args = append(args, ".")
 	} else {
@@ -1409,7 +1409,7 @@ func compileVerilog(ctx context.Context, workDir, target string, sources []model
 	if !strings.HasSuffix(strings.ToLower(target), ".vvp") {
 		target += ".vvp"
 	}
-	args := []string{"-g2012", "-o", filepath.Join(workDir, target)}
+	args := []string{"-g2012", "-DONLINE_JUDGE=1", "-o", filepath.Join(workDir, target)}
 	args = append(args, verilogFiles...)
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "iverilog", args, nil)
 	if status != model.CompileStatusOK {
@@ -1427,7 +1427,7 @@ func compileCrystal(ctx context.Context, workDir, target string, sources []model
 	if rootSource == "" {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no crystal sources"}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "crystal", []string{"build", rootSource, "--release", "--no-debug", "-o", filepath.Join(workDir, target)}, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "crystal", []string{"build", rootSource, "--release", "--no-debug", "--define", "ONLINE_JUDGE", "-o", filepath.Join(workDir, target)}, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1443,7 +1443,7 @@ func compileVLang(ctx context.Context, workDir, target string, sources []model.S
 	if rootSource == "" {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no vlang sources"}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "v", []string{"-o", filepath.Join(workDir, target), rootSource}, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "v", []string{"-d", "ONLINE_JUDGE", "-o", filepath.Join(workDir, target), rootSource}, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1458,7 +1458,7 @@ func compileOdin(ctx context.Context, workDir, target string, sources []model.So
 	if len(sourcePathsByExt(workDir, sources, ".odin")) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no odin sources"}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "odin", []string{"build", ".", "-out:" + filepath.Join(workDir, target)}, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "odin", []string{"build", ".", "-define:ONLINE_JUDGE=true", "-out:" + filepath.Join(workDir, target)}, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1474,7 +1474,7 @@ func compileC3(ctx context.Context, workDir, target string, sources []model.Sour
 	if rootSource == "" {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no c3 sources"}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "c3c", []string{"compile", rootSource, "-o", filepath.Join(workDir, target)}, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "c3c", []string{"compile", "-D", "ONLINE_JUDGE", rootSource, "-o", filepath.Join(workDir, target)}, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -1669,7 +1669,7 @@ func compileSwift(ctx context.Context, workDir, target string, sources []model.S
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no swift sources"}
 	}
 	moduleCacheDir := filepath.Join(workDir, ".cache", "swift-module-cache")
-	args := []string{"-O", "-module-cache-path", moduleCacheDir, "-o", target}
+	args := []string{"-O", "-D", "ONLINE_JUDGE", "-module-cache-path", moduleCacheDir, "-o", target}
 	args = append(args, swiftFiles...)
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "swiftc", args, nil)
 	if status != model.CompileStatusOK {
@@ -1804,6 +1804,7 @@ func compileFSharp(ctx context.Context, workDir string, sources []model.Source) 
 			"--target:exe",
 			"--targetprofile:netcore",
 			"--noframework",
+			"--define:ONLINE_JUDGE",
 			"--out:" + outDLL,
 		}
 		for _, refDLL := range refDLLs {
@@ -1834,7 +1835,7 @@ func compileFSharp(ctx context.Context, workDir string, sources []model.Source) 
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	}
 	outDir := filepath.Join(workDir, "publish")
-	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false"}
+	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE;$(DefineConstants)"}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
@@ -1894,7 +1895,7 @@ func compileVBNet(ctx context.Context, workDir string, sources []model.Source) m
 		}
 		sort.Strings(refDLLs)
 		outDLL := filepath.Join(workDir, "App.dll")
-		args := []string{vbcPath, "-nologo", "-nostdlib", "-sdkpath:" + refDir, "-vbruntime*", "-target:exe", "-optimize+", "-out:" + outDLL}
+		args := []string{vbcPath, "-nologo", "-nostdlib", "-sdkpath:" + refDir, "-vbruntime*", "-target:exe", "-optimize+", "-define:ONLINE_JUDGE=True", "-out:" + outDLL}
 		for _, refDLL := range refDLLs {
 			args = append(args, "-r:"+refDLL)
 		}
@@ -1922,7 +1923,7 @@ func compileVBNet(ctx context.Context, workDir string, sources []model.Source) m
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	}
 	outDir := filepath.Join(workDir, "publish")
-	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false"}
+	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE;$(DefineConstants)"}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
@@ -2067,7 +2068,7 @@ func compileCython(ctx context.Context, workDir, target string, sources []model.
 	}
 	cPath := filepath.Join(workDir, ".aonohako-cython.c")
 	outPath := filepath.Join(workDir, target)
-	script := `cython3 --embed -3 -o "$2" "$1" && gcc -O2 -pipe "$2" -o "$3" $(python3-config --includes --ldflags --embed)`
+	script := `cython3 --embed -3 -o "$2" "$1" && gcc -O2 -pipe -DONLINE_JUDGE=1 "$2" -o "$3" $(python3-config --includes --ldflags --embed)`
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "sh", []string{"-c", script, "aonohako-cython", rootSource, cPath, outPath}, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
@@ -2086,7 +2087,7 @@ func compileHaxe(ctx context.Context, workDir, target string, sources []model.So
 	if !strings.HasSuffix(strings.ToLower(target), ".n") {
 		target += ".n"
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "haxe", []string{"-main", "Main", "-neko", filepath.Join(workDir, target)}, nil)
+	stdout, stderr, status, reason := runCommand(ctx, workDir, "haxe", []string{"-D", "ONLINE_JUDGE", "-main", "Main", "-neko", filepath.Join(workDir, target)}, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}
@@ -2128,7 +2129,7 @@ func compileFreeBasic(ctx context.Context, workDir, target string, sources []mod
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: noSourceReason}
 	}
 	args := append([]string{}, dialectArgs...)
-	args = append(args, "-x", filepath.Join(workDir, target), rootSource)
+	args = append(args, "-d", "ONLINE_JUDGE", "-x", filepath.Join(workDir, target), rootSource)
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "fbc", args, nil)
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
@@ -2558,7 +2559,7 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 		if err := os.WriteFile(globalUsingsPath, []byte(globalUsings), 0o644); err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 		}
-		args := []string{cscPath, "-nologo", "-target:exe", "-langversion:latest", "-optimize+", "-out:" + outDLL}
+		args := []string{cscPath, "-nologo", "-target:exe", "-langversion:latest", "-optimize+", "-define:ONLINE_JUDGE", "-out:" + outDLL}
 		for _, refDLL := range refDLLs {
 			args = append(args, "-r:"+refDLL)
 		}
@@ -2597,7 +2598,7 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 	if hasProject {
 		publishTarget = projectPath
 	}
-	args := []string{"publish", publishTarget, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false"}
+	args := []string{"publish", publishTarget, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE;$(DefineConstants)"}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}

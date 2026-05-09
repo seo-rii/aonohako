@@ -78,6 +78,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"LANG=C.UTF-8",
 		"LC_ALL=C.UTF-8",
+		"ONLINE_JUDGE=1",
 	}
 	innerEnv := append(append(baseEnv[:0:0], baseEnv...), security.ThreadLimitEnv()...)
 	innerEnv = append(innerEnv, security.WorkspaceScopedEnv(ws.RootDir)...)

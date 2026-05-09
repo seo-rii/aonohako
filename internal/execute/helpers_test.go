@@ -297,14 +297,29 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			if tc.lang == "clojure" && !containsArg(args, "-XX:CompressedClassSpaceSize=64m") {
 				t.Errorf("buildCommand(%s) missing clojure JVM class-space guard in %v", tc.lang, args)
 			}
+			if tc.lang == "clojure" && !containsArg(args, "-DONLINE_JUDGE=1") {
+				t.Errorf("buildCommand(%s) missing ONLINE_JUDGE JVM property in %v", tc.lang, args)
+			}
 			if tc.lang == "java" && (!containsArg(args, "-XX:MaxDirectMemorySize=16m") || !containsArg(args, "-XX:MaxMetaspaceSize=64m")) {
 				t.Errorf("buildCommand(%s) missing Java off-heap guards in %v", tc.lang, args)
+			}
+			if tc.lang == "java" && !containsArg(args, "-DONLINE_JUDGE=1") {
+				t.Errorf("buildCommand(%s) missing ONLINE_JUDGE JVM property in %v", tc.lang, args)
 			}
 			if tc.lang == "groovy" && !containsArg(args, "-XX:CompressedClassSpaceSize=64m") {
 				t.Errorf("buildCommand(%s) missing groovy JVM class-space guard in %v", tc.lang, args)
 			}
+			if tc.lang == "groovy" && !containsArg(args, "-DONLINE_JUDGE=1") {
+				t.Errorf("buildCommand(%s) missing ONLINE_JUDGE JVM property in %v", tc.lang, args)
+			}
+			if tc.lang == "scala" && !containsArg(args, "-DONLINE_JUDGE=1") {
+				t.Errorf("buildCommand(%s) missing ONLINE_JUDGE JVM property in %v", tc.lang, args)
+			}
 			if tc.lang == "kotlin-jvm" && (!containsArg(args, "-XX:MaxDirectMemorySize=16m") || !containsArg(args, "-XX:MaxMetaspaceSize=64m")) {
 				t.Errorf("buildCommand(%s) missing Kotlin/JVM off-heap guards in %v", tc.lang, args)
+			}
+			if tc.lang == "kotlin-jvm" && !containsArg(args, "-DONLINE_JUDGE=1") {
+				t.Errorf("buildCommand(%s) missing ONLINE_JUDGE JVM property in %v", tc.lang, args)
 			}
 			if tc.lang == "elixir" && !containsArg(args, "ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 +MMscs 0") {
 				t.Errorf("buildCommand(%s) missing ERL_AFLAGS in %v", tc.lang, args)
