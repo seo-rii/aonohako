@@ -304,7 +304,7 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_compile_option "java" "javac --release 11 -encoding UTF-8"`,
 		`report_compile_option "kotlin-jvm" "kotlinc -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"`,
 		`report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"`,
-		`report_compile_option "rust" "rustc --edition 2018 -O -o <target>"`,
+		`report_compile_option "rust" "rustc --edition 2018 -O --cfg ONLINE_JUDGE -o <target>"`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("report_toolchain_versions.sh must contain %q", marker)

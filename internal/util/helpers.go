@@ -57,6 +57,7 @@ func BaseEnv() []string {
 		"PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
 		"LANG=C.UTF-8",
 		"LC_ALL=C.UTF-8",
+		"ONLINE_JUDGE=1",
 		"PYTHONPATH=/usr/local/lib/aonohako/python",
 		"PYTHONDONTWRITEBYTECODE=1",
 		"RUSTUP_HOME=/usr/local/rustup",
