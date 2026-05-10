@@ -34,6 +34,8 @@ var compileRegistry = map[string]Compiler{
 	"java": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
 		return compileJava(ctx, job.WorkDir, job.Request.Sources, job.Profile.JavaRelease)
 	}),
+	"groovy":  groovyCompiler{},
+	"clojure": clojureCompiler{},
 	"racket":  scriptCheckCompiler{bin: "raco", prefix: []string{"make"}},
 	"scheme":  passThroughCompiler{exts: []string{".scm"}, noSourceReason: "no scheme sources"},
 	"awk":     checkedSourcesCompiler{exts: []string{".awk"}, noSourceReason: "no awk sources", bin: "gawk", prefix: []string{"--sandbox", "--lint", "-f"}},
@@ -104,6 +106,11 @@ var compileRegistry = map[string]Compiler{
 		return []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"}
 	}},
 	"raku":       checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
+	"r":          rCompiler{},
+	"prolog":     prologCompiler{},
+	"lisp":       lispCompiler{},
+	"nasm":       nasmCompiler{},
+	"erlang":     erlangCompiler{},
 	"vb6":        passThroughCompiler{exts: []string{".bas", ".frm", ".cls"}, noSourceReason: "no vb6 sources"},
 	"smalltalk":  passThroughCompiler{exts: []string{".st"}, noSourceReason: "no smalltalk sources"},
 	"golfscript": passThroughCompiler{exts: []string{".gs"}, noSourceReason: "no golfscript sources"},
