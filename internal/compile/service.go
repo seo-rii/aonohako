@@ -675,12 +675,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	}
 
 	switch profile.CompileKind {
-	case "rust":
-		return compileRust(ctx, workDir, target, req.Sources, profile.RustEdition)
-	case "go":
-		return compileGo(ctx, workDir, target, req.Sources)
-	case "java":
-		return compileJava(ctx, workDir, req.Sources, profile.JavaRelease)
 	case "groovy":
 		var groovyFiles []string
 		for _, src := range req.Sources {
@@ -733,30 +727,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
 		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
-	case "vhdl":
-		return compileVHDL(ctx, workDir, req.Sources, req.EntryPoint)
-	case "verilog":
-		return compileVerilog(ctx, workDir, target, req.Sources)
-	case "crystal":
-		return compileCrystal(ctx, workDir, target, req.Sources)
-	case "vlang":
-		return compileVLang(ctx, workDir, target, req.Sources)
-	case "odin":
-		return compileOdin(ctx, workDir, target, req.Sources)
-	case "c3":
-		return compileC3(ctx, workDir, target, req.Sources)
-	case "hare":
-		return compileHare(ctx, workDir, target, req.Sources)
-	case "vbnet":
-		return compileVBNet(ctx, workDir, req.Sources)
-	case "gleam":
-		return compileGleam(ctx, workDir, req.Sources)
-	case "cuda-ocelot":
-		return compileCUDAOcelot(ctx, workDir, target, req.Sources)
-	case "rocq":
-		return compileRocq(ctx, workDir, req.Sources)
-	case "isabelle":
-		return compileIsabelle(ctx, workDir, req.Sources)
 	case "r":
 		var checked int
 		fullOut := newCompileOutputBuffer()

@@ -40,7 +40,9 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	for _, kind := range []string{
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
 		"pascal", "nim", "zig", "ada", "d",
+		"rust", "go", "java",
 		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3",
+		"vhdl", "verilog", "crystal", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
