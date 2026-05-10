@@ -1438,6 +1438,47 @@ public static class Program {
 			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
 				return fmt.Errorf("csharp memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
+
+			compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "CSHARP",
+				Sources: []model.Source{{
+					Name: "Program.cs",
+					DataB64: encodeScript(`using System.IO;
+
+public static class Program {
+  public static void Main() {
+    var data = new byte[65536];
+    using var stream = File.OpenWrite("burst.bin");
+    while (true) {
+      stream.Write(data, 0, data.Length);
+      stream.Flush();
+    }
+  }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("csharp write-burst compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("csharp write-burst compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries = binaries[:0]
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err = postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "csharp",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 8000, MemoryMB: 128, OutputBytes: 1024, WorkspaceBytes: 128 << 10},
+			})
+			if err != nil {
+				return fmt.Errorf("csharp write-burst execute request failed: %w", err)
+			}
+			if resp.Status != model.RunStatusWLE {
+				return fmt.Errorf("csharp write-burst status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
 			covered++
 		case "fsharp":
 			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
