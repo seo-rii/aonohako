@@ -46,6 +46,9 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
+		"typescript", "kotlin", "cobol", "cython", "haskell", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
+		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "whitespace", "brainfuck", "wasm",
+		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)

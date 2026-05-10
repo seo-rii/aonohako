@@ -15,6 +15,7 @@ type singleSourceExecutableCompiler struct {
 	noSourceReason string
 	bin            string
 	args           executableArgs
+	env            []string
 }
 
 func (c singleSourceExecutableCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
@@ -30,7 +31,7 @@ func (c singleSourceExecutableCompiler) Compile(ctx context.Context, job Compile
 	if runner == nil {
 		runner = sandboxCommandRunner{}
 	}
-	result := runner.Run(ctx, job.WorkDir, c.bin, c.args(job, rootSource), nil)
+	result := runner.Run(ctx, job.WorkDir, c.bin, c.args(job, rootSource), c.env)
 	if result.Status != model.CompileStatusOK {
 		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
 	}

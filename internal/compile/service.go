@@ -806,14 +806,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
 		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
-	case "typescript":
-		return compileTypeScript(ctx, workDir, req.Sources)
-	case "kotlin":
-		return compileKotlinNative(ctx, workDir, target, req.Sources, tuning)
-	case "cobol":
-		return compileCobol(ctx, workDir, target, req.Sources)
-	case "cython":
-		return compileCython(ctx, workDir, target, req.Sources)
 	case "nasm":
 		var rootSource string
 		for _, src := range req.Sources {
@@ -847,16 +839,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
-	case "haskell":
-		return compileHaskell(ctx, workDir, target, req.Sources)
-	case "haxe":
-		return compileHaxe(ctx, workDir, target, req.Sources)
-	case "swift":
-		return compileSwift(ctx, workDir, target, req.Sources)
-	case "sqlite":
-		return compileSQLite(workDir, req.Sources)
-	case "julia":
-		return compileJulia(workDir, req.Sources)
 	case "erlang":
 		var erlangFiles []string
 		for _, src := range req.Sources {
@@ -883,62 +865,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "erlc produced no artifacts", Stdout: stdout, Stderr: stderr}
 		}
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
-	case "scala":
-		return compileScala(ctx, workDir, req.Sources)
-	case "fsharp":
-		return compileFSharp(ctx, workDir, req.Sources)
-	case "freebasic":
-		return compileFreeBasic(ctx, workDir, target, req.Sources, nil, "no freebasic sources")
-	case "classic-basic":
-		return compileFreeBasic(ctx, workDir, target, req.Sources, []string{"-lang", "qb"}, "no classic-basic sources")
-	case "mojo":
-		return compileMojo(ctx, workDir, target, req.Sources)
-	case "deno":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(compileSandboxMemoryMB, tuning))}, nil)
-	case "kotlin-jvm":
-		return compileKotlinJVM(ctx, workDir, target, req.Sources, profile.JavaRelease, tuning)
-	case "coffeescript":
-		return compileCoffeeScript(ctx, workDir, target, req.Sources)
-	case "whitespace":
-		return compileWhitespace(workDir, req.Sources)
-	case "brainfuck":
-		return compileBrainfuck(workDir, req.Sources)
-	case "wasm":
-		return compileWasm(ctx, workDir, target, req.Sources)
-	case "ocaml":
-		return compileOCaml(ctx, workDir, target, req.Sources)
-	case "elixir":
-		return compileElixir(ctx, workDir, req.Sources, tuning)
-	case "csharp":
-		return compileCSharp(ctx, workDir, req.Sources)
-	case "dart":
-		var rootSource string
-		for _, src := range req.Sources {
-			if !strings.HasSuffix(strings.ToLower(src.Name), ".dart") {
-				continue
-			}
-			clean := filepath.Clean(src.Name)
-			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.dart") {
-				rootSource = filepath.Join(workDir, clean)
-			}
-			if strings.EqualFold(filepath.Base(clean), "Main.dart") {
-				break
-			}
-		}
-		if rootSource == "" {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no dart sources"}
-		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "dart", []string{"compile", "exe", "-D", "ONLINE_JUDGE=true", rootSource, "-o", filepath.Join(workDir, target)}, []string{"DART_SUPPRESS_ANALYTICS=true"})
-		if status != model.CompileStatusOK {
-			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
-		}
-		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
-		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
-		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
-	case "none":
-		return passThroughArtifacts(workDir, req.Sources)
 	default:
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unsupported compile kind: " + profile.CompileKind}
 	}
