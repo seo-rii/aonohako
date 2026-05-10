@@ -76,6 +76,42 @@ func compileCoffeeScript(ctx context.Context, workDir, target string, sources []
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+func compileSQLite(workDir string, sources []model.Source) model.CompileResponse {
+	var hasSQL bool
+	for _, src := range sources {
+		if strings.HasSuffix(strings.ToLower(src.Name), ".sql") {
+			hasSQL = true
+			break
+		}
+	}
+	if !hasSQL {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no sqlite sources"}
+	}
+	artifacts, err := collectArtifacts(workDir, func(string) bool { return true }, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
+}
+
+func compileJulia(workDir string, sources []model.Source) model.CompileResponse {
+	var hasJulia bool
+	for _, src := range sources {
+		if strings.HasSuffix(strings.ToLower(src.Name), ".jl") {
+			hasJulia = true
+			break
+		}
+	}
+	if !hasJulia {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no julia sources"}
+	}
+	artifacts, err := collectArtifacts(workDir, func(string) bool { return true }, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
+}
+
 func compileWhitespace(workDir string, sources []model.Source) model.CompileResponse {
 	var hasSource bool
 	for _, src := range sources {
