@@ -1,6 +1,13 @@
 package compile
 
 var compileRegistry = map[string]Compiler{
+	"c": nativeCompiler{exts: []string{".c", ".h"}, bin: "gcc", flags: func(job CompileJob) []string {
+		return []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + job.Profile.CompileStd}
+	}},
+	"cpp": nativeCompiler{exts: []string{".cpp", ".cc", ".cxx", ".h", ".hpp"}, bin: "g++", flags: func(job CompileJob) []string {
+		return []string{"-O2", "-Wall", "-lm", "--static", "-pipe", "-DONLINE_JUDGE=1", "-std=" + job.Profile.CompileStd}
+	}},
+	"asm":        nativeCompiler{exts: []string{".s"}, bin: "gcc", flags: func(CompileJob) []string { return []string{"-nostdlib", "-static", "-no-pie"} }},
 	"racket":     scriptCheckCompiler{bin: "raco", prefix: []string{"make"}},
 	"scheme":     passThroughCompiler{exts: []string{".scm"}, noSourceReason: "no scheme sources"},
 	"awk":        checkedSourcesCompiler{exts: []string{".awk"}, noSourceReason: "no awk sources", bin: "gawk", prefix: []string{"--sandbox", "--lint", "-f"}},
@@ -19,6 +26,13 @@ var compileRegistry = map[string]Compiler{
 	"php":        scriptCheckCompiler{bin: "php", prefix: []string{"-l"}},
 	"lua":        scriptCheckCompiler{bin: "luac5.4", prefix: []string{"-p"}},
 	"perl":       scriptCheckCompiler{bin: "perl", prefix: []string{"-c"}},
+	"fortran":    nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(CompileJob) []string { return []string{"-O2", "-pipe"} }},
+	"objective-c": nativeCompiler{exts: []string{".m"}, bin: "clang", flags: func(CompileJob) []string {
+		return []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"}
+	}},
+	"objective-cpp": nativeCompiler{exts: []string{".mm"}, bin: "clang++", flags: func(CompileJob) []string {
+		return []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"}
+	}},
 	"raku":       checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
 	"vb6":        passThroughCompiler{exts: []string{".bas", ".frm", ".cls"}, noSourceReason: "no vb6 sources"},
 	"smalltalk":  passThroughCompiler{exts: []string{".st"}, noSourceReason: "no smalltalk sources"},
