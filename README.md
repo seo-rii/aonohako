@@ -234,11 +234,11 @@ aonohako-selftest cgroup-preflight
   application. Do not expose platform mode directly to the public internet.
 - `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` is required for
   `AONOHAKO_INBOUND_AUTH=platform` outside `dev`. It makes platform mode verify
-  `X-Aonohako-Principal-Signature: v2=<hex-hmac-sha256>` over
-  `method + "\n" + path + "\n" + principal + "\n" + timestamp` before accepting
-  the request. The timestamp comes from
+  `X-Aonohako-Principal-Signature: v3=<hex-hmac-sha256>` over
+  `method + "\n" + path + "\n" + principal + "\n" + timestamp + "\n" +
+  sha256_hex(body)` before accepting the request. The timestamp comes from
   `X-Aonohako-Principal-Timestamp` in RFC3339 format and must be within five
-  minutes of the server clock.
+  minutes of the server clock. Legacy bodyless `v2=` signatures are rejected.
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS` and
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain available only as optional
   defense-in-depth assertions for deployments that want source-CIDR checks in

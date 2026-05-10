@@ -526,8 +526,10 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`; the application verifies
   `X-Aonohako-Principal-Signature` and
   `X-Aonohako-Principal-Timestamp` over the request method, path, principal,
-  and RFC3339 timestamp with a five-minute replay window, so unsigned trusted
-  platform headers are not accepted outside `dev`
+  RFC3339 timestamp, and SHA-256 request-body digest with a five-minute replay window,
+  so unsigned trusted
+  platform headers are not accepted outside `dev`; legacy bodyless signatures
+  are rejected
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` and
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain optional defense-in-depth
   assertions for source-CIDR checks in addition to signed platform principals
@@ -576,8 +578,9 @@ The following checks are enforced before the HTTP server starts:
   principal key; platform auth uses the upstream principal header such as
   `X-Aonohako-Principal`. Platform auth ignores generic forwarded identity
   headers. With `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`, the application
-  verifies the principal signature itself; outside `dev`, startup rejects
-  platform auth unless that signing secret is configured.
+  verifies the principal signature itself over method, path, principal,
+  timestamp, and body digest; outside `dev`, startup rejects platform auth
+  unless that signing secret is configured.
 - Outside `dev`, `/compile` and `/execute` requests are also capped per
   principal in a fixed one-minute window before they enter the run queue.
 - `aonohako-selftest deployment-contract` reports the active execution shape,
