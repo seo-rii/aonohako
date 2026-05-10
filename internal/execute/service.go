@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -128,6 +129,10 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 }
 
 func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput bool) sandboxRunResult {
+	return s.runOneWithStdin(ctx, req, nil, hooks, tuning, evaluateOutput)
+}
+
+func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, stdin io.Reader, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput bool) sandboxRunResult {
 	startWall := timing.MonotonicNow()
 	if req.EnableNetwork && s.deploymentTarget == platform.DeploymentTargetCloudRun {
 		return sandboxRunResult{response: model.RunResponse{
@@ -173,7 +178,7 @@ func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks
 		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "empty command"}}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, hooks, capturedOutputLimit, tuning, s.cgroupParentDir)
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, hooks, capturedOutputLimit, tuning, s.cgroupParentDir)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
 		return sandboxRunResult{response: model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason, VerdictSource: res.VerdictSource}}
@@ -257,13 +262,40 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 		programs[program.ID] = program
 	}
 
+	handoffDir, err := createRunWorkDir()
+	if err != nil {
+		slog.Warn("execute step handoff directory creation failed", "err", err)
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "handoff directory creation failed"}
+	}
+	defer os.RemoveAll(handoffDir)
+
 	handoffs := map[string]string{}
 	stepResults := make([]model.StepResult, 0, len(req.Steps))
 	for i, step := range req.Steps {
 		program := programs[step.ProgramID]
 		stdin := step.Stdin
+		var stdinReader io.Reader
+		var stdinFile *os.File
 		if step.StdinFrom != "" {
-			stdin = handoffs[step.StdinFrom]
+			handoffPath := handoffs[step.StdinFrom]
+			if handoffPath == "" {
+				return aggregateStepResponse(model.RunResponse{
+					Status:        model.RunStatusInitFail,
+					Reason:        fmt.Sprintf("step %s stdin handoff not found", step.ID),
+					VerdictSource: "step:" + step.ID + ":handoff",
+				}, stepResults)
+			}
+			stdin = ""
+			stdinFile, err = os.Open(handoffPath)
+			if err != nil {
+				slog.Warn("execute step handoff open failed", "step", step.ID, "err", err)
+				return aggregateStepResponse(model.RunResponse{
+					Status:        model.RunStatusInitFail,
+					Reason:        fmt.Sprintf("step %s handoff open failed", step.ID),
+					VerdictSource: "step:" + step.ID + ":handoff",
+				}, stepResults)
+			}
+			stdinReader = stdinFile
 		}
 		stepReq := &model.RunRequest{
 			Lang:           program.Lang,
@@ -291,7 +323,10 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			stepReq.IgnoreTLE = req.IgnoreTLE
 		}
 
-		run := s.runOne(ctx, stepReq, hooks, tuning, finalStep)
+		run := s.runOneWithStdin(ctx, stepReq, stdinReader, hooks, tuning, finalStep)
+		if stdinFile != nil {
+			_ = stdinFile.Close()
+		}
 		stepResult := stepResultFromResponse(step.ID, step.ProgramID, run.response)
 		stepResults = append(stepResults, stepResult)
 
@@ -311,7 +346,33 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 					VerdictSource: "step:" + step.ID + ":handoff",
 				}, stepResults)
 			}
-			handoffs[step.Handoff.ID] = string(run.judgeOut)
+			handoffFile, err := os.CreateTemp(handoffDir, "handoff-*")
+			if err != nil {
+				slog.Warn("execute step handoff file creation failed", "step", step.ID, "err", err)
+				return aggregateStepResponse(model.RunResponse{
+					Status:        model.RunStatusInitFail,
+					Reason:        fmt.Sprintf("step %s handoff creation failed", step.ID),
+					VerdictSource: "step:" + step.ID + ":handoff",
+				}, stepResults)
+			}
+			if _, err := handoffFile.Write(run.judgeOut); err != nil {
+				_ = handoffFile.Close()
+				slog.Warn("execute step handoff write failed", "step", step.ID, "err", err)
+				return aggregateStepResponse(model.RunResponse{
+					Status:        model.RunStatusInitFail,
+					Reason:        fmt.Sprintf("step %s handoff write failed", step.ID),
+					VerdictSource: "step:" + step.ID + ":handoff",
+				}, stepResults)
+			}
+			if err := handoffFile.Close(); err != nil {
+				slog.Warn("execute step handoff close failed", "step", step.ID, "err", err)
+				return aggregateStepResponse(model.RunResponse{
+					Status:        model.RunStatusInitFail,
+					Reason:        fmt.Sprintf("step %s handoff close failed", step.ID),
+					VerdictSource: "step:" + step.ID + ":handoff",
+				}, stepResults)
+			}
+			handoffs[step.Handoff.ID] = handoffFile.Name()
 			stepResults[len(stepResults)-1].HandoffBytes = int64(len(run.judgeOut))
 			continue
 		}

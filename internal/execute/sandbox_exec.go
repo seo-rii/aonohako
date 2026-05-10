@@ -42,16 +42,16 @@ type execResult struct {
 	VerdictSource   string
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	limits := req.Limits
 	timeMs := max(1, limits.TimeMs)
 	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
 	defer cancel()
 
-	return executeSandboxCommand(ctx, ws, command, req, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	return executeSandboxCommand(ctx, ws, command, req, stdinReader, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
 
-func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
@@ -227,7 +227,10 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 
 	cmd := exec.CommandContext(ctx, helperPath)
 	cmd.Dir = ws.BoxDir
-	cmd.Stdin = strings.NewReader(req.Stdin)
+	if stdinReader == nil {
+		stdinReader = strings.NewReader(req.Stdin)
+	}
+	cmd.Stdin = stdinReader
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid:   true,
 		Pdeathsig: syscall.SIGKILL,
