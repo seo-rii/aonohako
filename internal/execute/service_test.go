@@ -662,6 +662,72 @@ func TestRunTwoStepPipelineAcceptsFileHandoff(t *testing.T) {
 	}
 }
 
+func TestRunTwoStepPipelineSeparatesFileHandoffFromStdoutFlood(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name: "encode.sh",
+					DataB64: b64(`#!/bin/sh
+printf 'encoded-file\n' > encoded.txt
+i=0
+while [ "$i" -lt 256 ]; do
+  printf '0123456789abcdef0123456789abcdef\n'
+  i=$((i + 1))
+done
+`),
+					Mode: "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "decode.sh",
+					DataB64: b64("#!/bin/sh\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 1024},
+				Handoff:   &model.StepHandoff{ID: "encoded", From: "file", Path: "encoded.txt", MaxBytes: 1024},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinFrom: "encoded",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		ExpectedStdout: "encoded-file\n",
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusRE {
+		t.Fatalf("expected intermediate stdout flood runtime error, got %+v", resp)
+	}
+	if !strings.Contains(resp.Reason, "stdout exceeded output limit") {
+		t.Fatalf("reason = %q, want stdout output-limit diagnostic", resp.Reason)
+	}
+	if strings.Contains(resp.Reason, "handoff exceeded") {
+		t.Fatalf("file handoff stdout flood should not be reported as handoff overflow: %q", resp.Reason)
+	}
+	if resp.VerdictSource != "step:encode:stdout" {
+		t.Fatalf("verdict_source = %q, want step:encode:stdout", resp.VerdictSource)
+	}
+	if len(resp.Steps) != 1 || resp.Steps[0].HandoffBytes != int64(len("encoded-file\n")) {
+		t.Fatalf("unexpected step results: %+v", resp.Steps)
+	}
+}
+
 func TestRunTwoStepPipelineRejectsOversizedHandoff(t *testing.T) {
 	forceDirectMode(t)
 
