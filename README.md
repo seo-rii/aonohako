@@ -239,6 +239,10 @@ aonohako-selftest cgroup-preflight
   sha256_hex(body)` before accepting the request. The timestamp comes from
   `X-Aonohako-Principal-Timestamp` in RFC3339 format and must be within five
   minutes of the server clock. Legacy bodyless `v2=` signatures are rejected.
+  Concurrent pre-auth body hashing is capped by `AONOHAKO_MAX_ACTIVE_STREAMS`
+  when set, otherwise by `AONOHAKO_MAX_ACTIVE_RUNS` or a small internal
+  fallback, so invalid signatures cannot force unbounded parallel 64 MiB body
+  buffers.
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS` and
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain available only as optional
   defense-in-depth assertions for deployments that want source-CIDR checks in
