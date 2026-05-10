@@ -497,7 +497,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					http.Error(w, "invalid request body", status)
 					return
 				}
-				if !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.Path, value, r.Header.Get(platformPrincipalTimestampHeader), signature, bodyHash, time.Now()) {
+				if !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.RequestURI(), value, r.Header.Get(platformPrincipalTimestampHeader), signature, bodyHash, time.Now()) {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}
@@ -590,7 +590,7 @@ func hashAndRestoreRequestBody(w http.ResponseWriter, r *http.Request) (string, 
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func verifyPlatformPrincipalSignature(secret, method, path, principal, timestamp, signature, bodyHash string, now time.Time) bool {
+func verifyPlatformPrincipalSignature(secret, method, requestURI, principal, timestamp, signature, bodyHash string, now time.Time) bool {
 	timestamp = strings.TrimSpace(timestamp)
 	parsedTimestamp, err := time.Parse(time.RFC3339, timestamp)
 	if err != nil {
@@ -609,7 +609,7 @@ func verifyPlatformPrincipalSignature(secret, method, path, principal, timestamp
 		return false
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(method + "\n" + path + "\n" + principal + "\n" + timestamp + "\n" + bodyHash))
+	_, _ = mac.Write([]byte(method + "\n" + requestURI + "\n" + principal + "\n" + timestamp + "\n" + bodyHash))
 	want := hex.EncodeToString(mac.Sum(nil))
 	return constantTimeEqual(strings.ToLower(signature), want)
 }

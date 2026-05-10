@@ -235,8 +235,9 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` is required for
   `AONOHAKO_INBOUND_AUTH=platform` outside `dev`. It makes platform mode verify
   `X-Aonohako-Principal-Signature: v3=<hex-hmac-sha256>` over
-  `method + "\n" + path + "\n" + principal + "\n" + timestamp + "\n" +
-  sha256_hex(body)` before accepting the request. The timestamp comes from
+  `method + "\n" + request_uri + "\n" + principal + "\n" + timestamp + "\n" +
+  sha256_hex(body)` before accepting the request. `request_uri` includes the
+  path and query string. The timestamp comes from
   `X-Aonohako-Principal-Timestamp` in RFC3339 format and must be within five
   minutes of the server clock. Legacy bodyless `v2=` signatures are rejected.
   Concurrent pre-auth body hashing is capped by `AONOHAKO_MAX_ACTIVE_STREAMS`

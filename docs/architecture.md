@@ -525,8 +525,9 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_INBOUND_AUTH=platform` outside `dev` requires
   `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`; the application verifies
   `X-Aonohako-Principal-Signature` and
-  `X-Aonohako-Principal-Timestamp` over the request method, path, principal,
-  RFC3339 timestamp, and SHA-256 request-body digest with a five-minute replay window,
+  `X-Aonohako-Principal-Timestamp` over the request method, request URI
+  including query string, principal, RFC3339 timestamp, and SHA-256
+  request-body digest with a five-minute replay window,
   so unsigned trusted
   platform headers are not accepted outside `dev`; legacy bodyless signatures
   are rejected
@@ -581,7 +582,7 @@ The following checks are enforced before the HTTP server starts:
   principal key; platform auth uses the upstream principal header such as
   `X-Aonohako-Principal`. Platform auth ignores generic forwarded identity
   headers. With `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`, the application
-  verifies the principal signature itself over method, path, principal,
+  verifies the principal signature itself over method, request URI, principal,
   timestamp, and body digest; outside `dev`, startup rejects platform auth
   unless that signing secret is configured.
 - Outside `dev`, `/compile` and `/execute` requests are also capped per
