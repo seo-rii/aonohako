@@ -69,10 +69,11 @@ func (b *blockingBody) Close() error {
 	return nil
 }
 
-func platformPrincipalSignatureForTest(secret, method, path, principal, timestamp string) string {
+func platformPrincipalSignatureForTest(secret, method, path, principal, timestamp string, body []byte) string {
+	sum := sha256.Sum256(body)
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(method + "\n" + path + "\n" + principal + "\n" + timestamp))
-	return "v2=" + hex.EncodeToString(mac.Sum(nil))
+	_, _ = mac.Write([]byte(method + "\n" + path + "\n" + principal + "\n" + timestamp + "\n" + hex.EncodeToString(sum[:])))
+	return "v3=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 func TestConstantTimeEqualRequiresDigestAndLengthMatch(t *testing.T) {
@@ -649,11 +650,12 @@ func TestPlatformAuthRequiresValidPrincipalSignatureWhenConfigured(t *testing.T)
 	}{
 		{name: "missing signature", principal: "alice", want: http.StatusUnauthorized},
 		{name: "missing timestamp", principal: "alice", signature: "v2=bad", want: http.StatusUnauthorized},
-		{name: "stale timestamp", principal: "alice", timestamp: staleTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", staleTimestamp), want: http.StatusUnauthorized},
+		{name: "stale timestamp", principal: "alice", timestamp: staleTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", staleTimestamp, body), want: http.StatusUnauthorized},
 		{name: "legacy principal only signature", principal: "alice", timestamp: validTimestamp, signature: "v1=bad", want: http.StatusUnauthorized},
-		{name: "bad signature", principal: "alice", timestamp: validTimestamp, signature: "v2=bad", want: http.StatusUnauthorized},
-		{name: "wrong path signature", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/compile", "alice", validTimestamp), want: http.StatusUnauthorized},
-		{name: "valid signature", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", validTimestamp), want: http.StatusOK},
+		{name: "legacy bodyless signature", principal: "alice", timestamp: validTimestamp, signature: "v2=bad", want: http.StatusUnauthorized},
+		{name: "bad signature", principal: "alice", timestamp: validTimestamp, signature: "v3=bad", want: http.StatusUnauthorized},
+		{name: "wrong path signature", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/compile", "alice", validTimestamp, body), want: http.StatusUnauthorized},
+		{name: "valid signature", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", validTimestamp, body), want: http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
@@ -678,6 +680,40 @@ func TestPlatformAuthRequiresValidPrincipalSignatureWhenConfigured(t *testing.T)
 			_, _ = io.Copy(io.Discard, resp.Body)
 		})
 	}
+}
+
+func TestPlatformAuthRejectsBodySubstitutionReplay(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "platform-secret"}
+	cfg.MaxActiveRuns = 4
+	cfg.MaxPendingQueue = 8
+	cfg.MaxActiveStreams = 8
+	cfg.MaxPrincipalStreams = 8
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	signedBody := executePayload(t)
+	mutatedBody := append([]byte{}, signedBody...)
+	mutatedBody = append(mutatedBody, ' ')
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(mutatedBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(platformPrincipalHeader, "alice")
+	req.Header.Set(platformPrincipalTimestampHeader, timestamp)
+	req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, signedBody))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
 }
 
 func TestPlatformAuthEnforcesTrustedProxyCIDRsForUnsignedHeaders(t *testing.T) {

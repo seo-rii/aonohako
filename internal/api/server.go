@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -41,6 +42,7 @@ const (
 	maxCompileSourceFiles             = 512
 	maxCompileDecodedSourceBytes      = 16 << 20
 	maxCompileDecodedSourceTotalBytes = 48 << 20
+	maxJSONBodyBytes                  = 64 << 20
 	platformPrincipalHeader           = "X-Aonohako-Principal"
 	platformPrincipalSignatureHeader  = "X-Aonohako-Principal-Signature"
 	platformPrincipalTimestampHeader  = "X-Aonohako-Principal-Timestamp"
@@ -457,7 +459,22 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			principal := ""
 			value := strings.TrimSpace(r.Header.Get(platformPrincipalHeader))
 			if s.cfg.InboundAuth.PlatformPrincipalHMACSecret != "" {
-				if value == "" || !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.Path, value, r.Header.Get(platformPrincipalTimestampHeader), r.Header.Get(platformPrincipalSignatureHeader), time.Now()) {
+				signature := strings.TrimSpace(r.Header.Get(platformPrincipalSignatureHeader))
+				if value == "" || !strings.HasPrefix(signature, "v3=") {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				bodyHash, err := hashAndRestoreRequestBody(w, r)
+				if err != nil {
+					status := http.StatusBadRequest
+					var maxErr *http.MaxBytesError
+					if errors.As(err, &maxErr) {
+						status = http.StatusRequestEntityTooLarge
+					}
+					http.Error(w, "invalid request body", status)
+					return
+				}
+				if !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.Path, value, r.Header.Get(platformPrincipalTimestampHeader), signature, bodyHash, time.Now()) {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}
@@ -524,7 +541,21 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
-func verifyPlatformPrincipalSignature(secret, method, path, principal, timestamp, signature string, now time.Time) bool {
+func hashAndRestoreRequestBody(w http.ResponseWriter, r *http.Request) (string, error) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
+	if err != nil {
+		return "", err
+	}
+	if err := r.Body.Close(); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(body)
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func verifyPlatformPrincipalSignature(secret, method, path, principal, timestamp, signature, bodyHash string, now time.Time) bool {
 	timestamp = strings.TrimSpace(timestamp)
 	parsedTimestamp, err := time.Parse(time.RFC3339, timestamp)
 	if err != nil {
@@ -534,8 +565,8 @@ func verifyPlatformPrincipalSignature(secret, method, path, principal, timestamp
 		return false
 	}
 	signature = strings.TrimSpace(signature)
-	if strings.HasPrefix(signature, "v2=") {
-		signature = strings.TrimPrefix(signature, "v2=")
+	if strings.HasPrefix(signature, "v3=") {
+		signature = strings.TrimPrefix(signature, "v3=")
 	} else {
 		return false
 	}
@@ -543,7 +574,7 @@ func verifyPlatformPrincipalSignature(secret, method, path, principal, timestamp
 		return false
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(method + "\n" + path + "\n" + principal + "\n" + timestamp))
+	_, _ = mac.Write([]byte(method + "\n" + path + "\n" + principal + "\n" + timestamp + "\n" + bodyHash))
 	want := hex.EncodeToString(mac.Sum(nil))
 	return constantTimeEqual(strings.ToLower(signature), want)
 }
@@ -596,7 +627,7 @@ func (s *Server) applyRuntimeProfilePolicy(problemID string, runtimeProfile *str
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<20))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		return err

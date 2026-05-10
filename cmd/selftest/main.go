@@ -859,7 +859,7 @@ done
 	if resp.Status != model.RunStatusAccepted {
 		return fmt.Errorf("two-step execute failed: status=%s reason=%s stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 	}
-	if len(resp.Steps) != 2 || resp.Steps[0].Status != "OK" || resp.Steps[1].Status != model.RunStatusAccepted {
+	if len(resp.Steps) != 2 || resp.Steps[0].Status != model.RunStatusAccepted || resp.Steps[1].Status != model.RunStatusAccepted {
 		return fmt.Errorf("two-step execute returned unexpected step results: %+v", resp.Steps)
 	}
 
