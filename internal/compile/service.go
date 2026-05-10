@@ -757,10 +757,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileRocq(ctx, workDir, req.Sources)
 	case "isabelle":
 		return compileIsabelle(ctx, workDir, req.Sources)
-	case "python":
-		return compilePythonLike(ctx, workDir, req.Sources, "python3")
-	case "pypy":
-		return compilePythonLike(ctx, workDir, req.Sources, "pypy3")
 	case "r":
 		var checked int
 		fullOut := newCompileOutputBuffer()
@@ -1310,18 +1306,11 @@ func compileJava(ctx context.Context, workDir string, sources []model.Source, re
 }
 
 func compilePythonLike(ctx context.Context, workDir string, sources []model.Source, interpreter string) model.CompileResponse {
-	stdout, stderr, status, reason := runCommand(ctx, workDir, interpreter, []string{"-I", "-S", "-m", "compileall", "-b", "."}, nil)
-	if status != model.CompileStatusOK {
-		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
-	}
-	artifacts, err := collectArtifacts(workDir, func(name string) bool {
-		l := strings.ToLower(name)
-		return strings.HasSuffix(l, ".py") || strings.HasSuffix(l, ".pyc")
-	}, "")
-	if err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
-	}
-	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+	return pythonLikeCompiler{interpreter: interpreter}.Compile(ctx, CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: sources},
+		Runner:  sandboxCommandRunner{},
+	})
 }
 
 func compileScriptCheck(ctx context.Context, workDir string, sources []model.Source, bin string, prefix []string) model.CompileResponse {

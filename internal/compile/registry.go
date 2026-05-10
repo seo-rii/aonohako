@@ -30,6 +30,8 @@ var compileRegistry = map[string]Compiler{
 	"dafny":      checkedSourcesCompiler{exts: []string{".dfy"}, noSourceReason: "no dafny sources", bin: "dafny", prefix: []string{"verify", "--cores", "1"}, env: []string{"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1", "DOTNET_PROCESSOR_COUNT=1", "COMPlus_ThreadPool_ForceMinWorkerThreads=1"}},
 	"tla":        passThroughCompiler{exts: []string{".tla", ".cfg"}, noSourceReason: "no tla sources"},
 	"why3":       checkedSourcesCompiler{exts: []string{".mlw"}, noSourceReason: "no why3 sources", bin: "aonohako-why3-prove"},
+	"python":     pythonLikeCompiler{interpreter: "python3"},
+	"pypy":       pythonLikeCompiler{interpreter: "pypy3"},
 	"javascript": scriptCheckCompiler{bin: "node", prefix: []string{"--check"}},
 	"ruby":       scriptCheckCompiler{bin: "ruby", prefix: []string{"-c"}},
 	"php":        scriptCheckCompiler{bin: "php", prefix: []string{"-l"}},
