@@ -1249,6 +1249,100 @@ public class Main {
 			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
 				return fmt.Errorf("java memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
+
+			compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "JAVA",
+				Sources: []model.Source{{
+					Name: "Main.java",
+					DataB64: encodeScript(`import java.lang.reflect.Proxy;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+  interface Marker {}
+
+  public static void main(String[] args) {
+    List<Class<?>> generated = new ArrayList<>();
+    while (true) {
+      ClassLoader loader = new URLClassLoader(new URL[0], Main.class.getClassLoader());
+      Object proxy = Proxy.newProxyInstance(loader, new Class<?>[]{Marker.class}, (p, m, a) -> null);
+      generated.add(proxy.getClass());
+    }
+  }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("java metaspace compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("java metaspace compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries = binaries[:0]
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err = postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "java",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 6000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("java metaspace execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("java metaspace stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+
+			compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang: "JAVA",
+				Sources: []model.Source{{
+					Name: "Main.java",
+					DataB64: encodeScript(`import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+  public static void main(String[] args) {
+    List<Thread> threads = new ArrayList<>();
+    while (true) {
+      Thread t = new Thread(() -> {
+        try {
+          Thread.sleep(60000);
+        } catch (InterruptedException ignored) {
+        }
+      });
+      t.start();
+      threads.add(t);
+    }
+  }
+}
+`),
+				}},
+			})
+			if err != nil {
+				return fmt.Errorf("java thread compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("java thread compile failed: status=%s reason=%q stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries = binaries[:0]
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			resp, err = postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     "java",
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 6000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("java thread execute request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("java thread stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
 			covered++
 		case "groovy":
 			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
