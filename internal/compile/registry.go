@@ -7,7 +7,16 @@ var compileRegistry = map[string]Compiler{
 	"cpp": nativeCompiler{exts: []string{".cpp", ".cc", ".cxx", ".h", ".hpp"}, bin: "g++", flags: func(job CompileJob) []string {
 		return []string{"-O2", "-Wall", "-lm", "--static", "-pipe", "-DONLINE_JUDGE=1", "-std=" + job.Profile.CompileStd}
 	}},
-	"asm":        nativeCompiler{exts: []string{".s"}, bin: "gcc", flags: func(CompileJob) []string { return []string{"-nostdlib", "-static", "-no-pie"} }},
+	"asm": nativeCompiler{exts: []string{".s"}, bin: "gcc", flags: func(CompileJob) []string { return []string{"-nostdlib", "-static", "-no-pie"} }},
+	"pascal": singleSourceExecutableCompiler{exts: []string{".pas"}, preferredBases: []string{"Main.pas"}, noSourceReason: "no pascal sources", bin: "fpc", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"-O2", "-Xs", "-dONLINE_JUDGE", "-o" + outputPath(job), sourcePath}
+	}},
+	"nim": singleSourceExecutableCompiler{exts: []string{".nim"}, preferredBases: []string{"Main.nim"}, noSourceReason: "no nim sources", bin: "nim", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--out:" + outputPath(job), sourcePath}
+	}},
+	"zig": singleSourceExecutableCompiler{exts: []string{".zig"}, preferredBases: []string{"Main.zig"}, noSourceReason: "no zig sources", bin: "zig", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"build-exe", sourcePath, "-O", "ReleaseSafe", "-femit-bin=" + outputPath(job)}
+	}},
 	"racket":     scriptCheckCompiler{bin: "raco", prefix: []string{"make"}},
 	"scheme":     passThroughCompiler{exts: []string{".scm"}, noSourceReason: "no scheme sources"},
 	"awk":        checkedSourcesCompiler{exts: []string{".awk"}, noSourceReason: "no awk sources", bin: "gawk", prefix: []string{"--sandbox", "--lint", "-f"}},
@@ -27,6 +36,12 @@ var compileRegistry = map[string]Compiler{
 	"lua":        scriptCheckCompiler{bin: "luac5.4", prefix: []string{"-p"}},
 	"perl":       scriptCheckCompiler{bin: "perl", prefix: []string{"-c"}},
 	"fortran":    nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(CompileJob) []string { return []string{"-O2", "-pipe"} }},
+	"ada": singleSourceExecutableCompiler{exts: []string{".adb"}, preferredBases: []string{"Main.adb"}, noSourceReason: "no ada sources", bin: "gnatmake", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"-O2", "-o", outputPath(job), sourcePath}
+	}},
+	"d": singleSourceExecutableCompiler{exts: []string{".d"}, preferredBases: []string{"Main.d"}, noSourceReason: "no d sources", bin: "ldc2", args: func(job CompileJob, sourcePath string) []string {
+		return []string{sourcePath, "-O3", "-release", "--d-version=ONLINE_JUDGE", "-of=" + outputPath(job)}
+	}},
 	"objective-c": nativeCompiler{exts: []string{".m"}, bin: "clang", flags: func(CompileJob) []string {
 		return []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"}
 	}},

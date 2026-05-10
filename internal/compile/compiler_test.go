@@ -39,6 +39,7 @@ func (r *recordingCommandRunner) Run(_ context.Context, workDir, bin string, arg
 func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	for _, kind := range []string{
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
+		"pascal", "nim", "zig", "ada", "d",
 		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
@@ -46,6 +47,49 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestSingleSourceExecutableCompilerUsesPreferredSource(t *testing.T) {
+	workDir := t.TempDir()
+	for _, name := range []string{"Helper.nim", "Main.nim"} {
+		if err := os.WriteFile(filepath.Join(workDir, name), []byte("echo 1"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("binary"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := singleSourceExecutableCompiler{
+		exts:           []string{".nim"},
+		preferredBases: []string{"Main.nim"},
+		noSourceReason: "no nim sources",
+		bin:            "nim",
+		args: func(job CompileJob, sourcePath string) []string {
+			return []string{"c", "--out:" + outputPath(job), sourcePath}
+		},
+	}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Helper.nim"}, {Name: "Main.nim"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	wantSource := filepath.Join(workDir, "Main.nim")
+	if got := runner.commands[0].args[len(runner.commands[0].args)-1]; got != wantSource {
+		t.Fatalf("selected source = %q, want %q", got, wantSource)
 	}
 }
 

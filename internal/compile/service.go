@@ -675,88 +675,10 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	}
 
 	switch profile.CompileKind {
-	case "pascal":
-		var rootSource string
-		for _, src := range req.Sources {
-			if !strings.HasSuffix(strings.ToLower(src.Name), ".pas") {
-				continue
-			}
-			clean := filepath.Clean(src.Name)
-			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.pas") {
-				rootSource = filepath.Join(workDir, clean)
-			}
-			if strings.EqualFold(filepath.Base(clean), "Main.pas") {
-				break
-			}
-		}
-		if rootSource == "" {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no pascal sources"}
-		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "fpc", []string{"-O2", "-Xs", "-dONLINE_JUDGE", "-o" + filepath.Join(workDir, target), rootSource}, nil)
-		if status != model.CompileStatusOK {
-			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
-		}
-		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
-		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
-		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
-	case "nim":
-		var rootSource string
-		for _, src := range req.Sources {
-			if !strings.HasSuffix(strings.ToLower(src.Name), ".nim") {
-				continue
-			}
-			clean := filepath.Clean(src.Name)
-			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.nim") {
-				rootSource = filepath.Join(workDir, clean)
-			}
-			if strings.EqualFold(filepath.Base(clean), "Main.nim") {
-				break
-			}
-		}
-		if rootSource == "" {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no nim sources"}
-		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "nim", []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--out:" + filepath.Join(workDir, target), rootSource}, nil)
-		if status != model.CompileStatusOK {
-			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
-		}
-		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
-		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
-		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "rust":
 		return compileRust(ctx, workDir, target, req.Sources, profile.RustEdition)
 	case "go":
 		return compileGo(ctx, workDir, target, req.Sources)
-	case "zig":
-		var rootSource string
-		for _, src := range req.Sources {
-			if !strings.HasSuffix(strings.ToLower(src.Name), ".zig") {
-				continue
-			}
-			clean := filepath.Clean(src.Name)
-			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.zig") {
-				rootSource = filepath.Join(workDir, clean)
-			}
-			if strings.EqualFold(filepath.Base(clean), "Main.zig") {
-				break
-			}
-		}
-		if rootSource == "" {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no zig sources"}
-		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "zig", []string{"build-exe", rootSource, "-O", "ReleaseSafe", "-femit-bin=" + filepath.Join(workDir, target)}, nil)
-		if status != model.CompileStatusOK {
-			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
-		}
-		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
-		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
-		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "java":
 		return compileJava(ctx, workDir, req.Sources, profile.JavaRelease)
 	case "groovy":
@@ -922,62 +844,10 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileTypeScript(ctx, workDir, req.Sources)
 	case "kotlin":
 		return compileKotlinNative(ctx, workDir, target, req.Sources, tuning)
-	case "ada":
-		var rootSource string
-		for _, src := range req.Sources {
-			if !strings.HasSuffix(strings.ToLower(src.Name), ".adb") {
-				continue
-			}
-			clean := filepath.Clean(src.Name)
-			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.adb") {
-				rootSource = filepath.Join(workDir, clean)
-			}
-			if strings.EqualFold(filepath.Base(clean), "Main.adb") {
-				break
-			}
-		}
-		if rootSource == "" {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no ada sources"}
-		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "gnatmake", []string{"-O2", "-o", filepath.Join(workDir, target), rootSource}, nil)
-		if status != model.CompileStatusOK {
-			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
-		}
-		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
-		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
-		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "cobol":
 		return compileCobol(ctx, workDir, target, req.Sources)
 	case "cython":
 		return compileCython(ctx, workDir, target, req.Sources)
-	case "d":
-		var rootSource string
-		for _, src := range req.Sources {
-			if !strings.HasSuffix(strings.ToLower(src.Name), ".d") {
-				continue
-			}
-			clean := filepath.Clean(src.Name)
-			if rootSource == "" || strings.EqualFold(filepath.Base(clean), "Main.d") {
-				rootSource = filepath.Join(workDir, clean)
-			}
-			if strings.EqualFold(filepath.Base(clean), "Main.d") {
-				break
-			}
-		}
-		if rootSource == "" {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no d sources"}
-		}
-		stdout, stderr, status, reason := runCommand(ctx, workDir, "ldc2", []string{rootSource, "-O3", "-release", "--d-version=ONLINE_JUDGE", "-of=" + filepath.Join(workDir, target)}, nil)
-		if status != model.CompileStatusOK {
-			return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
-		}
-		artifacts, err := readSingleArtifact(workDir, target, target, "exec")
-		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
-		}
-		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	case "nasm":
 		var rootSource string
 		for _, src := range req.Sources {
