@@ -1150,6 +1150,26 @@ while (true) {
 				return fmt.Errorf("typescript memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
 			covered++
+		case "deno":
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang: "deno",
+				Binaries: []model.Binary{{
+					Name: "Main.ts",
+					DataB64: encodeScript(`const chunks: Uint8Array[] = [];
+while (true) {
+  chunks.push(new Uint8Array(8 * 1024 * 1024));
+}
+`),
+				}},
+				Limits: model.Limits{TimeMs: 4000, MemoryMB: 64, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("deno memory request failed: %w", err)
+			}
+			if resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusTLE {
+				return fmt.Errorf("deno memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
 		case "python":
 			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
 				Lang: "python",
@@ -1193,14 +1213,15 @@ while True:
 				Lang: "JAVA",
 				Sources: []model.Source{{
 					Name: "Main.java",
-					DataB64: encodeScript(`import java.util.ArrayList;
+					DataB64: encodeScript(`import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
   public static void main(String[] args) {
-    List<byte[]> chunks = new ArrayList<>();
+    List<ByteBuffer> chunks = new ArrayList<>();
     while (true) {
-      chunks.add(new byte[8 * 1024 * 1024]);
+      chunks.add(ByteBuffer.allocateDirect(8 * 1024 * 1024));
     }
   }
 }
