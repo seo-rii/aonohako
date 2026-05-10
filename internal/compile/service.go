@@ -675,12 +675,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 	}
 
 	switch profile.CompileKind {
-	case "c":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".c", ".h"), "gcc", []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + profile.CompileStd})
-	case "cpp":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".cpp", ".cc", ".cxx", ".h", ".hpp"), "g++", []string{"-O2", "-Wall", "-lm", "--static", "-pipe", "-DONLINE_JUDGE=1", "-std=" + profile.CompileStd})
-	case "asm":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".s"), "gcc", []string{"-nostdlib", "-static", "-no-pie"})
 	case "pascal":
 		var rootSource string
 		for _, src := range req.Sources {
@@ -928,8 +922,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileTypeScript(ctx, workDir, req.Sources)
 	case "kotlin":
 		return compileKotlinNative(ctx, workDir, target, req.Sources, tuning)
-	case "fortran":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".f", ".for", ".f90", ".f95", ".f03", ".f08"), "gfortran", []string{"-O2", "-pipe"})
 	case "ada":
 		var rootSource string
 		for _, src := range req.Sources {
@@ -986,10 +978,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 		}
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
-	case "objective-c":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".m"), "clang", []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"})
-	case "objective-cpp":
-		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".mm"), "clang++", []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"})
 	case "nasm":
 		var rootSource string
 		for _, src := range req.Sources {

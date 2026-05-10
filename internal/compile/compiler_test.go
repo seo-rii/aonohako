@@ -20,6 +20,7 @@ type recordedCommand struct {
 type recordingCommandRunner struct {
 	commands []recordedCommand
 	result   CommandResult
+	hook     func(workDir, bin string, args, env []string)
 }
 
 func (r *recordingCommandRunner) Run(_ context.Context, workDir, bin string, args, env []string) CommandResult {
@@ -29,11 +30,15 @@ func (r *recordingCommandRunner) Run(_ context.Context, workDir, bin string, arg
 		args:    append([]string{}, args...),
 		env:     append([]string{}, env...),
 	})
+	if r.hook != nil {
+		r.hook(workDir, bin, args, env)
+	}
 	return r.result
 }
 
 func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	for _, kind := range []string{
+		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
 		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
@@ -41,6 +46,49 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestNativeCompilerUsesRunnerAndReadsExecutable(t *testing.T) {
+	workDir := t.TempDir()
+	sourcePath := filepath.Join(workDir, "Main.c")
+	if err := os.WriteFile(sourcePath, []byte("int main(void){return 0;}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("binary"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := nativeCompiler{
+		exts: []string{".c"},
+		bin:  "gcc",
+		flags: func(CompileJob) []string {
+			return []string{"-O2", "-DONLINE_JUDGE=1"}
+		},
+	}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.c"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	wantArgs := []string{sourcePath, "-O2", "-DONLINE_JUDGE=1", "-o", "Main"}
+	if got := runner.commands[0].args; !reflect.DeepEqual(got, wantArgs) {
+		t.Fatalf("runner args = %#v, want %#v", got, wantArgs)
 	}
 }
 
