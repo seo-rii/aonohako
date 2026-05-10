@@ -174,8 +174,9 @@ step.
 ```
 
 The current API intentionally supports exactly two steps. Each step runs in a
-fresh sandbox workspace; only the first step handoff is copied into the second
-step stdin. `handoff.from` defaults to `stdout`; `file`/`file_output` handoff
+fresh sandbox workspace; the first step handoff is stored in a bounded
+temporary handoff file and streamed into the second step stdin. `handoff.from`
+defaults to `stdout`; `file`/`file_output` handoff
 requires `handoff.path` and captures that file through the same symlink-safe
 output path as `file_outputs`. `handoff.max_bytes` defaults to the step output
 capture limit and is capped at 8 MiB.
