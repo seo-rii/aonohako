@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"aonohako/internal/model"
+	"aonohako/internal/util"
 )
 
 type passThroughCompiler struct {
@@ -65,6 +66,42 @@ func (c checkedSourcesCompiler) Compile(ctx context.Context, job CompileJob) mod
 		}
 		return false
 	}, "")
+	if err != nil {
+		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
+	}
+	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
+}
+
+type scriptCheckCompiler struct {
+	bin    string
+	prefix []string
+}
+
+func (c scriptCheckCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	fullOut := newCompileOutputBuffer()
+	fullErr := newCompileOutputBuffer()
+	for _, src := range job.Request.Sources {
+		clean, err := util.ValidateRelativePath(src.Name)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		args := append(append([]string{}, c.prefix...), filepath.Join(job.WorkDir, clean))
+		result := runner.Run(ctx, job.WorkDir, c.bin, args, nil)
+		fullOut.Append(result.Stdout)
+		fullErr.Append(result.Stderr)
+		if result.Status != model.CompileStatusOK {
+			return compileResponseWithCapturedOutput(result.Status, nil, result.Reason, fullOut, fullErr)
+		}
+	}
+
+	artifacts, err := collectArtifacts(job.WorkDir, func(name string) bool { return true }, "")
 	if err != nil {
 		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 	}

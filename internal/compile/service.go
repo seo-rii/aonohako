@@ -817,8 +817,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
 		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
-	case "racket":
-		return compileScriptCheck(ctx, workDir, req.Sources, "raco", []string{"make"})
 	case "vhdl":
 		return compileVHDL(ctx, workDir, req.Sources, req.EntryPoint)
 	case "verilog":
@@ -926,16 +924,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 			return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
 		}
 		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
-	case "javascript":
-		return compileScriptCheck(ctx, workDir, req.Sources, "node", []string{"--check"})
-	case "ruby":
-		return compileScriptCheck(ctx, workDir, req.Sources, "ruby", []string{"-c"})
-	case "php":
-		return compileScriptCheck(ctx, workDir, req.Sources, "php", []string{"-l"})
-	case "lua":
-		return compileScriptCheck(ctx, workDir, req.Sources, "luac5.4", []string{"-p"})
-	case "perl":
-		return compileScriptCheck(ctx, workDir, req.Sources, "perl", []string{"-c"})
 	case "typescript":
 		return compileTypeScript(ctx, workDir, req.Sources)
 	case "kotlin":
@@ -1479,27 +1467,11 @@ func compilePythonLike(ctx context.Context, workDir string, sources []model.Sour
 }
 
 func compileScriptCheck(ctx context.Context, workDir string, sources []model.Source, bin string, prefix []string) model.CompileResponse {
-	fullOut := newCompileOutputBuffer()
-	fullErr := newCompileOutputBuffer()
-	for _, src := range sources {
-		clean, err := util.ValidateRelativePath(src.Name)
-		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
-		}
-		abs := filepath.Join(workDir, clean)
-		args := append(append([]string{}, prefix...), abs)
-		stdout, stderr, status, reason := runCommand(ctx, workDir, bin, args, nil)
-		fullOut.Append(stdout)
-		fullErr.Append(stderr)
-		if status != model.CompileStatusOK {
-			return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
-		}
-	}
-	artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
-	if err != nil {
-		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
-	}
-	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
+	return scriptCheckCompiler{bin: bin, prefix: prefix}.Compile(ctx, CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: sources},
+		Runner:  sandboxCommandRunner{},
+	})
 }
 
 func compileTypeScript(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
