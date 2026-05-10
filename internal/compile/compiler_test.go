@@ -35,11 +35,41 @@ func (r *recordingCommandRunner) Run(_ context.Context, workDir, bin string, arg
 func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	for _, kind := range []string{
 		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3",
+		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestScriptCheckCompilerUsesRunnerForEverySource(t *testing.T) {
+	workDir := t.TempDir()
+	for _, name := range []string{"A.rb", "B.rb"} {
+		if err := os.WriteFile(filepath.Join(workDir, name), []byte("puts 1"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
+
+	resp := scriptCheckCompiler{bin: "ruby", prefix: []string{"-c"}}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "A.rb"}, {Name: "B.rb"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 2 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	if want := []string{"-c", filepath.Join(workDir, "A.rb")}; !reflect.DeepEqual(runner.commands[0].args, want) {
+		t.Fatalf("first runner args = %#v, want %#v", runner.commands[0].args, want)
+	}
+	if want := []string{"-c", filepath.Join(workDir, "B.rb")}; !reflect.DeepEqual(runner.commands[1].args, want) {
+		t.Fatalf("second runner args = %#v, want %#v", runner.commands[1].args, want)
 	}
 }
 
