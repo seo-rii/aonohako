@@ -608,6 +608,9 @@ Recommended Cloud Run deployment baseline:
 - bounded in-memory volume mounted at `AONOHAKO_WORK_ROOT`, optionally asserted
   with `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` and
   `AONOHAKO_WORK_ROOT_MAX_BYTES` / `AONOHAKO_WORK_ROOT_MAX_FILES`
+- container memory sized above the work-root byte budget plus runtime headroom,
+  because Cloud Run/no-cgroup runners rely on the outer container limit as the
+  final OOM boundary
 - separate runner service account with minimal IAM permissions
 - Direct VPC egress with `all-traffic`
 - firewall-denied outbound traffic except for explicitly allowed destinations

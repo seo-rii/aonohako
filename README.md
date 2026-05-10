@@ -372,6 +372,9 @@ For Cloud Run deployments, use this baseline:
   startup should fail unless that path is actually backed by `tmpfs`, and set
   `AONOHAKO_WORK_ROOT_MAX_BYTES` and `AONOHAKO_WORK_ROOT_MAX_FILES` to the
   intended volume byte and inode budgets
+- container memory sized above the work-root byte budget plus runtime headroom,
+  because Cloud Run/no-cgroup runners rely on the outer container limit as the
+  final OOM boundary
 - Direct VPC egress with `all-traffic` routing and firewall-denied outbound
   traffic except for explicitly allowed targets
 - a dedicated service account with no unnecessary IAM permissions and no baked
