@@ -2,7 +2,9 @@ package compile
 
 import (
 	"context"
+	"fmt"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
 )
 
@@ -113,6 +115,81 @@ var compileRegistry = map[string]Compiler{
 	"sed":        checkedSourcesCompiler{exts: []string{".sed"}, noSourceReason: "no sed sources", bin: "sed", prefix: []string{"-n", "-f"}},
 	"bc":         passThroughCompiler{exts: []string{".bc"}, noSourceReason: "no bc sources"},
 	"forth":      passThroughCompiler{exts: []string{".fs", ".fth", ".4th"}, noSourceReason: "no forth sources"},
+	"typescript": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileTypeScript(ctx, job.WorkDir, job.Request.Sources)
+	}),
+	"kotlin": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileKotlinNative(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Tuning)
+	}),
+	"cobol": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileCobol(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"cython": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileCython(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"haskell": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileHaskell(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"haxe": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileHaxe(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"swift": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileSwift(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"sqlite": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
+		return compileSQLite(job.WorkDir, job.Request.Sources)
+	}),
+	"julia": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
+		return compileJulia(job.WorkDir, job.Request.Sources)
+	}),
+	"scala": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileScala(ctx, job.WorkDir, job.Request.Sources)
+	}),
+	"fsharp": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileFSharp(ctx, job.WorkDir, job.Request.Sources)
+	}),
+	"freebasic": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileFreeBasic(ctx, job.WorkDir, job.Target, job.Request.Sources, nil, "no freebasic sources")
+	}),
+	"classic-basic": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileFreeBasic(ctx, job.WorkDir, job.Target, job.Request.Sources, []string{"-lang", "qb"}, "no classic-basic sources")
+	}),
+	"mojo": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileMojo(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"deno": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileCheckedSources(ctx, job.WorkDir, job.Request.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(compileSandboxMemoryMB, job.Tuning))}, nil)
+	}),
+	"kotlin-jvm": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileKotlinJVM(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Profile.JavaRelease, job.Tuning)
+	}),
+	"coffeescript": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileCoffeeScript(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"whitespace": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
+		return compileWhitespace(job.WorkDir, job.Request.Sources)
+	}),
+	"brainfuck": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
+		return compileBrainfuck(job.WorkDir, job.Request.Sources)
+	}),
+	"wasm": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileWasm(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"ocaml": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileOCaml(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	}),
+	"elixir": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileElixir(ctx, job.WorkDir, job.Request.Sources, job.Tuning)
+	}),
+	"csharp": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
+		return compileCSharp(ctx, job.WorkDir, job.Request.Sources)
+	}),
+	"dart": singleSourceExecutableCompiler{exts: []string{".dart"}, preferredBases: []string{"Main.dart"}, noSourceReason: "no dart sources", bin: "dart", env: []string{"DART_SUPPRESS_ANALYTICS=true"}, args: func(job CompileJob, sourcePath string) []string {
+		return []string{"compile", "exe", "-D", "ONLINE_JUDGE=true", sourcePath, "-o", outputPath(job)}
+	}},
+	"none": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
+		return passThroughArtifacts(job.WorkDir, job.Request.Sources)
+	}),
 }
 
 func lookupCompiler(kind string) (Compiler, bool) {
