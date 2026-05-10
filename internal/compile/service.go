@@ -663,6 +663,17 @@ func validateTargetName(raw string) (string, error) {
 }
 
 func executeBuild(ctx context.Context, workDir string, profile profiles.Profile, target string, req *model.CompileRequest, tuning config.RuntimeTuningConfig) model.CompileResponse {
+	if compiler, ok := lookupCompiler(profile.CompileKind); ok {
+		return compiler.Compile(ctx, CompileJob{
+			WorkDir: workDir,
+			Target:  target,
+			Profile: profile,
+			Request: req,
+			Tuning:  tuning,
+			Runner:  sandboxCommandRunner{},
+		})
+	}
+
 	switch profile.CompileKind {
 	case "c":
 		return compileNative(ctx, workDir, target, gatherByExt(req.Sources, ".c", ".h"), "gcc", []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + profile.CompileStd})
@@ -808,16 +819,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 	case "racket":
 		return compileScriptCheck(ctx, workDir, req.Sources, "raco", []string{"make"})
-	case "scheme":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".scm"}, "no scheme sources")
-	case "awk":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".awk"}, "no awk sources", "gawk", []string{"--sandbox", "--lint", "-f"}, nil)
-	case "tcl":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".tcl"}, "no tcl sources")
-	case "gdl":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".pro"}, "no gdl sources")
-	case "octave":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".m"}, "no octave sources")
 	case "vhdl":
 		return compileVHDL(ctx, workDir, req.Sources, req.EntryPoint)
 	case "verilog":
@@ -838,26 +839,8 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileGleam(ctx, workDir, req.Sources)
 	case "cuda-ocelot":
 		return compileCUDAOcelot(ctx, workDir, target, req.Sources)
-	case "carbon":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".carbon"}, "no carbon sources", "carbon", []string{"compile", "--phase=check"}, nil)
-	case "graphql":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".graphql"}, "no graphql sources")
 	case "rocq":
 		return compileRocq(ctx, workDir, req.Sources)
-	case "lean4":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".lean"}, "no lean sources", "lean", nil, nil)
-	case "agda":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".agda"}, "no agda sources", "agda", nil, nil)
-	case "dafny":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".dfy"}, "no dafny sources", "dafny", []string{"verify", "--cores", "1"}, []string{
-			"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
-			"DOTNET_PROCESSOR_COUNT=1",
-			"COMPlus_ThreadPool_ForceMinWorkerThreads=1",
-		})
-	case "tla":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".tla", ".cfg"}, "no tla sources")
-	case "why3":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".mlw"}, "no why3 sources", "aonohako-why3-prove", nil, nil)
 	case "isabelle":
 		return compileIsabelle(ctx, workDir, req.Sources)
 	case "python":
@@ -1062,8 +1045,6 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileSQLite(workDir, req.Sources)
 	case "julia":
 		return compileJulia(workDir, req.Sources)
-	case "raku":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".raku", ".rakumod", ".p6", ".pl6"}, "no raku sources", "raku", []string{"-c"}, nil)
 	case "erlang":
 		var erlangFiles []string
 		for _, src := range req.Sources {
@@ -1094,40 +1075,18 @@ func executeBuild(ctx context.Context, workDir string, profile profiles.Profile,
 		return compileScala(ctx, workDir, req.Sources)
 	case "fsharp":
 		return compileFSharp(ctx, workDir, req.Sources)
-	case "vb6":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".bas", ".frm", ".cls"}, "no vb6 sources")
 	case "freebasic":
 		return compileFreeBasic(ctx, workDir, target, req.Sources, nil, "no freebasic sources")
 	case "classic-basic":
 		return compileFreeBasic(ctx, workDir, target, req.Sources, []string{"-lang", "qb"}, "no classic-basic sources")
-	case "smalltalk":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".st"}, "no smalltalk sources")
-	case "golfscript":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".gs"}, "no golfscript sources")
 	case "mojo":
 		return compileMojo(ctx, workDir, target, req.Sources)
 	case "deno":
 		return compileCheckedSources(ctx, workDir, req.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(compileSandboxMemoryMB, tuning))}, nil)
 	case "kotlin-jvm":
 		return compileKotlinJVM(ctx, workDir, target, req.Sources, profile.JavaRelease, tuning)
-	case "duckdb":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".sql"}, "no duckdb sources")
-	case "bqn":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".bqn"}, "no bqn sources")
-	case "apl":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".apl"}, "no apl sources")
-	case "uiua":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".ua"}, "no uiua sources")
-	case "janet":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".janet"}, "no janet sources")
 	case "coffeescript":
 		return compileCoffeeScript(ctx, workDir, target, req.Sources)
-	case "sed":
-		return compileCheckedSources(ctx, workDir, req.Sources, []string{".sed"}, "no sed sources", "sed", []string{"-n", "-f"}, nil)
-	case "bc":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".bc"}, "no bc sources")
-	case "forth":
-		return compilePassThroughIfExt(workDir, req.Sources, []string{".fs", ".fth", ".4th"}, "no forth sources")
 	case "whitespace":
 		return compileWhitespace(workDir, req.Sources)
 	case "brainfuck":
@@ -1239,41 +1198,18 @@ func selectPrimarySource(workDir string, sources []model.Source, exts []string, 
 }
 
 func compilePassThroughIfExt(workDir string, sources []model.Source, exts []string, noSourceReason string) model.CompileResponse {
-	if len(sourcePathsByExt(workDir, sources, exts...)) == 0 {
-		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: noSourceReason}
-	}
-	return passThroughArtifacts(workDir, sources)
+	return passThroughCompiler{exts: exts, noSourceReason: noSourceReason}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: sources},
+	})
 }
 
 func compileCheckedSources(ctx context.Context, workDir string, sources []model.Source, exts []string, noSourceReason, bin string, prefix, env []string) model.CompileResponse {
-	paths := sourcePathsByExt(workDir, sources, exts...)
-	if len(paths) == 0 {
-		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: noSourceReason}
-	}
-	fullOut := newCompileOutputBuffer()
-	fullErr := newCompileOutputBuffer()
-	for _, path := range paths {
-		args := append(append([]string{}, prefix...), path)
-		stdout, stderr, status, reason := runCommand(ctx, workDir, bin, args, env)
-		fullOut.Append(stdout)
-		fullErr.Append(stderr)
-		if status != model.CompileStatusOK {
-			return compileResponseWithCapturedOutput(status, nil, reason, fullOut, fullErr)
-		}
-	}
-	artifacts, err := collectArtifacts(workDir, func(name string) bool {
-		ext := strings.ToLower(filepath.Ext(name))
-		for _, allowed := range exts {
-			if ext == strings.ToLower(allowed) {
-				return true
-			}
-		}
-		return false
-	}, "")
-	if err != nil {
-		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
-	}
-	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
+	return checkedSourcesCompiler{exts: exts, noSourceReason: noSourceReason, bin: bin, prefix: prefix, env: env}.Compile(ctx, CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: sources},
+		Runner:  sandboxCommandRunner{},
+	})
 }
 
 func compileNative(ctx context.Context, workDir, target string, srcRel []string, compiler string, flags []string) model.CompileResponse {
