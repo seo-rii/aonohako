@@ -306,8 +306,10 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			EnableNetwork:  program.EnableNetwork,
 			EntryPoint:     program.EntryPoint,
 		}
+		handoffFromFile := false
 		if step.Handoff != nil {
 			if strings.EqualFold(step.Handoff.From, "file") || strings.EqualFold(step.Handoff.From, "file_output") {
+				handoffFromFile = true
 				stepReq.FileOutputs = []model.OutputFile{{Path: step.Handoff.Path}}
 			}
 			if step.Handoff.MaxBytes > 0 && stepReq.Limits.OutputBytes < int(step.Handoff.MaxBytes) {
@@ -338,12 +340,23 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			if maxBytes <= 0 {
 				maxBytes = int64(outputLimitBytes(stepReq))
 			}
-			if int64(len(run.judgeOut)) > maxBytes || run.response.StdoutTruncated {
-				stepResults[len(stepResults)-1].HandoffBytes = int64(len(run.judgeOut))
+			stepResults[len(stepResults)-1].HandoffBytes = int64(len(run.judgeOut))
+			handoffExceeded := int64(len(run.judgeOut)) > maxBytes
+			if !handoffFromFile && run.response.StdoutTruncated {
+				handoffExceeded = true
+			}
+			if handoffExceeded {
 				return aggregateStepResponse(model.RunResponse{
 					Status:        model.RunStatusRE,
 					Reason:        fmt.Sprintf("step %s handoff exceeded max_bytes", step.ID),
 					VerdictSource: "step:" + step.ID + ":handoff",
+				}, stepResults)
+			}
+			if handoffFromFile && run.response.StdoutTruncated {
+				return aggregateStepResponse(model.RunResponse{
+					Status:        model.RunStatusRE,
+					Reason:        fmt.Sprintf("step %s stdout exceeded output limit", step.ID),
+					VerdictSource: "step:" + step.ID + ":stdout",
 				}, stepResults)
 			}
 			handoffFile, err := os.CreateTemp(handoffDir, "handoff-*")
@@ -373,7 +386,6 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 				}, stepResults)
 			}
 			handoffs[step.Handoff.ID] = handoffFile.Name()
-			stepResults[len(stepResults)-1].HandoffBytes = int64(len(run.judgeOut))
 			continue
 		}
 
