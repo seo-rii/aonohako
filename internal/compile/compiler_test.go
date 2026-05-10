@@ -41,6 +41,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
 		"pascal", "nim", "zig", "ada", "d",
 		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3",
+		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
 	} {
@@ -90,6 +91,39 @@ func TestSingleSourceExecutableCompilerUsesPreferredSource(t *testing.T) {
 	wantSource := filepath.Join(workDir, "Main.nim")
 	if got := runner.commands[0].args[len(runner.commands[0].args)-1]; got != wantSource {
 		t.Fatalf("selected source = %q, want %q", got, wantSource)
+	}
+}
+
+func TestPythonLikeCompilerCollectsPythonArtifacts(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.py"), []byte("print(1)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main.pyc"), []byte("bytecode"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := pythonLikeCompiler{interpreter: "python3"}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	if want := []string{"-I", "-S", "-m", "compileall", "-b", "."}; !reflect.DeepEqual(runner.commands[0].args, want) {
+		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, want)
+	}
+	if len(resp.Artifacts) != 2 {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
 	}
 }
 
