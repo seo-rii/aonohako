@@ -741,21 +741,6 @@ func selectPrimarySource(workDir string, sources []model.Source, exts []string, 
 	return filepath.Join(workDir, selected)
 }
 
-func compilePassThroughIfExt(workDir string, sources []model.Source, exts []string, noSourceReason string) model.CompileResponse {
-	return passThroughCompiler{exts: exts, noSourceReason: noSourceReason}.Compile(context.Background(), CompileJob{
-		WorkDir: workDir,
-		Request: &model.CompileRequest{Sources: sources},
-	})
-}
-
-func compileCheckedSources(ctx context.Context, workDir string, sources []model.Source, exts []string, noSourceReason, bin string, prefix, env []string) model.CompileResponse {
-	return checkedSourcesCompiler{exts: exts, noSourceReason: noSourceReason, bin: bin, prefix: prefix, env: env}.Compile(ctx, CompileJob{
-		WorkDir: workDir,
-		Request: &model.CompileRequest{Sources: sources},
-		Runner:  sandboxCommandRunner{},
-	})
-}
-
 func passThroughArtifacts(workDir string, sources []model.Source) model.CompileResponse {
 	artifacts, err := collectArtifacts(workDir, func(name string) bool { return true }, "")
 	if err != nil {
