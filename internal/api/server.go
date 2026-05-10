@@ -43,6 +43,7 @@ const (
 	maxCompileDecodedSourceBytes      = 16 << 20
 	maxCompileDecodedSourceTotalBytes = 48 << 20
 	maxJSONBodyBytes                  = 64 << 20
+	defaultPlatformBodyHashSlots      = 8
 	platformPrincipalHeader           = "X-Aonohako-Principal"
 	platformPrincipalSignatureHeader  = "X-Aonohako-Principal-Signature"
 	platformPrincipalTimestampHeader  = "X-Aonohako-Principal-Timestamp"
@@ -70,6 +71,8 @@ type Server struct {
 	principalStreams map[string]int
 	principalRates   map[string]principalRateWindow
 	rateLastCleanup  time.Time
+
+	platformBodyHashSlots chan struct{}
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -94,7 +97,21 @@ func NewWithServices(cfg config.Config, compileService interface {
 		queue:            queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
 		principalStreams: map[string]int{},
 		principalRates:   map[string]principalRateWindow{},
+		platformBodyHashSlots: make(
+			chan struct{},
+			platformBodyHashConcurrency(cfg),
+		),
 	}
+}
+
+func platformBodyHashConcurrency(cfg config.Config) int {
+	if cfg.MaxActiveStreams > 0 {
+		return cfg.MaxActiveStreams
+	}
+	if cfg.MaxActiveRuns > 0 {
+		return max(1, cfg.MaxActiveRuns)
+	}
+	return defaultPlatformBodyHashSlots
 }
 
 func (s *Server) Handler() http.Handler {
@@ -464,7 +481,13 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}
+				releaseHashSlot, ok := s.acquirePlatformBodyHashSlot()
+				if !ok {
+					writeJSONError(w, http.StatusTooManyRequests, "platform_body_hash_limit_exceeded")
+					return
+				}
 				bodyHash, err := hashAndRestoreRequestBody(w, r)
+				releaseHashSlot()
 				if err != nil {
 					status := http.StatusBadRequest
 					var maxErr *http.MaxBytesError
@@ -539,6 +562,18 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		}
 	})
+}
+
+func (s *Server) acquirePlatformBodyHashSlot() (func(), bool) {
+	if s.platformBodyHashSlots == nil {
+		return func() {}, true
+	}
+	select {
+	case s.platformBodyHashSlots <- struct{}{}:
+		return func() { <-s.platformBodyHashSlots }, true
+	default:
+		return nil, false
+	}
 }
 
 func hashAndRestoreRequestBody(w http.ResponseWriter, r *http.Request) (string, error) {
