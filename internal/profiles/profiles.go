@@ -162,6 +162,14 @@ func Resolve(language string) (Profile, bool) {
 	return p, ok
 }
 
+func All() map[string]Profile {
+	out := make(map[string]Profile, len(profiles))
+	for key, profile := range profiles {
+		out[key] = profile
+	}
+	return out
+}
+
 func NormalizeRunLang(language string) string {
 	key := strings.ToLower(strings.TrimSpace(language))
 	switch key {

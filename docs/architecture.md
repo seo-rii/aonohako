@@ -43,7 +43,7 @@ High-level responsibilities:
 | --- | --- |
 | `cmd/server` | HTTP entry point |
 | `internal/api` | request decoding, SSE wiring, queue gating |
-| `internal/compile` | language-specific build drivers and artifact collection |
+| `internal/compile` | compile request service, compiler registry, language-specific build drivers, artifact collection |
 | `internal/execute` | sandboxed execution, output comparison, SPJ handling |
 | `internal/profiles` | compile/run language registry |
 | `internal/security` | workspace-scoped env and thread limit env |
@@ -62,6 +62,14 @@ artifacts, not for enforcing the main untrusted runtime boundary.
 Compiler frontends still parse attacker-controlled source code, so production
 deployments should treat `/compile` as an untrusted execution surface rather
 than a safe control-plane helper.
+
+The compile package is split into a small service/sandbox core and a compiler
+registry. `internal/compile/registry.go` maps each profile `CompileKind` to a
+`Compiler` implementation, while language-family files such as
+`native_compilers.go`, `jvm_compilers.go`, `dotnet_compilers.go`,
+`script_compilers.go`, `toolchain_compilers.go`, `beam_compilers.go`, and
+`proof_compilers.go` hold the concrete build drivers. Profile coverage tests
+assert that every configured language profile has a matching registry entry.
 
 When `AONOHAKO_EXECUTION_TRANSPORT=remote`, both `/compile` and `/execute` are
 forwarded to the downstream runner, so non-root control-plane instances do not
