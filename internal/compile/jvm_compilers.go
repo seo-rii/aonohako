@@ -71,6 +71,12 @@ func (clojureCompiler) Compile(ctx context.Context, job CompileJob) model.Compil
 	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
 }
 
+type javaCompiler struct{}
+
+func (javaCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileJava(ctx, job.WorkDir, job.Request.Sources, job.Profile.JavaRelease)
+}
+
 func compileJava(ctx context.Context, workDir string, sources []model.Source, release string) model.CompileResponse {
 	var javaPaths []string
 	for _, src := range sources {
@@ -95,6 +101,12 @@ func compileJava(ctx context.Context, workDir string, sources []model.Source, re
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "javac produced no artifacts", Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type scalaCompiler struct{}
+
+func (scalaCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileScala(ctx, job.WorkDir, job.Request.Sources)
 }
 
 func compileScala(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
@@ -123,6 +135,12 @@ func compileScala(ctx context.Context, workDir string, sources []model.Source) m
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "scalac produced no artifacts", Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type kotlinJVMCompiler struct{}
+
+func (kotlinJVMCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileKotlinJVM(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Profile.JavaRelease, job.Tuning)
 }
 
 func compileKotlinJVM(ctx context.Context, workDir, target string, sources []model.Source, javaRelease string, tuning config.RuntimeTuningConfig) model.CompileResponse {

@@ -12,12 +12,6 @@ type Compiler interface {
 	Compile(context.Context, CompileJob) model.CompileResponse
 }
 
-type compilerFunc func(context.Context, CompileJob) model.CompileResponse
-
-func (f compilerFunc) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
-	return f(ctx, job)
-}
-
 type CompileJob struct {
 	WorkDir string
 	Target  string

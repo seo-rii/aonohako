@@ -9,6 +9,12 @@ import (
 	"aonohako/internal/util"
 )
 
+type noneCompiler struct{}
+
+func (noneCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {
+	return passThroughArtifacts(job.WorkDir, job.Request.Sources)
+}
+
 type passThroughCompiler struct {
 	exts           []string
 	noSourceReason string

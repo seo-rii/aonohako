@@ -11,6 +11,12 @@ import (
 	"aonohako/internal/model"
 )
 
+type kotlinNativeCompiler struct{}
+
+func (kotlinNativeCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileKotlinNative(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Tuning)
+}
+
 func compileKotlinNative(ctx context.Context, workDir, target string, sources []model.Source, tuning config.RuntimeTuningConfig) model.CompileResponse {
 	var kt []string
 	for _, src := range sources {
@@ -55,6 +61,12 @@ func compileKotlinNative(ctx context.Context, workDir, target string, sources []
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type haskellCompiler struct{}
+
+func (haskellCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileHaskell(ctx, job.WorkDir, job.Target, job.Request.Sources)
+}
+
 func compileHaskell(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	var hs []string
 	for _, src := range sources {
@@ -76,6 +88,12 @@ func compileHaskell(ctx context.Context, workDir, target string, sources []model
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type swiftCompiler struct{}
+
+func (swiftCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileSwift(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileSwift(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
@@ -102,6 +120,12 @@ func compileSwift(ctx context.Context, workDir, target string, sources []model.S
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type cudaOcelotCompiler struct{}
+
+func (cudaOcelotCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileCUDAOcelot(ctx, job.WorkDir, job.Target, job.Request.Sources)
+}
+
 func compileCUDAOcelot(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	rootSource := selectPrimarySource(workDir, sources, []string{".cu"}, "Main.cu")
 	if rootSource == "" {
@@ -118,6 +142,12 @@ func compileCUDAOcelot(ctx context.Context, workDir, target string, sources []mo
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type cobolCompiler struct{}
+
+func (cobolCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileCobol(ctx, job.WorkDir, job.Target, job.Request.Sources)
+}
+
 func compileCobol(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	rootSource := selectPrimarySource(workDir, sources, []string{".cob", ".cbl", ".cobol"}, "Main.cob")
 	if rootSource == "" {
@@ -132,6 +162,12 @@ func compileCobol(ctx context.Context, workDir, target string, sources []model.S
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type cythonCompiler struct{}
+
+func (cythonCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileCython(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileCython(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
@@ -153,6 +189,12 @@ func compileCython(ctx context.Context, workDir, target string, sources []model.
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type haxeCompiler struct{}
+
+func (haxeCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileHaxe(ctx, job.WorkDir, job.Target, job.Request.Sources)
+}
+
 func compileHaxe(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	if len(sourcePathsByExt(workDir, sources, ".hx")) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no haxe sources"}
@@ -171,6 +213,15 @@ func compileHaxe(ctx context.Context, workDir, target string, sources []model.So
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type freeBasicCompiler struct {
+	dialectArgs    []string
+	noSourceReason string
+}
+
+func (c freeBasicCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileFreeBasic(ctx, job.WorkDir, job.Target, job.Request.Sources, c.dialectArgs, c.noSourceReason)
+}
+
 func compileFreeBasic(ctx context.Context, workDir, target string, sources []model.Source, dialectArgs []string, noSourceReason string) model.CompileResponse {
 	rootSource := selectPrimarySource(workDir, sources, []string{".bas"}, "Main.bas")
 	if rootSource == "" {
@@ -187,6 +238,12 @@ func compileFreeBasic(ctx context.Context, workDir, target string, sources []mod
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type mojoCompiler struct{}
+
+func (mojoCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileMojo(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileMojo(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {

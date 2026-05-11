@@ -2,10 +2,12 @@ package compile
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/util"
 )
@@ -24,6 +26,12 @@ func compileScriptCheck(ctx context.Context, workDir string, sources []model.Sou
 		Request: &model.CompileRequest{Sources: sources},
 		Runner:  sandboxCommandRunner{},
 	})
+}
+
+type typeScriptCompiler struct{}
+
+func (typeScriptCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileTypeScript(ctx, job.WorkDir, job.Request.Sources)
 }
 
 func compileTypeScript(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
@@ -51,6 +59,12 @@ func compileTypeScript(ctx context.Context, workDir string, sources []model.Sour
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type coffeeScriptCompiler struct{}
+
+func (coffeeScriptCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileCoffeeScript(ctx, job.WorkDir, job.Target, job.Request.Sources)
+}
+
 func compileCoffeeScript(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	rootSource := selectPrimarySource(workDir, sources, []string{".coffee"}, "Main.coffee")
 	if rootSource == "" {
@@ -76,6 +90,12 @@ func compileCoffeeScript(ctx context.Context, workDir, target string, sources []
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type sqliteCompiler struct{}
+
+func (sqliteCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {
+	return compileSQLite(job.WorkDir, job.Request.Sources)
+}
+
 func compileSQLite(workDir string, sources []model.Source) model.CompileResponse {
 	var hasSQL bool
 	for _, src := range sources {
@@ -94,6 +114,12 @@ func compileSQLite(workDir string, sources []model.Source) model.CompileResponse
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
 }
 
+type juliaCompiler struct{}
+
+func (juliaCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {
+	return compileJulia(job.WorkDir, job.Request.Sources)
+}
+
 func compileJulia(workDir string, sources []model.Source) model.CompileResponse {
 	var hasJulia bool
 	for _, src := range sources {
@@ -110,6 +136,12 @@ func compileJulia(workDir string, sources []model.Source) model.CompileResponse 
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
+}
+
+type whitespaceCompiler struct{}
+
+func (whitespaceCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {
+	return compileWhitespace(job.WorkDir, job.Request.Sources)
 }
 
 func compileWhitespace(workDir string, sources []model.Source) model.CompileResponse {
@@ -133,6 +165,12 @@ func compileWhitespace(workDir string, sources []model.Source) model.CompileResp
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no whitespace sources"}
 	}
 	return passThroughArtifacts(workDir, sources)
+}
+
+type brainfuckCompiler struct{}
+
+func (brainfuckCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {
+	return compileBrainfuck(job.WorkDir, job.Request.Sources)
 }
 
 func compileBrainfuck(workDir string, sources []model.Source) model.CompileResponse {
@@ -166,6 +204,12 @@ func compileBrainfuck(workDir string, sources []model.Source) model.CompileRespo
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no brainfuck sources"}
 	}
 	return passThroughArtifacts(workDir, sources)
+}
+
+type wasmCompiler struct{}
+
+func (wasmCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileWasm(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileWasm(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
@@ -210,4 +254,19 @@ func compileWasm(ctx context.Context, workDir, target string, sources []model.So
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts}
+}
+
+type denoCompiler struct{}
+
+func (denoCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileCheckedSources(
+		ctx,
+		job.WorkDir,
+		job.Request.Sources,
+		[]string{".ts", ".js"},
+		"no deno sources",
+		"deno",
+		[]string{"check", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(compileSandboxMemoryMB, job.Tuning))},
+		nil,
+	)
 }

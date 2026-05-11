@@ -1,13 +1,5 @@
 package compile
 
-import (
-	"context"
-	"fmt"
-
-	"aonohako/internal/config"
-	"aonohako/internal/model"
-)
-
 var compileRegistry = map[string]Compiler{
 	"c": nativeCompiler{exts: []string{".c", ".h"}, bin: "gcc", flags: func(job CompileJob) []string {
 		return []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + job.Profile.CompileStd}
@@ -25,74 +17,44 @@ var compileRegistry = map[string]Compiler{
 	"zig": singleSourceExecutableCompiler{exts: []string{".zig"}, preferredBases: []string{"Main.zig"}, noSourceReason: "no zig sources", bin: "zig", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"build-exe", sourcePath, "-O", "ReleaseSafe", "-femit-bin=" + outputPath(job)}
 	}},
-	"rust": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileRust(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Profile.RustEdition)
-	}),
-	"go": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileGo(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"java": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileJava(ctx, job.WorkDir, job.Request.Sources, job.Profile.JavaRelease)
-	}),
-	"groovy":  groovyCompiler{},
-	"clojure": clojureCompiler{},
-	"racket":  scriptCheckCompiler{bin: "raco", prefix: []string{"make"}},
-	"scheme":  passThroughCompiler{exts: []string{".scm"}, noSourceReason: "no scheme sources"},
-	"awk":     checkedSourcesCompiler{exts: []string{".awk"}, noSourceReason: "no awk sources", bin: "gawk", prefix: []string{"--sandbox", "--lint", "-f"}},
-	"tcl":     passThroughCompiler{exts: []string{".tcl"}, noSourceReason: "no tcl sources"},
-	"gdl":     passThroughCompiler{exts: []string{".pro"}, noSourceReason: "no gdl sources"},
-	"octave":  passThroughCompiler{exts: []string{".m"}, noSourceReason: "no octave sources"},
-	"carbon":  checkedSourcesCompiler{exts: []string{".carbon"}, noSourceReason: "no carbon sources", bin: "carbon", prefix: []string{"compile", "--phase=check"}},
-	"graphql": passThroughCompiler{exts: []string{".graphql"}, noSourceReason: "no graphql sources"},
-	"lean4":   checkedSourcesCompiler{exts: []string{".lean"}, noSourceReason: "no lean sources", bin: "lean"},
-	"agda":    checkedSourcesCompiler{exts: []string{".agda"}, noSourceReason: "no agda sources", bin: "agda"},
-	"dafny":   checkedSourcesCompiler{exts: []string{".dfy"}, noSourceReason: "no dafny sources", bin: "dafny", prefix: []string{"verify", "--cores", "1"}, env: []string{"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1", "DOTNET_PROCESSOR_COUNT=1", "COMPlus_ThreadPool_ForceMinWorkerThreads=1"}},
-	"tla":     passThroughCompiler{exts: []string{".tla", ".cfg"}, noSourceReason: "no tla sources"},
-	"why3":    checkedSourcesCompiler{exts: []string{".mlw"}, noSourceReason: "no why3 sources", bin: "aonohako-why3-prove"},
-	"vhdl": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileVHDL(ctx, job.WorkDir, job.Request.Sources, job.Request.EntryPoint)
-	}),
-	"verilog": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileVerilog(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"crystal": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileCrystal(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"vlang": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileVLang(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"odin": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileOdin(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"c3": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileC3(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"hare": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileHare(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"vbnet": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileVBNet(ctx, job.WorkDir, job.Request.Sources)
-	}),
-	"gleam": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileGleam(ctx, job.WorkDir, job.Request.Sources)
-	}),
-	"cuda-ocelot": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileCUDAOcelot(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"rocq": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileRocq(ctx, job.WorkDir, job.Request.Sources)
-	}),
-	"isabelle": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileIsabelle(ctx, job.WorkDir, job.Request.Sources)
-	}),
-	"python":     pythonLikeCompiler{interpreter: "python3"},
-	"pypy":       pythonLikeCompiler{interpreter: "pypy3"},
-	"javascript": scriptCheckCompiler{bin: "node", prefix: []string{"--check"}},
-	"ruby":       scriptCheckCompiler{bin: "ruby", prefix: []string{"-c"}},
-	"php":        scriptCheckCompiler{bin: "php", prefix: []string{"-l"}},
-	"lua":        scriptCheckCompiler{bin: "luac5.4", prefix: []string{"-p"}},
-	"perl":       scriptCheckCompiler{bin: "perl", prefix: []string{"-c"}},
-	"fortran":    nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(CompileJob) []string { return []string{"-O2", "-pipe"} }},
+	"rust":        rustCompiler{},
+	"go":          goCompiler{},
+	"java":        javaCompiler{},
+	"groovy":      groovyCompiler{},
+	"clojure":     clojureCompiler{},
+	"racket":      scriptCheckCompiler{bin: "raco", prefix: []string{"make"}},
+	"scheme":      passThroughCompiler{exts: []string{".scm"}, noSourceReason: "no scheme sources"},
+	"awk":         checkedSourcesCompiler{exts: []string{".awk"}, noSourceReason: "no awk sources", bin: "gawk", prefix: []string{"--sandbox", "--lint", "-f"}},
+	"tcl":         passThroughCompiler{exts: []string{".tcl"}, noSourceReason: "no tcl sources"},
+	"gdl":         passThroughCompiler{exts: []string{".pro"}, noSourceReason: "no gdl sources"},
+	"octave":      passThroughCompiler{exts: []string{".m"}, noSourceReason: "no octave sources"},
+	"carbon":      checkedSourcesCompiler{exts: []string{".carbon"}, noSourceReason: "no carbon sources", bin: "carbon", prefix: []string{"compile", "--phase=check"}},
+	"graphql":     passThroughCompiler{exts: []string{".graphql"}, noSourceReason: "no graphql sources"},
+	"lean4":       checkedSourcesCompiler{exts: []string{".lean"}, noSourceReason: "no lean sources", bin: "lean"},
+	"agda":        checkedSourcesCompiler{exts: []string{".agda"}, noSourceReason: "no agda sources", bin: "agda"},
+	"dafny":       checkedSourcesCompiler{exts: []string{".dfy"}, noSourceReason: "no dafny sources", bin: "dafny", prefix: []string{"verify", "--cores", "1"}, env: []string{"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1", "DOTNET_PROCESSOR_COUNT=1", "COMPlus_ThreadPool_ForceMinWorkerThreads=1"}},
+	"tla":         passThroughCompiler{exts: []string{".tla", ".cfg"}, noSourceReason: "no tla sources"},
+	"why3":        checkedSourcesCompiler{exts: []string{".mlw"}, noSourceReason: "no why3 sources", bin: "aonohako-why3-prove"},
+	"vhdl":        vhdlCompiler{},
+	"verilog":     verilogCompiler{},
+	"crystal":     crystalCompiler{},
+	"vlang":       vlangCompiler{},
+	"odin":        odinCompiler{},
+	"c3":          c3Compiler{},
+	"hare":        hareCompiler{},
+	"vbnet":       vbnetCompiler{},
+	"gleam":       gleamCompiler{},
+	"cuda-ocelot": cudaOcelotCompiler{},
+	"rocq":        rocqCompiler{},
+	"isabelle":    isabelleCompiler{},
+	"python":      pythonLikeCompiler{interpreter: "python3"},
+	"pypy":        pythonLikeCompiler{interpreter: "pypy3"},
+	"javascript":  scriptCheckCompiler{bin: "node", prefix: []string{"--check"}},
+	"ruby":        scriptCheckCompiler{bin: "ruby", prefix: []string{"-c"}},
+	"php":         scriptCheckCompiler{bin: "php", prefix: []string{"-l"}},
+	"lua":         scriptCheckCompiler{bin: "luac5.4", prefix: []string{"-p"}},
+	"perl":        scriptCheckCompiler{bin: "perl", prefix: []string{"-c"}},
+	"fortran":     nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(CompileJob) []string { return []string{"-O2", "-pipe"} }},
 	"ada": singleSourceExecutableCompiler{exts: []string{".adb"}, preferredBases: []string{"Main.adb"}, noSourceReason: "no ada sources", bin: "gnatmake", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"-O2", "-o", outputPath(job), sourcePath}
 	}},
@@ -105,98 +67,50 @@ var compileRegistry = map[string]Compiler{
 	"objective-cpp": nativeCompiler{exts: []string{".mm"}, bin: "clang++", flags: func(CompileJob) []string {
 		return []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"}
 	}},
-	"raku":       checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
-	"r":          rCompiler{},
-	"prolog":     prologCompiler{},
-	"lisp":       lispCompiler{},
-	"nasm":       nasmCompiler{},
-	"erlang":     erlangCompiler{},
-	"vb6":        passThroughCompiler{exts: []string{".bas", ".frm", ".cls"}, noSourceReason: "no vb6 sources"},
-	"smalltalk":  passThroughCompiler{exts: []string{".st"}, noSourceReason: "no smalltalk sources"},
-	"golfscript": passThroughCompiler{exts: []string{".gs"}, noSourceReason: "no golfscript sources"},
-	"duckdb":     passThroughCompiler{exts: []string{".sql"}, noSourceReason: "no duckdb sources"},
-	"bqn":        passThroughCompiler{exts: []string{".bqn"}, noSourceReason: "no bqn sources"},
-	"apl":        passThroughCompiler{exts: []string{".apl"}, noSourceReason: "no apl sources"},
-	"uiua":       passThroughCompiler{exts: []string{".ua"}, noSourceReason: "no uiua sources"},
-	"janet":      passThroughCompiler{exts: []string{".janet"}, noSourceReason: "no janet sources"},
-	"sed":        checkedSourcesCompiler{exts: []string{".sed"}, noSourceReason: "no sed sources", bin: "sed", prefix: []string{"-n", "-f"}},
-	"bc":         passThroughCompiler{exts: []string{".bc"}, noSourceReason: "no bc sources"},
-	"forth":      passThroughCompiler{exts: []string{".fs", ".fth", ".4th"}, noSourceReason: "no forth sources"},
-	"typescript": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileTypeScript(ctx, job.WorkDir, job.Request.Sources)
-	}),
-	"kotlin": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileKotlinNative(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Tuning)
-	}),
-	"cobol": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileCobol(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"cython": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileCython(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"haskell": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileHaskell(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"haxe": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileHaxe(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"swift": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileSwift(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"sqlite": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
-		return compileSQLite(job.WorkDir, job.Request.Sources)
-	}),
-	"julia": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
-		return compileJulia(job.WorkDir, job.Request.Sources)
-	}),
-	"scala": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileScala(ctx, job.WorkDir, job.Request.Sources)
-	}),
-	"fsharp": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileFSharp(ctx, job.WorkDir, job.Request.Sources)
-	}),
-	"freebasic": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileFreeBasic(ctx, job.WorkDir, job.Target, job.Request.Sources, nil, "no freebasic sources")
-	}),
-	"classic-basic": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileFreeBasic(ctx, job.WorkDir, job.Target, job.Request.Sources, []string{"-lang", "qb"}, "no classic-basic sources")
-	}),
-	"mojo": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileMojo(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"deno": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileCheckedSources(ctx, job.WorkDir, job.Request.Sources, []string{".ts", ".js"}, "no deno sources", "deno", []string{"check", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(compileSandboxMemoryMB, job.Tuning))}, nil)
-	}),
-	"kotlin-jvm": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileKotlinJVM(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Profile.JavaRelease, job.Tuning)
-	}),
-	"coffeescript": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileCoffeeScript(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"whitespace": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
-		return compileWhitespace(job.WorkDir, job.Request.Sources)
-	}),
-	"brainfuck": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
-		return compileBrainfuck(job.WorkDir, job.Request.Sources)
-	}),
-	"wasm": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileWasm(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"ocaml": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileOCaml(ctx, job.WorkDir, job.Target, job.Request.Sources)
-	}),
-	"elixir": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileElixir(ctx, job.WorkDir, job.Request.Sources, job.Tuning)
-	}),
-	"csharp": compilerFunc(func(ctx context.Context, job CompileJob) model.CompileResponse {
-		return compileCSharp(ctx, job.WorkDir, job.Request.Sources)
-	}),
+	"raku":          checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
+	"r":             rCompiler{},
+	"prolog":        prologCompiler{},
+	"lisp":          lispCompiler{},
+	"nasm":          nasmCompiler{},
+	"erlang":        erlangCompiler{},
+	"vb6":           passThroughCompiler{exts: []string{".bas", ".frm", ".cls"}, noSourceReason: "no vb6 sources"},
+	"smalltalk":     passThroughCompiler{exts: []string{".st"}, noSourceReason: "no smalltalk sources"},
+	"golfscript":    passThroughCompiler{exts: []string{".gs"}, noSourceReason: "no golfscript sources"},
+	"duckdb":        passThroughCompiler{exts: []string{".sql"}, noSourceReason: "no duckdb sources"},
+	"bqn":           passThroughCompiler{exts: []string{".bqn"}, noSourceReason: "no bqn sources"},
+	"apl":           passThroughCompiler{exts: []string{".apl"}, noSourceReason: "no apl sources"},
+	"uiua":          passThroughCompiler{exts: []string{".ua"}, noSourceReason: "no uiua sources"},
+	"janet":         passThroughCompiler{exts: []string{".janet"}, noSourceReason: "no janet sources"},
+	"sed":           checkedSourcesCompiler{exts: []string{".sed"}, noSourceReason: "no sed sources", bin: "sed", prefix: []string{"-n", "-f"}},
+	"bc":            passThroughCompiler{exts: []string{".bc"}, noSourceReason: "no bc sources"},
+	"forth":         passThroughCompiler{exts: []string{".fs", ".fth", ".4th"}, noSourceReason: "no forth sources"},
+	"typescript":    typeScriptCompiler{},
+	"kotlin":        kotlinNativeCompiler{},
+	"cobol":         cobolCompiler{},
+	"cython":        cythonCompiler{},
+	"haskell":       haskellCompiler{},
+	"haxe":          haxeCompiler{},
+	"swift":         swiftCompiler{},
+	"sqlite":        sqliteCompiler{},
+	"julia":         juliaCompiler{},
+	"scala":         scalaCompiler{},
+	"fsharp":        fsharpCompiler{},
+	"freebasic":     freeBasicCompiler{noSourceReason: "no freebasic sources"},
+	"classic-basic": freeBasicCompiler{dialectArgs: []string{"-lang", "qb"}, noSourceReason: "no classic-basic sources"},
+	"mojo":          mojoCompiler{},
+	"deno":          denoCompiler{},
+	"kotlin-jvm":    kotlinJVMCompiler{},
+	"coffeescript":  coffeeScriptCompiler{},
+	"whitespace":    whitespaceCompiler{},
+	"brainfuck":     brainfuckCompiler{},
+	"wasm":          wasmCompiler{},
+	"ocaml":         ocamlCompiler{},
+	"elixir":        elixirCompiler{},
+	"csharp":        csharpCompiler{},
 	"dart": singleSourceExecutableCompiler{exts: []string{".dart"}, preferredBases: []string{"Main.dart"}, noSourceReason: "no dart sources", bin: "dart", env: []string{"DART_SUPPRESS_ANALYTICS=true"}, args: func(job CompileJob, sourcePath string) []string {
 		return []string{"compile", "exe", "-D", "ONLINE_JUDGE=true", sourcePath, "-o", outputPath(job)}
 	}},
-	"none": compilerFunc(func(_ context.Context, job CompileJob) model.CompileResponse {
-		return passThroughArtifacts(job.WorkDir, job.Request.Sources)
-	}),
+	"none": noneCompiler{},
 }
 
 func lookupCompiler(kind string) (Compiler, bool) {

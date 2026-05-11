@@ -12,6 +12,12 @@ import (
 	"aonohako/internal/model"
 )
 
+type rocqCompiler struct{}
+
+func (rocqCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileRocq(ctx, job.WorkDir, job.Request.Sources)
+}
+
 func compileRocq(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
 	bin := "rocq"
 	prefix := []string{"c"}
@@ -20,6 +26,12 @@ func compileRocq(ctx context.Context, workDir string, sources []model.Source) mo
 		prefix = []string{"-q"}
 	}
 	return compileCheckedSources(ctx, workDir, sources, []string{".v"}, "no rocq sources", bin, prefix, []string{"OCAMLRUNPARAM=" + ocamlCompileRunParam})
+}
+
+type isabelleCompiler struct{}
+
+func (isabelleCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileIsabelle(ctx, job.WorkDir, job.Request.Sources)
 }
 
 func compileIsabelle(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
@@ -99,6 +111,12 @@ func compileIsabelle(ctx context.Context, workDir string, sources []model.Source
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type ocamlCompiler struct{}
+
+func (ocamlCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileOCaml(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileOCaml(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
