@@ -105,11 +105,14 @@ func NewWithServices(cfg config.Config, compileService interface {
 }
 
 func platformBodyHashConcurrency(cfg config.Config) int {
+	if cfg.PlatformBodyHashConcurrency > 0 {
+		return cfg.PlatformBodyHashConcurrency
+	}
 	if cfg.MaxActiveStreams > 0 {
-		return cfg.MaxActiveStreams
+		return min(defaultPlatformBodyHashSlots, cfg.MaxActiveStreams)
 	}
 	if cfg.MaxActiveRuns > 0 {
-		return max(1, cfg.MaxActiveRuns)
+		return min(defaultPlatformBodyHashSlots, max(1, cfg.MaxActiveRuns))
 	}
 	return defaultPlatformBodyHashSlots
 }
@@ -662,7 +665,8 @@ func (s *Server) applyRuntimeProfilePolicy(problemID string, runtimeProfile *str
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
+	body := http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+	dec := json.NewDecoder(body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		return err
@@ -673,5 +677,10 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 		}
 		return err
 	}
+	if err := body.Close(); err != nil {
+		return err
+	}
+	r.Body = http.NoBody
+	r.ContentLength = 0
 	return nil
 }

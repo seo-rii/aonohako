@@ -177,6 +177,11 @@ aonohako-selftest cgroup-preflight
   `/compile` and `/execute` request streams before they can occupy more server
   resources. Set it explicitly to `0` only for development cases that
   intentionally need unlimited open streams.
+- `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY` defaults to
+  `min(8, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
+  `min(8, AONOHAKO_MAX_ACTIVE_RUNS)`. It separately caps concurrent pre-auth
+  body hashing for signed platform-auth requests, so stream concurrency can be
+  higher than the number of simultaneous 64 MiB body hash operations.
 - `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev` and `16`
   for `cloudrun` or `selfhosted`. It caps simultaneous request streams per
   authenticated or platform principal; `0` disables the per-principal cap.
@@ -240,10 +245,9 @@ aonohako-selftest cgroup-preflight
   path and query string. The timestamp comes from
   `X-Aonohako-Principal-Timestamp` in RFC3339 format and must be within five
   minutes of the server clock. Legacy bodyless `v2=` signatures are rejected.
-  Concurrent pre-auth body hashing is capped by `AONOHAKO_MAX_ACTIVE_STREAMS`
-  when set, otherwise by `AONOHAKO_MAX_ACTIVE_RUNS` or a small internal
-  fallback, so invalid signatures cannot force unbounded parallel 64 MiB body
-  buffers.
+  Concurrent pre-auth body hashing is capped by
+  `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY`, so invalid signatures cannot force
+  unbounded parallel 64 MiB body buffers.
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS` and
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain available only as optional
   defense-in-depth assertions for deployments that want source-CIDR checks in

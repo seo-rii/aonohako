@@ -95,6 +95,13 @@ func TestValidateStepPipelineRejectsAPILevelDriftCases(t *testing.T) {
 			},
 			want: "second step handoff is not supported",
 		},
+		{
+			name: "second step explicit stdin with stdin_from",
+			edit: func(req *model.RunRequest) {
+				req.Steps[1].Stdin = "ignored\n"
+			},
+			want: "stdin cannot be combined with stdin_from",
+		},
 	}
 
 	for _, tc := range tests {

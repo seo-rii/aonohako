@@ -179,7 +179,8 @@ temporary handoff file and streamed into the second step stdin. `handoff.from`
 defaults to `stdout`; `file`/`file_output` handoff
 requires `handoff.path` and captures that file through the same symlink-safe
 output path as `file_outputs`. `handoff.max_bytes` defaults to the step output
-capture limit and is capped at 8 MiB.
+capture limit and is capped at 8 MiB. A step that sets `stdin_from` must not
+also set `stdin`; the handoff stream is the only stdin source for that step.
 
 ## `POST /execute` — Response
 

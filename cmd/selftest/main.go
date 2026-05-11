@@ -173,6 +173,7 @@ func runDeploymentContractSuite() error {
 		MaxActiveRuns                 int                           `json:"max_active_runs"`
 		MaxPendingQueue               int                           `json:"max_pending_queue"`
 		MaxActiveStreams              int                           `json:"max_active_streams"`
+		PlatformBodyHashConcurrency   int                           `json:"platform_body_hash_concurrency"`
 		MaxPrincipalStreams           int                           `json:"max_principal_streams"`
 		MaxPrincipalRequestsPerMinute int                           `json:"max_principal_requests_per_minute"`
 		HeartbeatIntervalSec          int64                         `json:"heartbeat_interval_sec"`
@@ -203,6 +204,7 @@ func runDeploymentContractSuite() error {
 		MaxActiveRuns:                 cfg.MaxActiveRuns,
 		MaxPendingQueue:               cfg.MaxPendingQueue,
 		MaxActiveStreams:              cfg.MaxActiveStreams,
+		PlatformBodyHashConcurrency:   cfg.PlatformBodyHashConcurrency,
 		MaxPrincipalStreams:           cfg.MaxPrincipalStreams,
 		MaxPrincipalRequestsPerMinute: cfg.MaxPrincipalRequestsPerMinute,
 		HeartbeatIntervalSec:          int64(cfg.HeartbeatInterval / time.Second),

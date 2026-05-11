@@ -796,6 +796,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "3")
 	t.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "7")
 	t.Setenv("AONOHAKO_MAX_ACTIVE_STREAMS", "11")
+	t.Setenv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", "6")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "5")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "13")
 	t.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "2")
@@ -828,6 +829,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	}
 	if cfg.MaxActiveStreams != 11 {
 		t.Fatalf("max active streams mismatch: %d", cfg.MaxActiveStreams)
+	}
+	if cfg.PlatformBodyHashConcurrency != 6 {
+		t.Fatalf("platform body hash concurrency mismatch: %d", cfg.PlatformBodyHashConcurrency)
 	}
 	if cfg.MaxPrincipalStreams != 5 {
 		t.Fatalf("max principal streams mismatch: %d", cfg.MaxPrincipalStreams)
@@ -880,6 +884,9 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "pending malformed", key: "AONOHAKO_MAX_PENDING_QUEUE", value: "many"},
 		{name: "streams negative", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "-1"},
 		{name: "streams malformed", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "many"},
+		{name: "platform body hash zero", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "0"},
+		{name: "platform body hash negative", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "-1"},
+		{name: "platform body hash malformed", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "many"},
 		{name: "principal streams negative", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", value: "-1"},
 		{name: "principal streams malformed", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", value: "many"},
 		{name: "principal rpm negative", key: "AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", value: "-1"},
@@ -980,6 +987,9 @@ func TestLoadIgnoresLegacyEnvFallbacks(t *testing.T) {
 	}
 	if cfg.MaxActiveStreams != defaultMaxActiveStreams {
 		t.Fatalf("legacy max active streams env should be ignored, got %d", cfg.MaxActiveStreams)
+	}
+	if cfg.PlatformBodyHashConcurrency != defaultPlatformBodyHashConcurrency(cfg.MaxActiveStreams, cfg.MaxActiveRuns) {
+		t.Fatalf("platform body hash concurrency default = %d", cfg.PlatformBodyHashConcurrency)
 	}
 	if cfg.MaxPrincipalStreams != defaultMaxPrincipalStreams(cfg.Execution.Platform) {
 		t.Fatalf("legacy max principal streams env should be ignored, got %d", cfg.MaxPrincipalStreams)

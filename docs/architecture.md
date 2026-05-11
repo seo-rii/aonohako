@@ -540,8 +540,8 @@ The following checks are enforced before the HTTP server starts:
   platform headers are not accepted outside `dev`; legacy bodyless signatures
   are rejected
 - platform body hashing happens before principal rate limiting, so concurrent
-  hash operations are capped by `AONOHAKO_MAX_ACTIVE_STREAMS` when set,
-  otherwise by `AONOHAKO_MAX_ACTIVE_RUNS` or a small internal fallback
+  hash operations are capped by `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY`
+  instead of request stream concurrency
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` and
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain optional defense-in-depth
   assertions for source-CIDR checks in addition to signed platform principals

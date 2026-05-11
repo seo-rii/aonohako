@@ -88,6 +88,27 @@ func TestConstantTimeEqualRequiresDigestAndLengthMatch(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONBodyReleasesRawBodyReference(t *testing.T) {
+	body := executePayload(t)
+	req := httptest.NewRequest(http.MethodPost, "/execute", bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	rr := httptest.NewRecorder()
+
+	var decoded model.RunRequest
+	if err := decodeJSONBody(rr, req, &decoded); err != nil {
+		t.Fatalf("decodeJSONBody returned error: %v", err)
+	}
+	if decoded.Lang != "binary" {
+		t.Fatalf("decoded lang = %q, want binary", decoded.Lang)
+	}
+	if req.Body != http.NoBody {
+		t.Fatalf("decodeJSONBody should replace request body with http.NoBody")
+	}
+	if req.ContentLength != 0 {
+		t.Fatalf("content length = %d, want 0", req.ContentLength)
+	}
+}
+
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
 	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
@@ -728,7 +749,8 @@ func TestPlatformAuthLimitsConcurrentBodyHashing(t *testing.T) {
 	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "platform-secret"}
 	cfg.MaxActiveRuns = 4
 	cfg.MaxPendingQueue = 8
-	cfg.MaxActiveStreams = 1
+	cfg.MaxActiveStreams = 8
+	cfg.PlatformBodyHashConcurrency = 1
 	cfg.MaxPrincipalStreams = 8
 	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
 		return model.RunResponse{Status: model.RunStatusAccepted}
