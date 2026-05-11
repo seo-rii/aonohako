@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
 )
 
 type recordedCommand struct {
@@ -52,6 +53,17 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
+		}
+	}
+}
+
+func TestCompileRegistryCoversProfileCompileKinds(t *testing.T) {
+	for language, profile := range profiles.All() {
+		if profile.CompileKind == "" {
+			t.Fatalf("profile %s has empty compile kind", language)
+		}
+		if _, ok := lookupCompiler(profile.CompileKind); !ok {
+			t.Fatalf("profile %s references missing compiler kind %q", language, profile.CompileKind)
 		}
 	}
 }
