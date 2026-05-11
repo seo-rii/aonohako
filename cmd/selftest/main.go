@@ -1307,15 +1307,20 @@ import java.util.List;
 public class Main {
   public static void main(String[] args) {
     List<Thread> threads = new ArrayList<>();
-    while (true) {
-      Thread t = new Thread(() -> {
-        try {
-          Thread.sleep(60000);
-        } catch (InterruptedException ignored) {
-        }
-      });
-      t.start();
-      threads.add(t);
+    try {
+      while (true) {
+        Thread t = new Thread(() -> {
+          try {
+            Thread.sleep(60000);
+          } catch (InterruptedException ignored) {
+          }
+        });
+        t.setDaemon(true);
+        t.start();
+        threads.add(t);
+      }
+    } catch (Throwable ignored) {
+      System.exit(75);
     }
   }
 }
