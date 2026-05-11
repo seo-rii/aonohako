@@ -81,8 +81,9 @@ type RuntimeTuningConfig struct {
 }
 
 const (
-	defaultMaxPendingQueue  = 16
-	defaultMaxActiveStreams = 64
+	defaultMaxPendingQueue       = 16
+	defaultMaxActiveStreams      = 64
+	defaultPlatformBodyHashSlots = 8
 
 	defaultJVMHeapPercent             = 50
 	minJVMHeapPercent                 = 25
@@ -130,6 +131,7 @@ type Config struct {
 	MaxActiveRuns                 int
 	MaxPendingQueue               int
 	MaxActiveStreams              int
+	PlatformBodyHashConcurrency   int
 	MaxPrincipalStreams           int
 	MaxPrincipalRequestsPerMinute int
 	HeartbeatInterval             time.Duration
@@ -161,6 +163,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	maxActiveStreams, err := parseNonNegativeIntEnv("AONOHAKO_MAX_ACTIVE_STREAMS", os.Getenv("AONOHAKO_MAX_ACTIVE_STREAMS"), defaultMaxActiveStreams)
+	if err != nil {
+		return Config{}, err
+	}
+	platformBodyHashConcurrency, err := parsePositiveIntEnv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", os.Getenv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY"), defaultPlatformBodyHashConcurrency(maxActiveStreams, maxActive))
 	if err != nil {
 		return Config{}, err
 	}
@@ -557,6 +563,7 @@ func Load() (Config, error) {
 		MaxActiveRuns:                 maxActive,
 		MaxPendingQueue:               maxPending,
 		MaxActiveStreams:              maxActiveStreams,
+		PlatformBodyHashConcurrency:   platformBodyHashConcurrency,
 		MaxPrincipalStreams:           maxPrincipalStreams,
 		MaxPrincipalRequestsPerMinute: maxPrincipalRequestsPerMinute,
 		HeartbeatInterval:             time.Duration(heartbeatSec) * time.Second,
@@ -644,6 +651,16 @@ func workRootFilesystemAt(workRoot, mountInfoPath string) (string, error) {
 func unescapeMountInfoField(path string) string {
 	replacer := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
 	return replacer.Replace(path)
+}
+
+func defaultPlatformBodyHashConcurrency(maxActiveStreams, maxActiveRuns int) int {
+	if maxActiveStreams > 0 {
+		return min(defaultPlatformBodyHashSlots, maxActiveStreams)
+	}
+	if maxActiveRuns > 0 {
+		return min(defaultPlatformBodyHashSlots, maxActiveRuns)
+	}
+	return defaultPlatformBodyHashSlots
 }
 
 func defaultMaxPrincipalStreams(opts platform.RuntimeOptions) int {

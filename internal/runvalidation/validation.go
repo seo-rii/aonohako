@@ -148,6 +148,9 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		if strings.TrimSpace(step.StdinFrom) != handoffID {
 			return fmt.Errorf("second step stdin_from must reference first step handoff id")
 		}
+		if step.Stdin != "" {
+			return fmt.Errorf("step %s stdin cannot be combined with stdin_from", step.ID)
+		}
 		if step.Handoff != nil {
 			return fmt.Errorf("second step handoff is not supported")
 		}
