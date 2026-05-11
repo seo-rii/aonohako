@@ -145,7 +145,7 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	defer cancel()
 	ctx = withCompileCgroupParent(ctx, s.cgroupParentDir)
 
-	return capCompileResponseOutput(executeBuild(ctx, workDir, profile, target, req, tuning))
+	return capCompileResponseOutput(executeBuild(ctx, workDir, profile, target, req, tuning), workDir)
 }
 
 type compileCgroupParentContextKey struct{}
@@ -165,12 +165,32 @@ func compileCgroupParentFromContext(ctx context.Context) string {
 	return strings.TrimSpace(parentDir)
 }
 
-func capCompileResponseOutput(resp model.CompileResponse) model.CompileResponse {
+func capCompileResponseOutput(resp model.CompileResponse, workDirs ...string) model.CompileResponse {
 	var truncated bool
 	resp.Stdout, truncated = capCompileOutputValue(resp.Stdout)
 	resp.StdoutTruncated = resp.StdoutTruncated || truncated
 	resp.Stderr, truncated = capCompileOutputValue(resp.Stderr)
 	resp.StderrTruncated = resp.StderrTruncated || truncated
+	if resp.Status == model.CompileStatusInternal && resp.Reason != "" {
+		rawReason := resp.Reason
+		for _, workDir := range workDirs {
+			workDir = strings.TrimSpace(workDir)
+			if workDir == "" {
+				continue
+			}
+			cleanWorkDir := filepath.Clean(workDir)
+			if cleanWorkDir == "." || !filepath.IsAbs(cleanWorkDir) {
+				continue
+			}
+			resp.Reason = strings.ReplaceAll(resp.Reason, cleanWorkDir, "$WORKDIR")
+			if realWorkDir, err := filepath.EvalSymlinks(cleanWorkDir); err == nil && realWorkDir != "" && realWorkDir != cleanWorkDir {
+				resp.Reason = strings.ReplaceAll(resp.Reason, realWorkDir, "$WORKDIR")
+			}
+		}
+		if resp.Reason != rawReason {
+			slog.Warn("compile internal reason redacted", "reason", rawReason)
+		}
+	}
 	if resp.ReasonCode == "" {
 		resp.ReasonCode = compileReasonCode(resp.Status, resp.Reason)
 	}
