@@ -671,6 +671,17 @@ func TestRunSandboxedCommandCapsCapturedOutput(t *testing.T) {
 	}
 }
 
+func TestCompileAddressSpaceLimitBytesUsesHighFiniteDenoCap(t *testing.T) {
+	got := compileAddressSpaceLimitBytes("deno", 4096)
+	want := uint64(65536) * 1024 * 1024
+	if got != want {
+		t.Fatalf("compileAddressSpaceLimitBytes(deno, 4096) = %d, want %d", got, want)
+	}
+	if got := compileAddressSpaceLimitBytes("gcc", 2048); got != 0 {
+		t.Fatalf("compileAddressSpaceLimitBytes(gcc, 2048) = %d, want helper default", got)
+	}
+}
+
 func TestRunSandboxedCommandDoesNotInheritParentSecrets(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not available")

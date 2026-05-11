@@ -140,6 +140,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if commandName == "dafny" {
 		threadLimit = 1024
 	}
+	addressSpaceLimit := compileAddressSpaceLimitBytes(commandName, memoryLimitMB)
 	helperReq := sandbox.ExecRequest{
 		Command: append([]string(nil), command...),
 		Dir:     workDir,
@@ -152,6 +153,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		ThreadLimit:              threadLimit,
 		OpenFileLimit:            openFileLimit,
 		StackLimitBytes:          security.StackLimitForCommand(command[0]),
+		AddressSpaceLimitBytes:   addressSpaceLimit,
 		FileSizeLimitBytes:       security.FileSizeLimitForCommand(command[0], compileWorkspaceBytes),
 		EnableNetwork:            false,
 		AllowUnixSockets:         true,
@@ -470,6 +472,16 @@ func cleanupCompileCgroup(group cgroup.Group) {
 	}
 	if err := group.KillAndRemoveWithRetry(250 * time.Millisecond); err != nil {
 		slog.Warn("compile cgroup cleanup failed", "path", group.Path, "err", err)
+	}
+}
+
+func compileAddressSpaceLimitBytes(commandBase string, memoryMB int) uint64 {
+	switch commandBase {
+	case "deno":
+		limitMB := max(65536, memoryMB*4+1024)
+		return uint64(limitMB) * 1024 * 1024
+	default:
+		return 0
 	}
 }
 

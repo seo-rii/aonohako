@@ -765,7 +765,7 @@ func TestAddressSpaceLimitBytes(t *testing.T) {
 		{"pypy_interpreter_virtual_cap", "pypy3", 128, 1024 * 1024 * 1024},
 		{"node_high_virtual_cap", "node", 128, 1024 * 1024 * 1024},
 		{"node_scaled_virtual_cap", "node", 512, 2560 * 1024 * 1024},
-		{"deno_virtual_cap", "deno", 256, 2048 * 1024 * 1024},
+		{"deno_virtual_cap", "deno", 256, 65536 * 1024 * 1024},
 		{"wasmtime_virtual_cap", "wasmtime", 256, 2048 * 1024 * 1024},
 		{"go_interpreter_virtual_cap", "umjunsik-lang-go", 128, 1024 * 1024 * 1024},
 		{"dotnet_virtual_cap", "dotnet", 256, 3584 * 1024 * 1024},

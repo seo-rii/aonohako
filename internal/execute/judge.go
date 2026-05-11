@@ -359,7 +359,7 @@ func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
 	case "node", "umjunsik-lang-go":
 		limitMB = max(1024, memoryMB*4+512)
 	case "deno":
-		limitMB = max(2048, memoryMB*4+1024)
+		limitMB = max(65536, memoryMB*4+1024)
 	case "wasmtime":
 		limitMB = max(1024, memoryMB*4+1024)
 	case "ghdl", "vvp":
