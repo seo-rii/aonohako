@@ -21,6 +21,7 @@ import (
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
@@ -230,7 +231,31 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	if stdinReader == nil {
 		stdinReader = strings.NewReader(req.Stdin)
 	}
-	cmd.Stdin = stdinReader
+	stdinFile, err := os.CreateTemp(filepath.Join(ws.RootDir, ".tmp"), "stdin-*")
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+	}
+	defer func() {
+		_ = stdinFile.Close()
+		_ = os.Remove(stdinFile.Name())
+	}()
+	written, err := io.Copy(stdinFile, io.LimitReader(stdinReader, runvalidation.MaxTextFieldBytes+1))
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+	}
+	if written > runvalidation.MaxTextFieldBytes {
+		return execResult{Status: model.RunStatusInitFail, Reason: "stdin too large"}
+	}
+	if err := stdinFile.Chown(65532, 65532); err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+	}
+	if err := stdinFile.Chmod(0o400); err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+	}
+	if _, err := stdinFile.Seek(0, 0); err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+	}
+	cmd.Stdin = stdinFile
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid:   true,
 		Pdeathsig: syscall.SIGKILL,

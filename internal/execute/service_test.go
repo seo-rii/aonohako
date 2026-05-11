@@ -612,6 +612,33 @@ func TestRunTwoStepPipelineAcceptsStdoutHandoff(t *testing.T) {
 	}
 }
 
+func TestRunJavaScriptCanReadDevStdin(t *testing.T) {
+	forceDirectMode(t)
+	if err := exec.Command("sh", "-c", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin command -v node").Run(); err != nil {
+		t.Skip("node is unavailable in the sandbox command PATH on this runner")
+	}
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "javascript",
+		Binaries: []model.Binary{{
+			Name: "main.js",
+			DataB64: b64(
+				"const fs = require('fs');\n" +
+					"const input = fs.readFileSync('/dev/stdin', 'utf8');\n" +
+					"process.stdout.write('node:' + input);\n",
+			),
+		}},
+		Stdin:          "stdin-ok\n",
+		ExpectedStdout: "node:stdin-ok\n",
+		Limits:         model.Limits{TimeMs: 3000, MemoryMB: 192},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Node /dev/stdin read to be accepted, got %+v", resp)
+	}
+}
+
 func TestRunTwoStepPipelineAcceptsFileHandoff(t *testing.T) {
 	forceDirectMode(t)
 
