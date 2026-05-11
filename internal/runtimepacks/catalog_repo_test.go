@@ -245,7 +245,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"rocq":          {"rocq c Main.v", "coqc -q Main.v"},
 		"scheme":        {"chibi-scheme Main.scm", "(scheme base)"},
 		"sed":           {"sed -f Main.sed", "s/^/ok/"},
-		"smalltalk":     {"GST_VERSION=3.2.5", "sed -i 's/const char \\*inbuf;/char *inbuf;/'", "CC=/usr/bin/gcc-14 ./configure", "make -j1", "gst -q Main.st"},
+		"smalltalk":     {"GST_VERSION=3.2.5", "mirrors.kernel.org/gnu/smalltalk", "sed -i 's/const char \\*inbuf;/char *inbuf;/'", "CC=/usr/bin/gcc-14 ./configure", "make -j1", "gst -q Main.st"},
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},
 		"tla":           {"TLA_VERSION=1.7.4", "install -d -m 0755 /usr/local/lib/aonohako", "curl --retry 6", "wget --tries=6", "aonohako-tla-run Main.tla"},

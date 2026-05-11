@@ -1856,7 +1856,16 @@ languages:
         - zip
       script:
         - export GST_VERSION=3.2.5
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://ftp.gnu.org/gnu/smalltalk/smalltalk-${GST_VERSION}.tar.gz" -o /tmp/smalltalk.tar.gz
+        - |
+          for url in \
+            "https://mirrors.kernel.org/gnu/smalltalk/smalltalk-${GST_VERSION}.tar.gz" \
+            "https://ftp.gnu.org/gnu/smalltalk/smalltalk-${GST_VERSION}.tar.gz"; do
+            if curl --retry 3 --retry-delay 2 --retry-connrefused --connect-timeout 20 --max-time 180 -fsSL "${url}" -o /tmp/smalltalk.tar.gz; then
+              break
+            fi
+            rm -f /tmp/smalltalk.tar.gz
+          done
+          test -s /tmp/smalltalk.tar.gz
         - tar -xzf /tmp/smalltalk.tar.gz -C /tmp
         - sed -i 's/const char \*inbuf;/char *inbuf;/' "/tmp/smalltalk-${GST_VERSION}/packages/iconv/iconv.c"
         - (cd "/tmp/smalltalk-${GST_VERSION}" && CC=/usr/bin/gcc-14 ./configure --prefix=/usr/local && make -j1 && make install)
