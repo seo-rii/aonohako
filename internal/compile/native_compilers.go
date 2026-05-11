@@ -72,6 +72,12 @@ func compileNative(ctx context.Context, workDir, target string, srcRel []string,
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type rustCompiler struct{}
+
+func (rustCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileRust(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Profile.RustEdition)
+}
+
 func compileRust(ctx context.Context, workDir, target string, sources []model.Source, edition string) model.CompileResponse {
 	var primary string
 	for _, src := range sources {
@@ -95,6 +101,12 @@ func compileRust(ctx context.Context, workDir, target string, sources []model.So
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type goCompiler struct{}
+
+func (goCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileGo(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileGo(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
@@ -145,6 +157,12 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type vhdlCompiler struct{}
+
+func (vhdlCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileVHDL(ctx, job.WorkDir, job.Request.Sources, job.Request.EntryPoint)
+}
+
 func compileVHDL(ctx context.Context, workDir string, sources []model.Source, entryPoint string) model.CompileResponse {
 	vhdlFiles := sourcePathsByExt(workDir, sources, ".vhd", ".vhdl")
 	if len(vhdlFiles) == 0 {
@@ -176,6 +194,12 @@ func compileVHDL(ctx context.Context, workDir string, sources []model.Source, en
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type verilogCompiler struct{}
+
+func (verilogCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileVerilog(ctx, job.WorkDir, job.Target, job.Request.Sources)
+}
+
 func compileVerilog(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	verilogFiles := sourcePathsByExt(workDir, sources, ".v", ".sv")
 	if len(verilogFiles) == 0 {
@@ -197,6 +221,12 @@ func compileVerilog(ctx context.Context, workDir, target string, sources []model
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type crystalCompiler struct{}
+
+func (crystalCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileCrystal(ctx, job.WorkDir, job.Target, job.Request.Sources)
+}
+
 func compileCrystal(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	rootSource := selectPrimarySource(workDir, sources, []string{".cr"}, "Main.cr")
 	if rootSource == "" {
@@ -211,6 +241,12 @@ func compileCrystal(ctx context.Context, workDir, target string, sources []model
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type vlangCompiler struct{}
+
+func (vlangCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileVLang(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileVLang(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
@@ -229,6 +265,12 @@ func compileVLang(ctx context.Context, workDir, target string, sources []model.S
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type odinCompiler struct{}
+
+func (odinCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileOdin(ctx, job.WorkDir, job.Target, job.Request.Sources)
+}
+
 func compileOdin(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	if len(sourcePathsByExt(workDir, sources, ".odin")) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no odin sources"}
@@ -242,6 +284,12 @@ func compileOdin(ctx context.Context, workDir, target string, sources []model.So
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type c3Compiler struct{}
+
+func (c3Compiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileC3(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileC3(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
@@ -258,6 +306,12 @@ func compileC3(ctx context.Context, workDir, target string, sources []model.Sour
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type hareCompiler struct{}
+
+func (hareCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileHare(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
 func compileHare(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {

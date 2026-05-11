@@ -13,6 +13,12 @@ import (
 	"aonohako/internal/util"
 )
 
+type gleamCompiler struct{}
+
+func (gleamCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileGleam(ctx, job.WorkDir, job.Request.Sources)
+}
+
 func compileGleam(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
 	gleamFiles := sourcePathsByExt(workDir, sources, ".gleam")
 	if len(gleamFiles) == 0 {
@@ -105,6 +111,12 @@ func compileGleam(ctx context.Context, workDir string, sources []model.Source) m
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type elixirCompiler struct{}
+
+func (elixirCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileElixir(ctx, job.WorkDir, job.Request.Sources, job.Tuning)
 }
 
 func compileElixir(ctx context.Context, workDir string, sources []model.Source, tuning config.RuntimeTuningConfig) model.CompileResponse {

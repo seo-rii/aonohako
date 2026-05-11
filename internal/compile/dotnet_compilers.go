@@ -12,6 +12,12 @@ import (
 	"aonohako/internal/util"
 )
 
+type fsharpCompiler struct{}
+
+func (fsharpCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileFSharp(ctx, job.WorkDir, job.Request.Sources)
+}
+
 func compileFSharp(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
 	projectDir := filepath.Join(workDir, "fsproj")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
@@ -113,6 +119,12 @@ func compileFSharp(ctx context.Context, workDir string, sources []model.Source) 
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type vbnetCompiler struct{}
+
+func (vbnetCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileVBNet(ctx, job.WorkDir, job.Request.Sources)
+}
+
 func compileVBNet(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
 	projectDir := filepath.Join(workDir, "vbproj")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
@@ -199,6 +211,12 @@ func compileVBNet(ctx context.Context, workDir string, sources []model.Source) m
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+type csharpCompiler struct{}
+
+func (csharpCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return compileCSharp(ctx, job.WorkDir, job.Request.Sources)
 }
 
 func compileCSharp(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
