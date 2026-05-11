@@ -56,6 +56,13 @@ Rust compile profiles. C/C++ values select the language standard (`"c99"`,
 }
 ```
 
+Compiler `stdout` and `stderr` are intentionally user-facing diagnostics and
+are returned as produced, subject only to the 1 MiB capture caps. Redacting
+normal compiler diagnostics is a non-goal. For `Internal Error` only, the
+human-readable `reason` may replace deployment-specific compile workspace paths
+with `$WORKDIR`; operators should use server logs for the raw infrastructure
+error.
+
 ## `POST /execute` — Request
 
 ```jsonc

@@ -789,6 +789,39 @@ func TestCapCompileResponseOutputSetsResourceReasonCode(t *testing.T) {
 	}
 }
 
+func TestCapCompileResponseOutputRedactsInternalWorkDirReason(t *testing.T) {
+	workDir := filepath.Join(t.TempDir(), "aonohako-compile-123")
+	reason := "open " + filepath.Join(workDir, "Main") + ": no such file or directory"
+	resp := capCompileResponseOutput(model.CompileResponse{
+		Status: model.CompileStatusInternal,
+		Stdout: filepath.Join(workDir, "compiler-output-kept") + "\n",
+		Stderr: filepath.Join(workDir, "compiler-stderr-kept") + "\n",
+		Reason: reason,
+	}, workDir)
+
+	if strings.Contains(resp.Reason, workDir) {
+		t.Fatalf("reason still contains workDir: %q", resp.Reason)
+	}
+	if !strings.Contains(resp.Reason, "$WORKDIR/Main") {
+		t.Fatalf("reason = %q, want redacted workdir marker", resp.Reason)
+	}
+	if !strings.Contains(resp.Stdout, workDir) || !strings.Contains(resp.Stderr, workDir) {
+		t.Fatalf("compiler stdout/stderr should be preserved, got stdout=%q stderr=%q", resp.Stdout, resp.Stderr)
+	}
+}
+
+func TestCapCompileResponseOutputKeepsCompilerFailureReason(t *testing.T) {
+	workDir := filepath.Join(t.TempDir(), "aonohako-compile-123")
+	resp := capCompileResponseOutput(model.CompileResponse{
+		Status: model.CompileStatusCompileError,
+		Reason: "compile failed at " + filepath.Join(workDir, "Main.c"),
+	}, workDir)
+
+	if !strings.Contains(resp.Reason, workDir) {
+		t.Fatalf("compile-error reason should be preserved, got %q", resp.Reason)
+	}
+}
+
 func TestCappedTextBufferCapsAggregation(t *testing.T) {
 	buf := newCompileOutputBuffer()
 	buf.Append(strings.Repeat("x", compileOutputCaptureBytes-1))
