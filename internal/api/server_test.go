@@ -109,6 +109,70 @@ func TestDecodeJSONBodyReleasesRawBodyReference(t *testing.T) {
 	}
 }
 
+func TestPreSSEErrorsUseJSONEnvelope(t *testing.T) {
+	t.Run("method mismatch", func(t *testing.T) {
+		s := newServerForTest(t)
+		req := httptest.NewRequest(http.MethodGet, "/execute", nil)
+		resp := httptest.NewRecorder()
+
+		s.Handler().ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status = %d, want %d", resp.Code, http.StatusMethodNotAllowed)
+		}
+		if got := resp.Header().Get("Content-Type"); got != "application/json" {
+			t.Fatalf("content type = %q, want application/json", got)
+		}
+		var payload map[string]string
+		if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("response should be JSON: %v; body=%q", err, resp.Body.String())
+		}
+		if payload["error"] != "method_not_allowed" || payload["message"] != "POST only" {
+			t.Fatalf("unexpected error payload: %#v", payload)
+		}
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		s := newServerForTest(t)
+		req := httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader("{"))
+		resp := httptest.NewRecorder()
+
+		s.Handler().ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", resp.Code, http.StatusBadRequest)
+		}
+		var payload map[string]string
+		if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("response should be JSON: %v; body=%q", err, resp.Body.String())
+		}
+		if payload["error"] != "invalid_json" || !strings.Contains(payload["message"], "invalid json") {
+			t.Fatalf("unexpected error payload: %#v", payload)
+		}
+	})
+
+	t.Run("auth rejection", func(t *testing.T) {
+		cfg := configForTest(t)
+		cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthBearer, BearerToken: "secret"}
+		s := NewWithServices(cfg, compile.New(), execute.New())
+		req := httptest.NewRequest(http.MethodPost, "/execute", bytes.NewReader(executePayload(t)))
+		resp := httptest.NewRecorder()
+
+		s.Handler().ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d", resp.Code, http.StatusUnauthorized)
+		}
+		var payload map[string]string
+		if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("response should be JSON: %v; body=%q", err, resp.Body.String())
+		}
+		if payload["error"] != "unauthorized" {
+			t.Fatalf("unexpected error payload: %#v", payload)
+		}
+	})
+}
+
 func TestExecuteQueueOverflowReturns429(t *testing.T) {
 	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {

@@ -572,6 +572,8 @@ func TestLoadRejectsEmbeddedHelperWhenNotRoot(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatalf("expected embedded helper execution to require root")
+	} else if !strings.Contains(err.Error(), "AONOHAKO_EXECUTION_TRANSPORT=remote") || !strings.Contains(err.Error(), "AONOHAKO_SANDBOX_BACKEND=none") {
+		t.Fatalf("root requirement error should point to non-root remote development settings, got %v", err)
 	}
 }
 

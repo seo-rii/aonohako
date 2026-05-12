@@ -268,8 +268,11 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`embedded + helper` backend rejects values other than `1`",
 		"`cloudrun + embedded + helper` is the supported production security target",
 		"`cloudrun + remote + none` is the supported Cloud Run control-plane shape",
+		"untrusted compile and execute work is forwarded to the remote runner",
 		"`dev + remote + none` is the non-root development path",
 		"forwards `/compile` and `/execute` to a remote hardened runner",
+		"For non-root local development, forward both `/compile` and `/execute`",
+		"Bare `go run ./cmd/server` uses the compatibility `local-dev` shape",
 		"[docs/selfhosted.md](docs/selfhosted.md)",
 	} {
 		if !strings.Contains(readme, want) {

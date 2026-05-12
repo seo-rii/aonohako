@@ -82,8 +82,8 @@ Dry-run image builds:
 
 ## Local development
 
-For non-root local development, keep `/compile` local and forward `/execute` to
-a hardened runner:
+For non-root local development, forward both `/compile` and `/execute` to a
+hardened runner:
 
 ```bash
 AONOHAKO_DEPLOYMENT_TARGET=dev \
@@ -93,8 +93,9 @@ AONOHAKO_REMOTE_RUNNER_URL=https://runner.internal \
 go run ./cmd/server
 ```
 
-If you want the local root-backed helper sandbox, run it explicitly with a
-dedicated work root:
+Bare `go run ./cmd/server` uses the compatibility `local-dev` shape, which is
+still an embedded helper sandbox and requires a root parent. If you want the
+local root-backed helper sandbox, run it explicitly with a dedicated work root:
 
 ```bash
 sudo env \
@@ -341,8 +342,9 @@ Security posture depends on where it runs:
   queue is single-slot.
 - `cloudrun + remote + none` is the supported Cloud Run control-plane shape
   when `/compile` and `/execute` should be forwarded to a separate hardened
-  runner. It still requires a bounded `AONOHAKO_WORK_ROOT` for local
-  compile/workspace handling.
+  runner. It still requires a bounded `AONOHAKO_WORK_ROOT` because the Cloud
+  Run deployment contract requires a dedicated, bounded workspace root; local
+  untrusted compile and execute work is forwarded to the remote runner.
 - `selfhosted + embedded + helper` applies the same dedicated work-root
   contract for local root-backed containers and VMs, including
   `AONOHAKO_MAX_ACTIVE_RUNS=1` so concurrent runs do not share the same sandbox
