@@ -137,7 +137,7 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		writeJSONErrorMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 		return
 	}
 	principal := principalFromContext(r.Context())
@@ -148,25 +148,25 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req model.CompileRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_json", "invalid json: "+err.Error())
 		return
 	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
 		return
 	}
 	if len(req.Sources) == 0 {
-		http.Error(w, "no sources", http.StatusBadRequest)
+		writeJSONErrorMessage(w, http.StatusBadRequest, "no_sources", "no sources")
 		return
 	}
 	if len(req.Sources) > maxCompileSourceFiles {
-		http.Error(w, fmt.Sprintf("too many sources: max %d", maxCompileSourceFiles), http.StatusBadRequest)
+		writeJSONErrorMessage(w, http.StatusBadRequest, "too_many_sources", fmt.Sprintf("too many sources: max %d", maxCompileSourceFiles))
 		return
 	}
 	totalDecodedSourceBytes := 0
 	for i, src := range req.Sources {
 		if len(src.DataB64)%4 != 0 {
-			http.Error(w, fmt.Sprintf("sources[%d].data_b64 invalid base64 length", i), http.StatusBadRequest)
+			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_base64_length", fmt.Sprintf("sources[%d].data_b64 invalid base64 length", i))
 			return
 		}
 		padding := 0
@@ -177,12 +177,12 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		decodedLen := base64.StdEncoding.DecodedLen(len(src.DataB64)) - padding
 		if decodedLen > maxCompileDecodedSourceBytes {
-			http.Error(w, fmt.Sprintf("source too large: max %d bytes decoded", maxCompileDecodedSourceBytes), http.StatusBadRequest)
+			writeJSONErrorMessage(w, http.StatusBadRequest, "source_too_large", fmt.Sprintf("source too large: max %d bytes decoded", maxCompileDecodedSourceBytes))
 			return
 		}
 		totalDecodedSourceBytes += decodedLen
 		if totalDecodedSourceBytes > maxCompileDecodedSourceTotalBytes {
-			http.Error(w, fmt.Sprintf("sources total size exceeded: max %d bytes decoded", maxCompileDecodedSourceTotalBytes), http.StatusBadRequest)
+			writeJSONErrorMessage(w, http.StatusBadRequest, "sources_total_size_exceeded", fmt.Sprintf("sources total size exceeded: max %d bytes decoded", maxCompileDecodedSourceTotalBytes))
 			return
 		}
 	}
@@ -197,12 +197,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	permit, err := s.queue.Acquire()
 	if err != nil {
 		if errors.Is(err, queue.ErrQueueFull) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			_ = json.NewEncoder(w).Encode(map[string]any{"error": "queue_full"})
+			writeJSONError(w, http.StatusTooManyRequests, "queue_full")
 			return
 		}
-		http.Error(w, "queue error", http.StatusInternalServerError)
+		writeJSONErrorMessage(w, http.StatusInternalServerError, "queue_error", "queue error")
 		return
 	}
 
@@ -210,7 +208,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w)
 	if err != nil {
 		permit.Cancel()
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
 		return
 	}
 	heartbeatCtx, stopHeartbeat := context.WithCancel(r.Context())
@@ -262,7 +260,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		writeJSONErrorMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 		return
 	}
 	principal := principalFromContext(r.Context())
@@ -273,19 +271,19 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req model.RunRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_json", "invalid json: "+err.Error())
 		return
 	}
 	if err := runvalidation.Validate(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
 		return
 	}
 	if (req.EnableNetwork || runvalidation.ProgramsEnableNetwork(&req)) && !s.cfg.AllowRequestNetwork {
-		http.Error(w, "enable_network is not allowed by server policy", http.StatusBadRequest)
+		writeJSONErrorMessage(w, http.StatusBadRequest, "network_not_allowed", "enable_network is not allowed by server policy")
 		return
 	}
 
@@ -299,12 +297,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	permit, err := s.queue.Acquire()
 	if err != nil {
 		if errors.Is(err, queue.ErrQueueFull) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			_ = json.NewEncoder(w).Encode(map[string]any{"error": "queue_full"})
+			writeJSONError(w, http.StatusTooManyRequests, "queue_full")
 			return
 		}
-		http.Error(w, "queue error", http.StatusInternalServerError)
+		writeJSONErrorMessage(w, http.StatusInternalServerError, "queue_error", "queue error")
 		return
 	}
 
@@ -312,7 +308,7 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w)
 	if err != nil {
 		permit.Cancel()
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
 		return
 	}
 	heartbeatCtx, stopHeartbeat := context.WithCancel(r.Context())
@@ -456,9 +452,17 @@ func (s *Server) allowPrincipalRequest(principal string, now time.Time) bool {
 }
 
 func writeJSONError(w http.ResponseWriter, status int, code string) {
+	writeJSONErrorMessage(w, status, code, code)
+}
+
+func writeJSONErrorMessage(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{"error": code})
+	body := map[string]any{"error": code}
+	if message != "" {
+		body["message"] = message
+	}
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 func (s *Server) requireAuth(next http.Handler) http.Handler {
@@ -481,7 +485,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			if s.cfg.InboundAuth.PlatformPrincipalHMACSecret != "" {
 				signature := strings.TrimSpace(r.Header.Get(platformPrincipalSignatureHeader))
 				if value == "" || !strings.HasPrefix(signature, "v3=") {
-					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
 				releaseHashSlot, ok := s.acquirePlatformBodyHashSlot()
@@ -497,11 +501,11 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					if errors.As(err, &maxErr) {
 						status = http.StatusRequestEntityTooLarge
 					}
-					http.Error(w, "invalid request body", status)
+					writeJSONErrorMessage(w, status, "invalid_request_body", "invalid request body")
 					return
 				}
 				if !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.RequestURI(), value, r.Header.Get(platformPrincipalTimestampHeader), signature, bodyHash, time.Now()) {
-					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
 			} else if len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 && s.cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetDev {
@@ -520,11 +524,11 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					}
 				}
 				if value == "" || !trustedSource {
-					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
 			} else if s.cfg.Execution.Platform.DeploymentTarget != platform.DeploymentTargetDev {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 			if value != "" {
@@ -547,21 +551,21 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		case config.InboundAuthBearer:
 			if s.cfg.InboundAuth.BearerToken == "" {
-				http.Error(w, "server auth misconfigured", http.StatusInternalServerError)
+				writeJSONErrorMessage(w, http.StatusInternalServerError, "server_auth_misconfigured", "server auth misconfigured")
 				return
 			}
 			const prefix = "Bearer "
 			got := r.Header.Get("Authorization")
 			if !strings.HasPrefix(got, prefix) || !constantTimeEqual(strings.TrimPrefix(got, prefix), s.cfg.InboundAuth.BearerToken) {
 				w.Header().Set("WWW-Authenticate", `Bearer realm="aonohako"`)
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 			sum := sha256.Sum256([]byte(s.cfg.InboundAuth.BearerToken))
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, "bearer:"+hex.EncodeToString(sum[:8]))))
 			return
 		default:
-			http.Error(w, "server auth misconfigured", http.StatusInternalServerError)
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "server_auth_misconfigured", "server auth misconfigured")
 			return
 		}
 	})

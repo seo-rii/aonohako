@@ -555,7 +555,7 @@ func Load() (Config, error) {
 		}
 	}
 	if contract.RequiresRootParent && os.Geteuid() != 0 {
-		return Config{}, fmt.Errorf("execution backend %s/%s requires root", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
+		return Config{}, fmt.Errorf("execution backend %s/%s requires root; for non-root development set AONOHAKO_EXECUTION_TRANSPORT=remote and AONOHAKO_SANDBOX_BACKEND=none with AONOHAKO_REMOTE_RUNNER_URL pointing at a hardened runner", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
 	}
 
 	return Config{
