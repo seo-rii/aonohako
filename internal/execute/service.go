@@ -22,12 +22,12 @@ const (
 	hardMaxOutputBytes           = 8 << 20
 	defaultWorkspaceBytes        = 128 << 20
 	hardMaxWorkspaceBytes        = 1 << 30
-	maxBinaryFiles               = 512
+	maxBinaryFiles               = runvalidation.MaxBinaryFiles
 	maxSidecarOutputSpecs        = 64
 	addressSpaceSlackKB          = 8 << 10
 	sandboxThreadLimit           = 128
-	maxBinaryFileBytes           = 16 << 20
-	maxBinaryTotalBytes          = 48 << 20
+	maxBinaryFileBytes           = runvalidation.MaxBinaryFileBytes
+	maxBinaryTotalBytes          = runvalidation.MaxBinaryTotalBytes
 	maxCapturedFileBytes         = 8 << 20
 	maxCapturedSidecarTotalBytes = 16 << 20
 	maxImageStreamBytes          = 8 << 20

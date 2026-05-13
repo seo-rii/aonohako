@@ -14,11 +14,16 @@ import (
 
 func materializeSources(root string, sources []model.Source) error {
 	totalBytes := 0
+	seenPaths := make(map[string]struct{}, len(sources))
 	for _, src := range sources {
 		clean, err := util.ValidateRelativePath(src.Name)
 		if err != nil {
 			return err
 		}
+		if _, exists := seenPaths[clean]; exists {
+			return fmt.Errorf("duplicate source path: %s", clean)
+		}
+		seenPaths[clean] = struct{}{}
 		data, err := util.DecodeB64(src.DataB64)
 		if err != nil {
 			return fmt.Errorf("decode %s: %w", clean, err)
