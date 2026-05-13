@@ -307,11 +307,13 @@ func existingWorkspacePath(ws Workspace, rel string) (string, error) {
 }
 
 func workspacePathCandidates(ws Workspace, rel string) []string {
-	candidates := []string{filepath.Join(ws.BoxDir, rel)}
 	if strings.HasPrefix(filepath.ToSlash(rel), "__img__/") {
-		candidates = append(candidates, filepath.Join(ws.RootDir, rel))
+		return []string{
+			filepath.Join(ws.RootDir, rel),
+			filepath.Join(ws.BoxDir, rel),
+		}
 	}
-	return candidates
+	return []string{filepath.Join(ws.BoxDir, rel)}
 }
 
 func clipUTF8(b []byte, n int) string {

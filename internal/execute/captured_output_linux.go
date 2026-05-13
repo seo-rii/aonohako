@@ -39,7 +39,7 @@ func openWorkspaceReadOnly(ws Workspace, rel string) (workspaceReadOnlyFile, err
 	}
 	roots := []string{ws.BoxDir}
 	if strings.HasPrefix(filepath.ToSlash(clean), "__img__/") {
-		roots = append(roots, ws.RootDir)
+		roots = []string{ws.RootDir, ws.BoxDir}
 	}
 	for _, root := range roots {
 		dirfd, err := unix.Open(root, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
