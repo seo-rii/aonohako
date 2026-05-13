@@ -114,6 +114,36 @@ func TestRemoteRunnerForwardsRuntimeProfile(t *testing.T) {
 	}
 }
 
+func TestRemoteRunnerPrefersPreSSEErrorMessage(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_request","message":"binary path duplicated"}`))
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:     "binary",
+		Binaries: []model.Binary{{Name: "run.sh", DataB64: "ZWNobw==", Mode: "exec"}},
+		Limits:   model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "binary path duplicated") {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
 func TestRemoteRunnerClassifiesAcceptedCPUOverrun(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

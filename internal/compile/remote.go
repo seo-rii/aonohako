@@ -89,7 +89,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 		}
 		var payload map[string]any
 		if err := json.Unmarshal(raw, &payload); err == nil {
-			if msg, ok := payload["error"].(string); ok && strings.TrimSpace(msg) != "" {
+			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
+				reason = msg
+			} else if msg, ok := payload["error"].(string); ok && strings.TrimSpace(msg) != "" {
 				reason = msg
 			}
 		}
