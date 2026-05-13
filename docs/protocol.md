@@ -250,6 +250,23 @@ Content-Type: application/json
 {"error": "queue_full"}
 ```
 
+Before an SSE stream is admitted, every rejected `/compile` or `/execute`
+request returns a JSON error envelope. The `error` field is a stable
+machine-readable code; `message` is optional human-readable detail and may be
+omitted for terse policy errors:
+
+```json
+{"error": "invalid_json", "message": "invalid json: ..."}
+```
+
+Pre-SSE failures include method mismatches (`method_not_allowed`), malformed or
+oversized JSON (`invalid_json` / `invalid_request_body`), auth failures
+(`unauthorized` / `server_auth_misconfigured`), request validation failures
+(`invalid_request`, `invalid_runtime_profile`, `network_not_allowed`), queue
+and stream admission failures, and SSE initialization failure
+(`stream_init_failed`). After the SSE stream is admitted, terminal failures are
+reported as SSE `error` events before the final `result` event.
+
 Callers should implement exponential backoff on 429.
 
 ---
