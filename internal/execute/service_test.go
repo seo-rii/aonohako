@@ -192,6 +192,54 @@ func TestStreamImageEventsSkipsOversizedPayloads(t *testing.T) {
 	}
 }
 
+func TestStreamImageEventsPrefersReservedRootImageOutput(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+	rootPath := filepath.Join(workDir, "__img__", "images.jsonl")
+	if err := os.MkdirAll(filepath.Dir(rootPath), 0o755); err != nil {
+		t.Fatalf("mkdir root image dir: %v", err)
+	}
+	if err := os.WriteFile(rootPath, []byte("{\"mime\":\"image/png\",\"b64\":\"root\",\"ts\":1}\n"), 0o644); err != nil {
+		t.Fatalf("write root image file: %v", err)
+	}
+	boxPath := filepath.Join(ws.BoxDir, "__img__", "images.jsonl")
+	if err := os.MkdirAll(filepath.Dir(boxPath), 0o755); err != nil {
+		t.Fatalf("mkdir box image dir: %v", err)
+	}
+	if err := os.WriteFile(boxPath, []byte("{\"mime\":\"image/png\",\"b64\":\"box\",\"ts\":1}\n"), 0o644); err != nil {
+		t.Fatalf("write box image file: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	var events []string
+	go streamImageEvents(ctx, ws, "__img__/images.jsonl", func(mime, b64 string, ts int64) {
+		mu.Lock()
+		events = append(events, b64)
+		mu.Unlock()
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		got := append([]string(nil), events...)
+		mu.Unlock()
+		if len(got) > 0 {
+			if got[0] != "root" {
+				t.Fatalf("first image event = %q, want root", got[0])
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("expected root image event")
+}
+
 func TestStreamImageEventsRejectsSymlinkEscape(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)
