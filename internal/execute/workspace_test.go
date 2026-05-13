@@ -103,6 +103,25 @@ func TestMaterializeFilesStoresProgramsInsideBoxWithImmutableModes(t *testing.T)
 	}
 }
 
+func TestMaterializeFilesRejectsDuplicatePaths(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{
+			{Name: "Main", DataB64: b64("#!/bin/sh\necho first\n"), Mode: "exec"},
+			{Name: "Main", DataB64: b64("#!/bin/sh\necho second\n"), Mode: "exec"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "duplicate binary path") {
+		t.Fatalf("expected duplicate binary path error, got %v", err)
+	}
+}
+
 func TestMaterializeFilesUsesExplicitPythonEntrypoint(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

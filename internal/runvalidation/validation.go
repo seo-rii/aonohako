@@ -1,11 +1,13 @@
 package runvalidation
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
 	"aonohako/internal/model"
 	"aonohako/internal/runtimepolicy"
+	"aonohako/internal/util"
 )
 
 const (
@@ -19,6 +21,8 @@ const (
 	MaxSteps            = 2
 	MaxSidecarOutputs   = 64
 	MaxStepHandoffBytes = MaxOutputBytes
+	MaxBinaryFileBytes  = 16 << 20
+	MaxBinaryTotalBytes = 48 << 20
 )
 
 func Validate(req *model.RunRequest) error {
@@ -41,6 +45,9 @@ func Validate(req *model.RunRequest) error {
 	} else {
 		if len(req.Binaries) > MaxBinaryFiles {
 			return fmt.Errorf("too many binaries: max %d", MaxBinaryFiles)
+		}
+		if err := ValidateBinaries("binaries", req.Binaries); err != nil {
+			return err
 		}
 		if len(req.FileOutputs) > 1 {
 			return fmt.Errorf("at most one file output is supported")
@@ -96,6 +103,9 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		}
 		if len(program.Binaries) > MaxBinaryFiles {
 			return fmt.Errorf("program %s has too many binaries: max %d", program.ID, MaxBinaryFiles)
+		}
+		if err := ValidateBinaries("program "+program.ID+" binaries", program.Binaries); err != nil {
+			return err
 		}
 		programs[program.ID] = struct{}{}
 	}
@@ -153,6 +163,34 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		}
 		if step.Handoff != nil {
 			return fmt.Errorf("second step handoff is not supported")
+		}
+	}
+	return nil
+}
+
+func ValidateBinaries(label string, binaries []model.Binary) error {
+	seenPaths := make(map[string]struct{}, len(binaries))
+	totalBytes := 0
+	for i, b := range binaries {
+		clean, err := util.ValidateRelativePath(b.Name)
+		if err != nil {
+			return fmt.Errorf("%s[%d].name: %w", label, i, err)
+		}
+		if _, ok := seenPaths[clean]; ok {
+			return fmt.Errorf("duplicate binary path: %s", clean)
+		}
+		seenPaths[clean] = struct{}{}
+
+		data, err := base64.StdEncoding.DecodeString(b.DataB64)
+		if err != nil {
+			return fmt.Errorf("%s[%d].data_b64 invalid base64: %w", label, i, err)
+		}
+		if len(data) > MaxBinaryFileBytes {
+			return fmt.Errorf("binary too large: %s", clean)
+		}
+		totalBytes += len(data)
+		if totalBytes > MaxBinaryTotalBytes {
+			return fmt.Errorf("binaries total size exceeded")
 		}
 	}
 	return nil

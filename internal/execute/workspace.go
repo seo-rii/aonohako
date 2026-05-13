@@ -85,6 +85,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if err != nil {
 			return "", "", err
 		}
+		if _, exists := submittedPaths[clean]; exists {
+			return "", "", fmt.Errorf("duplicate binary path: %s", clean)
+		}
 		data, err := base64.StdEncoding.DecodeString(b.DataB64)
 		if err != nil {
 			return "", "", fmt.Errorf("decode %s: %w", clean, err)

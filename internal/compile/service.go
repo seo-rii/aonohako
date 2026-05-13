@@ -67,6 +67,17 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	if len(req.Sources) > maxSourceFiles {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: fmt.Sprintf("too many sources: max %d", maxSourceFiles)}
 	}
+	sourcePaths := make(map[string]struct{}, len(req.Sources))
+	for i, src := range req.Sources {
+		cleanSource, err := util.ValidateRelativePath(src.Name)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: fmt.Sprintf("sources[%d].name: %s", i, err.Error())}
+		}
+		if _, exists := sourcePaths[cleanSource]; exists {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "duplicate source path: " + cleanSource}
+		}
+		sourcePaths[cleanSource] = struct{}{}
+	}
 	profile, ok := resolveProfile(req.Lang)
 	if !ok {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unsupported lang: " + req.Lang}
@@ -81,17 +92,7 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid entry_point: " + err.Error()}
 		}
-		found := false
-		for _, src := range req.Sources {
-			cleanSource, err := util.ValidateRelativePath(src.Name)
-			if err != nil {
-				return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
-			}
-			if cleanSource == cleanEntryPoint {
-				found = true
-				break
-			}
-		}
+		_, found := sourcePaths[cleanEntryPoint]
 		if !found && (strings.ContainsAny(cleanEntryPoint, `/\`) || filepath.Ext(cleanEntryPoint) != "") {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "entry_point not found in sources: " + cleanEntryPoint}
 		}

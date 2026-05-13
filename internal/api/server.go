@@ -31,6 +31,7 @@ import (
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/sse"
+	"aonohako/internal/util"
 )
 
 const (
@@ -164,18 +165,24 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	totalDecodedSourceBytes := 0
+	seenSourcePaths := map[string]struct{}{}
 	for i, src := range req.Sources {
-		if len(src.DataB64)%4 != 0 {
-			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_base64_length", fmt.Sprintf("sources[%d].data_b64 invalid base64 length", i))
+		clean, err := util.ValidateRelativePath(src.Name)
+		if err != nil {
+			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_source_path", fmt.Sprintf("sources[%d].name: %s", i, err.Error()))
 			return
 		}
-		padding := 0
-		if strings.HasSuffix(src.DataB64, "==") {
-			padding = 2
-		} else if strings.HasSuffix(src.DataB64, "=") {
-			padding = 1
+		if _, exists := seenSourcePaths[clean]; exists {
+			writeJSONErrorMessage(w, http.StatusBadRequest, "duplicate_source_path", "duplicate source path: "+clean)
+			return
 		}
-		decodedLen := base64.StdEncoding.DecodedLen(len(src.DataB64)) - padding
+		seenSourcePaths[clean] = struct{}{}
+		data, err := base64.StdEncoding.DecodeString(src.DataB64)
+		if err != nil {
+			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_base64", fmt.Sprintf("sources[%d].data_b64 invalid base64: %s", i, err.Error()))
+			return
+		}
+		decodedLen := len(data)
 		if decodedLen > maxCompileDecodedSourceBytes {
 			writeJSONErrorMessage(w, http.StatusBadRequest, "source_too_large", fmt.Sprintf("source too large: max %d bytes decoded", maxCompileDecodedSourceBytes))
 			return

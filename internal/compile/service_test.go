@@ -164,6 +164,20 @@ func TestRunRejectsOversizedSource(t *testing.T) {
 	}
 }
 
+func TestRunRejectsDuplicateSourcePath(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang: "UHMLANG",
+		Sources: []model.Source{
+			{Name: "Main.uhm", DataB64: b64String("first")},
+			{Name: "Main.uhm", DataB64: b64String("second")},
+		},
+	})
+	if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, "duplicate source path") {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
 func TestRunRejectsTooManySources(t *testing.T) {
 	svc := New()
 	sources := make([]model.Source, 0, maxSourceFiles+1)

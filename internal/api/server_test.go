@@ -1857,7 +1857,8 @@ func TestCompileRejectsInvalidSourcesBeforeQueueing(t *testing.T) {
 	}{
 		{name: "missing", sources: []map[string]any{}, want: "no sources"},
 		{name: "too many", sources: tooManySources, want: "too many sources"},
-		{name: "invalid base64 length", sources: []map[string]any{{"name": "Main.py", "data_b64": "A"}}, want: "invalid base64 length"},
+		{name: "invalid base64", sources: []map[string]any{{"name": "Main.py", "data_b64": "!!!!"}}, want: "invalid base64"},
+		{name: "duplicate path", sources: []map[string]any{{"name": "Main.py", "data_b64": "cHJpbnQoJ29rJykK"}, {"name": "Main.py", "data_b64": "cHJpbnQoJ29rJykK"}}, want: "duplicate source path"},
 		{name: "source too large", sources: []map[string]any{{"name": "Main.py", "data_b64": oversizedSource}}, want: "source too large"},
 	}
 
@@ -2160,6 +2161,65 @@ func TestExecuteRejectsTrailingJSONPayload(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400 for trailing execute JSON, got %d", resp.StatusCode)
+	}
+}
+
+func TestExecuteRejectsInvalidBinariesBeforeQueueing(t *testing.T) {
+	s := newServerForTest(t)
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("execute runner should not be called for invalid binaries")
+		return model.RunResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	tests := []struct {
+		name     string
+		binaries []map[string]any
+		want     string
+	}{
+		{
+			name:     "invalid base64",
+			binaries: []map[string]any{{"name": "run.sh", "data_b64": "!!!!", "mode": "exec"}},
+			want:     "invalid base64",
+		},
+		{
+			name: "duplicate path",
+			binaries: []map[string]any{
+				{"name": "run.sh", "data_b64": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n")), "mode": "exec"},
+				{"name": "run.sh", "data_b64": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 1\n")), "mode": "exec"},
+			},
+			want: "duplicate binary path",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := map[string]any{
+				"lang":     "binary",
+				"binaries": tc.binaries,
+				"limits":   map[string]any{"time_ms": 1000, "memory_mb": 64},
+			}
+			body, _ := json.Marshal(payload)
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", tc.name, resp.StatusCode)
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			if !strings.Contains(string(bodyBytes), tc.want) {
+				t.Fatalf("response %q should mention %q", string(bodyBytes), tc.want)
+			}
+			active, pending := s.queue.Snapshot()
+			if active != 0 || pending != 0 {
+				t.Fatalf("invalid execute binary request entered queue: active=%d pending=%d", active, pending)
+			}
+		})
 	}
 }
 

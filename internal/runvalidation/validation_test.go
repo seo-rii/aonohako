@@ -102,6 +102,13 @@ func TestValidateStepPipelineRejectsAPILevelDriftCases(t *testing.T) {
 			},
 			want: "stdin cannot be combined with stdin_from",
 		},
+		{
+			name: "duplicate program binary path",
+			edit: func(req *model.RunRequest) {
+				req.Programs[0].Binaries = append(req.Programs[0].Binaries, model.Binary{Name: "encode.sh", DataB64: "ZWNobw=="})
+			},
+			want: "duplicate binary path",
+		},
 	}
 
 	for _, tc := range tests {
@@ -134,5 +141,19 @@ func TestValidateRunRequestCoversLegacyAndStepModes(t *testing.T) {
 	legacy.Stdin = strings.Repeat("x", MaxTextFieldBytes+1)
 	if err := Validate(legacy); err == nil || !strings.Contains(err.Error(), "stdin too large") {
 		t.Fatalf("oversized legacy stdin error = %v", err)
+	}
+
+	legacy.Stdin = ""
+	legacy.Binaries[0].DataB64 = "!!!!"
+	if err := Validate(legacy); err == nil || !strings.Contains(err.Error(), "invalid base64") {
+		t.Fatalf("invalid legacy binary base64 error = %v", err)
+	}
+
+	legacy.Binaries = []model.Binary{
+		{Name: "run.sh", DataB64: "ZWNobw==", Mode: "exec"},
+		{Name: "run.sh", DataB64: "ZWNobw==", Mode: "exec"},
+	}
+	if err := Validate(legacy); err == nil || !strings.Contains(err.Error(), "duplicate binary path") {
+		t.Fatalf("duplicate legacy binary path error = %v", err)
 	}
 }
