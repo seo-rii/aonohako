@@ -54,7 +54,7 @@ func compileReasonCode(status, reason string) string {
 		return "timeout"
 	case strings.Contains(lowerReason, "memory limit exceeded"):
 		return "memory_limit_exceeded"
-	case strings.Contains(lowerReason, "workspace limit exceeded") || strings.Contains(lowerReason, "workspace scan failed"):
+	case strings.Contains(lowerReason, "workspace limit exceeded") || strings.Contains(lowerReason, "workspace quota exceeded") || strings.Contains(lowerReason, "workspace entry limit exceeded") || strings.Contains(lowerReason, "workspace depth exceeded") || strings.Contains(lowerReason, "workspace scan failed"):
 		return "workspace_limit_exceeded"
 	case strings.Contains(lowerReason, "pids limit exceeded") || strings.Contains(lowerReason, "process limit exceeded"):
 		return "process_limit_exceeded"
