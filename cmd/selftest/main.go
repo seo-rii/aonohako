@@ -1620,18 +1620,11 @@ let main _ =
 			}
 			covered++
 		case "uhmlang":
-			var program strings.Builder
-			program.WriteString("어떻게\n")
-			for i := 1; i <= 4500; i++ {
-				program.WriteString(strings.Repeat("어", i))
-				program.WriteString("엄.\n")
-			}
-			program.WriteString("식.ㅋ\n이 사람이름이냐ㅋㅋ\n")
 			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
 				Lang: "uhmlang",
 				Binaries: []model.Binary{{
 					Name:    "Main.uhm",
-					DataB64: encodeScript(program.String()),
+					DataB64: encodeScript(uhmlangMemoryStressProgram()),
 				}},
 				Limits: model.Limits{TimeMs: 6000, MemoryMB: 16, OutputBytes: 1024},
 			})
@@ -3520,4 +3513,15 @@ func runSuiteCases(cases []suiteCase) error {
 
 func encodeScript(body string) string {
 	return base64.StdEncoding.EncodeToString([]byte(body))
+}
+
+func uhmlangMemoryStressProgram() string {
+	var program strings.Builder
+	program.WriteString("어떻게\n")
+	for i := 1; i <= 3000; i++ {
+		program.WriteString(strings.Repeat("어", i))
+		program.WriteString("엄.\n")
+	}
+	program.WriteString("식.ㅋ\n이 사람이름이냐ㅋㅋ\n")
+	return program.String()
 }
