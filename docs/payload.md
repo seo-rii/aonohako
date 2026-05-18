@@ -278,7 +278,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | CPP, CPP03–CPP26 | `cpp` | `g++ -O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=<std>` |
 | RUST, RUST2015–2024 | `rust` | `rustc --edition <ed> -O --cfg ONLINE_JUDGE` |
 | GO | `go` | `go build -tags=online_judge,ONLINE_JUDGE` |
-| ZIG | `zig` | `zig build-exe -O ReleaseSafe` |
+| ZIG | `zig` | `zig build-exe -O ReleaseSafe -femit-bin=<target>` |
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |
 | NASM | `binary` | `nasm -felf64 -dONLINE_JUDGE=1` + `gcc -nostdlib -static -no-pie` |
 | JAVA, JAVA8–21 | `java` | `javac --release <v>` |
@@ -293,8 +293,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 | COFFEESCRIPT | `coffeescript` | `coffee --compile --bare` |
 | TYPESCRIPT | `typescript` | `tsc` |
 | DENO | `deno` | `deno check --v8-flags=--max-old-space-size=...` |
-| KOTLIN | `kotlin` | `kotlinc-native` |
-| KOTLIN_JVM, KOTLIN_JAVA, KOTLIN_JVM8–21, KOTLIN_JAVA8–21 | `kotlin-jvm` | `kotlinc -jvm-target <v>` plus `javac --release <v>` for submitted `.java` files |
+| KOTLIN | `kotlin` | `kotlinc-native -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -J-XX:ReservedCodeCacheSize=32m -J-XX:MaxMetaspaceSize=192m -J-XX:CompressedClassSpaceSize=64m -opt` |
+| KOTLIN_JVM, KOTLIN_JAVA, KOTLIN_JVM8–21, KOTLIN_JAVA8–21 | `kotlin-jvm` | `kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target <v>` plus `javac --release <v>` for submitted `.java` files |
 | PASCAL | `pascal` | `fpc -O2 -Xs -dONLINE_JUDGE` |
 | NIM | `nim` | `nim c -d:release -d:ONLINE_JUDGE --opt:speed` |
 | ADA | `ada` | `gnatmake -O2` |
@@ -307,7 +307,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | OBJECTIVE_CPP, OBJCPP | `objective-cpp` | `clang++ -x objective-c++ -O2 -pipe -DONLINE_JUDGE=1 -lobjc` |
 | HASKELL | `haskell` | `ghc -O2` |
 | HAXE | `haxe` | `haxe -D ONLINE_JUDGE -main Main -neko <target>` |
-| SWIFT | `swift` | `swiftc -O -D ONLINE_JUDGE` |
+| SWIFT | `swift` | `swiftc -O -D ONLINE_JUDGE -module-cache-path <workdir>/.cache/swift-module-cache` |
 | SQLITE | `sqlite` | Pass-through artifacts (requires at least one `.sql`) |
 | DUCKDB | `duckdb` | Pass-through artifacts (requires at least one `.sql`) |
 | JULIA | `julia` | Pass-through artifacts (requires at least one `.jl`) |
