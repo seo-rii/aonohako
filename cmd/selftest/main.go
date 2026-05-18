@@ -1586,13 +1586,11 @@ public static class Program {
 				Lang: "FSHARP",
 				Sources: []model.Source{{
 					Name: "Program.fs",
-					DataB64: encodeScript(`open System.Collections.Generic
-
-[<EntryPoint>]
+					DataB64: encodeScript(`[<EntryPoint>]
 let main _ =
-    let chunks = ResizeArray<byte[]>()
+    let mutable chunks = Array.empty<byte[]>
     while true do
-        chunks.Add(Array.zeroCreate<byte> (8 * 1024 * 1024))
+        chunks <- Array.append chunks [| Array.zeroCreate<byte> 8388608 |]
     0
 `),
 				}},
