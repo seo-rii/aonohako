@@ -606,7 +606,9 @@ func TestWorkflowSandboxJobCoversRootBackedWorkspacePermissionChecks(t *testing.
 
 	body := string(data)
 	for _, marker := range []string{
-		`chmod 0755 /work`,
+		`install -d -m 0755 /work /tmp/aonohako-sandbox-tests`,
+		`/tmp/aonohako-sandbox-tests/execute.test`,
+		`/tmp/aonohako-sandbox-tests/compile.test`,
 		"TestSandboxSecurityRegressionSuite",
 		"TestCompileSandboxSecurityRegressionSuite",
 		"aonohako-selftest compile-security",
