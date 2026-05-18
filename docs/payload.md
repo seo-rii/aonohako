@@ -380,7 +380,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `scala` | `java <JVM memory flags> -cp <classes:scala jars> <MainClass>` |
 | `java` | `java <JVM memory flags> -jar <file>` |
 | `kotlin-jvm` | `java <JVM memory flags> -jar <file>` |
-| `erlang` | `erl -noshell -pa <dir> -s <module> <function> -s init stop` |
+| `erlang` | `env ERL_AFLAGS=... erlexec/erl +S ... +A ... -noshell -pa <dir> -s <module> <function> -s init stop` |
 | `prolog` | `swipl -q -f <file> -g main -t halt` |
 | `lisp` | `sbcl --script <file>` |
 | `rocq` | `true` (verification is completed during compile) |
@@ -393,8 +393,8 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
 | `coffeescript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 /usr/local/bin/coffee <file>` |
 | `deno` | `deno run --no-prompt --v8-flags=--max-old-space-size=... <file>` |
-| `gdl` | `gdl <file>` |
-| `octave` | `octave --quiet <file>` |
+| `gdl` | `aonohako-gdl-run <file> <entry>` |
+| `octave` | `octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path <file>` |
 | `r` | `Rscript --vanilla <file>` |
 | `raku` | `raku <file>` |
 | `ruby` | `ruby <file>` |
@@ -402,11 +402,11 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `lua` | `lua5.4 <file>` |
 | `perl` | `perl <file>` |
 | `ocaml` | `env OCAMLRUNPARAM=s=32k <file>` |
-| `elixir` | `env ERL_AFLAGS=+MIscs 128 +S 1:1 +A 1 elixir <file>` |
-| `gleam` | `gleam run` wrapper |
+| `elixir` | `env ERL_AFLAGS=... erlexec ... -s elixir start_cli -extra <file>` or `elixir <file>` fallback |
+| `gleam` | `aonohako-gleam-run <workspace>` |
 | `haxe` | `neko <file>` |
-| `sqlite` | `sqlite3 <workspace-db> < <file>` |
-| `duckdb` | `duckdb <workspace-db> < <file>` |
+| `sqlite` | `sh -c 'sqlite3 <workspace-db> < <file>'` |
+| `duckdb` | `aonohako-duckdb-run <file>` |
 | `sed` | `sed -f <file>` |
 | `bc` | `bc -q <file>` |
 | `forth` | `gforth <file> -e bye` |
@@ -414,7 +414,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `uhmlang` | `env GOMEMLIMIT=... GOGC=... /usr/bin/umjunsik-lang-go <file>` |
 | `csharp`, `fsharp`, `vbnet` | `env DOTNET_GCHeapHardLimit=... DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet <file>` or direct |
 | `vb6` | `aonohako-vb6-run <file>` |
-| `vhdl` | `ghdl -r <entity>` |
+| `vhdl` | `aonohako-vhdl-run <workspace> <entity>` |
 | `verilog` | `vvp <file>` |
 | `c3` | direct compiled binary execution with C3 runtime allowances |
 | `cuda-ocelot` | CUDA Ocelot emulator wrapper |
@@ -429,7 +429,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `whitespace` | `python3 /usr/local/lib/aonohako/whitespace.py <file>` |
 | `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |
 | `wasm` | `wasmtime run --dir=. -O memory-reservation=... -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=... -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-wasm-stack=1048576 <file>` |
-| `aheui` | `sh -c 'aheui "$1" ...' sh <file>` |
+| `aheui` | `python3 -c '<aheui entry_point wrapper>' <file>` |
 | `text` | `cat <file>` |
 
 ## Resource Enforcement
