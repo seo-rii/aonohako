@@ -83,7 +83,7 @@ type RuntimeTuningConfig struct {
 const (
 	defaultMaxPendingQueue       = 16
 	defaultMaxActiveStreams      = 64
-	defaultPlatformBodyHashSlots = 8
+	defaultPlatformBodyHashSlots = 4
 
 	defaultJVMHeapPercent             = 50
 	minJVMHeapPercent                 = 25
