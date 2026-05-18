@@ -751,6 +751,27 @@ func TestRunSandboxedCommandMarksWorkspaceEntryLimitExceeded(t *testing.T) {
 	}
 }
 
+func TestRunSandboxedCommandFinalWorkspaceScanCatchesFastExit(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	workDir := sandboxWritableTempDir(t)
+	_, stderr, status, reason := RunSandboxedCommand(
+		context.Background(),
+		workDir,
+		"python3",
+		[]string{
+			"-c",
+			fmt.Sprintf("from pathlib import Path\nfor i in range(%d):\n    Path(f'f{i:05d}.txt').touch()\n", workspacequota.MaxEntries+16),
+		},
+		nil,
+	)
+	if status != model.CompileStatusCompileError || !strings.Contains(reason, "workspace entry limit exceeded") {
+		t.Fatalf("status=%q reason=%q stderr=%q", status, reason, stderr)
+	}
+}
+
 func TestRunSandboxedCommandFailsClosedWhenWorkspaceScanFails(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root can traverse unreadable directories")
@@ -811,6 +832,21 @@ func TestCapCompileResponseOutputSetsResourceReasonCode(t *testing.T) {
 	})
 	if resp.ReasonCode != "custom" {
 		t.Fatalf("existing ReasonCode overwritten with %q", resp.ReasonCode)
+	}
+
+	for _, reason := range []string{
+		"workspace quota exceeded",
+		"workspace entry limit exceeded",
+		"workspace depth exceeded",
+		"workspace scan failed",
+	} {
+		resp = capCompileResponseOutput(model.CompileResponse{
+			Status: model.CompileStatusCompileError,
+			Reason: reason,
+		})
+		if resp.ReasonCode != "workspace_limit_exceeded" {
+			t.Fatalf("ReasonCode=%q for reason %q, want workspace_limit_exceeded", resp.ReasonCode, reason)
+		}
 	}
 }
 

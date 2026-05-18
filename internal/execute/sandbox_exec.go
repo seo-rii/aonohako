@@ -590,6 +590,28 @@ done:
 		}
 	}
 
+	if result.Status == "OK" {
+		usage, err := workspacequota.Scan(ws.RootDir)
+		switch {
+		case errors.Is(err, workspacequota.ErrEntryLimitExceeded):
+			result.Status = model.RunStatusWLE
+			result.Reason = "workspace entry limit exceeded"
+			result.VerdictSource = "workspace_entries_final"
+		case errors.Is(err, workspacequota.ErrDepthExceeded):
+			result.Status = model.RunStatusWLE
+			result.Reason = "workspace depth exceeded"
+			result.VerdictSource = "workspace_depth_final"
+		case err != nil:
+			result.Status = model.RunStatusWLE
+			result.Reason = "workspace scan failed"
+			result.VerdictSource = "workspace_scan_final"
+		case usage.Bytes > workspaceLimitBytes:
+			result.Status = model.RunStatusWLE
+			result.Reason = "workspace quota exceeded"
+			result.VerdictSource = "workspace_bytes_final"
+		}
+	}
+
 	if ps := cmd.ProcessState; ps != nil {
 		if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
 			if ws.Exited() {

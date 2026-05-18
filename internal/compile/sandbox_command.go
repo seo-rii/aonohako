@@ -448,6 +448,15 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 					}
 				}
 			}
+			if usage, scanErr := workspacequota.Scan(workDir); errors.Is(scanErr, workspacequota.ErrEntryLimitExceeded) {
+				return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace entry limit exceeded"
+			} else if errors.Is(scanErr, workspacequota.ErrDepthExceeded) {
+				return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace depth exceeded"
+			} else if scanErr != nil {
+				return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace scan failed"
+			} else if usage.Bytes > int64(compileWorkspaceBytes) {
+				return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, "workspace quota exceeded"
+			}
 			if err != nil {
 				reason := err.Error()
 				if ps := cmd.ProcessState; ps != nil {
