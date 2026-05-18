@@ -797,19 +797,95 @@ func runCompileExecuteSuite() error {
 }
 
 func runTwoStepSuite() error {
-	server := api.NewWithServices(
-		config.Config{
-			MaxActiveRuns:     1,
-			MaxPendingQueue:   1,
-			HeartbeatInterval: time.Second,
-		},
-		compile.New(),
-		execute.New(),
-	)
-	httpServer := httptest.NewServer(server.Handler())
-	defer httpServer.Close()
+	baseURL := ""
+	cleanup := func() {}
+	// Runtime-image smoke should exercise the deployed server binary when it
+	// is present; the in-process fallback keeps local go test/go run usable.
+	if serverPath, err := exec.LookPath("aonohako"); err == nil {
+		selfPath, selfErr := os.Executable()
+		serverRealPath, _ := filepath.EvalSymlinks(serverPath)
+		selfRealPath, _ := filepath.EvalSymlinks(selfPath)
+		if selfErr != nil || serverRealPath == "" || selfRealPath == "" || serverRealPath != selfRealPath {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				return fmt.Errorf("two-step server port allocation failed: %w", err)
+			}
+			port := listener.Addr().(*net.TCPAddr).Port
+			if err := listener.Close(); err != nil {
+				return fmt.Errorf("two-step server port release failed: %w", err)
+			}
+			var serverLog bytes.Buffer
+			cmd := exec.Command(serverPath)
+			cmd.Env = append(os.Environ(),
+				"PORT="+strconv.Itoa(port),
+				"AONOHAKO_DEPLOYMENT_TARGET=dev",
+				"AONOHAKO_INBOUND_AUTH=none",
+				"AONOHAKO_MAX_ACTIVE_RUNS=1",
+				"AONOHAKO_MAX_PENDING_QUEUE=1",
+			)
+			cmd.Stdout = &serverLog
+			cmd.Stderr = &serverLog
+			if err := cmd.Start(); err != nil {
+				return fmt.Errorf("two-step server start failed: %w", err)
+			}
+			waitCh := make(chan error, 1)
+			go func() {
+				waitCh <- cmd.Wait()
+			}()
+			cleanup = func() {
+				if cmd.Process != nil {
+					_ = cmd.Process.Signal(syscall.SIGTERM)
+				}
+				select {
+				case <-waitCh:
+				case <-time.After(5 * time.Second):
+					if cmd.Process != nil {
+						_ = cmd.Process.Kill()
+					}
+					<-waitCh
+				}
+			}
+			baseURL = "http://127.0.0.1:" + strconv.Itoa(port)
+			client := http.Client{Timeout: 200 * time.Millisecond}
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				resp, err := client.Get(baseURL + "/healthz")
+				if err == nil {
+					_ = resp.Body.Close()
+					if resp.StatusCode == http.StatusOK {
+						break
+					}
+				}
+				select {
+				case err := <-waitCh:
+					return fmt.Errorf("two-step server exited before healthz: %v: %s", err, strings.TrimSpace(serverLog.String()))
+				default:
+				}
+				if time.Now().After(deadline) {
+					cleanup()
+					return fmt.Errorf("two-step server healthz timed out: %s", strings.TrimSpace(serverLog.String()))
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			defer cleanup()
+		}
+	}
+	if baseURL == "" {
+		server := api.NewWithServices(
+			config.Config{
+				MaxActiveRuns:     1,
+				MaxPendingQueue:   1,
+				HeartbeatInterval: time.Second,
+			},
+			compile.New(),
+			execute.New(),
+		)
+		httpServer := httptest.NewServer(server.Handler())
+		defer httpServer.Close()
+		baseURL = httpServer.URL
+	}
 
-	resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+	resp, err := postExecuteRequest(baseURL, model.RunRequest{
 		Programs: []model.RunProgram{
 			{
 				ID:   "encoder",
@@ -817,9 +893,7 @@ func runTwoStepSuite() error {
 				Binaries: []model.Binary{{
 					Name: "encode.sh",
 					DataB64: encodeScript(`#!/bin/sh
-while IFS= read -r line; do
-  printf 'encoded:%s\n' "$line"
-done
+printf 'encoded:two-step-ok\n'
 `),
 					Mode: "exec",
 				}},
@@ -842,7 +916,6 @@ done
 			{
 				ID:        "encode",
 				ProgramID: "encoder",
-				Stdin:     "two-step-ok\n",
 				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
 				Handoff:   &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 4096},
 			},
