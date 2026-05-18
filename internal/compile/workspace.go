@@ -20,6 +20,16 @@ func materializeSources(root string, sources []model.Source) error {
 		if err != nil {
 			return err
 		}
+		for _, scopedDir := range security.WorkspaceScopedDirs(root) {
+			rel, err := filepath.Rel(root, scopedDir)
+			if err != nil {
+				return err
+			}
+			rel = filepath.Clean(rel)
+			if clean == rel || strings.HasPrefix(clean, rel+string(os.PathSeparator)) {
+				return fmt.Errorf("source path uses reserved workspace directory: %s", clean)
+			}
+		}
 		if _, exists := seenPaths[clean]; exists {
 			return fmt.Errorf("duplicate source path: %s", clean)
 		}

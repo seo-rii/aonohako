@@ -178,6 +178,19 @@ func TestRunRejectsDuplicateSourcePath(t *testing.T) {
 	}
 }
 
+func TestRunRejectsReservedWorkspaceSourcePath(t *testing.T) {
+	svc := New()
+	resp := svc.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3",
+		Sources: []model.Source{
+			{Name: ".tmp/Main.py", DataB64: b64String("print('reserved')\n")},
+		},
+	})
+	if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, "reserved workspace directory") {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
 func TestRunRejectsTooManySources(t *testing.T) {
 	svc := New()
 	sources := make([]model.Source, 0, maxSourceFiles+1)

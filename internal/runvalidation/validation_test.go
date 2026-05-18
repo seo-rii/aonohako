@@ -68,6 +68,13 @@ func TestValidateStepPipelineRejectsAPILevelDriftCases(t *testing.T) {
 			want: "program encode lang is required",
 		},
 		{
+			name: "unsupported program language",
+			edit: func(req *model.RunRequest) {
+				req.Programs[0].Lang = "definitely-not-a-runtime"
+			},
+			want: "unsupported program encode lang",
+		},
+		{
 			name: "oversized step stdin",
 			edit: func(req *model.RunRequest) {
 				req.Steps[0].Stdin = strings.Repeat("x", MaxTextFieldBytes+1)
@@ -155,5 +162,11 @@ func TestValidateRunRequestCoversLegacyAndStepModes(t *testing.T) {
 	}
 	if err := Validate(legacy); err == nil || !strings.Contains(err.Error(), "duplicate binary path") {
 		t.Fatalf("duplicate legacy binary path error = %v", err)
+	}
+
+	legacy.Lang = "definitely-not-a-runtime"
+	legacy.Binaries = []model.Binary{{Name: "run.sh", DataB64: "ZWNobw==", Mode: "exec"}}
+	if err := Validate(legacy); err == nil || !strings.Contains(err.Error(), "unsupported lang") {
+		t.Fatalf("unsupported legacy lang error = %v", err)
 	}
 }
