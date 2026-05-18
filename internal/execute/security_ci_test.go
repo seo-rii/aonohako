@@ -21,6 +21,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "unix-stream-connect", fn: TestRunBlocksUnixSocketConnectWhenNetworkDisabled},
 		{name: "unix-datagram-send", fn: TestRunBlocksUnixDatagramSendWhenNetworkDisabled},
 		{name: "unix-datagram-accessible-send", fn: TestRunBlocksUnixDatagramSendToAccessibleSocketWhenNetworkDisabled},
+		{name: "managed-unix-sendmsg", fn: TestExecuteSandboxBlocksUnixSendmsgForManagedRuntimeSocketAllowance},
 		{name: "socketpair", fn: TestRunBlocksSocketPairCreationWhenNetworkDisabled},
 		{name: "namespace", fn: TestRunBlocksNamespaceEscapeAttempts},
 		{name: "process-group", fn: TestRunBlocksProcessGroupEscapeAttempts},

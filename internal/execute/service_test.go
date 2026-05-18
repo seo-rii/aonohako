@@ -1396,7 +1396,7 @@ func TestExecuteSandboxAllowsLocalUnixSocketPairsForManagedRuntimes(t *testing.T
 				[]string{
 					python,
 					"-c",
-					"import socket, sys\na, b = socket.socketpair()\na.sendmsg([b'ok'])\ndata, _, _, _ = b.recvmsg(2)\nsys.exit(0 if data == b'ok' else 1)\n",
+					"import socket, sys\na, b = socket.socketpair()\na.sendall(b'ok')\nsys.exit(0 if b.recv(2) == b'ok' else 1)\n",
 				},
 				&model.RunRequest{
 					Lang:   lang,
@@ -1457,6 +1457,65 @@ func TestExecuteSandboxBlocksUnixSocketConnectForManagedRuntimeSocketAllowance(t
 	)
 	if result.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted, got %+v", result)
+	}
+}
+
+func TestExecuteSandboxBlocksUnixSendmsgForManagedRuntimeSocketAllowance(t *testing.T) {
+	requireSandboxSupport(t)
+
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+
+	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("aonohako-managed-dgram-%d.sock", time.Now().UnixNano()))
+	_ = os.Remove(socketPath)
+	addr := &net.UnixAddr{Name: socketPath, Net: "unixgram"}
+	listener, err := net.ListenUnixgram("unixgram", addr)
+	if err != nil {
+		t.Fatalf("listen unixgram socket: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
+	}()
+	if err := os.Chmod(socketPath, 0o777); err != nil {
+		t.Fatalf("chmod unixgram socket: %v", err)
+	}
+
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+	script := fmt.Sprintf(
+		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)\n    s.sendmsg([b'escape'], [], 0, %q)\n    print('sent')\nexcept OSError:\n    print('blocked')\n",
+		socketPath,
+	)
+
+	result := executeSandboxCommand(
+		context.Background(),
+		ws,
+		[]string{python, "-c", script},
+		&model.RunRequest{
+			Lang:           "wasm",
+			ExpectedStdout: "blocked\n",
+			Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+		},
+		nil,
+		Hooks{},
+		1024,
+		config.DefaultRuntimeTuningConfig(),
+		"",
+	)
+	if result.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", result)
+	}
+
+	_ = listener.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	buf := make([]byte, 64)
+	if n, _, err := listener.ReadFromUnix(buf); err == nil {
+		t.Fatalf("expected no datagram delivery, got %q", string(buf[:n]))
 	}
 }
 
