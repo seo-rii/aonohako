@@ -189,16 +189,16 @@ func TestNativeCompilerUsesRunnerAndReadsExecutable(t *testing.T) {
 
 func TestScriptCheckCompilerUsesRunnerForEverySource(t *testing.T) {
 	workDir := t.TempDir()
-	for _, name := range []string{"A.rb", "B.rb"} {
+	for _, name := range []string{"A.rb", "B.rb", "data.txt"} {
 		if err := os.WriteFile(filepath.Join(workDir, name), []byte("puts 1"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
 
-	resp := scriptCheckCompiler{bin: "ruby", prefix: []string{"-c"}}.Compile(context.Background(), CompileJob{
+	resp := scriptCheckCompiler{exts: []string{".rb"}, noSourceReason: "no ruby sources", bin: "ruby", prefix: []string{"-c"}}.Compile(context.Background(), CompileJob{
 		WorkDir: workDir,
-		Request: &model.CompileRequest{Sources: []model.Source{{Name: "A.rb"}, {Name: "B.rb"}}},
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "A.rb"}, {Name: "B.rb"}, {Name: "data.txt"}}},
 		Runner:  runner,
 	})
 
@@ -207,6 +207,9 @@ func TestScriptCheckCompilerUsesRunnerForEverySource(t *testing.T) {
 	}
 	if len(runner.commands) != 2 {
 		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	if len(resp.Artifacts) != 3 {
+		t.Fatalf("artifacts = %+v, want source and data artifacts", resp.Artifacts)
 	}
 	if want := []string{"-c", filepath.Join(workDir, "A.rb")}; !reflect.DeepEqual(runner.commands[0].args, want) {
 		t.Fatalf("first runner args = %#v, want %#v", runner.commands[0].args, want)

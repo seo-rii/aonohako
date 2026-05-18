@@ -49,11 +49,11 @@ var compileRegistry = map[string]Compiler{
 	"isabelle":    isabelleCompiler{},
 	"python":      pythonLikeCompiler{interpreter: "python3"},
 	"pypy":        pythonLikeCompiler{interpreter: "pypy3"},
-	"javascript":  scriptCheckCompiler{bin: "node", prefix: []string{"--check"}},
-	"ruby":        scriptCheckCompiler{bin: "ruby", prefix: []string{"-c"}},
-	"php":         scriptCheckCompiler{bin: "php", prefix: []string{"-l"}},
-	"lua":         scriptCheckCompiler{bin: "luac5.4", prefix: []string{"-p"}},
-	"perl":        scriptCheckCompiler{bin: "perl", prefix: []string{"-c"}},
+	"javascript":  scriptCheckCompiler{exts: []string{".js"}, noSourceReason: "no javascript sources", bin: "node", prefix: []string{"--check"}},
+	"ruby":        scriptCheckCompiler{exts: []string{".rb"}, noSourceReason: "no ruby sources", bin: "ruby", prefix: []string{"-c"}},
+	"php":         scriptCheckCompiler{exts: []string{".php"}, noSourceReason: "no php sources", bin: "php", prefix: []string{"-l"}},
+	"lua":         scriptCheckCompiler{exts: []string{".lua"}, noSourceReason: "no lua sources", bin: "luac5.4", prefix: []string{"-p"}},
+	"perl":        scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
 	"fortran":     nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(CompileJob) []string { return []string{"-O2", "-pipe"} }},
 	"ada": singleSourceExecutableCompiler{exts: []string{".adb"}, preferredBases: []string{"Main.adb"}, noSourceReason: "no ada sources", bin: "gnatmake", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"-O2", "-o", outputPath(job), sourcePath}
