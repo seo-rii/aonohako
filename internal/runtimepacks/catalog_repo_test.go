@@ -368,6 +368,12 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 		if !slices.Contains(spec.Install.Apt, "libicu76") {
 			t.Fatalf("%s apt packages = %v, want libicu76", language, spec.Install.Apt)
 		}
+		smoke := strings.Join(spec.Smoke.Command, "\n")
+		for _, marker := range []string{"DOTNET_GCHeapHardLimit=8000000", "DOTNET_EnableDiagnostics=0", "COMPlus_EnableDiagnostics=0"} {
+			if !strings.Contains(smoke, marker) {
+				t.Fatalf("%s smoke command must contain %q, got %q", language, marker, smoke)
+			}
+		}
 	}
 }
 

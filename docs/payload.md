@@ -412,7 +412,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `forth` | `gforth <file> -e bye` |
 | `julia` | `julia --startup-file=no --history-file=no <file>` |
 | `uhmlang` | `env GOMEMLIMIT=... GOGC=... /usr/bin/umjunsik-lang-go <file>` |
-| `csharp`, `fsharp`, `vbnet` | `dotnet <file>` or direct |
+| `csharp`, `fsharp`, `vbnet` | `env DOTNET_GCHeapHardLimit=... DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet <file>` or direct |
 | `vb6` | `aonohako-vb6-run <file>` |
 | `vhdl` | `ghdl -r <entity>` |
 | `verilog` | `vvp <file>` |
