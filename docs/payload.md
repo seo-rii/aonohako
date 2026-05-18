@@ -423,7 +423,7 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `smalltalk` | `gst <file>` |
 | `golfscript` | GolfScript runner wrapper |
 | `bqn` | `bqn <file>` |
-| `apl` | `apl --script -f <file>` |
+| `apl` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=... /usr/local/bin/apl --script -f <file>` |
 | `uiua` | `uiua run <file> --no-format` |
 | `janet` | `janet <file>` |
 | `whitespace` | `python3 /usr/local/lib/aonohako/whitespace.py <file>` |
