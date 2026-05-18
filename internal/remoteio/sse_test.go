@@ -22,7 +22,8 @@ func TestSSEReaderReadsBoundedEvents(t *testing.T) {
 }
 
 func TestSSEReaderRejectsOversizedLine(t *testing.T) {
-	reader := NewSSEReader(strings.NewReader("event: log\ndata: " + strings.Repeat("x", DefaultSSELineBytes+1) + "\n\n"))
+	reader := NewSSEReader(strings.NewReader("event: log\ndata: " + strings.Repeat("x", 1025) + "\n\n"))
+	reader.maxLineBytes = 1024
 	if _, err := reader.Next(); err == nil || !strings.Contains(err.Error(), "sse line too large") {
 		t.Fatalf("expected line size error, got %v", err)
 	}
@@ -30,9 +31,22 @@ func TestSSEReaderRejectsOversizedLine(t *testing.T) {
 
 func TestSSEReaderRejectsOversizedEvent(t *testing.T) {
 	chunk := strings.Repeat("x", 1024)
-	reader := NewSSEReader(strings.NewReader("event: log\n" + strings.Repeat("data: "+chunk+"\n", DefaultSSEEventBytes/1024+2) + "\n"))
+	reader := NewSSEReader(strings.NewReader("event: log\n" + strings.Repeat("data: "+chunk+"\n", 5) + "\n"))
+	reader.maxEventBytes = 4 * 1024
 	if _, err := reader.Next(); err == nil || !strings.Contains(err.Error(), "sse event too large") {
 		t.Fatalf("expected event size error, got %v", err)
+	}
+}
+
+func TestSSEReaderAcceptsCompileSizedSingleLineResult(t *testing.T) {
+	payload := `{"status":"OK","stdout":"` + strings.Repeat("x", 1<<20) + `"}`
+	reader := NewSSEReader(strings.NewReader("event: result\ndata: " + payload + "\n\n"))
+	event, err := reader.Next()
+	if err != nil {
+		t.Fatalf("Next returned error: %v", err)
+	}
+	if event.Name != "result" || event.Data != payload {
+		t.Fatalf("unexpected event: name=%q data length=%d", event.Name, len(event.Data))
 	}
 }
 
