@@ -36,10 +36,12 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   the production profiles in parallel, runs
   [`scripts/report_toolchain_versions.sh`](scripts/report_toolchain_versions.sh)
   once per profile, records both toolchain versions and language-specific
-  compile options, and uploads the profile summary fragment plus a `docker save`
-  archive for that image as artifacts. A final CI job downloads those artifacts,
-  publishes one consolidated GitHub Actions summary, and
-  re-uploads the collected summaries plus image archives as a single bundle.
+  compile options, and uploads the profile summary fragment plus SBOM/scan
+  diagnostics. Docker archive export is currently skipped in CI to conserve
+  runner storage; each profile records an archive diagnostic JSON instead. A
+  final CI job downloads those artifacts, publishes one consolidated GitHub
+  Actions summary, and re-uploads the collected summaries and diagnostics as a
+  single bundle.
 - The current catalog covers native binaries, Python plus bundled judge
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), plus vendored

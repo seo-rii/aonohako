@@ -774,6 +774,50 @@ func TestPlatformAuthRequiresValidPrincipalSignatureWhenConfigured(t *testing.T)
 	}
 }
 
+func TestPlatformAuthEnforcesTrustedProxyCIDRsForSignedHeaders(t *testing.T) {
+	body := executePayload(t)
+	for _, tc := range []struct {
+		name  string
+		cidrs []string
+		want  int
+	}{
+		{name: "trusted source", cidrs: []string{"127.0.0.1/32", "::1/128"}, want: http.StatusOK},
+		{name: "untrusted source", cidrs: []string{"192.0.2.0/24"}, want: http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := configForTest(t)
+			cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "platform-secret"}
+			cfg.TrustedPlatformHeaders = true
+			cfg.TrustedPlatformHeaderCIDRs = tc.cidrs
+			cfg.MaxActiveRuns = 4
+			cfg.MaxPendingQueue = 8
+			cfg.MaxActiveStreams = 8
+			cfg.MaxPrincipalStreams = 8
+			s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+				return model.RunResponse{Status: model.RunStatusAccepted}
+			}})
+			ts := httptest.NewServer(s.Handler())
+			defer ts.Close()
+
+			timestamp := time.Now().UTC().Format(time.RFC3339)
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(platformPrincipalHeader, "alice")
+			req.Header.Set(platformPrincipalTimestampHeader, timestamp)
+			req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, body))
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.want {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
+			}
+			_, _ = io.Copy(io.Discard, resp.Body)
+		})
+	}
+}
+
 func TestPlatformAuthRejectsBodySubstitutionReplay(t *testing.T) {
 	cfg := configForTest(t)
 	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "platform-secret"}
@@ -895,6 +939,7 @@ func TestPlatformAuthEnforcesTrustedProxyCIDRsForUnsignedHeaders(t *testing.T) {
 			cfg := configForTest(t)
 			cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform}
 			cfg.Execution.Platform.DeploymentTarget = platform.DeploymentTargetDev
+			cfg.TrustedPlatformHeaders = true
 			cfg.TrustedPlatformHeaderCIDRs = tc.cidrs
 			cfg.MaxActiveRuns = 4
 			cfg.MaxPendingQueue = 8

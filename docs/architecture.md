@@ -705,24 +705,23 @@ production profiles in a parallel matrix and runs
 contains the compiler/runtime version table and a language-specific compile
 options table so CI summaries show both the installed toolchain and the flags or
 compile pipeline used by the service. Each matrix leg tries to create a
-`docker save` archive and SHA256 sidecar before best-effort scanner exports; if
-the runner cannot hold the archive, it writes an archive failure diagnostic JSON
-instead. It then uploads its summary fragment, Syft SBOM JSON or a Syft failure
-diagnostic JSON, non-blocking Grype JSON scan, and image archive or archive
-diagnostic as artifacts.
+`docker save` archive and SHA256 sidecar before best-effort scanner exports in
+workflows that enable archive export. The current CI workflow skips the archive
+export to conserve runner storage and writes an archive diagnostic JSON instead.
+It then uploads its summary fragment, Syft SBOM JSON or a Syft failure
+diagnostic JSON, non-blocking Grype JSON scan, and image archive diagnostic as
+artifacts.
 Syft and Grype are best-effort in that profile matrix because large language
 images can exhaust GitHub runner scratch space while exporting daemon images;
 the workflow prunes build cache, Go caches, and scanner temp/cache directories
 around those exports. The summary verifier still fails closed on missing, empty,
 non-JSON, or digest-mismatched artifact files. A final CI summary job downloads
 those artifacts, concatenates the per-profile reports into one GitHub Actions
-summary, and republishes the summaries plus image archives as a single bundle
-artifact.
-Each per-profile archive also emits a `.sha256` sidecar, and the final summary
-bundle includes a recomputed `SHA256SUMS` file over the downloaded image
-archives so promotion can verify the exact artifact bytes it consumed. Profiles
-with archive diagnostic JSON do not provide promotion-ready image bytes from
-that CI run.
+summary, and republishes the summaries plus archive diagnostics as a single
+bundle artifact. Because archive export is skipped in the default CI workflow,
+`SHA256SUMS` is empty unless a workflow variant produces real
+`.docker.tar.gz` archives; profiles with archive diagnostic JSON do not provide
+promotion-ready image bytes from that CI run.
 
 Debian-based production profiles now use a digest-pinned
 `debian:trixie-slim` base, which raises the baseline Python, PyPy, and GCC
