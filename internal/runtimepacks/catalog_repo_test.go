@@ -199,7 +199,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"aheui":         {"Hello, World!", "Main.aheui"},
 		"ada":           {"gnatmake", "Broken.adb"},
 		"agda":          {"agda Main.agda", "data Unit : Set"},
-		"apl":           {"kanapl@0.0.0", "apl --script -f Main.apl"},
+		"apl":           {"kanapl@0.0.0", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl"},
 		"asm":           {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
 		"awk":           {"gawk --sandbox", "Main.awk"},
 		"bc":            {"bc -q Main.bc", "1 + 1"},

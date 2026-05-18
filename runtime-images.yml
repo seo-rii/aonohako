@@ -2009,7 +2009,7 @@ languages:
         - -lc
         - |
           printf '%s\n' "⎕←'ok'" > Main.apl
-          apl --script -f Main.apl | grep '^ok$'
+          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl | grep '^ok$'
 
   uiua:
     install:
