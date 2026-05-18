@@ -245,7 +245,7 @@ func TestRemoteRunnerRejectsOversizedSSEEvents(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: log\n"))
 		_, _ = w.Write([]byte("data: "))
-		_, _ = w.Write([]byte(strings.Repeat("x", 300<<10)))
+		_, _ = w.Write([]byte(strings.Repeat("x", remoteio.DefaultSSELineBytes+1)))
 		_, _ = w.Write([]byte("\n\n"))
 	}))
 	defer remote.Close()

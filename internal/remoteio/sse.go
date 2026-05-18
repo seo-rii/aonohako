@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	DefaultSSELineBytes   = 256 << 10
-	DefaultSSEEventBytes  = 4 << 20
-	DefaultSSEStreamBytes = 64 << 20
+	DefaultSSELineBytes   = 64 << 20
+	DefaultSSEEventBytes  = 64 << 20
+	DefaultSSEStreamBytes = 128 << 20
 	DefaultSSEIdleTimeout = 30 * time.Second
 )
 
