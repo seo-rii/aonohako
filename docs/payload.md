@@ -312,17 +312,17 @@ When `spj` is provided, the SPJ binary is invoked as:
 | DUCKDB | `duckdb` | Pass-through artifacts (requires at least one `.sql`) |
 | JULIA | `julia` | Pass-through artifacts (requires at least one `.jl`) |
 | RAKU | `raku` | `raku -c` |
-| R | `r` | `Rscript --vanilla -e parse(...)` |
+| R | `r` | `/usr/lib/R/bin/exec/R --vanilla --slave -e parse(file=commandArgs(TRUE)[1]) --args <file>` |
 | ERLANG | `erlang` | `erlc -o <dir>` |
 | PROLOG | `prolog` | `swipl -q -f none -g halt -t halt` |
 | LISP | `lisp` | `sbcl --load ... --eval '(quit)'` |
 | COQ, ROCQ | `rocq` | `coqc -q` / Rocq-compatible proof check |
 | LEAN, LEAN4 | `lean4` | `lean` check |
 | AGDA | `agda` | `agda` check |
-| DAFNY | `dafny` | `dafny build` |
+| DAFNY | `dafny` | `dafny verify --cores 1` |
 | TLA, TLAPLUS | `tla` | TLA+ model/tooling pass-through plus runner wrapper |
 | WHY3, WHYML | `why3` | `why3` proof wrapper |
-| ISABELLE | `isabelle` | Isabelle theory build |
+| ISABELLE | `isabelle` | `isabelle process_theories -o naproche_server=false -D .` |
 | OCAML | `ocaml` | `ocamlopt` |
 | ELIXIR | `elixir` | `elixir` parse check |
 | CSHARP | `csharp` | `dotnet publish -p:DefineConstants=ONLINE_JUDGE` or direct `csc -define:ONLINE_JUDGE` |
@@ -383,13 +383,13 @@ When `spj` is provided, the SPJ binary is invoked as:
 | `erlang` | `erl -noshell -pa <dir> -s <module> <function> -s init stop` |
 | `prolog` | `swipl -q -f <file> -g main -t halt` |
 | `lisp` | `sbcl --script <file>` |
-| `rocq` | `coqc -q <file>` |
-| `lean4` | `lean <file>` |
-| `agda` | `agda <file>` |
-| `dafny` | `dafny run <file>` |
+| `rocq` | `true` (verification is completed during compile) |
+| `lean4` | `true` (verification is completed during compile) |
+| `agda` | `true` (verification is completed during compile) |
+| `dafny` | `true` (verification is completed during compile) |
 | `tla` | `aonohako-tla-run <file>` |
-| `why3` | `aonohako-why3-prove <file>` |
-| `isabelle` | `isabelle build` / theory runner wrapper |
+| `why3` | `true` (verification is completed during compile) |
+| `isabelle` | `true` (verification is completed during compile) |
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
 | `coffeescript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 /usr/local/bin/coffee <file>` |
 | `deno` | `deno run --no-prompt --v8-flags=--max-old-space-size=... <file>` |
