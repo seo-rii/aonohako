@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/util"
 )
@@ -25,6 +26,16 @@ const (
 	MaxBinaryTotalBytes = 48 << 20
 )
 
+var supportedRunLangs = func() map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, profile := range profiles.All() {
+		if profile.RunLang != "" {
+			out[profile.RunLang] = struct{}{}
+		}
+	}
+	return out
+}()
+
 func Validate(req *model.RunRequest) error {
 	if len(req.Stdin) > MaxTextFieldBytes {
 		return fmt.Errorf("stdin too large: max %d bytes", MaxTextFieldBytes)
@@ -43,6 +54,9 @@ func Validate(req *model.RunRequest) error {
 			return err
 		}
 	} else {
+		if err := ValidateRunLang("lang", req.Lang); err != nil {
+			return err
+		}
 		if len(req.Binaries) > MaxBinaryFiles {
 			return fmt.Errorf("too many binaries: max %d", MaxBinaryFiles)
 		}
@@ -97,6 +111,9 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		}
 		if strings.TrimSpace(program.Lang) == "" {
 			return fmt.Errorf("program %s lang is required", program.ID)
+		}
+		if err := ValidateRunLang("program "+program.ID+" lang", program.Lang); err != nil {
+			return err
 		}
 		if len(program.Binaries) == 0 {
 			return fmt.Errorf("program %s has no binaries", program.ID)
@@ -192,6 +209,17 @@ func ValidateBinaries(label string, binaries []model.Binary) error {
 		if totalBytes > MaxBinaryTotalBytes {
 			return fmt.Errorf("binaries total size exceeded")
 		}
+	}
+	return nil
+}
+
+func ValidateRunLang(label, raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return fmt.Errorf("%s is required", label)
+	}
+	lang := profiles.NormalizeRunLang(raw)
+	if _, ok := supportedRunLangs[lang]; !ok {
+		return fmt.Errorf("unsupported %s: %s", label, strings.TrimSpace(raw))
 	}
 	return nil
 }
