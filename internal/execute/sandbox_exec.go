@@ -416,7 +416,7 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 				fields := strings.Fields(string(raw))
 				if len(fields) >= 2 {
 					pageKB := int64(os.Getpagesize() / 1024)
-					if v, err := strconv.ParseInt(fields[0], 10, 64); err == nil {
+					if v, err := strconv.ParseInt(fields[0], 10, 64); err == nil && targetStarted {
 						v *= pageKB
 						if v > maxVmSizeKB {
 							maxVmSizeKB = v
