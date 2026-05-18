@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"aonohako/internal/profiles"
 	"aonohako/internal/runtimepacks"
+	"aonohako/internal/runvalidation"
 )
 
 func TestCompileExecuteCasesCoverCILanguages(t *testing.T) {
@@ -142,6 +144,21 @@ func TestSelftestUsageListsDeploymentContract(t *testing.T) {
 func TestSelftestUsageListsRuntimeMemory(t *testing.T) {
 	if !strings.Contains(selftestUsage, "runtime-memory") {
 		t.Fatalf("selftest usage should list runtime-memory: %s", selftestUsage)
+	}
+}
+
+func TestUHMLangMemoryStressProgramFitsRunRequestLimits(t *testing.T) {
+	program := uhmlangMemoryStressProgram()
+	if len([]byte(program)) > runvalidation.MaxBinaryFileBytes {
+		t.Fatalf("uhmlang memory stress program is %d bytes, max binary size is %d", len([]byte(program)), runvalidation.MaxBinaryFileBytes)
+	}
+	encoded := encodeScript(program)
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("decode encoded uhmlang stress program: %v", err)
+	}
+	if len(decoded) != len([]byte(program)) {
+		t.Fatalf("decoded length = %d, want %d", len(decoded), len([]byte(program)))
 	}
 }
 
