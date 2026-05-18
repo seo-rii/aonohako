@@ -94,8 +94,10 @@ func (c checkedSourcesCompiler) Compile(ctx context.Context, job CompileJob) mod
 }
 
 type scriptCheckCompiler struct {
-	bin    string
-	prefix []string
+	exts           []string
+	noSourceReason string
+	bin            string
+	prefix         []string
 }
 
 func (c scriptCheckCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
@@ -106,14 +108,25 @@ func (c scriptCheckCompiler) Compile(ctx context.Context, job CompileJob) model.
 	if runner == nil {
 		runner = sandboxCommandRunner{}
 	}
+	paths := make([]string, 0, len(job.Request.Sources))
+	if len(c.exts) == 0 {
+		for _, src := range job.Request.Sources {
+			clean, err := util.ValidateRelativePath(src.Name)
+			if err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+			}
+			paths = append(paths, filepath.Join(job.WorkDir, clean))
+		}
+	} else {
+		paths = sourcePathsByExt(job.WorkDir, job.Request.Sources, c.exts...)
+		if len(paths) == 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: c.noSourceReason}
+		}
+	}
 	fullOut := newCompileOutputBuffer()
 	fullErr := newCompileOutputBuffer()
-	for _, src := range job.Request.Sources {
-		clean, err := util.ValidateRelativePath(src.Name)
-		if err != nil {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
-		}
-		args := append(append([]string{}, c.prefix...), filepath.Join(job.WorkDir, clean))
+	for _, path := range paths {
+		args := append(append([]string{}, c.prefix...), path)
 		result := runner.Run(ctx, job.WorkDir, c.bin, args, nil)
 		fullOut.Append(result.Stdout)
 		fullErr.Append(result.Stderr)
