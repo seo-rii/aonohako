@@ -74,6 +74,23 @@ func requireSandboxSupport(t *testing.T) {
 	}
 }
 
+func sandboxAccessibleTempDir(t *testing.T) string {
+	t.Helper()
+	root := os.Getenv("AONOHAKO_WORK_ROOT")
+	if root == "" {
+		root = os.TempDir()
+	}
+	dir, err := os.MkdirTemp(root, "aonohako-direct-sandbox-*")
+	if err != nil {
+		t.Fatalf("mkdir sandbox temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("chmod sandbox temp dir: %v", err)
+	}
+	return dir
+}
+
 func buildCTestBinary(t *testing.T, source string, args ...string) string {
 	t.Helper()
 

@@ -1382,7 +1382,7 @@ func TestExecuteSandboxAllowsLocalUnixSocketPairsForManagedRuntimes(t *testing.T
 		t.Skip("python3 not available")
 	}
 
-	workDir := t.TempDir()
+	workDir := sandboxAccessibleTempDir(t)
 	ws, err := prepareWorkspaceDirs(workDir)
 	if err != nil {
 		t.Fatalf("prepareWorkspaceDirs: %v", err)
@@ -1408,8 +1408,8 @@ func TestExecuteSandboxAllowsLocalUnixSocketPairsForManagedRuntimes(t *testing.T
 				config.DefaultRuntimeTuningConfig(),
 				"",
 			)
-			if result.Status != model.RunStatusAccepted {
-				t.Fatalf("expected Accepted, got %+v", result)
+			if result.Status != "OK" {
+				t.Fatalf("expected OK, got %+v", result)
 			}
 		})
 	}
@@ -1430,7 +1430,7 @@ func TestExecuteSandboxBlocksUnixSocketConnectForManagedRuntimeSocketAllowance(t
 	}
 	defer listener.Close()
 
-	workDir := t.TempDir()
+	workDir := sandboxAccessibleTempDir(t)
 	ws, err := prepareWorkspaceDirs(workDir)
 	if err != nil {
 		t.Fatalf("prepareWorkspaceDirs: %v", err)
@@ -1455,8 +1455,8 @@ func TestExecuteSandboxBlocksUnixSocketConnectForManagedRuntimeSocketAllowance(t
 		config.DefaultRuntimeTuningConfig(),
 		"",
 	)
-	if result.Status != model.RunStatusAccepted {
-		t.Fatalf("expected Accepted, got %+v", result)
+	if result.Status != "OK" {
+		t.Fatalf("expected OK, got %+v", result)
 	}
 }
 
@@ -1483,7 +1483,7 @@ func TestExecuteSandboxBlocksUnixSendmsgForManagedRuntimeSocketAllowance(t *test
 		t.Fatalf("chmod unixgram socket: %v", err)
 	}
 
-	workDir := t.TempDir()
+	workDir := sandboxAccessibleTempDir(t)
 	ws, err := prepareWorkspaceDirs(workDir)
 	if err != nil {
 		t.Fatalf("prepareWorkspaceDirs: %v", err)
@@ -1508,8 +1508,8 @@ func TestExecuteSandboxBlocksUnixSendmsgForManagedRuntimeSocketAllowance(t *test
 		config.DefaultRuntimeTuningConfig(),
 		"",
 	)
-	if result.Status != model.RunStatusAccepted {
-		t.Fatalf("expected Accepted, got %+v", result)
+	if result.Status != "OK" {
+		t.Fatalf("expected OK, got %+v", result)
 	}
 
 	_ = listener.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
