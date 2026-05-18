@@ -228,7 +228,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"graphql":       {"graphql-core==3.2.6", "aonohako-graphql-run Main.graphql"},
 		"hare":          {"hare build -o Main Main.ha", "fmt::println"},
 		"haxe":          {"haxe -main Main -neko Main.n", "neko Main.n"},
-		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle build -D ."},
+		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle process_theories -o naproche_server=false -D ."},
 		"janet":         {"JANET_VERSION=1.41.2", "janet Main.janet"},
 		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "default-jdk-headless", "kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar", "javac --release 8 -cp Main.jar Helper.java", "jar uf Main.jar Helper.class"},
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
