@@ -243,12 +243,15 @@ languages:
         - rm -f /tmp/node.tar.xz
     smoke:
       command:
-        - node
-        - -e
+        - bash
+        - -lc
         - |
+          cat > Main.js <<'JS'
           const fs = require('fs');
           fs.writeFileSync('same-folder.txt', 'ok');
           console.log(fs.readFileSync('same-folder.txt', 'utf8'));
+          JS
+          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js | grep '^ok$'
 
   coffeescript:
     install:
@@ -290,7 +293,7 @@ languages:
         - |
           printf '%s\n' "declare const require: any;" "const fs = require('fs');" "fs.writeFileSync('same-folder.txt', 'ok');" "console.log(fs.readFileSync('same-folder.txt', 'utf8'));" > Main.ts
           tsc Main.ts --module commonjs --target es2019 --outDir dist
-          node dist/Main.js | grep '^ok$'
+          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js | grep '^ok$'
 
   ruby:
     install:
