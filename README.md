@@ -181,8 +181,8 @@ aonohako-selftest cgroup-preflight
   resources. Set it explicitly to `0` only for development cases that
   intentionally need unlimited open streams.
 - `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY` defaults to
-  `min(8, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
-  `min(8, AONOHAKO_MAX_ACTIVE_RUNS)`. It separately caps concurrent pre-auth
+  `min(4, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
+  `min(4, AONOHAKO_MAX_ACTIVE_RUNS)`. It separately caps concurrent pre-auth
   body hashing for signed platform-auth requests, so stream concurrency can be
   higher than the number of simultaneous 64 MiB body hash operations.
 - `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev` and `16`

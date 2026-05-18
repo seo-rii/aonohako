@@ -44,7 +44,7 @@ const (
 	maxCompileDecodedSourceBytes      = 16 << 20
 	maxCompileDecodedSourceTotalBytes = 48 << 20
 	maxJSONBodyBytes                  = 64 << 20
-	defaultPlatformBodyHashSlots      = 8
+	defaultPlatformBodyHashSlots      = 4
 	platformPrincipalHeader           = "X-Aonohako-Principal"
 	platformPrincipalSignatureHeader  = "X-Aonohako-Principal-Signature"
 	platformPrincipalTimestampHeader  = "X-Aonohako-Principal-Timestamp"

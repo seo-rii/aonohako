@@ -186,8 +186,8 @@ Both `/compile` and `/execute` share the same bounded queue:
   simultaneous `/compile` and `/execute` streams before they join the run queue.
 - **Platform body hash concurrency**:
   `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY` (default:
-  `min(8, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
-  `min(8, AONOHAKO_MAX_ACTIVE_RUNS)`). This caps concurrent pre-auth body
+  `min(4, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
+  `min(4, AONOHAKO_MAX_ACTIVE_RUNS)`). This caps concurrent pre-auth body
   hashing for signed platform-auth requests separately from request streams.
 - **Per-principal open request streams**:
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` (default: `0` in `dev`, `16` in
