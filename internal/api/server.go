@@ -515,22 +515,12 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
-			} else if len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 && s.cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetDev {
-				host, _, err := net.SplitHostPort(r.RemoteAddr)
-				if err != nil {
-					host = r.RemoteAddr
+				if s.cfg.TrustedPlatformHeaders && len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 && !s.trustedPlatformSource(r) {
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+					return
 				}
-				remoteIP := net.ParseIP(strings.TrimSpace(host))
-				trustedSource := false
-				if remoteIP != nil {
-					for _, cidr := range s.cfg.TrustedPlatformHeaderCIDRs {
-						if _, network, err := net.ParseCIDR(cidr); err == nil && network.Contains(remoteIP) {
-							trustedSource = true
-							break
-						}
-					}
-				}
-				if value == "" || !trustedSource {
+			} else if s.cfg.TrustedPlatformHeaders && len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 && s.cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetDev {
+				if value == "" || !s.trustedPlatformSource(r) {
 					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
@@ -576,6 +566,23 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		}
 	})
+}
+
+func (s *Server) trustedPlatformSource(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	remoteIP := net.ParseIP(strings.TrimSpace(host))
+	if remoteIP == nil {
+		return false
+	}
+	for _, cidr := range s.cfg.TrustedPlatformHeaderCIDRs {
+		if _, network, err := net.ParseCIDR(cidr); err == nil && network.Contains(remoteIP) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) acquirePlatformBodyHashSlot() (func(), bool) {
