@@ -1426,7 +1426,7 @@ languages:
           env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet new console --force --no-restore --verbosity quiet -n App -o app
           printf '%s\n' 'Console.WriteLine("ok");' > app/Program.cs
           env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish app --configuration Release -o publish
-          dotnet ./publish/App.dll | grep '^ok$'
+          env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
 
   fsharp:
     install:
@@ -1465,7 +1465,7 @@ languages:
               0
           FS
           env HOME=/tmp/fsharp-home DOTNET_CLI_HOME=/tmp/fsharp-home NUGET_PACKAGES=/tmp/fsharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.fsproj --configuration Release -o publish -p:UseAppHost=false
-          dotnet ./publish/App.dll | grep '^ok$'
+          env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
 
   vbnet:
     install:
@@ -1507,7 +1507,7 @@ languages:
           End Module
           VB
           env HOME=/tmp/vbnet-home DOTNET_CLI_HOME=/tmp/vbnet-home NUGET_PACKAGES=/tmp/vbnet-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.vbproj --configuration Release -o publish -p:UseAppHost=false
-          dotnet ./publish/App.dll | grep '^ok$'
+          env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
 
   gleam:
     install:
