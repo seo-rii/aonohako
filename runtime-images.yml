@@ -177,8 +177,10 @@ languages:
         - -lc
         - |
           printf '%s\n' 'public class Main {' '  public static void main(String[] args) {' '    System.out.println("ok");' '  }' '}' > Main.java
-          javac --release 11 Main.java
-          java Main | grep '^ok$'
+          javac --release 11 -encoding UTF-8 Main.java
+          printf '%s\n' 'Manifest-Version: 1.0' 'Main-Class: Main' '' > MANIFEST.MF
+          jar cfm Main.jar MANIFEST.MF Main.class
+          java -XX:ReservedCodeCacheSize=64m -XX:-UseCompressedClassPointers -Xmx128m -Xss1m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -XX:+UseSerialGC -DONLINE_JUDGE=1 -jar Main.jar | grep '^ok$'
 
   groovy:
     install:
@@ -200,7 +202,11 @@ languages:
           }
           GROOVY
           groovyc -d . Main.groovy
-          groovy -cp . Main | grep '^ok$'
+          shopt -s nullglob
+          groovy_jars=(/usr/share/groovy/embeddable/groovy-all*.jar /usr/share/java/groovy-all*.jar /usr/share/java/groovy*.jar)
+          groovy_cp='.'
+          for jar in "${groovy_jars[@]}"; do groovy_cp="${groovy_cp}:${jar}"; done
+          java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${groovy_cp}" Main | grep '^ok$'
           cat > Broken.groovy <<'GROOVY'
           class Broken {
               static void main(String[] args) {
@@ -223,7 +229,11 @@ languages:
         - |
           printf '%s\n' 'object Main extends App {' '  val path = new java.io.File("same-folder.txt")' '  val writer = new java.io.PrintWriter(path, "UTF-8")' '  writer.write("ok")' '  writer.close()' '  println(scala.io.Source.fromFile(path, "UTF-8").mkString.trim)' '}' > Main.scala
           scalac Main.scala
-          scala -nocompdaemon -classpath . Main | grep '^ok$'
+          shopt -s nullglob
+          scala_jars=(/usr/share/java/scala*.jar)
+          scala_cp='.'
+          for jar in "${scala_jars[@]}"; do scala_cp="${scala_cp}:${jar}"; done
+          java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${scala_cp}" Main | grep '^ok$'
 
   javascript:
     install:
@@ -1248,7 +1258,7 @@ languages:
           (spit "same-folder.txt" "ok")
           (println (str/trim (slurp "same-folder.txt")))
           CLOJURE
-          clojure Main.clj | grep '^ok$'
+          java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp /usr/share/java/clojure-1.12.jar clojure.main Main.clj | grep '^ok$'
           cat > Broken.clj <<'CLOJURE'
           (defn broken []
             (println "oops"
@@ -1954,7 +1964,7 @@ languages:
           kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar
           javac --release 8 -cp Main.jar Helper.java
           jar uf Main.jar Helper.class
-          java -jar Main.jar | grep '^ok$'
+          java -Xms64m -Xmx128m -Xss1m -XX:+UseSerialGC -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -DONLINE_JUDGE=1 -jar Main.jar | grep '^ok$'
 
   duckdb:
     install:

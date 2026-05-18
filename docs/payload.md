@@ -369,17 +369,17 @@ When `spj` is provided, the SPJ binary is invoked as:
 | Runtime lang | Executor |
 |---|---|
 | `binary` | Direct execution |
-| `clojure` | `clojure <file>` |
+| `clojure` | `java <JVM memory flags> -cp /usr/share/java/clojure-1.12.jar clojure.main <file>` |
 | `racket` | `racket <file>` |
 | `scheme` | `chibi-scheme <file>` |
 | `awk` | `gawk --sandbox -f <file>` |
 | `tcl` | `tclsh <file>` |
 | `python` | `python3 <file>` |
 | `pypy` | `pypy3 <file>` |
-| `groovy` | `groovy -cp <dir> <MainClass>` |
-| `scala` | `scala -classpath <dir> <MainClass>` |
-| `java` | `java -jar <file>` |
-| `kotlin-jvm` | `java -jar <file>` |
+| `groovy` | `java <JVM memory flags> -cp <classes:groovy jars> <MainClass>` |
+| `scala` | `java <JVM memory flags> -cp <classes:scala jars> <MainClass>` |
+| `java` | `java <JVM memory flags> -jar <file>` |
+| `kotlin-jvm` | `java <JVM memory flags> -jar <file>` |
 | `erlang` | `erl -noshell -pa <dir> -s <module> <function> -s init stop` |
 | `prolog` | `swipl -q -f <file> -g main -t halt` |
 | `lisp` | `sbcl --script <file>` |
