@@ -107,7 +107,7 @@ func compileFSharp(ctx context.Context, workDir string, sources []model.Source) 
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	}
 	outDir := filepath.Join(workDir, "publish")
-	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE;$(DefineConstants)"}
+	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE", "-p:NuGetAudit=false"}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
@@ -201,7 +201,7 @@ func compileVBNet(ctx context.Context, workDir string, sources []model.Source) m
 		return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 	}
 	outDir := filepath.Join(workDir, "publish")
-	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE;$(DefineConstants)"}
+	args := []string{"publish", projectPath, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE", "-p:NuGetAudit=false"}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
@@ -317,7 +317,7 @@ func compileCSharp(ctx context.Context, workDir string, sources []model.Source) 
 	if hasProject {
 		publishTarget = projectPath
 	}
-	args := []string{"publish", publishTarget, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE;$(DefineConstants)"}
+	args := []string{"publish", publishTarget, "--configuration", "Release", "-o", outDir, "-p:UseAppHost=false", "-p:DefineConstants=ONLINE_JUDGE", "-p:NuGetAudit=false"}
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "dotnet", args, dotnetBuildEnv())
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}

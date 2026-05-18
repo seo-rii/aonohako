@@ -33,6 +33,9 @@ func WorkspaceScopedDirs(workDir string) []string {
 		filepath.Join(workDir, ".pip-cache"),
 		filepath.Join(workDir, ".dotnet-home"),
 		filepath.Join(workDir, ".nuget"),
+		filepath.Join(workDir, ".nuget-scratch"),
+		filepath.Join(workDir, ".nuget-http-cache"),
+		filepath.Join(workDir, ".nuget-plugins-cache"),
 		filepath.Join(workDir, ".konan-home"),
 		filepath.Join(workDir, ".konan"),
 		filepath.Join(workDir, ".mix"),
@@ -53,6 +56,9 @@ func WorkspaceScopedEnv(workDir string) []string {
 	pip := filepath.Join(workDir, ".pip-cache")
 	dotnetHome := filepath.Join(workDir, ".dotnet-home")
 	nuget := filepath.Join(workDir, ".nuget")
+	nugetScratch := filepath.Join(workDir, ".nuget-scratch")
+	nugetHTTPCache := filepath.Join(workDir, ".nuget-http-cache")
+	nugetPluginsCache := filepath.Join(workDir, ".nuget-plugins-cache")
 	konanHome := filepath.Join(workDir, ".konan-home")
 	konan := filepath.Join(workDir, ".konan")
 	mix := filepath.Join(workDir, ".mix")
@@ -77,6 +83,9 @@ func WorkspaceScopedEnv(workDir string) []string {
 		fmt.Sprintf("PIP_CACHE_DIR=%s", pip),
 		fmt.Sprintf("DOTNET_CLI_HOME=%s", dotnetHome),
 		fmt.Sprintf("NUGET_PACKAGES=%s", nuget),
+		fmt.Sprintf("NUGET_SCRATCH=%s", nugetScratch),
+		fmt.Sprintf("NUGET_HTTP_CACHE_PATH=%s", nugetHTTPCache),
+		fmt.Sprintf("NUGET_PLUGINS_CACHE_PATH=%s", nugetPluginsCache),
 		"DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
 		"DOTNET_CLI_TELEMETRY_OPTOUT=1",
 		"DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",
