@@ -73,6 +73,11 @@ func Validate(req *model.RunRequest) error {
 			return err
 		}
 	}
+	if req.Interactor != nil {
+		if err := ValidateInteractor(req); err != nil {
+			return err
+		}
+	}
 	if req.SPJ != nil && req.SPJ.Limits != nil {
 		if err := ValidateOptionalLimits("spj.limits", *req.SPJ.Limits); err != nil {
 			return err
@@ -85,7 +90,7 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 	if len(req.Programs) == 0 || len(req.Steps) == 0 {
 		return fmt.Errorf("programs and steps must be provided together")
 	}
-	if strings.TrimSpace(req.Lang) != "" || len(req.Binaries) > 0 || strings.TrimSpace(req.Stdin) != "" || strings.TrimSpace(req.EntryPoint) != "" || req.EnableNetwork || !LimitsAreZero(req.Limits) {
+	if strings.TrimSpace(req.Lang) != "" || len(req.Binaries) > 0 || strings.TrimSpace(req.Stdin) != "" || strings.TrimSpace(req.EntryPoint) != "" || req.EnableNetwork || req.Interactor != nil || !LimitsAreZero(req.Limits) {
 		return fmt.Errorf("legacy execute fields cannot be combined with programs/steps")
 	}
 	if len(req.Programs) > MaxPrograms {
@@ -180,6 +185,39 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		}
 		if step.Handoff != nil {
 			return fmt.Errorf("second step handoff is not supported")
+		}
+	}
+	return nil
+}
+
+func ValidateInteractor(req *model.RunRequest) error {
+	if UsesSteps(req) {
+		return fmt.Errorf("interactor cannot be combined with programs/steps")
+	}
+	if req.SPJ != nil {
+		return fmt.Errorf("interactor cannot be combined with spj")
+	}
+	if len(req.FileOutputs) > 0 {
+		return fmt.Errorf("interactor cannot be combined with file_outputs")
+	}
+	if req.IgnoreTLE {
+		return fmt.Errorf("interactor cannot be combined with ignore_tle")
+	}
+	if err := ValidateRunLang("interactor.lang", req.Interactor.Lang); err != nil {
+		return err
+	}
+	if len(req.Interactor.Binaries) == 0 {
+		return fmt.Errorf("interactor.binaries is required")
+	}
+	if len(req.Interactor.Binaries) > MaxBinaryFiles {
+		return fmt.Errorf("interactor has too many binaries: max %d", MaxBinaryFiles)
+	}
+	if err := ValidateBinaries("interactor.binaries", req.Interactor.Binaries); err != nil {
+		return err
+	}
+	if req.Interactor.Limits != nil {
+		if err := ValidateOptionalLimits("interactor.limits", *req.Interactor.Limits); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -100,6 +100,17 @@ error.
       "memory_mb": 256
     }
   },
+  "interactor": {                            // optional interactive IO judge
+    "lang": "binary",                        // interactor runtime language
+    "binaries": [                            // pre-compiled interactor artifacts
+      {"name": "interactor", "data_b64": "<base64>", "mode": "exec"}
+    ],
+    "entry_point": "interactor.py",          // optional interactor entry point
+    "limits": {                              // optional interactor-specific limits
+      "time_ms": 2000,
+      "memory_mb": 256
+    }
+  },
   "file_outputs": [                          // read program output from file instead of stdout (at most one path)
     {"path": "output.txt"}
   ],
@@ -124,6 +135,8 @@ boundary. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
 server-side values when `0` or omitted, but values above the hard API caps are
 rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
+`interactor.limits` uses the same caps; omitted values inherit the contestant
+time/output policy and use safe memory/workspace defaults where needed.
 `runtime_profile`, when present, must name a profile configured by the runner
 operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded
 numeric tuning values and cannot pass arbitrary runtime flags. Non-dev servers
@@ -140,7 +153,7 @@ When `programs` or `steps` is present, the legacy top-level `lang`, `binaries`,
 `stdin`, `limits`, `entry_point`, and `enable_network` fields must be omitted.
 Top-level `expected_stdout`, `spj`, `file_outputs`, `sidecar_outputs`,
 `ignore_tle`, `problem_id`, and `runtime_profile` still apply to the final
-step.
+step. `interactor` is not supported with two-step execute mode.
 
 ```jsonc
 {
@@ -205,8 +218,8 @@ also set `stdin`; the handoff stream is the only stdin source for that step.
   "stderr_truncated": false,                // true when stderr exceeded the capture cap
   "reason": "",                             // human-readable error
   "verdict_source": "stdout",               // source that selected the final verdict, when known
-  "score": null,                            // nullable float 0.0–1.0 (SPJ score)
-  "steps": [                                // present for two-step execute mode
+  "score": null,                            // nullable float 0.0–1.0 (SPJ or interactive score)
+  "steps": [                                // present for two-step or interactive execute mode
     {
       "id": "encode",
       "program_id": "encoder",
@@ -267,6 +280,28 @@ When `spj` is provided, the SPJ binary is invoked as:
   SPJ stdin
 - Exit code 0 → accepted; non-zero → wrong answer
 - If `emit_score: true`, SPJ should print a float (0.0–1.0) to stdout
+
+## Interactive IO Judge
+
+When `interactor` is provided, `aonohako` starts the contestant and interactor
+at the same time in separate sandbox workspaces. Contestant stdout is streamed
+to interactor stdin, and interactor stdout is streamed to contestant stdin.
+
+The interactor is invoked as:
+
+```
+<interactor_command> <input_file> <output_file> <answer_file>
+```
+
+- `input_file` contains the request `stdin`
+- `answer_file` contains `expected_stdout`
+- `output_file` is an interactor-writable path for optional protocol logging
+- Interactor exit code `0` → accepted
+- Interactor exit code `3` → runtime error / interactor failure
+- Other non-zero interactor exit codes → wrong answer
+- `spj`, `file_outputs`, `ignore_tle`, and two-step `programs`/`steps` cannot
+  be combined with `interactor`
+- `sidecar_outputs` still capture files from the contestant workspace
 
 ## Supported Languages
 

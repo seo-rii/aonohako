@@ -122,6 +122,9 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		}
 		tuning = profileTuning.WithSafeDefaults()
 	}
+	if req.Interactor != nil {
+		return s.runInteractive(ctx, req, hooks, tuning)
+	}
 	if runvalidation.UsesSteps(req) {
 		return s.runStepPipeline(ctx, req, hooks, tuning)
 	}

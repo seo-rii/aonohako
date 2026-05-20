@@ -108,8 +108,8 @@ Client                        aonohako
   "stderr_truncated": false,            // true when stderr exceeded the capture cap
   "reason": "",                         // failure reason
   "verdict_source": "stdout",           // diagnostic source that selected the final verdict, when known
-  "score": null,                        // nullable float; SPJ score (0.0–1.0)
-  "steps": [                            // present for two-step `/execute` requests
+  "score": null,                        // nullable float; SPJ or interactive score (0.0–1.0)
+  "steps": [                            // present for two-step or interactive `/execute` requests
     {
       "id": "encode",
       "program_id": "encoder",
@@ -150,10 +150,11 @@ Client                        aonohako
 | `Container Initialization Failed` | Workspace setup or process start failed |
 
 `verdict_source` is optional diagnostic metadata. Local helper runners use it
-to distinguish output comparison (`stdout`, `file_output`, `spj`), process
-exit (`exit_code`, `signal`, `wait_status`, `sandbox_init`), wall/CPU time
-(`wall_time`, `cpu_time`, `cpu_time_final`, `cpu_time_cgroup`,
-`cpu_time_cgroup_final`, `cpu_rlimit`), memory sources
+to distinguish output comparison (`stdout`, `file_output`, `spj`,
+`interactor`, `contestant:*`, `interactor:*`), process exit (`exit_code`,
+`signal`, `wait_status`, `sandbox_init`), wall/CPU time (`wall_time`,
+`cpu_time`, `cpu_time_final`, `cpu_time_cgroup`, `cpu_time_cgroup_final`,
+`cpu_rlimit`), memory sources
 (`memory_rss`, `memory_cgroup`, `memory_cgroup_final`, `memory_reported`,
 `address_space`), pids limits (`pids_cgroup`, `pids_cgroup_final`), and
 workspace sources (`workspace_bytes`, `workspace_entries`, `workspace_depth`,

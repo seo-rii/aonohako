@@ -12,6 +12,8 @@ binary, configurable runtime images, and testable build metadata.
 - a `box` workspace layout that keeps submitted files immutable while allowing
   new files to be created in the same working directory
 - symlink-safe output capture for file outputs and sidecar artifacts
+- SPJ and interactive IO judging support for problems that need custom verdict
+  logic or bidirectional contestant/interactor communication
 - `runtime-images.yml` as the source of truth for runtime image groups
 - Docker build tooling that can emit production multi-language images and
   single-language CI smoke images from the same YAML catalog

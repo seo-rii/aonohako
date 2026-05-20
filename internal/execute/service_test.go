@@ -2501,6 +2501,113 @@ func TestRunSPJUsesDedicatedLimits(t *testing.T) {
 	}
 }
 
+func TestRunInteractiveIOAcceptsInteractorVerdict(t *testing.T) {
+	requireSandboxSupport(t)
+
+	contestant := `import sys
+n = int(sys.stdin.readline())
+print(n + 1, flush=True)
+`
+	interactor := `import sys
+input_path, output_path, answer_path = sys.argv[1:4]
+with open(input_path, "r", encoding="utf-8") as handle:
+    n = int(handle.read().strip())
+with open(answer_path, "r", encoding="utf-8") as handle:
+    expected = handle.read().strip()
+print(n, flush=True)
+line = sys.stdin.readline().strip()
+with open(output_path, "w", encoding="utf-8") as handle:
+    handle.write(line + "\n")
+if line != expected:
+    sys.stderr.write(f"expected {expected}, got {line}\n")
+    raise SystemExit(1)
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(contestant)),
+		}},
+		Stdin:          "41\n",
+		ExpectedStdout: "42\n",
+		Interactor: &model.InteractorSpec{
+			Lang: "python",
+			Binaries: []model.Binary{{
+				Name:    "interactor.py",
+				DataB64: base64.StdEncoding.EncodeToString([]byte(interactor)),
+			}},
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected interactive run to accept, got %+v", resp)
+	}
+	if resp.Score == nil || *resp.Score != 1 {
+		t.Fatalf("expected accepted interactive score 1, got %+v", resp.Score)
+	}
+	if len(resp.Steps) != 2 || resp.Steps[0].ID != "contestant" || resp.Steps[1].ID != "interactor" {
+		t.Fatalf("expected contestant and interactor step results, got %+v", resp.Steps)
+	}
+}
+
+func TestRunInteractiveIOReportsInteractorWrongAnswer(t *testing.T) {
+	requireSandboxSupport(t)
+
+	contestant := `import sys
+n = int(sys.stdin.readline())
+print(n + 2, flush=True)
+`
+	interactor := `import sys
+input_path, output_path, answer_path = sys.argv[1:4]
+with open(input_path, "r", encoding="utf-8") as handle:
+    n = int(handle.read().strip())
+with open(answer_path, "r", encoding="utf-8") as handle:
+    expected = handle.read().strip()
+print(n, flush=True)
+line = sys.stdin.readline().strip()
+with open(output_path, "w", encoding="utf-8") as handle:
+    handle.write(line + "\n")
+if line != expected:
+    sys.stderr.write(f"expected {expected}, got {line}\n")
+    raise SystemExit(1)
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(contestant)),
+		}},
+		Stdin:          "41\n",
+		ExpectedStdout: "42\n",
+		Interactor: &model.InteractorSpec{
+			Lang: "python",
+			Binaries: []model.Binary{{
+				Name:    "interactor.py",
+				DataB64: base64.StdEncoding.EncodeToString([]byte(interactor)),
+			}},
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusWA {
+		t.Fatalf("expected interactive wrong answer, got %+v", resp)
+	}
+	if resp.Score == nil || *resp.Score != 0 {
+		t.Fatalf("expected wrong-answer interactive score 0, got %+v", resp.Score)
+	}
+	if !strings.Contains(resp.Reason, "expected 42, got 43") {
+		t.Fatalf("expected interactor stderr in reason, got %+v", resp)
+	}
+	if strings.TrimSpace(resp.Stdout) != "43" {
+		t.Fatalf("expected contestant protocol output on WA, got %+v", resp)
+	}
+}
+
 func TestRunSleepMostlyConsumesWallTimeNotCPUTime(t *testing.T) {
 	forceDirectMode(t)
 

@@ -117,7 +117,8 @@ as `/execute` when it runs as a root-backed embedded helper:
    downstream runner.
 10. The parent watches time, memory, workspace growth, stdout, stderr, and
     optional sidecar image output when running locally.
-11. The parent compares output or runs an SPJ and returns the final result.
+11. The parent compares output, runs an SPJ, or runs an interactive interactor
+    and returns the final result.
 
 Two-step problems use the same `/execute` endpoint with `programs` and `steps`
 fields instead of a separate API path. The runner executes exactly two step
@@ -130,6 +131,13 @@ aggregate wall/CPU time, peak memory across steps, and a per-step diagnostic
 summary. Intermediate step success is exposed as the public `Accepted` status;
 the internal sandbox-only `OK` marker is not part of the step response
 contract.
+
+Interactive IO problems also use `/execute`, but provide `interactor` instead
+of `spj` or `programs`/`steps`. The runner starts the contestant and interactor
+concurrently in separate sandbox workspaces, streams contestant stdout to
+interactor stdin, and streams interactor stdout to contestant stdin. The
+interactor receives read-only input and answer files through argv, plus a
+writable output path for optional protocol logging.
 
 ## Sandbox Process Model
 
@@ -376,8 +384,9 @@ The stable contract is:
 Local helper responses include `verdict_source` diagnostic metadata when the
 runner can identify the source that selected the final status. The field is
 intended for operations and judge debugging, not as a security boundary. Typical
-values identify output comparison (`stdout`, `file_output`, `spj`), process
-exit (`exit_code`, `signal`), time (`wall_time`, `cpu_time`,
+values identify output comparison (`stdout`, `file_output`, `spj`,
+`interactor`, `contestant:*`, `interactor:*`), process exit (`exit_code`,
+`signal`), time (`wall_time`, `cpu_time`,
 `cpu_time_final`, `cpu_time_cgroup`, `cpu_time_cgroup_final`, `cpu_rlimit`),
 memory (`memory_rss`, `memory_cgroup`, `memory_reported`, `address_space`),
 cgroup pids (`pids_cgroup`), and

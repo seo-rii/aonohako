@@ -52,6 +52,13 @@ type SPJSpec struct {
 	Limits    *Limits `json:"limits,omitempty"`
 }
 
+type InteractorSpec struct {
+	Lang       string   `json:"lang"`
+	Binaries   []Binary `json:"binaries"`
+	EntryPoint string   `json:"entry_point,omitempty"`
+	Limits     *Limits  `json:"limits,omitempty"`
+}
+
 type OutputFile struct {
 	Path string `json:"path"`
 }
@@ -109,21 +116,22 @@ type SidecarError struct {
 }
 
 type RunRequest struct {
-	Lang           string       `json:"lang"`
-	Binaries       []Binary     `json:"binaries"`
-	Programs       []RunProgram `json:"programs,omitempty"`
-	Steps          []RunStep    `json:"steps,omitempty"`
-	Stdin          string       `json:"stdin"`
-	ExpectedStdout string       `json:"expected_stdout,omitempty"`
-	Limits         Limits       `json:"limits"`
-	ProblemID      string       `json:"problem_id,omitempty"`
-	RuntimeProfile string       `json:"runtime_profile,omitempty"`
-	EnableNetwork  bool         `json:"enable_network,omitempty"`
-	EntryPoint     string       `json:"entry_point,omitempty"`
-	SPJ            *SPJSpec     `json:"spj,omitempty"`
-	FileOutputs    []OutputFile `json:"file_outputs,omitempty"`
-	SidecarOutputs []OutputFile `json:"sidecar_outputs,omitempty"`
-	IgnoreTLE      bool         `json:"ignore_tle,omitempty"`
+	Lang           string          `json:"lang"`
+	Binaries       []Binary        `json:"binaries"`
+	Programs       []RunProgram    `json:"programs,omitempty"`
+	Steps          []RunStep       `json:"steps,omitempty"`
+	Stdin          string          `json:"stdin"`
+	ExpectedStdout string          `json:"expected_stdout,omitempty"`
+	Limits         Limits          `json:"limits"`
+	ProblemID      string          `json:"problem_id,omitempty"`
+	RuntimeProfile string          `json:"runtime_profile,omitempty"`
+	EnableNetwork  bool            `json:"enable_network,omitempty"`
+	EntryPoint     string          `json:"entry_point,omitempty"`
+	SPJ            *SPJSpec        `json:"spj,omitempty"`
+	Interactor     *InteractorSpec `json:"interactor,omitempty"`
+	FileOutputs    []OutputFile    `json:"file_outputs,omitempty"`
+	SidecarOutputs []OutputFile    `json:"sidecar_outputs,omitempty"`
+	IgnoreTLE      bool            `json:"ignore_tle,omitempty"`
 }
 
 type RunResponse struct {
