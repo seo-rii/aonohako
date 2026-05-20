@@ -43,6 +43,32 @@ type execResult struct {
 	VerdictSource   string
 }
 
+type sandboxStreamConfig struct {
+	stdin        io.Reader
+	liveStdin    bool
+	stdout       io.Writer
+	onStdoutDone func()
+	stderr       io.Writer
+	onStderrDone func()
+}
+
+type teeCaptureWriter struct {
+	capture *cappedBuffer
+	forward io.Writer
+}
+
+func (w teeCaptureWriter) Write(p []byte) (int, error) {
+	if w.capture != nil {
+		if _, err := w.capture.Write(p); err != nil {
+			return 0, err
+		}
+	}
+	if w.forward != nil {
+		_, _ = w.forward.Write(p)
+	}
+	return len(p), nil
+}
+
 func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	limits := req.Limits
 	timeMs := max(1, limits.TimeMs)
@@ -53,6 +79,10 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 }
 
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{stdin: stdinReader}, hooks, outputLimitBytes, tuning, cgroupParentDir)
+}
+
+func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
@@ -228,34 +258,63 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 
 	cmd := exec.CommandContext(ctx, helperPath)
 	cmd.Dir = ws.BoxDir
-	if stdinReader == nil {
-		stdinReader = strings.NewReader(req.Stdin)
+	var stdinLiveReader io.Reader
+	var stdinLiveWrite *os.File
+	var stdinCopyDone chan struct{}
+	if streams.liveStdin {
+		stdinLiveReader = streams.stdin
+		if stdinLiveReader == nil {
+			stdinLiveReader = strings.NewReader("")
+		}
+		stdinRead, stdinWrite, err := os.Pipe()
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stdin pipe failed: " + err.Error()}
+		}
+		stdinLiveWrite = stdinWrite
+		stdinCopyDone = make(chan struct{})
+		defer func() {
+			_ = stdinRead.Close()
+			_ = stdinWrite.Close()
+			if closer, ok := stdinLiveReader.(io.Closer); ok {
+				_ = closer.Close()
+			}
+			select {
+			case <-stdinCopyDone:
+			case <-time.After(100 * time.Millisecond):
+			}
+		}()
+		cmd.Stdin = stdinRead
+	} else {
+		stdinReader := streams.stdin
+		if stdinReader == nil {
+			stdinReader = strings.NewReader(req.Stdin)
+		}
+		stdinTemp, err := os.CreateTemp(filepath.Join(ws.RootDir, ".tmp"), "stdin-*")
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+		}
+		defer func() {
+			_ = stdinTemp.Close()
+			_ = os.Remove(stdinTemp.Name())
+		}()
+		written, err := io.Copy(stdinTemp, io.LimitReader(stdinReader, runvalidation.MaxTextFieldBytes+1))
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+		}
+		if written > runvalidation.MaxTextFieldBytes {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stdin too large"}
+		}
+		if err := stdinTemp.Chown(65532, 65532); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+		}
+		if err := stdinTemp.Chmod(0o400); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+		}
+		if _, err := stdinTemp.Seek(0, 0); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+		}
+		cmd.Stdin = stdinTemp
 	}
-	stdinFile, err := os.CreateTemp(filepath.Join(ws.RootDir, ".tmp"), "stdin-*")
-	if err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-	}
-	defer func() {
-		_ = stdinFile.Close()
-		_ = os.Remove(stdinFile.Name())
-	}()
-	written, err := io.Copy(stdinFile, io.LimitReader(stdinReader, runvalidation.MaxTextFieldBytes+1))
-	if err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-	}
-	if written > runvalidation.MaxTextFieldBytes {
-		return execResult{Status: model.RunStatusInitFail, Reason: "stdin too large"}
-	}
-	if err := stdinFile.Chown(65532, 65532); err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-	}
-	if err := stdinFile.Chmod(0o400); err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-	}
-	if _, err := stdinFile.Seek(0, 0); err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-	}
-	cmd.Stdin = stdinFile
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid:   true,
 		Pdeathsig: syscall.SIGKILL,
@@ -278,6 +337,14 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 	}
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
+	}
+	if streams.liveStdin {
+		_ = cmd.Stdin.(*os.File).Close()
+		go func() {
+			defer close(stdinCopyDone)
+			defer stdinLiveWrite.Close()
+			_, _ = ioCopy(stdinLiveWrite, stdinLiveReader)
+		}()
 	}
 	var runGroup cgroup.Group
 	cgroupCPUBaselineMicros := int64(0)
@@ -345,12 +412,26 @@ func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, 
 
 	doneOut := make(chan struct{})
 	doneErr := make(chan struct{})
+	stdoutWriter := interface{ Write([]byte) (int, error) }(&stdoutBuf)
+	if streams.stdout != nil {
+		stdoutWriter = teeCaptureWriter{capture: &stdoutBuf, forward: streams.stdout}
+	}
+	stderrWriter := interface{ Write([]byte) (int, error) }(&stderrBuf)
+	if streams.stderr != nil {
+		stderrWriter = teeCaptureWriter{capture: &stderrBuf, forward: streams.stderr}
+	}
 	go func() {
-		_, _ = ioCopy(&stdoutBuf, stdoutPipe)
+		_, _ = ioCopy(stdoutWriter, stdoutPipe)
+		if streams.onStdoutDone != nil {
+			streams.onStdoutDone()
+		}
 		close(doneOut)
 	}()
 	go func() {
-		_, _ = ioCopy(&stderrBuf, stderrPipe)
+		_, _ = ioCopy(stderrWriter, stderrPipe)
+		if streams.onStderrDone != nil {
+			streams.onStderrDone()
+		}
 		close(doneErr)
 	}()
 

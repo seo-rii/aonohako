@@ -170,3 +170,104 @@ func TestValidateRunRequestCoversLegacyAndStepModes(t *testing.T) {
 		t.Fatalf("unsupported legacy lang error = %v", err)
 	}
 }
+
+func TestValidateInteractorRequestCoversInteractiveIOShape(t *testing.T) {
+	valid := func() *model.RunRequest {
+		return &model.RunRequest{
+			Lang: "binary",
+			Binaries: []model.Binary{{
+				Name:    "run.sh",
+				DataB64: "ZWNobw==",
+				Mode:    "exec",
+			}},
+			Stdin:          "input\n",
+			ExpectedStdout: "answer\n",
+			Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+			Interactor: &model.InteractorSpec{
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "interactor.sh",
+					DataB64: "ZWNobw==",
+					Mode:    "exec",
+				}},
+			},
+		}
+	}
+
+	if err := Validate(valid()); err != nil {
+		t.Fatalf("interactive request should validate: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		edit func(*model.RunRequest)
+		want string
+	}{
+		{
+			name: "missing interactor binaries",
+			edit: func(req *model.RunRequest) {
+				req.Interactor.Binaries = nil
+			},
+			want: "interactor.binaries is required",
+		},
+		{
+			name: "unsupported interactor language",
+			edit: func(req *model.RunRequest) {
+				req.Interactor.Lang = "not-a-runtime"
+			},
+			want: "unsupported interactor.lang",
+		},
+		{
+			name: "spj is mutually exclusive",
+			edit: func(req *model.RunRequest) {
+				req.SPJ = &model.SPJSpec{Binary: &model.Binary{Name: "spj", DataB64: "ZWNobw==", Mode: "exec"}, Lang: "binary"}
+			},
+			want: "interactor cannot be combined with spj",
+		},
+		{
+			name: "file outputs are ambiguous",
+			edit: func(req *model.RunRequest) {
+				req.FileOutputs = []model.OutputFile{{Path: "answer.txt"}}
+			},
+			want: "interactor cannot be combined with file_outputs",
+		},
+		{
+			name: "interactor limit too high",
+			edit: func(req *model.RunRequest) {
+				req.Interactor.Limits = &model.Limits{TimeMs: MaxTimeMs + 1}
+			},
+			want: "interactor.limits.time_ms",
+		},
+		{
+			name: "steps are mutually exclusive",
+			edit: func(req *model.RunRequest) {
+				req.Programs = []model.RunProgram{{
+					ID:       "p",
+					Lang:     "binary",
+					Binaries: req.Binaries,
+				}}
+				req.Steps = []model.RunStep{{
+					ID:        "s",
+					ProgramID: "p",
+					Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+				}}
+				req.Lang = ""
+				req.Binaries = nil
+				req.Stdin = ""
+				req.Limits = model.Limits{}
+			},
+			want: "legacy execute fields",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := valid()
+			tc.edit(req)
+			err := Validate(req)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Validate error = %v, want containing %q", err, tc.want)
+			}
+		})
+	}
+}
