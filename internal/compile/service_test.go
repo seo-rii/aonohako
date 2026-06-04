@@ -279,6 +279,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"whitespace":    {compileKind: "whitespace", runLang: "whitespace"},
 		"befunge":       {compileKind: "befunge", runLang: "befunge"},
 		"bf":            {compileKind: "brainfuck", runLang: "brainfuck"},
+		"lolcode":       {compileKind: "lolcode", runLang: "lolcode"},
 		"wasm":          {compileKind: "wasm", runLang: "wasm"},
 		"vb6":           {compileKind: "vb6", runLang: "vb6"},
 		"freebasic":     {compileKind: "freebasic", runLang: "binary"},

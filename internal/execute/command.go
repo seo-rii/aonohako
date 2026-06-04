@@ -344,6 +344,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"bc", "-q", primaryPath}
 	case "befunge":
 		return []string{"python3", "/usr/local/lib/aonohako/befunge.py", primaryPath}
+	case "lolcode":
+		return []string{"lci", primaryPath}
 	case "forth":
 		return []string{"gforth", primaryPath, "-e", "bye"}
 	case "deno":

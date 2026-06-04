@@ -885,6 +885,33 @@ languages:
           printf '%s' '>"ko",,91+,@' > Main.bef
           python3 /usr/local/lib/aonohako/befunge.py Main.bef | grep '^ok$'
 
+  lolcode:
+    install:
+      apt:
+        - cmake
+        - curl
+        - gcc
+        - libc6-dev
+        - libreadline-dev
+        - make
+      script:
+        - export LCI_VERSION=0.11.2
+        - export LCI_SHA256=cb1065936d3a7463928dcddfc345a8d7d8602678394efc0e54981f9dd98c27d2
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://codeload.github.com/justinmeza/lci/tar.gz/v${LCI_VERSION}" -o /tmp/lci.tar.gz
+        - echo "${LCI_SHA256}  /tmp/lci.tar.gz" | sha256sum -c -
+        - tar -xzf /tmp/lci.tar.gz -C /tmp
+        - cmake -S "/tmp/lci-${LCI_VERSION}" -B /tmp/lci-build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
+        - cmake --build /tmp/lci-build --parallel "$(nproc)"
+        - cmake --install /tmp/lci-build
+        - rm -rf /tmp/lci.tar.gz "/tmp/lci-${LCI_VERSION}" /tmp/lci-build
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'HAI 1.2' 'VISIBLE "ok"' 'KTHXBYE' > Main.lol
+          lci Main.lol | grep '^ok$'
+
   wasm:
     install:
       apt:
@@ -2547,6 +2574,7 @@ profiles:
       - idris2
       - janet
       - lisp
+      - lolcode
       - lua
       - mercury
       - ocaml

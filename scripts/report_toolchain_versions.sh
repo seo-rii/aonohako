@@ -479,6 +479,10 @@ if has_language "bc"; then
     report_once "bc" bc --version
 fi
 
+if has_language "lolcode"; then
+    report_once "lci" lci -v
+fi
+
 if has_language "forth" || has_language "gforth"; then
     report_once "Gforth" gforth --version
 fi
@@ -607,6 +611,7 @@ report_compile_option "janet" "pass-through .janet artifacts"
 report_compile_option "sed" "pass-through .sed artifacts"
 report_compile_option "bc" "pass-through .bc artifacts"
 report_compile_option "befunge" "pass-through .bef/.bf93 artifacts"
+report_compile_option "lolcode" "pass-through .lol artifacts"
 report_compile_option "forth" "pass-through .fs artifacts"
 report_compile_option "whitespace" "pass-through .ws artifacts"
 report_compile_option "bf" "pass-through .bf artifacts"

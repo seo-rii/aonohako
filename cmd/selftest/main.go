@@ -2394,6 +2394,14 @@ msg:
 				source("Main.bef", `>"ko",,91+,@`),
 			},
 		},
+		"lolcode": {
+			compileLang:    "LOLCODE",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.lol", "HAI 1.2\nVISIBLE \"ok\"\nKTHXBYE\n"),
+			},
+		},
 		"clojure": {
 			compileLang:    "CLOJURE",
 			expectedStdout: "ok\n",

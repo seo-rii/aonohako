@@ -236,6 +236,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"whitespace", "/tmp/sol.ws", "python3", true},
 		{"befunge", "/tmp/sol.bef", "python3", true},
 		{"brainfuck", "/tmp/sol.bf", "python3", true},
+		{"lolcode", "/tmp/sol.lol", "lci", true},
 		{"wasm", "/tmp/sol.wasm", "wasmtime", true},
 		{"ruby", "/tmp/sol.rb", "ruby", true},
 		{"php", "/tmp/sol.php", "php", true},

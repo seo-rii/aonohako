@@ -158,7 +158,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(lowerClean, ".vvp") && verilogPath == "" {
 			verilogPath = dest
 		}
-		for _, ext := range []string{".bas", ".carbon", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".fs", ".fth", ".4th"} {
+		for _, ext := range []string{".bas", ".carbon", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".fs", ".fth", ".4th"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -267,7 +267,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		return rocqPath, lang, nil
 	case "haxe":
 		return primaryPath, lang, nil
-	case "vb6", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "forth", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet":
+	case "vb6", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "forth", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet":
 		if sourcePath == "" {
 			sourcePath = primaryPath
 		}
