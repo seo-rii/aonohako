@@ -234,6 +234,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"raku", "/tmp/sol.raku", "raku", true},
 		{"r", "/tmp/sol.R", "/usr/lib/R/bin/exec/R", true},
 		{"whitespace", "/tmp/sol.ws", "python3", true},
+		{"befunge", "/tmp/sol.bef", "python3", true},
 		{"brainfuck", "/tmp/sol.bf", "python3", true},
 		{"wasm", "/tmp/sol.wasm", "wasmtime", true},
 		{"ruby", "/tmp/sol.rb", "ruby", true},

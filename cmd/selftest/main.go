@@ -2386,6 +2386,14 @@ msg:
 				source("Main.bf", "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>."),
 			},
 		},
+		"befunge": {
+			compileLang:    "BEFUNGE",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.bef", `>"ko",,91+,@`),
+			},
+		},
 		"clojure": {
 			compileLang:    "CLOJURE",
 			expectedStdout: "ok\n",

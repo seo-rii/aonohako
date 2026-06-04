@@ -53,6 +53,7 @@ COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
+COPY --chmod=0644 scripts/befunge.py /usr/local/lib/aonohako/befunge.py
 COPY --chmod=0755 scripts/apl_kanapl_runner.js /usr/local/bin/apl
 COPY --chmod=0755 scripts/why3_prove_z3.sh /usr/local/bin/aonohako-why3-prove
 COPY --chmod=0755 scripts/gdl_run.sh /usr/local/bin/aonohako-gdl-run
@@ -70,7 +71,7 @@ COPY python/ /usr/local/lib/aonohako/python/
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
 RUN chmod 0755 /usr/local/lib/aonohako && \
-    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py && \
+    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py && \
     find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
     find /usr/local/lib/aonohako/python -type f -exec chmod 0644 {} + && \
     install -d -m 0700 /var/aonohako /var/aonohako/protected && \

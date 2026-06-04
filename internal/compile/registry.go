@@ -115,6 +115,7 @@ var compileRegistry = map[string]Compiler{
 	"rescript":      reScriptCompiler{},
 	"purescript":    pureScriptCompiler{},
 	"whitespace":    whitespaceCompiler{},
+	"befunge":       passThroughCompiler{exts: []string{".bef", ".bf93"}, noSourceReason: "no befunge sources"},
 	"brainfuck":     brainfuckCompiler{},
 	"wasm":          wasmCompiler{},
 	"ocaml":         ocamlCompiler{},

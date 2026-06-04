@@ -196,6 +196,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "GFORTH"
 	case "whitespace":
 		l = "WHITESPACE"
+	case "befunge", "befunge93", "befunge-93", "bf93":
+		l = "BEFUNGE"
 	case "bf", "brainfuck":
 		l = "BF"
 	case "wasm", "webassembly":

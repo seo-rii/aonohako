@@ -873,6 +873,18 @@ languages:
           printf '%s' '++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.' > Main.bf
           python3 /usr/local/lib/aonohako/brainfuck.py Main.bf | grep '^Hello World!$'
 
+  befunge:
+    install:
+      apt:
+        - python3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s' '>"ko",,91+,@' > Main.bef
+          python3 /usr/local/lib/aonohako/befunge.py Main.bef | grep '^ok$'
+
   wasm:
     install:
       apt:
@@ -2522,6 +2534,7 @@ profiles:
       - apl
       - awk
       - bc
+      - befunge
       - bf
       - bqn
       - elixir
