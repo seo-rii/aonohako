@@ -451,6 +451,94 @@ languages:
           printf '%s\n' 'let broken = ' > Broken.res
           if rescript build >/dev/null 2>&1; then exit 1; fi
 
+  purescript:
+    install:
+      apt:
+        - curl
+        - xz-utils
+      script:
+        - export NODE_VERSION=24.15.0
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
+        - mkdir -p /opt
+        - tar -xJf /tmp/node.tar.xz -C /opt
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
+        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
+        - rm -f /tmp/node.tar.xz
+        - npm install -g purescript@0.15.16 spago@1.0.4
+        - install -d -m 0755 /usr/local/lib/aonohako/purescript-home
+        - |
+          export HOME=/usr/local/lib/aonohako/purescript-home
+          tmp=/tmp/purescript-warmup
+          rm -rf "$tmp"
+          mkdir -p "$tmp/src"
+          cat > "$tmp/spago.yaml" <<'YAML'
+          package:
+            name: aonohako-purescript-warmup
+            dependencies:
+              - console
+              - effect
+              - prelude
+            test:
+              main: Test.Main
+              dependencies: []
+          workspace:
+            packageSet:
+              registry: 77.4.1
+            extraPackages: {}
+          YAML
+          cat > "$tmp/src/Main.purs" <<'PURS'
+          module Main where
+          import Prelude
+          import Effect (Effect)
+          import Effect.Console (log)
+          main :: Effect Unit
+          main = log "ok"
+          PURS
+          cd "$tmp" && spago build
+          chmod -R a+rX /usr/local/lib/aonohako/purescript-home
+          rm -rf "$tmp"
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          export HOME=/usr/local/lib/aonohako/purescript-home
+          cat > spago.yaml <<'YAML'
+          package:
+            name: aonohako-purescript-smoke
+            dependencies:
+              - console
+              - effect
+              - prelude
+            test:
+              main: Test.Main
+              dependencies: []
+          workspace:
+            packageSet:
+              registry: 77.4.1
+            extraPackages: {}
+          YAML
+          mkdir -p src
+          cat > src/Main.purs <<'PURS'
+          module Main where
+          import Prelude
+          import Effect (Effect)
+          import Effect.Console (log)
+          main :: Effect Unit
+          main = log "ok"
+          PURS
+          spago build
+          printf '%s\n' 'require("./output/Main/index.js").main();' > Main.js
+          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js | grep '^ok$'
+          cat > src/Broken.purs <<'PURS'
+          module Broken where
+          broken =
+          PURS
+          if spago build >/dev/null 2>&1; then exit 1; fi
+
   ruby:
     install:
       apt:
@@ -2480,6 +2568,7 @@ profiles:
       - haxe
       - java
       - javascript
+      - purescript
       - rescript
       - scala
       - typescript

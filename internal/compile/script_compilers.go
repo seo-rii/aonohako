@@ -238,6 +238,90 @@ func (reScriptCompiler) Compile(ctx context.Context, job CompileJob) model.Compi
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
 }
 
+type pureScriptCompiler struct{}
+
+func (pureScriptCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	rootSource := selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".purs"}, "Main.purs", "main.purs", filepath.Join("src", "Main.purs"))
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no purescript sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(job.Target), ".js") {
+		job.Target += ".js"
+	}
+	configPath := filepath.Join(job.WorkDir, "spago.yaml")
+	if _, err := os.Stat(configPath); err != nil {
+		if !os.IsNotExist(err) {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+		defaultConfig := `package:
+  name: aonohako-purescript-submission
+  dependencies:
+    - console
+    - effect
+    - prelude
+  test:
+    main: Test.Main
+    dependencies: []
+workspace:
+  packageSet:
+    registry: 77.4.1
+  extraPackages: {}
+`
+		if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+		for _, src := range job.Request.Sources {
+			clean := filepath.Clean(src.Name)
+			lower := strings.ToLower(clean)
+			if !strings.HasSuffix(lower, ".purs") && !strings.HasSuffix(lower, ".js") {
+				continue
+			}
+			if clean == "src" || strings.HasPrefix(clean, "src"+string(os.PathSeparator)) {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(job.WorkDir, clean))
+			if err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+			}
+			dest := filepath.Join(job.WorkDir, "src", clean)
+			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+			}
+			if err := os.WriteFile(dest, data, 0o644); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+			}
+		}
+	}
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	result := runner.Run(ctx, job.WorkDir, "spago", []string{"build"}, []string{"HOME=/usr/local/lib/aonohako/purescript-home"})
+	if result.Status != model.CompileStatusOK {
+		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
+	}
+	wrapper := []byte(`require("./output/Main/index.js").main();
+`)
+	if err := os.WriteFile(filepath.Join(job.WorkDir, job.Target), wrapper, 0o644); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	artifacts, err := readSingleArtifact(job.WorkDir, job.Target, job.Target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	outputArtifacts, err := collectArtifacts(filepath.Join(job.WorkDir, "output"), func(name string) bool {
+		return strings.HasSuffix(strings.ToLower(name), ".js")
+	}, "output")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	artifacts = append(artifacts, outputArtifacts...)
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
+}
+
 type sqliteCompiler struct{}
 
 func (sqliteCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {

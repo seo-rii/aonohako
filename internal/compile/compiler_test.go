@@ -50,7 +50,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "whitespace", "brainfuck", "wasm",
+		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "brainfuck", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -287,6 +287,64 @@ func TestReScriptCompilerCollectsMainAndHelperJS(t *testing.T) {
 	}
 	if got := []string{resp.Artifacts[0].Name, resp.Artifacts[1].Name}; !reflect.DeepEqual(got, []string{"Main.js", "Helper.js"}) {
 		t.Fatalf("artifact names = %#v", got)
+	}
+}
+
+func TestPureScriptCompilerWritesSpagoProjectAndCollectsOutput(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.purs"), []byte("module Main where\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if _, err := os.Stat(filepath.Join(workDir, "src", "Main.purs")); err != nil {
+				t.Fatalf("Main.purs was not copied into src: %v", err)
+			}
+			outDir := filepath.Join(workDir, "output", "Main")
+			if err := os.MkdirAll(outDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(outDir, "index.js"), []byte("exports.main = function () {};\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := pureScriptCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.purs"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	if !reflect.DeepEqual(runner.commands[0].args, []string{"build"}) {
+		t.Fatalf("runner args = %#v", runner.commands[0].args)
+	}
+	if !reflect.DeepEqual(runner.commands[0].env, []string{"HOME=/usr/local/lib/aonohako/purescript-home"}) {
+		t.Fatalf("runner env = %#v", runner.commands[0].env)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "spago.yaml")); err != nil {
+		t.Fatalf("spago.yaml was not written: %v", err)
+	}
+	if len(resp.Artifacts) != 2 {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+	if got := []string{resp.Artifacts[0].Name, resp.Artifacts[1].Name}; !reflect.DeepEqual(got, []string{"Main.js", "output/Main/index.js"}) {
+		t.Fatalf("artifact names = %#v", got)
+	}
+	body, err := util.DecodeB64(resp.Artifacts[0].DataB64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `require("./output/Main/index.js").main();`) {
+		t.Fatalf("wrapper body = %s", string(body))
 	}
 }
 

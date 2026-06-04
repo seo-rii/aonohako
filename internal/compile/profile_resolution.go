@@ -184,6 +184,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "COFFEESCRIPT"
 	case "rescript", "res":
 		l = "RESCRIPT"
+	case "purescript", "purs":
+		l = "PURESCRIPT"
 	case "sed":
 		l = "SED"
 	case "bc":

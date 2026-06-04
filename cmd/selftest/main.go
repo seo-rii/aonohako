@@ -3360,6 +3360,20 @@ main =
 				source("Main.res", `Console.log("ok")`),
 			},
 		},
+		"purescript": {
+			compileLang:    "PURESCRIPT",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 20000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.purs", `module Main where
+import Prelude
+import Effect (Effect)
+import Effect.Console (log)
+main :: Effect Unit
+main = log "ok"
+`),
+			},
+		},
 		"kotlin-jvm": {
 			compileLang:    "KOTLIN_JVM",
 			expectedStdout: "ok\n",
