@@ -2693,6 +2693,21 @@ pub fn main() {
 }`),
 			},
 		},
+		"sml": {
+			compileLang:    "SML",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.sml", `val out = TextIO.openOut "same-folder.txt"
+val _ = TextIO.output (out, "ok\n")
+val _ = TextIO.closeOut out
+val inp = TextIO.openIn "same-folder.txt"
+val line = TextIO.inputLine inp
+val _ = TextIO.closeIn inp
+val _ = case line of SOME s => print s | NONE => ()
+`),
+			},
+		},
 		"go": {
 			compileLang:    "GO",
 			expectedStdout: "ok\n",

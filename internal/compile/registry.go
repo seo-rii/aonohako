@@ -17,6 +17,9 @@ var compileRegistry = map[string]Compiler{
 	"zig": singleSourceExecutableCompiler{exts: []string{".zig"}, preferredBases: []string{"Main.zig"}, noSourceReason: "no zig sources", bin: "zig", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"build-exe", sourcePath, "-O", "ReleaseSafe", "-femit-bin=" + outputPath(job)}
 	}},
+	"sml": singleSourceExecutableCompiler{exts: []string{".sml"}, preferredBases: []string{"Main.sml"}, noSourceReason: "no sml sources", bin: "mlton", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"-output", outputPath(job), sourcePath}
+	}},
 	"rust":        rustCompiler{},
 	"go":          goCompiler{},
 	"java":        javaCompiler{},

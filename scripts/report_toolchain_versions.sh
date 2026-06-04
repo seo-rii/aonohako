@@ -406,6 +406,10 @@ if has_language "ocaml"; then
     report_once "OCaml" ocamlopt -version
 fi
 
+if has_language "sml"; then
+    report_once "MLton" mlton --version
+fi
+
 if has_language "elixir"; then
     report_once "Elixir" elixir -e "IO.puts(System.version())"
 fi
@@ -591,6 +595,7 @@ report_compile_option "raku" "raku -c"
 report_compile_option "erlang" "erlc"
 report_compile_option "prolog" "swipl syntax check"
 report_compile_option "ocaml" "ocamlopt"
+report_compile_option "sml" "mlton -output <target>"
 report_compile_option "elixir" "elixirc"
 report_compile_option "ruby" "ruby -c"
 report_compile_option "php" "php -l"

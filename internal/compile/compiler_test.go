@@ -40,7 +40,7 @@ func (r *recordingCommandRunner) Run(_ context.Context, workDir, bin string, arg
 func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	for _, kind := range []string{
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
-		"pascal", "nim", "zig", "ada", "d",
+		"pascal", "nim", "zig", "sml", "ada", "d",
 		"rust", "go", "java", "groovy", "clojure",
 		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3",
 		"vhdl", "verilog", "crystal", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",

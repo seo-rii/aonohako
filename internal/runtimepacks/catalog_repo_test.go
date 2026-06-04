@@ -22,7 +22,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 19 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bc", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "janet", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bc", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "janet", "lisp", "lua", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "graphql", "groovy", "haxe", "java", "javascript", "scala", "typescript"}) {
@@ -167,6 +167,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-scheme",
 		"ci-sed",
 		"ci-smalltalk",
+		"ci-sml",
 		"ci-sqlite",
 		"ci-swift",
 		"ci-systemverilog",
@@ -248,6 +249,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"rocq":          {"rocq c Main.v", "coqc -q Main.v"},
 		"scheme":        {"chibi-scheme Main.scm", "(scheme base)"},
 		"sed":           {"sed -f Main.sed", "s/^/ok/"},
+		"sml":           {"MLTON_VERSION=20241230", "mlton -output Main Main.sml"},
 		"smalltalk":     {"GST_VERSION=3.2.5", "mirrors.kernel.org/gnu/smalltalk", "sed -i 's/const char \\*inbuf;/char *inbuf;/'", "CC=/usr/bin/gcc-14 ./configure", "make -j1", "gst -q Main.st"},
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},

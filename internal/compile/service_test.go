@@ -235,6 +235,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"cython":        {compileKind: "cython", runLang: "binary"},
 		"dart":          {compileKind: "dart", runLang: "binary"},
 		"haskell":       {compileKind: "haskell", runLang: "binary"},
+		"sml":           {compileKind: "sml", runLang: "binary"},
 		"haxe":          {compileKind: "haxe", runLang: "haxe"},
 		"swift":         {compileKind: "swift", runLang: "binary"},
 		"sqlite":        {compileKind: "sqlite", runLang: "sqlite"},
@@ -335,6 +336,7 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"gnu-apl":         "apl",
 		"coffee":          "coffeescript",
 		"kotlin_java":     "kotlin-jvm",
+		"standard-ml":     "sml",
 	}
 
 	for input, wantCompileKind := range tests {
