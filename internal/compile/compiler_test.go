@@ -40,7 +40,7 @@ func (r *recordingCommandRunner) Run(_ context.Context, workDir, bin string, arg
 func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	for _, kind := range []string{
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
-		"pascal", "nim", "zig", "sml", "ada", "d",
+		"pascal", "nim", "zig", "sml", "idris2", "ada", "d",
 		"rust", "go", "java", "groovy", "clojure",
 		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3",
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
@@ -108,6 +108,53 @@ func TestSingleSourceExecutableCompilerUsesPreferredSource(t *testing.T) {
 	wantSource := filepath.Join(workDir, "Main.nim")
 	if got := runner.commands[0].args[len(runner.commands[0].args)-1]; got != wantSource {
 		t.Fatalf("selected source = %q, want %q", got, wantSource)
+	}
+}
+
+func TestIdris2CompilerCollectsChezExecutableBundle(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.idr"), []byte("main : IO ()\nmain = putStrLn \"ok\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			execDir := filepath.Join(workDir, "build", "exec")
+			if err := os.MkdirAll(filepath.Join(execDir, "Main_app"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(execDir, "Main"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(execDir, "Main_app", "Main.ss"), []byte("(display \"ok\")"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := idris2Compiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.idr"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	wantArgs := []string{"--cg", "chez", "-o", "Main", filepath.Join(workDir, "Main.idr")}
+	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
+		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
+	}
+	if len(resp.Artifacts) != 2 {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+	names := []string{resp.Artifacts[0].Name, resp.Artifacts[1].Name}
+	if !reflect.DeepEqual(names, []string{"Main", "Main_app/Main.ss"}) {
+		t.Fatalf("artifact names = %#v", names)
 	}
 }
 

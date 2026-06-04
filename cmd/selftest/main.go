@@ -2783,6 +2783,18 @@ main = do
   readFile "same-folder.txt" >>= putStrLn`),
 			},
 		},
+		"idris2": {
+			compileLang:    "IDRIS2",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.idr", `module Main
+
+main : IO ()
+main = putStrLn "ok"
+`),
+			},
+		},
 		"haxe": {
 			compileLang:    "HAXE",
 			expectedStdout: "ok\n",

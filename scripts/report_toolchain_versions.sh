@@ -406,6 +406,10 @@ if has_language "mercury"; then
     report_once "Mercury" mmc --version
 fi
 
+if has_language "idris2"; then
+    report_once "Idris2" idris2 --version
+fi
+
 if has_language "prolog"; then
     report_once "Prolog" swipl --version
 fi
@@ -539,6 +543,7 @@ report_compile_option "javascript" "node --check"
 report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"
 report_compile_option "coffeescript" "coffee --compile --bare --output <workdir>"
 report_compile_option "deno" "deno check --v8-flags=--max-old-space-size=<compile cap>"
+report_compile_option "idris2" "idris2 --cg chez -o <target>"
 report_compile_option "haxe" "haxe -D ONLINE_JUDGE -main Main -neko <target>.n"
 report_compile_option "graphql" "pass-through .graphql artifacts"
 report_compile_option "asm" "gcc -nostdlib -static -no-pie"

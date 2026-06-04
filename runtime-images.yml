@@ -380,6 +380,44 @@ languages:
           ghc -O2 -o Main Main.hs
           ./Main | grep '^ok$'
 
+  idris2:
+    install:
+      apt:
+        - bash
+        - build-essential
+        - ca-certificates
+        - chezscheme
+        - curl
+        - libgmp-dev
+        - make
+      script:
+        - export IDRIS2_VERSION=0.8.0
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/idris-lang/Idris2/archive/refs/tags/v${IDRIS2_VERSION}.tar.gz" -o /tmp/idris2.tar.gz
+        - tar -xzf /tmp/idris2.tar.gz -C /tmp
+        - IDRIS2_SRC="$(find /tmp -maxdepth 1 -type d -name 'Idris2-*' | head -n 1)"; test -n "${IDRIS2_SRC}"; cd "${IDRIS2_SRC}" && make bootstrap SCHEME=chezscheme PREFIX=/usr/local && make install PREFIX=/usr/local
+        - rm -rf /tmp/Idris2-* /tmp/idris2.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.idr <<'IDRIS'
+          module Main
+
+          main : IO ()
+          main = putStrLn "ok"
+          IDRIS
+          idris2 --cg chez -o Main Main.idr
+          ./build/exec/Main | grep '^ok$'
+          test -d build/exec/Main_app
+          cat > Broken.idr <<'IDRIS'
+          module Broken
+
+          main : IO ()
+          main =
+          IDRIS
+          if idris2 --cg chez -o Broken Broken.idr >/dev/null 2>&1; then exit 1; fi
+
   haxe:
     install:
       apt:
@@ -2253,6 +2291,7 @@ profiles:
       - gleam
       - golfscript
       - haskell
+      - idris2
       - janet
       - lisp
       - lua

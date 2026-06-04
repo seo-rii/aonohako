@@ -235,6 +235,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"cython":        {compileKind: "cython", runLang: "binary"},
 		"dart":          {compileKind: "dart", runLang: "binary"},
 		"haskell":       {compileKind: "haskell", runLang: "binary"},
+		"idris2":        {compileKind: "idris2", runLang: "binary"},
 		"sml":           {compileKind: "sml", runLang: "binary"},
 		"haxe":          {compileKind: "haxe", runLang: "haxe"},
 		"swift":         {compileKind: "swift", runLang: "binary"},

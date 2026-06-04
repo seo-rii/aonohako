@@ -98,6 +98,7 @@ var profiles = map[string]Profile{
 	"WHYML":         {SourceLang: "WHYML", Extension: "mlw", CompileKind: "why3", RunLang: "why3", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"ISABELLE":      {SourceLang: "ISABELLE", Extension: "thy", CompileKind: "isabelle", RunLang: "isabelle", TimeMultiplier: 4, TimeOffsetMs: 3000, MemoryMultiplier: 3, MemoryOffsetMB: 2048},
 	"HASKELL":       {SourceLang: "HASKELL", Extension: "hs", DefaultTarget: "Main", CompileKind: "haskell", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"IDRIS2":        {SourceLang: "IDRIS2", Extension: "idr", DefaultTarget: "Main", CompileKind: "idris2", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"SML":           {SourceLang: "SML", Extension: "sml", DefaultTarget: "Main", CompileKind: "sml", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"HAXE":          {SourceLang: "HAXE", Extension: "hx", DefaultTarget: "Main.n", CompileKind: "haxe", RunLang: "haxe", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LISP":          {SourceLang: "LISP", Extension: "lisp", CompileKind: "lisp", RunLang: "lisp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
@@ -204,7 +205,7 @@ func NormalizeRunLang(language string) string {
 		return "apl"
 	case "gnucobol":
 		return "binary"
-	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic", "vala", "mercury":
+	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic", "vala", "mercury", "idris2":
 		return "binary"
 	case "gforth":
 		return "forth"

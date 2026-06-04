@@ -108,6 +108,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "ISABELLE"
 	case "lisp":
 		l = "LISP"
+	case "idris2", "idris":
+		l = "IDRIS2"
 	case "sml", "standardml", "standard-ml":
 		l = "SML"
 	case "haxe":
