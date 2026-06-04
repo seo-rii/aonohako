@@ -180,6 +180,64 @@ if (__aonohakoPorts.stdin && typeof __aonohakoPorts.stdin.send === "function") {
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
 }
 
+type reScriptCompiler struct{}
+
+func (reScriptCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	rootSource := selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".res"}, "Main.res", "main.res")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no rescript sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(job.Target), ".js") {
+		job.Target += ".js"
+	}
+	configPath := filepath.Join(job.WorkDir, "rescript.json")
+	if _, err := os.Stat(configPath); err != nil {
+		if !os.IsNotExist(err) {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+		defaultConfig := `{
+  "name": "aonohako-rescript-submission",
+  "sources": [
+    { "dir": ".", "subdirs": false }
+  ],
+  "package-specs": {
+    "module": "commonjs",
+    "in-source": false
+  },
+  "suffix": ".js"
+}
+`
+		if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+	}
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	result := runner.Run(ctx, job.WorkDir, "rescript", []string{"build"}, nil)
+	if result.Status != model.CompileStatusOK {
+		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
+	}
+	compiledName := strings.TrimSuffix(filepath.Base(rootSource), filepath.Ext(rootSource)) + ".js"
+	outputDir := filepath.Join(job.WorkDir, "lib", "js")
+	artifacts, err := readSingleArtifact(outputDir, compiledName, job.Target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	extraArtifacts, err := collectArtifacts(outputDir, func(name string) bool {
+		return strings.HasSuffix(strings.ToLower(name), ".js") && name != compiledName
+	}, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	artifacts = append(artifacts, extraArtifacts...)
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
+}
+
 type sqliteCompiler struct{}
 
 func (sqliteCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {

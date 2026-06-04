@@ -3352,6 +3352,14 @@ main =
 `),
 			},
 		},
+		"rescript": {
+			compileLang:    "RESCRIPT",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.res", `Console.log("ok")`),
+			},
+		},
 		"kotlin-jvm": {
 			compileLang:    "KOTLIN_JVM",
 			expectedStdout: "ok\n",

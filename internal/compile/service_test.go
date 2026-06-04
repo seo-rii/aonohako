@@ -298,6 +298,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"uiua":          {compileKind: "uiua", runLang: "uiua"},
 		"janet":         {compileKind: "janet", runLang: "janet"},
 		"coffeescript":  {compileKind: "coffeescript", runLang: "javascript"},
+		"rescript":      {compileKind: "rescript", runLang: "javascript"},
 		"sed":           {compileKind: "sed", runLang: "sed"},
 		"bc":            {compileKind: "bc", runLang: "bc"},
 		"forth":         {compileKind: "forth", runLang: "forth"},

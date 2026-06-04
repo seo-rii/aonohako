@@ -25,7 +25,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bc", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "janet", "lisp", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
 	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zig"}) {
@@ -163,6 +163,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-r",
 		"ci-racket",
 		"ci-raku",
+		"ci-rescript",
 		"ci-rocq",
 		"ci-ruby",
 		"ci-rust",
@@ -271,6 +272,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"why3":          {"aonohako-why3-prove Main.mlw", "goal G: true"},
 		"zig":           {"Broken.zig", "zig build-exe"},
 		"r":             {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
+		"rescript":      {"rescript@12.3.0", "rescript build", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 lib/js/Main.js"},
 		"fortran":       {"Broken.f90", "gfortran"},
 		"d":             {"Broken.d", "ldc2"},
 		"prolog":        {"Broken.pl", "swipl"},

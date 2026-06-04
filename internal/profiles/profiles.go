@@ -117,6 +117,7 @@ var profiles = map[string]Profile{
 	"OCAML":         {SourceLang: "OCAML", Extension: "ml", DefaultTarget: "Main", CompileKind: "ocaml", RunLang: "ocaml", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"ELIXIR":        {SourceLang: "ELIXIR", Extension: "exs", CompileKind: "elixir", RunLang: "elixir", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1536},
 	"COFFEESCRIPT":  {SourceLang: "COFFEESCRIPT", Extension: "coffee", DefaultTarget: "Main.js", CompileKind: "coffeescript", RunLang: "javascript", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"RESCRIPT":      {SourceLang: "RESCRIPT", Extension: "res", DefaultTarget: "Main.js", CompileKind: "rescript", RunLang: "javascript", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"CSHARP":        {SourceLang: "CSHARP", Extension: "cs", CompileKind: "csharp", RunLang: "csharp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 16},
 	"R":             {SourceLang: "R", Extension: "R", CompileKind: "r", RunLang: "r", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"PYTHON3":       {SourceLang: "PYTHON3", Extension: "py", CompileKind: "python", RunLang: "python", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 32},

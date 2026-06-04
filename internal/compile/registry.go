@@ -112,6 +112,7 @@ var compileRegistry = map[string]Compiler{
 	"deno":          denoCompiler{},
 	"kotlin-jvm":    kotlinJVMCompiler{},
 	"coffeescript":  coffeeScriptCompiler{},
+	"rescript":      reScriptCompiler{},
 	"whitespace":    whitespaceCompiler{},
 	"brainfuck":     brainfuckCompiler{},
 	"wasm":          wasmCompiler{},

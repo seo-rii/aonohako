@@ -50,7 +50,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "whitespace", "brainfuck", "wasm",
+		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "whitespace", "brainfuck", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -239,6 +239,54 @@ func TestElmCompilerWritesProjectAndNodeWrapper(t *testing.T) {
 	}
 	if !strings.Contains(string(body), `fs.readFileSync(0, "utf8")`) || !strings.Contains(string(body), "__aonohakoElm.Main.init") || !strings.Contains(string(body), "__aonohakoPorts.stdin.send") {
 		t.Fatalf("elm wrapper missing runtime bridge: %s", string(body))
+	}
+}
+
+func TestReScriptCompilerCollectsMainAndHelperJS(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.res"), []byte("Console.log(\"ok\")\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			outDir := filepath.Join(workDir, "lib", "js")
+			if err := os.MkdirAll(outDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(outDir, "Main.js"), []byte("require('./Helper.js');\nconsole.log('ok');\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(outDir, "Helper.js"), []byte("exports.value = 'ok';\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := reScriptCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.res"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	if !reflect.DeepEqual(runner.commands[0].args, []string{"build"}) {
+		t.Fatalf("runner args = %#v", runner.commands[0].args)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "rescript.json")); err != nil {
+		t.Fatalf("rescript.json was not written: %v", err)
+	}
+	if len(resp.Artifacts) != 2 {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+	if got := []string{resp.Artifacts[0].Name, resp.Artifacts[1].Name}; !reflect.DeepEqual(got, []string{"Main.js", "Helper.js"}) {
+		t.Fatalf("artifact names = %#v", got)
 	}
 }
 
