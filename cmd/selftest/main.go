@@ -2995,6 +2995,28 @@ begin
 end.`),
 			},
 		},
+		"delphi": {
+			compileLang:    "DELPHI",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.dpr", `program Main;
+var
+  F: TextFile;
+  Line: string;
+begin
+  AssignFile(F, 'same-folder.txt');
+  Rewrite(F);
+  Writeln(F, 'ok');
+  CloseFile(F);
+  AssignFile(F, 'same-folder.txt');
+  Reset(F);
+  ReadLn(F, Line);
+  CloseFile(F);
+  Writeln(Line);
+end.`),
+			},
+		},
 		"perl": {
 			compileLang:    "PERL",
 			expectedStdout: "ok\n",

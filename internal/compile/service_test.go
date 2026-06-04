@@ -221,6 +221,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"aheui":         {compileKind: "none", runLang: "aheui"},
 		"nasm":          {compileKind: "nasm", runLang: "binary"},
 		"pascal":        {compileKind: "pascal", runLang: "binary"},
+		"delphi":        {compileKind: "delphi", runLang: "binary"},
 		"nim":           {compileKind: "nim", runLang: "binary"},
 		"clojure":       {compileKind: "clojure", runLang: "clojure"},
 		"racket":        {compileKind: "racket", runLang: "racket"},

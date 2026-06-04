@@ -28,6 +28,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "ZIG"
 	case "pascal", "freepascal", "fpc":
 		l = "PASCAL"
+	case "delphi":
+		l = "DELPHI"
 	case "nim":
 		l = "NIM"
 	case "clojure":

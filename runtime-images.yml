@@ -1615,6 +1615,41 @@ languages:
           PAS
           if fpc -O2 -Xs -oBroken Broken.pas >/dev/null 2>&1; then exit 1; fi
 
+  delphi:
+    install:
+      apt:
+        - fp-compiler
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.dpr <<'PAS'
+          program Main;
+          var
+            F: TextFile;
+            Line: string;
+          begin
+            AssignFile(F, 'same-folder.txt');
+            Rewrite(F);
+            Writeln(F, 'ok');
+            CloseFile(F);
+            AssignFile(F, 'same-folder.txt');
+            Reset(F);
+            ReadLn(F, Line);
+            CloseFile(F);
+            Writeln(Line);
+          end.
+          PAS
+          fpc -Mdelphi -O2 -Xs -oMain Main.dpr >/dev/null
+          ./Main | grep '^ok$'
+          cat > Broken.dpr <<'PAS'
+          program Broken;
+          begin
+            Writeln('oops')
+          PAS
+          if fpc -Mdelphi -O2 -Xs -oBroken Broken.dpr >/dev/null 2>&1; then exit 1; fi
+
   nim:
     install:
       apt:
@@ -2646,6 +2681,7 @@ profiles:
       - crystal
       - cython
       - d
+      - delphi
       - freebasic
       - fortran
       - go

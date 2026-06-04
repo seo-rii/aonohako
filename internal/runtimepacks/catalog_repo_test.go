@@ -28,7 +28,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
@@ -113,6 +113,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-d",
 		"ci-dafny",
 		"ci-dart",
+		"ci-delphi",
 		"ci-deno",
 		"ci-duckdb",
 		"ci-elixir",
@@ -226,6 +227,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"cython":        {"cython3 --embed -3 -o Main.c Main.pyx", "python3-config --includes --ldflags --embed"},
 		"dafny":         {"DAFNY_VERSION=4.11.0", "curl --retry 6", "wget --tries=6", "dafny verify --cores 1 Main.dfy"},
 		"dart":          {"dart compile exe", "Broken.dart"},
+		"delphi":        {"fpc -Mdelphi -O2 -Xs -oMain Main.dpr", "AssignFile", "Broken.dpr"},
 		"deno":          {"DENO_VERSION=2.7.14", "deno check --v8-flags=--max-old-space-size=512 Main.ts", "deno run --no-prompt --v8-flags=--max-old-space-size=128 Main.ts"},
 		"duckdb":        {"DUCKDB_VERSION=1.5.2", "aonohako-duckdb-run Main.sql"},
 		"elm":           {"elm-compiler", `"elm/json": "1.1.3"`, "HOME=/usr/local/lib/aonohako/elm-home", "elm make Main.elm --output=aonohako-elm-compiled.js", "port stdin : (String -> msg) -> Sub msg"},
