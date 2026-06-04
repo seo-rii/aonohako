@@ -242,6 +242,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"julia":         {compileKind: "julia", runLang: "julia"},
 		"raku":          {compileKind: "raku", runLang: "raku"},
 		"erlang":        {compileKind: "erlang", runLang: "erlang"},
+		"mercury":       {compileKind: "mercury", runLang: "binary"},
 		"prolog":        {compileKind: "prolog", runLang: "prolog"},
 		"r":             {compileKind: "r", runLang: "r"},
 		"groovy":        {compileKind: "groovy", runLang: "groovy"},

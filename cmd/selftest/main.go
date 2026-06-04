@@ -2653,6 +2653,22 @@ main() ->
     io:format("~s~n", [Data]).`),
 			},
 		},
+		"mercury": {
+			compileLang:    "MERCURY",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("main.m", `:- module main.
+:- interface.
+:- import_module io.
+:- pred main(io::di, io::uo) is det.
+:- implementation.
+
+main(!IO) :-
+    io.write_string("ok\n", !IO).
+`),
+			},
+		},
 		"fortran": {
 			compileLang:    "FORTRAN",
 			expectedStdout: "ok\n",

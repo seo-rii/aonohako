@@ -698,6 +698,47 @@ languages:
           SML
           if mlton -output Broken Broken.sml >/dev/null 2>&1; then exit 1; fi
 
+  mercury:
+    install:
+      apt:
+        - ca-certificates
+        - curl
+        - gcc
+        - libc6-dev
+      script:
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://paul.bone.id.au/paul.asc -o /etc/apt/trusted.gpg.d/paulbone.asc
+        - echo 'deb http://dl.mercurylang.org/deb/ trixie main' > /etc/apt/sources.list.d/mercury.list
+        - apt-get update
+        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mercury-recommended
+        - rm -rf /var/lib/apt/lists/*
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > main.m <<'MERCURY'
+          :- module main.
+          :- interface.
+          :- import_module io.
+          :- pred main(io::di, io::uo) is det.
+          :- implementation.
+
+          main(!IO) :-
+              io.write_string("ok\n", !IO).
+          MERCURY
+          mmc --make --grade hlc.gc -o Main main.m
+          ./Main | grep '^ok$'
+          cat > broken.m <<'MERCURY'
+          :- module broken.
+          :- interface.
+          :- import_module io.
+          :- pred main(io::di, io::uo) is det.
+          :- implementation.
+
+          main(!IO) :-
+          MERCURY
+          if mmc --make --grade hlc.gc -o Broken broken.m >/dev/null 2>&1; then exit 1; fi
+
   go:
     install:
       apt:
@@ -2215,6 +2256,7 @@ profiles:
       - janet
       - lisp
       - lua
+      - mercury
       - ocaml
       - perl
       - php

@@ -73,8 +73,11 @@ var compileRegistry = map[string]Compiler{
 	"objective-cpp": nativeCompiler{exts: []string{".mm"}, bin: "clang++", flags: func(CompileJob) []string {
 		return []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"}
 	}},
-	"raku":          checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
-	"r":             rCompiler{},
+	"raku": checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
+	"r":    rCompiler{},
+	"mercury": singleSourceExecutableCompiler{exts: []string{".m"}, preferredBases: []string{"main.m", "Main.m"}, noSourceReason: "no mercury sources", bin: "mmc", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"--make", "--grade", "hlc.gc", "-o", outputPath(job), sourcePath}
+	}},
 	"prolog":        prologCompiler{},
 	"lisp":          lispCompiler{},
 	"nasm":          nasmCompiler{},

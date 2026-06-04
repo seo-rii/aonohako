@@ -402,6 +402,10 @@ if has_language "erlang"; then
     report_once "Erlang" erl -noshell -eval "io:format(\"~s~n\", [erlang:system_info(otp_release)]), halt()."
 fi
 
+if has_language "mercury"; then
+    report_once "Mercury" mmc --version
+fi
+
 if has_language "prolog"; then
     report_once "Prolog" swipl --version
 fi
@@ -598,6 +602,7 @@ report_compile_option "systemverilog" "iverilog -g2012 -DONLINE_JUDGE=1 -o <targ
 report_compile_option "r" "/usr/lib/R/bin/exec/R --vanilla --slave -e parse(file=commandArgs(TRUE)[1]) --args <file>"
 report_compile_option "raku" "raku -c"
 report_compile_option "erlang" "erlc"
+report_compile_option "mercury" "mmc --make --grade hlc.gc -o <target>"
 report_compile_option "prolog" "swipl syntax check"
 report_compile_option "ocaml" "ocamlopt"
 report_compile_option "sml" "mlton -output <target>"

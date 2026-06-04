@@ -132,6 +132,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "RAKU"
 	case "erlang":
 		l = "ERLANG"
+	case "mercury":
+		l = "MERCURY"
 	case "prolog":
 		l = "PROLOG"
 	case "scala":
