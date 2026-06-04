@@ -2557,6 +2557,17 @@ int main() {
 }`),
 			},
 		},
+		"vala": {
+			compileLang:    "VALA",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.vala", `int main() {
+  print("ok\n");
+  return 0;
+}`),
+			},
+		},
 		"odin": {
 			compileLang:    "ODIN",
 			expectedStdout: "ok\n",

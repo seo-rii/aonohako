@@ -1050,6 +1050,24 @@ languages:
           printf '%s\n' 'puts(' > Broken.cr
           if crystal build Broken.cr --release --no-debug -o Broken >/dev/null 2>&1; then exit 1; fi
 
+  vala:
+    install:
+      apt:
+        - gcc
+        - libc6-dev
+        - libglib2.0-dev
+        - valac
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'int main() {' '  print("ok\n");' '  return 0;' '}' > Main.vala
+          valac -O --define=ONLINE_JUDGE -o Main Main.vala
+          ./Main | grep '^ok$'
+          printf '%s\n' 'int main() {' '  print(' > Broken.vala
+          if valac -O --define=ONLINE_JUDGE -o Broken Broken.vala >/dev/null 2>&1; then exit 1; fi
+
   vlang:
     install:
       apt:
@@ -2256,6 +2274,7 @@ profiles:
       - pascal
       - qbasic
       - rust
+      - vala
       - vlang
       - zig
   type-d:

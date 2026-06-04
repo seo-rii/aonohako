@@ -357,6 +357,10 @@ if has_language "crystal"; then
     report_once "Crystal" crystal --version
 fi
 
+if has_language "vala"; then
+    report_once "Vala" valac --version
+fi
+
 if has_language "cuda-ocelot"; then
     report_once "NVIDIA CUDA compiler" nvcc --version
 fi
@@ -549,6 +553,7 @@ report_compile_option "cython" "cython3 --embed -3 plus gcc -O2 -pipe -DONLINE_J
 report_compile_option "d" "ldc2 -O3 -release --d-version=ONLINE_JUDGE"
 report_compile_option "fortran" "gfortran -O2 -pipe"
 report_compile_option "crystal" "crystal build --release --no-debug --define ONLINE_JUDGE"
+report_compile_option "vala" "valac -O --define=ONLINE_JUDGE -o <target>"
 report_compile_option "vlang" "v -d ONLINE_JUDGE -o <target>"
 report_compile_option "odin" "odin build . -define:ONLINE_JUDGE=true -out:<target>"
 report_compile_option "c3" "c3c compile -D ONLINE_JUDGE -O2"

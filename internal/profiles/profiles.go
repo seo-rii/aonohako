@@ -75,6 +75,7 @@ var profiles = map[string]Profile{
 	"VERILOG":       {SourceLang: "VERILOG", Extension: "v", DefaultTarget: "Main.vvp", CompileKind: "verilog", RunLang: "verilog", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"SYSTEMVERILOG": {SourceLang: "SYSTEMVERILOG", Extension: "sv", DefaultTarget: "Main.vvp", CompileKind: "verilog", RunLang: "verilog", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"CRYSTAL":       {SourceLang: "CRYSTAL", Extension: "cr", DefaultTarget: "Main", CompileKind: "crystal", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
+	"VALA":          {SourceLang: "VALA", Extension: "vala", DefaultTarget: "Main", CompileKind: "vala", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"VLANG":         {SourceLang: "VLANG", Extension: "v", DefaultTarget: "Main", CompileKind: "vlang", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"ODIN":          {SourceLang: "ODIN", Extension: "odin", DefaultTarget: "Main", CompileKind: "odin", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"C3":            {SourceLang: "C3", Extension: "c3", DefaultTarget: "Main", CompileKind: "c3", RunLang: "c3", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
@@ -202,7 +203,7 @@ func NormalizeRunLang(language string) string {
 		return "apl"
 	case "gnucobol":
 		return "binary"
-	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic":
+	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic", "vala":
 		return "binary"
 	case "gforth":
 		return "forth"

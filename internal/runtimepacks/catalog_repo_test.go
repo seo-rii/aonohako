@@ -28,7 +28,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "graphql", "groovy", "haxe", "java", "javascript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "odin", "pascal", "qbasic", "rust", "vlang", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
@@ -176,6 +176,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-typescript",
 		"ci-uhmlang",
 		"ci-uiua",
+		"ci-vala",
 		"ci-vb6",
 		"ci-vbnet",
 		"ci-verilog",
@@ -255,6 +256,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},
 		"tla":           {"TLA_VERSION=1.7.4", "install -d -m 0755 /usr/local/lib/aonohako", "curl --retry 6", "wget --tries=6", "aonohako-tla-run Main.tla"},
 		"uiua":          {"UIUA_VERSION=0.18.1", "uiua run Main.ua --no-format"},
+		"vala":          {"valac -O --define=ONLINE_JUDGE -o Main Main.vala", "Broken.vala"},
 		"vb6":           {"aonohako-vb6-run Main.bas", "Sub Main()"},
 		"vbnet":         {"App.vbproj", "dotnet publish App.vbproj"},
 		"verilog":       {"iverilog -g2012", "Main.v"},

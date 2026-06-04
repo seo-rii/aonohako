@@ -70,6 +70,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "SYSTEMVERILOG"
 	case "crystal":
 		l = "CRYSTAL"
+	case "vala":
+		l = "VALA"
 	case "vlang":
 		l = "VLANG"
 	case "odin":

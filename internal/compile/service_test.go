@@ -260,6 +260,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"vhdl":          {compileKind: "vhdl", runLang: "vhdl"},
 		"verilog":       {compileKind: "verilog", runLang: "verilog"},
 		"crystal":       {compileKind: "crystal", runLang: "binary"},
+		"vala":          {compileKind: "vala", runLang: "binary"},
 		"vlang":         {compileKind: "vlang", runLang: "binary"},
 		"odin":          {compileKind: "odin", runLang: "binary"},
 		"c3":            {compileKind: "c3", runLang: "c3"},
