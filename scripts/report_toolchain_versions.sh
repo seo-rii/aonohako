@@ -191,7 +191,7 @@ if has_language "pypy"; then
     report_once "PyPy" pypy3 --version
 fi
 
-if has_language "javascript" || has_language "typescript" || has_language "coffeescript"; then
+if has_language "javascript" || has_language "typescript" || has_language "coffeescript" || has_language "elm"; then
     report_once "Node.js" node --version
     report_once "npm" npm --version
 fi
@@ -202,6 +202,10 @@ fi
 
 if has_language "deno"; then
     report_once "Deno" deno --version
+fi
+
+if has_language "elm"; then
+    report_once "Elm" elm --version
 fi
 
 if has_language "coffeescript"; then
@@ -543,6 +547,7 @@ report_compile_option "javascript" "node --check"
 report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"
 report_compile_option "coffeescript" "coffee --compile --bare --output <workdir>"
 report_compile_option "deno" "deno check --v8-flags=--max-old-space-size=<compile cap>"
+report_compile_option "elm" "elm make <source> --output <target>"
 report_compile_option "idris2" "idris2 --cg chez -o <target>"
 report_compile_option "haxe" "haxe -D ONLINE_JUDGE -main Main -neko <target>.n"
 report_compile_option "graphql" "pass-through .graphql artifacts"

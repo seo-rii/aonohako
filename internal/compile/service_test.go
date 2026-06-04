@@ -287,6 +287,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"golfscript":    {compileKind: "golfscript", runLang: "golfscript"},
 		"mojo":          {compileKind: "mojo", runLang: "binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
+		"elm":           {compileKind: "elm", runLang: "javascript"},
 		"kotlin-jvm":    {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},
 		"kotlin-java":   {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},
 		"kotlin/java":   {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},

@@ -99,6 +99,7 @@ var compileRegistry = map[string]Compiler{
 	"cobol":         cobolCompiler{},
 	"cython":        cythonCompiler{},
 	"haskell":       haskellCompiler{},
+	"elm":           elmCompiler{},
 	"haxe":          haxeCompiler{},
 	"swift":         swiftCompiler{},
 	"sqlite":        sqliteCompiler{},

@@ -158,6 +158,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "MOJO"
 	case "deno":
 		l = "DENO"
+	case "elm":
+		l = "ELM"
 	case "kotlin-jvm", "kotlin_java", "kotlin-java", "kotlin/java", "kotlinjava":
 		l = "KOTLIN_JVM"
 	case "kotlin-jvm8", "kotlin-java8", "kotlin/java8":

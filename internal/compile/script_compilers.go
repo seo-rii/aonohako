@@ -90,6 +90,96 @@ func compileCoffeeScript(ctx context.Context, workDir, target string, sources []
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type elmCompiler struct{}
+
+func (elmCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	rootSource := selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".elm"}, "Main.elm", "main.elm")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no elm sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(job.Target), ".js") {
+		job.Target += ".js"
+	}
+	elmJSONPath := filepath.Join(job.WorkDir, "elm.json")
+	if _, err := os.Stat(elmJSONPath); err != nil {
+		if !os.IsNotExist(err) {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+		defaultProject := `{
+  "type": "application",
+  "source-directories": ["."],
+  "elm-version": "0.19.1",
+  "dependencies": {
+    "direct": {
+      "elm/core": "1.0.5",
+      "elm/json": "1.1.3"
+    },
+    "indirect": {}
+  },
+  "test-dependencies": {
+    "direct": {},
+    "indirect": {}
+  }
+}
+`
+		if err := os.WriteFile(elmJSONPath, []byte(defaultProject), 0o644); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+		}
+	}
+	compiledPath := filepath.Join(job.WorkDir, "aonohako-elm-compiled.js")
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	result := runner.Run(ctx, job.WorkDir, "elm", []string{"make", rootSource, "--output", compiledPath}, []string{"HOME=/usr/local/lib/aonohako/elm-home"})
+	if result.Status != model.CompileStatusOK {
+		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
+	}
+	compiled, err := os.ReadFile(compiledPath)
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	wrapper := append([]byte(`const fs = require("fs");
+const __aonohakoInput = fs.readFileSync(0, "utf8");
+`), compiled...)
+	wrapper = append(wrapper, []byte(`
+const __aonohakoElm = typeof Elm !== "undefined" ? Elm : (typeof module !== "undefined" && module.exports ? module.exports.Elm : undefined);
+if (!__aonohakoElm || !__aonohakoElm.Main || typeof __aonohakoElm.Main.init !== "function") {
+  console.error("Elm.Main.init is not available");
+  process.exit(1);
+}
+const __aonohakoApp = __aonohakoElm.Main.init({ flags: null });
+const __aonohakoPorts = __aonohakoApp && __aonohakoApp.ports ? __aonohakoApp.ports : {};
+if (__aonohakoPorts.stdout && typeof __aonohakoPorts.stdout.subscribe === "function") {
+  __aonohakoPorts.stdout.subscribe((value) => process.stdout.write(String(value)));
+}
+if (__aonohakoPorts.stderr && typeof __aonohakoPorts.stderr.subscribe === "function") {
+  __aonohakoPorts.stderr.subscribe((value) => process.stderr.write(String(value)));
+}
+if (__aonohakoPorts.exit && typeof __aonohakoPorts.exit.subscribe === "function") {
+  __aonohakoPorts.exit.subscribe((code) => {
+    const numericCode = Number(code);
+    process.exitCode = Number.isFinite(numericCode) ? numericCode : 0;
+    setImmediate(() => process.exit(process.exitCode));
+  });
+}
+if (__aonohakoPorts.stdin && typeof __aonohakoPorts.stdin.send === "function") {
+  __aonohakoPorts.stdin.send(__aonohakoInput);
+}
+`)...)
+	if err := os.WriteFile(filepath.Join(job.WorkDir, job.Target), wrapper, 0o644); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	artifacts, err := readSingleArtifact(job.WorkDir, job.Target, job.Target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
+}
+
 type sqliteCompiler struct{}
 
 func (sqliteCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {

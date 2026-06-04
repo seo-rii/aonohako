@@ -25,7 +25,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bc", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "janet", "lisp", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "graphql", "groovy", "haxe", "java", "javascript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
 	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zig"}) {
@@ -115,6 +115,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-deno",
 		"ci-duckdb",
 		"ci-elixir",
+		"ci-elm",
 		"ci-erlang",
 		"ci-forth",
 		"ci-fortran",
@@ -221,6 +222,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"dart":          {"dart compile exe", "Broken.dart"},
 		"deno":          {"DENO_VERSION=2.7.14", "deno check --v8-flags=--max-old-space-size=512 Main.ts", "deno run --no-prompt --v8-flags=--max-old-space-size=128 Main.ts"},
 		"duckdb":        {"DUCKDB_VERSION=1.5.2", "aonohako-duckdb-run Main.sql"},
+		"elm":           {"elm-compiler", `"elm/json": "1.1.3"`, "HOME=/usr/local/lib/aonohako/elm-home", "elm make Main.elm --output=aonohako-elm-compiled.js", "port stdin : (String -> msg) -> Sub msg"},
 		"erlang":        {"Broken.erl", "erlc"},
 		"forth":         {"gforth Main.fs -e bye", ".\" ok\" cr"},
 		"freebasic":     {"FREEBASIC_VERSION=1.10.1", "libtinfo5", "fbc -x Main Main.bas"},

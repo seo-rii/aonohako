@@ -3328,6 +3328,30 @@ int main() {
 				source("Main.ts", `console.log("ok");`),
 			},
 		},
+		"elm": {
+			compileLang:    "ELM",
+			stdin:          "ok\n",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.elm", `port module Main exposing (main)
+import Platform
+port stdin : (String -> msg) -> Sub msg
+port stdout : String -> Cmd msg
+type Msg = Input String
+main : Program () () Msg
+main =
+    Platform.worker
+        { init = \_ -> ( (), Cmd.none )
+        , update = \msg model ->
+            case msg of
+                Input input ->
+                    ( model, stdout input )
+        , subscriptions = \_ -> stdin Input
+        }
+`),
+			},
+		},
 		"kotlin-jvm": {
 			compileLang:    "KOTLIN_JVM",
 			expectedStdout: "ok\n",

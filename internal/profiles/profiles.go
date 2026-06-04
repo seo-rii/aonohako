@@ -123,6 +123,7 @@ var profiles = map[string]Profile{
 	"PYPY3":         {SourceLang: "PYPY3", Extension: "py", CompileKind: "pypy", RunLang: "pypy", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 128},
 	"JAVASCRIPT":    {SourceLang: "JAVASCRIPT", Extension: "js", CompileKind: "javascript", RunLang: "javascript", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"TYPESCRIPT":    {SourceLang: "TYPESCRIPT", Extension: "ts", CompileKind: "typescript", RunLang: "javascript", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"ELM":           {SourceLang: "ELM", Extension: "elm", DefaultTarget: "Main.js", CompileKind: "elm", RunLang: "javascript", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"RUBY":          {SourceLang: "RUBY", Extension: "rb", CompileKind: "ruby", RunLang: "ruby", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PHP":           {SourceLang: "PHP", Extension: "php", CompileKind: "php", RunLang: "php", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LUA":           {SourceLang: "LUA", Extension: "lua", CompileKind: "lua", RunLang: "lua", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},

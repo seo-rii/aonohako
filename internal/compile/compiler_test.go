@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/util"
 )
 
 type recordedCommand struct {
@@ -47,7 +49,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
-		"typescript", "kotlin", "cobol", "cython", "haskell", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
+		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
 		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "whitespace", "brainfuck", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
@@ -188,6 +190,55 @@ func TestPythonLikeCompilerCollectsPythonArtifacts(t *testing.T) {
 	}
 	if len(resp.Artifacts) != 2 {
 		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+}
+
+func TestElmCompilerWritesProjectAndNodeWrapper(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.elm"), []byte("port module Main exposing (main)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(_ string, _ string, args, _ []string) {
+			if err := os.WriteFile(args[len(args)-1], []byte("var Elm = { Main: { init: function () { return { ports: {} }; } } };"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := elmCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.elm"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	wantArgs := []string{"make", filepath.Join(workDir, "Main.elm"), "--output", filepath.Join(workDir, "aonohako-elm-compiled.js")}
+	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
+		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
+	}
+	if !reflect.DeepEqual(runner.commands[0].env, []string{"HOME=/usr/local/lib/aonohako/elm-home"}) {
+		t.Fatalf("runner env = %#v", runner.commands[0].env)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "elm.json")); err != nil {
+		t.Fatalf("elm.json was not written: %v", err)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.js" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+	body, err := util.DecodeB64(resp.Artifacts[0].DataB64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `fs.readFileSync(0, "utf8")`) || !strings.Contains(string(body), "__aonohakoElm.Main.init") || !strings.Contains(string(body), "__aonohakoPorts.stdin.send") {
+		t.Fatalf("elm wrapper missing runtime bridge: %s", string(body))
 	}
 }
 

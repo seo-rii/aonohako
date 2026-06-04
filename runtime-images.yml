@@ -299,6 +299,117 @@ languages:
           tsc Main.ts --module commonjs --target es2019 --outDir dist
           node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js | grep '^ok$'
 
+  elm:
+    install:
+      apt:
+        - elm-compiler
+        - nodejs
+      script:
+        - install -d -m 0755 /usr/local/lib/aonohako/elm-home
+        - |
+          export HOME=/usr/local/lib/aonohako/elm-home
+          cat > /tmp/elm.json <<'JSON'
+          {
+            "type": "application",
+            "source-directories": ["."],
+            "elm-version": "0.19.1",
+            "dependencies": {
+              "direct": {
+                "elm/core": "1.0.5",
+                "elm/json": "1.1.3"
+              },
+              "indirect": {}
+            },
+            "test-dependencies": {
+              "direct": {},
+              "indirect": {}
+            }
+          }
+          JSON
+          cat > /tmp/Main.elm <<'ELM'
+          port module Main exposing (main)
+          import Platform
+          port stdin : (String -> msg) -> Sub msg
+          port stdout : String -> Cmd msg
+          type Msg = Input String
+          main : Program () () Msg
+          main =
+              Platform.worker
+                  { init = \_ -> ( (), Cmd.none )
+                  , update = \msg model ->
+                      case msg of
+                          Input input ->
+                              ( model, stdout input )
+                  , subscriptions = \_ -> stdin Input
+                  }
+          ELM
+          cd /tmp && yes | elm make Main.elm --output=/tmp/elm-warmup.js
+          chmod -R a+rX /usr/local/lib/aonohako/elm-home
+          rm -f /tmp/elm.json /tmp/Main.elm /tmp/elm-warmup.js
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          export HOME=/usr/local/lib/aonohako/elm-home
+          cat > elm.json <<'JSON'
+          {
+            "type": "application",
+            "source-directories": ["."],
+            "elm-version": "0.19.1",
+            "dependencies": {
+              "direct": {
+                "elm/core": "1.0.5",
+                "elm/json": "1.1.3"
+              },
+              "indirect": {}
+            },
+            "test-dependencies": {
+              "direct": {},
+              "indirect": {}
+            }
+          }
+          JSON
+          cat > Main.elm <<'ELM'
+          port module Main exposing (main)
+          import Platform
+          port stdin : (String -> msg) -> Sub msg
+          port stdout : String -> Cmd msg
+          type Msg = Input String
+          main : Program () () Msg
+          main =
+              Platform.worker
+                  { init = \_ -> ( (), Cmd.none )
+                  , update = \msg model ->
+                      case msg of
+                          Input input ->
+                              ( model, stdout input )
+                  , subscriptions = \_ -> stdin Input
+                  }
+          ELM
+          elm make Main.elm --output=aonohako-elm-compiled.js
+          {
+            printf '%s\n' 'const fs = require("fs");' 'const __aonohakoInput = fs.readFileSync(0, "utf8");'
+            cat aonohako-elm-compiled.js
+            cat <<'JS'
+          const __aonohakoElm = typeof Elm !== "undefined" ? Elm : (typeof module !== "undefined" && module.exports ? module.exports.Elm : undefined);
+          const __aonohakoApp = __aonohakoElm.Main.init({ flags: null });
+          const __aonohakoPorts = __aonohakoApp && __aonohakoApp.ports ? __aonohakoApp.ports : {};
+          if (__aonohakoPorts.stdout) {
+            __aonohakoPorts.stdout.subscribe((value) => process.stdout.write(String(value)));
+          }
+          if (__aonohakoPorts.stdin) {
+            __aonohakoPorts.stdin.send(__aonohakoInput);
+          }
+          JS
+          } > Main.js
+          printf 'ok\n' | node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js | grep '^ok$'
+          cat > Broken.elm <<'ELM'
+          module Broken exposing (main)
+          main =
+          ELM
+          if elm make Broken.elm --output=Broken.js >/dev/null 2>&1; then exit 1; fi
+
   ruby:
     install:
       apt:
@@ -2322,6 +2433,7 @@ profiles:
       - clojure
       - coffeescript
       - deno
+      - elm
       - graphql
       - groovy
       - haxe
