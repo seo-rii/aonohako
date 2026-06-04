@@ -305,7 +305,7 @@ if has_language "kotlin-jvm"; then
     report_once "Kotlin/JVM" kotlinc -version
 fi
 
-if has_language "pascal" || has_language "delphi"; then
+if has_language "pascal" || has_language "delphi" || has_language "objectpascal"; then
     report_once "Free Pascal" fpc -iV
 fi
 
@@ -579,6 +579,7 @@ report_compile_option "rust" "rustc --edition 2018 -O --cfg ONLINE_JUDGE -o <tar
 report_compile_option "zig" "zig build-exe -O ReleaseSafe -femit-bin=<target>"
 report_compile_option "pascal" "fpc -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "delphi" "fpc -Mdelphi -O2 -Xs -dONLINE_JUDGE"
+report_compile_option "objectpascal" "fpc -Mobjfpc -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "nim" "nim c -d:release -d:ONLINE_JUDGE --opt:speed"
 report_compile_option "ada" "gnatmake -O2"
 report_compile_option "cobol" "cobc -x -free -O2"

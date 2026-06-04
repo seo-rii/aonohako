@@ -28,7 +28,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
@@ -153,6 +153,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-nim",
 		"ci-objective-c",
 		"ci-objective-cpp",
+		"ci-objectpascal",
 		"ci-ocaml",
 		"ci-octave",
 		"ci-odin",
@@ -257,6 +258,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"nim":           {"nim c", "Broken.nim"},
 		"objective-c":   {"clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objective-cpp": {"clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
+		"objectpascal":  {"fpc -Mobjfpc -O2 -Xs -oMain Main.pas", "TOk = class", "Broken.pas"},
 		"octave":        {"octave-cli --quiet", "Main.m"},
 		"odin":          {"ODIN_VERSION=dev-2026-04", "odin build . -out:Main"},
 		"pascal":        {"fpc", "Broken.pas"},

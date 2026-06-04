@@ -3017,6 +3017,26 @@ begin
 end.`),
 			},
 		},
+		"objectpascal": {
+			compileLang:    "OBJECTPASCAL",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.pas", `program Main;
+type
+  TOk = class
+  public
+    class procedure Run;
+  end;
+class procedure TOk.Run;
+begin
+  Writeln('ok');
+end;
+begin
+  TOk.Run;
+end.`),
+			},
+		},
 		"perl": {
 			compileLang:    "PERL",
 			expectedStdout: "ok\n",

@@ -30,6 +30,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "PASCAL"
 	case "delphi":
 		l = "DELPHI"
+	case "objectpascal", "object-pascal", "object_pascal", "objpascal", "objfpc":
+		l = "OBJECTPASCAL"
 	case "nim":
 		l = "NIM"
 	case "clojure":

@@ -1650,6 +1650,42 @@ languages:
           PAS
           if fpc -Mdelphi -O2 -Xs -oBroken Broken.dpr >/dev/null 2>&1; then exit 1; fi
 
+  objectpascal:
+    install:
+      apt:
+        - fp-compiler
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.pas <<'PAS'
+          program Main;
+          type
+            TOk = class
+            public
+              class procedure Run;
+            end;
+          class procedure TOk.Run;
+          begin
+            Writeln('ok');
+          end;
+          begin
+            TOk.Run;
+          end.
+          PAS
+          fpc -Mobjfpc -O2 -Xs -oMain Main.pas >/dev/null
+          ./Main | grep '^ok$'
+          cat > Broken.pas <<'PAS'
+          program Broken;
+          type
+            TOk = class
+          begin
+            Writeln('oops');
+          end.
+          PAS
+          if fpc -Mobjfpc -O2 -Xs -oBroken Broken.pas >/dev/null 2>&1; then exit 1; fi
+
   nim:
     install:
       apt:
@@ -2692,6 +2728,7 @@ profiles:
       - nim
       - objective-c
       - objective-cpp
+      - objectpascal
       - odin
       - pascal
       - qbasic

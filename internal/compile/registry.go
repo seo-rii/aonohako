@@ -14,6 +14,9 @@ var compileRegistry = map[string]Compiler{
 	"delphi": singleSourceExecutableCompiler{exts: []string{".dpr", ".pas"}, preferredBases: []string{"Main.dpr", "Main.pas"}, noSourceReason: "no delphi sources", bin: "fpc", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"-Mdelphi", "-O2", "-Xs", "-dONLINE_JUDGE", "-o" + outputPath(job), sourcePath}
 	}},
+	"objectpascal": singleSourceExecutableCompiler{exts: []string{".pas", ".pp"}, preferredBases: []string{"Main.pas", "Main.pp"}, noSourceReason: "no objectpascal sources", bin: "fpc", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"-Mobjfpc", "-O2", "-Xs", "-dONLINE_JUDGE", "-o" + outputPath(job), sourcePath}
+	}},
 	"nim": singleSourceExecutableCompiler{exts: []string{".nim"}, preferredBases: []string{"Main.nim"}, noSourceReason: "no nim sources", bin: "nim", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--out:" + outputPath(job), sourcePath}
 	}},
