@@ -22,7 +22,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 19 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "janet", "lisp", "lolcode", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -135,6 +135,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-haxe",
 		"ci-idris2",
 		"ci-isabelle",
+		"ci-j",
 		"ci-janet",
 		"ci-java",
 		"ci-javascript",
@@ -241,6 +242,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"idris2":        {"IDRIS2_VERSION=0.8.0", "make bootstrap SCHEME=chezscheme PREFIX=/usr/local", "idris2 --cg chez -o Main Main.idr", "test -d build/exec/Main_app"},
 		"haxe":          {"haxe -main Main -neko Main.n", "neko Main.n"},
 		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle process_theories -o naproche_server=false -D ."},
+		"j":             {"J_VERSION=903", "7fb5e9e72c25c5f20bea30f4541cbc1b7c1980f10e5af842aa2a3e4413bfed5f", "aonohako-j Main.ijs", "echo 'ok'"},
 		"janet":         {"JANET_VERSION=1.41.2", "janet Main.janet"},
 		"javascript":    {"node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js"},
 		"groovy":        {"Broken.groovy", "groovyc", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp \"${groovy_cp}\" Main"},

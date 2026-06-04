@@ -297,6 +297,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"duckdb":        {compileKind: "duckdb", runLang: "duckdb"},
 		"bqn":           {compileKind: "bqn", runLang: "bqn"},
 		"apl":           {compileKind: "apl", runLang: "apl"},
+		"j":             {compileKind: "j", runLang: "j"},
 		"uiua":          {compileKind: "uiua", runLang: "uiua"},
 		"janet":         {compileKind: "janet", runLang: "janet"},
 		"coffeescript":  {compileKind: "coffeescript", runLang: "javascript"},

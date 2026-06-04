@@ -155,6 +155,7 @@ var profiles = map[string]Profile{
 	"BQN":           {SourceLang: "BQN", Extension: "bqn", CompileKind: "bqn", RunLang: "bqn", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"APL":           {SourceLang: "APL", Extension: "apl", CompileKind: "apl", RunLang: "apl", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"GNU_APL":       {SourceLang: "GNU_APL", Extension: "apl", CompileKind: "apl", RunLang: "apl", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"J":             {SourceLang: "J", Extension: "ijs", CompileKind: "j", RunLang: "j", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"UIUA":          {SourceLang: "UIUA", Extension: "ua", CompileKind: "uiua", RunLang: "uiua", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"JANET":         {SourceLang: "JANET", Extension: "janet", CompileKind: "janet", RunLang: "janet", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"SED":           {SourceLang: "SED", Extension: "sed", CompileKind: "sed", RunLang: "sed", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
@@ -182,7 +183,7 @@ func All() map[string]Profile {
 func NormalizeRunLang(language string) string {
 	key := strings.ToLower(strings.TrimSpace(language))
 	switch key {
-	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "lolcode", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "uiua", "janet", "aheui", "haxe", "coffeescript", "raku", "sed", "bc", "forth":
+	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "lolcode", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "coffeescript", "raku", "sed", "bc", "forth":
 		return key
 	case "coq":
 		return "rocq"
@@ -212,6 +213,8 @@ func NormalizeRunLang(language string) string {
 		return "smalltalk"
 	case "gnu-apl":
 		return "apl"
+	case "jsoftware":
+		return "j"
 	case "gnucobol":
 		return "binary"
 	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic", "vala", "mercury", "idris2":

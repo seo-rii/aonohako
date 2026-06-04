@@ -48,7 +48,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
-		"raku", "r", "mercury", "prolog", "lisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "uiua", "janet", "sed", "bc", "forth",
+		"raku", "r", "mercury", "prolog", "lisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
 		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "lolcode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",

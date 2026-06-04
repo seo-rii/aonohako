@@ -2402,6 +2402,14 @@ msg:
 				source("Main.lol", "HAI 1.2\nVISIBLE \"ok\"\nKTHXBYE\n"),
 			},
 		},
+		"j": {
+			compileLang:    "J",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.ijs", "echo 'ok'\nexit 0\n"),
+			},
+		},
 		"clojure": {
 			compileLang:    "CLOJURE",
 			expectedStdout: "ok\n",

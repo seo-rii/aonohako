@@ -265,6 +265,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"duckdb", "/tmp/Main.sql", "aonohako-duckdb-run", true},
 		{"bqn", "/tmp/Main.bqn", "bqn", true},
 		{"apl", "/tmp/Main.apl", "node", true},
+		{"j", "/tmp/Main.ijs", "aonohako-j", true},
 		{"uiua", "/tmp/Main.ua", "uiua", true},
 		{"janet", "/tmp/Main.janet", "janet", true},
 		{"sed", "/tmp/Main.sed", "sed", true},

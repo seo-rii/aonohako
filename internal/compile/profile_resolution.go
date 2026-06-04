@@ -176,6 +176,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "BQN"
 	case "apl", "gnu-apl":
 		l = "APL"
+	case "j", "jsoftware":
+		l = "J"
 	case "uiua":
 		l = "UIUA"
 	case "janet":

@@ -2436,6 +2436,26 @@ languages:
           printf '%s\n' "⎕←'ok'" > Main.apl
           node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl | grep '^ok$'
 
+  j:
+    install:
+      apt:
+        - curl
+      script:
+        - export J_VERSION=903
+        - export J_SHA256=7fb5e9e72c25c5f20bea30f4541cbc1b7c1980f10e5af842aa2a3e4413bfed5f
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://www.jsoftware.com/download/j${J_VERSION}/install/j${J_VERSION}_linux64.tar.gz" -o /tmp/j.tar.gz
+        - echo "${J_SHA256}  /tmp/j.tar.gz" | sha256sum -c -
+        - tar -xzf /tmp/j.tar.gz -C /opt
+        - ln -sfn "/opt/j${J_VERSION}/bin/jconsole" /usr/local/bin/aonohako-j
+        - rm -f /tmp/j.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' "echo 'ok'" 'exit 0' > Main.ijs
+          aonohako-j Main.ijs | grep '^ok$'
+
   uiua:
     install:
       apt:
@@ -2572,6 +2592,7 @@ profiles:
       - golfscript
       - haskell
       - idris2
+      - j
       - janet
       - lisp
       - lolcode

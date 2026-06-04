@@ -89,6 +89,7 @@ var compileRegistry = map[string]Compiler{
 	"duckdb":        passThroughCompiler{exts: []string{".sql"}, noSourceReason: "no duckdb sources"},
 	"bqn":           passThroughCompiler{exts: []string{".bqn"}, noSourceReason: "no bqn sources"},
 	"apl":           passThroughCompiler{exts: []string{".apl"}, noSourceReason: "no apl sources"},
+	"j":             passThroughCompiler{exts: []string{".ijs"}, noSourceReason: "no j sources"},
 	"uiua":          passThroughCompiler{exts: []string{".ua"}, noSourceReason: "no uiua sources"},
 	"janet":         passThroughCompiler{exts: []string{".janet"}, noSourceReason: "no janet sources"},
 	"sed":           checkedSourcesCompiler{exts: []string{".sed"}, noSourceReason: "no sed sources", bin: "sed", prefix: []string{"-n", "-f"}},

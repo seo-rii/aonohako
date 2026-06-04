@@ -479,6 +479,10 @@ if has_language "bc"; then
     report_once "bc" bc --version
 fi
 
+if has_language "j"; then
+    report_once "J" bash -lc "printf '%s\n' \"echo 9!:14 ''\" 'exit 0' >/tmp/aonohako-j-version.ijs && aonohako-j /tmp/aonohako-j-version.ijs"
+fi
+
 if has_language "lolcode"; then
     report_once "lci" lci -v
 fi
@@ -606,6 +610,7 @@ report_compile_option "golfscript" "pass-through .gs artifacts"
 report_compile_option "duckdb" "pass-through .sql artifacts"
 report_compile_option "bqn" "pass-through .bqn artifacts"
 report_compile_option "apl" "pass-through .apl artifacts"
+report_compile_option "j" "pass-through .ijs artifacts"
 report_compile_option "uiua" "pass-through .ua artifacts"
 report_compile_option "janet" "pass-through .janet artifacts"
 report_compile_option "sed" "pass-through .sed artifacts"
