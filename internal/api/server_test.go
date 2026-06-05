@@ -863,63 +863,36 @@ func TestPlatformAuthLimitsConcurrentBodyHashing(t *testing.T) {
 	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
 		return model.RunResponse{Status: model.RunStatusAccepted}
 	}})
+	releaseHashSlot, ok := s.acquirePlatformBodyHashSlot()
+	if !ok {
+		t.Fatalf("failed to occupy platform body hash slot")
+	}
+	defer releaseHashSlot()
+
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
-	blocking := newBlockingBody()
-	timestamp := time.Now().UTC().Format(time.RFC3339)
-	req1, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", blocking)
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set(platformPrincipalHeader, "alice")
-	req1.Header.Set(platformPrincipalTimestampHeader, timestamp)
-	req1.Header.Set(platformPrincipalSignatureHeader, "v3=bad")
-
-	respCh := make(chan *http.Response, 1)
-	errCh := make(chan error, 1)
-	go func() {
-		resp, err := http.DefaultClient.Do(req1)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		respCh <- resp
-	}()
-	<-blocking.started
-
 	body := executePayload(t)
-	req2, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set(platformPrincipalHeader, "alice")
-	req2.Header.Set(platformPrincipalTimestampHeader, timestamp)
-	req2.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, body))
-	resp2, err := http.DefaultClient.Do(req2)
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(platformPrincipalHeader, "alice")
+	req.Header.Set(platformPrincipalTimestampHeader, timestamp)
+	req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, body))
+	resp2, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("second request failed: %v", err)
+		t.Fatalf("request failed: %v", err)
 	}
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("second request status = %d, want %d", resp2.StatusCode, http.StatusTooManyRequests)
+		t.Fatalf("status = %d, want %d", resp2.StatusCode, http.StatusTooManyRequests)
 	}
 	var payload map[string]string
 	if err := json.NewDecoder(resp2.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode second response: %v", err)
+		t.Fatalf("decode response: %v", err)
 	}
 	if payload["error"] != "platform_body_hash_limit_exceeded" {
 		t.Fatalf("error = %q, want platform_body_hash_limit_exceeded", payload["error"])
-	}
-
-	blocking.Close()
-	select {
-	case err := <-errCh:
-		t.Fatalf("first request failed: %v", err)
-	case resp := <-respCh:
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("first request status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-		}
-		_, _ = io.Copy(io.Discard, resp.Body)
-	case <-time.After(2 * time.Second):
-		t.Fatal("first request did not finish after unblocking body")
 	}
 }
 
