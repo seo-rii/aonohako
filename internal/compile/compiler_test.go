@@ -128,6 +128,9 @@ func TestIdris2CompilerCollectsChezExecutableBundle(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(execDir, "Main"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.WriteFile(filepath.Join(execDir, "Main_app", "Main.so"), []byte("native"), 0o755); err != nil {
+				t.Fatal(err)
+			}
 			if err := os.WriteFile(filepath.Join(execDir, "Main_app", "Main.ss"), []byte("(display \"ok\")"), 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -151,12 +154,137 @@ func TestIdris2CompilerCollectsChezExecutableBundle(t *testing.T) {
 	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
 		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
 	}
-	if len(resp.Artifacts) != 2 {
+	if len(resp.Artifacts) != 3 {
 		t.Fatalf("artifacts = %+v", resp.Artifacts)
 	}
-	names := []string{resp.Artifacts[0].Name, resp.Artifacts[1].Name}
-	if !reflect.DeepEqual(names, []string{"Main", "Main_app/Main.ss"}) {
+	names := []string{resp.Artifacts[0].Name, resp.Artifacts[1].Name, resp.Artifacts[2].Name}
+	if !reflect.DeepEqual(names, []string{"Main", "Main_app/Main.so", "Main_app/Main.ss"}) {
 		t.Fatalf("artifact names = %#v", names)
+	}
+	modes := []string{resp.Artifacts[0].Mode, resp.Artifacts[1].Mode, resp.Artifacts[2].Mode}
+	if !reflect.DeepEqual(modes, []string{"exec", "exec", ""}) {
+		t.Fatalf("artifact modes = %#v", modes)
+	}
+	wrapper, err := util.DecodeB64(resp.Artifacts[0].DataB64)
+	if err != nil {
+		t.Fatalf("decode wrapper: %v", err)
+	}
+	if body := string(wrapper); !strings.Contains(body, `exec "./Main_app/Main.so" "$@"`) || strings.Contains(body, "readlink") {
+		t.Fatalf("unexpected idris2 wrapper: %q", body)
+	}
+}
+
+func TestIdris2CompilerAddsForkFreeWrapperWhenBackendSkipsIt(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.idr"), []byte("main : IO ()\nmain = putStrLn \"ok\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			execDir := filepath.Join(workDir, "build", "exec", "Main_app")
+			if err := os.MkdirAll(execDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(execDir, "Main.so"), []byte("native"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(execDir, "Main.ss"), []byte("(display \"ok\")"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := idris2Compiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.idr"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(resp.Artifacts) != 3 {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+	if resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("wrapper artifact = %+v", resp.Artifacts[0])
+	}
+	if resp.Artifacts[1].Name != "Main_app/Main.so" || resp.Artifacts[1].Mode != "exec" {
+		t.Fatalf("main shared object artifact = %+v", resp.Artifacts[1])
+	}
+}
+
+func TestMercuryCompilerUsesModuleMakeTarget(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "main.m"), []byte(":- module main.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "main"), []byte("binary"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	compiler, ok := lookupCompiler("mercury")
+	if !ok {
+		t.Fatal("missing mercury compiler")
+	}
+	resp := compiler.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "main.m"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	wantArgs := []string{"--make", "--grade", "hlc.gc", "main"}
+	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
+		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+}
+
+func TestValaCompilerDoesNotPassUnsupportedOptimizationFlag(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.vala"), []byte("int main() { return 0; }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("binary"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	compiler, ok := lookupCompiler("vala")
+	if !ok {
+		t.Fatal("missing vala compiler")
+	}
+	resp := compiler.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.vala"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	for _, arg := range runner.commands[0].args {
+		if arg == "-O" {
+			t.Fatalf("vala args must not include unsupported -O flag: %#v", runner.commands[0].args)
+		}
 	}
 }
 

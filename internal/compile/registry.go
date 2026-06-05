@@ -49,7 +49,7 @@ var compileRegistry = map[string]Compiler{
 	"verilog": verilogCompiler{},
 	"crystal": crystalCompiler{},
 	"vala": singleSourceExecutableCompiler{exts: []string{".vala"}, preferredBases: []string{"Main.vala"}, noSourceReason: "no vala sources", bin: "valac", args: func(job CompileJob, sourcePath string) []string {
-		return []string{"-O", "--define=ONLINE_JUDGE", "-o", outputPath(job), sourcePath}
+		return []string{"--define=ONLINE_JUDGE", "-o", outputPath(job), sourcePath}
 	}},
 	"vlang":       vlangCompiler{},
 	"odin":        odinCompiler{},
@@ -80,11 +80,9 @@ var compileRegistry = map[string]Compiler{
 	"objective-cpp": nativeCompiler{exts: []string{".mm"}, bin: "clang++", flags: func(CompileJob) []string {
 		return []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"}
 	}},
-	"raku": checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
-	"r":    rCompiler{},
-	"mercury": singleSourceExecutableCompiler{exts: []string{".m"}, preferredBases: []string{"main.m", "Main.m"}, noSourceReason: "no mercury sources", bin: "mmc", args: func(job CompileJob, sourcePath string) []string {
-		return []string{"--make", "--grade", "hlc.gc", "-o", outputPath(job), sourcePath}
-	}},
+	"raku":          checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
+	"r":             rCompiler{},
+	"mercury":       mercuryCompiler{},
 	"prolog":        prologCompiler{},
 	"lisp":          lispCompiler{},
 	"nasm":          nasmCompiler{},

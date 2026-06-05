@@ -125,7 +125,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// because lower file-size rlimits can break CoreCLR/F# startup before user code.
 	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "spago" || isIsabelle
 	allowProcessGroups := commandName == "swiftc" || commandName == "hare" || isIsabelle
-	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || commandName == "rescript" || isIsabelle
+	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || commandName == "idris2" || commandName == "rescript" || isIsabelle
 	allowExecveat := commandName == "hare"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB

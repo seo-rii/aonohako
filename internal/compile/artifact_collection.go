@@ -77,7 +77,11 @@ func collectArtifacts(root string, include func(name string) bool, prefix string
 		if prefix != "" {
 			name = filepath.ToSlash(filepath.Join(prefix, rel))
 		}
-		artifacts = append(artifacts, model.Artifact{Name: name, DataB64: util.EncodeB64(data)})
+		mode := ""
+		if info.Mode().Perm()&0o111 != 0 {
+			mode = "exec"
+		}
+		artifacts = append(artifacts, model.Artifact{Name: name, DataB64: util.EncodeB64(data), Mode: mode})
 		artifact.cleanup()
 		return nil
 	})

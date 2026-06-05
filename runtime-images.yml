@@ -1010,7 +1010,7 @@ languages:
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://downloads.sourceforge.net/project/mlton/mlton/${MLTON_VERSION}/mlton-${MLTON_VERSION}-1.amd64-linux.ubuntu-20.04_static.tgz" -o /tmp/mlton.tgz
         - tar -xzf /tmp/mlton.tgz -C /opt
         - rm -f /tmp/mlton.tgz
-        - MLTON_DIR="$(find /opt -maxdepth 1 -type d -name "mlton-${MLTON_VERSION}-*" | head -n 1)"; ln -sfn "${MLTON_DIR}/bin/mlton" /usr/local/bin/mlton
+        - MLTON_DIR="$(find /opt -maxdepth 1 -type d -name "mlton-${MLTON_VERSION}-*" | head -n 1)"; ln -sfn "${MLTON_DIR}/bin/mlton" /usr/local/bin/mlton; ln -sfn "${MLTON_DIR}/lib/mlton" /usr/local/lib/mlton
     smoke:
       command:
         - bash
@@ -1061,8 +1061,8 @@ languages:
           main(!IO) :-
               io.write_string("ok\n", !IO).
           MERCURY
-          mmc --make --grade hlc.gc -o Main main.m
-          ./Main | grep '^ok$'
+          mmc --make --grade hlc.gc main
+          ./main | grep '^ok$'
           cat > broken.m <<'MERCURY'
           :- module broken.
           :- interface.
@@ -1072,7 +1072,7 @@ languages:
 
           main(!IO) :-
           MERCURY
-          if mmc --make --grade hlc.gc -o Broken broken.m >/dev/null 2>&1; then exit 1; fi
+          if mmc --make --grade hlc.gc broken >/dev/null 2>&1; then exit 1; fi
 
   go:
     install:
@@ -1439,10 +1439,10 @@ languages:
         - -lc
         - |
           printf '%s\n' 'int main() {' '  print("ok\n");' '  return 0;' '}' > Main.vala
-          valac -O --define=ONLINE_JUDGE -o Main Main.vala
+          valac --define=ONLINE_JUDGE -o Main Main.vala
           ./Main | grep '^ok$'
           printf '%s\n' 'int main() {' '  print(' > Broken.vala
-          if valac -O --define=ONLINE_JUDGE -o Broken Broken.vala >/dev/null 2>&1; then exit 1; fi
+          if valac --define=ONLINE_JUDGE -o Broken Broken.vala >/dev/null 2>&1; then exit 1; fi
 
   vlang:
     install:
@@ -2528,15 +2528,27 @@ languages:
   j:
     install:
       apt:
+        - ca-certificates
         - curl
+        - unzip
       script:
-        - export J_VERSION=903
-        - export J_SHA256=7fb5e9e72c25c5f20bea30f4541cbc1b7c1980f10e5af842aa2a3e4413bfed5f
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://www.jsoftware.com/download/j${J_VERSION}/install/j${J_VERSION}_linux64.tar.gz" -o /tmp/j.tar.gz
-        - echo "${J_SHA256}  /tmp/j.tar.gz" | sha256sum -c -
-        - tar -xzf /tmp/j.tar.gz -C /opt
+        - export J_VERSION=963
+        - export J_SOURCE_COMMIT=a9728936d7bd7743024db26a8fcb72e5f2fcadac
+        - export J_ENGINE_SHA256=ff5b91383265d27e2b9edb4c934ba1b642784417196ba6c2b09a2661c2a173d1
+        - export J_SOURCE_SHA256=ce9dfef9911f330821b3a26031e35c5e3baaaa8a54d6c919608134a121e5b5a6
+        - mkdir -p /tmp/j-engine /tmp/j-source
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/jsoftware/jsource/releases/download/build96/l64.zip" -o /tmp/j-l64.zip
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/jsoftware/jsource/archive/${J_SOURCE_COMMIT}.tar.gz" -o /tmp/j-source.tar.gz
+        - echo "${J_ENGINE_SHA256}  /tmp/j-l64.zip" | sha256sum -c -
+        - echo "${J_SOURCE_SHA256}  /tmp/j-source.tar.gz" | sha256sum -c -
+        - unzip -q /tmp/j-l64.zip -d /tmp/j-engine
+        - tar -xzf /tmp/j-source.tar.gz -C /tmp/j-source --strip-components=1
+        - mkdir -p "/opt/j${J_VERSION}"
+        - cp -a /tmp/j-engine/j64 "/opt/j${J_VERSION}/bin"
+        - cp -a /tmp/j-source/jlibrary/. "/opt/j${J_VERSION}/"
+        - chmod 0755 "/opt/j${J_VERSION}/bin/jconsole"
         - ln -sfn "/opt/j${J_VERSION}/bin/jconsole" /usr/local/bin/aonohako-j
-        - rm -f /tmp/j.tar.gz
+        - rm -rf /tmp/j-engine /tmp/j-source /tmp/j-l64.zip /tmp/j-source.tar.gz
     smoke:
       command:
         - bash
