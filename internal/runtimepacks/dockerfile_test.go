@@ -287,8 +287,12 @@ func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.
 		}
 	}
 	for _, marker := range []string{
+		"ARG SANDBOX_TOOLS=",
+		"AONOHAKO_SANDBOX_TOOLS=${SANDBOX_TOOLS}",
 		"for tool in apt apt-get apt-cache apt-config dpkg dpkg-query dpkg-deb curl wget git pip pip3 npm npx yarn pnpm gem bundle bundler ssh scp sftp rsync nc netcat ncat socat telnet ftp lftp gdb gdbserver strace ltrace tcpdump tshark wireshark nmap dig nslookup host ip ss ifconfig route ping ping6 traceroute tracepath arp arping",
 		"chmod 0750 \"$(command -v \"",
+		"for tool in ${SANDBOX_TOOLS}; do",
+		"chmod 0755 \"$(command -v \"",
 		"/usr/lib/python*/dist-packages/pip",
 		"/usr/local/lib/node_modules/npm",
 		"/opt/node-*/lib/node_modules/npm",

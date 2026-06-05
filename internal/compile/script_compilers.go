@@ -130,11 +130,15 @@ func (elmCompiler) Compile(ctx context.Context, job CompileJob) model.CompileRes
 		}
 	}
 	compiledPath := filepath.Join(job.WorkDir, "aonohako-elm-compiled.js")
+	elmHome := filepath.Join(job.WorkDir, ".home")
+	if err := copyPrewarmedToolHome("/usr/local/lib/aonohako/elm-home/.elm", filepath.Join(elmHome, ".elm")); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
 	runner := job.Runner
 	if runner == nil {
 		runner = sandboxCommandRunner{}
 	}
-	result := runner.Run(ctx, job.WorkDir, "elm", []string{"make", rootSource, "--output", compiledPath}, []string{"HOME=/usr/local/lib/aonohako/elm-home"})
+	result := runner.Run(ctx, job.WorkDir, "elm", []string{"make", rootSource, "--output", compiledPath}, []string{"HOME=" + elmHome, "GHCRTS=-N1"})
 	if result.Status != model.CompileStatusOK {
 		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
 	}
@@ -178,6 +182,63 @@ if (__aonohakoPorts.stdin && typeof __aonohakoPorts.stdin.send === "function") {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
+}
+
+func copyPrewarmedToolHome(src, dest string) error {
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if err := os.RemoveAll(dest); err != nil {
+		return err
+	}
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dest, rel)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		mode := info.Mode().Perm()
+		if d.IsDir() {
+			if err := os.MkdirAll(target, mode); err != nil {
+				return err
+			}
+			if os.Geteuid() == 0 {
+				if err := os.Chown(target, 65532, 65532); err != nil {
+					return err
+				}
+			}
+			return os.Chmod(target, mode|0o700)
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, data, mode|0o600); err != nil {
+			return err
+		}
+		if os.Geteuid() == 0 {
+			if err := os.Chown(target, 65532, 65532); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 type reScriptCompiler struct{}
@@ -299,7 +360,14 @@ workspace:
 	if runner == nil {
 		runner = sandboxCommandRunner{}
 	}
-	result := runner.Run(ctx, job.WorkDir, "spago", []string{"build"}, []string{"HOME=/usr/local/lib/aonohako/purescript-home"})
+	pureScriptHome := filepath.Join(job.WorkDir, ".purescript-home")
+	if err := copyPrewarmedToolHome("/usr/local/lib/aonohako/purescript-home", pureScriptHome); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	result := runner.Run(ctx, job.WorkDir, "spago", []string{"build"}, []string{
+		"HOME=" + pureScriptHome,
+		"XDG_CACHE_HOME=" + filepath.Join(pureScriptHome, ".cache"),
+	})
 	if result.Status != model.CompileStatusOK {
 		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
 	}

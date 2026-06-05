@@ -30,6 +30,7 @@ languages:
   python:
     install:
       apt: [python3, python3-numpy]
+      sandbox_tools: [node, git]
     smoke:
       command: ["python3", "-c", "import numpy; print(numpy.arange(3).sum())"]
   java:
@@ -43,6 +44,7 @@ profiles:
     install:
       apt: [curl]
       script: ["echo profile-a"]
+      sandbox_tools: [git]
     languages: [plain, python]
   type-b:
     base_image: debian:trixie-slim
@@ -78,6 +80,9 @@ profiles:
 	if !reflect.DeepEqual(typeA.InstallScript, []string{"echo profile-a"}) {
 		t.Fatalf("type-a install script = %v", typeA.InstallScript)
 	}
+	if !reflect.DeepEqual(typeA.SandboxTools, []string{"git", "node"}) {
+		t.Fatalf("type-a sandbox tools = %v", typeA.SandboxTools)
+	}
 
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
@@ -106,6 +111,9 @@ profiles:
 	if !reflect.DeepEqual(ci[1].InstallScript, []string{"echo profile-a"}) {
 		t.Fatalf("ci[1] install script = %v", ci[1].InstallScript)
 	}
+	if !reflect.DeepEqual(ci[1].SandboxTools, []string{"git"}) {
+		t.Fatalf("ci[1] sandbox tools = %v", ci[1].SandboxTools)
+	}
 
 	if ci[2].Name != "ci-python" || !reflect.DeepEqual(ci[2].SmokeCommand, []string{"python3", "-c", "import numpy; print(numpy.arange(3).sum())"}) {
 		t.Fatalf("ci[2] = %+v", ci[2])
@@ -115,6 +123,9 @@ profiles:
 	}
 	if !reflect.DeepEqual(ci[2].InstallScript, []string{"echo profile-a"}) {
 		t.Fatalf("ci[2] install script = %v", ci[2].InstallScript)
+	}
+	if !reflect.DeepEqual(ci[2].SandboxTools, []string{"git", "node"}) {
+		t.Fatalf("ci[2] sandbox tools = %v", ci[2].SandboxTools)
 	}
 }
 
@@ -143,6 +154,7 @@ func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 		AptPackages:  []string{"python3", "python3-numpy"},
 		PipPackages:  []string{"requests"},
 		NPMPackages:  []string{"typescript"},
+		SandboxTools: []string{"git", "node"},
 		SmokeCommand: []string{"python3", "-c", "print('ok')"},
 	}
 
@@ -164,6 +176,9 @@ func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 	}
 	if build.BuildArgs["NPM_PACKAGES"] != "typescript" {
 		t.Fatalf("npm args = %q", build.BuildArgs["NPM_PACKAGES"])
+	}
+	if build.BuildArgs["SANDBOX_TOOLS"] != "git node" {
+		t.Fatalf("sandbox tool args = %q", build.BuildArgs["SANDBOX_TOOLS"])
 	}
 	if build.BuildArgs["SMOKE_COMMAND"] != "python3\t-c\tprint('ok')" {
 		t.Fatalf("smoke arg = %q", build.BuildArgs["SMOKE_COMMAND"])

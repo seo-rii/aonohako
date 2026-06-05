@@ -343,7 +343,7 @@ languages:
                   , subscriptions = \_ -> stdin Input
                   }
           ELM
-          cd /tmp && yes | elm make Main.elm --output=/tmp/elm-warmup.js
+          cd /tmp && printf 'y\n' | elm make Main.elm --output=/tmp/elm-warmup.js
           chmod -R a+rX /usr/local/lib/aonohako/elm-home
           rm -f /tmp/elm.json /tmp/Main.elm /tmp/elm-warmup.js
     smoke:
@@ -351,6 +351,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
           export HOME=/usr/local/lib/aonohako/elm-home
           cat > elm.json <<'JSON'
           {
@@ -426,12 +430,16 @@ languages:
         - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
         - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
         - rm -f /tmp/node.tar.xz
-        - npm install -g rescript@12.3.0
+        - npm install -g --prefix /usr/local rescript@12.3.0
     smoke:
       command:
         - bash
         - -lc
         - |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
           cat > rescript.json <<'JSON'
           {
             "name": "aonohako-rescript-smoke",
@@ -453,8 +461,11 @@ languages:
 
   purescript:
     install:
+      sandbox_tools:
+        - git
       apt:
         - curl
+        - git
         - xz-utils
       script:
         - export NODE_VERSION=24.15.0
@@ -467,7 +478,7 @@ languages:
         - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
         - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
         - rm -f /tmp/node.tar.xz
-        - npm install -g purescript@0.15.16 spago@1.0.4
+        - npm install -g --prefix /usr/local purescript@0.15.16 spago@1.0.4
         - install -d -m 0755 /usr/local/lib/aonohako/purescript-home
         - |
           export HOME=/usr/local/lib/aonohako/purescript-home
@@ -499,12 +510,17 @@ languages:
           PURS
           cd "$tmp" && spago build
           chmod -R a+rX /usr/local/lib/aonohako/purescript-home
+          cd /
           rm -rf "$tmp"
     smoke:
       command:
         - bash
         - -lc
         - |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
           export HOME=/usr/local/lib/aonohako/purescript-home
           cat > spago.yaml <<'YAML'
           package:

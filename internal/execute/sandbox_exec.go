@@ -327,14 +327,16 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 
 	stdoutBuf := cappedBuffer{limit: outputLimitBytes}
 	stderrBuf := cappedBuffer{limit: outputLimitBytes}
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "stdout pipe failed: " + err.Error()}
+	stdoutWriter := interface{ Write([]byte) (int, error) }(&stdoutBuf)
+	if streams.stdout != nil {
+		stdoutWriter = teeCaptureWriter{capture: &stdoutBuf, forward: streams.stdout}
 	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return execResult{Status: model.RunStatusInitFail, Reason: "stderr pipe failed: " + err.Error()}
+	stderrWriter := interface{ Write([]byte) (int, error) }(&stderrBuf)
+	if streams.stderr != nil {
+		stderrWriter = teeCaptureWriter{capture: &stderrBuf, forward: streams.stderr}
 	}
+	cmd.Stdout = stdoutWriter
+	cmd.Stderr = stderrWriter
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
 	}
@@ -409,31 +411,6 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	} else {
 		close(imageDone)
 	}
-
-	doneOut := make(chan struct{})
-	doneErr := make(chan struct{})
-	stdoutWriter := interface{ Write([]byte) (int, error) }(&stdoutBuf)
-	if streams.stdout != nil {
-		stdoutWriter = teeCaptureWriter{capture: &stdoutBuf, forward: streams.stdout}
-	}
-	stderrWriter := interface{ Write([]byte) (int, error) }(&stderrBuf)
-	if streams.stderr != nil {
-		stderrWriter = teeCaptureWriter{capture: &stderrBuf, forward: streams.stderr}
-	}
-	go func() {
-		_, _ = ioCopy(stdoutWriter, stdoutPipe)
-		if streams.onStdoutDone != nil {
-			streams.onStdoutDone()
-		}
-		close(doneOut)
-	}()
-	go func() {
-		_, _ = ioCopy(stderrWriter, stderrPipe)
-		if streams.onStderrDone != nil {
-			streams.onStderrDone()
-		}
-		close(doneErr)
-	}()
 
 	wallStart := timing.MonotonicNow()
 	waitCh := make(chan error, 1)
@@ -627,8 +604,12 @@ done:
 	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	stopImageStream()
 
-	<-doneOut
-	<-doneErr
+	if streams.onStdoutDone != nil {
+		streams.onStdoutDone()
+	}
+	if streams.onStderrDone != nil {
+		streams.onStderrDone()
+	}
 	<-imageDone
 
 	result.WallTimeMs = timing.SinceMillis(wallStart)

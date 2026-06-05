@@ -119,20 +119,20 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			return "", "", model.CompileStatusInternal, "dotnet state cleanup failed: " + err.Error()
 		}
 	}
-	// CoreCLR reserves a very large memfd-backed double-mapped region during
-	// startup, so finite RLIMIT_AS values can fail before user code. Dotnet-like
-	// commands get a high finite RLIMIT_FSIZE floor because lower file-size
-	// rlimits can break CoreCLR/F# startup before user code.
-	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || isIsabelle
+	// CoreCLR and some toolchain WebAssembly runtimes reserve very large virtual
+	// address ranges during startup, so finite RLIMIT_AS values can fail before
+	// user code. Dotnet-like commands get a high finite RLIMIT_FSIZE floor
+	// because lower file-size rlimits can break CoreCLR/F# startup before user code.
+	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "spago" || isIsabelle
 	allowProcessGroups := commandName == "swiftc" || commandName == "hare" || isIsabelle
-	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || isIsabelle
+	allowChmod := isDotnetLike || commandName == "gleam" || commandName == "hare" || commandName == "rescript" || isIsabelle
 	allowExecveat := commandName == "hare"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
 	if commandName == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
-	if commandName == "kotlinc" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" {
+	if commandName == "kotlinc" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" || commandName == "spago" {
 		memoryLimitMB = 4096
 	}
 	memoryLimitKB := int64(memoryLimitMB) * 1024

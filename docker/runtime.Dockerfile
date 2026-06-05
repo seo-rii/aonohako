@@ -23,6 +23,7 @@ ARG APT_PACKAGES=
 ARG PIP_PACKAGES=
 ARG NPM_PACKAGES=
 ARG INSTALL_SCRIPT=
+ARG SANDBOX_TOOLS=
 ARG SMOKE_COMMAND=
 
 RUN apt-get update && \
@@ -97,6 +98,9 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
     for tool in apt apt-get apt-cache apt-config dpkg dpkg-query dpkg-deb curl wget git pip pip3 npm npx yarn pnpm gem bundle bundler ssh scp sftp rsync nc netcat ncat socat telnet ftp lftp gdb gdbserver strace ltrace tcpdump tshark wireshark nmap dig nslookup host ip ss ifconfig route ping ping6 traceroute tracepath arp arping; do \
       if command -v "${tool}" >/dev/null 2>&1; then chmod 0750 "$(command -v "${tool}")"; fi; \
     done && \
+    for tool in ${SANDBOX_TOOLS}; do \
+      if command -v "${tool}" >/dev/null 2>&1; then chmod 0755 "$(command -v "${tool}")"; fi; \
+    done && \
     shopt -s nullglob && \
     for path in /usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip /usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip /usr/local/lib/node_modules/npm /opt/node-*/lib/node_modules/npm; do \
       if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
@@ -110,6 +114,7 @@ ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/
     CARGO_HOME=/usr/local/cargo \
     AONOHAKO_IMAGE_NAME=${IMAGE_NAME} \
     AONOHAKO_LANGUAGES=${LANGUAGES} \
+    AONOHAKO_SANDBOX_TOOLS=${SANDBOX_TOOLS} \
     AONOHAKO_SMOKE_COMMAND=${SMOKE_COMMAND}
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/aonohako-entrypoint"]

@@ -893,7 +893,9 @@ func runTwoStepSuite() error {
 				Binaries: []model.Binary{{
 					Name: "encode.sh",
 					DataB64: encodeScript(`#!/bin/sh
-printf 'encoded:two-step-ok\n'
+while IFS= read -r line; do
+  printf 'encoded:%s\n' "$line"
+done
 `),
 					Mode: "exec",
 				}},
@@ -916,6 +918,7 @@ done
 			{
 				ID:        "encode",
 				ProgramID: "encoder",
+				Stdin:     "two-step-ok\n",
 				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
 				Handoff:   &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 4096},
 			},
@@ -932,7 +935,8 @@ done
 		return fmt.Errorf("two-step execute request failed: %w", err)
 	}
 	if resp.Status != model.RunStatusAccepted {
-		return fmt.Errorf("two-step execute failed: status=%s reason=%s stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
+		stepsJSON, _ := json.Marshal(resp.Steps)
+		return fmt.Errorf("two-step execute failed: status=%s reason=%s stdout=%q stderr=%q steps=%s", resp.Status, resp.Reason, resp.Stdout, resp.Stderr, stepsJSON)
 	}
 	if len(resp.Steps) != 2 || resp.Steps[0].Status != model.RunStatusAccepted || resp.Steps[1].Status != model.RunStatusAccepted {
 		return fmt.Errorf("two-step execute returned unexpected step results: %+v", resp.Steps)
@@ -3564,6 +3568,11 @@ pub fn main() !void {
 }
 
 func runDirectImagePermissionChecks() error {
+	allowedExecutableTools := map[string]struct{}{}
+	for _, tool := range strings.Fields(os.Getenv("AONOHAKO_SANDBOX_TOOLS")) {
+		allowedExecutableTools[tool] = struct{}{}
+	}
+
 	protectedOut, protectedErr, err := runAsSandboxUser(
 		"if [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi; "+
 			"if [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi; "+
@@ -3624,6 +3633,12 @@ func runDirectImagePermissionChecks() error {
 		return fmt.Errorf("image-package-tools-are-not-executable: no package tools were checked")
 	}
 	for i := 0; i+1 < len(toolFields); i += 2 {
+		if _, ok := allowedExecutableTools[filepath.Base(toolFields[i])]; ok {
+			if toolFields[i+1] != "leaked" {
+				return fmt.Errorf("image-package-tools-are-not-executable: allowed tool %s was not executable: stdout %q stderr %q", toolFields[i], toolOut, toolErr)
+			}
+			continue
+		}
 		if toolFields[i+1] != "blocked" {
 			return fmt.Errorf("image-package-tools-are-not-executable: unexpected stdout %q stderr %q", toolOut, toolErr)
 		}

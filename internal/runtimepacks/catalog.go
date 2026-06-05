@@ -12,10 +12,11 @@ import (
 )
 
 type InstallSpec struct {
-	Apt    []string `yaml:"apt"`
-	Pip    []string `yaml:"pip"`
-	NPM    []string `yaml:"npm"`
-	Script []string `yaml:"script"`
+	Apt          []string `yaml:"apt"`
+	Pip          []string `yaml:"pip"`
+	NPM          []string `yaml:"npm"`
+	Script       []string `yaml:"script"`
+	SandboxTools []string `yaml:"sandbox_tools"`
 }
 
 type SmokeSpec struct {
@@ -46,6 +47,7 @@ type ImageSpec struct {
 	PipPackages   []string
 	NPMPackages   []string
 	InstallScript []string
+	SandboxTools  []string
 	SmokeCommand  []string
 }
 
@@ -119,16 +121,19 @@ func (c Catalog) buildImage(name string, profile ProfileSpec, smoke []string) Im
 	spec.PipPackages = append(spec.PipPackages, profile.Install.Pip...)
 	spec.NPMPackages = append(spec.NPMPackages, profile.Install.NPM...)
 	spec.InstallScript = append(spec.InstallScript, profile.Install.Script...)
+	spec.SandboxTools = append(spec.SandboxTools, profile.Install.SandboxTools...)
 	for _, lang := range spec.Languages {
 		langSpec := c.Languages[lang]
 		spec.AptPackages = append(spec.AptPackages, langSpec.Install.Apt...)
 		spec.PipPackages = append(spec.PipPackages, langSpec.Install.Pip...)
 		spec.NPMPackages = append(spec.NPMPackages, langSpec.Install.NPM...)
 		spec.InstallScript = append(spec.InstallScript, langSpec.Install.Script...)
+		spec.SandboxTools = append(spec.SandboxTools, langSpec.Install.SandboxTools...)
 	}
 	spec.AptPackages = dedupeSorted(spec.AptPackages)
 	spec.PipPackages = dedupeSorted(spec.PipPackages)
 	spec.NPMPackages = dedupeSorted(spec.NPMPackages)
+	spec.SandboxTools = dedupeSorted(spec.SandboxTools)
 	spec.InstallScript = dedupeStable(spec.InstallScript)
 	if len(smoke) > 0 {
 		spec.SmokeCommand = slices.Clone(smoke)
@@ -149,6 +154,7 @@ func (s ImageSpec) DockerBuild(contextDir, tagPrefix string) DockerBuildSpec {
 			"PIP_PACKAGES":   strings.Join(s.PipPackages, " "),
 			"NPM_PACKAGES":   strings.Join(s.NPMPackages, " "),
 			"INSTALL_SCRIPT": strings.Join(s.InstallScript, "\n"),
+			"SANDBOX_TOOLS":  strings.Join(s.SandboxTools, " "),
 			"SMOKE_COMMAND":  strings.Join(s.SmokeCommand, "\t"),
 		},
 	}

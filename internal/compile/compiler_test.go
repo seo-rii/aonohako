@@ -224,7 +224,7 @@ func TestElmCompilerWritesProjectAndNodeWrapper(t *testing.T) {
 	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
 		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
 	}
-	if !reflect.DeepEqual(runner.commands[0].env, []string{"HOME=/usr/local/lib/aonohako/elm-home"}) {
+	if !reflect.DeepEqual(runner.commands[0].env, []string{"HOME=" + filepath.Join(workDir, ".home"), "GHCRTS=-N1"}) {
 		t.Fatalf("runner env = %#v", runner.commands[0].env)
 	}
 	if _, err := os.Stat(filepath.Join(workDir, "elm.json")); err != nil {
@@ -327,7 +327,8 @@ func TestPureScriptCompilerWritesSpagoProjectAndCollectsOutput(t *testing.T) {
 	if !reflect.DeepEqual(runner.commands[0].args, []string{"build"}) {
 		t.Fatalf("runner args = %#v", runner.commands[0].args)
 	}
-	if !reflect.DeepEqual(runner.commands[0].env, []string{"HOME=/usr/local/lib/aonohako/purescript-home"}) {
+	pureScriptHome := filepath.Join(workDir, ".purescript-home")
+	if !reflect.DeepEqual(runner.commands[0].env, []string{"HOME=" + pureScriptHome, "XDG_CACHE_HOME=" + filepath.Join(pureScriptHome, ".cache")}) {
 		t.Fatalf("runner env = %#v", runner.commands[0].env)
 	}
 	if _, err := os.Stat(filepath.Join(workDir, "spago.yaml")); err != nil {
