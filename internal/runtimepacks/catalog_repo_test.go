@@ -201,6 +201,44 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	}
 }
 
+func TestRepositoryCatalogRefreshesMercuryRepoBeforeInstall(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	production, err := catalog.ProductionImages()
+	if err != nil {
+		t.Fatalf("ProductionImages returned error: %v", err)
+	}
+	var typeA *ImageSpec
+	for i := range production {
+		if production[i].Name == "type-a" {
+			typeA = &production[i]
+			break
+		}
+	}
+	if typeA == nil {
+		t.Fatalf("type-a production image not found")
+	}
+
+	script := strings.Join(typeA.InstallScript, "\n")
+	repoIndex := strings.Index(script, "dl.mercurylang.org/deb/ trixie main")
+	if repoIndex == -1 {
+		t.Fatalf("type-a install script is missing Mercury repo refresh markers:\n%s", script)
+	}
+	updateRelIndex := strings.Index(script[repoIndex:], "apt-get update -o APT::Get::List-Cleanup=false")
+	installRelIndex := strings.Index(script[repoIndex:], "mercury-recommended")
+	if updateRelIndex == -1 || installRelIndex == -1 {
+		t.Fatalf("type-a install script is missing Mercury repo refresh markers:\n%s", script)
+	}
+	updateIndex := repoIndex + updateRelIndex
+	installIndex := repoIndex + installRelIndex
+	if !(repoIndex < updateIndex && updateIndex < installIndex) {
+		t.Fatalf("Mercury repo must be refreshed after source addition and before install: repo=%d update=%d install=%d", repoIndex, updateIndex, installIndex)
+	}
+}
+
 func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
 	if err != nil {

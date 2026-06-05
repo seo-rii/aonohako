@@ -134,7 +134,6 @@ func (c Catalog) buildImage(name string, profile ProfileSpec, smoke []string) Im
 	spec.PipPackages = dedupeSorted(spec.PipPackages)
 	spec.NPMPackages = dedupeSorted(spec.NPMPackages)
 	spec.SandboxTools = dedupeSorted(spec.SandboxTools)
-	spec.InstallScript = dedupeStable(spec.InstallScript)
 	if len(smoke) > 0 {
 		spec.SmokeCommand = slices.Clone(smoke)
 	}
@@ -189,25 +188,6 @@ func dedupeSorted(values []string) []string {
 		out = append(out, value)
 	}
 	sort.Strings(out)
-	return out
-}
-
-func dedupeStable(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
 	return out
 }
 

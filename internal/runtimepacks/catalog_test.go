@@ -146,6 +146,45 @@ profiles:
 	}
 }
 
+func TestBuildImagePreservesRepeatedInstallScriptCommands(t *testing.T) {
+	path := writeCatalogFixture(t, `
+languages:
+  mercury:
+    install:
+      script:
+        - echo 'deb http://example.invalid/deb trixie main' > /etc/apt/sources.list.d/example.list
+        - apt-get update
+        - apt-get install -y example-package
+profiles:
+  type-a:
+    base_image: debian:trixie-slim
+    install:
+      script:
+        - apt-get update
+        - apt-get install -y base-package
+    languages: [mercury]
+`)
+
+	catalog, err := LoadCatalog(path)
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	production, err := catalog.ProductionImages()
+	if err != nil {
+		t.Fatalf("ProductionImages returned error: %v", err)
+	}
+	want := []string{
+		"apt-get update",
+		"apt-get install -y base-package",
+		"echo 'deb http://example.invalid/deb trixie main' > /etc/apt/sources.list.d/example.list",
+		"apt-get update",
+		"apt-get install -y example-package",
+	}
+	if !reflect.DeepEqual(production[0].InstallScript, want) {
+		t.Fatalf("install script = %v, want %v", production[0].InstallScript, want)
+	}
+}
+
 func TestImageSpecDockerBuildUsesCatalogPackages(t *testing.T) {
 	spec := ImageSpec{
 		Name:         "type-a",

@@ -652,6 +652,7 @@ languages:
         - tar -xzf /tmp/idris2.tar.gz -C /tmp
         - IDRIS2_SRC="$(find /tmp -maxdepth 1 -type d -name 'Idris2-*' | head -n 1)"; test -n "${IDRIS2_SRC}"; cd "${IDRIS2_SRC}" && make bootstrap SCHEME=chezscheme PREFIX=/usr/local && make install PREFIX=/usr/local
         - rm -rf /tmp/Idris2-* /tmp/idris2.tar.gz
+        - cd /
     smoke:
       command:
         - bash
@@ -1040,9 +1041,10 @@ languages:
         - libc6-dev
       script:
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://paul.bone.id.au/paul.asc -o /etc/apt/trusted.gpg.d/paulbone.asc
-        - echo 'deb http://dl.mercurylang.org/deb/ trixie main' > /etc/apt/sources.list.d/mercury.list
-        - apt-get update
+        - echo 'deb https://dl.mercurylang.org/deb/ trixie main' > /etc/apt/sources.list.d/mercury.list
+        - apt-get update -o APT::Get::List-Cleanup=false
         - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mercury-recommended
+        - apt-get clean
         - rm -rf /var/lib/apt/lists/*
     smoke:
       command:
@@ -2658,6 +2660,7 @@ profiles:
         - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list.d/aonohako-gcc16-sid.list
         - apt-get update
         - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid gcc-16 g++-16
+        - apt-get clean
         - rm -rf /var/lib/apt/lists/*
         - ln -sfn /usr/bin/gcc-16 /usr/local/bin/gcc
         - ln -sfn /usr/bin/g++-16 /usr/local/bin/g++
