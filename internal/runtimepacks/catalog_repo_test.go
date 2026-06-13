@@ -46,7 +46,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[7].Name != "type-h" || !reflect.DeepEqual(production[7].Languages, []string{"swift"}) {
 		t.Fatalf("type-h production image = %+v", production[7])
 	}
-	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"java", "plain", "python"}) {
+	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"java", "plain", "pypy", "python"}) {
 		t.Fatalf("type-i production image = %+v", production[8])
 	}
 	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"agda", "coq", "rocq", "tla", "why3"}) {
