@@ -329,6 +329,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"lisp":          {"Broken.lisp", "sbcl"},
 		"nasm":          {"Main.asm", "Broken.asm", "nasm -felf64"},
 		"coq":           {"Broken.v", "coqc"},
+		"python":        {"import qiskit", `"/usr/local/lib/aonohako/python" in os.environ.get("PYTHONPATH", "")`},
 		"purescript":    {"purescript@0.15.16", "spago@1.0.4", "registry: 77.4.1", "spago build", `require("./output/Main/index.js").main();`},
 		"typescript":    {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js"},
 		"wasm":          {"-W max-memory-size=33554432", "-W max-wasm-stack=1048576", "-W trap-on-grow-failure=y"},

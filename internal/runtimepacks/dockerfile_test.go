@@ -120,7 +120,7 @@ func TestRuntimeDockerfilePATHIncludesSbin(t *testing.T) {
 		t.Fatalf("runtime.Dockerfile PATH must include go/cargo bins and /usr/sbin:/sbin for sandbox tools")
 	}
 	if !strings.Contains(body, "PYTHONPATH=/usr/local/lib/aonohako/python") {
-		t.Fatalf("runtime.Dockerfile must export PYTHONPATH for vendored python judge helpers")
+		t.Fatalf("runtime.Dockerfile must export PYTHONPATH for custom python packages")
 	}
 }
 
@@ -224,11 +224,14 @@ func TestRuntimeDockerfileCopiesSandboxSelftestBinary(t *testing.T) {
 	if !strings.Contains(body, "COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest") {
 		t.Fatalf("runtime.Dockerfile must copy the sandbox selftest binary into runtime images")
 	}
-	if !strings.Contains(body, "COPY python/ /usr/local/lib/aonohako/python/") {
-		t.Fatalf("runtime.Dockerfile must copy vendored python judge helpers into runtime images")
+	if !strings.Contains(body, "COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/") {
+		t.Fatalf("runtime.Dockerfile must copy custom python package context into runtime images")
 	}
 	if !strings.Contains(body, "install -d -m 0755 /usr/local/lib/aonohako") {
 		t.Fatalf("runtime.Dockerfile must create a traversable /usr/local/lib/aonohako directory before copying helpers")
+	}
+	if !strings.Contains(body, "rm -f /usr/local/lib/aonohako/python/.empty") {
+		t.Fatalf("runtime.Dockerfile must remove the empty custom python package marker")
 	}
 	if !strings.Contains(body, "chmod 0755 /usr/local/lib/aonohako") {
 		t.Fatalf("runtime.Dockerfile must keep /usr/local/lib/aonohako traversable for sandboxed helper interpreters")
@@ -237,7 +240,7 @@ func TestRuntimeDockerfileCopiesSandboxSelftestBinary(t *testing.T) {
 		t.Fatalf("runtime.Dockerfile must keep bundled helper scripts world-readable")
 	}
 	if !strings.Contains(body, "find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} +") {
-		t.Fatalf("runtime.Dockerfile must preserve traversable permissions on vendored python helper directories")
+		t.Fatalf("runtime.Dockerfile must preserve traversable permissions on custom python package directories")
 	}
 }
 

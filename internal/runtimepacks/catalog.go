@@ -52,10 +52,11 @@ type ImageSpec struct {
 }
 
 type DockerBuildSpec struct {
-	Tag       string
-	File      string
-	Context   string
-	BuildArgs map[string]string
+	Tag           string
+	File          string
+	Context       string
+	BuildArgs     map[string]string
+	BuildContexts map[string]string
 }
 
 func LoadCatalog(path string) (Catalog, error) {

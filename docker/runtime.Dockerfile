@@ -47,7 +47,7 @@ RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
       env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}; \
     fi
 
-RUN install -d -m 0755 /usr/local/lib/aonohako
+RUN install -d -m 0755 /usr/local/lib/aonohako /usr/local/lib/aonohako/python
 
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
 COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
@@ -68,10 +68,11 @@ COPY --chmod=0755 scripts/tla_run.sh /usr/local/bin/aonohako-tla-run
 COPY --chmod=0755 scripts/vhdl_run.sh /usr/local/bin/aonohako-vhdl-run
 COPY --chmod=0755 scripts/vb6_run.rb /usr/local/bin/aonohako-vb6-run
 COPY --chmod=0755 scripts/golfscript_sandboxed.rb /usr/local/lib/aonohako/golfscript_sandboxed.rb
-COPY python/ /usr/local/lib/aonohako/python/
+COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
 RUN chmod 0755 /usr/local/lib/aonohako && \
+    rm -f /usr/local/lib/aonohako/python/.empty && \
     chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py && \
     find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
     find /usr/local/lib/aonohako/python -type f -exec chmod 0644 {} + && \

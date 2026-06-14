@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 
 	"aonohako/internal/runtimepacks"
@@ -17,12 +18,14 @@ func main() {
 	var tagPrefix string
 	var dryRun bool
 	var only string
+	var pythonPackagesContext string
 
 	flag.StringVar(&catalogPath, "catalog", "runtime-images.yml", "path to runtime catalog")
 	flag.StringVar(&mode, "mode", "production", "build mode: production or ci")
 	flag.StringVar(&tagPrefix, "tag-prefix", "aonohako", "docker tag prefix")
 	flag.BoolVar(&dryRun, "dry-run", false, "print commands without executing them")
 	flag.StringVar(&only, "only", "", "optional image name filter")
+	flag.StringVar(&pythonPackagesContext, "python-packages-context", os.Getenv("AONOHAKO_PYTHON_PACKAGES_CONTEXT"), "optional directory copied into /usr/local/lib/aonohako/python")
 	flag.Parse()
 
 	catalog, err := runtimepacks.LoadCatalog(catalogPath)
@@ -43,12 +46,30 @@ func main() {
 		log.Fatal(err)
 	}
 
+	pythonPackagesContext, cleanup, err := resolvePythonPackagesContext(pythonPackagesContext)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cleanup()
+
 	for _, spec := range specs {
 		if only != "" && spec.Name != only {
 			continue
 		}
 		build := spec.DockerBuild(".", tagPrefix)
+		if build.BuildContexts == nil {
+			build.BuildContexts = map[string]string{}
+		}
+		build.BuildContexts["aonohako-python-packages"] = pythonPackagesContext
 		args := []string{"buildx", "build", "--load", "-f", build.File, "-t", build.Tag}
+		contextKeys := make([]string, 0, len(build.BuildContexts))
+		for key := range build.BuildContexts {
+			contextKeys = append(contextKeys, key)
+		}
+		sort.Strings(contextKeys)
+		for _, key := range contextKeys {
+			args = append(args, "--build-context", fmt.Sprintf("%s=%s", key, build.BuildContexts[key]))
+		}
 		keys := make([]string, 0, len(build.BuildArgs))
 		for key := range build.BuildArgs {
 			keys = append(keys, key)
@@ -71,6 +92,29 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+}
+
+func resolvePythonPackagesContext(path string) (string, func(), error) {
+	if path != "" {
+		info, err := os.Stat(path)
+		if err != nil {
+			return "", func() {}, fmt.Errorf("python packages context %q: %w", path, err)
+		}
+		if !info.IsDir() {
+			return "", func() {}, fmt.Errorf("python packages context %q is not a directory", path)
+		}
+		return path, func() {}, nil
+	}
+
+	dir, err := os.MkdirTemp("", "aonohako-python-packages-*")
+	if err != nil {
+		return "", func() {}, err
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".empty"), nil, 0o644); err != nil {
+		os.RemoveAll(dir)
+		return "", func() {}, err
+	}
+	return dir, func() { _ = os.RemoveAll(dir) }, nil
 }
 
 func shellJoin(parts []string) string {

@@ -66,8 +66,8 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
       six==1.17.0 qiskit==2.4.0 pyparsing==3.3.2 pylatexenc==2.10 jax[cpu]==0.10.0 && \
     python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
       torch==2.11.0+cpu torchvision==0.26.0+cpu
+RUN install -d -m 0755 /usr/local/lib/aonohako/python
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
-COPY python /usr/local/lib/aonohako/python
 ENV PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/usr/local/lib/aonohako/python
 ENTRYPOINT ["/usr/bin/tini","--"]
 CMD ["aonohako"]

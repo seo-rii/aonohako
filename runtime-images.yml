@@ -128,6 +128,7 @@ languages:
         - -c
         - |
           import jax.numpy as jnp
+          import os
           import pathlib
           import numpy as np
           import pandas as pd
@@ -142,6 +143,7 @@ languages:
           assert callable(PIL.Image.new)
           assert callable(qiskit.QuantumCircuit)
           assert sns.__version__
+          assert "/usr/local/lib/aonohako/python" in os.environ.get("PYTHONPATH", "")
           pathlib.Path("same-folder.txt").write_text(str(total), encoding="utf-8")
           assert pathlib.Path("same-folder.txt").read_text(encoding="utf-8") == "10"
 
