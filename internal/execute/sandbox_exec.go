@@ -105,12 +105,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if workspaceLimitBytes > hardMaxWorkspaceBytes {
 		workspaceLimitBytes = hardMaxWorkspaceBytes
 	}
-	baseEnv := []string{
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"LANG=C.UTF-8",
-		"LC_ALL=C.UTF-8",
-		"ONLINE_JUDGE=1",
-	}
+	baseEnv := util.BaseEnv()
 	innerEnv := append(append(baseEnv[:0:0], baseEnv...), security.ThreadLimitEnv()...)
 	innerEnv = append(innerEnv, security.WorkspaceScopedEnv(ws.RootDir)...)
 	if !req.EnableNetwork {

@@ -1628,6 +1628,28 @@ func TestRunSandboxEnvironmentDoesNotInheritParentSecrets(t *testing.T) {
 	}
 }
 
+func TestRunSandboxEnvironmentIncludesRuntimePythonPath(t *testing.T) {
+	requireSandboxSupport(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: b64("import os\nprint(os.environ.get('PYTHONPATH', ''))\n"),
+		}},
+		ExpectedStdout: "/usr/local/lib/aonohako/python\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted with runtime PYTHONPATH, got %+v", resp)
+	}
+}
+
 func TestRunPreventsRemovingOrReplacingSubmittedFiles(t *testing.T) {
 	requireSandboxSupport(t)
 
