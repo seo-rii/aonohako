@@ -20,6 +20,7 @@ import (
 const (
 	defaultMaxOutputBytes        = 64 << 10
 	hardMaxOutputBytes           = 8 << 20
+	maxResponseOutputBytes       = defaultMaxOutputBytes
 	defaultWorkspaceBytes        = 128 << 20
 	hardMaxWorkspaceBytes        = 1 << 30
 	maxBinaryFiles               = runvalidation.MaxBinaryFiles
@@ -217,20 +218,21 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		reason = evalReason
 	}
 
+	responseOutputLimit := responseOutputLimitBytes(req)
 	var outResp, errResp string
 	if status == model.RunStatusWA || status == model.RunStatusRE || (status == model.RunStatusTLE && req.IgnoreTLE) {
-		outResp = clipUTF8(judgeOut, capturedOutputLimit)
+		outResp = clipUTF8(judgeOut, responseOutputLimit)
 	}
 	if res.ExitCode != nil && *res.ExitCode != 0 {
-		errResp = clipUTF8(fullErr, capturedOutputLimit)
+		errResp = clipUTF8(fullErr, responseOutputLimit)
 	}
 
 	if hooks.OnLog != nil {
 		if len(rawOut) > 0 {
-			hooks.OnLog("stdout", clipUTF8(rawOut, capturedOutputLimit))
+			hooks.OnLog("stdout", clipUTF8(rawOut, responseOutputLimit))
 		}
 		if len(fullErr) > 0 {
-			hooks.OnLog("stderr", clipUTF8(fullErr, capturedOutputLimit))
+			hooks.OnLog("stderr", clipUTF8(fullErr, responseOutputLimit))
 		}
 	}
 

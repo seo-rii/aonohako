@@ -1074,6 +1074,56 @@ func TestRunOutputLimitUsesConfiguredUnifiedCap(t *testing.T) {
 	}
 }
 
+func TestRunLargeOutputUsesFullJudgeCapButCapsResponseSample(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	outputLen := defaultMaxOutputBytes + 4096
+	output := strings.Repeat("a", outputLen)
+	script := fmt.Sprintf("#!/bin/sh\ni=0\nwhile [ \"$i\" -lt %d ]; do\n  printf a\n  i=$((i+1))\ndone\n", outputLen)
+
+	var stdoutLog string
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64(script),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: output,
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: outputLen},
+	}, Hooks{
+		OnLog: func(stream, msg string) {
+			if stream == "stdout" {
+				stdoutLog = msg
+			}
+		},
+	})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+	if stdoutLog != output[:defaultMaxOutputBytes] {
+		t.Fatalf("unexpected stdout log length=%d", len(stdoutLog))
+	}
+
+	resp = svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64(script),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "different\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: outputLen},
+	}, Hooks{})
+	if resp.Status != model.RunStatusWA {
+		t.Fatalf("expected WA, got %+v", resp)
+	}
+	if resp.Stdout != output[:defaultMaxOutputBytes] {
+		t.Fatalf("unexpected stdout response length=%d", len(resp.Stdout))
+	}
+}
+
 func TestRunRequestOutputLimitOverridesLegacyEnv(t *testing.T) {
 	forceDirectMode(t)
 	t.Setenv("AONOHAKO_MAX_OUTPUT_BYTES", "2048")

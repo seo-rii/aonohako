@@ -771,6 +771,10 @@ func outputLimitBytes(req *model.RunRequest) int {
 	return req.Limits.OutputBytes
 }
 
+func responseOutputLimitBytes(req *model.RunRequest) int {
+	return min(outputLimitBytes(req), maxResponseOutputBytes)
+}
+
 func firstImagePath(paths []model.OutputFile) string {
 	for _, p := range paths {
 		clean := filepath.ToSlash(strings.ToLower(strings.TrimSpace(p.Path)))

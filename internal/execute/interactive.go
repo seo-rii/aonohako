@@ -203,17 +203,17 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 		timing.SinceMillis(startWall),
 		deadlineHit.Load() || parentCanceled.Load(),
 		ignoreContestantCancelStatus,
-		outputLimitBytes(req),
+		responseOutputLimitBytes(req),
 	)
 	resp.SidecarOutputs = sidecarOutputs
 	resp.SidecarErrors = sidecarErrors
 
 	if hooks.OnLog != nil {
 		if len(contestantRes.Stdout) > 0 {
-			hooks.OnLog("stdout", clipUTF8(contestantRes.Stdout, outputLimitBytes(req)))
+			hooks.OnLog("stdout", clipUTF8(contestantRes.Stdout, responseOutputLimitBytes(req)))
 		}
 		if stderr := firstNonEmptyBytes(interactorRes.Stderr, contestantRes.Stderr); len(stderr) > 0 {
-			hooks.OnLog("stderr", clipUTF8(stderr, outputLimitBytes(req)))
+			hooks.OnLog("stderr", clipUTF8(stderr, responseOutputLimitBytes(req)))
 		}
 	}
 
@@ -398,9 +398,9 @@ func classifyInteractorStatus(req *model.RunRequest, res execResult) (string, st
 	case 0:
 		return model.RunStatusAccepted, "", "exit_code"
 	case 3:
-		return model.RunStatusRE, firstNonEmptyString(clipUTF8(res.Stderr, outputLimitBytes(req)), "interactor failed"), "exit_code"
+		return model.RunStatusRE, firstNonEmptyString(clipUTF8(res.Stderr, responseOutputLimitBytes(req)), "interactor failed"), "exit_code"
 	default:
-		return model.RunStatusWA, clipUTF8(res.Stderr, outputLimitBytes(req)), "exit_code"
+		return model.RunStatusWA, clipUTF8(res.Stderr, responseOutputLimitBytes(req)), "exit_code"
 	}
 }
 
@@ -418,8 +418,8 @@ func interactiveContestantStepResult(req *model.RunRequest, res execResult) mode
 		CPUTimeMs:       res.CPUTimeMs,
 		MemoryKB:        res.MemoryKB,
 		ExitCode:        res.ExitCode,
-		Stdout:          clipUTF8(res.Stdout, outputLimitBytes(req)),
-		Stderr:          clipUTF8(res.Stderr, outputLimitBytes(req)),
+		Stdout:          clipUTF8(res.Stdout, responseOutputLimitBytes(req)),
+		Stderr:          clipUTF8(res.Stderr, responseOutputLimitBytes(req)),
 		StdoutTruncated: res.StdoutTruncated,
 		StderrTruncated: res.StderrTruncated,
 		Reason:          firstNonEmptyString(reason, res.Reason),
@@ -438,7 +438,7 @@ func interactiveInteractorStepResult(req *model.RunRequest, res execResult) mode
 		CPUTimeMs:       res.CPUTimeMs,
 		MemoryKB:        res.MemoryKB,
 		ExitCode:        res.ExitCode,
-		Stderr:          clipUTF8(res.Stderr, outputLimitBytes(req)),
+		Stderr:          clipUTF8(res.Stderr, responseOutputLimitBytes(req)),
 		StdoutTruncated: res.StdoutTruncated,
 		StderrTruncated: res.StderrTruncated,
 		Reason:          firstNonEmptyString(reason, res.Reason),
