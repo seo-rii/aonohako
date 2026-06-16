@@ -61,20 +61,17 @@ func TestDotnetFileSizeCompatibilityCapExceedsDefaultWorkspaceQuota(t *testing.T
 	}
 }
 
-func TestStackLimitForCommandKeepsDotnetCompatible(t *testing.T) {
-	if got := StackLimitForCommand("/opt/dotnet/dotnet"); got != 64*1024*1024 {
-		t.Fatalf("dotnet stack limit = %d, want 64MiB", got)
-	}
-	if got := StackLimitForCommand("/usr/local/bin/dafny"); got != 64*1024*1024 {
-		t.Fatalf("dafny stack limit = %d, want 64MiB", got)
-	}
-	if got := StackLimitForCommand("/usr/local/bin/aonohako-tla-run"); got != 64*1024*1024 {
-		t.Fatalf("tla stack limit = %d, want 64MiB", got)
-	}
-	if got := StackLimitForCommand("/usr/local/bin/isabelle"); got != 64*1024*1024 {
-		t.Fatalf("isabelle stack limit = %d, want 64MiB", got)
-	}
-	if got := StackLimitForCommand("/usr/bin/python3"); got != 8*1024*1024 {
-		t.Fatalf("python stack limit = %d, want 8MiB", got)
+func TestStackLimitForCommandUsesInheritedHardLimit(t *testing.T) {
+	for _, command := range []string{
+		"/opt/dotnet/dotnet",
+		"/usr/local/bin/dafny",
+		"/usr/local/bin/aonohako-tla-run",
+		"/usr/local/bin/isabelle",
+		"/usr/bin/python3",
+		"/tmp/Main",
+	} {
+		if got := StackLimitForCommand(command); got != 0 {
+			t.Fatalf("%s stack limit = %d, want inherited hard limit", command, got)
+		}
 	}
 }

@@ -1398,7 +1398,7 @@ int main(void) {
 func TestRunAllowsPrlimitQueriesNeededByManagedRuntimes(t *testing.T) {
 	requireSandboxSupport(t)
 
-	binPath := buildCTestBinary(t, `#define _GNU_SOURCE
+	payload := buildCTestBinary(t, `#define _GNU_SOURCE
 #include <stdio.h>
 #include <sys/resource.h>
 
@@ -1412,17 +1412,13 @@ int main(void) {
 	return 0;
 }
 `)
-	payload, err := os.ReadFile(binPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%q): %v", binPath, err)
-	}
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
 		Lang: "binary",
 		Binaries: []model.Binary{{
 			Name:    "probe",
-			DataB64: base64.StdEncoding.EncodeToString(payload),
+			DataB64: payload,
 			Mode:    "exec",
 		}},
 		ExpectedStdout: "ok\n",
@@ -1431,6 +1427,45 @@ int main(void) {
 
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunDefaultStackLimitUsesInheritedHardLimit(t *testing.T) {
+	requireSandboxSupport(t)
+
+	payload := buildCTestBinary(t, `#define _GNU_SOURCE
+#include <stdio.h>
+#include <sys/resource.h>
+
+int main(void) {
+	struct rlimit lim;
+	if (prlimit(0, RLIMIT_STACK, NULL, &lim) != 0) {
+		perror("prlimit");
+		return 1;
+	}
+	if (lim.rlim_cur == RLIM_INFINITY) {
+		puts("unlimited");
+		return 0;
+	}
+	printf("%llu\n", (unsigned long long)lim.rlim_cur);
+	return 0;
+}
+`)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "probe",
+			DataB64: payload,
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "unlimited\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted with unlimited default stack, got %+v", resp)
 	}
 }
 

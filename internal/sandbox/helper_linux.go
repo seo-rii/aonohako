@@ -161,7 +161,12 @@ func MaybeRunFromEnv() bool {
 	}
 	stackLimitBytes := req.StackLimitBytes
 	if stackLimitBytes == 0 {
-		stackLimitBytes = 8 * 1024 * 1024
+		var current unix.Rlimit
+		if err := unix.Getrlimit(unix.RLIMIT_STACK, &current); err == nil && current.Max > 0 {
+			stackLimitBytes = current.Max
+		} else {
+			stackLimitBytes = unix.RLIM_INFINITY
+		}
 	}
 	limits := []struct {
 		resource int

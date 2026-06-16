@@ -28,10 +28,5 @@ func FileSizeLimitForCommand(command string, workspaceBytes int64) uint64 {
 }
 
 func StackLimitForCommand(command string) uint64 {
-	switch filepath.Base(command) {
-	case "aonohako-tla-run", "dafny", "dotnet", "isabelle":
-		return 64 * 1024 * 1024
-	default:
-		return 8 * 1024 * 1024
-	}
+	return 0
 }
