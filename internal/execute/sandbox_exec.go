@@ -419,6 +419,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	cpuBaselineNs := uint64(0)
 	targetStarted := false
 	targetStartGraceDeadline := time.Now().Add(100 * time.Millisecond)
+	var cgroupLimitBaseline cgroup.Stats
+	cgroupLimitBaselineSet := false
 	watchdog := time.NewTicker(5 * time.Millisecond)
 	defer watchdog.Stop()
 	lastWorkspaceScan := time.Time{}
@@ -456,61 +458,64 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 				}
 				if startTargetChecks {
 					// Some kernels/container settings hide /proc/<pid>/exe after
-					// the helper sets PR_SET_DUMPABLE=0. CPU and workspace
-					// enforcement start after a short grace period, but RSS is
-					// sampled immediately below because the helper execs in-place.
+					// the helper sets PR_SET_DUMPABLE=0. Start user accounting
+					// only after this point; the trusted Go helper can have a
+					// much larger RSS/cgroup peak than the submitted program.
 					targetStarted = true
 					cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
+					if runGroup.Path != "" {
+						if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
+							cgroupLimitBaseline = stats
+							cgroupLimitBaselineSet = true
+							cgroupCPUBaselineMicros = stats.CPUUsageMicros
+						}
+					}
 					lastWorkspaceScan = time.Time{}
 				}
 			}
 
-			if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", cmd.Process.Pid)); err == nil {
-				fields := strings.Fields(string(raw))
-				if len(fields) >= 2 {
-					pageKB := int64(os.Getpagesize() / 1024)
-					if v, err := strconv.ParseInt(fields[0], 10, 64); err == nil && targetStarted {
-						v *= pageKB
-						if v > maxVmSizeKB {
-							maxVmSizeKB = v
+			if targetStarted {
+				if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", cmd.Process.Pid)); err == nil {
+					fields := strings.Fields(string(raw))
+					if len(fields) >= 2 {
+						pageKB := int64(os.Getpagesize() / 1024)
+						if v, err := strconv.ParseInt(fields[0], 10, 64); err == nil {
+							v *= pageKB
+							if v > maxVmSizeKB {
+								maxVmSizeKB = v
+							}
 						}
-					}
-					if v, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
-						v *= pageKB
-						if v > maxRSSKB {
-							maxRSSKB = v
-						}
-					}
-				}
-				if memoryLimitKB > 0 && (disableAddressSpaceLimit || maxRSSKB*10 >= memoryLimitKB*8) {
-					if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/smaps_rollup", cmd.Process.Pid)); err == nil {
-						scanner := bufio.NewScanner(bytes.NewReader(raw))
-						for scanner.Scan() {
-							fields := strings.Fields(scanner.Text())
-							if len(fields) >= 2 && fields[0] == "Rss:" {
-								if v, err := strconv.ParseInt(fields[1], 10, 64); err == nil && v > maxRSSKB {
-									maxRSSKB = v
-								}
-								break
+						if v, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
+							v *= pageKB
+							if v > maxRSSKB {
+								maxRSSKB = v
 							}
 						}
 					}
-				}
-				if result.Status == "OK" && memoryLimitKB > 0 && maxRSSKB > memoryLimitKB {
-					result.Status = model.RunStatusMLE
-					result.Reason = "memory limit exceeded"
-					result.VerdictSource = "memory_rss"
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					if memoryLimitKB > 0 && (disableAddressSpaceLimit || maxRSSKB*10 >= memoryLimitKB*8) {
+						if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/smaps_rollup", cmd.Process.Pid)); err == nil {
+							scanner := bufio.NewScanner(bytes.NewReader(raw))
+							for scanner.Scan() {
+								fields := strings.Fields(scanner.Text())
+								if len(fields) >= 2 && fields[0] == "Rss:" {
+									if v, err := strconv.ParseInt(fields[1], 10, 64); err == nil && v > maxRSSKB {
+										maxRSSKB = v
+									}
+									break
+								}
+							}
+						}
+					}
+					if result.Status == "OK" && memoryLimitKB > 0 && maxRSSKB > memoryLimitKB {
+						result.Status = model.RunStatusMLE
+						result.Reason = "memory limit exceeded"
+						result.VerdictSource = "memory_rss"
+						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					}
 				}
 			}
 			if runGroup.Path != "" {
 				if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
-					if stats.MemoryCurrentBytes > 0 && stats.MemoryCurrentBytes/1024 > maxRSSKB {
-						maxRSSKB = stats.MemoryCurrentBytes / 1024
-					}
-					if stats.MemoryPeakBytes > 0 && stats.MemoryPeakBytes/1024 > maxRSSKB {
-						maxRSSKB = stats.MemoryPeakBytes / 1024
-					}
 					if stats.CPUUsageMicros > 0 {
 						cpuUsageMicros := stats.CPUUsageMicros
 						if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
@@ -520,19 +525,22 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 						if cpuTimeMs > maxCPUTimeMs {
 							maxCPUTimeMs = cpuTimeMs
 						}
-						if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+						if targetStarted && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
 							result.Status = model.RunStatusTLE
 							result.Reason = "cpu time limit exceeded"
 							result.VerdictSource = "cpu_time_cgroup"
 							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 						}
 					}
-					if result.Status == "OK" {
-						switch stats.FirstLimitBreach(memoryLimitKB * 1024) {
+					if targetStarted && result.Status == "OK" {
+						switch cgroupLimitBreachSince(stats, cgroupLimitBaseline, cgroupLimitBaselineSet) {
 						case cgroup.LimitBreachMemory:
 							result.Status = model.RunStatusMLE
 							result.Reason = "memory limit exceeded"
 							result.VerdictSource = "memory_cgroup"
+							if memoryLimitKB > maxRSSKB {
+								maxRSSKB = memoryLimitKB
+							}
 							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 						case cgroup.LimitBreachPids:
 							result.Status = model.RunStatusRE
@@ -617,12 +625,6 @@ done:
 
 	if runGroup.Path != "" {
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
-			if stats.MemoryCurrentBytes > 0 && stats.MemoryCurrentBytes/1024 > result.MemoryKB {
-				result.MemoryKB = stats.MemoryCurrentBytes / 1024
-			}
-			if stats.MemoryPeakBytes > 0 && stats.MemoryPeakBytes/1024 > result.MemoryKB {
-				result.MemoryKB = stats.MemoryPeakBytes / 1024
-			}
 			if stats.CPUUsageMicros > 0 {
 				cpuUsageMicros := stats.CPUUsageMicros
 				if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
@@ -632,12 +634,15 @@ done:
 					result.CPUTimeMs = cpuTimeMs
 				}
 			}
-			if result.Status == "OK" {
-				switch stats.FirstLimitBreach(memoryLimitKB * 1024) {
+			if targetStarted && result.Status == "OK" {
+				switch cgroupLimitBreachSince(stats, cgroupLimitBaseline, cgroupLimitBaselineSet) {
 				case cgroup.LimitBreachMemory:
 					result.Status = model.RunStatusMLE
 					result.Reason = "memory limit exceeded"
 					result.VerdictSource = "memory_cgroup_final"
+					if memoryLimitKB > result.MemoryKB {
+						result.MemoryKB = memoryLimitKB
+					}
 				case cgroup.LimitBreachPids:
 					result.Status = model.RunStatusRE
 					result.Reason = "process limit exceeded"
@@ -697,11 +702,6 @@ done:
 			result.Status = model.RunStatusRE
 			result.VerdictSource = "wait_status"
 		}
-		if sysu, ok := ps.SysUsage().(*syscall.Rusage); ok {
-			if sysu.Maxrss > result.MemoryKB {
-				result.MemoryKB = sysu.Maxrss
-			}
-		}
 		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > result.CPUTimeMs {
 			result.CPUTimeMs = usageCPU
 		}
@@ -722,6 +722,24 @@ done:
 		result.VerdictSource = "wall_time"
 	}
 	return result
+}
+
+func cgroupLimitBreachSince(stats, baseline cgroup.Stats, hasBaseline bool) cgroup.LimitBreach {
+	baseOOM := int64(0)
+	baseMemoryMax := int64(0)
+	basePidsMax := int64(0)
+	if hasBaseline {
+		baseOOM = baseline.OOMEvents()
+		baseMemoryMax = baseline.MemoryMaxEvents()
+		basePidsMax = baseline.PidsMaxEvents()
+	}
+	if stats.OOMEvents() > baseOOM || stats.MemoryMaxEvents() > baseMemoryMax {
+		return cgroup.LimitBreachMemory
+	}
+	if stats.PidsMaxEvents() > basePidsMax {
+		return cgroup.LimitBreachPids
+	}
+	return cgroup.LimitBreachNone
 }
 
 func cleanupSandboxCgroup(scope string, group cgroup.Group) {

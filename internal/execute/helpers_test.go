@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 )
 
@@ -31,6 +32,32 @@ type failingReader struct {
 
 func (r failingReader) Read([]byte) (int, error) {
 	return 0, r.err
+}
+
+func TestCgroupLimitBreachSinceIgnoresBaselineHelperEvents(t *testing.T) {
+	baseline := cgroup.Stats{
+		MemoryEvents: map[string]int64{"max": 2, "oom": 1},
+		PidsEvents:   map[string]int64{"max": 3},
+	}
+	if got := cgroupLimitBreachSince(baseline, baseline, true); got != cgroup.LimitBreachNone {
+		t.Fatalf("cgroupLimitBreachSince() = %q, want none", got)
+	}
+
+	memoryStats := cgroup.Stats{
+		MemoryEvents: map[string]int64{"max": 3, "oom": 1},
+		PidsEvents:   map[string]int64{"max": 3},
+	}
+	if got := cgroupLimitBreachSince(memoryStats, baseline, true); got != cgroup.LimitBreachMemory {
+		t.Fatalf("cgroupLimitBreachSince() = %q, want memory", got)
+	}
+
+	pidsStats := cgroup.Stats{
+		MemoryEvents: map[string]int64{"max": 2, "oom": 1},
+		PidsEvents:   map[string]int64{"max": 4},
+	}
+	if got := cgroupLimitBreachSince(pidsStats, baseline, true); got != cgroup.LimitBreachPids {
+		t.Fatalf("cgroupLimitBreachSince() = %q, want pids", got)
+	}
 }
 
 func forceDirectMode(t *testing.T) {
