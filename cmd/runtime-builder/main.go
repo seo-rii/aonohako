@@ -19,6 +19,9 @@ func main() {
 	var dryRun bool
 	var only string
 	var pythonPackagesContext string
+	var push bool
+	var cacheFrom string
+	var cacheTo string
 
 	flag.StringVar(&catalogPath, "catalog", "runtime-images.yml", "path to runtime catalog")
 	flag.StringVar(&mode, "mode", "production", "build mode: production or ci")
@@ -26,6 +29,9 @@ func main() {
 	flag.BoolVar(&dryRun, "dry-run", false, "print commands without executing them")
 	flag.StringVar(&only, "only", "", "optional image name filter")
 	flag.StringVar(&pythonPackagesContext, "python-packages-context", os.Getenv("AONOHAKO_PYTHON_PACKAGES_CONTEXT"), "optional directory copied into /usr/local/lib/aonohako/python")
+	flag.BoolVar(&push, "push", false, "push image to registry instead of loading into the local docker image store")
+	flag.StringVar(&cacheFrom, "cache-from", os.Getenv("AONOHAKO_DOCKER_CACHE_FROM"), "optional docker buildx cache source, for example type=gha,scope=aonohako-type-i")
+	flag.StringVar(&cacheTo, "cache-to", os.Getenv("AONOHAKO_DOCKER_CACHE_TO"), "optional docker buildx cache destination, for example type=gha,mode=max,scope=aonohako-type-i")
 	flag.Parse()
 
 	catalog, err := runtimepacks.LoadCatalog(catalogPath)
@@ -61,7 +67,19 @@ func main() {
 			build.BuildContexts = map[string]string{}
 		}
 		build.BuildContexts["aonohako-python-packages"] = pythonPackagesContext
-		args := []string{"buildx", "build", "--load", "-f", build.File, "-t", build.Tag}
+		args := []string{"buildx", "build"}
+		if push {
+			args = append(args, "--push")
+		} else {
+			args = append(args, "--load")
+		}
+		if cacheFrom != "" {
+			args = append(args, "--cache-from", cacheFrom)
+		}
+		if cacheTo != "" {
+			args = append(args, "--cache-to", cacheTo)
+		}
+		args = append(args, "-f", build.File, "-t", build.Tag)
 		contextKeys := make([]string, 0, len(build.BuildContexts))
 		for key := range build.BuildContexts {
 			contextKeys = append(contextKeys, key)
