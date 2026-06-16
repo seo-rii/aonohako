@@ -19,7 +19,7 @@ import (
 
 const (
 	defaultMaxOutputBytes        = 64 << 10
-	hardMaxOutputBytes           = 8 << 20
+	hardMaxOutputBytes           = 64 << 20
 	maxResponseOutputBytes       = defaultMaxOutputBytes
 	defaultWorkspaceBytes        = 128 << 20
 	hardMaxWorkspaceBytes        = 1 << 30

@@ -1124,6 +1124,16 @@ func TestRunLargeOutputUsesFullJudgeCapButCapsResponseSample(t *testing.T) {
 	}
 }
 
+func TestOutputLimitAllowsLargeJudgeCap(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{OutputBytes: hardMaxOutputBytes}}
+	if got := outputLimitBytes(req); got != hardMaxOutputBytes {
+		t.Fatalf("outputLimitBytes() = %d, want %d", got, hardMaxOutputBytes)
+	}
+	if got := responseOutputLimitBytes(req); got != defaultMaxOutputBytes {
+		t.Fatalf("responseOutputLimitBytes() = %d, want %d", got, defaultMaxOutputBytes)
+	}
+}
+
 func TestRunRequestOutputLimitOverridesLegacyEnv(t *testing.T) {
 	forceDirectMode(t)
 	t.Setenv("AONOHAKO_MAX_OUTPUT_BYTES", "2048")
