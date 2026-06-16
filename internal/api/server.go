@@ -156,6 +156,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
 		return
 	}
+	if err := resolveCompilePayloadURLs(r.Context(), &req); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
+		return
+	}
 	if len(req.Sources) == 0 {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "no_sources", "no sources")
 		return
@@ -281,12 +285,16 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_json", "invalid json: "+err.Error())
 		return
 	}
-	if err := runvalidation.Validate(&req); err != nil {
-		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
+		return
+	}
+	if err := resolveRunPayloadURLs(r.Context(), &req); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
+		return
+	}
+	if err := runvalidation.Validate(&req); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	if (req.EnableNetwork || runvalidation.ProgramsEnableNetwork(&req)) && !s.cfg.AllowRequestNetwork {

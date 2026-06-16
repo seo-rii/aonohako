@@ -221,6 +221,218 @@ func TestExecuteQueueOverflowReturns429(t *testing.T) {
 	}
 }
 
+func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/stdin":
+			_, _ = w.Write([]byte("hello\n"))
+		case "/expected":
+			_, _ = w.Write([]byte("world\n"))
+		case "/runner":
+			_, _ = w.Write([]byte("#!/bin/sh\ncat\n"))
+		case "/checker":
+			_, _ = w.Write([]byte("#!/bin/sh\nexit 0\n"))
+		case "/interactor":
+			_, _ = w.Write([]byte("#!/bin/sh\nexit 0\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer assetServer.Close()
+
+	tests := []struct {
+		name    string
+		payload map[string]any
+		check   func(*testing.T, *model.RunRequest)
+	}{
+		{
+			name: "legacy run and spj",
+			payload: map[string]any{
+				"lang": "binary",
+				"binaries": []map[string]any{{
+					"name":     "run.sh",
+					"data_url": assetServer.URL + "/runner",
+					"mode":     "exec",
+				}},
+				"stdin_url":           assetServer.URL + "/stdin",
+				"expected_stdout_url": assetServer.URL + "/expected",
+				"limits":              map[string]any{"time_ms": 1000, "memory_mb": 64},
+				"spj": map[string]any{
+					"binary": map[string]any{
+						"name":     "checker",
+						"data_url": assetServer.URL + "/checker",
+						"mode":     "exec",
+					},
+					"lang": "binary",
+				},
+			},
+			check: func(t *testing.T, req *model.RunRequest) {
+				t.Helper()
+				if req.Stdin != "hello\n" || req.ExpectedStdout != "world\n" {
+					t.Fatalf("text fields were not resolved: stdin=%q expected=%q", req.Stdin, req.ExpectedStdout)
+				}
+				if got, _ := base64.StdEncoding.DecodeString(req.Binaries[0].DataB64); string(got) != "#!/bin/sh\ncat\n" {
+					t.Fatalf("binary url was not resolved: %q", string(got))
+				}
+				if req.SPJ == nil || req.SPJ.Binary == nil {
+					t.Fatalf("spj was not preserved: %+v", req.SPJ)
+				}
+				if got, _ := base64.StdEncoding.DecodeString(req.SPJ.Binary.DataB64); string(got) != "#!/bin/sh\nexit 0\n" {
+					t.Fatalf("spj binary url was not resolved: %q", string(got))
+				}
+			},
+		},
+		{
+			name: "interactor binary",
+			payload: map[string]any{
+				"lang": "binary",
+				"binaries": []map[string]any{{
+					"name":     "run.sh",
+					"data_url": assetServer.URL + "/runner",
+					"mode":     "exec",
+				}},
+				"stdin_url":           assetServer.URL + "/stdin",
+				"expected_stdout_url": assetServer.URL + "/expected",
+				"limits":              map[string]any{"time_ms": 1000, "memory_mb": 64},
+				"interactor": map[string]any{
+					"lang": "binary",
+					"binaries": []map[string]any{{
+						"name":     "interactor",
+						"data_url": assetServer.URL + "/interactor",
+						"mode":     "exec",
+					}},
+				},
+			},
+			check: func(t *testing.T, req *model.RunRequest) {
+				t.Helper()
+				if req.Interactor == nil || len(req.Interactor.Binaries) != 1 {
+					t.Fatalf("interactor was not preserved: %+v", req.Interactor)
+				}
+				if got, _ := base64.StdEncoding.DecodeString(req.Interactor.Binaries[0].DataB64); string(got) != "#!/bin/sh\nexit 0\n" {
+					t.Fatalf("interactor binary url was not resolved: %q", string(got))
+				}
+			},
+		},
+		{
+			name: "step pipeline",
+			payload: map[string]any{
+				"programs": []map[string]any{
+					{
+						"id":   "encode",
+						"lang": "binary",
+						"binaries": []map[string]any{{
+							"name":     "encode.sh",
+							"data_url": assetServer.URL + "/runner",
+							"mode":     "exec",
+						}},
+					},
+					{
+						"id":   "decode",
+						"lang": "binary",
+						"binaries": []map[string]any{{
+							"name":     "decode.sh",
+							"data_url": assetServer.URL + "/runner",
+							"mode":     "exec",
+						}},
+					},
+				},
+				"steps": []map[string]any{
+					{
+						"id":         "encode",
+						"program_id": "encode",
+						"stdin_url":  assetServer.URL + "/stdin",
+						"limits":     map[string]any{"time_ms": 1000, "memory_mb": 64},
+						"handoff":    map[string]any{"id": "encoded"},
+					},
+					{
+						"id":         "decode",
+						"program_id": "decode",
+						"stdin_from": "encoded",
+						"limits":     map[string]any{"time_ms": 1000, "memory_mb": 64},
+					},
+				},
+				"expected_stdout_url": assetServer.URL + "/expected",
+			},
+			check: func(t *testing.T, req *model.RunRequest) {
+				t.Helper()
+				if req.Steps[0].Stdin != "hello\n" || req.ExpectedStdout != "world\n" {
+					t.Fatalf("step text urls were not resolved: step=%q expected=%q", req.Steps[0].Stdin, req.ExpectedStdout)
+				}
+				if got, _ := base64.StdEncoding.DecodeString(req.Programs[1].Binaries[0].DataB64); string(got) != "#!/bin/sh\ncat\n" {
+					t.Fatalf("program binary url was not resolved: %q", string(got))
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			s := NewWithServices(configForTest(t), compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+				called = true
+				tc.check(t, req)
+				return model.RunResponse{Status: model.RunStatusAccepted}
+			}})
+			ts := httptest.NewServer(s.Handler())
+			defer ts.Close()
+
+			body, _ := json.Marshal(tc.payload)
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "text/event-stream")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				raw, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status = %d, body=%s", resp.StatusCode, string(raw))
+			}
+			events := readSSEEvents(resp.Body, t)
+			if len(events) == 0 || events[len(events)-1].Name != "result" {
+				t.Fatalf("missing result event: %+v", events)
+			}
+			if !called {
+				t.Fatalf("runner was not called")
+			}
+		})
+	}
+}
+
+func TestExecuteRejectsConflictingPayloadURL(t *testing.T) {
+	s := newServerForTest(t)
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		t.Fatalf("execute runner should not be called for conflicting payload urls")
+		return model.RunResponse{}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	payload := map[string]any{
+		"lang":      "binary",
+		"binaries":  []map[string]any{{"name": "run.sh", "data_b64": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n")), "mode": "exec"}},
+		"stdin":     "inline",
+		"stdin_url": ts.URL + "/stdin",
+		"limits":    map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for conflicting stdin url, got %d", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(raw), "cannot combine inline content with url") {
+		t.Fatalf("unexpected response: %s", string(raw))
+	}
+}
+
 func TestExecuteActiveStreamOverflowReturns429(t *testing.T) {
 	cfg := configForTest(t)
 	cfg.MaxPendingQueue = 8
@@ -1903,6 +2115,59 @@ func TestCompileRejectsInvalidSourcesBeforeQueueing(t *testing.T) {
 				t.Fatalf("invalid compile source request entered queue: active=%d pending=%d", active, pending)
 			}
 		})
+	}
+}
+
+func TestCompileResolvesSourcePayloadURLsBeforeRunner(t *testing.T) {
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/Main.py" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("print('ok')\n"))
+	}))
+	defer assetServer.Close()
+
+	called := false
+	s := NewWithServices(configForTest(t), compileRunnerStub{run: func(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
+		called = true
+		if len(req.Sources) != 1 {
+			t.Fatalf("sources = %d, want 1", len(req.Sources))
+		}
+		data, err := base64.StdEncoding.DecodeString(req.Sources[0].DataB64)
+		if err != nil {
+			t.Fatalf("decoded source: %v", err)
+		}
+		if string(data) != "print('ok')\n" {
+			t.Fatalf("source url was not resolved: %q", string(data))
+		}
+		return model.CompileResponse{Status: model.CompileStatusOK}
+	}}, execute.New())
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	body, _ := json.Marshal(map[string]any{
+		"lang":    "python3",
+		"sources": []map[string]any{{"name": "Main.py", "data_url": assetServer.URL + "/Main.py"}},
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body=%s", resp.StatusCode, string(raw))
+	}
+	events := readSSEEvents(resp.Body, t)
+	if len(events) == 0 || events[len(events)-1].Name != "result" {
+		t.Fatalf("missing result event: %+v", events)
+	}
+	if !called {
+		t.Fatalf("compile runner was not called")
 	}
 }
 

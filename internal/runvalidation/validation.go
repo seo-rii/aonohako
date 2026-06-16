@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	MaxTextFieldBytes   = 16 << 20
+	MaxTextFieldBytes   = 64 << 20
 	MaxTimeMs           = 60_000
 	MaxMemoryMB         = 4096
 	MaxOutputBytes      = 8 << 20
@@ -90,7 +90,7 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 	if len(req.Programs) == 0 || len(req.Steps) == 0 {
 		return fmt.Errorf("programs and steps must be provided together")
 	}
-	if strings.TrimSpace(req.Lang) != "" || len(req.Binaries) > 0 || strings.TrimSpace(req.Stdin) != "" || strings.TrimSpace(req.EntryPoint) != "" || req.EnableNetwork || req.Interactor != nil || !LimitsAreZero(req.Limits) {
+	if strings.TrimSpace(req.Lang) != "" || len(req.Binaries) > 0 || strings.TrimSpace(req.Stdin) != "" || strings.TrimSpace(req.StdinURL) != "" || strings.TrimSpace(req.EntryPoint) != "" || req.EnableNetwork || req.Interactor != nil || !LimitsAreZero(req.Limits) {
 		return fmt.Errorf("legacy execute fields cannot be combined with programs/steps")
 	}
 	if len(req.Programs) > MaxPrograms {
@@ -180,7 +180,7 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		if strings.TrimSpace(step.StdinFrom) != handoffID {
 			return fmt.Errorf("second step stdin_from must reference first step handoff id")
 		}
-		if step.Stdin != "" {
+		if step.Stdin != "" || strings.TrimSpace(step.StdinURL) != "" {
 			return fmt.Errorf("step %s stdin cannot be combined with stdin_from", step.ID)
 		}
 		if step.Handoff != nil {
