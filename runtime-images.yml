@@ -2655,6 +2655,9 @@ languages:
         - ln -sfn /usr/local/go/bin/go /usr/local/bin/go
         - ln -sfn /usr/local/go/bin/gofmt /usr/local/bin/gofmt
         - git clone --depth=1 https://github.com/rycont/umjunsik-lang.git /tmp/umjunsik-lang
+        # Upstream uses Scanln for 식?, which cannot consume BOJ-style same-line integer input like "5 1".
+        - sed -i 's/fmt.Scanln(&integer)/fmt.Scan(\&integer)/' /tmp/umjunsik-lang/umjunsik-lang-go/eval/eval.go
+        - grep -q 'fmt.Scan(&integer)' /tmp/umjunsik-lang/umjunsik-lang-go/eval/eval.go
         - cd /tmp/umjunsik-lang/umjunsik-lang-go && env -u GOROOT GOENV=off go build -o /usr/local/bin/umjunsik-lang-go .
         - ln -sfn /usr/local/bin/umjunsik-lang-go /usr/bin/umjunsik-lang-go
         - rm -rf /tmp/umjunsik-lang
@@ -2665,6 +2668,8 @@ languages:
         - |
           printf '%s\n' '어떻게' '식........... ........ㅋ' '이 사람이름이냐ㅋㅋ' > Main.uhm
           /usr/bin/umjunsik-lang-go Main.uhm | grep '^X$'
+          printf '%s\n' '어떻게' '' '엄식?' '어엄식?' '' '동탄어?준... ....' '' '엄어,' '어엄어어.' '' '준.. ...' '식어어!' '' '이 사람이름이냐ㅋㅋ' > Main.uhm
+          printf '5 1\n' | /usr/bin/umjunsik-lang-go Main.uhm | grep '^6$'
 
 profiles:
   type-a:
