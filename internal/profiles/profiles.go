@@ -26,6 +26,7 @@ var profiles = map[string]Profile{
 	"C18":           {SourceLang: "C18", Extension: "c", DefaultTarget: "Main", CompileKind: "c", CompileStd: "c17", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"C23":           {SourceLang: "C23", Extension: "c", DefaultTarget: "Main", CompileKind: "c", CompileStd: "c23", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"CPP":           {SourceLang: "CPP", Extension: "cpp", DefaultTarget: "Main", CompileKind: "cpp", CompileStd: "c++17", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
+	"CPP98":         {SourceLang: "CPP98", Extension: "cpp", DefaultTarget: "Main", CompileKind: "cpp", CompileStd: "c++03", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"CPP03":         {SourceLang: "CPP03", Extension: "cpp", DefaultTarget: "Main", CompileKind: "cpp", CompileStd: "c++03", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"CPP11":         {SourceLang: "CPP11", Extension: "cpp", DefaultTarget: "Main", CompileKind: "cpp", CompileStd: "c++11", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"CPP14":         {SourceLang: "CPP14", Extension: "cpp", DefaultTarget: "Main", CompileKind: "cpp", CompileStd: "c++14", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
@@ -63,11 +64,17 @@ var profiles = map[string]Profile{
 	"GDL":           {SourceLang: "GDL", Extension: "pro", CompileKind: "gdl", RunLang: "gdl", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"OCTAVE":        {SourceLang: "OCTAVE", Extension: "m", CompileKind: "octave", RunLang: "octave", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"ADA":           {SourceLang: "ADA", Extension: "adb", DefaultTarget: "Main", CompileKind: "ada", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"ADA2012":       {SourceLang: "ADA2012", Extension: "adb", DefaultTarget: "Main", CompileKind: "ada", CompileStd: "-gnat2012", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"ADA2022":       {SourceLang: "ADA2022", Extension: "adb", DefaultTarget: "Main", CompileKind: "ada", CompileStd: "-gnat2022", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"COBOL":         {SourceLang: "COBOL", Extension: "cob", DefaultTarget: "Main", CompileKind: "cobol", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"GNUCOBOL":      {SourceLang: "GNUCOBOL", Extension: "cob", DefaultTarget: "Main", CompileKind: "cobol", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"CYTHON":        {SourceLang: "CYTHON", Extension: "pyx", DefaultTarget: "Main", CompileKind: "cython", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"DART":          {SourceLang: "DART", Extension: "dart", DefaultTarget: "Main", CompileKind: "dart", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"FORTRAN":       {SourceLang: "FORTRAN", Extension: "f90", DefaultTarget: "Main", CompileKind: "fortran", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"FORTRAN95":     {SourceLang: "FORTRAN95", Extension: "f90", DefaultTarget: "Main", CompileKind: "fortran", CompileStd: "f95", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"FORTRAN2003":   {SourceLang: "FORTRAN2003", Extension: "f90", DefaultTarget: "Main", CompileKind: "fortran", CompileStd: "f2003", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"FORTRAN2008":   {SourceLang: "FORTRAN2008", Extension: "f90", DefaultTarget: "Main", CompileKind: "fortran", CompileStd: "f2008", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"FORTRAN2018":   {SourceLang: "FORTRAN2018", Extension: "f90", DefaultTarget: "Main", CompileKind: "fortran", CompileStd: "f2018", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"D":             {SourceLang: "D", Extension: "d", DefaultTarget: "Main", CompileKind: "d", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"OBJC":          {SourceLang: "OBJC", Extension: "m", DefaultTarget: "Main", CompileKind: "objective-c", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"OBJECTIVE_C":   {SourceLang: "OBJECTIVE_C", Extension: "m", DefaultTarget: "Main", CompileKind: "objective-c", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
@@ -132,6 +139,8 @@ var profiles = map[string]Profile{
 	"ELM":           {SourceLang: "ELM", Extension: "elm", DefaultTarget: "Main.js", CompileKind: "elm", RunLang: "javascript", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"RUBY":          {SourceLang: "RUBY", Extension: "rb", CompileKind: "ruby", RunLang: "ruby", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PHP":           {SourceLang: "PHP", Extension: "php", CompileKind: "php", RunLang: "php", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"PHP7":          {SourceLang: "PHP7", Extension: "php", CompileKind: "php", RunLang: "php", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"PHP8":          {SourceLang: "PHP8", Extension: "php", CompileKind: "php", RunLang: "php", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LUA":           {SourceLang: "LUA", Extension: "lua", CompileKind: "lua", RunLang: "lua", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PERL":          {SourceLang: "PERL", Extension: "pl", CompileKind: "perl", RunLang: "perl", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"VB6":           {SourceLang: "VB6", Extension: "bas", CompileKind: "vb6", RunLang: "vb6", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
@@ -218,6 +227,12 @@ func NormalizeRunLang(language string) string {
 	case "jsoftware":
 		return "j"
 	case "gnucobol":
+		return "binary"
+	case "ada2012", "ada12", "ada2022", "ada22":
+		return "binary"
+	case "fortran95", "f95", "fortran2003", "fortran03", "f2003", "f03":
+		return "binary"
+	case "fortran2008", "fortran08", "f2008", "f08", "fortran2018", "fortran18", "f2018", "f18":
 		return "binary"
 	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic", "vala", "mercury", "idris2", "delphi", "object-pascal", "object_pascal", "objpascal", "objfpc":
 		return "binary"

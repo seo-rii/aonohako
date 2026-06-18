@@ -50,6 +50,10 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "OCTAVE"
 	case "ada":
 		l = "ADA"
+	case "ada2012", "ada12":
+		l = "ADA2012"
+	case "ada2022", "ada22":
+		l = "ADA2022"
 	case "cobol":
 		l = "COBOL"
 	case "gnucobol":
@@ -60,6 +64,14 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "DART"
 	case "fortran", "fortan":
 		l = "FORTRAN"
+	case "fortran95", "f95":
+		l = "FORTRAN95"
+	case "fortran2003", "fortran03", "f2003", "f03":
+		l = "FORTRAN2003"
+	case "fortran2008", "fortran08", "f2008", "f08":
+		l = "FORTRAN2008"
+	case "fortran2018", "fortran18", "f2018", "f18":
+		l = "FORTRAN2018"
 	case "d":
 		l = "D"
 	case "objective-c", "objc":
@@ -130,6 +142,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "C23"
 	case "cpp", "c++":
 		l = "CPP17"
+	case "cpp98", "c++98":
+		l = "CPP98"
 	case "java":
 		l = "JAVA11"
 	case "groovy":
@@ -251,6 +265,18 @@ func applyRequestedVersion(profile profiles.Profile, raw string) (profiles.Profi
 			return profile, fmt.Errorf("unsupported Rust edition: %s", raw)
 		}
 		profile.RustEdition = edition
+	case "fortran":
+		std, ok := fortranStandardVersion(version)
+		if !ok {
+			return profile, fmt.Errorf("unsupported Fortran standard: %s", raw)
+		}
+		profile.CompileStd = std
+	case "ada":
+		std, ok := adaStandardVersion(version)
+		if !ok {
+			return profile, fmt.Errorf("unsupported Ada standard: %s", raw)
+		}
+		profile.CompileStd = std
 	default:
 		return profile, fmt.Errorf("version is not supported for %s", profile.SourceLang)
 	}
@@ -354,6 +380,34 @@ func rustEditionVersion(version string) (string, bool) {
 	switch version {
 	case "2015", "2018", "2021", "2024":
 		return version, true
+	default:
+		return "", false
+	}
+}
+
+func fortranStandardVersion(version string) (string, bool) {
+	version = strings.TrimPrefix(version, "fortran")
+	switch version {
+	case "95", "f95":
+		return "f95", true
+	case "2003", "03", "f2003", "f03":
+		return "f2003", true
+	case "2008", "08", "f2008", "f08":
+		return "f2008", true
+	case "2018", "18", "f2018", "f18":
+		return "f2018", true
+	default:
+		return "", false
+	}
+}
+
+func adaStandardVersion(version string) (string, bool) {
+	version = strings.TrimPrefix(version, "ada")
+	switch version {
+	case "2012", "12":
+		return "-gnat2012", true
+	case "2022", "22":
+		return "-gnat2022", true
 	default:
 		return "", false
 	}

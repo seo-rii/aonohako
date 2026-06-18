@@ -67,9 +67,19 @@ var compileRegistry = map[string]Compiler{
 	"php":         scriptCheckCompiler{exts: []string{".php"}, noSourceReason: "no php sources", bin: "php", prefix: []string{"-l"}},
 	"lua":         scriptCheckCompiler{exts: []string{".lua"}, noSourceReason: "no lua sources", bin: "luac5.4", prefix: []string{"-p"}},
 	"perl":        scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
-	"fortran":     nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(CompileJob) []string { return []string{"-O2", "-pipe"} }},
+	"fortran": nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(job CompileJob) []string {
+		args := []string{"-O2", "-pipe"}
+		if job.Profile.CompileStd != "" {
+			args = append(args, "-std="+job.Profile.CompileStd)
+		}
+		return args
+	}},
 	"ada": singleSourceExecutableCompiler{exts: []string{".adb"}, preferredBases: []string{"Main.adb"}, noSourceReason: "no ada sources", bin: "gnatmake", args: func(job CompileJob, sourcePath string) []string {
-		return []string{"-O2", "-o", outputPath(job), sourcePath}
+		args := []string{"-O2"}
+		if job.Profile.CompileStd != "" {
+			args = append(args, job.Profile.CompileStd)
+		}
+		return append(args, "-o", outputPath(job), sourcePath)
 	}},
 	"d": singleSourceExecutableCompiler{exts: []string{".d"}, preferredBases: []string{"Main.d"}, noSourceReason: "no d sources", bin: "ldc2", args: func(job CompileJob, sourcePath string) []string {
 		return []string{sourcePath, "-O3", "-release", "--d-version=ONLINE_JUDGE", "-of=" + outputPath(job)}

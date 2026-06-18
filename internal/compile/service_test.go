@@ -18,6 +18,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/profiles"
 	"aonohako/internal/workspacequota"
 	"golang.org/x/sys/unix"
 )
@@ -346,6 +347,14 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"gst":             "smalltalk",
 		"gnu-apl":         "apl",
 		"coffee":          "coffeescript",
+		"cpp98":           "cpp",
+		"c++98":           "cpp",
+		"f95":             "fortran",
+		"f2003":           "fortran",
+		"f2008":           "fortran",
+		"f2018":           "fortran",
+		"ada12":           "ada",
+		"ada22":           "ada",
 		"kotlin_java":     "kotlin-jvm",
 		"standard-ml":     "sml",
 	}
@@ -383,6 +392,10 @@ func TestApplyRequestedVersionOverridesLanguageDefaults(t *testing.T) {
 		{name: "kotlin jvm target prefix", lang: "KOTLIN_JVM", version: "jvm-target=11", wantJava: "11"},
 		{name: "kotlin jvm 1.8 target", lang: "KOTLIN_JVM", version: "jvm_target=1.8", wantJava: "8"},
 		{name: "rust edition", lang: "RUST2021", version: "edition2024", wantRust: "2024"},
+		{name: "fortran standard", lang: "FORTRAN", version: "f2008", wantStd: "f2008"},
+		{name: "fortran standard prefix", lang: "FORTRAN", version: "fortran2018", wantStd: "f2018"},
+		{name: "ada standard", lang: "ADA", version: "ada2012", wantStd: "-gnat2012"},
+		{name: "ada standard short", lang: "ADA", version: "22", wantStd: "-gnat2022"},
 		{name: "unsupported versioned language", lang: "PYTHON3", version: "3.13", wantError: true},
 		{name: "unsupported version value", lang: "RUST2021", version: "2030", wantError: true},
 		{name: "unsupported kotlin jvm target", lang: "KOTLIN_JVM", version: "2030", wantError: true},
@@ -414,6 +427,32 @@ func TestApplyRequestedVersionOverridesLanguageDefaults(t *testing.T) {
 				t.Fatalf("RustEdition = %q, want %q", got.RustEdition, tc.wantRust)
 			}
 		})
+	}
+}
+
+func TestVersionedFortranAndAdaCompileArgs(t *testing.T) {
+	fortranCompiler, ok := compileRegistry["fortran"].(nativeCompiler)
+	if !ok {
+		t.Fatalf("fortran compiler has unexpected type %T", compileRegistry["fortran"])
+	}
+	fortranArgs := fortranCompiler.flags(CompileJob{
+		Profile: profiles.Profile{CompileStd: "f2008"},
+	})
+	if !strings.Contains(strings.Join(fortranArgs, " "), "-std=f2008") {
+		t.Fatalf("fortran args = %v, want -std=f2008", fortranArgs)
+	}
+
+	adaCompiler, ok := compileRegistry["ada"].(singleSourceExecutableCompiler)
+	if !ok {
+		t.Fatalf("ada compiler has unexpected type %T", compileRegistry["ada"])
+	}
+	adaArgs := adaCompiler.args(CompileJob{
+		WorkDir: "/work",
+		Target:  "Main",
+		Profile: profiles.Profile{CompileStd: "-gnat2022"},
+	}, "Main.adb")
+	if !strings.Contains(strings.Join(adaArgs, " "), "-gnat2022") {
+		t.Fatalf("ada args = %v, want -gnat2022", adaArgs)
 	}
 }
 
