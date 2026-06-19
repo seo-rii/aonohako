@@ -3,6 +3,7 @@ package execute
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -39,6 +40,8 @@ const (
 	defaultSPJMemoryMB           = 256
 	ocamlRunParam                = "s=32k"
 )
+
+var errStepStdinPartsTooLarge = errors.New("stdin_parts exceeded max bytes")
 
 type Hooks struct {
 	OnImage func(mime, b64 string, ts int64)
@@ -278,29 +281,14 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 	stepResults := make([]model.StepResult, 0, len(req.Steps))
 	for i, step := range req.Steps {
 		program := programs[step.ProgramID]
-		stdin := step.Stdin
-		var stdinReader io.Reader
-		var stdinFile *os.File
-		if step.StdinFrom != "" {
-			handoffPath := handoffs[step.StdinFrom]
-			if handoffPath == "" {
-				return aggregateStepResponse(model.RunResponse{
-					Status:        model.RunStatusInitFail,
-					Reason:        fmt.Sprintf("step %s stdin handoff not found", step.ID),
-					VerdictSource: "step:" + step.ID + ":handoff",
-				}, stepResults)
-			}
-			stdin = ""
-			stdinFile, err = os.Open(handoffPath)
-			if err != nil {
-				slog.Warn("execute step handoff open failed", "step", step.ID, "err", err)
-				return aggregateStepResponse(model.RunResponse{
-					Status:        model.RunStatusInitFail,
-					Reason:        fmt.Sprintf("step %s handoff open failed", step.ID),
-					VerdictSource: "step:" + step.ID + ":handoff",
-				}, stepResults)
-			}
-			stdinReader = stdinFile
+		stdin, stdinReader, closeStdin, stdinVerdictSource, err := prepareStepStdin(step, handoffs, handoffDir)
+		if err != nil {
+			slog.Warn("execute step stdin preparation failed", "step", step.ID, "err", err)
+			return aggregateStepResponse(model.RunResponse{
+				Status:        model.RunStatusInitFail,
+				Reason:        fmt.Sprintf("step %s %s", step.ID, err.Error()),
+				VerdictSource: "step:" + step.ID + ":" + stdinVerdictSource,
+			}, stepResults)
 		}
 		stepReq := &model.RunRequest{
 			Lang:           program.Lang,
@@ -331,8 +319,8 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 		}
 
 		run := s.runOneWithStdin(ctx, stepReq, stdinReader, hooks, tuning, finalStep)
-		if stdinFile != nil {
-			_ = stdinFile.Close()
+		if closeStdin != nil {
+			_ = closeStdin()
 		}
 		stepResult := stepResultFromResponse(step.ID, step.ProgramID, run.response)
 		stepResults = append(stepResults, stepResult)
@@ -399,6 +387,113 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 	}
 
 	return model.RunResponse{Status: model.RunStatusInitFail, Reason: "steps did not run"}
+}
+
+func prepareStepStdin(step model.RunStep, handoffs map[string]string, scratchDir string) (string, io.Reader, func() error, string, error) {
+	if len(step.StdinParts) > 0 {
+		stdinFile, err := assembleStepStdinParts(step, handoffs, scratchDir)
+		if err != nil {
+			return "", nil, nil, "stdin_parts", err
+		}
+		return "", stdinFile, stdinFile.Close, "stdin_parts", nil
+	}
+	if step.StdinFrom == "" {
+		return step.Stdin, nil, nil, "", nil
+	}
+
+	handoffPath := handoffs[step.StdinFrom]
+	if handoffPath == "" {
+		return "", nil, nil, "handoff", fmt.Errorf("stdin handoff not found")
+	}
+	stdinFile, err := os.Open(handoffPath)
+	if err != nil {
+		return "", nil, nil, "handoff", fmt.Errorf("handoff open failed")
+	}
+	return "", stdinFile, stdinFile.Close, "handoff", nil
+}
+
+func assembleStepStdinParts(step model.RunStep, handoffs map[string]string, scratchDir string) (*os.File, error) {
+	stdinFile, err := os.CreateTemp(scratchDir, "stdin-*")
+	if err != nil {
+		return nil, fmt.Errorf("stdin_parts file creation failed")
+	}
+	removeOnError := true
+	defer func() {
+		if removeOnError {
+			_ = stdinFile.Close()
+			_ = os.Remove(stdinFile.Name())
+		}
+	}()
+
+	writer := &byteLimitWriter{
+		w:     stdinFile,
+		limit: runvalidation.MaxTextFieldBytes,
+	}
+	for _, part := range step.StdinParts {
+		switch strings.ToLower(strings.TrimSpace(part.Type)) {
+		case "text":
+			if _, err := writer.Write([]byte(part.Data)); err != nil {
+				return nil, err
+			}
+		case "handoff":
+			handoffID := stdinPartHandoffID(part)
+			handoffPath := handoffs[handoffID]
+			if handoffPath == "" {
+				return nil, fmt.Errorf("stdin handoff not found")
+			}
+			handoffFile, err := os.Open(handoffPath)
+			if err != nil {
+				return nil, fmt.Errorf("handoff open failed")
+			}
+			_, copyErr := io.Copy(writer, handoffFile)
+			closeErr := handoffFile.Close()
+			if copyErr != nil {
+				return nil, copyErr
+			}
+			if closeErr != nil {
+				return nil, fmt.Errorf("handoff close failed")
+			}
+		default:
+			return nil, fmt.Errorf("stdin_parts contains unsupported part type")
+		}
+	}
+	if _, err := stdinFile.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("stdin_parts file rewind failed")
+	}
+	removeOnError = false
+	return stdinFile, nil
+}
+
+type byteLimitWriter struct {
+	w       io.Writer
+	limit   int64
+	written int64
+}
+
+func (w *byteLimitWriter) Write(p []byte) (int, error) {
+	remaining := w.limit - w.written
+	if remaining <= 0 {
+		return 0, errStepStdinPartsTooLarge
+	}
+	if int64(len(p)) > remaining {
+		allowed := int(remaining)
+		n, err := w.w.Write(p[:allowed])
+		w.written += int64(n)
+		if err != nil {
+			return n, err
+		}
+		return n, errStepStdinPartsTooLarge
+	}
+	n, err := w.w.Write(p)
+	w.written += int64(n)
+	return n, err
+}
+
+func stdinPartHandoffID(part model.StdinPart) string {
+	if strings.TrimSpace(part.From) != "" {
+		return strings.TrimSpace(part.From)
+	}
+	return strings.TrimSpace(part.ID)
 }
 
 func stepResultFromResponse(id, programID string, resp model.RunResponse) model.StepResult {

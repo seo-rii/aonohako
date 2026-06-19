@@ -48,6 +48,16 @@ func TestValidateStepPipelineRejectsAPILevelDriftCases(t *testing.T) {
 		}
 	}
 
+	partsReq := valid()
+	partsReq.Steps[1].StdinFrom = ""
+	partsReq.Steps[1].StdinParts = []model.StdinPart{
+		{Type: "text", Data: "DECODE\n"},
+		{Type: "handoff", ID: "encoded"},
+	}
+	if err := ValidateStepPipeline(partsReq); err != nil {
+		t.Fatalf("stdin_parts request should validate: %v", err)
+	}
+
 	tests := []struct {
 		name string
 		edit func(*model.RunRequest)
@@ -108,6 +118,37 @@ func TestValidateStepPipelineRejectsAPILevelDriftCases(t *testing.T) {
 				req.Steps[1].Stdin = "ignored\n"
 			},
 			want: "stdin cannot be combined with stdin_from",
+		},
+		{
+			name: "stdin parts mixed with stdin_from",
+			edit: func(req *model.RunRequest) {
+				req.Steps[1].StdinParts = []model.StdinPart{{Type: "handoff", ID: "encoded"}}
+			},
+			want: "stdin_parts cannot be combined",
+		},
+		{
+			name: "first step handoff stdin part",
+			edit: func(req *model.RunRequest) {
+				req.Steps[0].Stdin = ""
+				req.Steps[0].StdinParts = []model.StdinPart{{Type: "handoff", ID: "encoded"}}
+			},
+			want: "first step cannot use handoff stdin_part",
+		},
+		{
+			name: "second step stdin parts without handoff",
+			edit: func(req *model.RunRequest) {
+				req.Steps[1].StdinFrom = ""
+				req.Steps[1].StdinParts = []model.StdinPart{{Type: "text", Data: "DECODE\n"}}
+			},
+			want: "stdin_parts must reference",
+		},
+		{
+			name: "unresolved stdin part data url",
+			edit: func(req *model.RunRequest) {
+				req.Steps[0].Stdin = ""
+				req.Steps[0].StdinParts = []model.StdinPart{{Type: "text", DataURL: "https://example.invalid/stdin"}}
+			},
+			want: "data_url must be resolved",
 		},
 		{
 			name: "duplicate program binary path",

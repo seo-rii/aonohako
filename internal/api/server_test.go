@@ -228,6 +228,8 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 			_, _ = w.Write([]byte("hello\n"))
 		case "/expected":
 			_, _ = w.Write([]byte("world\n"))
+		case "/prefix":
+			_, _ = w.Write([]byte("DECODE\n"))
 		case "/runner":
 			_, _ = w.Write([]byte("#!/bin/sh\ncat\n"))
 		case "/checker":
@@ -347,8 +349,11 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 					{
 						"id":         "decode",
 						"program_id": "decode",
-						"stdin_from": "encoded",
-						"limits":     map[string]any{"time_ms": 1000, "memory_mb": 64},
+						"stdin_parts": []map[string]any{
+							{"type": "text", "data_url": assetServer.URL + "/prefix"},
+							{"type": "handoff", "id": "encoded"},
+						},
+						"limits": map[string]any{"time_ms": 1000, "memory_mb": 64},
 					},
 				},
 				"expected_stdout_url": assetServer.URL + "/expected",
@@ -357,6 +362,9 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 				t.Helper()
 				if req.Steps[0].Stdin != "hello\n" || req.ExpectedStdout != "world\n" {
 					t.Fatalf("step text urls were not resolved: step=%q expected=%q", req.Steps[0].Stdin, req.ExpectedStdout)
+				}
+				if len(req.Steps[1].StdinParts) != 2 || req.Steps[1].StdinParts[0].Data != "DECODE\n" || req.Steps[1].StdinParts[0].DataURL != "" {
+					t.Fatalf("stdin_parts url was not resolved: %+v", req.Steps[1].StdinParts)
 				}
 				if got, _ := base64.StdEncoding.DecodeString(req.Programs[1].Binaries[0].DataB64); string(got) != "#!/bin/sh\ncat\n" {
 					t.Fatalf("program binary url was not resolved: %q", string(got))

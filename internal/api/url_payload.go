@@ -36,10 +36,10 @@ func resolveCompilePayloadURLs(ctx context.Context, req *model.CompileRequest) e
 }
 
 func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
-	if err := resolveTextURL(ctx, "stdin", &req.Stdin, req.StdinURL, runvalidation.MaxTextFieldBytes); err != nil {
+	if err := resolveTextURL(ctx, "stdin", &req.Stdin, &req.StdinURL, runvalidation.MaxTextFieldBytes); err != nil {
 		return err
 	}
-	if err := resolveTextURL(ctx, "expected_stdout", &req.ExpectedStdout, req.ExpectedStdoutURL, runvalidation.MaxTextFieldBytes); err != nil {
+	if err := resolveTextURL(ctx, "expected_stdout", &req.ExpectedStdout, &req.ExpectedStdoutURL, runvalidation.MaxTextFieldBytes); err != nil {
 		return err
 	}
 	if err := resolveBinaryURLs(ctx, "binaries", req.Binaries); err != nil {
@@ -51,8 +51,13 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 		}
 	}
 	for i := range req.Steps {
-		if err := resolveTextURL(ctx, fmt.Sprintf("steps[%d].stdin", i), &req.Steps[i].Stdin, req.Steps[i].StdinURL, runvalidation.MaxTextFieldBytes); err != nil {
+		if err := resolveTextURL(ctx, fmt.Sprintf("steps[%d].stdin", i), &req.Steps[i].Stdin, &req.Steps[i].StdinURL, runvalidation.MaxTextFieldBytes); err != nil {
 			return err
+		}
+		for j := range req.Steps[i].StdinParts {
+			if err := resolveTextURL(ctx, fmt.Sprintf("steps[%d].stdin_parts[%d].data", i, j), &req.Steps[i].StdinParts[j].Data, &req.Steps[i].StdinParts[j].DataURL, runvalidation.MaxTextFieldBytes); err != nil {
+				return err
+			}
 		}
 	}
 	if req.SPJ != nil && req.SPJ.Binary != nil {
@@ -77,20 +82,21 @@ func resolveBinaryURLs(ctx context.Context, label string, binaries []model.Binar
 	return nil
 }
 
-func resolveTextURL(ctx context.Context, label string, inline *string, rawURL string, maxBytes int) error {
-	if strings.TrimSpace(rawURL) == "" {
+func resolveTextURL(ctx context.Context, label string, inline *string, rawURL *string, maxBytes int) error {
+	if rawURL == nil || strings.TrimSpace(*rawURL) == "" {
 		return nil
 	}
 	if inline != nil && *inline != "" {
 		return fmt.Errorf("%s cannot combine inline content with url", label)
 	}
-	data, err := downloadPayloadURL(ctx, rawURL, maxBytes)
+	data, err := downloadPayloadURL(ctx, *rawURL, maxBytes)
 	if err != nil {
 		return fmt.Errorf("%s_url: %w", label, err)
 	}
 	if inline != nil {
 		*inline = string(data)
 	}
+	*rawURL = ""
 	return nil
 }
 

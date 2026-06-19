@@ -660,6 +660,60 @@ func TestRunTwoStepPipelineAcceptsStdoutHandoff(t *testing.T) {
 	}
 }
 
+func TestRunTwoStepPipelineComposesStdinParts(t *testing.T) {
+	forceDirectMode(t)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "encode.sh",
+					DataB64: b64("#!/bin/sh\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "decode.sh",
+					DataB64: b64("#!/bin/sh\nIFS= read -r mode\nprintf 'mode:%s\\n' \"$mode\"\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				Stdin:     "answer\n",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+				Handoff:   &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 1024},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinParts: []model.StdinPart{
+					{Type: "text", Data: "DECODE\n"},
+					{Type: "handoff", ID: "encoded"},
+				},
+				Limits: model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		ExpectedStdout: "mode:DECODE\nanswer\n",
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+	if len(resp.Steps) != 2 || resp.Steps[1].Status != model.RunStatusAccepted {
+		t.Fatalf("unexpected step results: %+v", resp.Steps)
+	}
+}
+
 func TestRunJavaScriptCanReadDevStdin(t *testing.T) {
 	forceDirectMode(t)
 	if err := exec.Command("sh", "-c", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin command -v node").Run(); err != nil {

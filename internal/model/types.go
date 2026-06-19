@@ -80,14 +80,23 @@ type StepHandoff struct {
 	MaxBytes int64  `json:"max_bytes,omitempty"`
 }
 
+type StdinPart struct {
+	Type    string `json:"type"`
+	Data    string `json:"data,omitempty"`
+	DataURL string `json:"data_url,omitempty"`
+	ID      string `json:"id,omitempty"`
+	From    string `json:"from,omitempty"`
+}
+
 type RunStep struct {
-	ID        string       `json:"id"`
-	ProgramID string       `json:"program_id"`
-	Stdin     string       `json:"stdin,omitempty"`
-	StdinURL  string       `json:"stdin_url,omitempty"`
-	StdinFrom string       `json:"stdin_from,omitempty"`
-	Limits    Limits       `json:"limits"`
-	Handoff   *StepHandoff `json:"handoff,omitempty"`
+	ID         string       `json:"id"`
+	ProgramID  string       `json:"program_id"`
+	Stdin      string       `json:"stdin,omitempty"`
+	StdinURL   string       `json:"stdin_url,omitempty"`
+	StdinFrom  string       `json:"stdin_from,omitempty"`
+	StdinParts []StdinPart  `json:"stdin_parts,omitempty"`
+	Limits     Limits       `json:"limits"`
+	Handoff    *StepHandoff `json:"handoff,omitempty"`
 }
 
 type StepResult struct {

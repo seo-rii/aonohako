@@ -20,6 +20,7 @@ const (
 	MaxBinaryFiles      = 512
 	MaxPrograms         = 8
 	MaxSteps            = 2
+	MaxStdinParts       = 32
 	MaxSidecarOutputs   = 64
 	MaxStepHandoffBytes = MaxOutputBytes
 	MaxBinaryFileBytes  = 16 << 20
@@ -145,8 +146,15 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		if _, ok := programs[step.ProgramID]; !ok {
 			return fmt.Errorf("step %s references unknown program_id: %s", step.ID, step.ProgramID)
 		}
+		if len(step.StdinParts) > 0 && (step.Stdin != "" || strings.TrimSpace(step.StdinURL) != "" || strings.TrimSpace(step.StdinFrom) != "") {
+			return fmt.Errorf("step %s stdin_parts cannot be combined with stdin, stdin_url, or stdin_from", step.ID)
+		}
 		if len(step.Stdin) > MaxTextFieldBytes {
 			return fmt.Errorf("step %s stdin too large: max %d bytes", step.ID, MaxTextFieldBytes)
+		}
+		stdinPartsReferenceHandoff, err := ValidateStepStdinParts(step, i == 0, handoffID)
+		if err != nil {
+			return err
 		}
 		if err := ValidateRequiredLimits("step "+step.ID+" limits", step.Limits); err != nil {
 			return err
@@ -177,6 +185,15 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 			handoffID = step.Handoff.ID
 			continue
 		}
+		if len(step.StdinParts) > 0 {
+			if !stdinPartsReferenceHandoff {
+				return fmt.Errorf("second step stdin_parts must reference first step handoff id")
+			}
+			if step.Handoff != nil {
+				return fmt.Errorf("second step handoff is not supported")
+			}
+			continue
+		}
 		if strings.TrimSpace(step.StdinFrom) != handoffID {
 			return fmt.Errorf("second step stdin_from must reference first step handoff id")
 		}
@@ -188,6 +205,58 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		}
 	}
 	return nil
+}
+
+func ValidateStepStdinParts(step model.RunStep, firstStep bool, handoffID string) (bool, error) {
+	if len(step.StdinParts) == 0 {
+		return false, nil
+	}
+	if len(step.StdinParts) > MaxStdinParts {
+		return false, fmt.Errorf("step %s has too many stdin_parts: max %d", step.ID, MaxStdinParts)
+	}
+
+	totalTextBytes := 0
+	referencesHandoff := false
+	for i, part := range step.StdinParts {
+		partType := strings.ToLower(strings.TrimSpace(part.Type))
+		switch partType {
+		case "text":
+			if strings.TrimSpace(part.ID) != "" || strings.TrimSpace(part.From) != "" {
+				return false, fmt.Errorf("step %s stdin_parts[%d] text part cannot reference a handoff", step.ID, i)
+			}
+			if strings.TrimSpace(part.DataURL) != "" {
+				return false, fmt.Errorf("step %s stdin_parts[%d].data_url must be resolved before validation", step.ID, i)
+			}
+			totalTextBytes += len(part.Data)
+			if totalTextBytes > MaxTextFieldBytes {
+				return false, fmt.Errorf("step %s stdin_parts text too large: max %d bytes", step.ID, MaxTextFieldBytes)
+			}
+		case "handoff":
+			if firstStep {
+				return false, fmt.Errorf("first step cannot use handoff stdin_part")
+			}
+			if part.Data != "" || strings.TrimSpace(part.DataURL) != "" {
+				return false, fmt.Errorf("step %s stdin_parts[%d] handoff part cannot include data", step.ID, i)
+			}
+			if stdinPartHandoffID(part) == "" {
+				return false, fmt.Errorf("step %s stdin_parts[%d] handoff id is required", step.ID, i)
+			}
+			if stdinPartHandoffID(part) != handoffID {
+				return false, fmt.Errorf("step %s stdin_parts[%d] handoff must reference first step handoff id", step.ID, i)
+			}
+			referencesHandoff = true
+		default:
+			return false, fmt.Errorf("step %s stdin_parts[%d].type must be text or handoff", step.ID, i)
+		}
+	}
+	return referencesHandoff, nil
+}
+
+func stdinPartHandoffID(part model.StdinPart) string {
+	if strings.TrimSpace(part.From) != "" {
+		return strings.TrimSpace(part.From)
+	}
+	return strings.TrimSpace(part.ID)
 }
 
 func ValidateInteractor(req *model.RunRequest) error {
