@@ -39,8 +39,8 @@ languages:
         - python3
         - python3-pip
       script:
-        - export APECODE_COMMIT=c7ae98d9b8b59b5bdfd285d4349706c75711ef17
-        - export APECODE_SHA256=1ed716544e28a8b28432d81ad568de46eb11bc45e8ada83c1c8ebbc116367e57
+        - export APECODE_COMMIT=c7ae98d3dfc1713ecc800422a4c815628776e1e2
+        - export APECODE_SHA256=0ff71e149ec49a94211bb44b6a3d55e1290acb1387ca4f5f76a8f42f568ae629
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://codeload.github.com/seo-rii/apecode/tar.gz/${APECODE_COMMIT}" -o /tmp/apecode.tar.gz
         - echo "${APECODE_SHA256}  /tmp/apecode.tar.gz" | sha256sum -c -
         - python3 -m pip install --break-system-packages --no-cache-dir /tmp/apecode.tar.gz
