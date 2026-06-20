@@ -20,6 +20,36 @@ type singleSourceExecutableCompiler struct {
 	env            []string
 }
 
+type apeCodeCompiler struct{}
+
+func (apeCodeCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	rootSource := selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".ape"}, "Main.ape")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no apecode sources"}
+	}
+
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	result := runner.Run(ctx, job.WorkDir, "apecc", []string{"--check", rootSource}, nil)
+	if result.Status != model.CompileStatusOK {
+		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
+	}
+	rel, err := filepath.Rel(job.WorkDir, rootSource)
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	artifacts, err := readSingleArtifact(job.WorkDir, rel, filepath.ToSlash(rel), "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
+}
+
 func (c singleSourceExecutableCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
 	if job.Request == nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}

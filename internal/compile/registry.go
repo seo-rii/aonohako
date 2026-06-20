@@ -133,13 +133,11 @@ var compileRegistry = map[string]Compiler{
 	"befunge":       passThroughCompiler{exts: []string{".bef", ".bf93"}, noSourceReason: "no befunge sources"},
 	"brainfuck":     brainfuckCompiler{},
 	"lolcode":       passThroughCompiler{exts: []string{".lol"}, noSourceReason: "no lolcode sources"},
-	"apecode": singleSourceExecutableCompiler{exts: []string{".ape"}, preferredBases: []string{"Main.ape"}, noSourceReason: "no apecode sources", bin: "apecc", args: func(job CompileJob, sourcePath string) []string {
-		return []string{"-o", outputPath(job), sourcePath}
-	}},
-	"wasm":   wasmCompiler{},
-	"ocaml":  ocamlCompiler{},
-	"elixir": elixirCompiler{},
-	"csharp": csharpCompiler{},
+	"apecode":       apeCodeCompiler{},
+	"wasm":          wasmCompiler{},
+	"ocaml":         ocamlCompiler{},
+	"elixir":        elixirCompiler{},
+	"csharp":        csharpCompiler{},
 	"dart": singleSourceExecutableCompiler{exts: []string{".dart"}, preferredBases: []string{"Main.dart"}, noSourceReason: "no dart sources", bin: "dart", env: []string{"DART_SUPPRESS_ANALYTICS=true"}, args: func(job CompileJob, sourcePath string) []string {
 		return []string{"compile", "exe", "-D", "ONLINE_JUDGE=true", sourcePath, "-o", outputPath(job)}
 	}},

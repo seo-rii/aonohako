@@ -59,31 +59,18 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	}
 }
 
-func TestAPECodeCompilerUsesApeccTarget(t *testing.T) {
+func TestAPECodeCompilerChecksAndPassesThroughSource(t *testing.T) {
 	workDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workDir, "Main.ape"), []byte("state main { return true; }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	runner := &recordingCommandRunner{
 		result: CommandResult{Status: model.CompileStatusOK},
-		hook: func(workDir, _ string, _ []string, _ []string) {
-			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("#!/usr/bin/env python3\n"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-		},
 	}
 
-	resp := singleSourceExecutableCompiler{
-		exts:           []string{".ape"},
-		preferredBases: []string{"Main.ape"},
-		noSourceReason: "no apecode sources",
-		bin:            "apecc",
-		args: func(job CompileJob, sourcePath string) []string {
-			return []string{"-o", outputPath(job), sourcePath}
-		},
-	}.Compile(context.Background(), CompileJob{
+	resp := apeCodeCompiler{}.Compile(context.Background(), CompileJob{
 		WorkDir: workDir,
-		Target:  "Main",
+		Target:  "Main.ape",
 		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.ape"}}},
 		Runner:  runner,
 	})
@@ -94,11 +81,11 @@ func TestAPECodeCompilerUsesApeccTarget(t *testing.T) {
 	if len(runner.commands) != 1 {
 		t.Fatalf("runner commands = %+v", runner.commands)
 	}
-	wantArgs := []string{"-o", filepath.Join(workDir, "Main"), filepath.Join(workDir, "Main.ape")}
+	wantArgs := []string{"--check", filepath.Join(workDir, "Main.ape")}
 	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
 		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
 	}
-	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.ape" || resp.Artifacts[0].Mode != "" {
 		t.Fatalf("artifacts = %+v", resp.Artifacts)
 	}
 }

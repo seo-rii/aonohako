@@ -235,6 +235,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 	}{
 		{"binary", "/tmp/a.out", "/tmp/a.out", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
+		{"apecode", "/tmp/Main.ape", "apecc", true},
 		{"clojure", "/tmp/sol.clj", "java", true},
 		{"coq", "/tmp/Main.v", "true", false},
 		{"ocaml", "/tmp/sol", "env", true},

@@ -44,6 +44,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 				"raise SystemExit(code)\n",
 			primaryPath,
 		}
+	case "apecode":
+		return []string{"apecc", "--run", primaryPath}
 	case "clojure":
 		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
 		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)

@@ -158,7 +158,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(lowerClean, ".vvp") && verilogPath == "" {
 			verilogPath = dest
 		}
-		for _, ext := range []string{".bas", ".carbon", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".fs", ".fth", ".4th"} {
+		for _, ext := range []string{".bas", ".carbon", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".ape", ".fs", ".fth", ".4th"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -180,7 +180,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
-	case "binary", "c3", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "aheui", "cuda-ocelot":
+	case "binary", "c3", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "aheui", "apecode", "cuda-ocelot":
 		return primaryPath, lang, nil
 	case "python", "pypy":
 		if pyPath == "" {
