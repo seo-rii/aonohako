@@ -211,7 +211,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"BF":           "brainfuck",
 		"BEFUNGE":      "befunge",
 		"LOLCODE":      "lolcode",
-		"APECODE":      "apecode",
+		"APECODE":      "binary",
 		"WHITESPACE":   "whitespace",
 		"SCHEME":       "scheme",
 		"TCL":          "tcl",

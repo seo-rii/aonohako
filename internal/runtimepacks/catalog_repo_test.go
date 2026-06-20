@@ -248,7 +248,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 
 	tests := map[string][]string{
 		"aheui":         {"Hello, World!", "Main.aheui"},
-		"apecode":       {"APECODE_COMMIT=3b089ab399672a6d25549dfd05909ec6e2fbb014", "python3 -m pip install --break-system-packages --no-cache-dir /tmp/apecode.tar.gz", "apecc --check Main.ape", "apecc --run Main.ape", "state main", "3 1 2"},
+		"apecode":       {"APECODE_COMMIT=c7ae98d9b8b59b5bdfd285d4349706c75711ef17", "python3 -m pip install --break-system-packages --no-cache-dir /tmp/apecode.tar.gz", "apecc --check Main.ape", "apecc -o Main Main.ape", "./Main", "state main", "3 1 2"},
 		"ada":           {"gnatmake", "Broken.adb"},
 		"agda":          {"agda Main.agda", "data Unit : Set"},
 		"apl":           {"kanapl@0.0.0", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl"},

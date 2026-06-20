@@ -35,15 +35,11 @@ func (apeCodeCompiler) Compile(ctx context.Context, job CompileJob) model.Compil
 	if runner == nil {
 		runner = sandboxCommandRunner{}
 	}
-	result := runner.Run(ctx, job.WorkDir, "apecc", []string{"--check", rootSource}, nil)
+	result := runner.Run(ctx, job.WorkDir, "apecc", []string{"-o", outputPath(job), rootSource}, nil)
 	if result.Status != model.CompileStatusOK {
 		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
 	}
-	rel, err := filepath.Rel(job.WorkDir, rootSource)
-	if err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
-	}
-	artifacts, err := readSingleArtifact(job.WorkDir, rel, filepath.ToSlash(rel), "")
+	artifacts, err := readSingleArtifact(job.WorkDir, job.Target, job.Target, "exec")
 	if err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
 	}
