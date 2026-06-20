@@ -216,6 +216,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	}()
 	cmd.Stdout = stdoutFile
 	cmd.Stderr = stderrFile
+	sandbox.TrimParentMemoryBeforeSandbox()
 	if err := cmd.Start(); err != nil {
 		return "", "", model.CompileStatusInternal, "start failed: " + err.Error()
 	}

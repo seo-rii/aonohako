@@ -181,12 +181,6 @@ func MaybeRunFromEnv() bool {
 		{unix.RLIMIT_MSGQUEUE, 0},
 	}
 	limits[1].value = uint64(openFileLimit)
-	if !req.DisableAddressSpaceLimit {
-		limits = append(limits, struct {
-			resource int
-			value    uint64
-		}{unix.RLIMIT_AS, addressSpaceLimitBytes})
-	}
 	if !req.DisableFileSizeLimit {
 		fileSizeLimit := uint64(128 * 1024 * 1024)
 		if req.Limits.WorkspaceBytes > 0 {
@@ -507,6 +501,11 @@ func MaybeRunFromEnv() bool {
 	appendStmt(unix.BPF_RET|unix.BPF_K, allow)
 
 	prog := unix.SockFprog{Len: uint16(len(program)), Filter: &program[0]}
+	if !req.DisableAddressSpaceLimit {
+		if err := unix.Setrlimit(unix.RLIMIT_AS, &unix.Rlimit{Cur: addressSpaceLimitBytes, Max: addressSpaceLimitBytes}); err != nil {
+			fail("setrlimit(%d): %v", unix.RLIMIT_AS, err)
+		}
+	}
 	if err := unix.Prctl(unix.PR_SET_SECCOMP, uintptr(unix.SECCOMP_MODE_FILTER), uintptr(unsafe.Pointer(&prog)), 0, 0); err != nil {
 		fail("prctl seccomp: %v", err)
 	}

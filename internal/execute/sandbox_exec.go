@@ -332,6 +332,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
+	sandbox.TrimParentMemoryBeforeSandbox()
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
 	}
@@ -705,6 +706,13 @@ done:
 		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > result.CPUTimeMs {
 			result.CPUTimeMs = usageCPU
 		}
+	}
+	helperRuntimeOOM := bytes.Contains(result.Stderr, []byte("fatal error: runtime: out of memory"))
+	helperPageSummaryOOM := bytes.Contains(result.Stderr, []byte("fatal error: failed to reserve page summary memory"))
+	if !targetStarted && result.Status != model.RunStatusTLE && bytes.Contains(result.Stderr, []byte("runtime stack:")) && (helperRuntimeOOM || helperPageSummaryOOM) {
+		result.Status = model.RunStatusInitFail
+		result.Reason = "sandbox helper failed before target start: out of memory"
+		result.VerdictSource = "sandbox_helper_oom"
 	}
 	if addressSpaceProximityCanClassifyMLE(runtimeBase) && !disableAddressSpaceLimit && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
 		result.Status = model.RunStatusMLE
