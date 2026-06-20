@@ -1220,6 +1220,36 @@ func TestRunCommandRejectsFilesystemPrivilegeSyscalls(t *testing.T) {
 	}
 }
 
+func TestRunCommandAllowsChmodForAPECodeCompiler(t *testing.T) {
+	workDir := sandboxWritableTempDir(t)
+	binDir := filepath.Join(workDir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin dir: %v", err)
+	}
+	apecc := filepath.Join(binDir, "apecc")
+	if err := os.WriteFile(apecc, []byte("#!/bin/sh\nset -eu\n: > Main\n/bin/chmod 755 Main\n"), 0o755); err != nil {
+		t.Fatalf("write fake apecc: %v", err)
+	}
+
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		workDir,
+		"apecc",
+		nil,
+		[]string{"PATH=" + binDir},
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("expected apecc chmod to succeed, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+	info, err := os.Stat(filepath.Join(workDir, "Main"))
+	if err != nil {
+		t.Fatalf("stat compiled output: %v", err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Fatalf("compiled output mode = %v, want executable bit", info.Mode().Perm())
+	}
+}
+
 func TestRunCommandRejectsKernelAttackSurfaceSyscalls(t *testing.T) {
 	cc, err := exec.LookPath("cc")
 	if err != nil {
