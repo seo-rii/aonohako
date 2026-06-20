@@ -398,6 +398,7 @@ The interactor is invoked as:
 | SED | `sed` | `sed -n -f` syntax check |
 | BC | `bc` | Pass-through artifacts (requires at least one `.bc`) |
 | BEFUNGE | `befunge` | Pass-through artifacts (requires `.bef` or `.bf93`) |
+| APECODE | `apecode` | `apecc -o <target> <source.ape>` |
 | FORTH, GFORTH | `forth` | Pass-through artifacts (requires `.fs`, `.fth`, or `.4th`) |
 | BQN | `bqn` | Pass-through BQN source artifacts |
 | APL, GNU_APL | `apl` | Pass-through APL source artifacts |

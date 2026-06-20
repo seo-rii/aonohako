@@ -124,6 +124,7 @@ var profiles = map[string]Profile{
 	"BEFUNGE":       {SourceLang: "BEFUNGE", Extension: "bef", CompileKind: "befunge", RunLang: "befunge", TimeMultiplier: 4, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"BF":            {SourceLang: "BF", Extension: "bf", CompileKind: "brainfuck", RunLang: "brainfuck", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"LOLCODE":       {SourceLang: "LOLCODE", Extension: "lol", CompileKind: "lolcode", RunLang: "lolcode", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"APECODE":       {SourceLang: "APECODE", Extension: "ape", DefaultTarget: "Main", CompileKind: "apecode", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"WASM":          {SourceLang: "WASM", Extension: "wat", DefaultTarget: "Main.wasm", CompileKind: "wasm", RunLang: "wasm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"OCAML":         {SourceLang: "OCAML", Extension: "ml", DefaultTarget: "Main", CompileKind: "ocaml", RunLang: "ocaml", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"ELIXIR":        {SourceLang: "ELIXIR", Extension: "exs", CompileKind: "elixir", RunLang: "elixir", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1536},

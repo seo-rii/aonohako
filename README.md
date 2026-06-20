@@ -53,7 +53,7 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
-  Lisp/Smalltalk/GolfScript, Befunge, Brainfuck, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
+  Lisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
   submitters compile into binaries and should target the `plain` runtime image

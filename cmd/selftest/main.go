@@ -2406,6 +2406,17 @@ msg:
 				source("Main.lol", "HAI 1.2\nVISIBLE \"ok\"\nKTHXBYE\n"),
 			},
 		},
+		"apecode": {
+			compileLang:    "APECODE",
+			stdin:          "1\n3\n3 1 2\n",
+			expectedStdout: "3 1 2\n",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.ape", `state main {
+  return true;
+}`),
+			},
+		},
 		"j": {
 			compileLang:    "J",
 			expectedStdout: "ok\n",

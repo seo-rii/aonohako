@@ -22,7 +22,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 19 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -92,6 +92,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-ada",
 		"ci-agda",
 		"ci-aheui",
+		"ci-apecode",
 		"ci-apl",
 		"ci-asm",
 		"ci-awk",
@@ -247,6 +248,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 
 	tests := map[string][]string{
 		"aheui":         {"Hello, World!", "Main.aheui"},
+		"apecode":       {"APECODE_COMMIT=c31d5eb102aeb5a31aa79754bac3a9b0d8a1e740", "python3 -m pip install --break-system-packages --no-cache-dir /tmp/apecode.tar.gz", "apecc -o Main Main.ape", "state main", "3 1 2"},
 		"ada":           {"gnatmake", "Broken.adb"},
 		"agda":          {"agda Main.agda", "data Unit : Set"},
 		"apl":           {"kanapl@0.0.0", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl"},

@@ -50,12 +50,56 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "lolcode", "wasm",
+		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestAPECodeCompilerUsesApeccTarget(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.ape"), []byte("state main { return true; }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("#!/usr/bin/env python3\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := singleSourceExecutableCompiler{
+		exts:           []string{".ape"},
+		preferredBases: []string{"Main.ape"},
+		noSourceReason: "no apecode sources",
+		bin:            "apecc",
+		args: func(job CompileJob, sourcePath string) []string {
+			return []string{"-o", outputPath(job), sourcePath}
+		},
+	}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.ape"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	wantArgs := []string{"-o", filepath.Join(workDir, "Main"), filepath.Join(workDir, "Main.ape")}
+	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
+		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
 	}
 }
 
