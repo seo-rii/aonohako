@@ -13,7 +13,7 @@ import (
 
 const (
 	MaxTextFieldBytes   = 64 << 20
-	MaxTimeMs           = 60_000
+	MaxTimeMs           = 600_000
 	MaxMemoryMB         = 4096
 	MaxOutputBytes      = 64 << 20
 	MaxWorkspaceBytes   = 1 << 30

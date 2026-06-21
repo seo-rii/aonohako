@@ -78,7 +78,7 @@ error.
   "stdin": "hello\n",                        // input fed to process stdin (max 16 MiB)
   "expected_stdout": "hello\n",              // expected output for built-in diff (max 16 MiB)
   "limits": {
-    "time_ms": 2000,                         // wall-clock time limit, 1..60000 ms
+    "time_ms": 2000,                         // wall-clock time limit, 1..600000 ms
     "memory_mb": 256,                        // memory limit, 1..4096 MB
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..8388608
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
