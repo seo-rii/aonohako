@@ -143,12 +143,16 @@ func TestValidateStepPipelineRejectsAPILevelDriftCases(t *testing.T) {
 			want: "stdin_parts must reference",
 		},
 		{
-			name: "unresolved stdin part data url",
+			name: "stdin part data with data url",
 			edit: func(req *model.RunRequest) {
 				req.Steps[0].Stdin = ""
-				req.Steps[0].StdinParts = []model.StdinPart{{Type: "text", DataURL: "https://example.invalid/stdin"}}
+				req.Steps[0].StdinParts = []model.StdinPart{{
+					Type:    "text",
+					Data:    "input\n",
+					DataURL: "https://example.invalid/stdin",
+				}}
 			},
-			want: "data_url must be resolved",
+			want: "cannot combine data with data_url",
 		},
 		{
 			name: "duplicate program binary path",
@@ -192,6 +196,18 @@ func TestValidateRunRequestCoversLegacyAndStepModes(t *testing.T) {
 	}
 
 	legacy.Stdin = ""
+	legacy.StdinURL = "https://example.invalid/stdin"
+	if err := Validate(legacy); err != nil {
+		t.Fatalf("legacy stdin_url request should validate: %v", err)
+	}
+
+	legacy.Stdin = "input\n"
+	if err := Validate(legacy); err == nil || !strings.Contains(err.Error(), "cannot combine inline content with url") {
+		t.Fatalf("conflicting legacy stdin_url error = %v", err)
+	}
+
+	legacy.Stdin = ""
+	legacy.StdinURL = ""
 	legacy.Binaries[0].DataB64 = "!!!!"
 	if err := Validate(legacy); err == nil || !strings.Contains(err.Error(), "invalid base64") {
 		t.Fatalf("invalid legacy binary base64 error = %v", err)

@@ -77,7 +77,7 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 	}
 	defer os.RemoveAll(interactorWorkDir)
 
-	inputPath, err := writeTempFile(filepath.Join(interactorWS.RootDir, ".tmp"), "interactive-input-*", req.Stdin)
+	inputPath, err := writeStdinTempFile(ctx, filepath.Join(interactorWS.RootDir, ".tmp"), "interactive-input-*", req)
 	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactive input materialization failed: " + err.Error()}
 	}

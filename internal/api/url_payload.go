@@ -36,8 +36,8 @@ func resolveCompilePayloadURLs(ctx context.Context, req *model.CompileRequest) e
 }
 
 func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
-	if err := resolveTextURL(ctx, "stdin", &req.Stdin, &req.StdinURL, runvalidation.MaxTextFieldBytes); err != nil {
-		return err
+	if err := validateOptionalPayloadURL(req.StdinURL); err != nil {
+		return fmt.Errorf("stdin_url: %w", err)
 	}
 	if err := resolveTextURL(ctx, "expected_stdout", &req.ExpectedStdout, &req.ExpectedStdoutURL, runvalidation.MaxTextFieldBytes); err != nil {
 		return err
@@ -51,12 +51,12 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 		}
 	}
 	for i := range req.Steps {
-		if err := resolveTextURL(ctx, fmt.Sprintf("steps[%d].stdin", i), &req.Steps[i].Stdin, &req.Steps[i].StdinURL, runvalidation.MaxTextFieldBytes); err != nil {
-			return err
+		if err := validateOptionalPayloadURL(req.Steps[i].StdinURL); err != nil {
+			return fmt.Errorf("steps[%d].stdin_url: %w", i, err)
 		}
 		for j := range req.Steps[i].StdinParts {
-			if err := resolveTextURL(ctx, fmt.Sprintf("steps[%d].stdin_parts[%d].data", i, j), &req.Steps[i].StdinParts[j].Data, &req.Steps[i].StdinParts[j].DataURL, runvalidation.MaxTextFieldBytes); err != nil {
-				return err
+			if err := validateOptionalPayloadURL(req.Steps[i].StdinParts[j].DataURL); err != nil {
+				return fmt.Errorf("steps[%d].stdin_parts[%d].data_url: %w", i, j, err)
 			}
 		}
 	}
@@ -71,6 +71,13 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 		}
 	}
 	return nil
+}
+
+func validateOptionalPayloadURL(rawURL string) error {
+	if strings.TrimSpace(rawURL) == "" {
+		return nil
+	}
+	return validatePayloadURL(rawURL)
 }
 
 func resolveBinaryURLs(ctx context.Context, label string, binaries []model.Binary) error {

@@ -44,12 +44,13 @@ type execResult struct {
 }
 
 type sandboxStreamConfig struct {
-	stdin        io.Reader
-	liveStdin    bool
-	stdout       io.Writer
-	onStdoutDone func()
-	stderr       io.Writer
-	onStderrDone func()
+	stdin         io.Reader
+	stdinMaxBytes int64
+	liveStdin     bool
+	stdout        io.Writer
+	onStdoutDone  func()
+	stderr        io.Writer
+	onStderrDone  func()
 }
 
 type teeCaptureWriter struct {
@@ -69,17 +70,21 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	limits := req.Limits
 	timeMs := max(1, limits.TimeMs)
 	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
 	defer cancel()
 
-	return executeSandboxCommand(ctx, ws, command, req, stdinReader, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	return executeSandboxCommandWithStdinLimit(ctx, ws, command, req, stdinReader, stdinMaxBytes, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
 
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
-	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{stdin: stdinReader}, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	return executeSandboxCommandWithStdinLimit(ctx, ws, command, req, stdinReader, 0, hooks, outputLimitBytes, tuning, cgroupParentDir)
+}
+
+func executeSandboxCommandWithStdinLimit(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{stdin: stdinReader, stdinMaxBytes: stdinMaxBytes}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
 
 func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
@@ -284,6 +289,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		if stdinReader == nil {
 			stdinReader = strings.NewReader(req.Stdin)
 		}
+		stdinMaxBytes := streams.stdinMaxBytes
+		if stdinMaxBytes <= 0 {
+			stdinMaxBytes = runvalidation.MaxTextFieldBytes
+		}
 		stdinTemp, err := os.CreateTemp(filepath.Join(ws.RootDir, ".tmp"), "stdin-*")
 		if err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
@@ -292,11 +301,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			_ = stdinTemp.Close()
 			_ = os.Remove(stdinTemp.Name())
 		}()
-		written, err := io.Copy(stdinTemp, io.LimitReader(stdinReader, runvalidation.MaxTextFieldBytes+1))
+		written, err := io.Copy(stdinTemp, io.LimitReader(stdinReader, stdinMaxBytes+1))
 		if err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
 		}
-		if written > runvalidation.MaxTextFieldBytes {
+		if written > stdinMaxBytes {
 			return execResult{Status: model.RunStatusInitFail, Reason: "stdin too large"}
 		}
 		if err := stdinTemp.Chown(65532, 65532); err != nil {

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +22,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/workspacequota"
 )
 
@@ -711,6 +714,85 @@ func TestRunTwoStepPipelineComposesStdinParts(t *testing.T) {
 	}
 	if len(resp.Steps) != 2 || resp.Steps[1].Status != model.RunStatusAccepted {
 		t.Fatalf("unexpected step results: %+v", resp.Steps)
+	}
+}
+
+func TestRunConsumesLargeStdinURL(t *testing.T) {
+	forceDirectMode(t)
+
+	inputBytes := runvalidation.MaxTextFieldBytes + 1024
+	chunk := bytes.Repeat([]byte("x"), 64<<10)
+	inputServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", inputBytes))
+		for written := 0; written < inputBytes; {
+			size := min(len(chunk), inputBytes-written)
+			n, err := w.Write(chunk[:size])
+			written += n
+			if err != nil {
+				return
+			}
+		}
+	}))
+	defer inputServer.Close()
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "count.sh",
+			DataB64: b64("#!/bin/sh\nwc -c | tr -d ' '\n"),
+			Mode:    "exec",
+		}},
+		StdinURL:       inputServer.URL,
+		ExpectedStdout: fmt.Sprintf("%d\n", inputBytes),
+		Limits: model.Limits{
+			TimeMs:         5000,
+			MemoryMB:       128,
+			WorkspaceBytes: int64(inputBytes + 4<<20),
+		},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted for large stdin_url, got %+v", resp)
+	}
+}
+
+func TestAssembleStepStdinPartsConsumesLargeDataURL(t *testing.T) {
+	inputBytes := runvalidation.MaxTextFieldBytes + 1024
+	chunk := bytes.Repeat([]byte("x"), 64<<10)
+	inputServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", inputBytes))
+		for written := 0; written < inputBytes; {
+			size := min(len(chunk), inputBytes-written)
+			n, err := w.Write(chunk[:size])
+			written += n
+			if err != nil {
+				return
+			}
+		}
+	}))
+	defer inputServer.Close()
+
+	step := model.RunStep{
+		ID: "encode",
+		StdinParts: []model.StdinPart{{
+			Type:    "text",
+			DataURL: inputServer.URL,
+		}},
+		Limits: model.Limits{WorkspaceBytes: int64(inputBytes + 4<<20)},
+	}
+	stdinFile, err := assembleStepStdinParts(context.Background(), step, nil, t.TempDir(), stdinURLMaxBytes(step.Limits))
+	if err != nil {
+		t.Fatalf("assembleStepStdinParts returned error: %v", err)
+	}
+	defer stdinFile.Close()
+
+	info, err := stdinFile.Stat()
+	if err != nil {
+		t.Fatalf("stat stdin file: %v", err)
+	}
+	if info.Size() != int64(inputBytes) {
+		t.Fatalf("stdin file size = %d, want %d", info.Size(), inputBytes)
 	}
 }
 

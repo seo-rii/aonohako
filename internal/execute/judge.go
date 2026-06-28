@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -182,7 +183,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	}
 	defer os.Remove(spjPath)
 
-	inputPath, err := writeTempFile(filepath.Join(spjWS.RootDir, ".tmp"), "spj-input-*", req.Stdin)
+	inputPath, err := writeStdinTempFile(ctx, filepath.Join(spjWS.RootDir, ".tmp"), "spj-input-*", req)
 	if err != nil {
 		return false, nil, err
 	}
@@ -225,7 +226,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	spjReq := &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false}
 	args := buildCommandWithRuntimeTuning(spjPath, spjLang, spjReq, tuning)
 	args = append(args, inputPath, solutionPath, outputPath)
-	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, nil, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)
+	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, nil, 0, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
@@ -254,15 +255,38 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	return false, nil, nil
 }
 
+func writeStdinTempFile(ctx context.Context, dir, pattern string, req *model.RunRequest) (string, error) {
+	if strings.TrimSpace(req.StdinURL) == "" {
+		return writeTempFile(dir, pattern, req.Stdin)
+	}
+	maxBytes := stdinURLMaxBytes(req.Limits)
+	stdinURLReader, err := openStdinURL(ctx, req.StdinURL, maxBytes)
+	if err != nil {
+		return "", err
+	}
+	defer stdinURLReader.Close()
+	return writeTempFileFromReader(dir, pattern, stdinURLReader, maxBytes)
+}
+
 func writeTempFile(dir, pattern, content string) (string, error) {
+	return writeTempFileFromReader(dir, pattern, strings.NewReader(content), int64(len(content)))
+}
+
+func writeTempFileFromReader(dir, pattern string, reader io.Reader, maxBytes int64) (string, error) {
 	file, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return "", err
 	}
-	if _, err := file.WriteString(content); err != nil {
+	written, err := io.Copy(file, io.LimitReader(reader, maxBytes+1))
+	if err != nil {
 		file.Close()
 		os.Remove(file.Name())
 		return "", err
+	}
+	if written > maxBytes {
+		file.Close()
+		os.Remove(file.Name())
+		return "", fmt.Errorf("stdin too large")
 	}
 	if err := file.Close(); err != nil {
 		os.Remove(file.Name())

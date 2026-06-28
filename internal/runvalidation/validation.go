@@ -41,6 +41,9 @@ func Validate(req *model.RunRequest) error {
 	if len(req.Stdin) > MaxTextFieldBytes {
 		return fmt.Errorf("stdin too large: max %d bytes", MaxTextFieldBytes)
 	}
+	if req.Stdin != "" && strings.TrimSpace(req.StdinURL) != "" {
+		return fmt.Errorf("stdin cannot combine inline content with url")
+	}
 	if len(req.ExpectedStdout) > MaxTextFieldBytes {
 		return fmt.Errorf("expected_stdout too large: max %d bytes", MaxTextFieldBytes)
 	}
@@ -149,6 +152,9 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		if len(step.StdinParts) > 0 && (step.Stdin != "" || strings.TrimSpace(step.StdinURL) != "" || strings.TrimSpace(step.StdinFrom) != "") {
 			return fmt.Errorf("step %s stdin_parts cannot be combined with stdin, stdin_url, or stdin_from", step.ID)
 		}
+		if step.Stdin != "" && strings.TrimSpace(step.StdinURL) != "" {
+			return fmt.Errorf("step %s stdin cannot combine inline content with url", step.ID)
+		}
 		if len(step.Stdin) > MaxTextFieldBytes {
 			return fmt.Errorf("step %s stdin too large: max %d bytes", step.ID, MaxTextFieldBytes)
 		}
@@ -224,8 +230,8 @@ func ValidateStepStdinParts(step model.RunStep, firstStep bool, handoffID string
 			if strings.TrimSpace(part.ID) != "" || strings.TrimSpace(part.From) != "" {
 				return false, fmt.Errorf("step %s stdin_parts[%d] text part cannot reference a handoff", step.ID, i)
 			}
-			if strings.TrimSpace(part.DataURL) != "" {
-				return false, fmt.Errorf("step %s stdin_parts[%d].data_url must be resolved before validation", step.ID, i)
+			if part.Data != "" && strings.TrimSpace(part.DataURL) != "" {
+				return false, fmt.Errorf("step %s stdin_parts[%d] text part cannot combine data with data_url", step.ID, i)
 			}
 			totalTextBytes += len(part.Data)
 			if totalTextBytes > MaxTextFieldBytes {

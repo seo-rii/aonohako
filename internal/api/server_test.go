@@ -270,8 +270,8 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 			},
 			check: func(t *testing.T, req *model.RunRequest) {
 				t.Helper()
-				if req.Stdin != "hello\n" || req.ExpectedStdout != "world\n" {
-					t.Fatalf("text fields were not resolved: stdin=%q expected=%q", req.Stdin, req.ExpectedStdout)
+				if req.Stdin != "" || req.StdinURL != assetServer.URL+"/stdin" || req.ExpectedStdout != "world\n" {
+					t.Fatalf("unexpected text fields: stdin=%q stdin_url=%q expected=%q", req.Stdin, req.StdinURL, req.ExpectedStdout)
 				}
 				if got, _ := base64.StdEncoding.DecodeString(req.Binaries[0].DataB64); string(got) != "#!/bin/sh\ncat\n" {
 					t.Fatalf("binary url was not resolved: %q", string(got))
@@ -307,6 +307,9 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 			},
 			check: func(t *testing.T, req *model.RunRequest) {
 				t.Helper()
+				if req.Stdin != "" || req.StdinURL != assetServer.URL+"/stdin" || req.ExpectedStdout != "world\n" {
+					t.Fatalf("unexpected text fields: stdin=%q stdin_url=%q expected=%q", req.Stdin, req.StdinURL, req.ExpectedStdout)
+				}
 				if req.Interactor == nil || len(req.Interactor.Binaries) != 1 {
 					t.Fatalf("interactor was not preserved: %+v", req.Interactor)
 				}
@@ -360,11 +363,11 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 			},
 			check: func(t *testing.T, req *model.RunRequest) {
 				t.Helper()
-				if req.Steps[0].Stdin != "hello\n" || req.ExpectedStdout != "world\n" {
-					t.Fatalf("step text urls were not resolved: step=%q expected=%q", req.Steps[0].Stdin, req.ExpectedStdout)
+				if req.Steps[0].Stdin != "" || req.Steps[0].StdinURL != assetServer.URL+"/stdin" || req.ExpectedStdout != "world\n" {
+					t.Fatalf("unexpected step text fields: step=%q step_url=%q expected=%q", req.Steps[0].Stdin, req.Steps[0].StdinURL, req.ExpectedStdout)
 				}
-				if len(req.Steps[1].StdinParts) != 2 || req.Steps[1].StdinParts[0].Data != "DECODE\n" || req.Steps[1].StdinParts[0].DataURL != "" {
-					t.Fatalf("stdin_parts url was not resolved: %+v", req.Steps[1].StdinParts)
+				if len(req.Steps[1].StdinParts) != 2 || req.Steps[1].StdinParts[0].Data != "" || req.Steps[1].StdinParts[0].DataURL != assetServer.URL+"/prefix" {
+					t.Fatalf("unexpected stdin_parts url state: %+v", req.Steps[1].StdinParts)
 				}
 				if got, _ := base64.StdEncoding.DecodeString(req.Programs[1].Binaries[0].DataB64); string(got) != "#!/bin/sh\ncat\n" {
 					t.Fatalf("program binary url was not resolved: %q", string(got))
