@@ -15,6 +15,16 @@ func TestOpenFileLimitForCommandKeepsDotnetCompatible(t *testing.T) {
 	if got := OpenFileLimitForCommand("/usr/local/bin/isabelle"); got != 512 {
 		t.Fatalf("isabelle open file limit = %d, want 512", got)
 	}
+	for _, command := range []string{
+		"/usr/local/bin/fstar.exe",
+		"/usr/local/bin/aonohako-alloy-check",
+		"/usr/local/bin/aonohako-acl2-check",
+		"/usr/local/bin/aonohako-kframework-check",
+	} {
+		if got := OpenFileLimitForCommand(command); got != 512 {
+			t.Fatalf("%s open file limit = %d, want 512", command, got)
+		}
+	}
 	if got := OpenFileLimitForCommand("/usr/bin/python3"); got != 64 {
 		t.Fatalf("python open file limit = %d, want 64", got)
 	}
@@ -67,6 +77,10 @@ func TestStackLimitForCommandUsesInheritedHardLimit(t *testing.T) {
 		"/usr/local/bin/dafny",
 		"/usr/local/bin/aonohako-tla-run",
 		"/usr/local/bin/isabelle",
+		"/usr/local/bin/fstar.exe",
+		"/usr/local/bin/aonohako-alloy-check",
+		"/usr/local/bin/aonohako-acl2-check",
+		"/usr/local/bin/aonohako-kframework-check",
 		"/usr/bin/python3",
 		"/tmp/Main",
 	} {

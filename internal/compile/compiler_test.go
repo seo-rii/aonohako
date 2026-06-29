@@ -44,7 +44,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
 		"pascal", "delphi", "objectpascal", "nim", "zig", "sml", "idris2", "ada", "d",
 		"rust", "go", "java", "groovy", "clojure",
-		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3",
+		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
@@ -103,6 +103,39 @@ func TestCompileRegistryCoversProfileCompileKinds(t *testing.T) {
 		if _, ok := lookupCompiler(profile.CompileKind); !ok {
 			t.Fatalf("profile %s references missing compiler kind %q", language, profile.CompileKind)
 		}
+	}
+}
+
+func TestKFrameworkCompilerUsesMainDefinition(t *testing.T) {
+	workDir := t.TempDir()
+	for name, content := range map[string]string{
+		"Helper.k": "module HELPER\nendmodule\n",
+		"Main.k":   "module MAIN\nendmodule\n",
+	} {
+		if err := os.WriteFile(filepath.Join(workDir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
+
+	resp := kFrameworkCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{
+			{Name: "Helper.k"},
+			{Name: "Main.k"},
+		}},
+		Runner: runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("runner commands = %+v", runner.commands)
+	}
+	wantArgs := []string{filepath.Join(workDir, "Main.k")}
+	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
+		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
 	}
 }
 

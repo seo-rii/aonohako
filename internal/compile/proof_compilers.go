@@ -113,6 +113,33 @@ func compileIsabelle(ctx context.Context, workDir string, sources []model.Source
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type kFrameworkCompiler struct{}
+
+func (kFrameworkCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	sourcePath := selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".k"}, "Main.k")
+	if sourcePath == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no kframework sources"}
+	}
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	result := runner.Run(ctx, job.WorkDir, "aonohako-kframework-check", []string{sourcePath}, kFrameworkCompileEnv(job.WorkDir))
+	if result.Status != model.CompileStatusOK {
+		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
+	}
+	artifacts, err := collectArtifacts(job.WorkDir, func(name string) bool {
+		return strings.EqualFold(filepath.Ext(name), ".k")
+	}, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
+}
+
 type ocamlCompiler struct{}
 
 func (ocamlCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
@@ -172,5 +199,12 @@ func isabelleCompileEnv(workDir string) []string {
 		"ISABELLE_TOOL_JAVA_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
 		"ISABELLE_JAVA_SYSTEM_OPTIONS=-Xms64m -Xmx1024m -Xss1m -XX:+UseSerialGC",
 		"ISABELLE_TMP_PREFIX=" + tmp,
+	}
+}
+
+func kFrameworkCompileEnv(workDir string) []string {
+	tmp := filepath.Join(workDir, ".tmp")
+	return []string{
+		fmt.Sprintf("JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=%s -Xms64m -Xmx2048m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=512m -XX:CompressedClassSpaceSize=128m", tmp),
 	}
 }

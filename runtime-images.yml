@@ -2153,6 +2153,116 @@ languages:
           printf '%s\n' 'query { ok }' > Main.graphql
           aonohako-graphql-run Main.graphql | grep '{"data":{"ok":"ok"}}'
 
+  fstar:
+    install:
+      apt:
+        - curl
+        - tar
+        - wget
+      script:
+        - export FSTAR_VERSION=2026.06.28
+        - export FSTAR_URL="https://github.com/FStarLang/FStar/releases/download/v${FSTAR_VERSION}/fstar-v${FSTAR_VERSION}-Linux-x86_64.tar.gz"
+        - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$FSTAR_URL" -o /tmp/fstar.tar.gz || wget --tries=6 --waitretry=2 -O /tmp/fstar.tar.gz "$FSTAR_URL"
+        - rm -rf /opt/fstar "/opt/fstar-${FSTAR_VERSION}"
+        - tar -xzf /tmp/fstar.tar.gz -C /opt
+        - mv /opt/fstar "/opt/fstar-${FSTAR_VERSION}"
+        - ln -sfn "/opt/fstar-${FSTAR_VERSION}" /opt/fstar
+        - ln -sfn /opt/fstar/bin/fstar.exe /usr/local/bin/fstar.exe
+        - ln -sfn /opt/fstar/bin/fstar.exe /usr/local/bin/fstar
+        - rm -f /tmp/fstar.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.fst <<'FSTAR'
+          module Main
+          let ok () : Lemma (1 + 1 == 2) = ()
+          FSTAR
+          fstar.exe Main.fst
+
+  alloy:
+    install:
+      apt:
+        - curl
+        - default-jre-headless
+        - python3
+        - wget
+      script:
+        - export ALLOY_VERSION=6.2.0
+        - export ALLOY_URL="https://github.com/AlloyTools/org.alloytools.alloy/releases/download/v${ALLOY_VERSION}/org.alloytools.alloy.dist.jar"
+        - install -d -m 0755 /usr/local/lib/aonohako
+        - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$ALLOY_URL" -o /usr/local/lib/aonohako/alloy.jar || wget --tries=6 --waitretry=2 -O /usr/local/lib/aonohako/alloy.jar "$ALLOY_URL"
+        - chmod 0644 /usr/local/lib/aonohako/alloy.jar
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.als <<'ALLOY'
+          sig A {}
+          assert ok { all a: A | a = a }
+          check ok for 3
+          run { some A } for 1
+          ALLOY
+          aonohako-alloy-check Main.als
+          cat > Broken.als <<'ALLOY'
+          sig A {}
+          assert bad { no A }
+          check bad for exactly 1 A
+          ALLOY
+          if aonohako-alloy-check Broken.als >/dev/null 2>&1; then exit 1; fi
+
+  acl2:
+    install:
+      apt:
+        - acl2
+        - bash
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.lisp <<'ACL2'
+          (in-package "ACL2")
+          (defthm plus-zero-right
+            (implies (integerp x)
+                     (equal (+ x 0) x)))
+          ACL2
+          aonohako-acl2-check Main.lisp
+          cat > Broken.lisp <<'ACL2'
+          (in-package "ACL2")
+          (defthm bad (equal (+ 1 1) 2))
+          ACL2
+          if aonohako-acl2-check Broken.lisp >/dev/null 2>&1; then exit 1; fi
+
+  kframework:
+    install:
+      apt:
+        - curl
+        - default-jre-headless
+        - python3
+      script:
+        - export KFRAMEWORK_VERSION=7.1.337
+        - export KFRAMEWORK_URL="https://github.com/runtimeverification/k/releases/download/v${KFRAMEWORK_VERSION}/kframework_${KFRAMEWORK_VERSION}_amd64_ubuntu_noble.deb"
+        - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$KFRAMEWORK_URL" -o /tmp/kframework.deb
+        - apt-get update
+        - apt-get install -y --no-install-recommends /tmp/kframework.deb
+        - rm -f /tmp/kframework.deb
+        - rm -rf /var/lib/apt/lists/*
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.k <<'K'
+          module MAIN
+            imports INT
+            syntax Exp ::= Int
+          endmodule
+          K
+          aonohako-kframework-check Main.k
+
   lean4:
     install:
       apt:
@@ -2889,3 +2999,13 @@ profiles:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     languages:
       - lean4
+  type-t:
+    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    languages:
+      - acl2
+      - alloy
+      - fstar
+  type-u:
+    base_image: ubuntu:noble@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54
+    languages:
+      - kframework

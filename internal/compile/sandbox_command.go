@@ -123,16 +123,16 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// address ranges during startup, so finite RLIMIT_AS values can fail before
 	// user code. Dotnet-like commands get a high finite RLIMIT_FSIZE floor
 	// because lower file-size rlimits can break CoreCLR/F# startup before user code.
-	disableAddressSpaceLimit := isDotnetLike || commandName == "c3c" || commandName == "carbon" || commandName == "kotlinc" || commandName == "spago" || isIsabelle
-	allowProcessGroups := commandName == "swiftc" || commandName == "hare" || isIsabelle
-	allowChmod := isDotnetLike || commandName == "apecc" || commandName == "gleam" || commandName == "hare" || commandName == "idris2" || commandName == "rescript" || isIsabelle
+	disableAddressSpaceLimit := isDotnetLike || commandName == "aonohako-kframework-check" || commandName == "c3c" || commandName == "carbon" || commandName == "fstar.exe" || commandName == "kotlinc" || commandName == "kompile" || commandName == "spago" || isIsabelle
+	allowProcessGroups := commandName == "aonohako-kframework-check" || commandName == "swiftc" || commandName == "hare" || commandName == "kompile" || isIsabelle
+	allowChmod := isDotnetLike || commandName == "aonohako-kframework-check" || commandName == "apecc" || commandName == "gleam" || commandName == "hare" || commandName == "idris2" || commandName == "kompile" || commandName == "rescript" || isIsabelle
 	allowExecveat := commandName == "hare"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
 	if commandName == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
-	if commandName == "kotlinc" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" || commandName == "spago" {
+	if commandName == "aonohako-kframework-check" || commandName == "kotlinc" || commandName == "kompile" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" || commandName == "spago" {
 		memoryLimitMB = 4096
 	}
 	memoryLimitKB := int64(memoryLimitMB) * 1024

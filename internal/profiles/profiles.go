@@ -106,6 +106,10 @@ var profiles = map[string]Profile{
 	"WHY3":          {SourceLang: "WHY3", Extension: "mlw", CompileKind: "why3", RunLang: "why3", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"WHYML":         {SourceLang: "WHYML", Extension: "mlw", CompileKind: "why3", RunLang: "why3", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"ISABELLE":      {SourceLang: "ISABELLE", Extension: "thy", CompileKind: "isabelle", RunLang: "isabelle", TimeMultiplier: 4, TimeOffsetMs: 3000, MemoryMultiplier: 3, MemoryOffsetMB: 2048},
+	"FSTAR":         {SourceLang: "FSTAR", Extension: "fst", CompileKind: "fstar", RunLang: "fstar", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1536},
+	"ALLOY":         {SourceLang: "ALLOY", Extension: "als", CompileKind: "alloy", RunLang: "alloy", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	"ACL2":          {SourceLang: "ACL2", Extension: "lisp", CompileKind: "acl2", RunLang: "acl2", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1536},
+	"KFRAMEWORK":    {SourceLang: "KFRAMEWORK", Extension: "k", CompileKind: "kframework", RunLang: "kframework", TimeMultiplier: 4, TimeOffsetMs: 3000, MemoryMultiplier: 3, MemoryOffsetMB: 2048},
 	"HASKELL":       {SourceLang: "HASKELL", Extension: "hs", DefaultTarget: "Main", CompileKind: "haskell", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"IDRIS2":        {SourceLang: "IDRIS2", Extension: "idr", DefaultTarget: "Main", CompileKind: "idris2", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"SML":           {SourceLang: "SML", Extension: "sml", DefaultTarget: "Main", CompileKind: "sml", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
@@ -201,7 +205,7 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
-	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "coffeescript", "raku", "sed", "bc", "forth":
+	case "binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "coffeescript", "raku", "sed", "bc", "forth":
 		return key
 	case "coq":
 		return "rocq"
@@ -227,6 +231,10 @@ func NormalizeRunLang(language string) string {
 		return "tla"
 	case "whyml":
 		return "why3"
+	case "f*", "f-star":
+		return "fstar"
+	case "k", "k-framework":
+		return "kframework"
 	case "gst":
 		return "smalltalk"
 	case "gnu-apl":

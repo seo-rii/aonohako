@@ -2513,6 +2513,44 @@ theorem ok: True by simp
 end`),
 			},
 		},
+		"fstar": {
+			compileLang: "FSTAR",
+			limits:      model.Limits{TimeMs: 20000, MemoryMB: 2048},
+			sources: []model.Source{
+				source("Main.fst", `module Main
+let ok () : Lemma (1 + 1 == 2) = ()`),
+			},
+		},
+		"alloy": {
+			compileLang: "ALLOY",
+			limits:      model.Limits{TimeMs: 20000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.als", `sig A {}
+assert ok { all a: A | a = a }
+check ok for 3
+run { some A } for 1`),
+			},
+		},
+		"acl2": {
+			compileLang: "ACL2",
+			limits:      model.Limits{TimeMs: 20000, MemoryMB: 2048},
+			sources: []model.Source{
+				source("Main.lisp", `(in-package "ACL2")
+(defthm plus-zero-right
+  (implies (integerp x)
+           (equal (+ x 0) x)))`),
+			},
+		},
+		"kframework": {
+			compileLang: "KFRAMEWORK",
+			limits:      model.Limits{TimeMs: 60000, MemoryMB: 4096},
+			sources: []model.Source{
+				source("Main.k", `module MAIN
+  imports INT
+  syntax Exp ::= Int
+endmodule`),
+			},
+		},
 		"csharp": {
 			compileLang:    "CSHARP",
 			expectedStdout: "ok\n",

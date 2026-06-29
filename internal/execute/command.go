@@ -148,7 +148,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			dynamicSpaceMB = 512
 		}
 		return []string{"sbcl", "--noinform", "--dynamic-space-size", fmt.Sprintf("%d", dynamicSpaceMB), "--script", primaryPath}
-	case "rocq", "coq", "lean4", "agda", "dafny", "why3", "isabelle":
+	case "rocq", "coq", "lean4", "agda", "dafny", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework":
 		// These are proof/check profiles. The compile phase already performed
 		// the verification step, so execute only preserves the compile/execute
 		// API contract.

@@ -366,6 +366,10 @@ The interactor is invoked as:
 | TLA, TLAPLUS | `tla` | TLA+ model/tooling pass-through plus runner wrapper |
 | WHY3, WHYML | `why3` | `why3` proof wrapper |
 | ISABELLE | `isabelle` | `isabelle process_theories -o naproche_server=false -D .` |
+| FSTAR | `fstar` | `fstar.exe` verification |
+| ALLOY | `alloy` | Alloy CLI execution plus receipt validation |
+| ACL2 | `acl2` | ACL2 batch proof wrapper |
+| KFRAMEWORK | `kframework` | `kompile --backend llvm` definition check |
 | OCAML | `ocaml` | `ocamlopt` |
 | ELIXIR | `elixir` | `elixir` parse check |
 | CSHARP | `csharp` | `dotnet publish -p:DefineConstants=ONLINE_JUDGE` or direct `csc -define:ONLINE_JUDGE` |
@@ -438,6 +442,10 @@ The interactor is invoked as:
 | `tla` | `aonohako-tla-run <file>` |
 | `why3` | `true` (verification is completed during compile) |
 | `isabelle` | `true` (verification is completed during compile) |
+| `fstar` | `true` (verification is completed during compile) |
+| `alloy` | `true` (verification is completed during compile) |
+| `acl2` | `true` (verification is completed during compile) |
+| `kframework` | `true` (verification is completed during compile) |
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
 | `coffeescript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 /usr/local/bin/coffee <file>` |
 | `deno` | `deno run --no-prompt --v8-flags=--max-old-space-size=... <file>` |

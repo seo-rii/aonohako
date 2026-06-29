@@ -489,6 +489,22 @@ if has_language "isabelle"; then
     report_once "Isabelle" isabelle version
 fi
 
+if has_language "fstar"; then
+    report_once "F*" fstar.exe --version
+fi
+
+if has_language "alloy"; then
+    report_once "Alloy" java -jar /usr/local/lib/aonohako/alloy.jar version
+fi
+
+if has_language "acl2"; then
+    report_once "ACL2" sh -c 'printf "%s\n" "(good-bye)" | ACL2_CUSTOMIZATION=NONE acl2 | sed -n "1,12p"'
+fi
+
+if has_language "kframework"; then
+    report_once "K Framework" kompile --version
+fi
+
 if has_language "bqn"; then
     report_once "CBQN" sh -c 'command -v bqn >/dev/null && printf installed'
 fi
@@ -617,4 +633,8 @@ report_compile_option "dafny" "dafny verify --cores 1"
 report_compile_option "tla" "pass-through .tla/.cfg artifacts"
 report_compile_option "why3" "aonohako-why3-prove"
 report_compile_option "isabelle" "isabelle process_theories -o naproche_server=false -D ."
+report_compile_option "fstar" "fstar.exe"
+report_compile_option "alloy" "aonohako-alloy-check"
+report_compile_option "acl2" "aonohako-acl2-check"
+report_compile_option "kframework" "aonohako-kframework-check"
 EOF

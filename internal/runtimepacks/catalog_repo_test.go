@@ -18,8 +18,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 19 {
-		t.Fatalf("expected 19 production images, got %d", len(production))
+	if len(production) != 21 {
+		t.Fatalf("expected 21 production images, got %d", len(production))
 	}
 
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
@@ -79,6 +79,12 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[18].Name != "type-s" || !reflect.DeepEqual(production[18].Languages, []string{"lean4"}) {
 		t.Fatalf("type-s production image = %+v", production[18])
 	}
+	if production[19].Name != "type-t" || !reflect.DeepEqual(production[19].Languages, []string{"acl2", "alloy", "fstar"}) {
+		t.Fatalf("type-t production image = %+v", production[19])
+	}
+	if production[20].Name != "type-u" || !reflect.DeepEqual(production[20].Languages, []string{"kframework"}) {
+		t.Fatalf("type-u production image = %+v", production[20])
+	}
 
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
@@ -89,9 +95,11 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		names = append(names, spec.Name)
 	}
 	if !reflect.DeepEqual(names, []string{
+		"ci-acl2",
 		"ci-ada",
 		"ci-agda",
 		"ci-aheui",
+		"ci-alloy",
 		"ci-apecode",
 		"ci-apl",
 		"ci-asm",
@@ -124,6 +132,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-fortran",
 		"ci-freebasic",
 		"ci-fsharp",
+		"ci-fstar",
 		"ci-gdl",
 		"ci-gforth",
 		"ci-gleam",
@@ -142,6 +151,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-java",
 		"ci-javascript",
 		"ci-julia",
+		"ci-kframework",
 		"ci-kotlin",
 		"ci-kotlin-jvm",
 		"ci-lean4",
@@ -248,9 +258,11 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 
 	tests := map[string][]string{
 		"aheui":         {"Hello, World!", "Main.aheui"},
+		"acl2":          {"acl2", "aonohako-acl2-check Main.lisp", "plus-zero-right", "Broken.lisp"},
 		"apecode":       {"APECODE_COMMIT=c7ae98d3dfc1713ecc800422a4c815628776e1e2", "python3 -m pip install --break-system-packages --no-cache-dir /tmp/apecode.tar.gz", "apecc --check Main.ape", "apecc -o Main Main.ape", "./Main", "state main", "3 1 2"},
 		"ada":           {"gnatmake", "Broken.adb"},
 		"agda":          {"agda Main.agda", "data Unit : Set"},
+		"alloy":         {"ALLOY_VERSION=6.2.0", "org.alloytools.alloy.dist.jar", "aonohako-alloy-check Main.als", "check ok for 3", "Broken.als"},
 		"apl":           {"kanapl@0.0.0", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl"},
 		"asm":           {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
 		"awk":           {"gawk --sandbox", "Main.awk"},
@@ -281,6 +293,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"gnucobol":      {"gnucobol", "cobc -x -free -O2 -o Main Main.cob"},
 		"golfscript":    {"golfscript_sandboxed.rb", "Main.gs"},
 		"graphql":       {"graphql-core==3.2.6", "aonohako-graphql-run Main.graphql"},
+		"fstar":         {"FSTAR_VERSION=2026.06.28", "fstar-v${FSTAR_VERSION}-Linux-x86_64.tar.gz", "fstar.exe Main.fst", "Lemma (1 + 1 == 2)"},
 		"hare":          {"hare build -o Main Main.ha", "fmt::println"},
 		"idris2":        {"IDRIS2_VERSION=0.8.0", "make bootstrap SCHEME=chezscheme PREFIX=/usr/local", "idris2 --cg chez -o Main Main.idr", "test -d build/exec/Main_app"},
 		"haxe":          {"haxe -main Main -neko Main.n", "neko Main.n"},
@@ -290,6 +303,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"javascript":    {"node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js"},
 		"groovy":        {"Broken.groovy", "groovyc", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp \"${groovy_cp}\" Main"},
 		"java":          {"javac --release 11 -encoding UTF-8 Main.java", "jar cfm Main.jar MANIFEST.MF Main.class", "java -XX:ReservedCodeCacheSize=64m -XX:-UseCompressedClassPointers -Xmx128m -Xss1m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -XX:+UseSerialGC -DONLINE_JUDGE=1 -jar Main.jar"},
+		"kframework":    {"KFRAMEWORK_VERSION=7.1.337", "kframework_${KFRAMEWORK_VERSION}_amd64_ubuntu_noble.deb", "aonohako-kframework-check Main.k", "imports INT"},
 		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "default-jdk-headless", "kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar", "javac --release 8 -cp Main.jar Helper.java", "jar uf Main.jar Helper.class", "java -Xms64m -Xmx128m -Xss1m -XX:+UseSerialGC -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -DONLINE_JUDGE=1 -jar Main.jar"},
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
 		"lolcode":       {"LCI_VERSION=0.11.2", "cb1065936d3a7463928dcddfc345a8d7d8602678394efc0e54981f9dd98c27d2", "lci Main.lol", `VISIBLE "ok"`},
@@ -499,7 +513,7 @@ func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
 	}
 
 	for _, profileName := range sortedKeys(catalog.Profiles) {
-		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" {
+		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" || profileName == "type-t" || profileName == "type-u" {
 			continue
 		}
 		profile := catalog.Profiles[profileName]

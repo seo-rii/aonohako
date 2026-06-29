@@ -62,6 +62,10 @@ func TestOpenFileLimitForCommandRaisesKnownRuntimeNeeds(t *testing.T) {
 		want    int
 	}{
 		{"/opt/dotnet/dotnet", 512},
+		{"/usr/local/bin/fstar.exe", 512},
+		{"/usr/local/bin/aonohako-alloy-check", 512},
+		{"/usr/local/bin/aonohako-acl2-check", 512},
+		{"/usr/local/bin/aonohako-kframework-check", 512},
 		{"/usr/local/bin/aonohako-tla-run", 512},
 		{"/usr/local/bin/isabelle", 512},
 		{"/usr/bin/Rscript", 256},

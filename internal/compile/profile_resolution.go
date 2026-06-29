@@ -122,6 +122,14 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "WHY3"
 	case "isabelle":
 		l = "ISABELLE"
+	case "fstar", "f*", "f-star":
+		l = "FSTAR"
+	case "alloy":
+		l = "ALLOY"
+	case "acl2":
+		l = "ACL2"
+	case "k", "kframework", "k-framework":
+		l = "KFRAMEWORK"
 	case "lisp":
 		l = "LISP"
 	case "idris2", "idris":
