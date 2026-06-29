@@ -99,8 +99,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "request-specific environment built from fixed base variables") || !strings.Contains(architecture, "does not inherit the server process environment") {
 		t.Fatalf("architecture.md must describe sandbox environment inheritance boundaries")
 	}
-	if !strings.Contains(architecture, "ships shared scratch paths such as `/tmp`, `/var/tmp`, and `/run/lock`") || !strings.Contains(architecture, "entrypoint no longer mutates") {
-		t.Fatalf("architecture.md must describe static scratch hardening without startup mutation")
+	if !strings.Contains(architecture, "ships shared scratch paths such as `/tmp`, `/var/tmp`, and `/run/lock`") || !strings.Contains(architecture, "it tightens a Cloud Run mounted\n`AONOHAKO_WORK_ROOT` to mode `0711`") {
+		t.Fatalf("architecture.md must describe static scratch hardening and Cloud Run work root mode tightening")
 	}
 	if !strings.Contains(architecture, "Server startup validates the deployment contract instead of trusting docs alone.") || !strings.Contains(architecture, "The following checks are enforced before the HTTP server starts") {
 		t.Fatalf("architecture.md must describe startup deployment contract validation")

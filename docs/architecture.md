@@ -294,8 +294,10 @@ workspace, for example `HOME`, `TMPDIR`, `JAVA_TOOL_OPTIONS`,
 
 To avoid escaping into global writable directories, the runtime image itself
 ships shared scratch paths such as `/tmp`, `/var/tmp`, and `/run/lock` with
-non-writable permissions for the sandbox UID. The entrypoint no longer mutates
-container-global scratch state at startup.
+non-writable permissions for the sandbox UID. The entrypoint does not mutate
+container-global scratch state at startup, but it tightens a Cloud Run mounted
+`AONOHAKO_WORK_ROOT` to mode `0711` because the in-memory volume is created
+after the image filesystem has already been built.
 
 ### Output capture
 

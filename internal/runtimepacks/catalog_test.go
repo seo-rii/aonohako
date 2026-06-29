@@ -281,6 +281,62 @@ func TestRuntimeEntrypointPassesThroughToRequestedCommand(t *testing.T) {
 	}
 }
 
+func TestRuntimeEntrypointTightensCloudRunWorkRoot(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "runtime_entrypoint.sh")
+	workRoot := t.TempDir()
+	if err := os.Chmod(workRoot, 0o777); err != nil {
+		t.Fatalf("Chmod(%q): %v", workRoot, err)
+	}
+
+	cmd := exec.Command("/bin/sh", path, "sh", "-c", "printf ok")
+	cmd.Env = append(os.Environ(),
+		"AONOHAKO_DEPLOYMENT_TARGET=cloudrun",
+		"AONOHAKO_WORK_ROOT="+workRoot,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("runtime_entrypoint.sh: %v\n%s", err, string(out))
+	}
+	if string(out) != "ok" {
+		t.Fatalf("runtime_entrypoint.sh must exec the requested command, got %q", string(out))
+	}
+	info, err := os.Stat(workRoot)
+	if err != nil {
+		t.Fatalf("Stat(%q): %v", workRoot, err)
+	}
+	if got := info.Mode().Perm(); got != 0o711 {
+		t.Fatalf("cloudrun work root mode = %03o, want 711", got)
+	}
+}
+
+func TestRuntimeEntrypointLeavesSelfHostedWorkRootModeAlone(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "runtime_entrypoint.sh")
+	workRoot := t.TempDir()
+	if err := os.Chmod(workRoot, 0o777); err != nil {
+		t.Fatalf("Chmod(%q): %v", workRoot, err)
+	}
+
+	cmd := exec.Command("/bin/sh", path, "sh", "-c", "printf ok")
+	cmd.Env = append(os.Environ(),
+		"AONOHAKO_DEPLOYMENT_TARGET=selfhosted",
+		"AONOHAKO_WORK_ROOT="+workRoot,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("runtime_entrypoint.sh: %v\n%s", err, string(out))
+	}
+	if string(out) != "ok" {
+		t.Fatalf("runtime_entrypoint.sh must exec the requested command, got %q", string(out))
+	}
+	info, err := os.Stat(workRoot)
+	if err != nil {
+		t.Fatalf("Stat(%q): %v", workRoot, err)
+	}
+	if got := info.Mode().Perm(); got != 0o777 {
+		t.Fatalf("selfhosted work root mode = %03o, want 777", got)
+	}
+}
+
 func TestSmokeScriptPreservesMultilineSmokeCommands(t *testing.T) {
 	path := filepath.Join("..", "..", "scripts", "smoke_runtime.sh")
 	binDir := t.TempDir()
