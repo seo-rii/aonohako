@@ -29,6 +29,8 @@ on:
           - type-q
           - type-r
           - type-s
+          - type-t
+          - type-u
       tag_prefix:
         description: image tag prefix
         required: true
