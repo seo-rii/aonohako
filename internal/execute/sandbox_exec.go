@@ -30,17 +30,18 @@ import (
 )
 
 type execResult struct {
-	Status          string
-	ExitCode        *int
-	Stdout          []byte
-	Stderr          []byte
-	StdoutTruncated bool
-	StderrTruncated bool
-	MemoryKB        int64
-	WallTimeMs      int64
-	CPUTimeMs       int64
-	Reason          string
-	VerdictSource   string
+	Status           string
+	ExitCode         *int
+	Stdout           []byte
+	Stderr           []byte
+	StdoutTruncated  bool
+	StderrTruncated  bool
+	MemoryKB         int64
+	WallTimeMs       int64
+	CPUTimeMs        int64
+	ProcessCPUTimeMs int64
+	Reason           string
+	VerdictSource    string
 }
 
 type sandboxStreamConfig struct {
@@ -431,7 +432,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	targetStartGraceDeadline := time.Now().Add(100 * time.Millisecond)
 	var cgroupLimitBaseline cgroup.Stats
 	cgroupLimitBaselineSet := false
-	watchdog := time.NewTicker(5 * time.Millisecond)
+	watchdog := time.NewTicker(1 * time.Millisecond)
 	defer watchdog.Stop()
 	lastWorkspaceScan := time.Time{}
 	maxCPUTimeMs := int64(0)
@@ -712,8 +713,11 @@ done:
 			result.Status = model.RunStatusRE
 			result.VerdictSource = "wait_status"
 		}
-		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > result.CPUTimeMs {
-			result.CPUTimeMs = usageCPU
+		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > 0 {
+			result.ProcessCPUTimeMs = usageCPU
+			if !targetStarted && result.CPUTimeMs <= 0 {
+				result.CPUTimeMs = usageCPU
+			}
 		}
 	}
 	helperRuntimeOOM := bytes.Contains(result.Stderr, []byte("fatal error: runtime: out of memory"))

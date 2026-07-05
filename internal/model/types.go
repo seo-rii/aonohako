@@ -100,21 +100,22 @@ type RunStep struct {
 }
 
 type StepResult struct {
-	ID              string `json:"id"`
-	ProgramID       string `json:"program_id,omitempty"`
-	Status          string `json:"status"`
-	TimeMs          int64  `json:"time_ms"`
-	WallTimeMs      int64  `json:"wall_time_ms"`
-	CPUTimeMs       int64  `json:"cpu_time_ms"`
-	MemoryKB        int64  `json:"memory_kb"`
-	ExitCode        *int   `json:"exit_code,omitempty"`
-	Stdout          string `json:"stdout,omitempty"`
-	Stderr          string `json:"stderr,omitempty"`
-	StdoutTruncated bool   `json:"stdout_truncated,omitempty"`
-	StderrTruncated bool   `json:"stderr_truncated,omitempty"`
-	Reason          string `json:"reason,omitempty"`
-	VerdictSource   string `json:"verdict_source,omitempty"`
-	HandoffBytes    int64  `json:"handoff_bytes,omitempty"`
+	ID               string `json:"id"`
+	ProgramID        string `json:"program_id,omitempty"`
+	Status           string `json:"status"`
+	TimeMs           int64  `json:"time_ms"`
+	WallTimeMs       int64  `json:"wall_time_ms"`
+	CPUTimeMs        int64  `json:"cpu_time_ms"`
+	ProcessCPUTimeMs int64  `json:"process_cpu_time_ms,omitempty"`
+	MemoryKB         int64  `json:"memory_kb"`
+	ExitCode         *int   `json:"exit_code,omitempty"`
+	Stdout           string `json:"stdout,omitempty"`
+	Stderr           string `json:"stderr,omitempty"`
+	StdoutTruncated  bool   `json:"stdout_truncated,omitempty"`
+	StderrTruncated  bool   `json:"stderr_truncated,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+	VerdictSource    string `json:"verdict_source,omitempty"`
+	HandoffBytes     int64  `json:"handoff_bytes,omitempty"`
 }
 
 type SidecarOutput struct {
@@ -149,22 +150,23 @@ type RunRequest struct {
 }
 
 type RunResponse struct {
-	Status          string          `json:"status"`
-	TimeMs          int64           `json:"time_ms"`
-	WallTimeMs      int64           `json:"wall_time_ms"`
-	CPUTimeMs       int64           `json:"cpu_time_ms"`
-	MemoryKB        int64           `json:"memory_kb"`
-	ExitCode        *int            `json:"exit_code,omitempty"`
-	Stdout          string          `json:"stdout,omitempty"`
-	Stderr          string          `json:"stderr,omitempty"`
-	StdoutTruncated bool            `json:"stdout_truncated,omitempty"`
-	StderrTruncated bool            `json:"stderr_truncated,omitempty"`
-	Reason          string          `json:"reason,omitempty"`
-	VerdictSource   string          `json:"verdict_source,omitempty"`
-	Score           *float64        `json:"score,omitempty"`
-	Steps           []StepResult    `json:"steps,omitempty"`
-	SidecarOutputs  []SidecarOutput `json:"sidecar_outputs,omitempty"`
-	SidecarErrors   []SidecarError  `json:"sidecar_errors,omitempty"`
+	Status           string          `json:"status"`
+	TimeMs           int64           `json:"time_ms"`
+	WallTimeMs       int64           `json:"wall_time_ms"`
+	CPUTimeMs        int64           `json:"cpu_time_ms"`
+	ProcessCPUTimeMs int64           `json:"process_cpu_time_ms,omitempty"`
+	MemoryKB         int64           `json:"memory_kb"`
+	ExitCode         *int            `json:"exit_code,omitempty"`
+	Stdout           string          `json:"stdout,omitempty"`
+	Stderr           string          `json:"stderr,omitempty"`
+	StdoutTruncated  bool            `json:"stdout_truncated,omitempty"`
+	StderrTruncated  bool            `json:"stderr_truncated,omitempty"`
+	Reason           string          `json:"reason,omitempty"`
+	VerdictSource    string          `json:"verdict_source,omitempty"`
+	Score            *float64        `json:"score,omitempty"`
+	Steps            []StepResult    `json:"steps,omitempty"`
+	SidecarOutputs   []SidecarOutput `json:"sidecar_outputs,omitempty"`
+	SidecarErrors    []SidecarError  `json:"sidecar_errors,omitempty"`
 }
 
 const (

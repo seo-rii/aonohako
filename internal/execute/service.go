@@ -255,21 +255,22 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 
 	return sandboxRunResult{
 		response: model.RunResponse{
-			Status:          status,
-			TimeMs:          res.WallTimeMs,
-			WallTimeMs:      res.WallTimeMs,
-			CPUTimeMs:       res.CPUTimeMs,
-			MemoryKB:        res.MemoryKB,
-			ExitCode:        res.ExitCode,
-			Stdout:          outResp,
-			Stderr:          errResp,
-			StdoutTruncated: res.StdoutTruncated,
-			StderrTruncated: res.StderrTruncated,
-			Reason:          reason,
-			VerdictSource:   verdictSource,
-			Score:           score,
-			SidecarOutputs:  sidecarOutputs,
-			SidecarErrors:   sidecarErrors,
+			Status:           status,
+			TimeMs:           res.WallTimeMs,
+			WallTimeMs:       res.WallTimeMs,
+			CPUTimeMs:        res.CPUTimeMs,
+			ProcessCPUTimeMs: res.ProcessCPUTimeMs,
+			MemoryKB:         res.MemoryKB,
+			ExitCode:         res.ExitCode,
+			Stdout:           outResp,
+			Stderr:           errResp,
+			StdoutTruncated:  res.StdoutTruncated,
+			StderrTruncated:  res.StderrTruncated,
+			Reason:           reason,
+			VerdictSource:    verdictSource,
+			Score:            score,
+			SidecarOutputs:   sidecarOutputs,
+			SidecarErrors:    sidecarErrors,
 		},
 		judgeOut: append([]byte(nil), judgeOut...),
 	}
@@ -551,20 +552,21 @@ func stepResultFromResponse(id, programID string, resp model.RunResponse) model.
 		status = model.RunStatusAccepted
 	}
 	return model.StepResult{
-		ID:              id,
-		ProgramID:       programID,
-		Status:          status,
-		TimeMs:          resp.TimeMs,
-		WallTimeMs:      resp.WallTimeMs,
-		CPUTimeMs:       resp.CPUTimeMs,
-		MemoryKB:        resp.MemoryKB,
-		ExitCode:        resp.ExitCode,
-		Stdout:          resp.Stdout,
-		Stderr:          resp.Stderr,
-		StdoutTruncated: resp.StdoutTruncated,
-		StderrTruncated: resp.StderrTruncated,
-		Reason:          resp.Reason,
-		VerdictSource:   resp.VerdictSource,
+		ID:               id,
+		ProgramID:        programID,
+		Status:           status,
+		TimeMs:           resp.TimeMs,
+		WallTimeMs:       resp.WallTimeMs,
+		CPUTimeMs:        resp.CPUTimeMs,
+		ProcessCPUTimeMs: resp.ProcessCPUTimeMs,
+		MemoryKB:         resp.MemoryKB,
+		ExitCode:         resp.ExitCode,
+		Stdout:           resp.Stdout,
+		Stderr:           resp.Stderr,
+		StdoutTruncated:  resp.StdoutTruncated,
+		StderrTruncated:  resp.StderrTruncated,
+		Reason:           resp.Reason,
+		VerdictSource:    resp.VerdictSource,
 	}
 }
 
@@ -588,10 +590,12 @@ func prefixStepVerdictSource(stepID, source string) string {
 func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) model.RunResponse {
 	var wallMs int64
 	var cpuMs int64
+	var processCPUTimeMs int64
 	var memoryKB int64
 	for _, step := range steps {
 		wallMs += step.WallTimeMs
 		cpuMs += step.CPUTimeMs
+		processCPUTimeMs += step.ProcessCPUTimeMs
 		if step.MemoryKB > memoryKB {
 			memoryKB = step.MemoryKB
 		}
@@ -599,6 +603,7 @@ func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) mod
 	resp.TimeMs = wallMs
 	resp.WallTimeMs = wallMs
 	resp.CPUTimeMs = cpuMs
+	resp.ProcessCPUTimeMs = processCPUTimeMs
 	if memoryKB > resp.MemoryKB {
 		resp.MemoryKB = memoryKB
 	}
