@@ -815,6 +815,7 @@ func TestAddressSpaceLimitBytes(t *testing.T) {
 		{"native_zero", "runner", 0, 512 * 1024 * 1024},
 		{"python_interpreter_virtual_cap", "python3", 256, 1280 * 1024 * 1024},
 		{"pypy_interpreter_virtual_cap", "pypy3", 128, 1024 * 1024 * 1024},
+		{"sbcl_interpreter_virtual_cap", "sbcl", 256, 8192 * 1024 * 1024},
 		{"node_high_virtual_cap", "node", 128, 1024 * 1024 * 1024},
 		{"node_scaled_virtual_cap", "node", 512, 2560 * 1024 * 1024},
 		{"deno_virtual_cap", "deno", 256, 65536 * 1024 * 1024},
@@ -843,7 +844,7 @@ func TestAddressSpaceLimitBytesAlwaysAtLeast512MB(t *testing.T) {
 }
 
 func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) {
-	for _, commandBase := range []string{"deno", "dotnet", "node", "pypy3", "python3", "umjunsik-lang-go", "wasmtime"} {
+	for _, commandBase := range []string{"deno", "dotnet", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "wasmtime"} {
 		if addressSpaceProximityCanClassifyMLE(commandBase) {
 			t.Fatalf("%s should not use address-space proximity for MLE classification", commandBase)
 		}
