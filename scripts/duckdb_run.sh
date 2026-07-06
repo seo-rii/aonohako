@@ -12,8 +12,4 @@ if grep -Eiq 'read_(csv|json|parquet)|pragma[[:space:]]+enable_|pragma[[:space:]
   exit 1
 fi
 
-{
-  printf '%s\n' '.mode list'
-  printf '%s\n' '.headers off'
-  cat "${src}"
-} | duckdb -batch ':memory:'
+exec duckdb -batch ':memory:' '.mode list' '.headers off' '.read /dev/stdin' ".read ${src}"

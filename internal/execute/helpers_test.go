@@ -669,7 +669,7 @@ func TestBuildCommandUsesRuntimeScopedSQLiteDBAndJavaHeap(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 96}}
 
 	sqliteArgs := buildCommand("/tmp/work/Main.sql", "sqlite", req)
-	if !reflect.DeepEqual(sqliteArgs, []string{"sh", "-c", "exec sqlite3 \"$0\" < \"$1\"", "/tmp/work/.aonohako.sqlite3", "/tmp/work/Main.sql"}) {
+	if !reflect.DeepEqual(sqliteArgs, []string{"sh", "-c", "exec sqlite3 \"$0\" \".read /dev/stdin\" \".read $1\"", "/tmp/work/.aonohako.sqlite3", "/tmp/work/Main.sql"}) {
 		t.Fatalf("sqlite command = %v", sqliteArgs)
 	}
 

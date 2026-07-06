@@ -461,8 +461,8 @@ The interactor is invoked as:
 | `elixir` | `env ERL_AFLAGS=... erlexec ... -s elixir start_cli -extra <file>` or `elixir <file>` fallback |
 | `gleam` | `aonohako-gleam-run <workspace>` |
 | `haxe` | `neko <file>` |
-| `sqlite` | `sh -c 'sqlite3 <workspace-db> < <file>'` |
-| `duckdb` | `aonohako-duckdb-run <file>` |
+| `sqlite` | `sqlite3 <workspace-db> ".read /dev/stdin" ".read <file>"`; setup SQL from stdin runs before the submitted file |
+| `duckdb` | `aonohako-duckdb-run <file>`; setup SQL from stdin runs before the submitted file |
 | `sed` | `sed -f <file>` |
 | `bc` | `bc -q <file>` |
 | `forth` | `gforth <file> -e bye` |

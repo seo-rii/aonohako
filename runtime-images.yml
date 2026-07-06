@@ -764,8 +764,9 @@ languages:
         - bash
         - -lc
         - |
-          printf '%s\n' 'create table numbers(v integer);' 'insert into numbers(v) values (1),(2),(3);' 'select sum(v) from numbers;' > Main.sql
-          [ "$(sqlite3 same-folder.db < Main.sql)" = 6 ]
+          printf '%s\n' 'create table numbers(v integer);' 'insert into numbers(v) values (1),(2),(3);' > setup.sql
+          printf '%s\n' 'select sum(v) from numbers;' > Main.sql
+          [ "$(sqlite3 same-folder.db '.read setup.sql' '.read Main.sql')" = 6 ]
           [ -f same-folder.db ]
 
   julia:
@@ -2613,8 +2614,9 @@ languages:
         - bash
         - -lc
         - |
-          printf '%s\n' "select 'ok';" > Main.sql
-          aonohako-duckdb-run Main.sql | grep '^ok$'
+          printf '%s\n' "create table t(v varchar);" "insert into t values ('ok');" > setup.sql
+          printf '%s\n' "select v from t;" > Main.sql
+          aonohako-duckdb-run Main.sql < setup.sql | grep '^ok$'
 
   bqn:
     install:

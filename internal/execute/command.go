@@ -318,7 +318,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		}
 	case "sqlite":
 		dbPath := filepath.Join(filepath.Dir(primaryPath), ".aonohako.sqlite3")
-		return []string{"sh", "-c", "exec sqlite3 \"$0\" < \"$1\"", dbPath, primaryPath}
+		return []string{"sh", "-c", "exec sqlite3 \"$0\" \".read /dev/stdin\" \".read $1\"", dbPath, primaryPath}
 	case "uhmlang":
 		return []string{
 			"env",
