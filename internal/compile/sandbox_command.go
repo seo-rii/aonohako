@@ -132,7 +132,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if commandName == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
-	if commandName == "aonohako-kframework-check" || commandName == "kotlinc" || commandName == "kompile" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" || commandName == "spago" {
+	if commandName == "aonohako-acl2-check" || commandName == "aonohako-kframework-check" || commandName == "kotlinc" || commandName == "kompile" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" || commandName == "spago" {
 		memoryLimitMB = 4096
 	}
 	memoryLimitKB := int64(memoryLimitMB) * 1024
