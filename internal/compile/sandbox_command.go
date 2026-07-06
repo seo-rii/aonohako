@@ -123,7 +123,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	// address ranges during startup, so finite RLIMIT_AS values can fail before
 	// user code. Dotnet-like commands get a high finite RLIMIT_FSIZE floor
 	// because lower file-size rlimits can break CoreCLR/F# startup before user code.
-	disableAddressSpaceLimit := isDotnetLike || commandName == "aonohako-kframework-check" || commandName == "c3c" || commandName == "carbon" || commandName == "fstar.exe" || commandName == "kotlinc" || commandName == "kompile" || commandName == "spago" || isIsabelle
+	disableAddressSpaceLimit := isDotnetLike || commandName == "aonohako-acl2-check" || commandName == "aonohako-alloy-check" || commandName == "aonohako-kframework-check" || commandName == "c3c" || commandName == "carbon" || commandName == "fstar.exe" || commandName == "kotlinc" || commandName == "kompile" || commandName == "spago" || isIsabelle
 	allowProcessGroups := commandName == "aonohako-kframework-check" || commandName == "swiftc" || commandName == "hare" || commandName == "kompile" || isIsabelle
 	allowChmod := isDotnetLike || commandName == "aonohako-kframework-check" || commandName == "apecc" || commandName == "gleam" || commandName == "hare" || commandName == "idris2" || commandName == "kompile" || commandName == "rescript" || isIsabelle
 	allowExecveat := commandName == "hare"
@@ -132,7 +132,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	if commandName == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
-	if commandName == "aonohako-acl2-check" || commandName == "aonohako-kframework-check" || commandName == "kotlinc" || commandName == "kompile" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" || commandName == "spago" {
+	if commandName == "aonohako-acl2-check" || commandName == "aonohako-alloy-check" || commandName == "aonohako-kframework-check" || commandName == "kotlinc" || commandName == "kompile" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" || commandName == "spago" {
 		memoryLimitMB = 4096
 	}
 	memoryLimitKB := int64(memoryLimitMB) * 1024
