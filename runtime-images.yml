@@ -15,6 +15,26 @@ languages:
           gcc -O2 -pipe Main.c -o Main
           [ "$(./Main)" = ok ]
 
+  c:
+    smoke:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          printf '%s\n' '#include <stdio.h>' 'int main(void) {' '  puts("ok");' '  return 0;' '}' > Main.c
+          gcc -O2 -pipe Main.c -o Main
+          [ "$(./Main)" = ok ]
+
+  cpp:
+    smoke:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          printf '%s\n' '#include <iostream>' 'int main() {' '  std::cout << "ok\\n";' '  return 0;' '}' > Main.cpp
+          g++ -O2 -pipe Main.cpp -o Main
+          [ "$(./Main)" = ok ]
+
   aheui:
     install:
       apt:
@@ -2943,6 +2963,8 @@ profiles:
     base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
     install: *gcc16_profile
     languages:
+      - c
+      - cpp
       - plain
       - python
       - pypy

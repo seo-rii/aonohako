@@ -2337,6 +2337,30 @@ int main(void) {
 }`),
 			},
 		},
+		"c": {
+			compileLang:    "C11",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.c", `#include <stdio.h>
+int main(void) {
+    puts("ok");
+    return 0;
+}`),
+			},
+		},
+		"cpp": {
+			compileLang:    "CPP17",
+			expectedStdout: "ok\n",
+			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.cpp", `#include <iostream>
+int main() {
+    std::cout << "ok\n";
+    return 0;
+}`),
+			},
+		},
 		"aheui": {
 			compileLang:    "AHEUI",
 			expectedStdout: "Hello, World!\n",
