@@ -1054,7 +1054,7 @@ languages:
         - make
       script:
         - export MLTON_VERSION=20241230
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://downloads.sourceforge.net/project/mlton/mlton/${MLTON_VERSION}/mlton-${MLTON_VERSION}-1.amd64-linux.ubuntu-20.04_static.tgz" -o /tmp/mlton.tgz
+        - curl --retry 8 --retry-all-errors --retry-delay 3 --connect-timeout 20 -fL "https://downloads.sourceforge.net/project/mlton/mlton/${MLTON_VERSION}/mlton-${MLTON_VERSION}-1.amd64-linux.ubuntu-20.04_static.tgz" -o /tmp/mlton.tgz
         - tar -xzf /tmp/mlton.tgz -C /opt
         - rm -f /tmp/mlton.tgz
         - MLTON_DIR="$(find /opt -maxdepth 1 -type d -name "mlton-${MLTON_VERSION}-*" | head -n 1)"; ln -sfn "${MLTON_DIR}/bin/mlton" /usr/local/bin/mlton; ln -sfn "${MLTON_DIR}/lib/mlton" /usr/local/lib/mlton
