@@ -31,7 +31,7 @@ languages:
         - /bin/sh
         - -c
         - |
-          printf '%s\n' '#include <iostream>' 'int main() {' '  std::cout << "ok\\n";' '  return 0;' '}' > Main.cpp
+          printf '%s\n' '#include <iostream>' 'int main() {' '  std::cout << "ok\n";' '  return 0;' '}' > Main.cpp
           g++ -O2 -pipe Main.cpp -o Main
           [ "$(./Main)" = ok ]
 
