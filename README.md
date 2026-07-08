@@ -97,8 +97,10 @@ as a named build context:
 ```
 
 The same path can be supplied with `AONOHAKO_PYTHON_PACKAGES_CONTEXT`.
-Contents are copied to `/usr/local/lib/aonohako/python`, which is exported as
-`PYTHONPATH` in runtime images.
+When neither is supplied and the repository `python/` directory exists, it is
+used by default. Contents are copied to `/usr/local/lib/aonohako/python`, which
+is exported as `PYTHONPATH` in runtime images. The bundled `sitecustomize.py`
+stays inactive unless an execution requests image sidecar output.
 
 ## Local development
 

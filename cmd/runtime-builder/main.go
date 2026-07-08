@@ -28,7 +28,7 @@ func main() {
 	flag.StringVar(&tagPrefix, "tag-prefix", "aonohako", "docker tag prefix")
 	flag.BoolVar(&dryRun, "dry-run", false, "print commands without executing them")
 	flag.StringVar(&only, "only", "", "optional image name filter")
-	flag.StringVar(&pythonPackagesContext, "python-packages-context", os.Getenv("AONOHAKO_PYTHON_PACKAGES_CONTEXT"), "optional directory copied into /usr/local/lib/aonohako/python")
+	flag.StringVar(&pythonPackagesContext, "python-packages-context", defaultPythonPackagesContext(), "optional directory copied into /usr/local/lib/aonohako/python")
 	flag.BoolVar(&push, "push", false, "push image to registry instead of loading into the local docker image store")
 	flag.StringVar(&cacheFrom, "cache-from", os.Getenv("AONOHAKO_DOCKER_CACHE_FROM"), "optional docker buildx cache source, for example type=gha,scope=aonohako-type-i")
 	flag.StringVar(&cacheTo, "cache-to", os.Getenv("AONOHAKO_DOCKER_CACHE_TO"), "optional docker buildx cache destination, for example type=gha,mode=max,scope=aonohako-type-i")
@@ -133,6 +133,16 @@ func resolvePythonPackagesContext(path string) (string, func(), error) {
 		return "", func() {}, err
 	}
 	return dir, func() { _ = os.RemoveAll(dir) }, nil
+}
+
+func defaultPythonPackagesContext() string {
+	if path := os.Getenv("AONOHAKO_PYTHON_PACKAGES_CONTEXT"); path != "" {
+		return path
+	}
+	if info, err := os.Stat("python"); err == nil && info.IsDir() {
+		return "python"
+	}
+	return ""
 }
 
 func shellJoin(parts []string) string {

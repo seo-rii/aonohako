@@ -42,3 +42,34 @@ func TestResolvePythonPackagesContextRejectsFile(t *testing.T) {
 		t.Fatalf("expected file path to be rejected as python packages context")
 	}
 }
+
+func TestDefaultPythonPackagesContextUsesEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AONOHAKO_PYTHON_PACKAGES_CONTEXT", dir)
+
+	if got := defaultPythonPackagesContext(); got != dir {
+		t.Fatalf("default context = %q, want env directory %q", got, dir)
+	}
+}
+
+func TestDefaultPythonPackagesContextUsesRepoPythonDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "python"), 0o755); err != nil {
+		t.Fatalf("mkdir python context: %v", err)
+	}
+	t.Setenv("AONOHAKO_PYTHON_PACKAGES_CONTEXT", "")
+	t.Chdir(dir)
+
+	if got := defaultPythonPackagesContext(); got != "python" {
+		t.Fatalf("default context = %q, want repository python directory", got)
+	}
+}
+
+func TestDefaultPythonPackagesContextCanStayEmpty(t *testing.T) {
+	t.Setenv("AONOHAKO_PYTHON_PACKAGES_CONTEXT", "")
+	t.Chdir(t.TempDir())
+
+	if got := defaultPythonPackagesContext(); got != "" {
+		t.Fatalf("default context = %q, want empty", got)
+	}
+}

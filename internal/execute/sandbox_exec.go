@@ -117,6 +117,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if !req.EnableNetwork {
 		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
 	}
+	imgPath := firstImagePath(req.SidecarOutputs)
+	if imgPath != "" {
+		innerEnv = append(innerEnv, "IMG_CAPTURE=1")
+	}
 
 	runLang := profiles.NormalizeRunLang(req.Lang)
 	isC3 := runLang == "c3"
@@ -407,7 +411,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 
 	imageDone := make(chan struct{})
 	stopImageStream := func() {}
-	if imgPath := firstImagePath(req.SidecarOutputs); imgPath != "" {
+	if imgPath != "" {
 		imageCtx, cancelImage := context.WithCancel(ctx)
 		stopImageStream = cancelImage
 		go func() {

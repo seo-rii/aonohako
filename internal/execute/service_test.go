@@ -1881,6 +1881,39 @@ func TestRunSandboxEnvironmentIncludesRuntimePythonPath(t *testing.T) {
 	}
 }
 
+func TestRunSandboxEnablesImageCaptureOnlyForImageSidecar(t *testing.T) {
+	requireSandboxSupport(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+
+	svc := New()
+	run := func(sidecars []model.OutputFile) string {
+		t.Helper()
+		resp := svc.Run(context.Background(), &model.RunRequest{
+			Lang: "python",
+			Binaries: []model.Binary{{
+				Name:    "main.py",
+				DataB64: b64("import os\nprint(os.environ.get('IMG_CAPTURE', ''))\n"),
+			}},
+			ExpectedStdout: "",
+			Limits:         model.Limits{TimeMs: 1000, MemoryMB: 256},
+			SidecarOutputs: sidecars,
+		}, Hooks{})
+		if resp.Status != model.RunStatusAccepted {
+			t.Fatalf("expected Accepted, got %+v", resp)
+		}
+		return resp.Stdout
+	}
+
+	if got := run(nil); got != "\n" {
+		t.Fatalf("IMG_CAPTURE without image sidecar = %q, want empty line", got)
+	}
+	if got := run([]model.OutputFile{{Path: "__img__/images.jsonl"}}); got != "1\n" {
+		t.Fatalf("IMG_CAPTURE with image sidecar = %q, want 1", got)
+	}
+}
+
 func TestRunPreventsRemovingOrReplacingSubmittedFiles(t *testing.T) {
 	requireSandboxSupport(t)
 
