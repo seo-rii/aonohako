@@ -857,7 +857,7 @@ func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) 
 func TestEvaluateRunStatusClassifiesFinalCPUOverrun(t *testing.T) {
 	req := &model.RunRequest{ExpectedStdout: "ok\n", Limits: model.Limits{TimeMs: 100, MemoryMB: 64}}
 	res := execResult{Status: "OK", CPUTimeMs: 101}
-	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("ok\n"), "stdout", config.DefaultRuntimeTuningConfig(), "")
+	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("ok\n"), "stdout", nil, config.DefaultRuntimeTuningConfig(), "")
 	if status != model.RunStatusTLE {
 		t.Fatalf("status = %q, want TLE", status)
 	}

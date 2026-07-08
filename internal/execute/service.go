@@ -228,7 +228,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	status, evalReason, verdictSource := classifyRunStatusWithoutOutput(req, res)
 	var score *float64
 	if evaluateOutput {
-		status, score, evalReason, verdictSource = evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, tuning, s.cgroupParentDir)
+		status, score, evalReason, verdictSource = evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, sidecarOutputs, tuning, s.cgroupParentDir)
 	}
 	reason := res.Reason
 	if evalReason != "" {

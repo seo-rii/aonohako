@@ -48,10 +48,11 @@ type Limits struct {
 }
 
 type SPJSpec struct {
-	Binary    *Binary `json:"binary,omitempty"`
-	Lang      string  `json:"lang,omitempty"`
-	EmitScore bool    `json:"emit_score,omitempty"`
-	Limits    *Limits `json:"limits,omitempty"`
+	Binary         *Binary      `json:"binary,omitempty"`
+	Lang           string       `json:"lang,omitempty"`
+	EmitScore      bool         `json:"emit_score,omitempty"`
+	Limits         *Limits      `json:"limits,omitempty"`
+	SidecarOutputs []OutputFile `json:"sidecar_outputs,omitempty"`
 }
 
 type InteractorSpec struct {
