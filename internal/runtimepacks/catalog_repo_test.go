@@ -278,7 +278,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"cobol":         {"gnucobol", "cobc -x -free -O2 -o Main Main.cob"},
 		"coffeescript":  {"coffeescript", "ln -sfn /usr/bin/coffee /usr/local/bin/coffee", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/coffee Main.coffee"},
 		"crystal":       {"crystal build Main.cr", "Broken.cr"},
-		"cuda-ocelot":   {"GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99", "libfl-dev", "libzstd-dev", "aonohako-cuda-ocelot-build Main.cu Main"},
+		"cuda-ocelot":   {"GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99", "git clone --filter=blob:none --sparse", "git sparse-checkout set --no-cone /ocelot /.gitmodules", "libfl-dev", "libzstd-dev", "aonohako-cuda-ocelot-build Main.cu Main"},
 		"cython":        {"cython3 --embed -3 -o Main.c Main.pyx", "python3-config --includes --ldflags --embed"},
 		"dafny":         {"DAFNY_VERSION=4.11.0", "curl --retry 6", "wget --tries=6", "dafny verify --cores 1 Main.dfy"},
 		"dart":          {"dart compile exe", "Broken.dart"},

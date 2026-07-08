@@ -2128,8 +2128,13 @@ languages:
         - ninja-build
       script:
         - export GPUOCELOT_COMMIT=b16039dc940dc6bc4ea0a98380495769ff35ed99
-        - git clone --recursive https://github.com/gpuocelot/gpuocelot /opt/gpuocelot-src
-        - cd /opt/gpuocelot-src && git checkout "${GPUOCELOT_COMMIT}" && git submodule update --init --recursive
+        - git clone --filter=blob:none --sparse https://github.com/gpuocelot/gpuocelot /opt/gpuocelot-src
+        - cd /opt/gpuocelot-src && git checkout "${GPUOCELOT_COMMIT}" && git sparse-checkout set --no-cone /ocelot /.gitmodules
+        - >-
+          cd /opt/gpuocelot-src && git submodule update --init --recursive
+          ocelot/ThirdParty/hydrazine
+          ocelot/ThirdParty/res_embed
+          ocelot/ThirdParty/cuda-fatbin-decompression
         - cmake -S /opt/gpuocelot-src/ocelot -B /opt/gpuocelot-src/build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/gpuocelot
         - cmake --build /opt/gpuocelot-src/build --target install
         - ln -sfn /usr/local/cuda/bin/nvcc /usr/local/bin/nvcc
