@@ -34,6 +34,20 @@ languages:
           printf '%s\n' '#include <iostream>' 'int main() {' '  std::cout << "ok\n";' '  return 0;' '}' > Main.cpp
           g++ -O2 -pipe Main.cpp -o Main
           [ "$(./Main)" = ok ]
+          printf '%s\n' \
+            '#include "testlib.h"' \
+            'int main(int argc, char *argv[]) {' \
+            '  registerTestlibCmd(argc, argv);' \
+            '  int expected = ans.readInt();' \
+            '  int actual = ouf.readInt();' \
+            '  if (expected != actual) quitf(_wa, "expected %d, found %d", expected, actual);' \
+            '  quitf(_ok, "accepted");' \
+            '}' > Checker.cpp
+          g++ -std=c++17 -O2 -pipe Checker.cpp -o Checker
+          printf '%s\n' '1 2' > input.txt
+          printf '%s\n' '3' > answer.txt
+          printf '%s\n' '3' > output.txt
+          ./Checker input.txt output.txt answer.txt
 
   aheui:
     install:

@@ -47,7 +47,8 @@ RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
       env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}; \
     fi
 
-RUN install -d -m 0755 /usr/local/lib/aonohako /usr/local/lib/aonohako/python
+RUN install -d -m 0755 /usr/local/lib/aonohako /usr/local/lib/aonohako/python /usr/local/include
+COPY --chmod=0644 third_party/testlib/testlib.h /usr/local/include/testlib.h
 
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
 COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
