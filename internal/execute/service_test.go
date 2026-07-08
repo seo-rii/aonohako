@@ -2806,6 +2806,51 @@ raise SystemExit(0)
 	}
 }
 
+func TestRunSPJCanReadTopLevelSidecarOutputsByDefault(t *testing.T) {
+	requireSandboxSupport(t)
+
+	contestant := `import json
+import os
+
+os.makedirs("__img__", exist_ok=True)
+with open("__img__/images.jsonl", "w", encoding="utf-8") as handle:
+    handle.write(json.dumps({"mime": "image/png", "b64": "abc", "ts": 123}) + "\n")
+`
+	spj := `#!/usr/bin/env python3
+import json
+import os
+
+image_path = os.path.join("sidecar", "__img__", "images.jsonl")
+with open(image_path, "r", encoding="utf-8") as handle:
+    rows = [json.loads(line) for line in handle if line.strip()]
+if rows != [{"mime": "image/png", "b64": "abc", "ts": 123}]:
+    raise SystemExit(4)
+raise SystemExit(0)
+`
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: base64.StdEncoding.EncodeToString([]byte(contestant)),
+		}},
+		ExpectedStdout: "",
+		SPJ: &model.SPJSpec{
+			Binary: &model.Binary{
+				Name:    "spj.py",
+				DataB64: base64.StdEncoding.EncodeToString([]byte(spj)),
+			},
+			Lang: "python",
+		},
+		SidecarOutputs: []model.OutputFile{{Path: "__img__/images.jsonl"}},
+		Limits:         model.Limits{TimeMs: 3000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected SPJ to accept default image sidecar, got %+v", resp)
+	}
+}
+
 func TestRunSPJUsesDedicatedLimits(t *testing.T) {
 	requireSandboxSupport(t)
 

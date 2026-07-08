@@ -260,7 +260,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 }
 
 func materializeSPJSidecars(root string, specs []model.OutputFile, sidecars []model.SidecarOutput) error {
-	if len(specs) == 0 {
+	if len(specs) == 0 && len(sidecars) == 0 {
 		return nil
 	}
 	byPath := make(map[string]string, len(sidecars))
@@ -270,6 +270,12 @@ func materializeSPJSidecars(root string, specs []model.OutputFile, sidecars []mo
 			continue
 		}
 		byPath[filepath.ToSlash(clean)] = sidecar.DataB64
+	}
+	if len(specs) == 0 {
+		specs = make([]model.OutputFile, 0, len(byPath))
+		for clean := range byPath {
+			specs = append(specs, model.OutputFile{Path: clean})
+		}
 	}
 	for _, spec := range specs {
 		clean, err := util.ValidateRelativePath(spec.Path)
