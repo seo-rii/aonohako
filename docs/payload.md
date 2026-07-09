@@ -268,15 +268,15 @@ When `file_outputs` is present:
 When `spj` is provided, the SPJ binary is invoked as:
 
 ```
-<spj_binary> <input_file> <expected_output_file> <user_output_file>
+<spj_binary> <input_file> <user_output_file> <expected_output_file>
 ```
 
 - The SPJ runs from a clean SPJ-only workspace, not the participant writable
   directory
-- The input, expected output, and user output files are read-only for the SPJ
+- The input, user output, and expected output files are read-only for the SPJ
 - The SPJ uses `spj.limits` when provided; otherwise it defaults to a fixed
   1000 ms / 256 MiB policy instead of inheriting contestant limits
-- User output is passed through the third argv file path, not duplicated on
+- User output is passed through the second argv file path, not duplicated on
   SPJ stdin
 - Exit code 0 → accepted; non-zero → wrong answer
 - If `emit_score: true`, SPJ should print a float (0.0–1.0) to stdout

@@ -229,7 +229,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	}
 	spjReq := &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false}
 	args := buildCommandWithRuntimeTuning(spjPath, spjLang, spjReq, tuning)
-	args = append(args, inputPath, solutionPath, outputPath)
+	args = append(args, inputPath, outputPath, solutionPath)
 	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, nil, 0, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)

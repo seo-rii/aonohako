@@ -2725,12 +2725,16 @@ func TestRunSPJUsesFileArgumentsWithoutDuplicatingStdoutOnStdin(t *testing.T) {
 import sys
 
 stdin = sys.stdin.read()
-with open(sys.argv[3], "r", encoding="utf-8") as handle:
+with open(sys.argv[2], "r", encoding="utf-8") as handle:
     output = handle.read()
+with open(sys.argv[3], "r", encoding="utf-8") as handle:
+    answer = handle.read()
 if stdin:
     raise SystemExit(3)
 if output != "42\n":
     raise SystemExit(4)
+if answer != "42\n":
+    raise SystemExit(5)
 raise SystemExit(0)
 `
 	svc := New()
@@ -2776,7 +2780,7 @@ with open(image_path, "r", encoding="utf-8") as handle:
     rows = [json.loads(line) for line in handle if line.strip()]
 if rows != [{"mime": "image/png", "b64": "abc", "ts": 123}]:
     raise SystemExit(4)
-with open(sys.argv[3], "r", encoding="utf-8") as handle:
+with open(sys.argv[2], "r", encoding="utf-8") as handle:
     if handle.read() != "":
         raise SystemExit(5)
 raise SystemExit(0)
