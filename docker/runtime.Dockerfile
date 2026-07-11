@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG GO_IMAGE=golang:1.26.5-bookworm@sha256:18aedc16aa19b3fd7ded7245fc14b109e054d65d22ed53c355c899582bbb2113
-ARG RUNTIME_BASE=debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+ARG RUNTIME_BASE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
 WORKDIR /src
 COPY go.mod go.sum ./

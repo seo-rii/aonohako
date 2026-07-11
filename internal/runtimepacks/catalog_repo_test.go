@@ -355,10 +355,10 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 			"g++ -std=c++17 -O2 -pipe Checker.cpp -o Checker",
 			"./Checker input.txt output.txt answer.txt",
 		},
-		"python":        {"import qiskit", `"/usr/local/lib/aonohako/python" in os.environ.get("PYTHONPATH", "")`},
-		"purescript":    {"purescript@0.15.16", "spago@1.0.4", "registry: 77.4.1", "spago build", `require("./output/Main/index.js").main();`},
-		"typescript":    {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js"},
-		"wasm":          {"-W max-memory-size=33554432", "-W max-wasm-stack=1048576", "-W trap-on-grow-failure=y"},
+		"python":     {"import qiskit", `"/usr/local/lib/aonohako/python" in os.environ.get("PYTHONPATH", "")`},
+		"purescript": {"purescript@0.15.16", "spago@1.0.4", "registry: 77.4.1", "spago build", `require("./output/Main/index.js").main();`},
+		"typescript": {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js"},
+		"wasm":       {"-W max-memory-size=33554432", "-W max-wasm-stack=1048576", "-W trap-on-grow-failure=y"},
 	}
 
 	for language, patterns := range tests {
@@ -423,8 +423,8 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 		t.Fatalf("LoadCatalog returned error: %v", err)
 	}
 
-	const pinnedTrixie = "debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a"
-	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n", "type-p", "type-q", "type-r", "type-s"} {
+	const pinnedTrixie = "debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2"
+	for _, profileName := range []string{"type-a", "type-b", "type-c", "type-d", "type-e", "type-f", "type-i", "type-j", "type-k", "type-l", "type-m", "type-n", "type-p", "type-q", "type-r", "type-s", "type-t"} {
 		profile, ok := catalog.Profiles[profileName]
 		if !ok {
 			t.Fatalf("profile %q missing from catalog", profileName)
@@ -564,6 +564,7 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 		"pyparsing==3.3.2",
 		"pylatexenc==2.10",
 		"jax[cpu]==0.10.0",
+		"setuptools==80.10.2",
 	} {
 		if !slices.Contains(python.Install.Pip, pkg) {
 			t.Fatalf("python runtime must include %q, got %v", pkg, python.Install.Pip)

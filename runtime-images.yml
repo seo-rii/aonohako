@@ -168,6 +168,7 @@ languages:
         - python3
         - python3-pip
       pip:
+        - setuptools==80.10.2
         - numpy==2.4.4
         - pandas==3.0.2
         - seaborn==0.13.2
@@ -2848,7 +2849,7 @@ languages:
 
 profiles:
   type-a:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: &gcc16_profile
       script:
         - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list.d/aonohako-gcc16-sid.list
@@ -2903,7 +2904,7 @@ profiles:
       - wasm
       - whitespace
   type-b:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - clojure
@@ -2920,7 +2921,7 @@ profiles:
       - scala
       - typescript
   type-c:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - ada
@@ -2951,20 +2952,20 @@ profiles:
       - vlang
       - zig
   type-d:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - kotlin
       - kotlin-jvm
   type-e:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - csharp
       - fsharp
       - vbnet
   type-f:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - uhmlang
@@ -2979,7 +2980,7 @@ profiles:
     languages:
       - swift
   type-i:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - c
@@ -2989,7 +2990,7 @@ profiles:
       - pypy
       - java
   type-j:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     languages:
       - agda
       - coq
@@ -2997,24 +2998,24 @@ profiles:
       - tla
       - why3
   type-k:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - dart
   type-l:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - python
   type-m:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - duckdb
       - gdl
       - octave
   type-n:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - systemverilog
@@ -3025,25 +3026,25 @@ profiles:
     languages:
       - cuda-ocelot
   type-p:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
       - carbon
       - vb6
   type-q:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     languages:
       - dafny
   type-r:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     languages:
       - isabelle
   type-s:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     languages:
       - lean4
   type-t:
-    base_image: debian:trixie-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     languages:
       - acl2
       - alloy
