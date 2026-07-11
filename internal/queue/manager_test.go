@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -130,6 +131,150 @@ func TestQueueUnlimitedPendingWhenZero(t *testing.T) {
 		}
 		if p.Position() != i+1 {
 			t.Fatalf("unexpected position at %d: %d", i, p.Position())
+		}
+	}
+}
+
+func TestCancelGrantedQueuedPermitReleasesCapacity(t *testing.T) {
+	q := New(1, 1)
+	p1, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("acquire1: %v", err)
+	}
+	p2, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("acquire2: %v", err)
+	}
+
+	p1.Release()
+	p2.Cancel()
+
+	if err := p2.Wait(context.Background()); !errors.Is(err, ErrPermitCanceled) {
+		t.Fatalf("Wait() error = %v, want ErrPermitCanceled", err)
+	}
+	active, pending := q.Snapshot()
+	if active != 0 || pending != 0 {
+		t.Fatalf("queue snapshot = (%d, %d), want (0, 0)", active, pending)
+	}
+
+	p3, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("acquire3: %v", err)
+	}
+	if p3.Position() != 0 {
+		t.Fatalf("position after cancellation = %d, want 0", p3.Position())
+	}
+	p3.Release()
+}
+
+func TestImmediatePermitWaitAfterTerminalActionReturnsError(t *testing.T) {
+	for _, action := range []struct {
+		name string
+		do   func(*Permit)
+	}{
+		{name: "cancel", do: func(permit *Permit) { permit.Cancel() }},
+		{name: "release", do: func(permit *Permit) { permit.Release() }},
+	} {
+		t.Run(action.name, func(t *testing.T) {
+			q := New(1, 1)
+			permit, err := q.Acquire()
+			if err != nil {
+				t.Fatalf("Acquire() error = %v", err)
+			}
+			action.do(permit)
+			if err := permit.Wait(context.Background()); !errors.Is(err, ErrPermitCanceled) {
+				t.Fatalf("Wait() error = %v, want ErrPermitCanceled", err)
+			}
+			active, pending := q.Snapshot()
+			if active != 0 || pending != 0 {
+				t.Fatalf("queue snapshot = (%d, %d), want (0, 0)", active, pending)
+			}
+		})
+	}
+}
+
+func TestConcurrentWaitAndCancelDoesNotHang(t *testing.T) {
+	q := New(1, 1)
+	p1, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("acquire1: %v", err)
+	}
+	p2, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("acquire2: %v", err)
+	}
+
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- p2.Wait(context.Background())
+	}()
+	cancelDone := make(chan struct{})
+	go func() {
+		p2.Cancel()
+		close(cancelDone)
+	}()
+
+	select {
+	case <-cancelDone:
+	case <-time.After(time.Second):
+		t.Fatal("Cancel() hung")
+	}
+	select {
+	case err := <-waitDone:
+		if !errors.Is(err, ErrPermitCanceled) {
+			t.Fatalf("Wait() error = %v, want ErrPermitCanceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Wait() did not wake after Cancel()")
+	}
+
+	p1.Release()
+	active, pending := q.Snapshot()
+	if active != 0 || pending != 0 {
+		t.Fatalf("queue snapshot = (%d, %d), want (0, 0)", active, pending)
+	}
+}
+
+func TestGrantCancelWaitRaceReleasesExactlyOnce(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		q := New(1, 1)
+		p1, err := q.Acquire()
+		if err != nil {
+			t.Fatalf("iteration %d acquire1: %v", i, err)
+		}
+		p2, err := q.Acquire()
+		if err != nil {
+			t.Fatalf("iteration %d acquire2: %v", i, err)
+		}
+
+		waitDone := make(chan error, 1)
+		go func() {
+			waitDone <- p2.Wait(context.Background())
+		}()
+		var actions sync.WaitGroup
+		actions.Add(2)
+		go func() {
+			defer actions.Done()
+			p1.Release()
+		}()
+		go func() {
+			defer actions.Done()
+			p2.Cancel()
+		}()
+		actions.Wait()
+
+		select {
+		case err := <-waitDone:
+			if err != nil && !errors.Is(err, ErrPermitCanceled) {
+				t.Fatalf("iteration %d Wait() error = %v", i, err)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("iteration %d Wait() hung", i)
+		}
+		p2.Release()
+		active, pending := q.Snapshot()
+		if active != 0 || pending != 0 {
+			t.Fatalf("iteration %d queue snapshot = (%d, %d), want (0, 0)", i, active, pending)
 		}
 	}
 }

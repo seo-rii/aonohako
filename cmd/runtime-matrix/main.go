@@ -43,6 +43,9 @@ func main() {
 				filtered = append(filtered, spec)
 			}
 		}
+		if len(filtered) == 0 {
+			log.Fatalf("no runtime image matches -only %q", only)
+		}
 		specs = filtered
 	}
 

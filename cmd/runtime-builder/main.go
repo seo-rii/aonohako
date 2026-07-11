@@ -51,6 +51,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if only != "" {
+		matched := false
+		for _, spec := range specs {
+			if spec.Name == only {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			log.Fatalf("no runtime image matches -only %q", only)
+		}
+	}
 
 	pythonPackagesContext, cleanup, err := resolvePythonPackagesContext(pythonPackagesContext)
 	if err != nil {

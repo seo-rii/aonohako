@@ -255,3 +255,15 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeRunLangCoffeeScriptIsCaseInsensitive(t *testing.T) {
+	for _, input := range []string{"COFFEESCRIPT", "coffeescript", "CoffeeScript", " coffeescript "} {
+		if got := NormalizeRunLang(input); got != "javascript" {
+			t.Fatalf("NormalizeRunLang(%q) = %q, want javascript", input, got)
+		}
+		profile, ok := Resolve(input)
+		if !ok || profile.RunLang != "javascript" {
+			t.Fatalf("Resolve(%q) = (%+v, %v), want JavaScript run profile", input, profile, ok)
+		}
+	}
+}

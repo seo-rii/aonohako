@@ -304,6 +304,59 @@ func TestLoadRuntimeTuningProfiles(t *testing.T) {
 	}
 }
 
+func TestLoadPreservesExplicitZeroRuntimeTuning(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+	t.Setenv("AONOHAKO_GO_MEMORY_RESERVE_MB", "+0")
+	t.Setenv("AONOHAKO_ERLANG_ASYNC_THREADS", "00")
+	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{
+		"inherit-zero": {},
+		"override-zero": {"go_memory_reserve_mb": 64, "erlang_async_threads": 2}
+	}`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	effective := cfg.Execution.RuntimeTuning.WithSafeDefaults()
+	if effective.GoMemoryReserveMB != 0 || effective.ErlangAsyncThreads != 0 {
+		t.Fatalf("global explicit zero tuning was replaced: %+v", effective)
+	}
+	profile := cfg.Execution.RuntimeTuningProfiles["inherit-zero"].WithSafeDefaults()
+	if profile.GoMemoryReserveMB != 0 || profile.ErlangAsyncThreads != 0 {
+		t.Fatalf("profile did not inherit global explicit zero tuning: %+v", profile)
+	}
+	override := cfg.Execution.RuntimeTuningProfiles["override-zero"].WithSafeDefaults()
+	if override.GoMemoryReserveMB != 64 || override.ErlangAsyncThreads != 2 {
+		t.Fatalf("nonzero profile override did not replace inherited zero: %+v", override)
+	}
+}
+
+func TestLoadPreservesProfileExplicitZeroOverrides(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
+	t.Setenv("AONOHAKO_GO_MEMORY_RESERVE_MB", "64")
+	t.Setenv("AONOHAKO_ERLANG_ASYNC_THREADS", "2")
+	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{
+		"explicit-zero": {"go_memory_reserve_mb": 0, "erlang_async_threads": 0}
+	}`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	profile := cfg.Execution.RuntimeTuningProfiles["explicit-zero"].WithSafeDefaults()
+	if profile.GoMemoryReserveMB != 0 || profile.ErlangAsyncThreads != 0 {
+		t.Fatalf("profile explicit zero overrides were replaced: %+v", profile)
+	}
+}
+
 func TestLoadProblemRuntimeProfiles(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
@@ -874,6 +927,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
+	const maxInt64Text = "9223372036854775807"
 	tests := []struct {
 		name  string
 		key   string
@@ -889,6 +943,8 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "platform body hash zero", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "0"},
 		{name: "platform body hash negative", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "-1"},
 		{name: "platform body hash malformed", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "many"},
+		{name: "platform body hash above cap", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "65"},
+		{name: "platform body hash too large", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: maxInt64Text},
 		{name: "principal streams negative", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", value: "-1"},
 		{name: "principal streams malformed", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", value: "many"},
 		{name: "principal rpm negative", key: "AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", value: "-1"},
@@ -896,12 +952,15 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "heartbeat zero", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "0"},
 		{name: "heartbeat negative", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "-1"},
 		{name: "heartbeat malformed", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: "soon"},
+		{name: "heartbeat overflow", key: "AONOHAKO_HEARTBEAT_INTERVAL_SEC", value: maxInt64Text},
 		{name: "body read timeout zero", key: "AONOHAKO_BODY_READ_TIMEOUT_SEC", value: "0"},
 		{name: "body read timeout negative", key: "AONOHAKO_BODY_READ_TIMEOUT_SEC", value: "-1"},
 		{name: "body read timeout malformed", key: "AONOHAKO_BODY_READ_TIMEOUT_SEC", value: "soon"},
+		{name: "body read timeout overflow", key: "AONOHAKO_BODY_READ_TIMEOUT_SEC", value: maxInt64Text},
 		{name: "remote sse idle zero", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "0"},
 		{name: "remote sse idle negative", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "-1"},
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
+		{name: "remote sse idle overflow", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: maxInt64Text},
 		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
 		{name: "allow runtime profile malformed", key: "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", value: "sometimes"},
 		{name: "require work root tmpfs malformed", key: "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", value: "sometimes"},

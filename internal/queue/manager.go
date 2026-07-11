@@ -7,9 +7,21 @@ import (
 )
 
 var ErrQueueFull = errors.New("queue_full")
+var ErrPermitCanceled = errors.New("permit_canceled")
+
+type permitState uint8
+
+const (
+	permitPending permitState = iota
+	permitGranted
+	permitAcquired
+	permitCanceled
+	permitReleased
+)
 
 type waitEntry struct {
-	ch chan struct{}
+	ch     chan struct{}
+	permit *Permit
 }
 
 type Permit struct {
@@ -18,8 +30,8 @@ type Permit struct {
 	position int
 	once     sync.Once
 
-	mu      sync.Mutex
-	granted bool
+	mu    sync.Mutex
+	state permitState
 }
 
 func (p *Permit) Position() int {
@@ -28,54 +40,58 @@ func (p *Permit) Position() int {
 
 func (p *Permit) Wait(ctx context.Context) error {
 	if p.entry == nil {
-		return nil
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.state == permitAcquired {
+			return nil
+		}
+		return ErrPermitCanceled
 	}
 	select {
 	case <-p.entry.ch:
-		p.setGranted(true)
-		return nil
-	case <-ctx.Done():
-		if p.mgr.removeWaiter(p.entry) {
-			return ctx.Err()
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		switch p.state {
+		case permitGranted:
+			p.state = permitAcquired
+			return nil
+		case permitAcquired:
+			return nil
+		default:
+			return ErrPermitCanceled
 		}
-		// Race: permit granted while context was cancelled.
-		<-p.entry.ch
-		p.setGranted(true)
-		p.Release()
+	case <-ctx.Done():
+		p.Cancel()
 		return ctx.Err()
 	}
 }
 
-func (p *Permit) setGranted(v bool) {
-	p.mu.Lock()
-	p.granted = v
-	p.mu.Unlock()
-}
-
-func (p *Permit) isGranted() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.granted
-}
-
 func (p *Permit) Release() {
-	if p == nil || p.mgr == nil || !p.isGranted() {
+	if p == nil || p.mgr == nil {
 		return
 	}
-	p.once.Do(func() {
-		p.mgr.release()
-	})
+	p.mu.Lock()
+	shouldRelease := p.state == permitGranted || p.state == permitAcquired
+	if shouldRelease {
+		p.state = permitReleased
+	}
+	p.mu.Unlock()
+	if shouldRelease {
+		p.once.Do(func() {
+			p.mgr.release()
+		})
+	}
 }
 
 func (p *Permit) Cancel() {
 	if p == nil || p.mgr == nil {
 		return
 	}
-	if p.entry != nil && !p.isGranted() {
-		_ = p.mgr.removeWaiter(p.entry)
-		return
+	if p.mgr.cancel(p) {
+		p.once.Do(func() {
+			p.mgr.release()
+		})
 	}
-	p.Release()
 }
 
 type Manager struct {
@@ -103,7 +119,7 @@ func (m *Manager) Acquire() (*Permit, error) {
 
 	if m.active < m.maxActive {
 		m.active++
-		return &Permit{mgr: m, position: 0, granted: true}, nil
+		return &Permit{mgr: m, position: 0, state: permitAcquired}, nil
 	}
 
 	if m.maxPending > 0 && len(m.waiters) >= m.maxPending {
@@ -111,29 +127,51 @@ func (m *Manager) Acquire() (*Permit, error) {
 	}
 
 	entry := &waitEntry{ch: make(chan struct{})}
+	permit := &Permit{mgr: m, entry: entry, position: len(m.waiters) + 1, state: permitPending}
+	entry.permit = permit
 	m.waiters = append(m.waiters, entry)
-	return &Permit{mgr: m, entry: entry, position: len(m.waiters)}, nil
+	return permit, nil
 }
 
-func (m *Manager) removeWaiter(target *waitEntry) bool {
+func (m *Manager) cancel(permit *Permit) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for i, w := range m.waiters {
-		if w == target {
-			m.waiters = append(m.waiters[:i], m.waiters[i+1:]...)
-			return true
+
+	permit.mu.Lock()
+	defer permit.mu.Unlock()
+	switch permit.state {
+	case permitPending:
+		for i, waiter := range m.waiters {
+			if waiter.permit == permit {
+				m.waiters = append(m.waiters[:i], m.waiters[i+1:]...)
+				break
+			}
 		}
+		permit.state = permitCanceled
+		close(permit.entry.ch)
+		return false
+	case permitGranted, permitAcquired:
+		permit.state = permitCanceled
+		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (m *Manager) release() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.waiters) > 0 {
+	for len(m.waiters) > 0 {
 		next := m.waiters[0]
 		m.waiters = m.waiters[1:]
+		next.permit.mu.Lock()
+		if next.permit.state != permitPending {
+			next.permit.mu.Unlock()
+			continue
+		}
+		next.permit.state = permitGranted
 		close(next.ch)
+		next.permit.mu.Unlock()
 		return
 	}
 	if m.active > 0 {

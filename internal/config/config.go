@@ -78,12 +78,16 @@ type RuntimeTuningConfig struct {
 	NodeStackSizeKB            int
 	WasmtimeMemoryGuardBytes   int
 	WasmtimeMaxWasmStackBytes  int
+
+	goMemoryReserveExplicitZero    bool
+	erlangAsyncThreadsExplicitZero bool
 }
 
 const (
 	defaultMaxPendingQueue       = 16
 	defaultMaxActiveStreams      = 64
 	defaultPlatformBodyHashSlots = 4
+	maxPlatformBodyHashSlots     = 64
 
 	defaultJVMHeapPercent             = 50
 	minJVMHeapPercent                 = 25
@@ -166,7 +170,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	platformBodyHashConcurrency, err := parsePositiveIntEnv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", os.Getenv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY"), defaultPlatformBodyHashConcurrency(maxActiveStreams, maxActive))
+	platformBodyHashConcurrency, err := parseBoundedIntEnv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", os.Getenv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY"), defaultPlatformBodyHashConcurrency(maxActiveStreams, maxActive), 1, maxPlatformBodyHashSlots)
 	if err != nil {
 		return Config{}, err
 	}
@@ -192,15 +196,20 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
 		}
 	}
-	heartbeatSec, err := parsePositiveIntEnv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", os.Getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC"), 10)
+	maxDurationSeconds64 := int64(^uint64(0)>>1) / int64(time.Second)
+	maxDurationSeconds := int(^uint(0) >> 1)
+	if int64(maxDurationSeconds) > maxDurationSeconds64 {
+		maxDurationSeconds = int(maxDurationSeconds64)
+	}
+	heartbeatSec, err := parseBoundedIntEnv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", os.Getenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC"), 10, 1, maxDurationSeconds)
 	if err != nil {
 		return Config{}, err
 	}
-	bodyReadTimeoutSec, err := parsePositiveIntEnv("AONOHAKO_BODY_READ_TIMEOUT_SEC", os.Getenv("AONOHAKO_BODY_READ_TIMEOUT_SEC"), 30)
+	bodyReadTimeoutSec, err := parseBoundedIntEnv("AONOHAKO_BODY_READ_TIMEOUT_SEC", os.Getenv("AONOHAKO_BODY_READ_TIMEOUT_SEC"), 30, 1, maxDurationSeconds)
 	if err != nil {
 		return Config{}, err
 	}
-	remoteSSEIdleTimeoutSec, err := parsePositiveIntEnv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", os.Getenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC"), int(remoteio.DefaultSSEIdleTimeout/time.Second))
+	remoteSSEIdleTimeoutSec, err := parseBoundedIntEnv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", os.Getenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC"), int(remoteio.DefaultSSEIdleTimeout/time.Second), 1, maxDurationSeconds)
 	if err != nil {
 		return Config{}, err
 	}
@@ -258,10 +267,12 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	runtimeTuning.GoMemoryReserveMB, err = parseBoundedIntEnv("AONOHAKO_GO_MEMORY_RESERVE_MB", os.Getenv("AONOHAKO_GO_MEMORY_RESERVE_MB"), runtimeTuning.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
+	goMemoryReserveRaw := os.Getenv("AONOHAKO_GO_MEMORY_RESERVE_MB")
+	runtimeTuning.GoMemoryReserveMB, err = parseBoundedIntEnv("AONOHAKO_GO_MEMORY_RESERVE_MB", goMemoryReserveRaw, runtimeTuning.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
 	if err != nil {
 		return Config{}, err
 	}
+	runtimeTuning.goMemoryReserveExplicitZero = strings.TrimSpace(goMemoryReserveRaw) != "" && runtimeTuning.GoMemoryReserveMB == 0
 	runtimeTuning.GoGOGC, err = parseBoundedIntEnv("AONOHAKO_GO_GOGC", os.Getenv("AONOHAKO_GO_GOGC"), runtimeTuning.GoGOGC, minGoGOGC, maxGoGOGC)
 	if err != nil {
 		return Config{}, err
@@ -270,10 +281,12 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	runtimeTuning.ErlangAsyncThreads, err = parseBoundedIntEnv("AONOHAKO_ERLANG_ASYNC_THREADS", os.Getenv("AONOHAKO_ERLANG_ASYNC_THREADS"), runtimeTuning.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
+	erlangAsyncThreadsRaw := os.Getenv("AONOHAKO_ERLANG_ASYNC_THREADS")
+	runtimeTuning.ErlangAsyncThreads, err = parseBoundedIntEnv("AONOHAKO_ERLANG_ASYNC_THREADS", erlangAsyncThreadsRaw, runtimeTuning.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
 	if err != nil {
 		return Config{}, err
 	}
+	runtimeTuning.erlangAsyncThreadsExplicitZero = strings.TrimSpace(erlangAsyncThreadsRaw) != "" && runtimeTuning.ErlangAsyncThreads == 0
 	runtimeTuning.DotnetGCHeapPercent, err = parseBoundedIntEnv("AONOHAKO_DOTNET_GC_HEAP_PERCENT", os.Getenv("AONOHAKO_DOTNET_GC_HEAP_PERCENT"), runtimeTuning.DotnetGCHeapPercent, minDotnetGCHeapPercent, maxDotnetGCHeapPercent)
 	if err != nil {
 		return Config{}, err
@@ -332,12 +345,14 @@ func Load() (Config, error) {
 					profileTuning.JVMHeapPercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
 				case "go_memory_reserve_mb":
 					profileTuning.GoMemoryReserveMB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
+					profileTuning.goMemoryReserveExplicitZero = value == 0
 				case "go_gogc":
 					profileTuning.GoGOGC, err = parseBoundedIntEnv(envName, rawValue, profileTuning.GoGOGC, minGoGOGC, maxGoGOGC)
 				case "erlang_schedulers":
 					profileTuning.ErlangSchedulers, err = parseBoundedIntEnv(envName, rawValue, profileTuning.ErlangSchedulers, minErlangSchedulers, maxErlangSchedulers)
 				case "erlang_async_threads":
 					profileTuning.ErlangAsyncThreads, err = parseBoundedIntEnv(envName, rawValue, profileTuning.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
+					profileTuning.erlangAsyncThreadsExplicitZero = value == 0
 				case "dotnet_gc_heap_percent":
 					profileTuning.DotnetGCHeapPercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.DotnetGCHeapPercent, minDotnetGCHeapPercent, maxDotnetGCHeapPercent)
 				case "kotlin_native_compiler_heap_mb":
@@ -718,10 +733,14 @@ func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	defaults := DefaultRuntimeTuningConfig()
 	c.JVMHeapPercent = clampWithDefault(c.JVMHeapPercent, defaults.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
-	c.GoMemoryReserveMB = clampWithDefault(c.GoMemoryReserveMB, defaults.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
+	if c.GoMemoryReserveMB != 0 || !c.goMemoryReserveExplicitZero {
+		c.GoMemoryReserveMB = clampWithDefault(c.GoMemoryReserveMB, defaults.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
+	}
 	c.GoGOGC = clampWithDefault(c.GoGOGC, defaults.GoGOGC, minGoGOGC, maxGoGOGC)
 	c.ErlangSchedulers = clampWithDefault(c.ErlangSchedulers, defaults.ErlangSchedulers, minErlangSchedulers, maxErlangSchedulers)
-	c.ErlangAsyncThreads = clampWithDefault(c.ErlangAsyncThreads, defaults.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
+	if c.ErlangAsyncThreads != 0 || !c.erlangAsyncThreadsExplicitZero {
+		c.ErlangAsyncThreads = clampWithDefault(c.ErlangAsyncThreads, defaults.ErlangAsyncThreads, minErlangAsyncThreads, maxErlangAsyncThreads)
+	}
 	c.DotnetGCHeapPercent = clampWithDefault(c.DotnetGCHeapPercent, defaults.DotnetGCHeapPercent, minDotnetGCHeapPercent, maxDotnetGCHeapPercent)
 	c.KotlinNativeCompilerHeapMB = clampWithDefault(c.KotlinNativeCompilerHeapMB, defaults.KotlinNativeCompilerHeapMB, minKotlinNativeCompilerHeapMB, maxKotlinNativeCompilerHeapMB)
 	c.DenoOldSpacePercent = clampWithDefault(c.DenoOldSpacePercent, defaults.DenoOldSpacePercent, minDenoOldSpacePercent, maxDenoOldSpacePercent)

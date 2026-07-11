@@ -2,7 +2,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -71,5 +73,17 @@ func TestDefaultPythonPackagesContextCanStayEmpty(t *testing.T) {
 
 	if got := defaultPythonPackagesContext(); got != "" {
 		t.Fatalf("default context = %q, want empty", got)
+	}
+}
+
+func TestRuntimeBuilderRejectsUnknownOnlyFilter(t *testing.T) {
+	catalogPath := filepath.Join("..", "..", "runtime-images.yml")
+	cmd := exec.Command("go", "run", ".", "-catalog", catalogPath, "-mode", "production", "-dry-run", "-only", "definitely-not-an-image")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("runtime-builder succeeded with an unmatched -only filter: %s", out)
+	}
+	if !strings.Contains(string(out), `no runtime image matches -only "definitely-not-an-image"`) {
+		t.Fatalf("runtime-builder error did not explain the unmatched filter: %s", out)
 	}
 }
