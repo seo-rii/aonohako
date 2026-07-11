@@ -371,10 +371,12 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 	body := string(data)
 	for _, marker := range []string{
 		"echo \"- Languages: \\`${AONOHAKO_LANGUAGES}\\`\"",
+		`DOCKER_RUN_ARGS+=(--env "AONOHAKO_LANGUAGES=${AONOHAKO_LANGUAGES}")`,
 		"declare -A enabled_languages=()",
 		"declare -A reported_tools=()",
 		`while IFS= read -r raw_language; do`,
 		`if ! command -v "$1" >/dev/null 2>&1; then`,
+		`if output="$("$@" </dev/null 2>&1)"; then`,
 		`output="$(printf "%s" "${output}" | tr -d '\r' | sed -n '/./{s/|/\\|/g;p;q;}')"`,
 		`if has_language "aheui"; then`,
 		`if has_language "python"; then`,
@@ -408,6 +410,8 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "GNU sed" sed --version`,
 		`report_once "bc" bc --version`,
 		`report_once "Gforth" gforth --version`,
+		`report_once "Dafny" env DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_PROCESSOR_COUNT=1 COMPlus_ThreadPool_ForceMinWorkerThreads=1 dafny --version`,
+		`report_once "TLA+ TLC" bash -c 'java -cp /usr/local/lib/aonohako/tla2tools.jar tlc2.TLC -version 2>&1 | grep -m1 "^TLC2 Version "'`,
 		`echo "## Runtime Compile Options"`,
 		`report_compile_option "java" "javac --release 11 -encoding UTF-8"`,
 		`report_compile_option "kotlin-jvm" "kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"`,
@@ -416,6 +420,105 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("report_toolchain_versions.sh must contain %q", marker)
+		}
+	}
+}
+
+func TestToolchainVersionReportKeepsProfileScopeAndCompletesAllProbes(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "report_toolchain_versions.sh")
+	binDir := t.TempDir()
+
+	dockerScript := `#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = image ]; then
+    exit 0
+fi
+shift
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --rm|-i)
+            shift
+            ;;
+        --env)
+            export "$2"
+            shift 2
+            ;;
+        --entrypoint)
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+exec bash
+`
+	if err := os.WriteFile(filepath.Join(binDir, "docker"), []byte(dockerScript), 0o755); err != nil {
+		t.Fatalf("WriteFile fake docker: %v", err)
+	}
+
+	dafnyScript := `#!/usr/bin/env bash
+set -eu
+[ "${DOTNET_SYSTEM_GLOBALIZATION_INVARIANT:-}" = 1 ]
+[ "${DOTNET_PROCESSOR_COUNT:-}" = 1 ]
+[ "${COMPlus_ThreadPool_ForceMinWorkerThreads:-}" = 1 ]
+printf '%s\n' '4.11.0+test'
+`
+	if err := os.WriteFile(filepath.Join(binDir, "dafny"), []byte(dafnyScript), 0o755); err != nil {
+		t.Fatalf("WriteFile fake dafny: %v", err)
+	}
+
+	javaScript := `#!/usr/bin/env bash
+if [ "${1:-}" = -version ]; then
+    printf '%s\n' 'openjdk version "21-test"' >&2
+    exit 0
+fi
+printf '%s\n' 'TLC2 Version 2.19 of 08 August 2024 (rev: test)'
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(binDir, "java"), []byte(javaScript), 0o755); err != nil {
+		t.Fatalf("WriteFile fake java: %v", err)
+	}
+
+	erlangScript := `#!/usr/bin/env bash
+while IFS= read -r _; do
+    :
+done
+printf '%s\n' 27
+`
+	if err := os.WriteFile(filepath.Join(binDir, "erl"), []byte(erlangScript), 0o755); err != nil {
+		t.Fatalf("WriteFile fake erl: %v", err)
+	}
+
+	cmd := exec.Command("bash", path, "test:image")
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"AONOHAKO_LANGUAGES=erlang,dafny,tla",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("report_toolchain_versions.sh: %v\n%s", err, string(out))
+	}
+
+	body := string(out)
+	for _, want := range []string{
+		"- Languages: `erlang,dafny,tla`",
+		"| Erlang | `27` |",
+		"| Java runtime | `openjdk version \"21-test\"` |",
+		"| Dafny | `4.11.0+test` |",
+		"| TLA+ TLC | `TLC2 Version 2.19 of 08 August 2024 (rev: test)` |",
+		"## Runtime Compile Options",
+		"| `erlang` | `erlc` |",
+		"| `dafny` | `dafny verify --cores 1` |",
+		"| `tla` | `pass-through .tla/.cfg artifacts` |",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("toolchain report missing %q in:\n%s", want, body)
+		}
+	}
+	for _, unwanted := range []string{"| Java compiler |", "| GNU sed |", "<command failed>"} {
+		if strings.Contains(body, unwanted) {
+			t.Fatalf("toolchain report unexpectedly contains %q in:\n%s", unwanted, body)
 		}
 	}
 }
@@ -571,6 +674,21 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 		t.Fatalf("verify_toolchain_artifacts.py should accept archive diagnostics: %v\n%s", err, string(out))
 	}
 
+	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), []byte(`{"error":"grype scan failed"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile scanner error fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root)
+	out, err = cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("verify_toolchain_artifacts.py unexpectedly accepted a scanner error diagnostic: %s", string(out))
+	}
+	if !strings.Contains(string(out), "contains scanner error diagnostic") || !strings.Contains(string(out), profile+".grype.json") {
+		t.Fatalf("verification failure did not explain scanner error diagnostic: %q", string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), []byte(`{"matches":[]}`), 0o644); err != nil {
+		t.Fatalf("Restore grype fixture: %v", err)
+	}
+
 	if err := os.Remove(filepath.Join(dir, profile+".grype.json")); err != nil {
 		t.Fatalf("Remove grype fixture: %v", err)
 	}
@@ -581,6 +699,76 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	}
 	if !strings.Contains(string(out), "missing") || !strings.Contains(string(out), profile+".grype.json") {
 		t.Fatalf("verification failure did not explain missing grype report: %q", string(out))
+	}
+}
+
+func TestCheckGrypeReportScriptEnforcesFixableHighSeverityPolicy(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "check_grype_report.py")
+	tests := []struct {
+		name        string
+		body        string
+		wantSuccess bool
+		want        []string
+	}{
+		{
+			name: "no fixable high severity findings",
+			body: `{"matches":[` +
+				`{"vulnerability":{"id":"CVE-1","severity":"High","fix":{"versions":[],"state":"not-fixed"}},"artifact":{"name":"base","version":"1"}},` +
+				`{"vulnerability":{"id":"CVE-2","severity":"Medium","fix":{"versions":["2"],"state":"fixed","available":[{"version":"2"}]}},"artifact":{"name":"library","version":"1"}}` +
+				`]}`,
+			wantSuccess: true,
+			want:        []string{"policy passed", "2 match(es)"},
+		},
+		{
+			name: "fixable high and critical findings",
+			body: `{"matches":[` +
+				`{"vulnerability":{"id":"CVE-CRITICAL","severity":"Critical","fix":{"versions":["3"],"state":"fixed"}},"artifact":{"name":"runtime","version":"2"}},` +
+				`{"vulnerability":{"id":"GHSA-HIGH","severity":"High","fix":{"versions":[],"state":"fixed","available":[{"version":"5"}]}},"artifact":{"name":"package","version":"4"}}` +
+				`]}`,
+			want: []string{
+				"2 fixable high/critical finding(s)",
+				"Critical CVE-CRITICAL: runtime 2 -> 3",
+				"High GHSA-HIGH: package 4 -> 5",
+			},
+		},
+		{
+			name: "scanner operational error",
+			body: `{"error":"grype scan failed"}`,
+			want: []string{"scanner operational error", "grype scan failed"},
+		},
+		{
+			name: "invalid json",
+			body: `{"matches":`,
+			want: []string{"not valid JSON"},
+		},
+		{
+			name: "invalid report shape",
+			body: `{"descriptor":{}}`,
+			want: []string{"no valid matches array"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reportPath := filepath.Join(t.TempDir(), "grype.json")
+			if err := os.WriteFile(reportPath, []byte(tt.body), 0o644); err != nil {
+				t.Fatalf("WriteFile(%q): %v", reportPath, err)
+			}
+
+			cmd := exec.Command("python3", path, reportPath)
+			out, err := cmd.CombinedOutput()
+			if tt.wantSuccess && err != nil {
+				t.Fatalf("check_grype_report.py: %v\n%s", err, string(out))
+			}
+			if !tt.wantSuccess && err == nil {
+				t.Fatalf("check_grype_report.py unexpectedly succeeded: %s", string(out))
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(string(out), want) {
+					t.Fatalf("check_grype_report.py output missing %q in %q", want, string(out))
+				}
+			}
+		})
 	}
 }
 
@@ -613,8 +801,11 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "scripts/install_anchore_tool.sh grype v0.111.0") || !strings.Contains(body, `"${RUNNER_TEMP}/anchore-bin/grype" "aonohako-sbom:ci-python" -o json > grype-ci-python.json`) {
 		t.Fatalf("ci workflow must scan the sandbox runtime image with a retryable pinned Grype install")
 	}
-	if !strings.Contains(body, `printf '{"error":"grype scan failed"}\n' > grype-ci-python.json`) || !strings.Contains(body, "grype-ci-python.json") {
-		t.Fatalf("ci workflow must publish a non-blocking Grype report artifact for the sandbox runtime image")
+	if strings.Contains(body, `printf '{"error":"grype scan failed"}`) || strings.Contains(body, `printf '{"error":"syft scan failed"`) {
+		t.Fatalf("ci workflow must fail closed instead of replacing scanner failures with JSON sentinels")
+	}
+	if !strings.Contains(body, "python3 scripts/check_grype_report.py grype-ci-python.json") {
+		t.Fatalf("ci workflow must enforce the fixable high/critical policy for the sandbox runtime image")
 	}
 	summarySection := body[strings.Index(body, "toolchain-summary:"):]
 	if idx := strings.Index(summarySection, "\n  mixin-smoke:"); idx >= 0 {
@@ -650,9 +841,6 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 		!strings.Contains(body, `|| true`) {
 		t.Fatalf("ci workflow must clean Go caches and stale stereoscope temp files best-effort before production-profile exports")
 	}
-	if !strings.Contains(body, `printf '{"error":"syft scan failed","profile":"%s"}\n'`) {
-		t.Fatalf("ci workflow must keep production-profile Syft artifacts non-blocking under runner disk pressure")
-	}
 	archiveIdx := strings.Index(profileSection, `docker archive export skipped to conserve CI storage`)
 	syftIdx := strings.Index(profileSection, "scripts/install_anchore_tool.sh syft v1.42.4")
 	if archiveIdx < 0 || syftIdx < 0 || archiveIdx > syftIdx {
@@ -663,6 +851,15 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	}
 	if !strings.Contains(profileSection, `docker image rm "aonohako-ci-prod:${{ matrix.name }}" || true`) {
 		t.Fatalf("ci workflow must remove production-profile images after scanner reports are generated")
+	}
+	if !strings.Contains(profileSection, `"${RUNNER_TEMP}/anchore-bin/grype" "aonohako-ci-prod:${{ matrix.name }}" -o json > "${report_path}" || scan_status=$?`) ||
+		!strings.Contains(profileSection, `exit "${scan_status}"`) {
+		t.Fatalf("ci workflow must fail closed on production-profile Grype operational errors")
+	}
+	setupGoIdx := strings.Index(profileSection, "uses: actions/setup-go@v6")
+	buildxIdx := strings.Index(profileSection, "uses: docker/setup-buildx-action@v4")
+	if setupGoIdx < 0 || buildxIdx < 0 || setupGoIdx > buildxIdx || !strings.Contains(profileSection[setupGoIdx:buildxIdx], "cache: false") {
+		t.Fatalf("toolchain-profile setup-go step must disable its unused host cache")
 	}
 	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
 		t.Fatalf("ci workflow must include the language list in the profile summaries")

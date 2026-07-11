@@ -42,9 +42,13 @@ for profile_dir in profile_dirs:
 
     for path in [profile_dir / f"{profile}.sbom.spdx.json", profile_dir / f"{profile}.grype.json"]:
         try:
-            json.loads(path.read_text(encoding="utf-8"))
+            report = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             fail(f"{path} is not valid JSON: {exc}")
+        if not isinstance(report, dict):
+            fail(f"{path} must contain a JSON object")
+        if "error" in report:
+            fail(f"{path} contains scanner error diagnostic: {report['error']!r}")
 
     archive = profile_dir / f"{profile}.docker.tar.gz"
     archive_digest = profile_dir / f"{profile}.docker.tar.gz.sha256"

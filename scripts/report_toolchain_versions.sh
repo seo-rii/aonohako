@@ -21,7 +21,13 @@ if [ -n "${REPO_DIGEST}" ]; then
 fi
 echo
 
-docker run --rm -i --entrypoint bash "${IMAGE_REF}" <<'EOF'
+DOCKER_RUN_ARGS=(run --rm -i)
+if [ -n "${AONOHAKO_LANGUAGES:-}" ]; then
+    DOCKER_RUN_ARGS+=(--env "AONOHAKO_LANGUAGES=${AONOHAKO_LANGUAGES}")
+fi
+DOCKER_RUN_ARGS+=(--entrypoint bash "${IMAGE_REF}")
+
+docker "${DOCKER_RUN_ARGS[@]}" <<'EOF'
 set -euo pipefail
 
 declare -A enabled_languages=()
@@ -33,7 +39,7 @@ if [ -n "${AONOHAKO_LANGUAGES:-}" ]; then
         if [ -n "${language}" ]; then
             enabled_languages["${language}"]=1
         fi
-    done < <(printf "%s" "${AONOHAKO_LANGUAGES}" | tr ',' '\n')
+    done < <(printf "%s\n" "${AONOHAKO_LANGUAGES}" | tr ',' '\n')
 fi
 
 has_language() {
@@ -52,7 +58,7 @@ report() {
         return 0
     fi
 
-    if output="$("$@" 2>&1)"; then
+    if output="$("$@" </dev/null 2>&1)"; then
         :
     else
         output="<command failed>"
@@ -193,8 +199,11 @@ if has_language "graphql"; then
     report_python_pkg_once "GraphQL Core" "graphql-core"
 fi
 
-if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure" || has_language "kotlin-jvm" || has_language "tla"; then
+if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure" || has_language "kotlin-jvm"; then
     report_once "Java compiler" javac -version
+fi
+
+if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure" || has_language "kotlin-jvm" || has_language "tla"; then
     report_once "Java runtime" java -version
 fi
 
@@ -473,11 +482,11 @@ if has_language "agda"; then
 fi
 
 if has_language "dafny"; then
-    report_once "Dafny" dafny --version
+    report_once "Dafny" env DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_PROCESSOR_COUNT=1 COMPlus_ThreadPool_ForceMinWorkerThreads=1 dafny --version
 fi
 
 if has_language "tla"; then
-    report_once "TLA+ TLC" java -cp /usr/local/lib/aonohako/tla2tools.jar tlc2.TLC -version
+    report_once "TLA+ TLC" bash -c 'java -cp /usr/local/lib/aonohako/tla2tools.jar tlc2.TLC -version 2>&1 | grep -m1 "^TLC2 Version "'
 fi
 
 if has_language "why3"; then
