@@ -92,19 +92,19 @@ func TestRepositoryPolicyScriptDoesNotRequireRipgrep(t *testing.T) {
 	}
 }
 
-func TestRuntimeDockerfileUsesGo126BuilderImage(t *testing.T) {
+func TestRuntimeDockerfileUsesPatchedGoBuilderImage(t *testing.T) {
 	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile(%q): %v", path, err)
 	}
 
-	m := regexp.MustCompile(`ARG GO_IMAGE=golang:(\d+\.\d+)-bookworm@sha256:[a-f0-9]{64}`).FindStringSubmatch(string(data))
+	m := regexp.MustCompile(`ARG GO_IMAGE=golang:(\d+\.\d+\.\d+)-bookworm@sha256:[a-f0-9]{64}`).FindStringSubmatch(string(data))
 	if len(m) != 2 {
 		t.Fatalf("runtime.Dockerfile is missing a parseable digest-pinned GO_IMAGE default")
 	}
-	if m[1] != "1.26" {
-		t.Fatalf("GO_IMAGE default = %s, want 1.26 to satisfy go.mod and CI image builds", m[1])
+	if m[1] != "1.26.5" {
+		t.Fatalf("GO_IMAGE default = %s, want 1.26.5 to satisfy go.mod and CI image builds", m[1])
 	}
 }
 
