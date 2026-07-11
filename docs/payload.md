@@ -146,6 +146,14 @@ entry points can keep profile selection behind trusted problem policy.
 `AONOHAKO_PROBLEM_RUNTIME_PROFILES`; mapped problems receive their configured
 profile before the request enters the stream or runner queue.
 
+Source, binary, expected-output, and stdin fields that support a `*_url` or
+`data_url` alternative may fetch only public HTTP(S) destinations. URL
+credentials and destinations resolving to loopback, private, link-local,
+multicast, unspecified, or reserved address space are rejected at connection
+time and after every redirect. URL-backed artifacts consume the same decoded
+aggregate byte budgets as inline base64 payloads; invalid collection counts or
+paths are rejected before any outbound request is made.
+
 ### Two-step execute mode
 
 `/execute` also accepts a two-step pipeline shape without a separate endpoint.
@@ -447,7 +455,6 @@ The interactor is invoked as:
 | `acl2` | `true` (verification is completed during compile) |
 | `kframework` | `true` (verification is completed during compile) |
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
-| `coffeescript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 /usr/local/bin/coffee <file>` |
 | `deno` | `deno run --no-prompt --v8-flags=--max-old-space-size=... <file>` |
 | `gdl` | `aonohako-gdl-run <file> <entry>` |
 | `octave` | `octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path <file>` |
@@ -490,6 +497,11 @@ The interactor is invoked as:
 | `wasm` | `wasmtime run --dir=. -O memory-reservation=... -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=... -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-wasm-stack=1048576 <file>` |
 | `aheui` | `python3 -c '<aheui entry_point wrapper>' <file>` |
 | `text` | `cat <file>` |
+
+The `COFFEESCRIPT` source profile compiles submissions to JavaScript and
+therefore normalizes to the `javascript` execute key, regardless of identifier
+case. The CoffeeScript compiler remains part of the corresponding runtime image
+for the compile phase and toolchain smoke tests.
 
 ## Resource Enforcement
 

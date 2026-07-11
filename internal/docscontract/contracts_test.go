@@ -38,6 +38,8 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		"at most one path is supported",
 		"capture failure is reported as `Runtime Error`",
 		"`verdict_source` is diagnostic and non-authoritative",
+		"fields that support a `*_url` or\n`data_url` alternative may fetch only public HTTP(S) destinations",
+		"invalid collection counts or\npaths are rejected before any outbound request is made",
 	}
 
 	for _, want := range wants {
@@ -210,6 +212,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`process_madvise`, `process_mrelease`, `pidfd_*`") || !strings.Contains(architecture, "NUMA and memory-policy syscalls") || !strings.Contains(architecture, "`kcmp`, nested `seccomp`, Landlock") || !strings.Contains(architecture, "LSM attribute/module\n  syscalls") || !strings.Contains(architecture, "`lookup_dcookie`") || !strings.Contains(architecture, "`statmount` and `listmount`") || !strings.Contains(architecture, "`perf_event_open`, `cachestat`") || !strings.Contains(architecture, "`chmod`, `fchmodat2`, `chown`, `mknod`") || !strings.Contains(architecture, "kexec, NFS server control,\n  quota control, swap, reboot, syslog") || !strings.Contains(architecture, "`clock_settime`, `settimeofday`, `adjtimex`") || !strings.Contains(architecture, "`personality` mutations") {
 		t.Fatalf("architecture.md must describe extended kernel metadata/process seccomp denies")
 	}
+	if !strings.Contains(architecture, "`rt_sigqueueinfo`, `rt_tgsigqueueinfo`") || !strings.Contains(architecture, "`prlimit64` except self queries with a null new-limit pointer") || !strings.Contains(architecture, "SysV shared memory,\n  message-queue, and semaphore operations") {
+		t.Fatalf("architecture.md must describe interactive-signal, prlimit, and persistent IPC seccomp policy")
+	}
 	if !strings.Contains(architecture, "post-start\n`execve()` surface") || !strings.Contains(architecture, "world-executable binary that is present in the\nruntime image") {
 		t.Fatalf("architecture.md must describe the remaining execve image surface")
 	}
@@ -278,6 +283,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"forwards `/compile` and `/execute` to a remote hardened runner",
 		"For non-root local development, forward both `/compile` and `/execute`",
 		"Bare `go run ./cmd/server` uses the compatibility `local-dev` shape",
+		"Server-side payload downloads reject URL credentials",
 		"[docs/selfhosted.md](docs/selfhosted.md)",
 	} {
 		if !strings.Contains(readme, want) {

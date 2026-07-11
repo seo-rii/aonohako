@@ -202,9 +202,10 @@ aonohako-selftest cgroup-preflight
   intentionally need unlimited open streams.
 - `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY` defaults to
   `min(4, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
-  `min(4, AONOHAKO_MAX_ACTIVE_RUNS)`. It separately caps concurrent pre-auth
-  body hashing for signed platform-auth requests, so stream concurrency can be
-  higher than the number of simultaneous 64 MiB body hash operations.
+  `min(4, AONOHAKO_MAX_ACTIVE_RUNS)` and accepts values from `1` through `64`.
+  It separately caps concurrent pre-auth body hashing for signed platform-auth
+  requests, so stream concurrency can be higher than the number of simultaneous
+  64 MiB body hash operations.
 - `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev` and `16`
   for `cloudrun` or `selfhosted`. It caps simultaneous request streams per
   authenticated or platform principal; `0` disables the per-principal cap.
@@ -316,6 +317,12 @@ Per-request execution limits are part of the `/execute` payload:
 - `data_url`
   `sources[]`, `binaries[]`, `programs[].binaries[]`, `spj.binary`, and
   `interactor.binaries[]` may use HTTP(S) `data_url` instead of `data_b64`.
+  Server-side payload downloads reject URL credentials and any destination
+  that resolves to loopback, private, link-local, multicast, unspecified, or
+  otherwise reserved address space. The same policy is enforced for every
+  redirect and at connection time. URL-backed artifacts share the same decoded
+  aggregate byte limits as inline payloads and are resolved only after request
+  structure and collection counts pass validation.
 - `enable_network`
   Cloud Run embedded-helper runners reject `true`. Self-hosted embedded-helper
   runners honor it only when `AONOHAKO_ALLOW_REQUEST_NETWORK=true`, and then

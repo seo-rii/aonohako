@@ -218,10 +218,11 @@ The seccomp filter denies high-risk operations, including:
   `set_mempolicy`, `migrate_pages`, and `move_pages`
 - `kcmp`, nested `seccomp`, Landlock policy syscalls, and LSM attribute/module
   syscalls
-- `kill`, `tkill`, `tgkill`
-- `prlimit64`, `setpriority`
+- `kill`, `tkill`, `tgkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo`
+- `prlimit64` except self queries with a null new-limit pointer, `setpriority`
 - `bpf`, `io_uring_*`, `userfaultfd`, `memfd_create` except for .NET and
   Wasmtime runtime compatibility, memory locking, SysV shared memory,
+  message-queue, and semaphore operations,
   `perf_event_open`, `cachestat`
 - `open_by_handle_at`, `name_to_handle_at`, `lookup_dcookie`
 - `fanotify_*`, keyring syscalls, module loading, kexec, NFS server control,
