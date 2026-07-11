@@ -106,6 +106,112 @@ func TestCompileRegistryCoversProfileCompileKinds(t *testing.T) {
 	}
 }
 
+func TestGoCompilerBuildsSoleNestedModuleFromModuleRoot(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workDir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("binary"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := goCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{
+			{Name: "src/go.mod"},
+			{Name: "src/main.go"},
+		}},
+		Runner: runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("response = %+v", resp)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("commands = %+v, want one", runner.commands)
+	}
+	wantArgs := []string{
+		"-C", filepath.Join(workDir, "src"),
+		"build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE",
+		"-o", filepath.Join(workDir, "Main"), ".",
+	}
+	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
+		t.Fatalf("args = %#v, want %#v", runner.commands[0].args, wantArgs)
+	}
+	if runner.commands[0].workDir != workDir {
+		t.Fatalf("sandbox workDir = %q, want workspace root %q", runner.commands[0].workDir, workDir)
+	}
+}
+
+func TestGoCompilerRejectsMultipleModuleFiles(t *testing.T) {
+	runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
+	resp := goCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: t.TempDir(),
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{
+			{Name: "go.mod"},
+			{Name: "main.go"},
+			{Name: "nested/go.mod"},
+		}},
+		Runner: runner,
+	})
+	if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, "multiple go.mod") {
+		t.Fatalf("response = %+v", resp)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatalf("compiler ran for ambiguous modules: %+v", runner.commands)
+	}
+}
+
+func TestGoCompilerKeepsRootAndNoModuleBuildModes(t *testing.T) {
+	tests := []struct {
+		name    string
+		sources []model.Source
+		wantEnd []string
+	}{
+		{
+			name:    "root module",
+			sources: []model.Source{{Name: "go.mod"}, {Name: "main.go"}},
+			wantEnd: []string{"build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-o", "Main", "."},
+		},
+		{
+			name:    "no module",
+			sources: []model.Source{{Name: "src/main.go"}},
+			wantEnd: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			runner := &recordingCommandRunner{
+				result: CommandResult{Status: model.CompileStatusOK},
+				hook: func(workDir, _ string, _ []string, _ []string) {
+					if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("binary"), 0o755); err != nil {
+						t.Fatal(err)
+					}
+				},
+			}
+			resp := goCompiler{}.Compile(context.Background(), CompileJob{WorkDir: workDir, Target: "Main", Request: &model.CompileRequest{Sources: tc.sources}, Runner: runner})
+			if resp.Status != model.CompileStatusOK || len(runner.commands) != 1 {
+				t.Fatalf("response=%+v commands=%+v", resp, runner.commands)
+			}
+			want := tc.wantEnd
+			if want == nil {
+				want = []string{"build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-o", "Main", filepath.Join(workDir, "src/main.go")}
+			}
+			if !reflect.DeepEqual(runner.commands[0].args, want) {
+				t.Fatalf("args = %#v, want %#v", runner.commands[0].args, want)
+			}
+		})
+	}
+}
+
 func TestKFrameworkCompilerUsesMainDefinition(t *testing.T) {
 	workDir := t.TempDir()
 	for name, content := range map[string]string{

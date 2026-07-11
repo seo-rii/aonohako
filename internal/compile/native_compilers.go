@@ -106,23 +106,31 @@ func compileRust(ctx context.Context, workDir, target string, sources []model.So
 type goCompiler struct{}
 
 func (goCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
-	return compileGo(ctx, job.WorkDir, job.Target, job.Request.Sources)
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	return compileGo(ctx, job.WorkDir, job.Target, job.Request.Sources, runner)
 }
 
-func compileGo(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
+func compileGo(ctx context.Context, workDir, target string, sources []model.Source, runner CommandRunner) model.CompileResponse {
 	var goFiles []string
-	hasMod := false
+	var goModFiles []string
 	for _, src := range sources {
-		name := strings.ToLower(filepath.Base(src.Name))
+		clean := filepath.Clean(src.Name)
+		name := filepath.Base(clean)
 		if name == "go.mod" {
-			hasMod = true
+			goModFiles = append(goModFiles, clean)
 		}
-		if strings.HasSuffix(name, ".go") {
-			goFiles = append(goFiles, filepath.Join(workDir, filepath.Clean(src.Name)))
+		if strings.HasSuffix(strings.ToLower(name), ".go") {
+			goFiles = append(goFiles, filepath.Join(workDir, clean))
 		}
 	}
 	if len(goFiles) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no go sources"}
+	}
+	if len(goModFiles) > 1 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "multiple go.mod files are not supported"}
 	}
 	goCache := filepath.Join(workDir, ".gocache")
 	goModCache := filepath.Join(workDir, ".gomodcache")
@@ -132,8 +140,12 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "mkdir failed: " + err.Error()}
 		}
 	}
-	args := []string{"build", "-tags=online_judge,ONLINE_JUDGE", "-o", target}
-	if hasMod {
+	args := []string{"build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-o", target}
+	if len(goModFiles) == 1 {
+		moduleDir := filepath.Dir(filepath.Join(workDir, goModFiles[0]))
+		if moduleDir != workDir {
+			args = []string{"-C", moduleDir, "build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-o", filepath.Join(workDir, target)}
+		}
 		args = append(args, ".")
 	} else {
 		args = append(args, goFiles...)
@@ -146,15 +158,15 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 		"GOTELEMETRY=off",
 		"GOTOOLCHAIN=local",
 	)
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "go", args, env)
-	if status != model.CompileStatusOK {
-		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
+	result := runner.Run(ctx, workDir, "go", args, env)
+	if result.Status != model.CompileStatusOK {
+		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
 	}
 	artifacts, err := readSingleArtifact(workDir, target, target, "exec")
 	if err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
 	}
-	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
 }
 
 type vhdlCompiler struct{}

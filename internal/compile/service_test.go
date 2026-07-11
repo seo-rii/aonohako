@@ -150,6 +150,26 @@ func TestCompileNativeBuildsMultipleCFiles(t *testing.T) {
 	}
 }
 
+func TestRunCompilesNestedGoModule(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go is unavailable")
+	}
+	resp := New().Run(context.Background(), &model.CompileRequest{
+		Lang:       "GO",
+		EntryPoint: "src/main.go",
+		Sources: []model.Source{
+			{Name: "src/go.mod", DataB64: b64String("module example.com/submission\n\ngo 1.22\n")},
+			{Name: "src/main.go", DataB64: b64String("package main\nfunc main() {}\n")},
+		},
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("nested Go module response = %+v", resp)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+}
+
 func TestRunRejectsOversizedSource(t *testing.T) {
 	svc := New()
 	large := bytes.Repeat([]byte("a"), 17<<20)
