@@ -227,8 +227,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "identity metadata such as `/etc/passwd`, `/etc/group`, and\npackage database paths, and package-manager module entrypoint directories") || !strings.Contains(architecture, "Runtime-mounted host files such as `/etc/hostname` and `/etc/hosts` are not\nimage-hardened") {
 		t.Fatalf("architecture.md must describe image-hardened metadata and runtime-mounted host metadata limits")
 	}
-	if !strings.Contains(architecture, "Syft SBOM") || !strings.Contains(architecture, "every production runtime profile artifact") || !strings.Contains(architecture, "non-blocking Grype JSON scan") {
-		t.Fatalf("architecture.md must describe production runtime SBOM and scan artifacts")
+	if !strings.Contains(architecture, "Syft SBOM") || !strings.Contains(architecture, "every production runtime profile artifact") || !strings.Contains(architecture, "Syft and Grype operational failures fail the\nprofile matrix leg") || !strings.Contains(architecture, "root-backed Python runtime additionally rejects fixable\nHigh or Critical findings") {
+		t.Fatalf("architecture.md must describe production runtime SBOM and fail-closed scan policy")
 	}
 	if !strings.Contains(architecture, "fail-closed production profile artifact verification step") || !strings.Contains(architecture, "SBOM JSON, Grype JSON, summary, image archive, per-archive SHA256 sidecar, and\n  consolidated `SHA256SUMS` entries") {
 		t.Fatalf("architecture.md must describe production runtime artifact verification")
