@@ -29,3 +29,29 @@ func TestHelperAppliesAddressSpaceLimitAfterGoSetupBeforeSeccomp(t *testing.T) {
 		t.Fatalf("RLIMIT_AS must be applied after Go setup and before seccomp install")
 	}
 }
+
+func TestHelperPolicyIncludesPeerControlAndSysVIPCGuards(t *testing.T) {
+	raw, err := os.ReadFile("helper_linux.go")
+	if err != nil {
+		t.Fatalf("read helper_linux.go: %v", err)
+	}
+	source := string(raw)
+	for _, marker := range []string{
+		"unix.SYS_RT_SIGQUEUEINFO",
+		"unix.SYS_RT_TGSIGQUEUEINFO",
+		"unix.SYS_MSGGET",
+		"unix.SYS_MSGSND",
+		"unix.SYS_MSGRCV",
+		"unix.SYS_MSGCTL",
+		"unix.SYS_SEMGET",
+		"unix.SYS_SEMOP",
+		"unix.SYS_SEMTIMEDOP",
+		"unix.SYS_SEMCTL",
+		"unix.SYS_PRLIMIT64",
+		"seccompDataArg0Offset+2*8+4",
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("helper policy is missing %s", marker)
+		}
+	}
+}

@@ -241,6 +241,7 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 		}
 	}))
 	defer assetServer.Close()
+	setPayloadURLHTTPClientForTest(t, assetServer.URL)
 
 	tests := []struct {
 		name    string
@@ -276,11 +277,17 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 				if got, _ := base64.StdEncoding.DecodeString(req.Binaries[0].DataB64); string(got) != "#!/bin/sh\ncat\n" {
 					t.Fatalf("binary url was not resolved: %q", string(got))
 				}
+				if req.Binaries[0].DataURL != "" {
+					t.Fatalf("resolved binary data_url was retained: %q", req.Binaries[0].DataURL)
+				}
 				if req.SPJ == nil || req.SPJ.Binary == nil {
 					t.Fatalf("spj was not preserved: %+v", req.SPJ)
 				}
 				if got, _ := base64.StdEncoding.DecodeString(req.SPJ.Binary.DataB64); string(got) != "#!/bin/sh\nexit 0\n" {
 					t.Fatalf("spj binary url was not resolved: %q", string(got))
+				}
+				if req.SPJ.Binary.DataURL != "" {
+					t.Fatalf("resolved spj data_url was retained: %q", req.SPJ.Binary.DataURL)
 				}
 			},
 		},
@@ -315,6 +322,9 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 				}
 				if got, _ := base64.StdEncoding.DecodeString(req.Interactor.Binaries[0].DataB64); string(got) != "#!/bin/sh\nexit 0\n" {
 					t.Fatalf("interactor binary url was not resolved: %q", string(got))
+				}
+				if req.Interactor.Binaries[0].DataURL != "" {
+					t.Fatalf("resolved interactor data_url was retained: %q", req.Interactor.Binaries[0].DataURL)
 				}
 			},
 		},
@@ -371,6 +381,9 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 				}
 				if got, _ := base64.StdEncoding.DecodeString(req.Programs[1].Binaries[0].DataB64); string(got) != "#!/bin/sh\ncat\n" {
 					t.Fatalf("program binary url was not resolved: %q", string(got))
+				}
+				if req.Programs[0].Binaries[0].DataURL != "" || req.Programs[1].Binaries[0].DataURL != "" {
+					t.Fatalf("resolved program data_url was retained: %+v", req.Programs)
 				}
 			},
 		},
@@ -2138,6 +2151,7 @@ func TestCompileResolvesSourcePayloadURLsBeforeRunner(t *testing.T) {
 		_, _ = w.Write([]byte("print('ok')\n"))
 	}))
 	defer assetServer.Close()
+	setPayloadURLHTTPClientForTest(t, assetServer.URL)
 
 	called := false
 	s := NewWithServices(configForTest(t), compileRunnerStub{run: func(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
@@ -2151,6 +2165,9 @@ func TestCompileResolvesSourcePayloadURLsBeforeRunner(t *testing.T) {
 		}
 		if string(data) != "print('ok')\n" {
 			t.Fatalf("source url was not resolved: %q", string(data))
+		}
+		if req.Sources[0].DataURL != "" {
+			t.Fatalf("resolved source data_url was retained: %q", req.Sources[0].DataURL)
 		}
 		return model.CompileResponse{Status: model.CompileStatusOK}
 	}}, execute.New())

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"aonohako/internal/model"
+	"aonohako/internal/payloadurl"
 	"aonohako/internal/profiles"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/util"
@@ -82,8 +83,8 @@ func Validate(req *model.RunRequest) error {
 			return err
 		}
 	}
-	if req.SPJ != nil && req.SPJ.Limits != nil {
-		if err := ValidateOptionalLimits("spj.limits", *req.SPJ.Limits); err != nil {
+	if req.SPJ != nil {
+		if err := ValidateSPJ(req.SPJ); err != nil {
 			return err
 		}
 	}
@@ -94,7 +95,7 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 	if len(req.Programs) == 0 || len(req.Steps) == 0 {
 		return fmt.Errorf("programs and steps must be provided together")
 	}
-	if strings.TrimSpace(req.Lang) != "" || len(req.Binaries) > 0 || strings.TrimSpace(req.Stdin) != "" || strings.TrimSpace(req.StdinURL) != "" || strings.TrimSpace(req.EntryPoint) != "" || req.EnableNetwork || req.Interactor != nil || !LimitsAreZero(req.Limits) {
+	if req.Lang != "" || len(req.Binaries) > 0 || req.Stdin != "" || req.StdinURL != "" || req.EntryPoint != "" || req.EnableNetwork || req.Interactor != nil || !LimitsAreZero(req.Limits) {
 		return fmt.Errorf("legacy execute fields cannot be combined with programs/steps")
 	}
 	if len(req.Programs) > MaxPrograms {
@@ -112,11 +113,12 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 
 	programs := make(map[string]struct{}, len(req.Programs))
 	for i, program := range req.Programs {
-		if strings.TrimSpace(program.ID) == "" {
+		programID := strings.TrimSpace(program.ID)
+		if programID == "" {
 			return fmt.Errorf("programs[%d].id is required", i)
 		}
-		if _, exists := programs[program.ID]; exists {
-			return fmt.Errorf("duplicate program id: %s", program.ID)
+		if _, exists := programs[programID]; exists {
+			return fmt.Errorf("duplicate program id: %s", programID)
 		}
 		if strings.TrimSpace(program.Lang) == "" {
 			return fmt.Errorf("program %s lang is required", program.ID)
@@ -133,20 +135,21 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		if err := ValidateBinaries("program "+program.ID+" binaries", program.Binaries); err != nil {
 			return err
 		}
-		programs[program.ID] = struct{}{}
+		programs[programID] = struct{}{}
 	}
 
 	handoffID := ""
 	seenSteps := map[string]struct{}{}
 	for i, step := range req.Steps {
-		if strings.TrimSpace(step.ID) == "" {
+		stepID := strings.TrimSpace(step.ID)
+		if stepID == "" {
 			return fmt.Errorf("steps[%d].id is required", i)
 		}
-		if _, exists := seenSteps[step.ID]; exists {
-			return fmt.Errorf("duplicate step id: %s", step.ID)
+		if _, exists := seenSteps[stepID]; exists {
+			return fmt.Errorf("duplicate step id: %s", stepID)
 		}
-		seenSteps[step.ID] = struct{}{}
-		if _, ok := programs[step.ProgramID]; !ok {
+		seenSteps[stepID] = struct{}{}
+		if _, ok := programs[strings.TrimSpace(step.ProgramID)]; !ok {
 			return fmt.Errorf("step %s references unknown program_id: %s", step.ID, step.ProgramID)
 		}
 		if len(step.StdinParts) > 0 && (step.Stdin != "" || strings.TrimSpace(step.StdinURL) != "" || strings.TrimSpace(step.StdinFrom) != "") {
@@ -188,7 +191,7 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 			if step.Handoff.MaxBytes < 0 || step.Handoff.MaxBytes > MaxStepHandoffBytes {
 				return fmt.Errorf("first step handoff.max_bytes must be between 0 and %d", MaxStepHandoffBytes)
 			}
-			handoffID = step.Handoff.ID
+			handoffID = strings.TrimSpace(step.Handoff.ID)
 			continue
 		}
 		if len(step.StdinParts) > 0 {
@@ -294,6 +297,63 @@ func ValidateInteractor(req *model.RunRequest) error {
 		if err := ValidateOptionalLimits("interactor.limits", *req.Interactor.Limits); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func ValidateSPJ(spec *model.SPJSpec) error {
+	if spec == nil {
+		return nil
+	}
+	if spec.Limits != nil {
+		if err := ValidateOptionalLimits("spj.limits", *spec.Limits); err != nil {
+			return err
+		}
+	}
+	if spec.Binary == nil {
+		return fmt.Errorf("spj.binary is required")
+	}
+	cleanName, err := util.ValidateRelativePath(spec.Binary.Name)
+	if err != nil {
+		return fmt.Errorf("spj.binary.name: %w", err)
+	}
+	dataB64 := strings.TrimSpace(spec.Binary.DataB64)
+	dataURL := strings.TrimSpace(spec.Binary.DataURL)
+	if dataB64 == "" && dataURL == "" {
+		return fmt.Errorf("spj.binary payload is required")
+	}
+	if dataB64 != "" && dataURL != "" {
+		return fmt.Errorf("spj.binary cannot combine data_b64 with data_url")
+	}
+	if dataB64 != "" {
+		data, err := base64.StdEncoding.DecodeString(spec.Binary.DataB64)
+		if err != nil {
+			return fmt.Errorf("spj.binary.data_b64 invalid base64: %w", err)
+		}
+		if len(data) > MaxBinaryFileBytes {
+			return fmt.Errorf("spj binary too large: %s", cleanName)
+		}
+	} else {
+		if err := payloadurl.Validate(dataURL); err != nil {
+			return fmt.Errorf("spj.binary.data_url: %w", err)
+		}
+	}
+	if err := ValidateRunLang("spj.lang", spec.Lang); err != nil {
+		return err
+	}
+	if len(spec.SidecarOutputs) > MaxSidecarOutputs {
+		return fmt.Errorf("spj has too many sidecar outputs: max %d", MaxSidecarOutputs)
+	}
+	seenSidecars := make(map[string]struct{}, len(spec.SidecarOutputs))
+	for i, output := range spec.SidecarOutputs {
+		clean, err := util.ValidateRelativePath(output.Path)
+		if err != nil {
+			return fmt.Errorf("spj.sidecar_outputs[%d].path: %w", i, err)
+		}
+		if _, exists := seenSidecars[clean]; exists {
+			return fmt.Errorf("duplicate spj sidecar output path: %s", clean)
+		}
+		seenSidecars[clean] = struct{}{}
 	}
 	return nil
 }

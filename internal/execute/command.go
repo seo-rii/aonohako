@@ -253,7 +253,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"-jar",
 			primaryPath,
 		}
-	case "javascript", "apl", "coffeescript":
+	case "javascript", "apl":
 		limitMB := max(64, req.Limits.MemoryMB)
 		oldSpaceMB := max(32, (limitMB*tuning.NodeOldSpacePercent)/100)
 		semiSpaceMB := limitMB / 64
@@ -273,8 +273,6 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		switch lang {
 		case "apl":
 			return append(args, "/usr/local/bin/apl", "--script", "-f", primaryPath)
-		case "coffeescript":
-			return append(args, "/usr/local/bin/coffee", primaryPath)
 		default:
 			return append(args, primaryPath)
 		}

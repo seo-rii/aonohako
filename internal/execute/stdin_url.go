@@ -5,22 +5,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
+
+	"aonohako/internal/payloadurl"
 )
 
 const stdinURLDownloadTimeout = 60 * time.Second
 
-var stdinURLHTTPClient = &http.Client{
-	Timeout: stdinURLDownloadTimeout,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return fmt.Errorf("too many redirects")
-		}
-		return validateStdinURL(req.URL.String())
-	},
-}
+var stdinURLHTTPClient = payloadurl.NewHTTPClient(stdinURLDownloadTimeout)
 
 func openStdinURL(ctx context.Context, rawURL string, maxBytes int64) (io.ReadCloser, error) {
 	if err := validateStdinURL(rawURL); err != nil {
@@ -47,17 +39,5 @@ func openStdinURL(ctx context.Context, rawURL string, maxBytes int64) (io.ReadCl
 }
 
 func validateStdinURL(rawURL string) error {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return err
-	}
-	switch strings.ToLower(parsed.Scheme) {
-	case "http", "https":
-	default:
-		return fmt.Errorf("url scheme must be http or https")
-	}
-	if parsed.Host == "" {
-		return fmt.Errorf("url host is required")
-	}
-	return nil
+	return payloadurl.Validate(rawURL)
 }

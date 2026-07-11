@@ -1,6 +1,7 @@
 package runvalidation
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -326,5 +327,97 @@ func TestValidateInteractorRequestCoversInteractiveIOShape(t *testing.T) {
 				t.Fatalf("Validate error = %v, want containing %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestValidateSPJRejectsIncompleteAndAmbiguousSpecs(t *testing.T) {
+	valid := func() *model.SPJSpec {
+		return &model.SPJSpec{
+			Binary: &model.Binary{Name: "checker", DataB64: "ZWNobw==", Mode: "exec"},
+			Lang:   "binary",
+		}
+	}
+	if err := ValidateSPJ(valid()); err != nil {
+		t.Fatalf("valid SPJ should pass: %v", err)
+	}
+	urlSpec := valid()
+	urlSpec.Binary.DataB64 = ""
+	urlSpec.Binary.DataURL = "https://assets.example/checker"
+	if err := ValidateSPJ(urlSpec); err != nil {
+		t.Fatalf("valid SPJ data_url should pass before payload resolution: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		edit func(*model.SPJSpec)
+		want string
+	}{
+		{name: "missing binary", edit: func(spec *model.SPJSpec) { spec.Binary = nil }, want: "spj.binary is required"},
+		{name: "missing name", edit: func(spec *model.SPJSpec) { spec.Binary.Name = "" }, want: "spj.binary.name"},
+		{name: "unsafe name", edit: func(spec *model.SPJSpec) { spec.Binary.Name = "../checker" }, want: "spj.binary.name"},
+		{name: "missing payload", edit: func(spec *model.SPJSpec) { spec.Binary.DataB64 = "" }, want: "payload is required"},
+		{name: "ambiguous payload", edit: func(spec *model.SPJSpec) { spec.Binary.DataURL = "https://assets.example/checker" }, want: "cannot combine data_b64 with data_url"},
+		{name: "invalid base64", edit: func(spec *model.SPJSpec) { spec.Binary.DataB64 = "!!!!" }, want: "invalid base64"},
+		{name: "oversized payload", edit: func(spec *model.SPJSpec) {
+			spec.Binary.DataB64 = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", MaxBinaryFileBytes+1)))
+		}, want: "too large"},
+		{name: "invalid data url scheme", edit: func(spec *model.SPJSpec) { spec.Binary.DataB64 = ""; spec.Binary.DataURL = "file:///tmp/checker" }, want: "scheme must be http"},
+		{name: "data url credentials", edit: func(spec *model.SPJSpec) {
+			spec.Binary.DataB64 = ""
+			spec.Binary.DataURL = "https://user:pass@assets.example/checker"
+		}, want: "credentials"},
+		{name: "missing language", edit: func(spec *model.SPJSpec) { spec.Lang = "" }, want: "spj.lang is required"},
+		{name: "unsupported language", edit: func(spec *model.SPJSpec) { spec.Lang = "not-a-runtime" }, want: "unsupported spj.lang"},
+		{name: "too many sidecars", edit: func(spec *model.SPJSpec) { spec.SidecarOutputs = make([]model.OutputFile, MaxSidecarOutputs+1) }, want: "too many sidecar outputs"},
+		{name: "unsafe sidecar", edit: func(spec *model.SPJSpec) { spec.SidecarOutputs = []model.OutputFile{{Path: "../secret"}} }, want: "spj.sidecar_outputs[0].path"},
+		{name: "duplicate sidecar", edit: func(spec *model.SPJSpec) {
+			spec.SidecarOutputs = []model.OutputFile{{Path: "answer.json"}, {Path: "dir/../answer.json"}}
+		}, want: "duplicate spj sidecar output path"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := valid()
+			tc.edit(spec)
+			err := ValidateSPJ(spec)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("ValidateSPJ error = %v, want containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateStepPipelineNormalizesIdentifiersAndRejectsIgnoredLegacyText(t *testing.T) {
+	req := &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: " encode ", Lang: "binary", Binaries: []model.Binary{{Name: "encode", DataB64: "ZWNobw==", Mode: "exec"}}},
+			{ID: "decode", Lang: "binary", Binaries: []model.Binary{{Name: "decode", DataB64: "ZWNobw==", Mode: "exec"}}},
+		},
+		Steps: []model.RunStep{
+			{ID: " encode-step ", ProgramID: "encode", StdinFrom: "   ", Limits: model.Limits{TimeMs: 1000, MemoryMB: 128}, Handoff: &model.StepHandoff{ID: " encoded ", From: "   "}},
+			{ID: "decode-step", ProgramID: " decode ", StdinFrom: " encoded ", Limits: model.Limits{TimeMs: 1000, MemoryMB: 128}},
+		},
+	}
+	if err := ValidateStepPipeline(req); err != nil {
+		t.Fatalf("canonical-equivalent step identifiers should validate: %v", err)
+	}
+
+	duplicate := *req
+	duplicate.Programs = append([]model.RunProgram(nil), req.Programs...)
+	duplicate.Programs[1].ID = "encode"
+	if err := ValidateStepPipeline(&duplicate); err == nil || !strings.Contains(err.Error(), "duplicate program id") {
+		t.Fatalf("whitespace-equivalent duplicate program error = %v", err)
+	}
+
+	for _, edit := range []func(*model.RunRequest){
+		func(r *model.RunRequest) { r.Lang = " " },
+		func(r *model.RunRequest) { r.Stdin = "\t" },
+		func(r *model.RunRequest) { r.StdinURL = " " },
+		func(r *model.RunRequest) { r.EntryPoint = "\n" },
+	} {
+		copyReq := *req
+		edit(&copyReq)
+		if err := ValidateStepPipeline(&copyReq); err == nil || !strings.Contains(err.Error(), "legacy execute fields") {
+			t.Fatalf("whitespace-only legacy field error = %v", err)
+		}
 	}
 }

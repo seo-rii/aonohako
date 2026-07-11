@@ -54,6 +54,17 @@ type sandboxStreamConfig struct {
 	onStderrDone  func()
 }
 
+type sandboxPreparedStdin struct {
+	file *os.File
+}
+
+func (s *sandboxPreparedStdin) Read(p []byte) (int, error) {
+	if s == nil || s.file == nil {
+		return 0, io.EOF
+	}
+	return s.file.Read(p)
+}
+
 type teeCaptureWriter struct {
 	capture *cappedBuffer
 	forward io.Writer
@@ -294,35 +305,42 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		if stdinReader == nil {
 			stdinReader = strings.NewReader(req.Stdin)
 		}
-		stdinMaxBytes := streams.stdinMaxBytes
-		if stdinMaxBytes <= 0 {
-			stdinMaxBytes = runvalidation.MaxTextFieldBytes
+		if prepared, ok := stdinReader.(*sandboxPreparedStdin); ok && prepared.file != nil {
+			if _, err := prepared.file.Seek(0, io.SeekStart); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+			}
+			cmd.Stdin = prepared.file
+		} else {
+			stdinMaxBytes := streams.stdinMaxBytes
+			if stdinMaxBytes <= 0 {
+				stdinMaxBytes = runvalidation.MaxTextFieldBytes
+			}
+			stdinTemp, err := os.CreateTemp(filepath.Join(ws.RootDir, ".tmp"), "stdin-*")
+			if err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+			}
+			defer func() {
+				_ = stdinTemp.Close()
+				_ = os.Remove(stdinTemp.Name())
+			}()
+			written, err := io.Copy(stdinTemp, io.LimitReader(stdinReader, stdinMaxBytes+1))
+			if err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+			}
+			if written > stdinMaxBytes {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin too large"}
+			}
+			if err := stdinTemp.Chown(65532, 65532); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+			}
+			if err := stdinTemp.Chmod(0o400); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+			}
+			if _, err := stdinTemp.Seek(0, 0); err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+			}
+			cmd.Stdin = stdinTemp
 		}
-		stdinTemp, err := os.CreateTemp(filepath.Join(ws.RootDir, ".tmp"), "stdin-*")
-		if err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-		}
-		defer func() {
-			_ = stdinTemp.Close()
-			_ = os.Remove(stdinTemp.Name())
-		}()
-		written, err := io.Copy(stdinTemp, io.LimitReader(stdinReader, stdinMaxBytes+1))
-		if err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-		}
-		if written > stdinMaxBytes {
-			return execResult{Status: model.RunStatusInitFail, Reason: "stdin too large"}
-		}
-		if err := stdinTemp.Chown(65532, 65532); err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-		}
-		if err := stdinTemp.Chmod(0o400); err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-		}
-		if _, err := stdinTemp.Seek(0, 0); err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
-		}
-		cmd.Stdin = stdinTemp
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid:   true,

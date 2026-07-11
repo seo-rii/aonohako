@@ -257,7 +257,6 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"scala", "/tmp/classes", "java", false},
 		{"fsharp", "/tmp/App.dll", "dotnet", true},
 		{"javascript", "/tmp/sol.js", "node", true},
-		{"coffeescript", "/tmp/sol.coffee", "node", true},
 		{"julia", "/tmp/sol.jl", "julia", true},
 		{"raku", "/tmp/sol.raku", "raku", true},
 		{"r", "/tmp/sol.R", "/usr/lib/R/bin/exec/R", true},
@@ -511,19 +510,6 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 		"/tmp/Main.apl",
 	}) {
 		t.Fatalf("apl command = %v", aplArgs)
-	}
-
-	coffeeArgs := buildCommand("/tmp/Main.coffee", "coffeescript", req)
-	if !reflect.DeepEqual(coffeeArgs, []string{
-		"node",
-		"--disable-wasm-trap-handler",
-		"--max-old-space-size=57",
-		"--max-semi-space-size=1",
-		"--stack-size=2048",
-		"/usr/local/bin/coffee",
-		"/tmp/Main.coffee",
-	}) {
-		t.Fatalf("coffeescript command = %v", coffeeArgs)
 	}
 
 	wasmArgs := buildCommand("/tmp/Main.wasm", "wasm", req)
@@ -857,7 +843,7 @@ func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) 
 func TestEvaluateRunStatusClassifiesFinalCPUOverrun(t *testing.T) {
 	req := &model.RunRequest{ExpectedStdout: "ok\n", Limits: model.Limits{TimeMs: 100, MemoryMB: 64}}
 	res := execResult{Status: "OK", CPUTimeMs: 101}
-	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("ok\n"), "stdout", nil, config.DefaultRuntimeTuningConfig(), "")
+	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("ok\n"), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "")
 	if status != model.RunStatusTLE {
 		t.Fatalf("status = %q, want TLE", status)
 	}

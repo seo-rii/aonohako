@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,10 +16,11 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/util"
 )
 
-func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
+func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource, judgeInputPath string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
 	status, reason, source := classifyRunStatusWithoutOutput(req, res)
 
 	var score *float64
@@ -26,7 +28,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
 	if evaluateOutputs {
 		if hasSPJ(req) {
-			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), spjSidecars, tuning, cgroupParentDir)
+			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir)
 			if sc != nil {
 				score = sc
 			}
@@ -159,10 +161,16 @@ func captureSidecarOutputs(ws Workspace, specs []model.OutputFile) ([]model.Side
 }
 
 func hasSPJ(req *model.RunRequest) bool {
-	return req != nil && req.SPJ != nil && req.SPJ.Binary != nil && req.SPJ.Binary.Name != "" && req.SPJ.Binary.DataB64 != ""
+	return req != nil && req.SPJ != nil
 }
 
-func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout string, sidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (bool, *float64, error) {
+func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout, judgeInputPath string, sidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (bool, *float64, error) {
+	if req == nil || req.SPJ == nil {
+		return false, nil, fmt.Errorf("spj is required")
+	}
+	if err := runvalidation.ValidateSPJ(req.SPJ); err != nil {
+		return false, nil, err
+	}
 	spjRoot := filepath.Join(ws.RootDir, ".spj")
 	spjWS, err := prepareWorkspaceDirs(spjRoot)
 	if err != nil {
@@ -183,7 +191,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	}
 	defer os.Remove(spjPath)
 
-	inputPath, err := writeStdinTempFile(ctx, filepath.Join(spjWS.RootDir, ".tmp"), "spj-input-*", req)
+	inputPath, err := writeStdinTempFile(ctx, filepath.Join(spjWS.RootDir, ".tmp"), "spj-input-*", req, judgeInputPath)
 	if err != nil {
 		return false, nil, err
 	}
@@ -243,7 +251,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 				if err != nil {
 					return false, nil, err
 				}
-				if parsed < 0 || parsed > 1 {
+				if math.IsNaN(parsed) || math.IsInf(parsed, 0) || parsed < 0 || parsed > 1 {
 					return false, nil, fmt.Errorf("spj score out of range")
 				}
 				scoreVal = parsed
@@ -301,7 +309,15 @@ func materializeSPJSidecars(root string, specs []model.OutputFile, sidecars []mo
 	return nil
 }
 
-func writeStdinTempFile(ctx context.Context, dir, pattern string, req *model.RunRequest) (string, error) {
+func writeStdinTempFile(ctx context.Context, dir, pattern string, req *model.RunRequest, preparedPath string) (string, error) {
+	if strings.TrimSpace(preparedPath) != "" {
+		prepared, err := os.Open(preparedPath)
+		if err != nil {
+			return "", err
+		}
+		defer prepared.Close()
+		return writeTempFileFromReader(dir, pattern, prepared, stdinURLMaxBytes(req.Limits))
+	}
 	if strings.TrimSpace(req.StdinURL) == "" {
 		return writeTempFile(dir, pattern, req.Stdin)
 	}

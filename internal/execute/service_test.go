@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -734,6 +735,7 @@ func TestRunConsumesLargeStdinURL(t *testing.T) {
 		}
 	}))
 	defer inputServer.Close()
+	setStdinURLHTTPClientForTest(t, inputServer.URL)
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
@@ -743,7 +745,7 @@ func TestRunConsumesLargeStdinURL(t *testing.T) {
 			DataB64: b64("#!/bin/sh\nwc -c | tr -d ' '\n"),
 			Mode:    "exec",
 		}},
-		StdinURL:       inputServer.URL,
+		StdinURL:       "http://payload.example/input",
 		ExpectedStdout: fmt.Sprintf("%d\n", inputBytes),
 		Limits: model.Limits{
 			TimeMs:         5000,
@@ -772,12 +774,13 @@ func TestAssembleStepStdinPartsConsumesLargeDataURL(t *testing.T) {
 		}
 	}))
 	defer inputServer.Close()
+	setStdinURLHTTPClientForTest(t, inputServer.URL)
 
 	step := model.RunStep{
 		ID: "encode",
 		StdinParts: []model.StdinPart{{
 			Type:    "text",
-			DataURL: inputServer.URL,
+			DataURL: "http://payload.example/input",
 		}},
 		Limits: model.Limits{WorkspaceBytes: int64(inputBytes + 4<<20)},
 	}
@@ -1097,7 +1100,7 @@ func TestEvaluateRunStatusReportsVerdictSource(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			status, _, _, source := evaluateRunStatus(context.Background(), Workspace{}, &tc.req, tc.res, tc.judgeOut, tc.judgeSource, nil, config.DefaultRuntimeTuningConfig(), "")
+			status, _, _, source := evaluateRunStatus(context.Background(), Workspace{}, &tc.req, tc.res, tc.judgeOut, tc.judgeSource, "", nil, config.DefaultRuntimeTuningConfig(), "")
 			if status != tc.wantStatus {
 				t.Fatalf("status = %q, want %q", status, tc.wantStatus)
 			}
@@ -1516,18 +1519,64 @@ int main(void) {
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "binary",
-		Binaries: []model.Binary{{
-			Name:    "runner",
-			DataB64: buildCTestBinary(t, code),
-			Mode:    "exec",
-		}},
+		Lang:           "binary",
+		Binaries:       []model.Binary{{Name: "runner", DataB64: buildCTestBinary(t, code), Mode: "exec"}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunBlocksSysVMessageQueuesAndSemaphores(t *testing.T) {
+	requireSandboxSupport(t)
+
+	code := `
+#include <errno.h>
+#include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/sem.h>
+
+int main(void) {
+	errno = 0;
+	int msg_id = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
+	int msg_errno = errno;
+	errno = 0;
+	int sem_id = semget(IPC_PRIVATE, 1, IPC_CREAT | 0600);
+	int sem_errno = errno;
+	if (msg_id == -1 && msg_errno == EPERM && sem_id == -1 && sem_errno == EPERM) {
+		puts("blocked");
+		return 0;
+	}
+	printf("unexpected msg=%d sem=%d msg_errno=%d sem_errno=%d\n", msg_id, sem_id, msg_errno, sem_errno);
+	return 1;
+}
+`
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang:           "binary",
+		Binaries:       []model.Binary{{Name: "runner", DataB64: buildCTestBinary(t, code), Mode: "exec"}},
 		ExpectedStdout: "blocked\n",
 		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
 	}, Hooks{})
 
+	msgID, semID := -1, -1
+	if strings.HasPrefix(resp.Stdout, "unexpected ") {
+		_, _ = fmt.Sscanf(resp.Stdout, "unexpected msg=%d sem=%d", &msgID, &semID)
+	}
+	defer func() {
+		if msgID >= 0 {
+			_, _, _ = syscall.Syscall(syscall.SYS_MSGCTL, uintptr(msgID), 0, 0)
+		}
+		if semID >= 0 {
+			_, _, _ = syscall.Syscall6(syscall.SYS_SEMCTL, uintptr(semID), 0, 0, 0, 0, 0)
+		}
+	}()
 	if resp.Status != model.RunStatusAccepted {
-		t.Fatalf("expected Accepted, got %+v", resp)
+		t.Fatalf("expected SysV IPC creation to be blocked, got %+v", resp)
 	}
 }
 
@@ -1551,18 +1600,86 @@ int main(void) {
 
 	svc := New()
 	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "binary",
-		Binaries: []model.Binary{{
-			Name:    "probe",
-			DataB64: payload,
-			Mode:    "exec",
-		}},
+		Lang:           "binary",
+		Binaries:       []model.Binary{{Name: "probe", DataB64: payload, Mode: "exec"}},
 		ExpectedStdout: "ok\n",
 		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
 	}, Hooks{})
-
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted, got %+v", resp)
+	}
+}
+
+func TestRunBlocksUnsafePrlimitAndQueuedSignalsAgainstSameUIDPeer(t *testing.T) {
+	requireSandboxSupport(t)
+
+	target := exec.Command("sleep", "10")
+	target.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65532, Gid: 65532}}
+	if err := target.Start(); err != nil {
+		t.Fatalf("start same-UID target process: %v", err)
+	}
+	defer func() {
+		_ = target.Process.Kill()
+		_, _ = target.Process.Wait()
+	}()
+
+	code := fmt.Sprintf(`
+#define _GNU_SOURCE
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+int main(void) {
+	const pid_t peer = %d;
+	struct rlimit current;
+	if (syscall(SYS_prlimit64, 0, RLIMIT_NOFILE, NULL, &current) != 0) {
+		perror("safe prlimit query");
+		return 2;
+	}
+	struct rlimit lowered = {16, 16};
+	errno = 0;
+	long self_set = syscall(SYS_prlimit64, 0, RLIMIT_NOFILE, &lowered, NULL);
+	int self_errno = errno;
+	errno = 0;
+	long peer_query = syscall(SYS_prlimit64, peer, RLIMIT_NOFILE, NULL, &current);
+	int peer_errno = errno;
+	siginfo_t info = {0};
+	info.si_signo = SIGCONT;
+	info.si_code = SI_QUEUE;
+	errno = 0;
+	long queued = syscall(SYS_rt_sigqueueinfo, peer, SIGCONT, &info);
+	int queued_errno = errno;
+	errno = 0;
+	long thread_queued = syscall(SYS_rt_tgsigqueueinfo, peer, peer, SIGCONT, &info);
+	int thread_errno = errno;
+	if (self_set == -1 && self_errno == EPERM &&
+		peer_query == -1 && peer_errno == EPERM &&
+		queued == -1 && queued_errno == EPERM &&
+		thread_queued == -1 && thread_errno == EPERM) {
+		puts("blocked");
+		return 0;
+	}
+	printf("unexpected self=%%ld/%%d peer=%%ld/%%d queued=%%ld/%%d thread=%%ld/%%d\n",
+		self_set, self_errno, peer_query, peer_errno, queued, queued_errno, thread_queued, thread_errno);
+	return 1;
+}
+`, target.Process.Pid)
+
+	svc := New()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang:           "binary",
+		Binaries:       []model.Binary{{Name: "runner", DataB64: buildCTestBinary(t, code), Mode: "exec"}},
+		ExpectedStdout: "blocked\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 256},
+	}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected unsafe peer-control syscalls to be blocked, got %+v", resp)
+	}
+	if err := target.Process.Signal(syscall.Signal(0)); err != nil {
+		t.Fatalf("same-UID target should remain alive: %v", err)
 	}
 }
 
@@ -1978,6 +2095,7 @@ func TestRunCannotSignalSiblingProcess(t *testing.T) {
 	requireSandboxSupport(t)
 
 	target := exec.Command("sleep", "10")
+	target.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65532, Gid: 65532}}
 	if err := target.Start(); err != nil {
 		t.Fatalf("start target process: %v", err)
 	}
@@ -2731,9 +2849,9 @@ with open(sys.argv[3], "r", encoding="utf-8") as handle:
     answer = handle.read()
 if stdin:
     raise SystemExit(3)
-if output != "42\n":
+if output != "actual\n":
     raise SystemExit(4)
-if answer != "42\n":
+if answer != "official\n":
     raise SystemExit(5)
 raise SystemExit(0)
 `
@@ -2742,9 +2860,9 @@ raise SystemExit(0)
 		Lang: "python",
 		Binaries: []model.Binary{{
 			Name:    "main.py",
-			DataB64: base64.StdEncoding.EncodeToString([]byte("print('42')\n")),
+			DataB64: base64.StdEncoding.EncodeToString([]byte("print('actual')\n")),
 		}},
-		ExpectedStdout: "42\n",
+		ExpectedStdout: "official\n",
 		SPJ: &model.SPJSpec{
 			Binary: &model.Binary{
 				Name:    "spj.py",
@@ -2852,6 +2970,174 @@ raise SystemExit(0)
 
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("expected SPJ to accept default image sidecar, got %+v", resp)
+	}
+}
+
+func TestRunRejectsIncompleteSPJBeforeStartingSandbox(t *testing.T) {
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "runner",
+			DataB64: b64("#!/bin/sh\nexit 0\n"),
+			Mode:    "exec",
+		}},
+		Limits: model.Limits{TimeMs: 1000, MemoryMB: 64},
+		SPJ:    &model.SPJSpec{},
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "spj.binary is required") {
+		t.Fatalf("incomplete SPJ should fail closed before sandbox startup, got %+v", resp)
+	}
+}
+
+func TestRunSPJUsesSingleStableStdinURLFetch(t *testing.T) {
+	requireSandboxSupport(t)
+
+	var requests atomic.Int64
+	inputServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) != 1 {
+			http.Error(w, "stdin URL fetched more than once", http.StatusGone)
+			return
+		}
+		_, _ = w.Write([]byte("payload\n"))
+	}))
+	defer inputServer.Close()
+	setStdinURLHTTPClientForTest(t, inputServer.URL)
+
+	checker := `#!/usr/bin/env python3
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    judge_input = handle.read()
+with open(sys.argv[2], "r", encoding="utf-8") as handle:
+    actual = handle.read()
+with open(sys.argv[3], "r", encoding="utf-8") as handle:
+    official = handle.read()
+if judge_input != "payload\n":
+    raise SystemExit(2)
+if actual != "actual:payload\n":
+    raise SystemExit(3)
+if official != "official\n":
+    raise SystemExit(4)
+`
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: b64("import sys\nsys.stdout.write('actual:' + sys.stdin.read())\n"),
+		}},
+		StdinURL:       "http://payload.example/input",
+		ExpectedStdout: "official\n",
+		Limits:         model.Limits{TimeMs: 3000, MemoryMB: 128},
+		SPJ: &model.SPJSpec{
+			Binary: &model.Binary{Name: "checker.py", DataB64: b64(checker)},
+			Lang:   "python",
+		},
+	}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("SPJ should share the contestant's stable URL input, got %+v", resp)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("stdin URL requests = %d, want exactly 1", got)
+	}
+}
+
+func TestRunStepSPJReceivesExactFinalStepStdin(t *testing.T) {
+	requireSandboxSupport(t)
+
+	tests := []struct {
+		name          string
+		producer      string
+		handoff       model.StepHandoff
+		consumerInput func() (string, []model.StdinPart)
+		wantInput     string
+	}{
+		{
+			name:     "stdout handoff with normalized identifiers",
+			producer: "print('handoff', end='')\n",
+			handoff:  model.StepHandoff{ID: " transfer ", From: "   "},
+			consumerInput: func() (string, []model.StdinPart) {
+				return " transfer ", nil
+			},
+			wantInput: "handoff",
+		},
+		{
+			name:     "composed stdin parts",
+			producer: "print('handoff', end='')\n",
+			handoff:  model.StepHandoff{ID: "transfer", From: "stdout"},
+			consumerInput: func() (string, []model.StdinPart) {
+				return "", []model.StdinPart{{Type: "text", Data: "prefix:"}, {Type: "handoff", From: " transfer "}}
+			},
+			wantInput: "prefix:handoff",
+		},
+		{
+			name:     "normalized file handoff",
+			producer: "open('payload.txt', 'w', encoding='utf-8').write('file-handoff')\n",
+			handoff:  model.StepHandoff{ID: "transfer", From: " FILE_OUTPUT ", Path: "payload.txt"},
+			consumerInput: func() (string, []model.StdinPart) {
+				return "transfer", nil
+			},
+			wantInput: "file-handoff",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stdinFrom, stdinParts := tc.consumerInput()
+			checker := fmt.Sprintf(`#!/usr/bin/env python3
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    judge_input = handle.read()
+with open(sys.argv[2], "r", encoding="utf-8") as handle:
+    actual = handle.read()
+with open(sys.argv[3], "r", encoding="utf-8") as handle:
+    official = handle.read()
+if judge_input != %q:
+    raise SystemExit(2)
+if actual != "actual:" + %q:
+    raise SystemExit(3)
+if official != "official\n":
+    raise SystemExit(4)
+`, tc.wantInput, tc.wantInput)
+			resp := New().Run(context.Background(), &model.RunRequest{
+				Programs: []model.RunProgram{
+					{ID: " producer ", Lang: "python", Binaries: []model.Binary{{Name: "producer.py", DataB64: b64(tc.producer)}}},
+					{ID: "consumer", Lang: "python", Binaries: []model.Binary{{Name: "consumer.py", DataB64: b64("import sys\nsys.stdout.write('actual:' + sys.stdin.read())\n")}}},
+				},
+				Steps: []model.RunStep{
+					{ID: " produce ", ProgramID: "producer", Limits: model.Limits{TimeMs: 2000, MemoryMB: 128}, Handoff: &tc.handoff},
+					{ID: "consume", ProgramID: " consumer ", StdinFrom: stdinFrom, StdinParts: stdinParts, Limits: model.Limits{TimeMs: 2000, MemoryMB: 128}},
+				},
+				ExpectedStdout: "official\n",
+				SPJ: &model.SPJSpec{
+					Binary: &model.Binary{Name: "checker.py", DataB64: b64(checker)},
+					Lang:   "python",
+				},
+			}, Hooks{})
+			if resp.Status != model.RunStatusAccepted {
+				t.Fatalf("SPJ should receive exact final-step stdin, got %+v", resp)
+			}
+		})
+	}
+}
+
+func TestRunSPJRejectsNonFiniteScore(t *testing.T) {
+	requireSandboxSupport(t)
+
+	for _, score := range []string{"NaN", "+Inf", "-Inf"} {
+		t.Run(score, func(t *testing.T) {
+			checker := fmt.Sprintf("#!/usr/bin/env python3\nprint(%q)\n", score)
+			resp := New().Run(context.Background(), &model.RunRequest{
+				Lang:     "python",
+				Binaries: []model.Binary{{Name: "main.py", DataB64: b64("print('actual')\n")}},
+				Limits:   model.Limits{TimeMs: 3000, MemoryMB: 128},
+				SPJ: &model.SPJSpec{
+					Binary:    &model.Binary{Name: "checker.py", DataB64: b64(checker)},
+					Lang:      "python",
+					EmitScore: true,
+				},
+			}, Hooks{})
+			if resp.Status != model.RunStatusRE || !strings.Contains(resp.Reason, "score out of range") {
+				t.Fatalf("non-finite SPJ score should be rejected, got %+v", resp)
+			}
+		})
 	}
 }
 
@@ -2990,6 +3276,33 @@ if line != expected:
 	}
 	if strings.TrimSpace(resp.Stdout) != "43" {
 		t.Fatalf("expected contestant protocol output on WA, got %+v", resp)
+	}
+}
+
+func TestRunInteractiveUsesInteractorOutputLimit(t *testing.T) {
+	requireSandboxSupport(t)
+
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: b64("import time\ntime.sleep(10)\n"),
+		}},
+		Interactor: &model.InteractorSpec{
+			Lang: "python",
+			Binaries: []model.Binary{{
+				Name:    "interactor.py",
+				DataB64: b64("import sys\nsys.stderr.write('0123456789abcdef')\nraise SystemExit(3)\n"),
+			}},
+			Limits: &model.Limits{OutputBytes: 5},
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128, OutputBytes: 1024},
+	}, Hooks{})
+	if resp.Status != model.RunStatusRE {
+		t.Fatalf("expected interactor failure, got %+v", resp)
+	}
+	if len(resp.Steps) != 2 || resp.Steps[1].Stderr != "01234" || !resp.Steps[1].StderrTruncated {
+		t.Fatalf("interactor output should use its 5-byte cap, got %+v", resp.Steps)
 	}
 }
 

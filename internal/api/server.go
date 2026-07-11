@@ -45,6 +45,7 @@ const (
 	maxCompileDecodedSourceTotalBytes = 48 << 20
 	maxJSONBodyBytes                  = 64 << 20
 	defaultPlatformBodyHashSlots      = 4
+	defaultPayloadURLFetchSlots       = 4
 	platformPrincipalHeader           = "X-Aonohako-Principal"
 	platformPrincipalSignatureHeader  = "X-Aonohako-Principal-Signature"
 	platformPrincipalTimestampHeader  = "X-Aonohako-Principal-Timestamp"
@@ -74,6 +75,8 @@ type Server struct {
 	rateLastCleanup  time.Time
 
 	platformBodyHashSlots chan struct{}
+	payloadURLFetchSlots  chan struct{}
+	payloadURLTimeout     time.Duration
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -91,6 +94,13 @@ func New(cfg config.Config) (*Server, error) {
 func NewWithServices(cfg config.Config, compileService interface {
 	Run(context.Context, *model.CompileRequest) model.CompileResponse
 }, executeRunner execute.Runner) *Server {
+	payloadURLFetchSlots := defaultPayloadURLFetchSlots
+	if cfg.MaxActiveStreams > 0 {
+		payloadURLFetchSlots = min(payloadURLFetchSlots, cfg.MaxActiveStreams)
+	} else if cfg.MaxActiveRuns > 0 {
+		payloadURLFetchSlots = min(payloadURLFetchSlots, cfg.MaxActiveRuns)
+	}
+	payloadURLFetchSlots = max(1, payloadURLFetchSlots)
 	return &Server{
 		cfg:              cfg,
 		compile:          compileService,
@@ -102,6 +112,8 @@ func NewWithServices(cfg config.Config, compileService interface {
 			chan struct{},
 			platformBodyHashConcurrency(cfg),
 		),
+		payloadURLFetchSlots: make(chan struct{}, payloadURLFetchSlots),
+		payloadURLTimeout:    payloadURLRequestTimeout,
 	}
 }
 
@@ -156,10 +168,6 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
 		return
 	}
-	if err := resolveCompilePayloadURLs(r.Context(), &req); err != nil {
-		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
-		return
-	}
 	if len(req.Sources) == 0 {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "no_sources", "no sources")
 		return
@@ -181,6 +189,16 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seenSourcePaths[clean] = struct{}{}
+		if strings.TrimSpace(src.DataURL) != "" {
+			if src.DataB64 != "" {
+				writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", fmt.Sprintf("sources[%d] cannot combine data_b64 with data_url", i))
+				return
+			}
+			if err := validatePayloadURL(src.DataURL); err != nil {
+				writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", fmt.Sprintf("sources[%d].data_url: %s", i, err.Error()))
+				return
+			}
+		}
 		data, err := base64.StdEncoding.DecodeString(src.DataB64)
 		if err != nil {
 			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_base64", fmt.Sprintf("sources[%d].data_b64 invalid base64: %s", i, err.Error()))
@@ -194,6 +212,25 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		totalDecodedSourceBytes += decodedLen
 		if totalDecodedSourceBytes > maxCompileDecodedSourceTotalBytes {
 			writeJSONErrorMessage(w, http.StatusBadRequest, "sources_total_size_exceeded", fmt.Sprintf("sources total size exceeded: max %d bytes decoded", maxCompileDecodedSourceTotalBytes))
+			return
+		}
+	}
+	if compileHasPayloadURLs(&req) {
+		releaseFetch, ok := s.acquirePayloadURLFetch()
+		if !ok {
+			writeJSONError(w, http.StatusTooManyRequests, "payload_url_fetch_limit_exceeded")
+			return
+		}
+		fetchCtx, cancelFetch := context.WithTimeout(r.Context(), s.payloadURLTimeout)
+		err := resolveCompilePayloadURLs(fetchCtx, &req, totalDecodedSourceBytes)
+		cancelFetch()
+		releaseFetch()
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				writeJSONErrorMessage(w, http.StatusGatewayTimeout, "payload_url_fetch_timeout", "payload url fetch timed out")
+				return
+			}
+			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
 			return
 		}
 	}
@@ -289,10 +326,6 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
 		return
 	}
-	if err := resolveRunPayloadURLs(r.Context(), &req); err != nil {
-		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
-		return
-	}
 	if err := runvalidation.Validate(&req); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -301,7 +334,34 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "network_not_allowed", "enable_network is not allowed by server policy")
 		return
 	}
-
+	if runHasBufferedPayloadURLs(&req) {
+		releaseFetch, ok := s.acquirePayloadURLFetch()
+		if !ok {
+			writeJSONError(w, http.StatusTooManyRequests, "payload_url_fetch_limit_exceeded")
+			return
+		}
+		fetchCtx, cancelFetch := context.WithTimeout(r.Context(), s.payloadURLTimeout)
+		err := resolveRunPayloadURLs(fetchCtx, &req)
+		cancelFetch()
+		releaseFetch()
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				writeJSONErrorMessage(w, http.StatusGatewayTimeout, "payload_url_fetch_timeout", "payload url fetch timed out")
+				return
+			}
+			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
+			return
+		}
+		if err := runvalidation.Validate(&req); err != nil {
+			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	} else if err := resolveRunPayloadURLs(r.Context(), &req); err != nil {
+		// Streaming stdin URLs are not fetched here, but still receive the same
+		// syntax and credential validation before stream/queue admission.
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
+		return
+	}
 	releaseStream, ok, code := s.acquireStream(principal)
 	if !ok {
 		writeJSONError(w, http.StatusTooManyRequests, code)
@@ -600,6 +660,18 @@ func (s *Server) acquirePlatformBodyHashSlot() (func(), bool) {
 	select {
 	case s.platformBodyHashSlots <- struct{}{}:
 		return func() { <-s.platformBodyHashSlots }, true
+	default:
+		return nil, false
+	}
+}
+
+func (s *Server) acquirePayloadURLFetch() (func(), bool) {
+	if s.payloadURLFetchSlots == nil {
+		return func() {}, true
+	}
+	select {
+	case s.payloadURLFetchSlots <- struct{}{}:
+		return func() { <-s.payloadURLFetchSlots }, true
 	default:
 		return nil, false
 	}

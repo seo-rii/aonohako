@@ -293,6 +293,8 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_KILL),
 		uint32(unix.SYS_TKILL),
 		uint32(unix.SYS_TGKILL),
+		uint32(unix.SYS_RT_SIGQUEUEINFO),
+		uint32(unix.SYS_RT_TGSIGQUEUEINFO),
 		uint32(unix.SYS_SETPRIORITY),
 		uint32(unix.SYS_BPF),
 		uint32(unix.SYS_IO_SETUP),
@@ -312,6 +314,14 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_SHMAT),
 		uint32(unix.SYS_SHMDT),
 		uint32(unix.SYS_SHMCTL),
+		uint32(unix.SYS_MSGGET),
+		uint32(unix.SYS_MSGSND),
+		uint32(unix.SYS_MSGRCV),
+		uint32(unix.SYS_MSGCTL),
+		uint32(unix.SYS_SEMGET),
+		uint32(unix.SYS_SEMOP),
+		uint32(unix.SYS_SEMTIMEDOP),
+		uint32(unix.SYS_SEMCTL),
 		uint32(unix.SYS_PERF_EVENT_OPEN),
 		uint32(unix.SYS_CACHESTAT),
 		uint32(unix.SYS_OPEN_BY_HANDLE_AT),
@@ -365,6 +375,25 @@ func MaybeRunFromEnv() bool {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 	}
+	// prlimit64(0, resource, NULL, old_limit) is needed by managed
+	// runtimes. A non-zero pid could alter a same-UID peer, while a non-NULL
+	// new_limit could change the limits used for verdict accounting. Check
+	// both words of the 64-bit pointer so an address whose low word is zero
+	// cannot pass.
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_PRLIMIT64), 0, 13)
+	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 1, 0)
+	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset+4)
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 1, 0)
+	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset+2*8)
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 1, 0)
+	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset+2*8+4)
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 1, 0)
+	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	appendStmt(unix.BPF_RET|unix.BPF_K, allow)
 	if !req.AllowExecveat {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_EXECVEAT), 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)

@@ -115,6 +115,11 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if req.SPJ != nil {
+		if err := runvalidation.ValidateSPJ(req.SPJ); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
 	tuning := s.runtimeTuning.WithSafeDefaults()
 	if req.RuntimeProfile != "" {
 		if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
@@ -198,6 +203,39 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	if stdinMaxBytes <= 0 {
 		stdinMaxBytes = runvalidation.MaxTextFieldBytes
 	}
+	judgeInputPath := ""
+	if hasSPJ(req) {
+		inputReader := stdin
+		if inputReader == nil {
+			inputReader = strings.NewReader(req.Stdin)
+		}
+		judgeInput, err := os.CreateTemp(ws.RootDir, ".judge-input-*")
+		if err != nil {
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin materialization failed"}}
+		}
+		defer func() {
+			_ = judgeInput.Close()
+			_ = os.Remove(judgeInput.Name())
+		}()
+		written, copyErr := io.Copy(judgeInput, io.LimitReader(inputReader, stdinMaxBytes+1))
+		if copyErr != nil {
+			slog.Warn("execute judge input materialization failed", "err", copyErr)
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin materialization failed"}}
+		}
+		if written > stdinMaxBytes {
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin too large"}}
+		}
+		if err := judgeInput.Chmod(0o400); err != nil {
+			slog.Warn("execute judge input hardening failed", "err", err)
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin materialization failed"}}
+		}
+		if _, err := judgeInput.Seek(0, io.SeekStart); err != nil {
+			slog.Warn("execute judge input rewind failed", "err", err)
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin materialization failed"}}
+		}
+		judgeInputPath = judgeInput.Name()
+		stdin = &sandboxPreparedStdin{file: judgeInput}
+	}
 
 	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir)
 	if res.Status == model.RunStatusInitFail {
@@ -228,7 +266,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	status, evalReason, verdictSource := classifyRunStatusWithoutOutput(req, res)
 	var score *float64
 	if evaluateOutput {
-		status, score, evalReason, verdictSource = evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, sidecarOutputs, tuning, s.cgroupParentDir)
+		status, score, evalReason, verdictSource = evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, judgeInputPath, sidecarOutputs, tuning, s.cgroupParentDir)
 	}
 	reason := res.Reason
 	if evalReason != "" {
@@ -282,7 +320,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 	}
 	programs := make(map[string]model.RunProgram, len(req.Programs))
 	for _, program := range req.Programs {
-		programs[program.ID] = program
+		programs[strings.TrimSpace(program.ID)] = program
 	}
 
 	handoffDir, err := createRunWorkDir()
@@ -295,7 +333,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 	handoffs := map[string]string{}
 	stepResults := make([]model.StepResult, 0, len(req.Steps))
 	for i, step := range req.Steps {
-		program := programs[step.ProgramID]
+		program := programs[strings.TrimSpace(step.ProgramID)]
 		stdin, stdinReader, closeStdin, stdinVerdictSource, stdinMaxBytes, err := prepareStepStdin(ctx, step, handoffs, handoffDir)
 		if err != nil {
 			slog.Warn("execute step stdin preparation failed", "step", step.ID, "err", err)
@@ -316,7 +354,8 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 		}
 		handoffFromFile := false
 		if step.Handoff != nil {
-			if strings.EqualFold(step.Handoff.From, "file") || strings.EqualFold(step.Handoff.From, "file_output") {
+			handoffFrom := strings.ToLower(strings.TrimSpace(step.Handoff.From))
+			if handoffFrom == "file" || handoffFrom == "file_output" {
 				handoffFromFile = true
 				stepReq.FileOutputs = []model.OutputFile{{Path: step.Handoff.Path}}
 			}
@@ -393,7 +432,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 					VerdictSource: "step:" + step.ID + ":handoff",
 				}, stepResults)
 			}
-			handoffs[step.Handoff.ID] = handoffFile.Name()
+			handoffs[strings.TrimSpace(step.Handoff.ID)] = handoffFile.Name()
 			continue
 		}
 
@@ -421,11 +460,12 @@ func prepareStepStdin(ctx context.Context, step model.RunStep, handoffs map[stri
 		}
 		return "", stdinFile, stdinFile.Close, "stdin_parts", maxBytes, nil
 	}
-	if step.StdinFrom == "" {
+	stdinFrom := strings.TrimSpace(step.StdinFrom)
+	if stdinFrom == "" {
 		return step.Stdin, nil, nil, "", runvalidation.MaxTextFieldBytes, nil
 	}
 
-	handoffPath := handoffs[step.StdinFrom]
+	handoffPath := handoffs[stdinFrom]
 	if handoffPath == "" {
 		return "", nil, nil, "handoff", 0, fmt.Errorf("stdin handoff not found")
 	}
