@@ -13,6 +13,9 @@ REPO_DIGEST="$(docker image inspect "${IMAGE_REF}" --format '{{if .RepoDigests}}
 echo "## Runtime Toolchain Versions"
 echo
 echo "- Image: \`${IMAGE_REF}\`"
+if [ -n "${AONOHAKO_IMAGE_ID:-}" ]; then
+    echo "- Image ID: \`${AONOHAKO_IMAGE_ID}\`"
+fi
 if [ -n "${AONOHAKO_LANGUAGES:-}" ]; then
     echo "- Languages: \`${AONOHAKO_LANGUAGES}\`"
 fi

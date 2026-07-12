@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 
 	"aonohako/internal/runtimepacks"
 )
+
+var pinnedRuntimeBasePattern = regexp.MustCompile(`^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$`)
 
 func main() {
 	var catalogPath string
@@ -61,6 +64,11 @@ func main() {
 		}
 		if !matched {
 			log.Fatalf("no runtime image matches -only %q", only)
+		}
+	}
+	for _, spec := range specs {
+		if !pinnedRuntimeBasePattern.MatchString(spec.BaseImage) {
+			log.Fatalf("runtime image %q base_image must be digest-pinned, got %q", spec.Name, spec.BaseImage)
 		}
 	}
 

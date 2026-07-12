@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -61,6 +62,7 @@ for profile_dir in profile_dirs:
         profile_dir / "summary.md",
         profile_dir / f"{profile}.sbom.spdx.json",
         profile_dir / f"{profile}.grype.json",
+        profile_dir / f"{profile}.provenance.json",
     ]
     for path in required:
         if not path.is_file():
@@ -88,6 +90,10 @@ for profile_dir in profile_dirs:
     expected_image = f"aonohako-ci-prod:{profile}"
     if image_match is None or image_match.group(1) != expected_image:
         fail(f"{summary_path} image must equal {expected_image!r}")
+    image_id_match = re.search(r"(?m)^- Image ID: `(sha256:[0-9a-f]{64})`$", summary)
+    if image_id_match is None:
+        fail(f"{summary_path} is missing an immutable image ID")
+    summary_image_id = image_id_match.group(1)
     if "| Tool | Version |" not in summary:
         fail(f"{summary_path} is missing the version table")
     version_section = summary.split("## Runtime Compile Options", maxsplit=1)[0]
@@ -118,6 +124,7 @@ for profile_dir in profile_dirs:
 
     sbom_path = profile_dir / f"{profile}.sbom.spdx.json"
     grype_path = profile_dir / f"{profile}.grype.json"
+    provenance_path = profile_dir / f"{profile}.provenance.json"
     reports = {}
     for path in [sbom_path, grype_path]:
         try:
@@ -138,10 +145,8 @@ for profile_dir in profile_dirs:
     if not isinstance(sbom.get("documentNamespace"), str) or not sbom["documentNamespace"].strip():
         fail(f"{sbom_path} is missing documentNamespace")
     creation_info = sbom.get("creationInfo")
-    if not isinstance(creation_info, dict) or not isinstance(creation_info.get("creators"), list) or not any(
-        isinstance(creator, str) and creator.startswith("Tool: syft-") for creator in creation_info["creators"]
-    ):
-        fail(f"{sbom_path} is missing Syft creation metadata")
+    if not isinstance(creation_info, dict) or not isinstance(creation_info.get("creators"), list) or "Tool: syft-1.42.4" not in creation_info["creators"]:
+        fail(f"{sbom_path} is missing pinned Syft 1.42.4 creation metadata")
     packages = sbom.get("packages")
     if not isinstance(packages, list) or not packages:
         fail(f"{sbom_path} is missing a non-empty SPDX packages array")
@@ -169,9 +174,36 @@ for profile_dir in profile_dirs:
     if not isinstance(grype.get("distro"), dict):
         fail(f"{grype_path} is missing Grype distro metadata")
 
+    try:
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"{provenance_path} is not valid JSON: {exc}")
+    if not isinstance(provenance, dict):
+        fail(f"{provenance_path} must contain a JSON object")
+    image_id = provenance.get("image_id")
+    if provenance.get("profile") != profile or provenance.get("image") != expected_image or not isinstance(image_id, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) is None:
+        fail(f"{provenance_path} is missing exact profile, image, or immutable image ID provenance")
+    if image_id != summary_image_id:
+        fail(f"{summary_path} image ID does not match {provenance_path}")
+    if target.get("imageID") != image_id:
+        fail(f"{grype_path} image ID does not match {provenance_path}")
+    provenance_artifacts = provenance.get("artifacts")
+    expected_provenance_artifacts = {
+        "summary.md": summary_path,
+        "sbom.spdx.json": sbom_path,
+        "grype.json": grype_path,
+    }
+    if not isinstance(provenance_artifacts, dict) or set(provenance_artifacts) != set(expected_provenance_artifacts):
+        fail(f"{provenance_path} artifact inventory does not match the profile reports")
+    for artifact_name, artifact_path in expected_provenance_artifacts.items():
+        expected_digest = provenance_artifacts.get(artifact_name)
+        if not isinstance(expected_digest, str) or re.fullmatch(r"[0-9a-f]{64}", expected_digest) is None or sha256_file(artifact_path) != expected_digest:
+            fail(f"{provenance_path} digest for {artifact_name!r} does not match {artifact_path}")
+
     expected_manifest.add((profile_dir / "summary.md").relative_to(root).as_posix())
     expected_manifest.add(sbom_path.relative_to(root).as_posix())
     expected_manifest.add(grype_path.relative_to(root).as_posix())
+    expected_manifest.add(provenance_path.relative_to(root).as_posix())
 
     archive = profile_dir / f"{profile}.docker.tar.gz"
     archive_digest = profile_dir / f"{profile}.docker.tar.gz.sha256"
@@ -281,6 +313,17 @@ for line in aggregate_compile_rows:
         aggregate_languages.append(match.group(1))
 if set(aggregate_languages) != expected_languages or len(aggregate_languages) != len(expected_languages):
     fail(f"{aggregate} compile-option inventory {aggregate_languages!r} does not match profile languages {sorted(expected_languages)!r}")
+aggregator = Path(__file__).with_name("aggregate_toolchain_summaries.py")
+generated_aggregate = subprocess.run(
+    [sys.executable, str(aggregator), str(root)],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+if generated_aggregate.returncode != 0:
+    fail(f"aggregate regeneration failed: {generated_aggregate.stderr.strip()}")
+if aggregate_text != generated_aggregate.stdout:
+    fail(f"{aggregate} does not exactly match the profile summaries")
 
 manifest = root / "MANIFEST.txt"
 if not manifest.is_file() or manifest.stat().st_size == 0:

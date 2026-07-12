@@ -51,6 +51,7 @@ func TestDockerfileBasePolicyRejectsValidSyntaxBypasses(t *testing.T) {
 		{name: "pinned direct", body: "from --platform=linux/amd64 ubuntu:24.04@" + digest + " AS final\n", ok: true},
 		{name: "pinned continued from", body: "ARG BASE=ubuntu:24.04@" + digest + "\nFROM \\\n  ${BASE} AS final\n", ok: true},
 		{name: "backtick escape", body: "# escape=`\nARG BASE=ubuntu:24.04@" + digest + "\nFROM `\n  ${BASE} AS final\n", ok: true},
+		{name: "UTF-8 BOM pinned", body: "\ufeffFROM ubuntu:24.04@" + digest + " AS final\n", ok: true},
 		{name: "scratch", body: "FROM scratch\n", ok: true},
 		{name: "tagless", body: "FROM ubuntu\n"},
 		{name: "lowercase tagged", body: "from ubuntu:latest\n"},
@@ -64,6 +65,8 @@ func TestDockerfileBasePolicyRejectsValidSyntaxBypasses(t *testing.T) {
 		{name: "backtick split from keyword", body: "# escape=`\nFR`\nOM ubuntu:latest\n"},
 		{name: "backtick split from with trailing tab", body: "# escape=`\nFROM scratch AS seed\nFR`\t\nOM ubuntu:latest AS final\n"},
 		{name: "spaced backtick split from keyword", body: "# escape = `\nFROM scratch AS seed\nFR`\nOM ubuntu:latest AS final\n"},
+		{name: "UTF-8 BOM unpinned", body: "\ufeffFROM ubuntu:latest\nFROM scratch\n"},
+		{name: "heredoc fake stage", body: "FROM scratch AS seed\nCOPY <<EOF /payload\nFROM scratch AS ubuntu\nEOF\nFROM ubuntu\n"},
 		{name: "no from", body: "ARG BASE=ubuntu:24.04@" + digest + "\n"},
 		{name: "unterminated continuation", body: "FROM \\"},
 	}

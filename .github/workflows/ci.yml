@@ -165,6 +165,7 @@ jobs:
           docker builder prune -af
           docker image prune -f
       - run: >
+          AONOHAKO_IMAGE_ID="$(docker image inspect "aonohako-ci-prod:${{ matrix.name }}" --format '{{.Id}}')"
           AONOHAKO_LANGUAGES="${{ matrix.languages }}"
           bash ./scripts/report_toolchain_versions.sh "aonohako-ci-prod:${{ matrix.name }}"
           > "toolchain-artifacts/${{ matrix.name }}/summary.md"
@@ -181,11 +182,27 @@ jobs:
           exit "${scan_status}"
       - run: |
           scripts/install_anchore_tool.sh grype v0.111.0 "${RUNNER_TEMP}/anchore-bin"
+          image_ref="aonohako-ci-prod:${{ matrix.name }}"
+          image_id="$(docker image inspect "${image_ref}" --format '{{.Id}}')"
+          summary_path="toolchain-artifacts/${{ matrix.name }}/summary.md"
+          sbom_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.sbom.spdx.json"
           report_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.grype.json"
+          provenance_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.provenance.json"
           scan_status=0
-          "${RUNNER_TEMP}/anchore-bin/grype" "aonohako-ci-prod:${{ matrix.name }}" -o json > "${report_path}" || scan_status=$?
+          "${RUNNER_TEMP}/anchore-bin/grype" "${image_ref}" -o json > "${report_path}" || scan_status=$?
+          if [ "${scan_status}" -eq 0 ]; then
+            jq -n \
+              --arg profile "${{ matrix.name }}" \
+              --arg image "${image_ref}" \
+              --arg image_id "${image_id}" \
+              --arg summary_sha256 "$(sha256sum "${summary_path}" | cut -d ' ' -f 1)" \
+              --arg sbom_sha256 "$(sha256sum "${sbom_path}" | cut -d ' ' -f 1)" \
+              --arg grype_sha256 "$(sha256sum "${report_path}" | cut -d ' ' -f 1)" \
+              '{profile:$profile,image:$image,image_id:$image_id,artifacts:{"summary.md":$summary_sha256,"sbom.spdx.json":$sbom_sha256,"grype.json":$grype_sha256}}' \
+              > "${provenance_path}"
+          fi
           rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/grype"
-          docker image rm "aonohako-ci-prod:${{ matrix.name }}" || true
+          docker image rm "${image_ref}" || true
           docker image prune -f
           exit "${scan_status}"
         if: ${{ !cancelled() }}
@@ -239,7 +256,7 @@ jobs:
           {
             printf '%s\n' SUMMARY.md MANIFEST.txt SHA256SUMS
             find toolchain-artifacts/toolchain-profile-* -type f \
-              \( -name summary.md -o -name '*.sbom.spdx.json' -o -name '*.grype.json' -o -name '*.docker.tar.gz' -o -name '*.docker.tar.gz.sha256' -o -name '*.docker.tar.gz.error.json' \) \
+              \( -name summary.md -o -name '*.sbom.spdx.json' -o -name '*.grype.json' -o -name '*.provenance.json' -o -name '*.docker.tar.gz' -o -name '*.docker.tar.gz.sha256' -o -name '*.docker.tar.gz.error.json' \) \
               -print
           } | sed 's#^toolchain-artifacts/##' | sort -u > toolchain-artifacts/MANIFEST.txt
         if: steps.bundle.outputs.has_artifacts == 'true'
@@ -260,6 +277,7 @@ jobs:
             toolchain-artifacts/toolchain-profile-*/**/summary.md
             toolchain-artifacts/toolchain-profile-*/**/*.sbom.spdx.json
             toolchain-artifacts/toolchain-profile-*/**/*.grype.json
+            toolchain-artifacts/toolchain-profile-*/**/*.provenance.json
             toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz
             toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz.sha256
             toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz.error.json

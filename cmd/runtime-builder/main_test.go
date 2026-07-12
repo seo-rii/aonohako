@@ -87,3 +87,26 @@ func TestRuntimeBuilderRejectsUnknownOnlyFilter(t *testing.T) {
 		t.Fatalf("runtime-builder error did not explain the unmatched filter: %s", out)
 	}
 }
+
+func TestRuntimeBuilderRejectsUnpinnedCatalogBaseImage(t *testing.T) {
+	catalogPath := filepath.Join(t.TempDir(), "runtime-images.yml")
+	body := `
+languages:
+  plain: {}
+profiles:
+  type-a:
+    base_image: ubuntu:latest
+    languages: [plain]
+`
+	if err := os.WriteFile(catalogPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
+	cmd := exec.Command("go", "run", ".", "-catalog", catalogPath, "-mode", "production", "-dry-run")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("runtime-builder accepted unpinned base image: %s", out)
+	}
+	if !strings.Contains(string(out), `base_image must be digest-pinned, got "ubuntu:latest"`) {
+		t.Fatalf("runtime-builder error did not explain unpinned base image: %s", out)
+	}
+}

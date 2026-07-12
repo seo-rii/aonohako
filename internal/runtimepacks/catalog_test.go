@@ -146,6 +146,57 @@ profiles:
 	}
 }
 
+func TestLoadCatalogRejectsUnsafeNamesAndDuplicateProfileLanguages(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "unsafe language name",
+			body: `
+languages:
+  'bad"; echo injected; #': {}
+profiles: {}
+`,
+			want: "language name",
+		},
+		{
+			name: "unsafe profile name",
+			body: `
+languages:
+  plain: {}
+profiles:
+  'bad"; echo injected; #':
+    base_image: debian:trixie-slim
+    languages: [plain]
+`,
+			want: "profile name",
+		},
+		{
+			name: "duplicate profile language",
+			body: `
+languages:
+  plain: {}
+profiles:
+  type-a:
+    base_image: debian:trixie-slim
+    languages: [plain, plain]
+`,
+			want: "duplicate language plain",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadCatalog(writeCatalogFixture(t, tc.body))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("LoadCatalog error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestBuildImagePreservesRepeatedInstallScriptCommands(t *testing.T) {
 	path := writeCatalogFixture(t, `
 languages:
@@ -371,6 +422,7 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 	body := string(data)
 	for _, marker := range []string{
 		"echo \"- Languages: \\`${AONOHAKO_LANGUAGES}\\`\"",
+		"echo \"- Image ID: \\`${AONOHAKO_IMAGE_ID}\\`\"",
 		`DOCKER_RUN_ARGS+=(--env "AONOHAKO_LANGUAGES=${AONOHAKO_LANGUAGES}")`,
 		"declare -A enabled_languages=()",
 		"declare -A reported_tools=()",
@@ -691,6 +743,7 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	profile := "type-a"
 	profileSpec := profile + "=python"
 	imageRef := "aonohako-ci-prod:" + profile
+	imageID := "sha256:" + strings.Repeat("a", 64)
 	dir := filepath.Join(root, "toolchain-profile-"+profile)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", dir, err)
@@ -707,16 +760,19 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 		archiveRelative,
 		archiveRelative + ".sha256",
 		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".grype.json")),
+		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".provenance.json")),
 		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".sbom.spdx.json")),
 	}, "\n") + "\n"
-	validProfileSummary := []byte(fmt.Sprintf("## Runtime Toolchain Versions\n\n- Image: `%s`\n- Languages: `python`\n\n| Tool | Version |\n| --- | --- |\n| Python | `3.13` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n| `python` | `python3 -m compileall` |\n", imageRef))
+	validProfileSummary := []byte(fmt.Sprintf("## Runtime Toolchain Versions\n\n- Image: `%s`\n- Image ID: `%s`\n- Languages: `python`\n\n| Tool | Version |\n| --- | --- |\n| Python | `3.13` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n| `python` | `python3 -m compileall` |\n", imageRef, imageID))
 	validSBOM := []byte(fmt.Sprintf(`{"spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","SPDXID":"SPDXRef-DOCUMENT","name":%q,"documentNamespace":"https://anchore.example/type-a","creationInfo":{"creators":["Organization: Anchore, Inc","Tool: syft-1.42.4"]},"packages":[{"name":"python","SPDXID":"SPDXRef-Package-python"}],"relationships":[{"spdxElementId":"SPDXRef-DOCUMENT","relatedSpdxElement":"SPDXRef-Package-python","relationshipType":"DESCRIBES"}]}`, imageRef))
-	validGrype := []byte(fmt.Sprintf(`{"matches":[],"source":{"type":"image","target":{"userInput":%q}},"distro":{"name":"debian","version":"13"},"descriptor":{"name":"grype","version":"0.111.0"}}`, imageRef))
+	validGrype := []byte(fmt.Sprintf(`{"matches":[],"source":{"type":"image","target":{"userInput":%q,"imageID":%q}},"distro":{"name":"debian","version":"13"},"descriptor":{"name":"grype","version":"0.111.0"}}`, imageRef, imageID))
+	validProvenance := []byte(fmt.Sprintf(`{"profile":%q,"image":%q,"image_id":%q,"artifacts":{"summary.md":"%x","sbom.spdx.json":"%x","grype.json":"%x"}}`, profile, imageRef, imageID, sha256.Sum256(validProfileSummary), sha256.Sum256(validSBOM), sha256.Sum256(validGrype)))
 	validAggregateSummary := []byte("## Runtime Toolchain Versions\n\n- Profiles: `type-a`\n\n| Tool | Version | Profiles |\n| --- | --- | --- |\n| Python | `3.13` | `type-a` |\n\n## Runtime Compile Options\n\n| Language | Compile options | Profiles |\n| --- | --- | --- |\n| `python` | `python3 -m compileall` | `type-a` |\n")
 	for path, body := range map[string][]byte{
-		filepath.Join(dir, "summary.md"):              validProfileSummary,
-		filepath.Join(dir, profile+".sbom.spdx.json"): validSBOM,
-		filepath.Join(dir, profile+".grype.json"):     validGrype,
+		filepath.Join(dir, "summary.md"):               validProfileSummary,
+		filepath.Join(dir, profile+".sbom.spdx.json"):  validSBOM,
+		filepath.Join(dir, profile+".grype.json"):      validGrype,
+		filepath.Join(dir, profile+".provenance.json"): validProvenance,
 		archivePath: archiveBody,
 		filepath.Join(dir, profile+".docker.tar.gz.sha256"): []byte(archiveDigest + "  " + archiveRelative + "\n"),
 		filepath.Join(root, "SHA256SUMS"):                   []byte(archiveDigest + "  " + archiveRelative + "\n"),
@@ -770,6 +826,7 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, "summary.md")),
 		diagnosticRelative,
 		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".grype.json")),
+		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".provenance.json")),
 		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".sbom.spdx.json")),
 	}, "\n") + "\n"
 	if err := os.WriteFile(filepath.Join(root, "SHA256SUMS"), nil, 0o644); err != nil {
@@ -809,6 +866,18 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	if err := os.WriteFile(filepath.Join(dir, profile+".sbom.spdx.json"), validSBOM, 0o644); err != nil {
 		t.Fatalf("Restore SPDX fixture: %v", err)
 	}
+	staleSyftSBOM := []byte(strings.Replace(string(validSBOM), "Tool: syft-1.42.4", "Tool: syft-0.1.0", 1))
+	if err := os.WriteFile(filepath.Join(dir, profile+".sbom.spdx.json"), staleSyftSBOM, 0o644); err != nil {
+		t.Fatalf("WriteFile stale Syft fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "pinned Syft 1.42.4") {
+		t.Fatalf("verifier unexpectedly accepted stale Syft metadata: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".sbom.spdx.json"), validSBOM, 0o644); err != nil {
+		t.Fatalf("Restore SPDX fixture: %v", err)
+	}
 
 	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), []byte(`{"error":"grype scan failed"}`), 0o644); err != nil {
 		t.Fatalf("WriteFile scanner error fixture: %v", err)
@@ -823,6 +892,18 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	}
 	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), validGrype, 0o644); err != nil {
 		t.Fatalf("Restore grype fixture: %v", err)
+	}
+	mismatchedProvenance := []byte(strings.Replace(string(validProvenance), imageID, "sha256:"+strings.Repeat("b", 64), 1))
+	if err := os.WriteFile(filepath.Join(dir, profile+".provenance.json"), mismatchedProvenance, 0o644); err != nil {
+		t.Fatalf("WriteFile mismatched provenance fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "image ID does not match") {
+		t.Fatalf("verifier unexpectedly accepted mismatched immutable provenance: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".provenance.json"), validProvenance, 0o644); err != nil {
+		t.Fatalf("Restore provenance fixture: %v", err)
 	}
 	invalidMatchGrype := []byte(fmt.Sprintf(`{"matches":[null],"source":{"type":"image","target":{"userInput":%q}},"distro":{},"descriptor":{"name":"grype","version":"0.111.0"}}`, imageRef))
 	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), invalidMatchGrype, 0o644); err != nil {
@@ -880,7 +961,7 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	if err := os.WriteFile(filepath.Join(dir, "summary.md"), validProfileSummary, 0o644); err != nil {
 		t.Fatalf("Restore summary fixture: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "summary.md"), []byte(fmt.Sprintf("## Runtime Toolchain Versions\n\n- Image: `%s`\n- Languages: `python`\n\n| Tool | Version |\n| --- | --- |\n| Python | `3.13` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n", imageRef)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "summary.md"), []byte(fmt.Sprintf("## Runtime Toolchain Versions\n\n- Image: `%s`\n- Image ID: `%s`\n- Languages: `python`\n\n| Tool | Version |\n| --- | --- |\n| Python | `3.13` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n", imageRef, imageID)), 0o644); err != nil {
 		t.Fatalf("WriteFile incomplete language summary fixture: %v", err)
 	}
 	cmd = exec.Command("python3", path, root, profileSpec)
@@ -890,6 +971,18 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	}
 	if err := os.WriteFile(filepath.Join(dir, "summary.md"), validProfileSummary, 0o644); err != nil {
 		t.Fatalf("Restore summary fixture: %v", err)
+	}
+	staleAggregate := []byte(strings.Replace(string(validAggregateSummary), "Python | `3.13`", "Python | `3.12`", 1))
+	if err := os.WriteFile(filepath.Join(root, "SUMMARY.md"), staleAggregate, 0o644); err != nil {
+		t.Fatalf("WriteFile stale aggregate fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "does not exactly match") {
+		t.Fatalf("verifier unexpectedly accepted stale aggregate content: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(root, "SUMMARY.md"), validAggregateSummary, 0o644); err != nil {
+		t.Fatalf("Restore aggregate fixture: %v", err)
 	}
 	extraRelative := filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".zzz.json"))
 	if err := os.WriteFile(filepath.Join(root, extraRelative), []byte(`{}`), 0o644); err != nil {
@@ -1070,15 +1163,21 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(profileSection, `--source-name "aonohako-ci-prod:${{ matrix.name }}"`) {
 		t.Fatalf("ci workflow must preserve the tagged image reference in SPDX document provenance")
 	}
+	if !strings.Contains(profileSection, `AONOHAKO_IMAGE_ID="$(docker image inspect "aonohako-ci-prod:${{ matrix.name }}" --format '{{.Id}}')"`) || !strings.Contains(profileSection, `image_id="$(docker image inspect "${image_ref}" --format '{{.Id}}')"`) {
+		t.Fatalf("ci workflow must capture one immutable image ID for the summary and scanner provenance")
+	}
 	if !strings.Contains(profileSection, `"${HOME}/.cache/syft"`) || !strings.Contains(profileSection, `"${HOME}/.cache/grype"`) {
 		t.Fatalf("ci workflow must clean scanner caches after production-profile scans")
 	}
-	if !strings.Contains(profileSection, `docker image rm "aonohako-ci-prod:${{ matrix.name }}" || true`) {
+	if !strings.Contains(profileSection, `docker image rm "${image_ref}" || true`) {
 		t.Fatalf("ci workflow must remove production-profile images after scanner reports are generated")
 	}
-	if !strings.Contains(profileSection, `"${RUNNER_TEMP}/anchore-bin/grype" "aonohako-ci-prod:${{ matrix.name }}" -o json > "${report_path}" || scan_status=$?`) ||
+	if !strings.Contains(profileSection, `"${RUNNER_TEMP}/anchore-bin/grype" "${image_ref}" -o json > "${report_path}" || scan_status=$?`) ||
 		!strings.Contains(profileSection, `exit "${scan_status}"`) {
 		t.Fatalf("ci workflow must fail closed on production-profile Grype operational errors")
+	}
+	if !strings.Contains(profileSection, `provenance_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.provenance.json"`) || !strings.Contains(profileSection, `"summary.md":$summary_sha256`) || !strings.Contains(profileSection, `"sbom.spdx.json":$sbom_sha256`) || !strings.Contains(profileSection, `"grype.json":$grype_sha256`) {
+		t.Fatalf("ci workflow must bind profile reports to immutable image provenance and their exact digests")
 	}
 	setupGoIdx := strings.Index(profileSection, "uses: actions/setup-go@v6")
 	buildxIdx := strings.Index(profileSection, "uses: docker/setup-buildx-action@v4")
@@ -1130,7 +1229,7 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(summarySection, `relative_path="${archive#toolchain-artifacts/}"`) || !strings.Contains(summarySection, `> "${archive}.sha256"`) {
 		t.Fatalf("ci workflow must regenerate portable bundle-relative archive sidecars")
 	}
-	for _, selected := range []string{"-name summary.md", "-name '*.sbom.spdx.json'", "-name '*.grype.json'", "-name '*.docker.tar.gz'", "-name '*.docker.tar.gz.sha256'", "-name '*.docker.tar.gz.error.json'"} {
+	for _, selected := range []string{"-name summary.md", "-name '*.sbom.spdx.json'", "-name '*.grype.json'", "-name '*.provenance.json'", "-name '*.docker.tar.gz'", "-name '*.docker.tar.gz.sha256'", "-name '*.docker.tar.gz.error.json'"} {
 		if !strings.Contains(summarySection, selected) {
 			t.Fatalf("ci workflow manifest must select %q", selected)
 		}
@@ -1138,7 +1237,7 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz\n") {
 		t.Fatalf("ci workflow upload must match manifest entries for real image archives")
 	}
-	if !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.sbom.spdx.json\n") || !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.grype.json\n") {
+	if !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.sbom.spdx.json\n") || !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.grype.json\n") || !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.provenance.json\n") {
 		t.Fatalf("ci workflow summary bundle must retain the scanner evidence it verifies")
 	}
 	if !strings.Contains(body, "toolchain-summary-bundle") {

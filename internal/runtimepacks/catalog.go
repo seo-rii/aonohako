@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+var catalogIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*$`)
 
 type InstallSpec struct {
 	Shared       []string `yaml:"shared"`
@@ -80,7 +83,7 @@ func LoadCatalog(path string) (Catalog, error) {
 		catalog.SharedInstalls = map[string]InstallSpec{}
 	}
 	for sharedName, install := range catalog.SharedInstalls {
-		if strings.TrimSpace(sharedName) == "" || sharedName != strings.TrimSpace(sharedName) {
+		if !catalogIdentifierPattern.MatchString(sharedName) {
 			return Catalog{}, fmt.Errorf("shared install name %q is invalid", sharedName)
 		}
 		for _, referencedName := range install.Shared {
@@ -113,6 +116,9 @@ func LoadCatalog(path string) (Catalog, error) {
 		}
 	}
 	for languageName, language := range catalog.Languages {
+		if !catalogIdentifierPattern.MatchString(languageName) {
+			return Catalog{}, fmt.Errorf("language name %q is invalid", languageName)
+		}
 		for _, sharedName := range language.Install.Shared {
 			if _, ok := catalog.SharedInstalls[sharedName]; !ok {
 				return Catalog{}, fmt.Errorf("language %s references unknown shared install %s", languageName, sharedName)
@@ -120,12 +126,20 @@ func LoadCatalog(path string) (Catalog, error) {
 		}
 	}
 	for profileName, profile := range catalog.Profiles {
+		if !catalogIdentifierPattern.MatchString(profileName) {
+			return Catalog{}, fmt.Errorf("profile name %q is invalid", profileName)
+		}
 		for _, sharedName := range profile.Install.Shared {
 			if _, ok := catalog.SharedInstalls[sharedName]; !ok {
 				return Catalog{}, fmt.Errorf("profile %s references unknown shared install %s", profileName, sharedName)
 			}
 		}
+		seenLanguages := make(map[string]struct{}, len(profile.Languages))
 		for _, lang := range profile.Languages {
+			if _, duplicate := seenLanguages[lang]; duplicate {
+				return Catalog{}, fmt.Errorf("profile %s contains duplicate language %s", profileName, lang)
+			}
+			seenLanguages[lang] = struct{}{}
 			if _, ok := catalog.Languages[lang]; !ok {
 				return Catalog{}, fmt.Errorf("profile %s references unknown language %s", profileName, lang)
 			}

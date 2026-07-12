@@ -25,6 +25,9 @@ for file in "$@"; do
   while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
     line_number=$((line_number + 1))
     raw_line="${raw_line%$'\r'}"
+    if [[ "${line_number}" -eq 1 ]]; then
+      raw_line="${raw_line#$'\xef\xbb\xbf'}"
+    fi
     trimmed_line="${raw_line#"${raw_line%%[![:space:]]*}"}"
 
     if [[ -z "${logical_line}" && "${parser_directives_allowed}" == true ]]; then
@@ -72,6 +75,10 @@ for file in "$@"; do
       continue
     fi
 
+    if [[ "${logical_line}" == *'<<'* ]]; then
+      echo "dockerfile base policy failed: ${file}:${instruction_line} uses unsupported heredoc syntax" >&2
+      exit 1
+    fi
     read -r -a tokens <<< "${logical_line}"
     logical_line=""
     if [[ "${#tokens[@]}" -eq 0 ]]; then
