@@ -85,13 +85,13 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 	uploadCtx, finishUpload := remoteio.WithRequestUploadTimeout(httpReq.Context(), cancelStream, r.uploadTimeout)
 	httpReq = httpReq.WithContext(uploadCtx)
 	resp, err := r.client.Do(httpReq)
-	uploadTimedOut := finishUpload()
 	if err != nil {
-		if uploadTimedOut {
+		if finishUpload() {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile request upload timed out"}
 		}
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile request failed: " + err.Error()}
 	}
+	defer finishUpload()
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -147,6 +147,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 				return capCompileResponseOutput(result)
 			}
 			if streamCtx.Err() != nil && ctx.Err() == nil {
+				if finishUpload() {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile request upload timed out"}
+				}
 				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream idle timeout exceeded"}
 			}
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream failed: " + err.Error()}

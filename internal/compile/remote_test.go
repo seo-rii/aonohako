@@ -3,6 +3,7 @@ package compile
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -534,6 +535,40 @@ func TestRemoteRunnerCompileBoundsStalledRequestUpload(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("stalled upload returned after %v, want under 1s", elapsed)
+	}
+}
+
+func TestRemoteRunnerCompileKeepsUploadTimeoutAfterEarlyResponse(t *testing.T) {
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{URL: "https://runner.internal"}},
+	}).(*remoteRunner)
+	runner.uploadTimeout = 20 * time.Millisecond
+	runner.client = &http.Client{Transport: compileRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		reader, writer := io.Pipe()
+		go func() {
+			<-req.Context().Done()
+			_ = writer.CloseWithError(req.Context().Err())
+		}()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       reader,
+		}, nil
+	})}
+
+	started := time.Now()
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "python3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "request upload timed out") {
+		t.Fatalf("early response with stalled upload = %+v, want bounded upload failure", resp)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("early response with stalled upload returned after %v, want under 1s", elapsed)
 	}
 }
 

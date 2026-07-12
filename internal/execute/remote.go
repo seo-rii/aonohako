@@ -83,13 +83,13 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	uploadCtx, finishUpload := remoteio.WithRequestUploadTimeout(httpReq.Context(), cancelStream, r.uploadTimeout)
 	httpReq = httpReq.WithContext(uploadCtx)
 	resp, err := r.client.Do(httpReq)
-	uploadTimedOut := finishUpload()
 	if err != nil {
-		if uploadTimedOut {
+		if finishUpload() {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute request upload timed out"}
 		}
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute request failed: " + err.Error()}
 	}
+	defer finishUpload()
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -145,6 +145,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				return result
 			}
 			if streamCtx.Err() != nil && ctx.Err() == nil {
+				if finishUpload() {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute request upload timed out"}
+				}
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute stream idle timeout exceeded"}
 			}
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute stream failed: " + err.Error()}
