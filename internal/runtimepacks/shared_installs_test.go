@@ -25,10 +25,14 @@ languages:
       shared: [bundle]
       apt: [curl]
       script: ["echo direct"]
+    smoke:
+      command: ["alpha", "--version"]
   beta:
     install:
       shared: [base, bundle]
       script: ["echo direct"]
+    smoke:
+      command: ["beta", "--version"]
 profiles:
   combined:
     base_image: debian:trixie-slim

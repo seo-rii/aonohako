@@ -1,7 +1,9 @@
 package runtimepacks
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -76,7 +78,15 @@ func LoadCatalog(path string) (Catalog, error) {
 		return Catalog{}, err
 	}
 	var catalog Catalog
-	if err := yaml.Unmarshal(data, &catalog); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&catalog); err != nil {
+		return Catalog{}, err
+	}
+	var trailingDocument any
+	if err := decoder.Decode(&trailingDocument); err == nil {
+		return Catalog{}, fmt.Errorf("runtime catalog contains multiple YAML documents")
+	} else if err != io.EOF {
 		return Catalog{}, err
 	}
 	if catalog.Languages == nil {
@@ -87,6 +97,9 @@ func LoadCatalog(path string) (Catalog, error) {
 	}
 	if catalog.SharedInstalls == nil {
 		catalog.SharedInstalls = map[string]InstallSpec{}
+	}
+	if len(catalog.Languages) == 0 {
+		return Catalog{}, fmt.Errorf("runtime catalog must define at least one language")
 	}
 	for sharedName, install := range catalog.SharedInstalls {
 		if !catalogIdentifierPattern.MatchString(sharedName) {
@@ -140,6 +153,9 @@ func LoadCatalog(path string) (Catalog, error) {
 				return Catalog{}, fmt.Errorf("profile %s references unknown shared install %s", profileName, sharedName)
 			}
 		}
+		if len(profile.Languages) == 0 {
+			return Catalog{}, fmt.Errorf("profile %s must contain at least one language", profileName)
+		}
 		seenLanguages := make(map[string]struct{}, len(profile.Languages))
 		for _, lang := range profile.Languages {
 			if _, duplicate := seenLanguages[lang]; duplicate {
@@ -149,6 +165,14 @@ func LoadCatalog(path string) (Catalog, error) {
 			if _, ok := catalog.Languages[lang]; !ok {
 				return Catalog{}, fmt.Errorf("profile %s references unknown language %s", profileName, lang)
 			}
+		}
+	}
+	if len(catalog.Profiles) == 0 {
+		return Catalog{}, fmt.Errorf("runtime catalog must define at least one profile")
+	}
+	for languageName, language := range catalog.Languages {
+		if len(language.Smoke.Command) == 0 || strings.TrimSpace(language.Smoke.Command[0]) == "" {
+			return Catalog{}, fmt.Errorf("language %s must define a smoke command", languageName)
 		}
 	}
 	return catalog, nil

@@ -236,6 +236,8 @@ languages:
         - echo 'deb http://example.invalid/deb trixie main' > /etc/apt/sources.list.d/example.list
         - apt-get update
         - apt-get install -y example-package
+    smoke:
+      command: ["mercury", "--version"]
 profiles:
   type-a:
     base_image: debian:trixie-slim
