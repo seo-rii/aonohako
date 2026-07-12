@@ -190,6 +190,84 @@ func TestMaterializeFilesRejectsEntrypointPathEscape(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesTreatsGDLEntryPointAsProcedure(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang:       "gdl",
+		EntryPoint: "solve_2$",
+		Binaries: []model.Binary{
+			{Name: "notes.txt", DataB64: b64("fixture")},
+			{Name: "Main.pro", DataB64: b64("pro solve_2$\nprint, 'ok'\nend\n")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "gdl" || filepath.Base(primary) != "Main.pro" {
+		t.Fatalf("materializeFiles = (%q, %q), want Main.pro/gdl", primary, lang)
+	}
+}
+
+func TestMaterializeFilesRejectsUnsafeGDLEntryPoint(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang:       "gdl",
+		EntryPoint: "solve\nexit",
+		Binaries:   []model.Binary{{Name: "Main.pro", DataB64: b64("pro solve\nend\n")}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "GDL procedure name") {
+		t.Fatalf("expected unsafe GDL entry_point rejection, got %v", err)
+	}
+}
+
+func TestMaterializeFilesRejectsGDLSourceControlCharactersBeforeWriting(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang: "gdl",
+		Binaries: []model.Binary{
+			{Name: "notes.txt", DataB64: b64("fixture")},
+			{Name: "dummy\nexit\nMain.pro", DataB64: b64("pro main\nend\n")},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "GDL source path contains an unsafe character") {
+		t.Fatalf("expected GDL source path rejection, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(ws.BoxDir, "notes.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("GDL source validation happened after materialization: %v", statErr)
+	}
+}
+
+func TestMaterializeFilesRejectsPrintableGDLCommandSeparators(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang:     "gdl",
+		Binaries: []model.Binary{{Name: "dummy.pro & exit & Main.pro", DataB64: b64("pro main\nend\n")}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "GDL source path contains an unsafe character") {
+		t.Fatalf("expected printable GDL command separator rejection, got %v", err)
+	}
+}
+
 func TestMaterializeFilesRejectsUnsafeJavaEntrypoint(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

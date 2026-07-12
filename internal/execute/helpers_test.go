@@ -427,6 +427,15 @@ func TestBuildCommandErlangEntryPointVariants(t *testing.T) {
 	}
 }
 
+func TestBuildCommandGDLProcedureEntryPoint(t *testing.T) {
+	req := &model.RunRequest{EntryPoint: "solve_2$"}
+	args := buildCommand("/tmp/Main.pro", "gdl", req)
+	want := []string{"aonohako-gdl-run", "/tmp/Main.pro", "solve_2$"}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("GDL command = %v, want %v", args, want)
+	}
+}
+
 func TestBuildCommandNormalizesManagedRuntimeEntryPoints(t *testing.T) {
 	req := &model.RunRequest{EntryPoint: "pkg/Main", Limits: model.Limits{MemoryMB: 64}}
 

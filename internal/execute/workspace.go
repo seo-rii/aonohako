@@ -67,6 +67,16 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if _, err := normalizeJVMMainClass(req.EntryPoint, "Main"); err != nil {
 			return "", "", err
 		}
+	case "gdl":
+		entry := strings.TrimSpace(req.EntryPoint)
+		for i := 0; i < len(entry); i++ {
+			ch := entry[i]
+			firstOK := ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' || ch == '_'
+			restOK := firstOK || ch >= '0' && ch <= '9' || ch == '$'
+			if i == 0 && !firstOK || i > 0 && !restOK {
+				return "", "", fmt.Errorf("invalid entry_point: GDL procedure name must match [A-Za-z_][A-Za-z0-9_$]*")
+			}
+		}
 	case "erlang", "vhdl":
 	default:
 		if rawEntryPoint := strings.TrimSpace(req.EntryPoint); rawEntryPoint != "" {
@@ -75,6 +85,21 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 				return "", "", fmt.Errorf("invalid entry_point: %w", err)
 			}
 			entryPointPath = clean
+		}
+	}
+	if lang == "gdl" {
+		for i, binary := range req.Binaries {
+			clean, err := util.ValidateRelativePath(binary.Name)
+			if err != nil {
+				return "", "", err
+			}
+			for j := 0; j < len(clean); j++ {
+				ch := clean[j]
+				safe := ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '_' || ch == '-' || ch == '.' || ch == '/'
+				if !safe {
+					return "", "", fmt.Errorf("binaries[%d].name: GDL source path contains an unsafe character", i)
+				}
+			}
 		}
 	}
 	submittedPaths := make(map[string]string, len(req.Binaries))
