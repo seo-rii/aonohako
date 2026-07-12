@@ -50,6 +50,17 @@ type blockingBody struct {
 	once    sync.Once
 }
 
+type readCountingBody struct {
+	reads int
+}
+
+func (b *readCountingBody) Read([]byte) (int, error) {
+	b.reads++
+	return 0, errors.New("body must not be read")
+}
+
+func (*readCountingBody) Close() error { return nil }
+
 func newBlockingBody() *blockingBody {
 	return &blockingBody{started: make(chan struct{}), unblock: make(chan struct{})}
 }
@@ -1050,6 +1061,45 @@ func TestPlatformAuthEnforcesTrustedProxyCIDRsForSignedHeaders(t *testing.T) {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
 			}
 			_, _ = io.Copy(io.Discard, resp.Body)
+		})
+	}
+}
+
+func TestPlatformAuthRejectsCheapMetadataFailuresBeforeBodyHashing(t *testing.T) {
+	validTimestamp := time.Now().UTC().Format(time.RFC3339)
+	staleTimestamp := time.Now().UTC().Add(-10 * time.Minute).Format(time.RFC3339)
+	for _, tc := range []struct {
+		name       string
+		remoteAddr string
+		timestamp  string
+		cidrs      []string
+	}{
+		{name: "untrusted source", remoteAddr: "198.51.100.1:1234", timestamp: validTimestamp, cidrs: []string{"192.0.2.0/24"}},
+		{name: "stale timestamp", remoteAddr: "127.0.0.1:1234", timestamp: staleTimestamp, cidrs: []string{"127.0.0.1/32"}},
+		{name: "malformed timestamp", remoteAddr: "127.0.0.1:1234", timestamp: "not-a-time", cidrs: []string{"127.0.0.1/32"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := configForTest(t)
+			cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "platform-secret"}
+			cfg.TrustedPlatformHeaders = true
+			cfg.TrustedPlatformHeaderCIDRs = tc.cidrs
+			s := NewWithServices(cfg, compile.New(), execute.New())
+			body := &readCountingBody{}
+			req := httptest.NewRequest(http.MethodPost, "/execute", body)
+			req.RemoteAddr = tc.remoteAddr
+			req.Header.Set(platformPrincipalHeader, "alice")
+			req.Header.Set(platformPrincipalTimestampHeader, tc.timestamp)
+			req.Header.Set(platformPrincipalSignatureHeader, "v3="+strings.Repeat("0", sha256.Size*2))
+			rr := httptest.NewRecorder()
+
+			s.Handler().ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusUnauthorized, rr.Body.String())
+			}
+			if body.reads != 0 {
+				t.Fatalf("request body was read %d times before cheap authentication rejection", body.reads)
+			}
 		})
 	}
 }

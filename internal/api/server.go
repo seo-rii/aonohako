@@ -597,6 +597,19 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
+				timestamp := strings.TrimSpace(r.Header.Get(platformPrincipalTimestampHeader))
+				parsedTimestamp, err := time.Parse(time.RFC3339, timestamp)
+				now := time.Now()
+				rawSignature := strings.TrimPrefix(signature, "v3=")
+				decodedSignature, decodeErr := hex.DecodeString(rawSignature)
+				if err != nil || now.Sub(parsedTimestamp) > platformPrincipalSignatureSkew || parsedTimestamp.Sub(now) > platformPrincipalSignatureSkew || decodeErr != nil || len(decodedSignature) != sha256.Size {
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+					return
+				}
+				if s.cfg.TrustedPlatformHeaders && len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 && !s.trustedPlatformSource(r) {
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+					return
+				}
 				releaseHashSlot, ok := s.acquirePlatformBodyHashSlot()
 				if !ok {
 					writeJSONError(w, http.StatusTooManyRequests, "platform_body_hash_limit_exceeded")
@@ -613,11 +626,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					writeJSONErrorMessage(w, status, "invalid_request_body", "invalid request body")
 					return
 				}
-				if !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.RequestURI(), value, r.Header.Get(platformPrincipalTimestampHeader), signature, bodyHash, time.Now()) {
-					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
-					return
-				}
-				if s.cfg.TrustedPlatformHeaders && len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 && !s.trustedPlatformSource(r) {
+				if !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.RequestURI(), value, timestamp, signature, bodyHash, time.Now()) {
 					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}

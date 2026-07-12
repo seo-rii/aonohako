@@ -2,11 +2,25 @@ package runvalidation
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
 	"aonohako/internal/model"
 )
+
+func validTwoStepPipelineRequest() *model.RunRequest {
+	return &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "encode", Lang: "binary", Binaries: []model.Binary{{Name: "encode", DataB64: "eA==", Mode: "exec"}}},
+			{ID: "decode", Lang: "binary", Binaries: []model.Binary{{Name: "decode", DataB64: "eA==", Mode: "exec"}}},
+		},
+		Steps: []model.RunStep{
+			{ID: "encode-step", ProgramID: "encode", Limits: model.Limits{TimeMs: 1000, MemoryMB: 128}, Handoff: &model.StepHandoff{ID: "encoded"}},
+			{ID: "decode-step", ProgramID: "decode", StdinFrom: "encoded", Limits: model.Limits{TimeMs: 1000, MemoryMB: 128}},
+		},
+	}
+}
 
 func TestValidateStepPipelineRejectsAPILevelDriftCases(t *testing.T) {
 	valid := func() *model.RunRequest {
@@ -419,5 +433,35 @@ func TestValidateStepPipelineNormalizesIdentifiersAndRejectsIgnoredLegacyText(t 
 		if err := ValidateStepPipeline(&copyReq); err == nil || !strings.Contains(err.Error(), "legacy execute fields") {
 			t.Fatalf("whitespace-only legacy field error = %v", err)
 		}
+	}
+}
+
+func TestValidateStepPipelineRejectsUnusedPrograms(t *testing.T) {
+	req := validTwoStepPipelineRequest()
+	req.Programs = append(req.Programs, model.RunProgram{
+		ID:   "unused",
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "unused",
+			DataB64: "eA==",
+			Mode:    "exec",
+		}},
+	})
+
+	if err := Validate(req); err == nil || !strings.Contains(err.Error(), "unused program") {
+		t.Fatalf("Validate error = %v, want unused program rejection", err)
+	}
+}
+
+func TestValidateRejectsRequestWideBinaryFileOverflow(t *testing.T) {
+	req := validTwoStepPipelineRequest()
+	req.Programs[0].Binaries = make([]model.Binary, MaxBinaryFiles)
+	for i := range req.Programs[0].Binaries {
+		req.Programs[0].Binaries[i] = model.Binary{Name: fmt.Sprintf("a-%03d", i), DataB64: "eA=="}
+	}
+	req.Programs[1].Binaries = []model.Binary{{Name: "b", DataB64: "eA=="}}
+
+	if err := Validate(req); err == nil || !strings.Contains(err.Error(), "too many binaries") {
+		t.Fatalf("Validate error = %v, want request-wide binary count rejection", err)
 	}
 }

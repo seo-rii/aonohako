@@ -189,6 +189,93 @@ func TestResolveRunPayloadURLsSharesBinaryBudgetAcrossPrograms(t *testing.T) {
 	}
 }
 
+func TestExecuteRejectsUnusedURLProgramBeforeFetch(t *testing.T) {
+	var requests atomic.Int64
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = io.WriteString(w, "x")
+	}))
+	defer assetServer.Close()
+	setPayloadURLHTTPClientForTest(t, assetServer.URL)
+
+	s := NewWithServices(configForTest(t), compileRunnerStub{}, execute.New())
+	server := httptest.NewServer(s.Handler())
+	defer server.Close()
+
+	req := model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "encode", Lang: "binary", Binaries: []model.Binary{{Name: "encode", DataURL: "http://payload.example/encode", Mode: "exec"}}},
+			{ID: "decode", Lang: "binary", Binaries: []model.Binary{{Name: "decode", DataURL: "http://payload.example/decode", Mode: "exec"}}},
+			{ID: "unused", Lang: "binary", Binaries: []model.Binary{{Name: "unused", DataURL: "http://payload.example/unused", Mode: "exec"}}},
+		},
+		Steps: []model.RunStep{
+			{ID: "encode-step", ProgramID: "encode", Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}, Handoff: &model.StepHandoff{ID: "encoded"}},
+			{ID: "decode-step", ProgramID: "decode", StdinFrom: "encoded", Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}},
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Post(server.URL+"/execute", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	responseBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(responseBody), "unused program") {
+		t.Fatalf("status = %d body=%s, want unused program rejection", resp.StatusCode, responseBody)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid request performed %d payload fetches", got)
+	}
+}
+
+func TestExecuteRejectsRequestWideBinaryOverflowBeforeFetch(t *testing.T) {
+	var requests atomic.Int64
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = io.WriteString(w, "x")
+	}))
+	defer assetServer.Close()
+	setPayloadURLHTTPClientForTest(t, assetServer.URL)
+
+	firstProgramBinaries := make([]model.Binary, runvalidation.MaxBinaryFiles)
+	for i := range firstProgramBinaries {
+		firstProgramBinaries[i] = model.Binary{Name: fmt.Sprintf("encode-%03d", i), DataURL: "http://payload.example/encode", Mode: "exec"}
+	}
+	req := model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "encode", Lang: "binary", Binaries: firstProgramBinaries},
+			{ID: "decode", Lang: "binary", Binaries: []model.Binary{{Name: "decode", DataURL: "http://payload.example/decode", Mode: "exec"}}},
+		},
+		Steps: []model.RunStep{
+			{ID: "encode-step", ProgramID: "encode", Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}, Handoff: &model.StepHandoff{ID: "encoded"}},
+			{ID: "decode-step", ProgramID: "decode", StdinFrom: "encoded", Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}},
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewWithServices(configForTest(t), compileRunnerStub{}, execute.New())
+	server := httptest.NewServer(s.Handler())
+	defer server.Close()
+	resp, err := http.Post(server.URL+"/execute", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	responseBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(responseBody), "too many binaries") {
+		t.Fatalf("status = %d body=%s, want request-wide binary rejection", resp.StatusCode, responseBody)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid request performed %d payload fetches", got)
+	}
+}
+
 func TestCompileRejectsTooManyURLSourcesWithoutFetch(t *testing.T) {
 	var requests atomic.Int64
 	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

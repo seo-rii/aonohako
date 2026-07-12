@@ -116,8 +116,13 @@ func ValidateBinaryBudget(req *model.RunRequest) (int, error) {
 	}
 
 	var decodedBytes int64
+	var binaryFiles int
 	for _, group := range binaryGroups {
 		for i := range group.binaries {
+			binaryFiles++
+			if binaryFiles > MaxBinaryFiles {
+				return 0, fmt.Errorf("too many binaries: max %d", MaxBinaryFiles)
+			}
 			decoded, err := io.Copy(io.Discard, base64.NewDecoder(base64.StdEncoding, strings.NewReader(group.binaries[i].DataB64)))
 			if err != nil {
 				field := fmt.Sprintf("%s[%d]", group.label, i)
@@ -184,6 +189,7 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 
 	handoffID := ""
 	seenSteps := map[string]struct{}{}
+	referencedPrograms := make(map[string]struct{}, len(req.Steps))
 	for i, step := range req.Steps {
 		stepID := strings.TrimSpace(step.ID)
 		if stepID == "" {
@@ -193,9 +199,11 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 			return fmt.Errorf("duplicate step id: %s", stepID)
 		}
 		seenSteps[stepID] = struct{}{}
-		if _, ok := programs[strings.TrimSpace(step.ProgramID)]; !ok {
+		programID := strings.TrimSpace(step.ProgramID)
+		if _, ok := programs[programID]; !ok {
 			return fmt.Errorf("step %s references unknown program_id: %s", step.ID, step.ProgramID)
 		}
+		referencedPrograms[programID] = struct{}{}
 		if len(step.StdinParts) > 0 && (step.Stdin != "" || strings.TrimSpace(step.StdinURL) != "" || strings.TrimSpace(step.StdinFrom) != "") {
 			return fmt.Errorf("step %s stdin_parts cannot be combined with stdin, stdin_url, or stdin_from", step.ID)
 		}
@@ -255,6 +263,12 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 		}
 		if step.Handoff != nil {
 			return fmt.Errorf("second step handoff is not supported")
+		}
+	}
+	for _, program := range req.Programs {
+		programID := strings.TrimSpace(program.ID)
+		if _, referenced := referencedPrograms[programID]; !referenced {
+			return fmt.Errorf("unused program: %s", programID)
 		}
 	}
 	return nil
