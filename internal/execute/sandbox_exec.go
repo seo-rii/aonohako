@@ -174,7 +174,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			break
 		}
 	}
-	runtimeBase := sandboxCommandBase(finalCommand)
+	runtimeBase := sandboxCommandBase(finalCommand, ws.RootDir)
 	isDotnet := runtimeBase == "dotnet"
 	isTLA := runtimeBase == "aonohako-tla-run"
 	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
@@ -378,6 +378,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	var runGroup cgroup.Group
 	cgroupCPUBaselineMicros := int64(0)
+	var cgroupLimitBaseline cgroup.Stats
+	cgroupLimitBaselineSet := false
 	if cgroupParentDir != "" {
 		if err := cgroup.EnableControllers(cgroupParentDir, []string{"cpu", "memory", "pids"}); err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -405,6 +407,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			cgroupCPUBaselineMicros = stats.CPUUsageMicros
+			cgroupLimitBaseline = stats
+			cgroupLimitBaselineSet = true
 		}
 		defer func() {
 			cleanupSandboxCgroup("execute", runGroup)
@@ -452,8 +456,6 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	cpuBaselineNs := uint64(0)
 	targetStarted := false
 	targetStartGraceDeadline := time.Now().Add(100 * time.Millisecond)
-	var cgroupLimitBaseline cgroup.Stats
-	cgroupLimitBaselineSet := false
 	watchdog := time.NewTicker(1 * time.Millisecond)
 	defer watchdog.Stop()
 	lastWorkspaceScan := time.Time{}
@@ -495,6 +497,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 					// only after this point; the trusted Go helper can have a
 					// much larger RSS/cgroup peak than the submitted program.
 					targetStarted = true
+					maxCPUTimeMs = 0
 					cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
 					if runGroup.Path != "" {
 						if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
@@ -667,7 +670,7 @@ done:
 					result.CPUTimeMs = cpuTimeMs
 				}
 			}
-			if targetStarted && result.Status == "OK" {
+			if result.Status == "OK" {
 				switch cgroupLimitBreachSince(stats, cgroupLimitBaseline, cgroupLimitBaselineSet) {
 				case cgroup.LimitBreachMemory:
 					result.Status = model.RunStatusMLE
@@ -868,57 +871,63 @@ func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit f
 	var offset int64
 	var carry string
 	var streamBytes int64
+	var pendingLines []string
 
-	readNew := func() {
-		if streamBytes >= maxImageStreamBytes {
-			return
-		}
-		output, err := openWorkspaceReadOnly(ws, clean)
-		if err != nil {
-			return
-		}
-		defer output.cleanup()
-		if output.info.Size() <= offset {
-			return
-		}
-		if _, err := output.file.Seek(offset, 0); err != nil {
-			return
-		}
-		remaining := maxImageStreamBytes - streamBytes
-		available := output.info.Size() - offset
-		if available > remaining {
-			available = remaining
-		}
-		if available > maxImageReadChunkBytes {
-			available = maxImageReadChunkBytes
-		}
-		if available <= 0 {
-			return
-		}
-		chunk := make([]byte, available)
-		n, _ := output.file.Read(chunk)
-		if n == 0 {
-			return
-		}
-		chunk = chunk[:n]
-		offset += int64(n)
-		streamBytes += int64(n)
-		text := carry + string(chunk)
-		lines := strings.Split(text, "\n")
-		if !strings.HasSuffix(text, "\n") {
-			carry = lines[len(lines)-1]
-			lines = lines[:len(lines)-1]
-			if len(carry) > maxImageEventBytes {
-				carry = ""
+	readNew := func(final bool) bool {
+		hasUnread := false
+		if len(pendingLines) == 0 && streamBytes < maxImageStreamBytes {
+			output, err := openWorkspaceReadOnly(ws, clean)
+			if err == nil {
+				if output.info.Size() > offset {
+					if _, err := output.file.Seek(offset, 0); err == nil {
+						remaining := maxImageStreamBytes - streamBytes
+						available := output.info.Size() - offset
+						if available > remaining {
+							available = remaining
+						}
+						if available > maxImageReadChunkBytes {
+							available = maxImageReadChunkBytes
+						}
+						if available > 0 {
+							chunk := make([]byte, available)
+							n, _ := output.file.Read(chunk)
+							if n > 0 {
+								chunk = chunk[:n]
+								offset += int64(n)
+								streamBytes += int64(n)
+								text := carry + string(chunk)
+								lines := strings.Split(text, "\n")
+								if !strings.HasSuffix(text, "\n") {
+									carry = lines[len(lines)-1]
+									lines = lines[:len(lines)-1]
+									if len(carry) > maxImageEventBytes {
+										carry = ""
+									}
+								} else {
+									carry = ""
+								}
+								pendingLines = append(pendingLines, lines...)
+							}
+						}
+					}
+				}
+				hasUnread = output.info.Size() > offset && streamBytes < maxImageStreamBytes
+				output.cleanup()
 			}
-		} else {
+		}
+		if final && !hasUnread && carry != "" {
+			pendingLines = append(pendingLines, carry)
 			carry = ""
 		}
+
 		emitted := 0
-		for _, line := range lines {
+		consumed := 0
+		for consumed < len(pendingLines) {
 			if emitted >= maxImageEventsPerRead {
-				return
+				break
 			}
+			line := pendingLines[consumed]
+			consumed++
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -947,15 +956,21 @@ func streamImageEvents(ctx context.Context, ws Workspace, relPath string, emit f
 			emit(payload.Mime, payload.B64, ts)
 			emitted++
 		}
+		pendingLines = pendingLines[consumed:]
+		if !final {
+			return false
+		}
+		return len(pendingLines) > 0 || hasUnread || carry != "" || consumed > 0
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			readNew()
+			for readNew(true) {
+			}
 			return
 		case <-ticker.C:
-			readNew()
+			readNew(false)
 		}
 	}
 }

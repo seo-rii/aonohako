@@ -26,8 +26,14 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	var score *float64
 	outputOK := false
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
+	stdoutLimitExceeded := judgeSource == "stdout" && res.StdoutTruncated
 	if evaluateOutputs {
-		if hasSPJ(req) {
+		if stdoutLimitExceeded {
+			if status == "OK" {
+				reason = "stdout exceeded output limit"
+				source = "stdout_limit"
+			}
+		} else if hasSPJ(req) {
 			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir)
 			if sc != nil {
 				score = sc
@@ -50,7 +56,9 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	}
 
 	if status == "OK" && evaluateOutputs {
-		if hasSPJ(req) {
+		if stdoutLimitExceeded {
+			source = "stdout_limit"
+		} else if hasSPJ(req) {
 			source = "spj"
 		} else if judgeSource != "" {
 			source = judgeSource
@@ -244,6 +252,9 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	}
 	if res.ExitCode != nil && *res.ExitCode == 0 {
 		if req.SPJ.EmitScore {
+			if res.StdoutTruncated {
+				return false, nil, fmt.Errorf("score output exceeded output limit")
+			}
 			raw := strings.TrimSpace(string(res.Stdout))
 			scoreVal := 0.0
 			if raw != "" {
@@ -380,21 +391,57 @@ func clipUTF8(b []byte, n int) string {
 	return string(b[:validEnd])
 }
 
-func sandboxCommandBase(command []string) string {
+func sandboxCommandBase(command []string, workspaceRoots ...string) string {
 	if len(command) == 0 {
 		return ""
 	}
-	base := filepath.Base(command[0])
-	if base != "env" {
-		return base
+	executable := command[0]
+	if filepath.Base(executable) == "env" {
+		for _, arg := range command[1:] {
+			if strings.Contains(arg, "=") {
+				continue
+			}
+			executable = arg
+			break
+		}
 	}
-	for _, arg := range command[1:] {
-		if strings.Contains(arg, "=") {
+	if !filepath.IsAbs(executable) {
+		return ""
+	}
+	cleanExecutable := filepath.Clean(executable)
+	resolvedExecutable := cleanExecutable
+	if resolved, err := filepath.EvalSymlinks(cleanExecutable); err == nil && resolved != "" {
+		resolvedExecutable = filepath.Clean(resolved)
+	}
+	for _, workspaceRoot := range workspaceRoots {
+		if strings.TrimSpace(workspaceRoot) == "" {
 			continue
 		}
-		return filepath.Base(arg)
+		cleanRoot := filepath.Clean(workspaceRoot)
+		for _, candidate := range []string{cleanExecutable, resolvedExecutable} {
+			rel, err := filepath.Rel(cleanRoot, candidate)
+			if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+				return ""
+			}
+		}
 	}
-	return base
+	for _, trustedRoot := range []string{
+		"/bin",
+		"/opt",
+		"/sbin",
+		"/usr/bin",
+		"/usr/local/bin",
+		"/usr/local/cargo/bin",
+		"/usr/local/go/bin",
+		"/usr/local/sbin",
+		"/usr/sbin",
+	} {
+		rel, err := filepath.Rel(trustedRoot, resolvedExecutable)
+		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return filepath.Base(cleanExecutable)
+		}
+	}
+	return ""
 }
 
 func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {

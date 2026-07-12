@@ -97,32 +97,43 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 	defer contestantIn.Close()
 	defer interactorIn.Close()
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	contestantCtx, cancelContestant := context.WithCancel(ctx)
+	interactorCtx, cancelInteractor := context.WithCancel(ctx)
+	defer cancelContestant()
+	defer cancelInteractor()
 
-	var deadlineHit atomic.Bool
-	var parentCanceled atomic.Bool
-	limitMs := max(1, req.Limits.TimeMs)
-	timer := time.AfterFunc(time.Duration(limitMs)*time.Millisecond, func() {
-		deadlineHit.Store(true)
-		cancel()
-	})
-	defer timer.Stop()
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			parentCanceled.Store(true)
-			cancel()
-		case <-runCtx.Done():
+	var contestantDeadlineHit atomic.Bool
+	var contestantFinished atomic.Bool
+	var interactorFinished atomic.Bool
+	var contestantCanceledByInteractor atomic.Bool
+	contestantLimitMs := max(1, req.Limits.TimeMs)
+	contestantTimer := time.AfterFunc(time.Duration(contestantLimitMs)*time.Millisecond, func() {
+		if contestantFinished.Load() {
+			return
 		}
-	}()
+		contestantDeadlineHit.Store(true)
+		cancelContestant()
+		cancelInteractor()
+	})
+	defer contestantTimer.Stop()
+	interactorLimitMs := max(1, interactorReq.Limits.TimeMs)
+	interactorTimer := time.AfterFunc(time.Duration(interactorLimitMs)*time.Millisecond, func() {
+		if interactorFinished.Load() {
+			return
+		}
+		if !contestantFinished.Load() {
+			contestantCanceledByInteractor.Store(true)
+		}
+		cancelInteractor()
+		cancelContestant()
+	})
+	defer interactorTimer.Stop()
 
 	contestantCh := make(chan execResult, 1)
 	interactorCh := make(chan execResult, 1)
 	go func() {
-		contestantCh <- executeSandboxCommandWithStreams(
-			runCtx,
+		res := executeSandboxCommandWithStreams(
+			contestantCtx,
 			contestantWS,
 			contestantArgs,
 			req,
@@ -137,10 +148,12 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 			tuning,
 			s.cgroupParentDir,
 		)
+		contestantFinished.Store(true)
+		contestantCh <- res
 	}()
 	go func() {
-		interactorCh <- executeSandboxCommandWithStreams(
-			runCtx,
+		res := executeSandboxCommandWithStreams(
+			interactorCtx,
 			interactorWS,
 			interactorArgs,
 			interactorReq,
@@ -155,42 +168,48 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 			tuning,
 			s.cgroupParentDir,
 		)
+		interactorFinished.Store(true)
+		interactorCh <- res
 	}()
 
 	var contestantRes execResult
 	var interactorRes execResult
 	gotContestant := false
 	gotInteractor := false
-	ignoreContestantCancelStatus := false
-	parentDone := ctx.Done()
 	for !gotContestant || !gotInteractor {
 		select {
 		case res := <-contestantCh:
 			contestantRes = res
 			gotContestant = true
+			contestantTimer.Stop()
 			interactorIn.Close()
-			if res.Status == model.RunStatusInitFail {
-				cancel()
+			contestantStatus, _, _ := classifyRunStatusWithoutOutput(req, res)
+			if contestantStatus != "OK" {
+				cancelInteractor()
 			}
 		case res := <-interactorCh:
 			interactorRes = res
 			gotInteractor = true
+			interactorTimer.Stop()
 			contestantIn.Close()
-			if interactiveAccepted(res) {
-				time.AfterFunc(interactiveAcceptedGrace, cancel)
+			interactorStatus, _, _ := classifyInteractorStatus(interactorReq, res)
+			if interactorStatus == model.RunStatusAccepted {
+				time.AfterFunc(interactiveAcceptedGrace, func() {
+					if !contestantFinished.Load() {
+						contestantCanceledByInteractor.Store(true)
+						cancelContestant()
+					}
+				})
 				continue
 			}
-			if !gotContestant {
-				ignoreContestantCancelStatus = true
+			if !contestantFinished.Load() {
+				contestantCanceledByInteractor.Store(true)
 			}
-			cancel()
-		case <-parentDone:
-			parentCanceled.Store(true)
-			cancel()
-			parentDone = nil
+			cancelContestant()
 		}
 	}
-	cancel()
+	cancelContestant()
+	cancelInteractor()
 	contestantIn.Close()
 	interactorIn.Close()
 
@@ -201,8 +220,8 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 		contestantRes,
 		interactorRes,
 		timing.SinceMillis(startWall),
-		deadlineHit.Load() || parentCanceled.Load(),
-		ignoreContestantCancelStatus,
+		contestantDeadlineHit.Load() || ctx.Err() != nil,
+		contestantCanceledByInteractor.Load(),
 		responseOutputLimitBytes(req),
 	)
 	resp.SidecarOutputs = sidecarOutputs
@@ -291,11 +310,7 @@ func interactorRunRequest(req *model.RunRequest) *model.RunRequest {
 	}
 }
 
-func interactiveAccepted(res execResult) bool {
-	return res.Status == "OK" && res.ExitCode != nil && *res.ExitCode == 0
-}
-
-func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, interactorRes execResult, wallMs int64, deadlineExceeded, ignoreContestantCancelStatus bool, outputLimit int) model.RunResponse {
+func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, interactorRes execResult, wallMs int64, deadlineExceeded, contestantCanceledByInteractor bool, outputLimit int) model.RunResponse {
 	status := model.RunStatusRE
 	reason := ""
 	source := "interactive"
@@ -306,9 +321,11 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		contestantStatus = model.RunStatusAccepted
 	}
 	interactorStatus, interactorReason, interactorSource := classifyInteractorStatus(interactorReq, interactorRes)
+	ignoreContestantStatus := contestantCanceledByInteractor && (contestantRes.Status == model.RunStatusTLE && contestantRes.VerdictSource == "wall_time" ||
+		contestantRes.Status == model.RunStatusInitFail && strings.Contains(strings.ToLower(contestantRes.Reason), "context canceled"))
 
 	switch {
-	case contestantRes.Status == model.RunStatusInitFail:
+	case contestantRes.Status == model.RunStatusInitFail && !ignoreContestantStatus:
 		status = model.RunStatusInitFail
 		reason = firstNonEmptyString(contestantRes.Reason, "contestant initialization failed")
 		source = prefixInteractiveSource("contestant", contestantRes.VerdictSource)
@@ -320,14 +337,14 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		status = model.RunStatusTLE
 		reason = "wall time limit exceeded"
 		source = "interactive:wall_time"
-	case interactiveAccepted(interactorRes):
-		status = model.RunStatusAccepted
-		source = "interactor"
-		scoreVal = 1
-	case !ignoreContestantCancelStatus && contestantStatus != model.RunStatusAccepted:
+	case !ignoreContestantStatus && contestantStatus != model.RunStatusAccepted:
 		status = contestantStatus
 		reason = firstNonEmptyString(contestantReason, contestantRes.Reason)
 		source = prefixInteractiveSource("contestant", contestantSource)
+	case interactorStatus == model.RunStatusAccepted:
+		status = model.RunStatusAccepted
+		source = "interactor"
+		scoreVal = 1
 	case interactorStatus == model.RunStatusRE:
 		status = model.RunStatusRE
 		reason = firstNonEmptyString(interactorReason, interactiveFailureMessage(contestantRes, interactorRes, outputLimit), "interactor failed")
