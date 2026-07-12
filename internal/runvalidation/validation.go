@@ -3,6 +3,7 @@ package runvalidation
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
 	"strings"
 
 	"aonohako/internal/model"
@@ -88,7 +89,50 @@ func Validate(req *model.RunRequest) error {
 			return err
 		}
 	}
+	if _, err := ValidateBinaryBudget(req); err != nil {
+		return err
+	}
 	return nil
+}
+
+func ValidateBinaryBudget(req *model.RunRequest) (int, error) {
+	if req == nil {
+		return 0, nil
+	}
+	type binaryGroup struct {
+		label      string
+		binaries   []model.Binary
+		singleItem bool
+	}
+	binaryGroups := []binaryGroup{{label: "binaries", binaries: req.Binaries}}
+	for i := range req.Programs {
+		binaryGroups = append(binaryGroups, binaryGroup{label: fmt.Sprintf("programs[%d].binaries", i), binaries: req.Programs[i].Binaries})
+	}
+	if req.SPJ != nil && req.SPJ.Binary != nil {
+		binaryGroups = append(binaryGroups, binaryGroup{label: "spj.binary", binaries: []model.Binary{*req.SPJ.Binary}, singleItem: true})
+	}
+	if req.Interactor != nil {
+		binaryGroups = append(binaryGroups, binaryGroup{label: "interactor.binaries", binaries: req.Interactor.Binaries})
+	}
+
+	var decodedBytes int64
+	for _, group := range binaryGroups {
+		for i := range group.binaries {
+			decoded, err := io.Copy(io.Discard, base64.NewDecoder(base64.StdEncoding, strings.NewReader(group.binaries[i].DataB64)))
+			if err != nil {
+				field := fmt.Sprintf("%s[%d]", group.label, i)
+				if group.singleItem {
+					field = group.label
+				}
+				return 0, fmt.Errorf("%s.data_b64 invalid base64: %w", field, err)
+			}
+			decodedBytes += decoded
+			if decodedBytes > int64(MaxBinaryTotalBytes) {
+				return 0, fmt.Errorf("binaries total size exceeded: max %d bytes", MaxBinaryTotalBytes)
+			}
+		}
+	}
+	return int(decodedBytes), nil
 }
 
 func ValidateStepPipeline(req *model.RunRequest) error {

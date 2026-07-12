@@ -4,6 +4,8 @@ package execute
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 
 	"aonohako/internal/util"
 )
@@ -19,6 +21,25 @@ type workspaceReadOnlyFile struct {
 	info    os.FileInfo
 	full    string
 	cleanup func()
+}
+
+func existingWorkspacePath(ws Workspace, rel string) (string, error) {
+	for _, candidate := range workspacePathCandidates(ws, rel) {
+		if _, err := os.Lstat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", os.ErrNotExist
+}
+
+func workspacePathCandidates(ws Workspace, rel string) []string {
+	if strings.HasPrefix(filepath.ToSlash(rel), "__img__/") {
+		return []string{
+			filepath.Join(ws.RootDir, rel),
+			filepath.Join(ws.BoxDir, rel),
+		}
+	}
+	return []string{filepath.Join(ws.BoxDir, rel)}
 }
 
 func openWorkspaceReadOnly(ws Workspace, rel string) (workspaceReadOnlyFile, error) {

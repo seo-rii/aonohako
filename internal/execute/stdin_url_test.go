@@ -45,7 +45,7 @@ func TestOpenStdinURLAllowsInjectedPublicDestination(t *testing.T) {
 	defer server.Close()
 	setStdinURLHTTPClientForTest(t, server.URL)
 
-	body, err := openStdinURL(context.Background(), "http://payload.example/input", 16)
+	body, err := openStdinURL(context.Background(), "http://payload.example/input", 16, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestOpenStdinURLRejectsLoopbackBeforeRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := openStdinURL(context.Background(), server.URL, 16); err == nil || !strings.Contains(err.Error(), "no public addresses") {
+	if _, err := openStdinURL(context.Background(), server.URL, 16, nil); err == nil || !strings.Contains(err.Error(), "no public addresses") {
 		t.Fatalf("openStdinURL error = %v, want loopback rejection", err)
 	}
 	if got := requests.Load(); got != 0 {

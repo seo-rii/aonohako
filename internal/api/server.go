@@ -77,6 +77,7 @@ type Server struct {
 	platformBodyHashSlots chan struct{}
 	payloadURLFetchSlots  chan struct{}
 	payloadURLTimeout     time.Duration
+	sseWriteTimeout       time.Duration
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -114,6 +115,7 @@ func NewWithServices(cfg config.Config, compileService interface {
 		),
 		payloadURLFetchSlots: make(chan struct{}, payloadURLFetchSlots),
 		payloadURLTimeout:    payloadURLRequestTimeout,
+		sseWriteTimeout:      sse.DefaultWriteTimeout,
 	}
 }
 
@@ -253,53 +255,69 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
-	stream, err := sse.New(w)
+	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
 		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
 		return
 	}
-	heartbeatCtx, stopHeartbeat := context.WithCancel(r.Context())
+	streamCtx, stopStream := context.WithCancel(r.Context())
 	heartbeatDone := make(chan struct{})
 	go func() {
 		defer close(heartbeatDone)
-		stream.Heartbeat(heartbeatCtx, s.cfg.HeartbeatInterval)
+		if err := stream.Heartbeat(streamCtx, s.cfg.HeartbeatInterval); err != nil {
+			stopStream()
+		}
 	}()
 	defer func() {
-		stopHeartbeat()
+		stopStream()
 		<-heartbeatDone
 	}()
 
 	reqID := s.nextID("compile")
 	active, pending := s.queue.Snapshot()
-	_ = stream.Event("progress", map[string]any{
+	if err := stream.Event("progress", map[string]any{
 		"stage":          "accepted",
 		"request_id":     reqID,
 		"queue_position": permit.Position(),
 		"active_runs":    active,
 		"queue_pending":  pending,
 		"ts":             time.Now().UnixMilli(),
-	})
+	}); err != nil {
+		permit.Cancel()
+		return
+	}
 
-	if err := permit.Wait(r.Context()); err != nil {
-		if r.Context().Err() == nil {
+	if err := permit.Wait(streamCtx); err != nil {
+		if r.Context().Err() == nil && streamCtx.Err() == nil {
 			_ = stream.Event("error", map[string]any{"message": err.Error()})
 		}
 		return
 	}
 	defer permit.Release()
 
-	_ = stream.Event("progress", map[string]any{"stage": "start", "request_id": reqID, "ts": time.Now().UnixMilli()})
+	if err := stream.Event("progress", map[string]any{"stage": "start", "request_id": reqID, "ts": time.Now().UnixMilli()}); err != nil {
+		return
+	}
 
-	resp := s.compile.Run(r.Context(), &req)
+	resp := s.compile.Run(streamCtx, &req)
+	if streamCtx.Err() != nil {
+		return
+	}
 	if resp.Stdout != "" {
-		_ = stream.Event("log", map[string]any{"stream": "stdout", "chunk": resp.Stdout})
+		if err := stream.Event("log", map[string]any{"stream": "stdout", "chunk": resp.Stdout}); err != nil {
+			return
+		}
 	}
 	if resp.Stderr != "" {
-		_ = stream.Event("log", map[string]any{"stream": "stderr", "chunk": resp.Stderr})
+		if err := stream.Event("log", map[string]any{"stream": "stderr", "chunk": resp.Stderr}); err != nil {
+			return
+		}
 	}
 	if resp.Status != model.CompileStatusOK {
-		_ = stream.Event("error", map[string]any{"message": firstNonEmpty(resp.Reason, resp.Stderr, resp.Stdout, "compile failed")})
+		if err := stream.Event("error", map[string]any{"message": firstNonEmpty(resp.Reason, resp.Stderr, resp.Stdout, "compile failed")}); err != nil {
+			return
+		}
 	}
 	if err := stream.Event("result", resp); err != nil {
 		return
@@ -380,55 +398,71 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
-	stream, err := sse.New(w)
+	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
 		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
 		return
 	}
-	heartbeatCtx, stopHeartbeat := context.WithCancel(r.Context())
+	streamCtx, stopStream := context.WithCancel(r.Context())
 	heartbeatDone := make(chan struct{})
 	go func() {
 		defer close(heartbeatDone)
-		stream.Heartbeat(heartbeatCtx, s.cfg.HeartbeatInterval)
+		if err := stream.Heartbeat(streamCtx, s.cfg.HeartbeatInterval); err != nil {
+			stopStream()
+		}
 	}()
 	defer func() {
-		stopHeartbeat()
+		stopStream()
 		<-heartbeatDone
 	}()
 
 	reqID := s.nextID("execute")
 	active, pending := s.queue.Snapshot()
-	_ = stream.Event("progress", map[string]any{
+	if err := stream.Event("progress", map[string]any{
 		"stage":          "accepted",
 		"request_id":     reqID,
 		"queue_position": permit.Position(),
 		"active_runs":    active,
 		"queue_pending":  pending,
 		"ts":             time.Now().UnixMilli(),
-	})
+	}); err != nil {
+		permit.Cancel()
+		return
+	}
 
-	if err := permit.Wait(r.Context()); err != nil {
-		if r.Context().Err() == nil {
+	if err := permit.Wait(streamCtx); err != nil {
+		if r.Context().Err() == nil && streamCtx.Err() == nil {
 			_ = stream.Event("error", map[string]any{"message": err.Error()})
 		}
 		return
 	}
 	defer permit.Release()
 
-	_ = stream.Event("progress", map[string]any{"stage": "start", "request_id": reqID, "ts": time.Now().UnixMilli()})
+	if err := stream.Event("progress", map[string]any{"stage": "start", "request_id": reqID, "ts": time.Now().UnixMilli()}); err != nil {
+		return
+	}
 
-	resp := s.execute.Run(r.Context(), &req, execute.Hooks{
+	resp := s.execute.Run(streamCtx, &req, execute.Hooks{
 		OnImage: func(mime, b64 string, ts int64) {
-			_ = stream.Event("image", map[string]any{"mime": mime, "b64": b64, "ts": ts})
+			if err := stream.Event("image", map[string]any{"mime": mime, "b64": b64, "ts": ts}); err != nil {
+				stopStream()
+			}
 		},
 		OnLog: func(streamName, msg string) {
-			_ = stream.Event("log", map[string]any{"stream": streamName, "chunk": msg})
+			if err := stream.Event("log", map[string]any{"stream": streamName, "chunk": msg}); err != nil {
+				stopStream()
+			}
 		},
 	})
+	if streamCtx.Err() != nil {
+		return
+	}
 
 	if resp.Status == model.RunStatusInitFail {
-		_ = stream.Event("error", map[string]any{"message": firstNonEmpty(resp.Reason, resp.Stderr, resp.Stdout, "execution failed")})
+		if err := stream.Event("error", map[string]any{"message": firstNonEmpty(resp.Reason, resp.Stderr, resp.Stdout, "execution failed")}); err != nil {
+			return
+		}
 	}
 	if err := stream.Event("result", resp); err != nil {
 		slog.Error("execute: write result failed", "reqID", reqID, "err", err)

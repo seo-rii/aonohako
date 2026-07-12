@@ -9,16 +9,27 @@ import (
 	"time"
 )
 
+const DefaultWriteTimeout = 10 * time.Second
+
 type Writer struct {
-	w       http.ResponseWriter
-	flusher http.Flusher
-	mu      sync.Mutex
+	w            http.ResponseWriter
+	controller   *http.ResponseController
+	writeTimeout time.Duration
+	mu           sync.Mutex
+	failed       error
 }
 
-func New(w http.ResponseWriter) (*Writer, error) {
-	flusher, ok := w.(http.Flusher)
+func New(w http.ResponseWriter, writeTimeout time.Duration) (*Writer, error) {
+	_, ok := w.(http.Flusher)
 	if !ok {
 		return nil, fmt.Errorf("streaming unsupported")
+	}
+	if writeTimeout <= 0 {
+		writeTimeout = DefaultWriteTimeout
+	}
+	controller := http.NewResponseController(w)
+	if err := controller.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		return nil, fmt.Errorf("set initial sse write deadline: %w", err)
 	}
 	headers := w.Header()
 	headers.Set("Content-Type", "text/event-stream")
@@ -26,8 +37,13 @@ func New(w http.ResponseWriter) (*Writer, error) {
 	headers.Set("Connection", "keep-alive")
 	headers.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-	return &Writer{w: w, flusher: flusher}, nil
+	if err := controller.Flush(); err != nil {
+		return nil, fmt.Errorf("flush initial sse response: %w", err)
+	}
+	if err := controller.SetWriteDeadline(time.Time{}); err != nil {
+		return nil, fmt.Errorf("clear initial sse write deadline: %w", err)
+	}
+	return &Writer{w: w, controller: controller, writeTimeout: writeTimeout}, nil
 }
 
 func (s *Writer) Event(name string, data any) error {
@@ -37,17 +53,31 @@ func (s *Writer) Event(name string, data any) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, err := fmt.Fprintf(s.w, "event: %s\n", name); err != nil {
-		return err
+	if s.failed != nil {
+		return s.failed
 	}
-	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", payload); err != nil {
-		return err
+	if err := s.controller.SetWriteDeadline(time.Now().Add(s.writeTimeout)); err != nil {
+		s.failed = fmt.Errorf("set sse write deadline: %w", err)
+		return s.failed
 	}
-	s.flusher.Flush()
+	_, err = fmt.Fprintf(s.w, "event: %s\n", name)
+	if err == nil {
+		_, err = fmt.Fprintf(s.w, "data: %s\n\n", payload)
+	}
+	if err == nil {
+		err = s.controller.Flush()
+	}
+	if err == nil {
+		err = s.controller.SetWriteDeadline(time.Time{})
+	}
+	if err != nil {
+		s.failed = fmt.Errorf("write sse event %q: %w", name, err)
+		return s.failed
+	}
 	return nil
 }
 
-func (s *Writer) Heartbeat(ctx context.Context, interval time.Duration) {
+func (s *Writer) Heartbeat(ctx context.Context, interval time.Duration) error {
 	if interval <= 0 {
 		interval = 10 * time.Second
 	}
@@ -56,9 +86,11 @@ func (s *Writer) Heartbeat(ctx context.Context, interval time.Duration) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
-			_ = s.Event("heartbeat", map[string]any{"ts": time.Now().UnixMilli()})
+			if err := s.Event("heartbeat", map[string]any{"ts": time.Now().UnixMilli()}); err != nil {
+				return err
+			}
 		}
 	}
 }

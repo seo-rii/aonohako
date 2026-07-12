@@ -157,6 +157,38 @@ func TestResolveBase64URLStopsAtAggregateBudget(t *testing.T) {
 	}
 }
 
+func TestResolveRunPayloadURLsSharesBinaryBudgetAcrossPrograms(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = io.WriteString(w, "x")
+	}))
+	defer server.Close()
+	setPayloadURLHTTPClientForTest(t, server.URL)
+
+	halfMaxSizeBinary := base64.StdEncoding.EncodeToString(make([]byte, runvalidation.MaxBinaryFileBytes/2))
+	req := &model.RunRequest{Programs: []model.RunProgram{
+		{Binaries: []model.Binary{{Name: "url", DataURL: "http://payload.example/url"}}},
+		{Binaries: []model.Binary{{Name: "inline-1", DataB64: halfMaxSizeBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-2", DataB64: halfMaxSizeBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-3", DataB64: halfMaxSizeBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-4", DataB64: halfMaxSizeBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-5", DataB64: halfMaxSizeBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-6", DataB64: halfMaxSizeBinary}}},
+	}}
+
+	err := resolveRunPayloadURLs(context.Background(), req)
+	if err == nil || !strings.Contains(err.Error(), "binaries total size exceeded") {
+		t.Fatalf("resolveRunPayloadURLs error = %v, want request-wide binary limit", err)
+	}
+	if req.Programs[0].Binaries[0].DataURL == "" || req.Programs[0].Binaries[0].DataB64 != "" {
+		t.Fatalf("over-budget URL binary was consumed: %+v", req.Programs[0].Binaries[0])
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("requests = %d, want 1", got)
+	}
+}
+
 func TestCompileRejectsTooManyURLSourcesWithoutFetch(t *testing.T) {
 	var requests atomic.Int64
 	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

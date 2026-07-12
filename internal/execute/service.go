@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
@@ -83,6 +84,7 @@ type Service struct {
 	runtimeTuning         config.RuntimeTuningConfig
 	runtimeTuningProfiles map[string]config.RuntimeTuningConfig
 	cgroupParentDir       string
+	stdinURLTimeout       time.Duration
 }
 
 type sandboxRunResult struct {
@@ -93,9 +95,9 @@ type sandboxRunResult struct {
 func New() *Service {
 	opts, err := platform.CurrentRuntimeOptions()
 	if err != nil {
-		return &Service{runtimeTuning: config.DefaultRuntimeTuningConfig()}
+		return &Service{runtimeTuning: config.DefaultRuntimeTuningConfig(), stdinURLTimeout: stdinURLDownloadTimeout}
 	}
-	return &Service{deploymentTarget: opts.DeploymentTarget, runtimeTuning: config.DefaultRuntimeTuningConfig()}
+	return &Service{deploymentTarget: opts.DeploymentTarget, runtimeTuning: config.DefaultRuntimeTuningConfig(), stdinURLTimeout: stdinURLDownloadTimeout}
 }
 
 func NewWithConfig(cfg config.Config) *Service {
@@ -108,12 +110,16 @@ func NewWithConfig(cfg config.Config) *Service {
 		runtimeTuning:         cfg.Execution.RuntimeTuning.WithSafeDefaults(),
 		runtimeTuningProfiles: profiles,
 		cgroupParentDir:       cfg.Execution.Cgroup.ParentDir,
+		stdinURLTimeout:       stdinURLDownloadTimeout,
 	}
 }
 
 func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
+	}
+	if _, err := runvalidation.ValidateBinaryBudget(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if req.SPJ != nil {
 		if err := runvalidation.ValidateSPJ(req.SPJ); err != nil {
@@ -192,7 +198,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 
 	if stdin == nil && strings.TrimSpace(req.StdinURL) != "" {
 		urlMaxBytes := stdinURLMaxBytes(req.Limits)
-		stdinURLReader, err := openStdinURL(ctx, req.StdinURL, urlMaxBytes)
+		stdinURLReader, err := openStdinURL(ctx, req.StdinURL, urlMaxBytes, nil)
 		if err != nil {
 			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin_url: " + err.Error()}}
 		}
@@ -332,9 +338,14 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 
 	handoffs := map[string]string{}
 	stepResults := make([]model.StepResult, 0, len(req.Steps))
+	stdinURLTimeout := s.stdinURLTimeout
+	if stdinURLTimeout <= 0 {
+		stdinURLTimeout = stdinURLDownloadTimeout
+	}
+	stdinURLBudget := &stdinURLDownloadBudget{remaining: stdinURLTimeout}
 	for i, step := range req.Steps {
 		program := programs[strings.TrimSpace(step.ProgramID)]
-		stdin, stdinReader, closeStdin, stdinVerdictSource, stdinMaxBytes, err := prepareStepStdin(ctx, step, handoffs, handoffDir)
+		stdin, stdinReader, closeStdin, stdinVerdictSource, stdinMaxBytes, err := prepareStepStdin(ctx, step, handoffs, handoffDir, stdinURLBudget)
 		if err != nil {
 			slog.Warn("execute step stdin preparation failed", "step", step.ID, "err", err)
 			return aggregateStepResponse(model.RunResponse{
@@ -443,10 +454,10 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 	return model.RunResponse{Status: model.RunStatusInitFail, Reason: "steps did not run"}
 }
 
-func prepareStepStdin(ctx context.Context, step model.RunStep, handoffs map[string]string, scratchDir string) (string, io.Reader, func() error, string, int64, error) {
+func prepareStepStdin(ctx context.Context, step model.RunStep, handoffs map[string]string, scratchDir string, budget *stdinURLDownloadBudget) (string, io.Reader, func() error, string, int64, error) {
 	if strings.TrimSpace(step.StdinURL) != "" {
 		maxBytes := stdinURLMaxBytes(step.Limits)
-		stdinURLReader, err := openStdinURL(ctx, step.StdinURL, maxBytes)
+		stdinURLReader, err := openStdinURL(ctx, step.StdinURL, maxBytes, budget)
 		if err != nil {
 			return "", nil, nil, "stdin_url", 0, err
 		}
@@ -454,7 +465,7 @@ func prepareStepStdin(ctx context.Context, step model.RunStep, handoffs map[stri
 	}
 	if len(step.StdinParts) > 0 {
 		maxBytes := stdinURLMaxBytes(step.Limits)
-		stdinFile, err := assembleStepStdinParts(ctx, step, handoffs, scratchDir, maxBytes)
+		stdinFile, err := assembleStepStdinParts(ctx, step, handoffs, scratchDir, maxBytes, budget)
 		if err != nil {
 			return "", nil, nil, "stdin_parts", 0, err
 		}
@@ -476,7 +487,7 @@ func prepareStepStdin(ctx context.Context, step model.RunStep, handoffs map[stri
 	return "", stdinFile, stdinFile.Close, "handoff", runvalidation.MaxTextFieldBytes, nil
 }
 
-func assembleStepStdinParts(ctx context.Context, step model.RunStep, handoffs map[string]string, scratchDir string, maxBytes int64) (*os.File, error) {
+func assembleStepStdinParts(ctx context.Context, step model.RunStep, handoffs map[string]string, scratchDir string, maxBytes int64, budget *stdinURLDownloadBudget) (*os.File, error) {
 	stdinFile, err := os.CreateTemp(scratchDir, "stdin-*")
 	if err != nil {
 		return nil, fmt.Errorf("stdin_parts file creation failed")
@@ -497,7 +508,7 @@ func assembleStepStdinParts(ctx context.Context, step model.RunStep, handoffs ma
 		switch strings.ToLower(strings.TrimSpace(part.Type)) {
 		case "text":
 			if strings.TrimSpace(part.DataURL) != "" {
-				stdinURLReader, err := openStdinURL(ctx, part.DataURL, maxBytes-writer.written)
+				stdinURLReader, err := openStdinURL(ctx, part.DataURL, maxBytes-writer.written, budget)
 				if err != nil {
 					return nil, err
 				}

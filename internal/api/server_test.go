@@ -2591,3 +2591,104 @@ func TestExecuteSSEInitFailureReleasesPermit(t *testing.T) {
 		t.Fatalf("queue leaked after execute SSE init failure: active=%d pending=%d", active, pending)
 	}
 }
+
+func TestCompileSlowSSEReaderWriteDeadlineReleasesPermit(t *testing.T) {
+	runnerStarted := make(chan struct{})
+	releaseRunner := make(chan struct{})
+	largeOutput := strings.Repeat("x", 8<<20)
+	s := newServerForTest(t)
+	s.cfg.HeartbeatInterval = time.Hour
+	s.sseWriteTimeout = 100 * time.Millisecond
+	s.compile = compileRunnerStub{run: func(context.Context, *model.CompileRequest) model.CompileResponse {
+		close(runnerStarted)
+		<-releaseRunner
+		return model.CompileResponse{Status: model.CompileStatusOK, Stdout: largeOutput}
+	}}
+
+	server := httptest.NewUnstartedServer(s.Handler())
+	server.Config.ConnState = func(conn net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			if tcpConn, ok := conn.(*net.TCPConn); ok {
+				_ = tcpConn.SetWriteBuffer(1024)
+			}
+		}
+	}
+	if server.Config.WriteTimeout != 0 {
+		t.Fatalf("test server unexpectedly has global WriteTimeout %v", server.Config.WriteTimeout)
+	}
+	server.Start()
+	defer server.Close()
+	runnerReleased := false
+	defer func() {
+		if !runnerReleased {
+			close(releaseRunner)
+		}
+	}()
+
+	conn, err := net.Dial("tcp", server.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConn.SetReadBuffer(1024)
+	}
+	payload, err := json.Marshal(map[string]any{
+		"lang":    "python3",
+		"sources": []map[string]any{{"name": "Main.py", "data_b64": base64.StdEncoding.EncodeToString([]byte("print('ok')\n"))}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestHeader := fmt.Sprintf(
+		"POST /compile HTTP/1.1\r\nHost: slow-reader\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: keep-alive\r\n\r\n",
+		len(payload),
+	)
+	if _, err := io.WriteString(conn, requestHeader); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReaderSize(conn, 16)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read response headers: %v", err)
+		}
+		if line == "\r\n" {
+			break
+		}
+	}
+	if err := conn.SetReadDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-runnerStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("compile runner did not start")
+	}
+	active, _ := s.queue.Snapshot()
+	if active != 1 {
+		t.Fatalf("active runs = %d, want 1 before blocked response write", active)
+	}
+	close(releaseRunner)
+	runnerReleased = true
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		active, pending := s.queue.Snapshot()
+		if active == 0 && pending == 0 && s.streams.Load() == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("slow SSE reader retained capacity: active=%d pending=%d streams=%d", active, pending, s.streams.Load())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

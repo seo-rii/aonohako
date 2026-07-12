@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -784,7 +785,7 @@ func TestAssembleStepStdinPartsConsumesLargeDataURL(t *testing.T) {
 		}},
 		Limits: model.Limits{WorkspaceBytes: int64(inputBytes + 4<<20)},
 	}
-	stdinFile, err := assembleStepStdinParts(context.Background(), step, nil, t.TempDir(), stdinURLMaxBytes(step.Limits))
+	stdinFile, err := assembleStepStdinParts(context.Background(), step, nil, t.TempDir(), stdinURLMaxBytes(step.Limits), nil)
 	if err != nil {
 		t.Fatalf("assembleStepStdinParts returned error: %v", err)
 	}
@@ -796,6 +797,153 @@ func TestAssembleStepStdinPartsConsumesLargeDataURL(t *testing.T) {
 	}
 	if info.Size() != int64(inputBytes) {
 		t.Fatalf("stdin file size = %d, want %d", info.Size(), inputBytes)
+	}
+}
+
+func TestRunStepPipelineBoundsCumulativeStdinURLDownloadTime(t *testing.T) {
+	var requests atomic.Int64
+	inputServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		select {
+		case <-time.After(80 * time.Millisecond):
+			_, _ = io.WriteString(w, "x")
+		case <-r.Context().Done():
+		}
+	}))
+	defer inputServer.Close()
+	setStdinURLHTTPClientForTest(t, inputServer.URL)
+
+	svc := New()
+	svc.stdinURLTimeout = 130 * time.Millisecond
+	started := time.Now()
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "encode.sh",
+					DataB64: b64("#!/bin/sh\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "decode.sh",
+					DataB64: b64("#!/bin/sh\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				StdinParts: []model.StdinPart{
+					{Type: "text", DataURL: "http://payload.example/first"},
+					{Type: "text", DataURL: "http://payload.example/second"},
+				},
+				Limits:  model.Limits{TimeMs: 1000, MemoryMB: 128},
+				Handoff: &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 1024},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinFrom: "encoded",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		ExpectedStdout: "xx",
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "deadline exceeded") {
+		t.Fatalf("expected cumulative stdin URL deadline failure, got %+v", resp)
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("cumulative stdin URL timeout returned after %v", elapsed)
+	}
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("download requests = %d, want 2", got)
+	}
+}
+
+func TestServiceRunRejectsRequestWideBinaryBudget(t *testing.T) {
+	maxSizeBinary := base64.StdEncoding.EncodeToString(make([]byte, runvalidation.MaxBinaryFileBytes))
+	programs := make([]model.RunProgram, 4)
+	for i := range programs {
+		programs[i] = model.RunProgram{
+			ID:   fmt.Sprintf("program-%d", i),
+			Lang: "binary",
+			Binaries: []model.Binary{{
+				Name:    "Main",
+				DataB64: maxSizeBinary,
+				Mode:    "exec",
+			}},
+		}
+	}
+
+	resp := New().Run(context.Background(), &model.RunRequest{Programs: programs}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "binaries total size exceeded") {
+		t.Fatalf("Service.Run over-budget response = %+v", resp)
+	}
+}
+
+func TestRunStepPipelineDoesNotChargeSandboxTimeToStdinURLBudget(t *testing.T) {
+	forceDirectMode(t)
+
+	inputServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "prefix\n")
+	}))
+	defer inputServer.Close()
+	setStdinURLHTTPClientForTest(t, inputServer.URL)
+
+	svc := New()
+	svc.stdinURLTimeout = 100 * time.Millisecond
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "encode.sh",
+					DataB64: b64("#!/bin/sh\nsleep 0.2\nprintf 'handoff\\n'\n"),
+					Mode:    "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "decode.sh",
+					DataB64: b64("#!/bin/sh\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128},
+				Handoff:   &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 1024},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinParts: []model.StdinPart{
+					{Type: "text", DataURL: "http://payload.example/prefix"},
+					{Type: "handoff", ID: "encoded"},
+				},
+				Limits: model.Limits{TimeMs: 1000, MemoryMB: 128},
+			},
+		},
+		ExpectedStdout: "prefix\nhandoff\n",
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("sandbox time consumed stdin URL budget: %+v", resp)
 	}
 }
 

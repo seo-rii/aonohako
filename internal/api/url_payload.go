@@ -129,6 +129,15 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 			}
 		}
 	}
+	decodedBytes, err := runvalidation.ValidateBinaryBudget(req)
+	if err != nil {
+		return err
+	}
+	budget := &payloadByteBudget{
+		remaining: runvalidation.MaxBinaryTotalBytes - decodedBytes,
+		limit:     runvalidation.MaxBinaryTotalBytes,
+		message:   "binaries total size exceeded",
+	}
 	if !runHasBufferedPayloadURLs(req) {
 		return nil
 	}
@@ -136,21 +145,21 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 	if err := resolveTextURL(ctx, "expected_stdout", &req.ExpectedStdout, &req.ExpectedStdoutURL, runvalidation.MaxTextFieldBytes); err != nil {
 		return err
 	}
-	if err := resolveBinaryURLs(ctx, "binaries", req.Binaries); err != nil {
+	if err := resolveBinaryURLs(ctx, "binaries", req.Binaries, budget); err != nil {
 		return err
 	}
 	for i := range req.Programs {
-		if err := resolveBinaryURLs(ctx, fmt.Sprintf("programs[%d].binaries", i), req.Programs[i].Binaries); err != nil {
+		if err := resolveBinaryURLs(ctx, fmt.Sprintf("programs[%d].binaries", i), req.Programs[i].Binaries, budget); err != nil {
 			return err
 		}
 	}
 	if req.SPJ != nil && req.SPJ.Binary != nil {
-		if err := resolveBase64URL(ctx, "spj.binary", &req.SPJ.Binary.DataB64, &req.SPJ.Binary.DataURL, runvalidation.MaxBinaryFileBytes, nil); err != nil {
+		if err := resolveBase64URL(ctx, "spj.binary", &req.SPJ.Binary.DataB64, &req.SPJ.Binary.DataURL, runvalidation.MaxBinaryFileBytes, budget); err != nil {
 			return err
 		}
 	}
 	if req.Interactor != nil {
-		if err := resolveBinaryURLs(ctx, "interactor.binaries", req.Interactor.Binaries); err != nil {
+		if err := resolveBinaryURLs(ctx, "interactor.binaries", req.Interactor.Binaries, budget); err != nil {
 			return err
 		}
 	}
@@ -208,26 +217,7 @@ func validateOptionalPayloadURL(rawURL string) error {
 	return validatePayloadURL(rawURL)
 }
 
-func resolveBinaryURLs(ctx context.Context, label string, binaries []model.Binary) error {
-	decodedBytes := 0
-	for i := range binaries {
-		if strings.TrimSpace(binaries[i].DataURL) != "" {
-			continue
-		}
-		data, err := base64.StdEncoding.DecodeString(binaries[i].DataB64)
-		if err != nil {
-			return fmt.Errorf("%s[%d].data_b64 invalid base64: %w", label, i, err)
-		}
-		decodedBytes += len(data)
-	}
-	if decodedBytes > runvalidation.MaxBinaryTotalBytes {
-		return fmt.Errorf("%s total size exceeded: max %d bytes", label, runvalidation.MaxBinaryTotalBytes)
-	}
-	budget := &payloadByteBudget{
-		remaining: runvalidation.MaxBinaryTotalBytes - decodedBytes,
-		limit:     runvalidation.MaxBinaryTotalBytes,
-		message:   label + " total size exceeded",
-	}
+func resolveBinaryURLs(ctx context.Context, label string, binaries []model.Binary, budget *payloadByteBudget) error {
 	for i := range binaries {
 		if err := resolveBase64URL(ctx, fmt.Sprintf("%s[%d]", label, i), &binaries[i].DataB64, &binaries[i].DataURL, runvalidation.MaxBinaryFileBytes, budget); err != nil {
 			return err

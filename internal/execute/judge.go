@@ -322,7 +322,7 @@ func writeStdinTempFile(ctx context.Context, dir, pattern string, req *model.Run
 		return writeTempFile(dir, pattern, req.Stdin)
 	}
 	maxBytes := stdinURLMaxBytes(req.Limits)
-	stdinURLReader, err := openStdinURL(ctx, req.StdinURL, maxBytes)
+	stdinURLReader, err := openStdinURL(ctx, req.StdinURL, maxBytes, nil)
 	if err != nil {
 		return "", err
 	}
@@ -359,47 +359,6 @@ func writeTempFileFromReader(dir, pattern string, reader io.Reader, maxBytes int
 		return "", err
 	}
 	return file.Name(), nil
-}
-
-func validateCapturedOutput(ws Workspace, rel string) (string, os.FileInfo, error) {
-	clean, err := util.ValidateRelativePath(rel)
-	if err != nil {
-		return "", nil, err
-	}
-	full, err := existingWorkspacePath(ws, clean)
-	if err != nil {
-		return "", nil, err
-	}
-	st, err := os.Lstat(full)
-	if err != nil {
-		return "", nil, err
-	}
-	if st.Mode()&os.ModeSymlink != 0 {
-		return "", nil, fmt.Errorf("symlink outputs are not allowed: %s", rel)
-	}
-	if !st.Mode().IsRegular() {
-		return "", nil, fmt.Errorf("output is not a regular file: %s", rel)
-	}
-	return full, st, nil
-}
-
-func existingWorkspacePath(ws Workspace, rel string) (string, error) {
-	for _, candidate := range workspacePathCandidates(ws, rel) {
-		if _, err := os.Lstat(candidate); err == nil {
-			return candidate, nil
-		}
-	}
-	return "", os.ErrNotExist
-}
-
-func workspacePathCandidates(ws Workspace, rel string) []string {
-	if strings.HasPrefix(filepath.ToSlash(rel), "__img__/") {
-		return []string{
-			filepath.Join(ws.RootDir, rel),
-			filepath.Join(ws.BoxDir, rel),
-		}
-	}
-	return []string{filepath.Join(ws.BoxDir, rel)}
 }
 
 func clipUTF8(b []byte, n int) string {
