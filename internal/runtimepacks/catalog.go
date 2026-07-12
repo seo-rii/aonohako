@@ -14,6 +14,12 @@ import (
 
 var catalogIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
+const (
+	ciImageNamePrefix       = "ci-"
+	maxDockerTagLength      = 128
+	maxCILanguageNameLength = maxDockerTagLength - len(ciImageNamePrefix)
+)
+
 type InstallSpec struct {
 	Shared       []string `yaml:"shared"`
 	Apt          []string `yaml:"apt"`
@@ -116,7 +122,7 @@ func LoadCatalog(path string) (Catalog, error) {
 		}
 	}
 	for languageName, language := range catalog.Languages {
-		if !catalogIdentifierPattern.MatchString(languageName) {
+		if !catalogIdentifierPattern.MatchString(languageName) || len(languageName) > maxCILanguageNameLength {
 			return Catalog{}, fmt.Errorf("language name %q is invalid", languageName)
 		}
 		for _, sharedName := range language.Install.Shared {
@@ -126,7 +132,7 @@ func LoadCatalog(path string) (Catalog, error) {
 		}
 	}
 	for profileName, profile := range catalog.Profiles {
-		if !catalogIdentifierPattern.MatchString(profileName) {
+		if !catalogIdentifierPattern.MatchString(profileName) || len(profileName) > maxDockerTagLength {
 			return Catalog{}, fmt.Errorf("profile name %q is invalid", profileName)
 		}
 		for _, sharedName := range profile.Install.Shared {
@@ -166,7 +172,7 @@ func (c Catalog) CILanguageImages() ([]ImageSpec, error) {
 		if profileName == "" {
 			return nil, fmt.Errorf("language %s is not assigned to any profile", lang)
 		}
-		images = append(images, c.buildImage("ci-"+lang, ProfileSpec{
+		images = append(images, c.buildImage(ciImageNamePrefix+lang, ProfileSpec{
 			BaseImage: baseImage,
 			Languages: []string{lang},
 			Install:   c.Profiles[profileName].Install,

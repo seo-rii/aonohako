@@ -171,6 +171,15 @@ profiles: {}
 			want: "language name",
 		},
 		{
+			name: "language name too long for prefixed docker tag",
+			body: fmt.Sprintf(`
+languages:
+  %s: {}
+profiles: {}
+`, strings.Repeat("a", maxCILanguageNameLength+1)),
+			want: "language name",
+		},
+		{
 			name: "unsafe profile name",
 			body: `
 languages:
@@ -180,6 +189,18 @@ profiles:
     base_image: debian:trixie-slim
     languages: [plain]
 `,
+			want: "profile name",
+		},
+		{
+			name: "profile name too long for docker tag",
+			body: fmt.Sprintf(`
+languages:
+  plain: {}
+profiles:
+  %s:
+    base_image: debian:trixie-slim
+    languages: [plain]
+`, strings.Repeat("a", maxDockerTagLength+1)),
 			want: "profile name",
 		},
 		{
