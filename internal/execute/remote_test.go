@@ -17,6 +17,12 @@ import (
 	"aonohako/internal/remoteio"
 )
 
+type executeRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f executeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestRemoteRunnerForwardsSSELogsImagesAndResult(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/execute" {
@@ -238,6 +244,30 @@ func TestRemoteRunnerRejectsNonSSESuccessResponses(t *testing.T) {
 	}
 	if got := resp.Reason; got == "" || got == "remote execute stream ended without result" {
 		t.Fatalf("expected explicit non-SSE reason, got %+v", resp)
+	}
+}
+
+func TestRemoteRunnerRejectsDeceptiveSSEContentTypes(t *testing.T) {
+	for _, contentType := range []string{`application/json; note="text/event-stream"`, "text/event-streaming"} {
+		t.Run(contentType, func(t *testing.T) {
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", contentType)
+				_, _ = w.Write([]byte("event: result\ndata: {\"status\":\"Accepted\"}\n\n"))
+			}))
+			defer remote.Close()
+
+			runner := newRemoteRunner(config.Config{
+				Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{URL: remote.URL}},
+			})
+			resp := runner.Run(context.Background(), &model.RunRequest{
+				Lang:     "plain",
+				Binaries: []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+				Limits:   model.Limits{TimeMs: 1000, MemoryMB: 64},
+			}, Hooks{})
+			if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "unexpected content type") {
+				t.Fatalf("deceptive content type response = %+v", resp)
+			}
+		})
 	}
 }
 
@@ -574,6 +604,30 @@ func TestRemoteRunnerExecuteBoundsErrorResponseBodyRead(t *testing.T) {
 	}
 }
 
+func TestRemoteRunnerExecuteBoundsStalledRequestUpload(t *testing.T) {
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{URL: "https://runner.internal"}},
+	}).(*remoteRunner)
+	runner.uploadTimeout = 20 * time.Millisecond
+	runner.client = &http.Client{Transport: executeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		<-req.Context().Done()
+		return nil, req.Context().Err()
+	})}
+
+	started := time.Now()
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:     "plain",
+		Binaries: []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+		Limits:   model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "request upload timed out") {
+		t.Fatalf("stalled upload response = %+v, want bounded upload failure", resp)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("stalled upload returned after %v, want under 1s", elapsed)
+	}
+}
+
 func TestNormalizeRemoteExecuteURLAppendsExecutePath(t *testing.T) {
 	tests := []struct {
 		raw  string
@@ -582,6 +636,7 @@ func TestNormalizeRemoteExecuteURLAppendsExecutePath(t *testing.T) {
 		{raw: "https://runner.internal", want: "https://runner.internal/execute"},
 		{raw: "https://runner.internal/base", want: "https://runner.internal/base/execute"},
 		{raw: "https://runner.internal/execute", want: "https://runner.internal/execute"},
+		{raw: "https://runner.internal/execute/", want: "https://runner.internal/execute"},
 	}
 
 	for _, tc := range tests {

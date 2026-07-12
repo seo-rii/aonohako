@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -126,5 +127,39 @@ func TestHTTPClientsRejectRedirectsBeforeForwardingCredentials(t *testing.T) {
 	}
 	if got := targetCredentialRequests.Load(); got != 0 {
 		t.Fatalf("redirect target credential requests = %d, want 0", got)
+	}
+}
+
+func TestRequestUploadTimeoutCancelsStalledWrite(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tracedCtx, finish := WithRequestUploadTimeout(ctx, cancel, 20*time.Millisecond)
+
+	select {
+	case <-tracedCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("request upload timeout did not cancel the request context")
+	}
+	if !finish() {
+		t.Fatal("request upload timeout did not report that its timer fired")
+	}
+}
+
+func TestRequestUploadTimeoutStopsAfterRequestWrite(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tracedCtx, finish := WithRequestUploadTimeout(ctx, cancel, 20*time.Millisecond)
+	trace := httptrace.ContextClientTrace(tracedCtx)
+	if trace == nil || trace.WroteRequest == nil {
+		t.Fatal("request upload context is missing WroteRequest trace")
+	}
+	trace.WroteRequest(httptrace.WroteRequestInfo{})
+	time.Sleep(3 * 20 * time.Millisecond)
+
+	if err := tracedCtx.Err(); err != nil {
+		t.Fatalf("completed request write was canceled: %v", err)
+	}
+	if finish() {
+		t.Fatal("completed request write was reported as timed out")
 	}
 }

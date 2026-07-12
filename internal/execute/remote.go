@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -28,6 +29,7 @@ type remoteRunner struct {
 	audience         string
 	metadataURL      string
 	idleTimeout      time.Duration
+	uploadTimeout    time.Duration
 	errorBodyTimeout time.Duration
 	strictProto      bool
 }
@@ -46,6 +48,7 @@ func newRemoteRunner(cfg config.Config) Runner {
 		audience:         cfg.Execution.Remote.Audience,
 		metadataURL:      cloudRunMetadataIdentityURL,
 		idleTimeout:      cfg.Execution.Remote.SSEIdleTimeout,
+		uploadTimeout:    remoteio.DefaultRequestUploadTimeout,
 		errorBodyTimeout: remoteio.DefaultErrorResponseBodyTimeout,
 		strictProto:      cfg.Execution.Remote.StrictProtocol,
 	}
@@ -77,8 +80,14 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		httpReq.Header.Set("Authorization", authHeader)
 	}
 
+	uploadCtx, finishUpload := remoteio.WithRequestUploadTimeout(httpReq.Context(), cancelStream, r.uploadTimeout)
+	httpReq = httpReq.WithContext(uploadCtx)
 	resp, err := r.client.Do(httpReq)
+	uploadTimedOut := finishUpload()
 	if err != nil {
+		if uploadTimedOut {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute request upload timed out"}
+		}
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute request failed: " + err.Error()}
 	}
 	defer resp.Body.Close()
@@ -106,7 +115,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		}
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote execute returned %s: %s", resp.Status, reason)}
 	}
-	if contentType := resp.Header.Get("Content-Type"); !strings.Contains(strings.ToLower(contentType), "text/event-stream") {
+	contentType := resp.Header.Get("Content-Type")
+	mediaType, _, mediaTypeErr := mime.ParseMediaType(contentType)
+	if mediaTypeErr != nil || !strings.EqualFold(mediaType, "text/event-stream") {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote execute returned unexpected content type: %s", contentType)}
 	}
 	if err := remoteio.CheckProtocolVersionWithPolicy(resp.Header, r.strictProto); err != nil {
@@ -238,13 +249,14 @@ func normalizeRemoteExecuteURL(raw string) string {
 	if err != nil || parsed == nil {
 		return trimmed
 	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	if strings.HasSuffix(parsed.Path, "/execute") {
 		return parsed.String()
 	}
-	if parsed.Path == "" || parsed.Path == "/" {
+	if parsed.Path == "" {
 		parsed.Path = "/execute"
 		return parsed.String()
 	}
-	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/execute"
+	parsed.Path += "/execute"
 	return parsed.String()
 }

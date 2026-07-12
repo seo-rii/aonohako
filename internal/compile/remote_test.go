@@ -16,6 +16,12 @@ import (
 	"aonohako/internal/remoteio"
 )
 
+type compileRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f compileRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/compile" {
@@ -502,5 +508,75 @@ func TestRemoteRunnerCompileBoundsErrorResponseBodyRead(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("stalled error response returned after %v, want under 1s", elapsed)
+	}
+}
+
+func TestRemoteRunnerCompileBoundsStalledRequestUpload(t *testing.T) {
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{URL: "https://runner.internal"}},
+	}).(*remoteRunner)
+	runner.uploadTimeout = 20 * time.Millisecond
+	runner.client = &http.Client{Transport: compileRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		<-req.Context().Done()
+		return nil, req.Context().Err()
+	})}
+
+	started := time.Now()
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "python3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "request upload timed out") {
+		t.Fatalf("stalled upload response = %+v, want bounded upload failure", resp)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("stalled upload returned after %v, want under 1s", elapsed)
+	}
+}
+
+func TestRemoteRunnerCompileRejectsDeceptiveSSEContentTypes(t *testing.T) {
+	for _, contentType := range []string{`application/json; note="text/event-stream"`, "text/event-streaming"} {
+		t.Run(contentType, func(t *testing.T) {
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", contentType)
+				_, _ = w.Write([]byte("event: result\ndata: {\"status\":\"OK\"}\n\n"))
+			}))
+			defer remote.Close()
+
+			runner := newRemoteRunner(config.Config{
+				Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{URL: remote.URL}},
+			})
+			resp := runner.Run(context.Background(), &model.CompileRequest{
+				Lang: "python3",
+				Sources: []model.Source{{
+					Name:    "Main.py",
+					DataB64: "cHJpbnQoJ29rJykK",
+				}},
+			})
+			if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "unexpected content type") {
+				t.Fatalf("deceptive content type response = %+v", resp)
+			}
+		})
+	}
+}
+
+func TestNormalizeRemoteCompileURLAppendsCompilePath(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{raw: "https://runner.internal", want: "https://runner.internal/compile"},
+		{raw: "https://runner.internal/base", want: "https://runner.internal/base/compile"},
+		{raw: "https://runner.internal/compile", want: "https://runner.internal/compile"},
+		{raw: "https://runner.internal/compile/", want: "https://runner.internal/compile"},
+	}
+
+	for _, tc := range tests {
+		if got := normalizeRemoteCompileURL(tc.raw); got != tc.want {
+			t.Fatalf("normalizeRemoteCompileURL(%q) = %q, want %q", tc.raw, got, tc.want)
+		}
 	}
 }

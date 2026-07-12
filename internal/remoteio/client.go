@@ -1,14 +1,20 @@
 package remoteio
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
+	"sync/atomic"
 	"time"
 )
 
-const metadataRequestTimeout = 10 * time.Second
+const (
+	metadataRequestTimeout      = 10 * time.Second
+	DefaultRequestUploadTimeout = 30 * time.Second
+)
 
 var errRedirectNotAllowed = errors.New("remote redirects are not allowed")
 
@@ -24,6 +30,24 @@ func NewMetadataHTTPClient() *http.Client {
 		Transport:     newHTTPTransport(nil),
 		CheckRedirect: rejectRedirect,
 		Timeout:       metadataRequestTimeout,
+	}
+}
+
+func WithRequestUploadTimeout(ctx context.Context, cancel context.CancelFunc, timeout time.Duration) (context.Context, func() bool) {
+	if timeout <= 0 {
+		timeout = DefaultRequestUploadTimeout
+	}
+	var timedOut atomic.Bool
+	timer := time.AfterFunc(timeout, func() {
+		timedOut.Store(true)
+		cancel()
+	})
+	trace := &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) {
+		timer.Stop()
+	}}
+	return httptrace.WithClientTrace(ctx, trace), func() bool {
+		timer.Stop()
+		return timedOut.Load()
 	}
 }
 
