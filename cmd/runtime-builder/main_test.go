@@ -92,7 +92,9 @@ func TestRuntimeBuilderRejectsUnpinnedCatalogBaseImage(t *testing.T) {
 	catalogPath := filepath.Join(t.TempDir(), "runtime-images.yml")
 	body := `
 languages:
-  plain: {}
+  plain:
+    smoke:
+      command: ["plain", "--version"]
 profiles:
   type-a:
     base_image: ubuntu:latest

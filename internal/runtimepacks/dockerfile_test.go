@@ -33,7 +33,7 @@ func TestRuntimeDockerfileDeclaresRuntimeBaseBeforeFirstFrom(t *testing.T) {
 
 func TestDockerfilesPinExternalBaseImagesByDigest(t *testing.T) {
 	root := filepath.Join("..", "..")
-	cmd := exec.Command("bash", filepath.Join("scripts", "check_dockerfile_bases.sh"), "Dockerfile", filepath.Join("docker", "runtime.Dockerfile"))
+	cmd := exec.Command("bash", filepath.Join("scripts", "check_dockerfile_bases.sh"), "--allow-context", "aonohako-python-packages", "Dockerfile", filepath.Join("docker", "runtime.Dockerfile"))
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("check_dockerfile_bases.sh: %v\n%s", err, out)

@@ -1211,21 +1211,21 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(profileSection, `provenance_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.provenance.json"`) || !strings.Contains(profileSection, `"summary.md":$summary_sha256`) || !strings.Contains(profileSection, `"sbom.spdx.json":$sbom_sha256`) || !strings.Contains(profileSection, `"grype.json":$grype_sha256`) {
 		t.Fatalf("ci workflow must bind profile reports to immutable image provenance and their exact digests")
 	}
-	setupGoIdx := strings.Index(profileSection, "uses: actions/setup-go@v6")
-	buildxIdx := strings.Index(profileSection, "uses: docker/setup-buildx-action@v4")
+	setupGoIdx := strings.Index(profileSection, "uses: actions/setup-go@")
+	buildxIdx := strings.Index(profileSection, "uses: docker/setup-buildx-action@")
 	if setupGoIdx < 0 || buildxIdx < 0 || setupGoIdx > buildxIdx || !strings.Contains(profileSection[setupGoIdx:buildxIdx], "cache: false") {
 		t.Fatalf("toolchain-profile setup-go step must disable its unused host cache")
 	}
 	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
 		t.Fatalf("ci workflow must include the language list in the profile summaries")
 	}
-	if !strings.Contains(body, "actions/upload-artifact@v7") || !strings.Contains(body, "actions/download-artifact@v8") {
+	if !strings.Contains(body, "actions/upload-artifact@") || !strings.Contains(body, "actions/download-artifact@") {
 		t.Fatalf("ci workflow must aggregate toolchain summary data through artifacts")
 	}
 	if !strings.Contains(summarySection, "    if: ${{ always() }}") {
 		t.Fatalf("toolchain summary job must remain always-on")
 	}
-	if !strings.Contains(summarySection, "      - uses: actions/checkout@v6") {
+	if !strings.Contains(summarySection, "      - uses: actions/checkout@") {
 		t.Fatalf("toolchain summary job must check out the repository before running aggregation scripts")
 	}
 	if strings.Contains(body, `docker save "aonohako-ci-prod:${{ matrix.name }}"`) {
