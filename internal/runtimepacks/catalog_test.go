@@ -1067,6 +1067,9 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if archiveIdx < 0 || syftIdx < 0 || archiveIdx > syftIdx {
 		t.Fatalf("ci workflow must write production-profile archive diagnostics before best-effort scanner exports")
 	}
+	if !strings.Contains(profileSection, `--source-name "aonohako-ci-prod:${{ matrix.name }}"`) {
+		t.Fatalf("ci workflow must preserve the tagged image reference in SPDX document provenance")
+	}
 	if !strings.Contains(profileSection, `"${HOME}/.cache/syft"`) || !strings.Contains(profileSection, `"${HOME}/.cache/grype"`) {
 		t.Fatalf("ci workflow must clean scanner caches after production-profile scans")
 	}
