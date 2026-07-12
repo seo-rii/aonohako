@@ -20,13 +20,6 @@ type passThroughCompiler struct {
 	noSourceReason string
 }
 
-func compilePassThroughIfExt(workDir string, sources []model.Source, exts []string, noSourceReason string) model.CompileResponse {
-	return passThroughCompiler{exts: exts, noSourceReason: noSourceReason}.Compile(context.Background(), CompileJob{
-		WorkDir: workDir,
-		Request: &model.CompileRequest{Sources: sources},
-	})
-}
-
 func (c passThroughCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {
 	if job.Request == nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}

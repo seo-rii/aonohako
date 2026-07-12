@@ -12,22 +12,6 @@ import (
 	"aonohako/internal/util"
 )
 
-func compilePythonLike(ctx context.Context, workDir string, sources []model.Source, interpreter string) model.CompileResponse {
-	return pythonLikeCompiler{interpreter: interpreter}.Compile(ctx, CompileJob{
-		WorkDir: workDir,
-		Request: &model.CompileRequest{Sources: sources},
-		Runner:  sandboxCommandRunner{},
-	})
-}
-
-func compileScriptCheck(ctx context.Context, workDir string, sources []model.Source, bin string, prefix []string) model.CompileResponse {
-	return scriptCheckCompiler{bin: bin, prefix: prefix}.Compile(ctx, CompileJob{
-		WorkDir: workDir,
-		Request: &model.CompileRequest{Sources: sources},
-		Runner:  sandboxCommandRunner{},
-	})
-}
-
 type typeScriptCompiler struct{}
 
 func (typeScriptCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {

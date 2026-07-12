@@ -798,7 +798,6 @@ func runCompileExecuteSuite() error {
 
 func runTwoStepSuite() error {
 	baseURL := ""
-	cleanup := func() {}
 	// Runtime-image smoke should exercise the deployed server binary when it
 	// is present; the in-process fallback keeps local go test/go run usable.
 	if serverPath, err := exec.LookPath("aonohako"); err == nil {
@@ -832,7 +831,7 @@ func runTwoStepSuite() error {
 			go func() {
 				waitCh <- cmd.Wait()
 			}()
-			cleanup = func() {
+			cleanup := func() {
 				if cmd.Process != nil {
 					_ = cmd.Process.Signal(syscall.SIGTERM)
 				}
