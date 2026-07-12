@@ -204,11 +204,11 @@ jobs:
       - unit
       - supply-chain
       - sandbox
+      - runtime-matrix
       - toolchain-profile
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
-        continue-on-error: true
         with:
           pattern: toolchain-profile-*
           path: toolchain-artifacts
@@ -219,8 +219,7 @@ jobs:
           dirs=(toolchain-artifacts/toolchain-profile-*)
           if [ "${#dirs[@]}" -eq 0 ]; then
             echo "No toolchain profile artifacts were produced." >> "$GITHUB_STEP_SUMMARY"
-            echo "has_artifacts=false" >> "${GITHUB_OUTPUT}"
-            exit 0
+            exit 1
           fi
           echo "has_artifacts=true" >> "${GITHUB_OUTPUT}"
       - run: |
@@ -228,13 +227,28 @@ jobs:
           printf '%s\n' "${summary}" | tee toolchain-artifacts/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
         if: steps.bundle.outputs.has_artifacts == 'true'
       - run: |
-          find toolchain-artifacts -type f | sort > toolchain-artifacts/MANIFEST.txt
+          : > toolchain-artifacts/SHA256SUMS
+          while IFS= read -r -d '' archive; do
+            digest="$(sha256sum "${archive}" | cut -d ' ' -f 1)"
+            relative_path="${archive#toolchain-artifacts/}"
+            printf '%s  %s\n' "${digest}" "${relative_path}" > "${archive}.sha256"
+            printf '%s  %s\n' "${digest}" "${relative_path}" >> toolchain-artifacts/SHA256SUMS
+          done < <(find toolchain-artifacts -type f -name '*.docker.tar.gz' -print0 | sort -z)
         if: steps.bundle.outputs.has_artifacts == 'true'
       - run: |
-          find toolchain-artifacts -type f -name '*.docker.tar.gz' -print0 | sort -z | xargs -0 -r sha256sum > toolchain-artifacts/SHA256SUMS
+          {
+            printf '%s\n' SUMMARY.md MANIFEST.txt SHA256SUMS
+            find toolchain-artifacts/toolchain-profile-* -type f \
+              \( -name summary.md -o -name '*.sbom.spdx.json' -o -name '*.grype.json' -o -name '*.docker.tar.gz' -o -name '*.docker.tar.gz.sha256' -o -name '*.docker.tar.gz.error.json' \) \
+              -print
+          } | sed 's#^toolchain-artifacts/##' | sort -u > toolchain-artifacts/MANIFEST.txt
         if: steps.bundle.outputs.has_artifacts == 'true'
-      - run: python3 scripts/verify_toolchain_artifacts.py toolchain-artifacts
+      - run: |
+          mapfile -t expected_profiles < <(jq -r '.[] | "\(.name)=\(.languages)"' <<< "${PRODUCTION_MATRIX}")
+          python3 scripts/verify_toolchain_artifacts.py toolchain-artifacts "${expected_profiles[@]}"
         if: steps.bundle.outputs.has_artifacts == 'true'
+        env:
+          PRODUCTION_MATRIX: ${{ needs.runtime-matrix.outputs.production_matrix }}
       - uses: actions/upload-artifact@v7
         if: steps.bundle.outputs.has_artifacts == 'true'
         with:
@@ -244,6 +258,9 @@ jobs:
             toolchain-artifacts/MANIFEST.txt
             toolchain-artifacts/SHA256SUMS
             toolchain-artifacts/toolchain-profile-*/**/summary.md
+            toolchain-artifacts/toolchain-profile-*/**/*.sbom.spdx.json
+            toolchain-artifacts/toolchain-profile-*/**/*.grype.json
+            toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz
             toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz.sha256
             toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz.error.json
           compression-level: 0

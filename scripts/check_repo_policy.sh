@@ -25,26 +25,6 @@ search_fixed() {
   fi
 }
 
-file_matches_regex() {
-  local pattern=$1
-  local file=$2
-  if "${have_rg}"; then
-    rg -q "${pattern}" "${file}"
-  else
-    grep -E -q "${pattern}" "${file}"
-  fi
-}
-
-find_regex() {
-  local pattern=$1
-  shift
-  if "${have_rg}"; then
-    rg -n "${pattern}" "$@"
-  else
-    grep -E -n "${pattern}" "$@"
-  fi
-}
-
 declare -a patterns=(
   'gcloud'
   'GOOGLE_APPLICATION_CREDENTIALS'
@@ -60,25 +40,6 @@ for pattern in "${patterns[@]}"; do
   fi
 done
 
-require_pinned_arg() {
-  local file=$1
-  local arg=$2
-  if ! file_matches_regex "^ARG ${arg}=[^[:space:]]+@sha256:[0-9a-f]{64}$" "${file}"; then
-    echo "repository policy violation: ${file} must define digest-pinned ARG ${arg}" >&2
-    exit 1
-  fi
-}
-
-require_pinned_arg Dockerfile GO_IMAGE
-require_pinned_arg Dockerfile RUNTIME_BASE
-require_pinned_arg Dockerfile DOTNET_SDK_IMAGE
-require_pinned_arg Dockerfile PYTHON_IMAGE
-require_pinned_arg docker/runtime.Dockerfile GO_IMAGE
-require_pinned_arg docker/runtime.Dockerfile RUNTIME_BASE
-
-if find_regex '^FROM( --platform=\$BUILDPLATFORM)? [^{$][^[:space:]@]*:[^[:space:]@]*( AS|$)' Dockerfile docker/runtime.Dockerfile; then
-  echo "repository policy violation: Dockerfile external FROM images must be digest-pinned or routed through a pinned ARG" >&2
-  exit 1
-fi
+"${BASH}" scripts/check_dockerfile_bases.sh Dockerfile docker/runtime.Dockerfile
 
 echo "repository policy check passed"

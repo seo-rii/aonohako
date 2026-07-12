@@ -32,39 +32,57 @@ func TestRuntimeDockerfileDeclaresRuntimeBaseBeforeFirstFrom(t *testing.T) {
 }
 
 func TestDockerfilesPinExternalBaseImagesByDigest(t *testing.T) {
-	requiredArgs := map[string][]string{
-		filepath.Join("..", "..", "Dockerfile"): {
-			"GO_IMAGE",
-			"RUNTIME_BASE",
-			"DOTNET_SDK_IMAGE",
-			"PYTHON_IMAGE",
-		},
-		filepath.Join("..", "..", "docker", "runtime.Dockerfile"): {
-			"GO_IMAGE",
-			"RUNTIME_BASE",
-		},
+	root := filepath.Join("..", "..")
+	cmd := exec.Command("bash", filepath.Join("scripts", "check_dockerfile_bases.sh"), "Dockerfile", filepath.Join("docker", "runtime.Dockerfile"))
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("check_dockerfile_bases.sh: %v\n%s", err, out)
 	}
-	pinnedArgPattern := regexp.MustCompile(`(?m)^ARG ([A-Z0-9_]+)=[^\s]+@sha256:[0-9a-f]{64}$`)
-	unpinnedDirectFromPattern := regexp.MustCompile(`(?m)^FROM( --platform=\$BUILDPLATFORM)? [^{$\s][^\s@]*:[^\s@]*( AS|$)`)
-	for path, args := range requiredArgs {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("ReadFile(%q): %v", path, err)
-		}
-		body := string(data)
-		matches := pinnedArgPattern.FindAllStringSubmatch(body, -1)
-		pinned := make(map[string]bool, len(matches))
-		for _, match := range matches {
-			pinned[match[1]] = true
-		}
-		for _, arg := range args {
-			if !pinned[arg] {
-				t.Fatalf("%s must define digest-pinned ARG %s", path, arg)
+}
+
+func TestDockerfileBasePolicyRejectsValidSyntaxBypasses(t *testing.T) {
+	const digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	tests := []struct {
+		name string
+		body string
+		ok   bool
+	}{
+		{name: "pinned arg", body: "ARG BASE=ubuntu:24.04@" + digest + "\nFROM --platform=$BUILDPLATFORM ${BASE} AS build\nFROM build AS final\n", ok: true},
+		{name: "pinned direct", body: "from --platform=linux/amd64 ubuntu:24.04@" + digest + " AS final\n", ok: true},
+		{name: "pinned continued from", body: "ARG BASE=ubuntu:24.04@" + digest + "\nFROM \\\n  ${BASE} AS final\n", ok: true},
+		{name: "backtick escape", body: "# escape=`\nARG BASE=ubuntu:24.04@" + digest + "\nFROM `\n  ${BASE} AS final\n", ok: true},
+		{name: "scratch", body: "FROM scratch\n", ok: true},
+		{name: "tagless", body: "FROM ubuntu\n"},
+		{name: "lowercase tagged", body: "from ubuntu:latest\n"},
+		{name: "explicit platform", body: "FROM --platform=linux/amd64 ubuntu:latest\n"},
+		{name: "unchecked arg", body: "ARG OTHER=ubuntu:latest\nFROM ${OTHER}\n"},
+		{name: "arg after from", body: "FROM scratch AS seed\nARG OTHER=ubuntu:24.04@" + digest + "\nFROM ${OTHER}\n"},
+		{name: "mixed arg expression", body: "ARG REPO=ubuntu\nFROM ${REPO}:latest\n"},
+		{name: "split from keyword", body: "FR\\\nOM ubuntu:latest\n"},
+		{name: "split from with trailing space", body: "FROM scratch AS seed\nFR\\ \nOM ubuntu:latest\n"},
+		{name: "split arg keyword", body: "AR\\\nG BASE=ubuntu:latest\nFROM ${BASE}\n"},
+		{name: "backtick split from keyword", body: "# escape=`\nFR`\nOM ubuntu:latest\n"},
+		{name: "backtick split from with trailing tab", body: "# escape=`\nFROM scratch AS seed\nFR`\t\nOM ubuntu:latest AS final\n"},
+		{name: "spaced backtick split from keyword", body: "# escape = `\nFROM scratch AS seed\nFR`\nOM ubuntu:latest AS final\n"},
+		{name: "no from", body: "ARG BASE=ubuntu:24.04@" + digest + "\n"},
+		{name: "unterminated continuation", body: "FROM \\"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "Dockerfile")
+			if err := os.WriteFile(path, []byte(tt.body), 0o644); err != nil {
+				t.Fatalf("WriteFile: %v", err)
 			}
-		}
-		if match := unpinnedDirectFromPattern.FindString(body); match != "" {
-			t.Fatalf("%s contains unpinned direct external FROM %q", path, match)
-		}
+			cmd := exec.Command("bash", filepath.Join("..", "..", "scripts", "check_dockerfile_bases.sh"), path)
+			out, err := cmd.CombinedOutput()
+			if tt.ok && err != nil {
+				t.Fatalf("policy rejected valid Dockerfile: %v\n%s", err, out)
+			}
+			if !tt.ok && err == nil {
+				t.Fatalf("policy accepted unpinned Dockerfile:\n%s", tt.body)
+			}
+		})
 	}
 }
 

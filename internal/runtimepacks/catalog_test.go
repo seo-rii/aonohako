@@ -376,6 +376,8 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		"declare -A reported_tools=()",
 		`while IFS= read -r raw_language; do`,
 		`if ! command -v "$1" >/dev/null 2>&1; then`,
+		`output="<not installed>"`,
+		`output="<package probe failed>"`,
 		`if output="$("$@" </dev/null 2>&1)"; then`,
 		`output="$(printf "%s" "${output}" | tr -d '\r' | sed -n '/./{s/|/\\|/g;p;q;}')"`,
 		`if has_language "aheui"; then`,
@@ -404,6 +406,7 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "Haxe" haxe --version`,
 		`report_once "CoffeeScript" coffee --version`,
 		`report_once "Raku" raku --version`,
+		`report_once "MLton" mlton`,
 		`report_once "Clang" clang --version`,
 		`report_once "Clang++" clang++ --version`,
 		`report_once "FreeBASIC" fbc -version`,
@@ -490,10 +493,19 @@ printf '%s\n' 27
 		t.Fatalf("WriteFile fake erl: %v", err)
 	}
 
+	mltonScript := `#!/usr/bin/env bash
+set -eu
+[ "$#" -eq 0 ]
+printf '%s\n' 'MLton 20241230'
+`
+	if err := os.WriteFile(filepath.Join(binDir, "mlton"), []byte(mltonScript), 0o755); err != nil {
+		t.Fatalf("WriteFile fake mlton: %v", err)
+	}
+
 	cmd := exec.Command("bash", path, "test:image")
 	cmd.Env = append(os.Environ(),
 		"PATH="+binDir+":"+os.Getenv("PATH"),
-		"AONOHAKO_LANGUAGES=erlang,dafny,tla",
+		"AONOHAKO_LANGUAGES=erlang,sml,dafny,tla",
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -502,13 +514,15 @@ printf '%s\n' 27
 
 	body := string(out)
 	for _, want := range []string{
-		"- Languages: `erlang,dafny,tla`",
+		"- Languages: `erlang,sml,dafny,tla`",
 		"| Erlang | `27` |",
+		"| MLton | `MLton 20241230` |",
 		"| Java runtime | `openjdk version \"21-test\"` |",
 		"| Dafny | `4.11.0+test` |",
 		"| TLA+ TLC | `TLC2 Version 2.19 of 08 August 2024 (rev: test)` |",
 		"## Runtime Compile Options",
 		"| `erlang` | `erlc` |",
+		"| `sml` | `mlton -output <target>` |",
 		"| `dafny` | `dafny verify --cores 1` |",
 		"| `tla` | `pass-through .tla/.cfg artifacts` |",
 	} {
@@ -519,6 +533,55 @@ printf '%s\n' 27
 	for _, unwanted := range []string{"| Java compiler |", "| GNU sed |", "<command failed>"} {
 		if strings.Contains(body, unwanted) {
 			t.Fatalf("toolchain report unexpectedly contains %q in:\n%s", unwanted, body)
+		}
+	}
+
+	for _, tool := range []string{"bash", "sed", "tr"} {
+		target, err := exec.LookPath(tool)
+		if err != nil {
+			t.Fatalf("LookPath(%q): %v", tool, err)
+		}
+		if err := os.Symlink(target, filepath.Join(binDir, tool)); err != nil {
+			t.Fatalf("Symlink(%q): %v", tool, err)
+		}
+	}
+	cmd = exec.Command("bash", path, "test:image")
+	cmd.Env = append(os.Environ(), "PATH="+binDir, "AONOHAKO_LANGUAGES=gdl")
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("report_toolchain_versions.sh missing-probe run: %v\n%s", err, string(out))
+	}
+	if !strings.Contains(string(out), "| GNU Data Language | `<not installed>` |") {
+		t.Fatalf("missing required tool was not reported explicitly:\n%s", string(out))
+	}
+	cmd = exec.Command("bash", path, "test:image")
+	cmd.Env = append(os.Environ(), "PATH="+binDir, "AONOHAKO_LANGUAGES=tcl")
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("report_toolchain_versions.sh missing Tcl run: %v\n%s", err, string(out))
+	}
+	if !strings.Contains(string(out), "| Tcl | `<not installed>` |") {
+		t.Fatalf("missing Tcl runtime was not reported explicitly:\n%s", string(out))
+	}
+}
+
+func TestToolchainVersionReportHasProbeForEveryCatalogLanguage(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	path := filepath.Join("..", "..", "scripts", "report_toolchain_versions.sh")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+	body := string(data)
+	for language := range catalog.Languages {
+		if !strings.Contains(body, `has_language "`+language+`"`) {
+			t.Fatalf("toolchain report has no required probe branch for catalog language %q", language)
+		}
+		if !strings.Contains(body, `report_compile_option "`+language+`"`) {
+			t.Fatalf("toolchain report has no compile-option row for catalog language %q", language)
 		}
 	}
 }
@@ -626,6 +689,8 @@ func TestAggregateToolchainSummariesScriptSeparatesVersionConflicts(t *testing.T
 func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testing.T) {
 	root := t.TempDir()
 	profile := "type-a"
+	profileSpec := profile + "=python"
+	imageRef := "aonohako-ci-prod:" + profile
 	dir := filepath.Join(root, "toolchain-profile-"+profile)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", dir, err)
@@ -633,13 +698,30 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	archivePath := filepath.Join(dir, profile+".docker.tar.gz")
 	archiveBody := []byte("docker archive fixture")
 	archiveDigest := fmt.Sprintf("%x", sha256.Sum256(archiveBody))
+	archiveRelative := filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".docker.tar.gz"))
+	manifest := strings.Join([]string{
+		"MANIFEST.txt",
+		"SHA256SUMS",
+		"SUMMARY.md",
+		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, "summary.md")),
+		archiveRelative,
+		archiveRelative + ".sha256",
+		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".grype.json")),
+		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".sbom.spdx.json")),
+	}, "\n") + "\n"
+	validProfileSummary := []byte(fmt.Sprintf("## Runtime Toolchain Versions\n\n- Image: `%s`\n- Languages: `python`\n\n| Tool | Version |\n| --- | --- |\n| Python | `3.13` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n| `python` | `python3 -m compileall` |\n", imageRef))
+	validSBOM := []byte(fmt.Sprintf(`{"spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","SPDXID":"SPDXRef-DOCUMENT","name":%q,"documentNamespace":"https://anchore.example/type-a","creationInfo":{"creators":["Organization: Anchore, Inc","Tool: syft-1.42.4"]},"packages":[{"name":"python","SPDXID":"SPDXRef-Package-python"}],"relationships":[{"spdxElementId":"SPDXRef-DOCUMENT","relatedSpdxElement":"SPDXRef-Package-python","relationshipType":"DESCRIBES"}]}`, imageRef))
+	validGrype := []byte(fmt.Sprintf(`{"matches":[],"source":{"type":"image","target":{"userInput":%q}},"distro":{"name":"debian","version":"13"},"descriptor":{"name":"grype","version":"0.111.0"}}`, imageRef))
+	validAggregateSummary := []byte("## Runtime Toolchain Versions\n\n- Profiles: `type-a`\n\n| Tool | Version | Profiles |\n| --- | --- | --- |\n| Python | `3.13` | `type-a` |\n\n## Runtime Compile Options\n\n| Language | Compile options | Profiles |\n| --- | --- | --- |\n| `python` | `python3 -m compileall` | `type-a` |\n")
 	for path, body := range map[string][]byte{
-		filepath.Join(dir, "summary.md"):              []byte("## Runtime Toolchain Versions\n"),
-		filepath.Join(dir, profile+".sbom.spdx.json"): []byte(`{"spdxVersion":"SPDX-2.3"}`),
-		filepath.Join(dir, profile+".grype.json"):     []byte(`{"matches":[]}`),
+		filepath.Join(dir, "summary.md"):              validProfileSummary,
+		filepath.Join(dir, profile+".sbom.spdx.json"): validSBOM,
+		filepath.Join(dir, profile+".grype.json"):     validGrype,
 		archivePath: archiveBody,
-		filepath.Join(dir, profile+".docker.tar.gz.sha256"): []byte(archiveDigest + "  " + archivePath + "\n"),
-		filepath.Join(root, "SHA256SUMS"):                   []byte(archiveDigest + "  " + archivePath + "\n"),
+		filepath.Join(dir, profile+".docker.tar.gz.sha256"): []byte(archiveDigest + "  " + archiveRelative + "\n"),
+		filepath.Join(root, "SHA256SUMS"):                   []byte(archiveDigest + "  " + archiveRelative + "\n"),
+		filepath.Join(root, "SUMMARY.md"):                   validAggregateSummary,
+		filepath.Join(root, "MANIFEST.txt"):                 []byte(manifest),
 	} {
 		if err := os.WriteFile(path, body, 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", path, err)
@@ -647,7 +729,7 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	}
 
 	path := filepath.Join("..", "..", "scripts", "verify_toolchain_artifacts.py")
-	cmd := exec.Command("python3", path, root)
+	cmd := exec.Command("python3", path, root, profileSpec)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("verify_toolchain_artifacts.py: %v\n%s", err, string(out))
@@ -655,29 +737,83 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	if !strings.Contains(string(out), "verified 1 toolchain profile artifact set(s)") {
 		t.Fatalf("verification output missing success line: %q", string(out))
 	}
+	cmd = exec.Command("python3", path, root, profileSpec, "type-b=java")
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "profile inventory") {
+		t.Fatalf("verifier unexpectedly accepted a missing expected profile: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".docker.tar.gz.sha256"), []byte(archiveDigest+"  "+archivePath+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile nonportable sidecar: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "must reference bundle path") {
+		t.Fatalf("verifier unexpectedly accepted a nonportable sidecar path: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".docker.tar.gz.sha256"), []byte(archiveDigest+"  "+archiveRelative+"\n"), 0o644); err != nil {
+		t.Fatalf("Restore archive sidecar: %v", err)
+	}
 
 	for _, path := range []string{
 		archivePath,
 		filepath.Join(dir, profile+".docker.tar.gz.sha256"),
-		filepath.Join(root, "SHA256SUMS"),
 	} {
 		if err := os.Remove(path); err != nil {
 			t.Fatalf("Remove archive fixture %q: %v", path, err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, profile+".docker.tar.gz.error.json"), []byte(`{"error":"docker archive export failed"}`), 0o644); err != nil {
+	diagnosticRelative := filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".docker.tar.gz.error.json"))
+	manifest = strings.Join([]string{
+		"MANIFEST.txt",
+		"SHA256SUMS",
+		"SUMMARY.md",
+		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, "summary.md")),
+		diagnosticRelative,
+		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".grype.json")),
+		filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".sbom.spdx.json")),
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(root, "SHA256SUMS"), nil, 0o644); err != nil {
+		t.Fatalf("WriteFile empty bundle digest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "MANIFEST.txt"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile diagnostic manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".docker.tar.gz.error.json"), []byte(`{"skipped":"docker archive export skipped","profile":"type-a"}`), 0o644); err != nil {
 		t.Fatalf("WriteFile archive error fixture: %v", err)
 	}
-	cmd = exec.Command("python3", path, root)
+	cmd = exec.Command("python3", path, root, profileSpec)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("verify_toolchain_artifacts.py should accept archive diagnostics: %v\n%s", err, string(out))
 	}
 
+	if err := os.WriteFile(filepath.Join(dir, profile+".docker.tar.gz.error.json"), []byte(`{"error":"docker archive export failed"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile invalid archive diagnostic: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "contains an archive error diagnostic") {
+		t.Fatalf("verifier unexpectedly accepted invalid archive diagnostic: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".docker.tar.gz.error.json"), []byte(`{"skipped":"docker archive export skipped","profile":"type-a"}`), 0o644); err != nil {
+		t.Fatalf("Restore archive diagnostic: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".sbom.spdx.json"), []byte(`{"spdxVersion":"SPDX-garbage","packages":[]}`), 0o644); err != nil {
+		t.Fatalf("WriteFile invalid SPDX fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "required SPDX 2.3 document metadata") {
+		t.Fatalf("verifier unexpectedly accepted malformed SPDX metadata: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".sbom.spdx.json"), validSBOM, 0o644); err != nil {
+		t.Fatalf("Restore SPDX fixture: %v", err)
+	}
+
 	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), []byte(`{"error":"grype scan failed"}`), 0o644); err != nil {
 		t.Fatalf("WriteFile scanner error fixture: %v", err)
 	}
-	cmd = exec.Command("python3", path, root)
+	cmd = exec.Command("python3", path, root, profileSpec)
 	out, err = cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("verify_toolchain_artifacts.py unexpectedly accepted a scanner error diagnostic: %s", string(out))
@@ -685,14 +821,99 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	if !strings.Contains(string(out), "contains scanner error diagnostic") || !strings.Contains(string(out), profile+".grype.json") {
 		t.Fatalf("verification failure did not explain scanner error diagnostic: %q", string(out))
 	}
-	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), []byte(`{"matches":[]}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), validGrype, 0o644); err != nil {
 		t.Fatalf("Restore grype fixture: %v", err)
+	}
+	invalidMatchGrype := []byte(fmt.Sprintf(`{"matches":[null],"source":{"type":"image","target":{"userInput":%q}},"distro":{},"descriptor":{"name":"grype","version":"0.111.0"}}`, imageRef))
+	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), invalidMatchGrype, 0o644); err != nil {
+		t.Fatalf("WriteFile invalid Grype match fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "invalid vulnerability match") {
+		t.Fatalf("verifier unexpectedly accepted malformed Grype matches: %v\n%s", err, string(out))
+	}
+	staleSourceGrype := []byte(`{"matches":[],"source":{"type":"image","target":{"userInput":"aonohako-ci-prod:type-z"}},"distro":{},"descriptor":{"name":"grype","version":"0.111.0"}}`)
+	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), staleSourceGrype, 0o644); err != nil {
+		t.Fatalf("WriteFile stale Grype source fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "source image must equal") {
+		t.Fatalf("verifier unexpectedly accepted stale Grype source: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), validGrype, 0o644); err != nil {
+		t.Fatalf("Restore grype fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile empty grype fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "missing the Grype matches array") {
+		t.Fatalf("verifier unexpectedly accepted structurally empty Grype JSON: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, profile+".grype.json"), validGrype, 0o644); err != nil {
+		t.Fatalf("Restore grype fixture: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "summary.md"), []byte("## Runtime Toolchain Versions\n\n- Languages: `sml`\n\n| Tool | Version |\n| --- | --- |\n| MLton | `<command failed>` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n| `sml` | `mlton` |\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile failed summary fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "failed version probe") {
+		t.Fatalf("verifier unexpectedly accepted failed version probe: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "summary.md"), validProfileSummary, 0o644); err != nil {
+		t.Fatalf("Restore summary fixture: %v", err)
+	}
+	staleImageSummary := []byte(strings.Replace(string(validProfileSummary), imageRef, "aonohako-ci-prod:type-z", 1))
+	if err := os.WriteFile(filepath.Join(dir, "summary.md"), staleImageSummary, 0o644); err != nil {
+		t.Fatalf("WriteFile stale image summary fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "image must equal") {
+		t.Fatalf("verifier unexpectedly accepted a stale summary image: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "summary.md"), validProfileSummary, 0o644); err != nil {
+		t.Fatalf("Restore summary fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "summary.md"), []byte(fmt.Sprintf("## Runtime Toolchain Versions\n\n- Image: `%s`\n- Languages: `python`\n\n| Tool | Version |\n| --- | --- |\n| Python | `3.13` |\n\n## Runtime Compile Options\n\n| Language | Compile options |\n| --- | --- |\n", imageRef)), 0o644); err != nil {
+		t.Fatalf("WriteFile incomplete language summary fixture: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "compile-option") {
+		t.Fatalf("verifier unexpectedly accepted a missing language probe: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "summary.md"), validProfileSummary, 0o644); err != nil {
+		t.Fatalf("Restore summary fixture: %v", err)
+	}
+	extraRelative := filepath.ToSlash(filepath.Join("toolchain-profile-"+profile, profile+".zzz.json"))
+	if err := os.WriteFile(filepath.Join(root, extraRelative), []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile extra bundle file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "MANIFEST.txt"), []byte(manifest+extraRelative+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile overbroad manifest: %v", err)
+	}
+	cmd = exec.Command("python3", path, root, profileSpec)
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "inventory") {
+		t.Fatalf("verifier unexpectedly accepted an overbroad manifest: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(root, "MANIFEST.txt"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("Restore manifest fixture: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, extraRelative)); err != nil {
+		t.Fatalf("Remove extra bundle file: %v", err)
 	}
 
 	if err := os.Remove(filepath.Join(dir, profile+".grype.json")); err != nil {
 		t.Fatalf("Remove grype fixture: %v", err)
 	}
-	cmd = exec.Command("python3", path, root)
+	cmd = exec.Command("python3", path, root, profileSpec)
 	out, err = cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("verify_toolchain_artifacts.py unexpectedly succeeded after removing grype report: %s", string(out))
@@ -884,6 +1105,38 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	}
 	if !strings.Contains(summarySection, "python3 scripts/verify_toolchain_artifacts.py toolchain-artifacts") {
 		t.Fatalf("ci workflow must fail closed when production-profile artifacts are incomplete or digest mismatched")
+	}
+	if !strings.Contains(summarySection, "PRODUCTION_MATRIX: ${{ needs.runtime-matrix.outputs.production_matrix }}") || !strings.Contains(summarySection, `python3 scripts/verify_toolchain_artifacts.py toolchain-artifacts "${expected_profiles[@]}"`) {
+		t.Fatalf("ci workflow must verify the exact production profile inventory")
+	}
+	if !strings.Contains(summarySection, `jq -r '.[] | "\(.name)=\(.languages)"'`) {
+		t.Fatalf("ci workflow must bind each expected profile to its matrix language inventory")
+	}
+	if strings.Contains(summarySection, "continue-on-error: true") || !strings.Contains(summarySection, `echo "No toolchain profile artifacts were produced."`) || !strings.Contains(summarySection, "exit 1") {
+		t.Fatalf("ci workflow must fail closed when profile artifact download or discovery fails")
+	}
+	shaIdx := strings.Index(summarySection, "find toolchain-artifacts -type f -name '*.docker.tar.gz'")
+	manifestIdx := strings.Index(summarySection, "printf '%s\\n' SUMMARY.md MANIFEST.txt SHA256SUMS")
+	verifyIdx := strings.Index(summarySection, "python3 scripts/verify_toolchain_artifacts.py toolchain-artifacts")
+	if shaIdx < 0 || manifestIdx < 0 || verifyIdx < 0 || !(shaIdx < manifestIdx && manifestIdx < verifyIdx) {
+		t.Fatalf("ci workflow must create bundle-relative archive digests and the exact manifest before verification")
+	}
+	if strings.Contains(summarySection, "find toolchain-artifacts -type f | sort") || !strings.Contains(summarySection, "sed 's#^toolchain-artifacts/##'") {
+		t.Fatalf("ci workflow manifest must use bundle-relative paths from the selected upload inventory")
+	}
+	if !strings.Contains(summarySection, `relative_path="${archive#toolchain-artifacts/}"`) || !strings.Contains(summarySection, `> "${archive}.sha256"`) {
+		t.Fatalf("ci workflow must regenerate portable bundle-relative archive sidecars")
+	}
+	for _, selected := range []string{"-name summary.md", "-name '*.sbom.spdx.json'", "-name '*.grype.json'", "-name '*.docker.tar.gz'", "-name '*.docker.tar.gz.sha256'", "-name '*.docker.tar.gz.error.json'"} {
+		if !strings.Contains(summarySection, selected) {
+			t.Fatalf("ci workflow manifest must select %q", selected)
+		}
+	}
+	if !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.docker.tar.gz\n") {
+		t.Fatalf("ci workflow upload must match manifest entries for real image archives")
+	}
+	if !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.sbom.spdx.json\n") || !strings.Contains(summarySection, "toolchain-artifacts/toolchain-profile-*/**/*.grype.json\n") {
+		t.Fatalf("ci workflow summary bundle must retain the scanner evidence it verifies")
 	}
 	if !strings.Contains(body, "toolchain-summary-bundle") {
 		t.Fatalf("ci workflow must publish a final bundle artifact for toolchain reports")

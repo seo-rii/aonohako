@@ -55,10 +55,8 @@ report() {
     local output
 
     if ! command -v "$1" >/dev/null 2>&1; then
-        return 0
-    fi
-
-    if output="$("$@" </dev/null 2>&1)"; then
+        output="<not installed>"
+    elif output="$("$@" </dev/null 2>&1)"; then
         :
     else
         output="<command failed>"
@@ -77,7 +75,7 @@ report_python_pkg() {
     local output
 
     if ! command -v python3 >/dev/null 2>&1; then
-        return 0
+        output="<not installed>"
     elif output="$(DIST_NAME="${dist}" python3 - <<'PY' 2>&1
 import importlib.metadata
 import os
@@ -87,10 +85,13 @@ PY
 )"; then
         :
     else
-        return 0
+        output="<package probe failed>"
     fi
 
     output="$(printf "%s" "${output}" | sed -n '1p' | tr -d '\r' | sed 's/|/\\|/g')"
+    if [ -z "${output}" ]; then
+        output="<no version output>"
+    fi
     printf '| %s | `%s` |\n' "${name}" "${output}"
 }
 
@@ -155,6 +156,22 @@ if has_language "python"; then
     report_python_pkg_once "JAXLIB" "jaxlib"
 fi
 
+if has_language "apecode"; then
+    report_python_pkg_once "APECode" "apecode"
+fi
+
+if has_language "whitespace"; then
+    report_once "Whitespace interpreter" sh -c 'test -f /usr/local/lib/aonohako/whitespace.py && printf bundled'
+fi
+
+if has_language "bf"; then
+    report_once "Brainfuck interpreter" sh -c 'test -f /usr/local/lib/aonohako/brainfuck.py && printf bundled'
+fi
+
+if has_language "befunge"; then
+    report_once "Befunge interpreter" sh -c 'test -f /usr/local/lib/aonohako/befunge.py && printf bundled'
+fi
+
 if has_language "pypy"; then
     report_once "PyPy" pypy3 --version
 fi
@@ -215,7 +232,7 @@ if has_language "scala"; then
     report_once "Scala" scala -version
 fi
 
-if has_language "plain" || has_language "asm" || has_language "nasm" || has_language "objective-c" || has_language "objective-cpp"; then
+if has_language "plain" || has_language "c" || has_language "cpp" || has_language "asm" || has_language "nasm" || has_language "objective-c" || has_language "objective-cpp"; then
     report_once "GCC" gcc -dumpfullversion -dumpversion
     report_once "G++" g++ -dumpfullversion -dumpversion
 fi
@@ -242,6 +259,22 @@ fi
 
 if has_language "rust"; then
     report_once "Rust" rustc --version
+fi
+
+if has_language "zig"; then
+    report_once "Zig" zig version
+fi
+
+if has_language "d"; then
+    report_once "LDC" ldc2 --version
+fi
+
+if has_language "fortran"; then
+    report_once "GFortran" gfortran --version
+fi
+
+if has_language "haskell"; then
+    report_once "GHC" ghc --version
 fi
 
 if has_language "vlang"; then
@@ -301,9 +334,13 @@ if has_language "awk"; then
 fi
 
 if has_language "tcl"; then
-    if [ -z "${reported_tools[Tcl]:-}" ] && command -v tclsh >/dev/null 2>&1; then
+    if [ -z "${reported_tools[Tcl]:-}" ]; then
         reported_tools["Tcl"]=1
-        output="$(printf 'puts [info patchlevel]\n' | tclsh 2>&1 || printf '<command failed>')"
+        if command -v tclsh >/dev/null 2>&1; then
+            output="$(printf 'puts [info patchlevel]\n' | tclsh 2>&1 || printf '<command failed>')"
+        else
+            output="<not installed>"
+        fi
         output="$(printf "%s" "${output}" | tr -d '\r' | sed -n '/./{s/|/\\|/g;p;q;}')"
         if [ -z "${output}" ]; then
             output="<no version output>"
@@ -402,8 +439,12 @@ if has_language "ocaml"; then
     report_once "OCaml" ocamlopt -version
 fi
 
+if has_language "lisp"; then
+    report_once "SBCL" sbcl --version
+fi
+
 if has_language "sml"; then
-    report_once "MLton" mlton --version
+    report_once "MLton" mlton
 fi
 
 if has_language "elixir"; then
@@ -534,13 +575,20 @@ if has_language "wasm"; then
     report_once "Wasmtime" wasmtime --version
 fi
 
+if has_language "uhmlang"; then
+    report_once "Umjunsik Lang" sh -c 'command -v umjunsik-lang-go >/dev/null && printf installed'
+fi
+
 echo
 echo "## Runtime Compile Options"
 echo
 echo "| Language | Compile options |"
 echo "| --- | --- |"
 report_compile_option "aheui" "pass-through .aheui artifacts"
+report_compile_option "apecode" "apecc -o <target>"
 report_compile_option "plain" "C: gcc -O2 -Wall -lm --static -DONLINE_JUDGE=1 -std=c11; C++: g++ -O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=c++17; text: pass-through"
+report_compile_option "c" "gcc -O2 -Wall -lm --static -DONLINE_JUDGE=1 -std=<selected>"
+report_compile_option "cpp" "g++ -O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=<selected>"
 report_compile_option "python" "python3 -I -S -m compileall -b ."
 report_compile_option "pypy" "pypy3 -I -S -m compileall -b ."
 report_compile_option "java" "javac --release 11 -encoding UTF-8"
@@ -557,6 +605,7 @@ report_compile_option "elm" "elm make <source> --output <target>"
 report_compile_option "idris2" "idris2 --cg chez -o <target>"
 report_compile_option "haxe" "haxe -D ONLINE_JUDGE -main Main -neko <target>.n"
 report_compile_option "graphql" "pass-through .graphql artifacts"
+report_compile_option "haskell" "ghc -O2 -o <target>"
 report_compile_option "asm" "gcc -nostdlib -static -no-pie"
 report_compile_option "nasm" "nasm -felf64 -dONLINE_JUDGE=1 plus gcc -nostdlib -static -no-pie"
 report_compile_option "objective-c" "clang -x objective-c -O2 -pipe -DONLINE_JUDGE=1 -lobjc"
@@ -595,6 +644,7 @@ report_compile_option "freebasic" "fbc -d ONLINE_JUDGE -x <target>"
 report_compile_option "classic-basic" "fbc -lang qb -d ONLINE_JUDGE -x <target>"
 report_compile_option "qbasic" "fbc -lang qb -d ONLINE_JUDGE -x <target>"
 report_compile_option "smalltalk" "pass-through .st artifacts"
+report_compile_option "lisp" "sbcl --noinform --non-interactive --eval compile-file"
 report_compile_option "golfscript" "pass-through .gs artifacts"
 report_compile_option "duckdb" "pass-through .sql artifacts"
 report_compile_option "bqn" "pass-through .bqn artifacts"
@@ -607,9 +657,11 @@ report_compile_option "bc" "pass-through .bc artifacts"
 report_compile_option "befunge" "pass-through .bef/.bf93 artifacts"
 report_compile_option "lolcode" "pass-through .lol artifacts"
 report_compile_option "forth" "pass-through .fs artifacts"
+report_compile_option "gforth" "pass-through .fs/.fth/.4th artifacts"
 report_compile_option "whitespace" "pass-through .ws artifacts"
 report_compile_option "bf" "pass-through .bf artifacts"
 report_compile_option "wasm" "wat2wasm or pass-through .wasm artifacts"
+report_compile_option "uhmlang" "pass-through .uhm artifacts"
 report_compile_option "racket" "raco make"
 report_compile_option "scheme" "pass-through .scm artifacts"
 report_compile_option "awk" "gawk --sandbox --lint -f"
