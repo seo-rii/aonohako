@@ -2540,6 +2540,14 @@ type noFlushResponseWriter struct {
 	body   bytes.Buffer
 }
 
+type deadlineResponseRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (w *deadlineResponseRecorder) SetWriteDeadline(time.Time) error {
+	return nil
+}
+
 func (w *noFlushResponseWriter) Header() http.Header {
 	if w.header == nil {
 		w.header = make(http.Header)
@@ -2590,6 +2598,59 @@ func TestExecuteSSEInitFailureReleasesPermit(t *testing.T) {
 	if active != 0 || pending != 0 {
 		t.Fatalf("queue leaked after execute SSE init failure: active=%d pending=%d", active, pending)
 	}
+}
+
+func TestCanceledRequestDoesNotStartRunnerWithImmediatePermit(t *testing.T) {
+	t.Run("compile", func(t *testing.T) {
+		called := false
+		s := newServerForTest(t)
+		s.compile = compileRunnerStub{run: func(context.Context, *model.CompileRequest) model.CompileResponse {
+			called = true
+			return model.CompileResponse{Status: model.CompileStatusOK}
+		}}
+		body, err := json.Marshal(map[string]any{
+			"lang":    "PYTHON3",
+			"sources": []map[string]any{{"name": "Main.py", "data_b64": base64.StdEncoding.EncodeToString([]byte("print('ok')\n"))}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req := httptest.NewRequest(http.MethodPost, "/compile", bytes.NewReader(body)).WithContext(ctx)
+		w := &deadlineResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+
+		s.compileHandler(w, req)
+		if called {
+			t.Fatal("compile runner started after request cancellation")
+		}
+		active, pending := s.queue.Snapshot()
+		if active != 0 || pending != 0 {
+			t.Fatalf("queue leaked after canceled compile request: active=%d pending=%d", active, pending)
+		}
+	})
+
+	t.Run("execute", func(t *testing.T) {
+		called := false
+		s := newServerForTest(t)
+		s.execute = executeRunnerStub{run: func(context.Context, *model.RunRequest, execute.Hooks) model.RunResponse {
+			called = true
+			return model.RunResponse{Status: model.RunStatusAccepted}
+		}}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req := httptest.NewRequest(http.MethodPost, "/execute", bytes.NewReader(executePayload(t))).WithContext(ctx)
+		w := &deadlineResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+
+		s.executeHandler(w, req)
+		if called {
+			t.Fatal("execute runner started after request cancellation")
+		}
+		active, pending := s.queue.Snapshot()
+		if active != 0 || pending != 0 {
+			t.Fatalf("queue leaked after canceled execute request: active=%d pending=%d", active, pending)
+		}
+	})
 }
 
 func TestCompileSlowSSEReaderWriteDeadlineReleasesPermit(t *testing.T) {

@@ -39,16 +39,29 @@ func (p *Permit) Position() int {
 }
 
 func (p *Permit) Wait(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		p.Cancel()
+		return err
+	}
 	if p.entry == nil {
 		p.mu.Lock()
-		defer p.mu.Unlock()
-		if p.state == permitAcquired {
-			return nil
+		acquired := p.state == permitAcquired
+		p.mu.Unlock()
+		if !acquired {
+			return ErrPermitCanceled
 		}
-		return ErrPermitCanceled
+		if err := ctx.Err(); err != nil {
+			p.Cancel()
+			return err
+		}
+		return nil
 	}
 	select {
 	case <-p.entry.ch:
+		if err := ctx.Err(); err != nil {
+			p.Cancel()
+			return err
+		}
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		switch p.state {

@@ -116,6 +116,56 @@ func TestQueuedContextCancelRemovesWaiter(t *testing.T) {
 	}
 }
 
+func TestImmediatePermitWaitHonorsCanceledContext(t *testing.T) {
+	q := New(1, 1)
+	permit, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("Acquire() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := permit.Wait(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Wait() error = %v, want context.Canceled", err)
+	}
+	active, pending := q.Snapshot()
+	if active != 0 || pending != 0 {
+		t.Fatalf("queue snapshot = (%d, %d), want (0, 0)", active, pending)
+	}
+
+	next, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("Acquire() after cancellation error = %v", err)
+	}
+	if next.Position() != 0 {
+		t.Fatalf("position after cancellation = %d, want 0", next.Position())
+	}
+	next.Release()
+}
+
+func TestGrantedPermitWaitHonorsCanceledContext(t *testing.T) {
+	q := New(1, 1)
+	first, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("first Acquire() error = %v", err)
+	}
+	second, err := q.Acquire()
+	if err != nil {
+		t.Fatalf("second Acquire() error = %v", err)
+	}
+	first.Release()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := second.Wait(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Wait() error = %v, want context.Canceled", err)
+	}
+	active, pending := q.Snapshot()
+	if active != 0 || pending != 0 {
+		t.Fatalf("queue snapshot = (%d, %d), want (0, 0)", active, pending)
+	}
+}
+
 func TestQueueUnlimitedPendingWhenZero(t *testing.T) {
 	q := New(1, 0)
 	p1, err := q.Acquire()
