@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -68,7 +69,7 @@ func TestRemoteRunnerForwardsSSELogsImagesAndResult(t *testing.T) {
 		},
 	})
 
-	if resp.Status != model.RunStatusAccepted || resp.CPUTimeMs != 2 {
+	if resp.Status != model.RunStatusAccepted || resp.CPUTimeMs != 2 || resp.Reason != "" {
 		t.Fatalf("unexpected remote response: %+v", resp)
 	}
 	if len(logs) != 1 || logs[0] != "stdout:hello\n" {
@@ -329,6 +330,160 @@ func TestRemoteRunnerTimesOutIdleSSEStream(t *testing.T) {
 	}, Hooks{})
 	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "idle timeout") {
 		t.Fatalf("expected idle timeout failure, got %+v", resp)
+	}
+}
+
+func TestRemoteRunnerAbsoluteDeadlineCannotBeExtendedByHeartbeats(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		ticker := time.NewTicker(5 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-ticker.C:
+				_, _ = fmt.Fprint(w, ": heartbeat\n\n")
+				flusher.Flush()
+			}
+		}
+	}))
+	defer remote.Close()
+
+	runner := &remoteRunner{
+		client:          remote.Client(),
+		executeURL:      remote.URL + "/execute",
+		idleTimeout:     20 * time.Millisecond,
+		absoluteTimeout: 60 * time.Millisecond,
+	}
+	resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1, MemoryMB: 64}}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "absolute deadline") {
+		t.Fatalf("response = %+v, want absolute deadline failure", resp)
+	}
+}
+
+func TestRemoteRunnerAbsoluteDeadlineIncludesPipelineLimitsAndOverhead(t *testing.T) {
+	var remaining time.Duration
+	runner := &remoteRunner{
+		client: &http.Client{Transport: executeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			deadline, ok := req.Context().Deadline()
+			if !ok {
+				t.Fatal("remote request context has no deadline")
+			}
+			remaining = time.Until(deadline)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"Accepted\"}\n\n")),
+			}, nil
+		})},
+		executeURL: "http://remote.example/execute",
+	}
+	resp := runner.Run(context.Background(), &model.RunRequest{Steps: []model.RunStep{
+		{Limits: model.Limits{TimeMs: 1000}},
+		{Limits: model.Limits{TimeMs: 2000}},
+	}}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("response = %+v", resp)
+	}
+	want := 3*time.Second + remoteio.DefaultOperationOverhead
+	if remaining < want-time.Second || remaining > want+time.Second {
+		t.Fatalf("remote deadline remaining = %s, want about %s", remaining, want)
+	}
+}
+
+func TestRemoteRunnerRejectsMissingOrUnknownResultStatus(t *testing.T) {
+	for _, payload := range []string{`{}`, `{"status":"Not A Verdict"}`} {
+		t.Run(payload, func(t *testing.T) {
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+			}))
+			defer remote.Close()
+
+			runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
+			resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}}, Hooks{})
+			if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "invalid remote result status") {
+				t.Fatalf("response = %+v, want invalid remote result status", resp)
+			}
+		})
+	}
+}
+
+func TestRemoteRunnerRejectsOversizedLogAndImageEvents(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		event   string
+		payload string
+	}{
+		{name: "log", event: "log", payload: `{"stream":"stdout","chunk":"` + strings.Repeat("x", maxResponseOutputBytes+1) + `"}`},
+		{name: "image", event: "image", payload: `{"mime":"image/png","b64":"` + strings.Repeat("A", 4*((maxImageEventBytes/3)+1)) + `"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", tc.event, tc.payload)
+			}))
+			defer remote.Close()
+
+			called := false
+			runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
+			resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}}, Hooks{
+				OnLog:   func(string, string) { called = true },
+				OnImage: func(string, string, int64) { called = true },
+			})
+			if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "too large") {
+				t.Fatalf("response = %+v, want oversized remote event rejection", resp)
+			}
+			if called {
+				t.Fatal("oversized remote event reached a hook")
+			}
+		})
+	}
+}
+
+func TestRemoteRunnerRejectsCumulativeLogOverflow(t *testing.T) {
+	chunk := strings.Repeat("x", maxResponseOutputBytes/2+1)
+	raw, err := json.Marshal(map[string]string{"stream": "stdout", "chunk": chunk})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for range 2 {
+			_, _ = fmt.Fprintf(w, "event: log\ndata: %s\n\n", raw)
+		}
+		_, _ = fmt.Fprint(w, "event: result\ndata: {\"status\":\"Accepted\"}\n\n")
+	}))
+	defer remote.Close()
+
+	runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
+	resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "log stream too large") {
+		t.Fatalf("response = %+v, want cumulative log rejection", resp)
+	}
+}
+
+func TestRemoteRunnerCapsFinalOutputLikeLocalExecution(t *testing.T) {
+	raw, err := json.Marshal(model.RunResponse{
+		Status: model.RunStatusRE,
+		Stdout: strings.Repeat("x", maxResponseOutputBytes+1),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "event: result\ndata: %s\n\n", raw)
+	}))
+	defer remote.Close()
+
+	runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
+	resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}}, Hooks{})
+	if resp.Status != model.RunStatusRE || len(resp.Stdout) != maxResponseOutputBytes || !resp.StdoutTruncated {
+		t.Fatalf("response output was not capped: status=%q len=%d truncated=%v", resp.Status, len(resp.Stdout), resp.StdoutTruncated)
 	}
 }
 

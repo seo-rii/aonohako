@@ -14,6 +14,7 @@ import (
 const (
 	metadataRequestTimeout      = 10 * time.Second
 	DefaultRequestUploadTimeout = 30 * time.Second
+	DefaultOperationOverhead    = 30 * time.Second
 )
 
 var errRedirectNotAllowed = errors.New("remote redirects are not allowed")

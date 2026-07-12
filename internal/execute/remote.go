@@ -3,10 +3,12 @@ package execute
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"mime"
 	"net/http"
 	"net/url"
@@ -16,6 +18,8 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runvalidation"
+	"aonohako/internal/util"
 )
 
 const cloudRunMetadataIdentityURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
@@ -29,6 +33,7 @@ type remoteRunner struct {
 	audience         string
 	metadataURL      string
 	idleTimeout      time.Duration
+	absoluteTimeout  time.Duration
 	uploadTimeout    time.Duration
 	errorBodyTimeout time.Duration
 	strictProto      bool
@@ -64,7 +69,52 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote request encode failed: " + err.Error()}
 	}
 
-	streamCtx, cancelStream := context.WithCancel(ctx)
+	absoluteTimeout := r.absoluteTimeout
+	if absoluteTimeout <= 0 {
+		var requestedTimeMs int64
+		if runvalidation.UsesSteps(req) {
+			for _, step := range req.Steps {
+				stepTimeMs := step.Limits.TimeMs
+				if stepTimeMs < 0 {
+					stepTimeMs = 0
+				}
+				if stepTimeMs > runvalidation.MaxTimeMs {
+					stepTimeMs = runvalidation.MaxTimeMs
+				}
+				requestedTimeMs += int64(stepTimeMs)
+			}
+		} else {
+			mainTimeMs := req.Limits.TimeMs
+			if mainTimeMs < 0 {
+				mainTimeMs = 0
+			}
+			if mainTimeMs > runvalidation.MaxTimeMs {
+				mainTimeMs = runvalidation.MaxTimeMs
+			}
+			requestedTimeMs = int64(mainTimeMs)
+			if req.Interactor != nil && req.Interactor.Limits != nil {
+				interactorTimeMs := req.Interactor.Limits.TimeMs
+				if interactorTimeMs < 0 {
+					interactorTimeMs = 0
+				}
+				if interactorTimeMs > runvalidation.MaxTimeMs {
+					interactorTimeMs = runvalidation.MaxTimeMs
+				}
+				if int64(interactorTimeMs) > requestedTimeMs {
+					requestedTimeMs = int64(interactorTimeMs)
+				}
+			}
+		}
+		if req.SPJ != nil {
+			spjTimeMs := defaultSPJTimeMs
+			if req.SPJ.Limits != nil && req.SPJ.Limits.TimeMs > 0 {
+				spjTimeMs = min(req.SPJ.Limits.TimeMs, runvalidation.MaxTimeMs)
+			}
+			requestedTimeMs += int64(spjTimeMs)
+		}
+		absoluteTimeout = time.Duration(requestedTimeMs)*time.Millisecond + remoteio.DefaultOperationOverhead
+	}
+	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()
 
 	httpReq, err := http.NewRequestWithContext(streamCtx, http.MethodPost, r.executeURL, bytes.NewReader(body))
@@ -86,6 +136,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if err != nil {
 		if finishUpload() {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute request upload timed out"}
+		}
+		if errors.Is(streamCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute absolute deadline exceeded"}
 		}
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute request failed: " + err.Error()}
 	}
@@ -137,6 +190,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		})
 	}
 	result := model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute stream ended without result"}
+	remoteErrorReason := ""
+	logBytes := map[string]int{"stdout": 0, "stderr": 0}
+	var imageBytes int
 
 	for {
 		event, err := reader.Next()
@@ -147,6 +203,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if streamCtx.Err() != nil && ctx.Err() == nil {
 				if finishUpload() {
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute request upload timed out"}
+				}
+				if errors.Is(streamCtx.Err(), context.DeadlineExceeded) {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute absolute deadline exceeded"}
 				}
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute stream idle timeout exceeded"}
 			}
@@ -161,8 +220,15 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if err := json.Unmarshal([]byte(event.Data), &chunk); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote log decode failed: " + err.Error()}
 			}
-			if strings.TrimSpace(chunk.Stream) == "" {
-				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote log event missing stream"}
+			if chunk.Stream != "stdout" && chunk.Stream != "stderr" {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote log event has invalid stream"}
+			}
+			if len(chunk.Chunk) > responseOutputLimitBytes(req) {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log event too large: max %d bytes", responseOutputLimitBytes(req))}
+			}
+			logBytes[chunk.Stream] += len(chunk.Chunk)
+			if logBytes[chunk.Stream] > responseOutputLimitBytes(req) {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log stream too large: max %d bytes", responseOutputLimitBytes(req))}
 			}
 			if hooks.OnLog != nil {
 				hooks.OnLog(chunk.Stream, chunk.Chunk)
@@ -179,6 +245,17 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if strings.TrimSpace(image.Mime) == "" || strings.TrimSpace(image.B64) == "" {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote image event missing payload"}
 			}
+			if len(image.B64) > maxImageEventBytes {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote image event too large: max %d bytes", maxImageEventBytes)}
+			}
+			decodedImage, err := base64.StdEncoding.DecodeString(image.B64)
+			if err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote image event has invalid base64"}
+			}
+			imageBytes += len(decodedImage)
+			if imageBytes > maxImageStreamBytes {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote image stream too large: max %d bytes", maxImageStreamBytes)}
+			}
 			if hooks.OnImage != nil {
 				ts := image.TS
 				if ts == 0 {
@@ -194,14 +271,104 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote error decode failed: " + err.Error()}
 			}
 			if strings.TrimSpace(remoteErr.Message) != "" {
-				result.Reason = remoteErr.Message
+				remoteErrorReason = remoteErr.Message
 			}
 		case "result":
-			if err := json.Unmarshal([]byte(event.Data), &result); err != nil {
-				result = model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote result decode failed: " + err.Error()}
+			var remoteResult model.RunResponse
+			if err := json.Unmarshal([]byte(event.Data), &remoteResult); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote result decode failed: " + err.Error()}
 			}
-			result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatus(result.Status, result.Reason, result.VerdictSource, result.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(result.VerdictSource, "cpu_time_cgroup"))
-			return result
+			if strings.TrimSpace(remoteResult.Reason) == "" {
+				remoteResult.Reason = remoteErrorReason
+			}
+			switch remoteResult.Status {
+			case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusMLE, model.RunStatusWLE, model.RunStatusRE, model.RunStatusInitFail:
+			default:
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote result status: %q", remoteResult.Status)}
+			}
+			if remoteResult.TimeMs < 0 || remoteResult.WallTimeMs < 0 || remoteResult.CPUTimeMs < 0 || remoteResult.ProcessCPUTimeMs < 0 || remoteResult.MemoryKB < 0 {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: negative resource measurement"}
+			}
+			if remoteResult.Score != nil && (math.IsNaN(*remoteResult.Score) || math.IsInf(*remoteResult.Score, 0) || *remoteResult.Score < 0 || *remoteResult.Score > 1) {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: score out of range"}
+			}
+			if len(remoteResult.Steps) > runvalidation.MaxSteps {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote result: too many steps: max %d", runvalidation.MaxSteps)}
+			}
+			responseLimit := responseOutputLimitBytes(req)
+			for i := range remoteResult.Steps {
+				step := &remoteResult.Steps[i]
+				switch step.Status {
+				case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusMLE, model.RunStatusWLE, model.RunStatusRE, model.RunStatusInitFail:
+				default:
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote step result status: %q", step.Status)}
+				}
+				if step.TimeMs < 0 || step.WallTimeMs < 0 || step.CPUTimeMs < 0 || step.ProcessCPUTimeMs < 0 || step.MemoryKB < 0 || step.HandoffBytes < 0 {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative measurement"}
+				}
+				if len(step.Stdout) > responseLimit {
+					step.Stdout = clipUTF8([]byte(step.Stdout), responseLimit)
+					step.StdoutTruncated = true
+				}
+				if len(step.Stderr) > responseLimit {
+					step.Stderr = clipUTF8([]byte(step.Stderr), responseLimit)
+					step.StderrTruncated = true
+				}
+			}
+			if len(remoteResult.SidecarOutputs) > maxSidecarOutputSpecs || len(remoteResult.SidecarErrors) > maxSidecarOutputSpecs {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: too many sidecar entries"}
+			}
+			requestedSidecars := make(map[string]struct{}, len(req.SidecarOutputs))
+			for _, sidecar := range req.SidecarOutputs {
+				if clean, err := util.ValidateRelativePath(sidecar.Path); err == nil {
+					requestedSidecars[clean] = struct{}{}
+				}
+			}
+			seenSidecars := make(map[string]struct{}, len(remoteResult.SidecarOutputs))
+			var sidecarBytes int
+			for i, sidecar := range remoteResult.SidecarOutputs {
+				clean, err := util.ValidateRelativePath(sidecar.Path)
+				if err != nil {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote result sidecar[%d].path: %v", i, err)}
+				}
+				if _, requested := requestedSidecars[clean]; !requested {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: unrequested sidecar path: " + clean}
+				}
+				if _, duplicate := seenSidecars[clean]; duplicate {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: duplicate sidecar path: " + clean}
+				}
+				seenSidecars[clean] = struct{}{}
+				decoded, err := base64.StdEncoding.DecodeString(sidecar.DataB64)
+				if err != nil {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote result sidecar[%d].data_b64", i)}
+				}
+				if len(decoded) > maxCapturedFileBytes {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: sidecar too large: " + clean}
+				}
+				sidecarBytes += len(decoded)
+				if sidecarBytes > maxCapturedSidecarTotalBytes {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: sidecar total size exceeded"}
+				}
+			}
+			for i, sidecarErr := range remoteResult.SidecarErrors {
+				clean, err := util.ValidateRelativePath(sidecarErr.Path)
+				if err != nil {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote result sidecar error[%d].path: %v", i, err)}
+				}
+				if _, requested := requestedSidecars[clean]; !requested {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: unrequested sidecar error path: " + clean}
+				}
+			}
+			if len(remoteResult.Stdout) > responseLimit {
+				remoteResult.Stdout = clipUTF8([]byte(remoteResult.Stdout), responseLimit)
+				remoteResult.StdoutTruncated = true
+			}
+			if len(remoteResult.Stderr) > responseLimit {
+				remoteResult.Stderr = clipUTF8([]byte(remoteResult.Stderr), responseLimit)
+				remoteResult.StderrTruncated = true
+			}
+			remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
+			return remoteResult
 		}
 	}
 }

@@ -224,6 +224,86 @@ func TestRemoteRunnerCompileTimesOutIdleSSEStream(t *testing.T) {
 	}
 }
 
+func TestRemoteRunnerCompileAbsoluteDeadlineCannotBeExtendedByHeartbeats(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		ticker := time.NewTicker(5 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-ticker.C:
+				_, _ = io.WriteString(w, ": heartbeat\n\n")
+				flusher.Flush()
+			}
+		}
+	}))
+	defer remote.Close()
+
+	runner := &remoteRunner{
+		client:          remote.Client(),
+		compileURL:      remote.URL + "/compile",
+		idleTimeout:     20 * time.Millisecond,
+		absoluteTimeout: 60 * time.Millisecond,
+	}
+	resp := runner.Run(context.Background(), &model.CompileRequest{Lang: "PYTHON3"})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "absolute deadline") {
+		t.Fatalf("response = %+v, want absolute deadline failure", resp)
+	}
+}
+
+func TestRemoteRunnerCompileAbsoluteDeadlineIncludesBuildLimitAndOverhead(t *testing.T) {
+	var remaining time.Duration
+	runner := &remoteRunner{
+		client: &http.Client{Transport: compileRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			deadline, ok := req.Context().Deadline()
+			if !ok {
+				t.Fatal("remote request context has no deadline")
+			}
+			remaining = time.Until(deadline)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"OK\"}\n\n")),
+			}, nil
+		})},
+		compileURL: "http://remote.example/compile",
+	}
+	resp := runner.Run(context.Background(), &model.CompileRequest{Lang: "PYTHON3"})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("response = %+v", resp)
+	}
+	want := buildTimeout + remoteio.DefaultOperationOverhead
+	if remaining < want-time.Second || remaining > want+time.Second {
+		t.Fatalf("remote deadline remaining = %s, want about %s", remaining, want)
+	}
+}
+
+func TestRemoteRunnerCompileRejectsInvalidResultContract(t *testing.T) {
+	for _, payload := range []string{
+		`{}`,
+		`{"status":"Not A Compile Status"}`,
+		`{"status":"OK","artifacts":[{"name":"Main","data_b64":"!!!!"}]}`,
+	} {
+		t.Run(payload, func(t *testing.T) {
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, "event: result\ndata: "+payload+"\n\n")
+			}))
+			defer remote.Close()
+
+			runner := &remoteRunner{client: remote.Client(), compileURL: remote.URL + "/compile"}
+			resp := runner.Run(context.Background(), &model.CompileRequest{Lang: "PYTHON3"})
+			if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "invalid remote result") {
+				t.Fatalf("response = %+v, want invalid remote result", resp)
+			}
+		})
+	}
+}
+
 func TestRemoteRunnerCompileRejectsProtocolVersionMismatch(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

@@ -3,6 +3,7 @@ package compile
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/util"
 )
 
 const cloudRunMetadataIdentityURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
@@ -29,6 +31,7 @@ type remoteRunner struct {
 	audience         string
 	metadataURL      string
 	idleTimeout      time.Duration
+	absoluteTimeout  time.Duration
 	uploadTimeout    time.Duration
 	errorBodyTimeout time.Duration
 	strictProto      bool
@@ -64,7 +67,11 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote request encode failed: " + err.Error()}
 	}
 
-	streamCtx, cancelStream := context.WithCancel(ctx)
+	absoluteTimeout := r.absoluteTimeout
+	if absoluteTimeout <= 0 {
+		absoluteTimeout = buildTimeout + remoteio.DefaultOperationOverhead
+	}
+	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()
 
 	httpReq, err := http.NewRequestWithContext(streamCtx, http.MethodPost, r.compileURL, bytes.NewReader(body))
@@ -88,6 +95,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 	if err != nil {
 		if finishUpload() {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile request upload timed out"}
+		}
+		if errors.Is(streamCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile absolute deadline exceeded"}
 		}
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile request failed: " + err.Error()}
 	}
@@ -139,6 +149,7 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 		})
 	}
 	result := model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream ended without result"}
+	remoteErrorReason := ""
 
 	for {
 		event, err := reader.Next()
@@ -149,6 +160,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 			if streamCtx.Err() != nil && ctx.Err() == nil {
 				if finishUpload() {
 					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile request upload timed out"}
+				}
+				if errors.Is(streamCtx.Err(), context.DeadlineExceeded) {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile absolute deadline exceeded"}
 				}
 				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile stream idle timeout exceeded"}
 			}
@@ -163,13 +177,51 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote error decode failed: " + err.Error()}
 			}
 			if strings.TrimSpace(remoteErr.Message) != "" {
-				result.Reason = remoteErr.Message
+				remoteErrorReason = remoteErr.Message
 			}
 		case "result":
-			if err := json.Unmarshal([]byte(event.Data), &result); err != nil {
-				result = model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote result decode failed: " + err.Error()}
+			var remoteResult model.CompileResponse
+			if err := json.Unmarshal([]byte(event.Data), &remoteResult); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote result decode failed: " + err.Error()}
 			}
-			return capCompileResponseOutput(result)
+			if strings.TrimSpace(remoteResult.Reason) == "" {
+				remoteResult.Reason = remoteErrorReason
+			}
+			switch remoteResult.Status {
+			case model.CompileStatusOK, model.CompileStatusCompileError, model.CompileStatusTimeout, model.CompileStatusInvalid, model.CompileStatusInternal:
+			default:
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("invalid remote result status: %q", remoteResult.Status)}
+			}
+			if len(remoteResult.Artifacts) > maxSourceFiles {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("invalid remote result: too many artifacts: max %d", maxSourceFiles)}
+			}
+			seenArtifacts := make(map[string]struct{}, len(remoteResult.Artifacts))
+			var artifactBytes int64
+			for i, artifact := range remoteResult.Artifacts {
+				if artifact.Mode != "" && artifact.Mode != "exec" {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("invalid remote result artifact[%d].mode: %q", i, artifact.Mode)}
+				}
+				cleanName, err := util.ValidateRelativePath(artifact.Name)
+				if err != nil {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("invalid remote result artifact[%d].name: %v", i, err)}
+				}
+				if _, duplicate := seenArtifacts[cleanName]; duplicate {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "invalid remote result: duplicate artifact path: " + cleanName}
+				}
+				seenArtifacts[cleanName] = struct{}{}
+				decoded, err := base64.StdEncoding.DecodeString(artifact.DataB64)
+				if err != nil {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("invalid remote result artifact[%d].data_b64: %v", i, err)}
+				}
+				if len(decoded) > maxArtifactBytes {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("invalid remote result: artifact too large: %s", cleanName)}
+				}
+				artifactBytes += int64(len(decoded))
+				if artifactBytes > maxArtifactTotalBytes {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "invalid remote result: artifact total size exceeded"}
+				}
+			}
+			return capCompileResponseOutput(remoteResult)
 		}
 	}
 }
