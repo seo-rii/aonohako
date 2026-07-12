@@ -12,6 +12,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/security"
 )
 
 func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
@@ -51,6 +52,21 @@ func TestSandboxCommandBaseRecognizesSystemBEAMRuntime(t *testing.T) {
 	}
 	if got := addressSpaceLimitBytes(sandboxCommandBase(command, "/work/run-1"), 768); got < 8<<30 {
 		t.Fatalf("BEAM address-space limit = %d, want at least 8 GiB", got)
+	}
+}
+
+func TestSandboxCommandBaseRecognizesSystemRRuntime(t *testing.T) {
+	command := []string{
+		"/usr/bin/env",
+		"R_HOME=/usr/lib/R",
+		"/usr/lib/R/bin/exec/R",
+	}
+	commandBase := sandboxCommandBase(command, "/work/run-1")
+	if commandBase != "R" {
+		t.Fatalf("sandboxCommandBase() = %q, want trusted R runtime", commandBase)
+	}
+	if got, want := security.OpenFileLimitForCommand(commandBase), security.OpenFileLimitForCommand("R"); got != want {
+		t.Fatalf("R open-file limit = %d, want %d", got, want)
 	}
 }
 
