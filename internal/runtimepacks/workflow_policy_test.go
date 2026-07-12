@@ -61,3 +61,28 @@ func TestCIWorkflowSmokesEveryProductionProfile(t *testing.T) {
 		t.Fatal("toolchain-profile job must run aonohako-smoke for every production matrix image")
 	}
 }
+
+func TestCIWorkflowRunsPrivilegedExecutionRegressions(t *testing.T) {
+	path := filepath.Join("..", "..", ".github", "workflows", "ci.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+	body := string(data)
+	start := strings.Index(body, "\n  sandbox:")
+	end := strings.Index(body, "\n  runtime-matrix:")
+	if start < 0 || end <= start {
+		t.Fatal("ci workflow is missing the sandbox job")
+	}
+	sandboxJob := body[start:end]
+	for _, testName := range []string{
+		"TestSandboxSecurityRegressionSuite",
+		"TestRunBlocksForkForSubmittedTrustedRuntimeName",
+		"TestRunSPJRejectsTruncatedScore",
+		"TestRunInteractiveEnforcesInteractorWallLimit",
+	} {
+		if !strings.Contains(sandboxJob, testName) {
+			t.Errorf("sandbox job does not run privileged regression %s", testName)
+		}
+	}
+}
