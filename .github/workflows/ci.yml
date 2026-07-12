@@ -23,15 +23,15 @@ jobs:
   policy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - run: chmod +x scripts/check_repo_policy.sh
       - run: ./scripts/check_repo_policy.sh
 
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
       - run: go test ./...
@@ -40,27 +40,27 @@ jobs:
   supply-chain:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
   image-sbom:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh scripts/install_anchore_tool.sh
       - run: ./scripts/build_runtime_images.sh -mode ci -only ci-python -tag-prefix "aonohako-sbom"
       - run: |
           scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
           "${RUNNER_TEMP}/anchore-bin/syft" "aonohako-sbom:ci-python" -o spdx-json=sbom-ci-python.spdx.json
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: sbom-ci-python
@@ -70,7 +70,7 @@ jobs:
           "${RUNNER_TEMP}/anchore-bin/grype" "aonohako-sbom:ci-python" -o json > grype-ci-python.json
           python3 scripts/check_grype_report.py grype-ci-python.json
         if: ${{ !cancelled() }}
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: grype-ci-python
@@ -79,11 +79,11 @@ jobs:
   sandbox:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh
       - run: ./scripts/build_runtime_images.sh -mode ci -only ci-python -tag-prefix "aonohako-ci-sandbox"
@@ -102,8 +102,8 @@ jobs:
       ci_matrix: ${{ steps.matrix.outputs.ci_matrix }}
       production_matrix: ${{ steps.matrix.outputs.production_matrix }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
       - id: matrix
@@ -126,11 +126,11 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.runtime-matrix.outputs.ci_matrix) }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh scripts/smoke_runtime.sh
       - run: ./scripts/build_runtime_images.sh -mode ci -only "${{ matrix.name }}" -tag-prefix "aonohako-ci"
@@ -149,16 +149,17 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.runtime-matrix.outputs.production_matrix) }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
           cache: false
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh scripts/report_toolchain_versions.sh scripts/install_anchore_tool.sh
       - run: mkdir -p "toolchain-artifacts/${{ matrix.name }}"
       - run: ./scripts/build_runtime_images.sh -mode production -only "${{ matrix.name }}" -tag-prefix "aonohako-ci-prod"
+      - run: docker run --rm "aonohako-ci-prod:${{ matrix.name }}" aonohako-smoke
       - run: |
           chmod -R u+w "${GOMODCACHE}" 2>/dev/null || true
           rm -rf "${GOCACHE}" "${GOMODCACHE}" /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* || true
@@ -206,7 +207,7 @@ jobs:
           docker image prune -f
           exit "${scan_status}"
         if: ${{ !cancelled() }}
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: toolchain-profile-${{ matrix.name }}
@@ -224,8 +225,8 @@ jobs:
       - runtime-matrix
       - toolchain-profile
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: toolchain-profile-*
           path: toolchain-artifacts
@@ -266,7 +267,7 @@ jobs:
         if: steps.bundle.outputs.has_artifacts == 'true'
         env:
           PRODUCTION_MATRIX: ${{ needs.runtime-matrix.outputs.production_matrix }}
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: steps.bundle.outputs.has_artifacts == 'true'
         with:
           name: toolchain-summary-bundle
@@ -291,11 +292,11 @@ jobs:
       - supply-chain
       - sandbox
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh
       - run: ./scripts/build_runtime_images.sh -mode production -only type-i -tag-prefix "aonohako-ci-mix"
