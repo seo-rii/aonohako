@@ -58,7 +58,7 @@ func selectPrimarySource(workDir string, sources []model.Source, exts []string, 
 			continue
 		}
 		clean := filepath.Clean(src.Name)
-		rank := bestRank
+		rank := len(preferredBases) + 1
 		if value, ok := preferred[strings.ToLower(filepath.Base(clean))]; ok {
 			rank = value
 		}
