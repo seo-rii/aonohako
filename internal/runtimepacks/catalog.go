@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var catalogIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*$`)
+var catalogIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 type InstallSpec struct {
 	Shared       []string `yaml:"shared"`

@@ -38,7 +38,7 @@ for specification in sys.argv[2:]:
     if profile in expected_profile_languages:
         fail(f"duplicate expected profile name {profile!r}")
     languages = [language.strip() for language in raw_languages.split(",")]
-    if any(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", language) is None for language in languages):
+    if any(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", language) is None for language in languages):
         fail(f"invalid expected language inventory for {profile!r}")
     if len(languages) != len(set(languages)):
         fail(f"duplicate expected language for {profile!r}")

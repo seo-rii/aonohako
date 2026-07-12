@@ -162,6 +162,15 @@ profiles: {}
 			want: "language name",
 		},
 		{
+			name: "docker-unsafe language name",
+			body: `
+languages:
+  c++: {}
+profiles: {}
+`,
+			want: "language name",
+		},
+		{
 			name: "unsafe profile name",
 			body: `
 languages:
