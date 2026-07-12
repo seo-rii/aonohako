@@ -86,7 +86,7 @@ error.
   "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
   "enable_network": false,                   // outbound network request flag; honored only when server policy allows request-controlled network
-  "entry_point": "src/main.py",              // optional submitted file path to run; JVM/BEAM runtimes use class/module entry names
+  "entry_point": "src/main.py",              // optional submitted file path to run; some runtimes use a class/module/procedure/top-level name
   "spj": {                                   // optional special judge
     "binary": {                              // pre-compiled SPJ binary
       "name": "checker",
@@ -125,10 +125,12 @@ error.
 working directory, so scripts can read adjacent data files such as CSV fixtures
 by relative path. For path-based runtimes (`binary`, Python, Ruby, JavaScript,
 text, and similar), `entry_point` must be a submitted file path and selects the
-primary file to execute. For Java, Scala, Groovy, and Erlang, `entry_point`
-keeps its existing class/module meaning instead of selecting a file path; JVM
-class names are validated before they are written into generated manifests or
-command arguments.
+primary file to execute. Java, Scala, and Groovy use it as a class name; Erlang
+uses a module/function entry; GDL uses a procedure name; and VHDL uses a top
+level. These non-path values are validated before they reach generated
+manifests or command arguments. Because GDL sources are compiled through its
+interactive command channel, submitted GDL paths are limited to ASCII letters,
+digits, `.`, `_`, `-`, and `/`.
 
 `limits.time_ms` and `limits.memory_mb` are required and bounded at the API
 boundary. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
@@ -150,9 +152,10 @@ Source, binary, expected-output, and stdin fields that support a `*_url` or
 `data_url` alternative may fetch only public HTTP(S) destinations. URL
 credentials and destinations resolving to loopback, private, link-local,
 multicast, unspecified, or reserved address space are rejected at connection
-time and after every redirect. URL-backed artifacts consume the same decoded
-aggregate byte budgets as inline base64 payloads; invalid collection counts or
-paths are rejected before any outbound request is made.
+time and after every redirect. Execute binaries in the top-level, `programs`,
+SPJ, and interactor fields share one request-wide 48 MiB decoded budget across
+inline base64 and URL-backed payloads; invalid collection counts or paths are
+rejected before any outbound request is made.
 
 ### Two-step execute mode
 
@@ -209,6 +212,9 @@ requires `handoff.path` and captures that file through the same symlink-safe
 output path as `file_outputs`. `handoff.max_bytes` defaults to the step output
 capture limit and is capped at 8 MiB. A step that sets `stdin_from` must not
 also set `stdin`; the handoff stream is the only stdin source for that step.
+All `stdin_url` and text-part `data_url` downloads used by the two steps share
+one cumulative 60-second download budget. Time spent running a sandbox between
+completed downloads does not consume that budget.
 
 ## `POST /execute` — Response
 

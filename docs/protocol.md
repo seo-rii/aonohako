@@ -171,11 +171,11 @@ Both `/compile` and `/execute` share the same bounded queue:
   `runtime_profile` values, invalid `problem_id` values, profile conflicts with
   problem policy, and policy-disabled direct profile requests before acquiring
   a stream or queue slot.
-- `/execute` rejects oversized `stdin` / `expected_stdout`, out-of-range run
-  limits, invalid or unknown `runtime_profile` values, invalid `problem_id`
-  values, profile conflicts with problem policy, policy-disabled direct profile
-  requests, and disallowed `enable_network=true` before acquiring a stream or
-  queue slot.
+- `/execute` rejects oversized `stdin` / `expected_stdout`, a request-wide
+  decoded binary total over 48 MiB, out-of-range run limits, invalid or unknown
+  `runtime_profile` values, invalid `problem_id` values, profile conflicts with
+  problem policy, policy-disabled direct profile requests, and disallowed
+  `enable_network=true` before acquiring a stream or queue slot.
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `1` for
   `embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`,
   otherwise `max(1, cpu−2)`). The `embedded + helper` backend rejects values
@@ -203,6 +203,10 @@ Both `/compile` and `/execute` share the same bounded queue:
 - **Request body read timeout**: `AONOHAKO_BODY_READ_TIMEOUT_SEC` (default:
   `30`). This bounds the HTTP request-body upload window before the response
   switches to SSE streaming.
+- **SSE write timeout**: each initial flush and event write has a 10-second
+  deadline. The deadline is cleared while a healthy stream is idle; a slow or
+  disconnected reader cancels active work and releases its queue and stream
+  capacity.
 - **Remote SSE idle timeout**: `AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` (default:
   `30`). This bounds how long a remote `/compile` or `/execute` stream may stay
   silent before the control plane cancels it.

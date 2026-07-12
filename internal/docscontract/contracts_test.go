@@ -31,15 +31,18 @@ func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 		"`limits.time_ms` and `limits.memory_mb` are required and bounded at the API\nboundary",
 		"`spj.limits` uses the same\nupper caps",
 		"`entry_point` must be a submitted file path and selects the\nprimary file to execute",
-		"For Java, Scala, Groovy, and Erlang, `entry_point`\nkeeps its existing class/module meaning",
-		"JVM\nclass names are validated",
+		"GDL uses a procedure name; and VHDL uses a top\nlevel",
+		"These non-path values are validated before they reach generated\nmanifests or command arguments",
+		"submitted GDL paths are limited to ASCII letters,\ndigits, `.`, `_`, `-`, and `/`",
 		"| PYTHON3 | `python` | `python3 -I -S -m compileall` |",
 		"| PYPY3 | `pypy` | `pypy3 -I -S -m compileall` |",
 		"at most one path is supported",
 		"capture failure is reported as `Runtime Error`",
 		"`verdict_source` is diagnostic and non-authoritative",
 		"fields that support a `*_url` or\n`data_url` alternative may fetch only public HTTP(S) destinations",
-		"invalid collection counts or\npaths are rejected before any outbound request is made",
+		"invalid collection counts or paths are\nrejected before any outbound request is made",
+		"share one request-wide 48 MiB decoded budget across\ninline base64 and URL-backed payloads",
+		"share\none cumulative 60-second download budget",
 	}
 
 	for _, want := range wants {
@@ -75,7 +78,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"forwards `log`, `image`, `error`, and `result`",
 		"Workspace Limit Exceeded",
 		"`/compile` rejects missing sources, more than 512 sources, source files over\n  16 MiB decoded, source totals over 48 MiB decoded, and invalid or unknown\n  `runtime_profile` values, invalid `problem_id` values, profile conflicts with\n  problem policy, and policy-disabled direct profile requests before acquiring\n  a stream or queue slot",
-		"`/execute` rejects oversized `stdin` / `expected_stdout`, out-of-range run\n  limits, invalid or unknown `runtime_profile` values, invalid `problem_id`\n  values, profile conflicts with problem policy, policy-disabled direct profile\n  requests, and disallowed `enable_network=true` before acquiring a stream or\n  queue slot",
+		"`/execute` rejects oversized `stdin` / `expected_stdout`, a request-wide\n  decoded binary total over 48 MiB",
+		"each initial flush and event write has a 10-second\n  deadline",
 		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
 		"`verdict_source` is optional diagnostic metadata",
 		"`AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
@@ -158,6 +162,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`") {
 		t.Fatalf("architecture.md must describe the remote SSE idle timeout env")
 	}
+	if !strings.Contains(architecture, "authenticated remote runner URLs must use HTTPS outside `dev`") || !strings.Contains(architecture, "metadata requests use a dedicated HTTP transport\n  that never consults process proxy environment variables") {
+		t.Fatalf("architecture.md must describe authenticated transport and metadata proxy isolation")
+	}
 	if !strings.Contains(architecture, "remote runner SSE responses are parsed with bounded line, event, and stream\n  sizes") || !strings.Contains(architecture, "SSE idle heartbeat timeouts") {
 		t.Fatalf("architecture.md must describe remote SSE bounds and idle timeout")
 	}
@@ -230,7 +237,10 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "Syft SBOM") || !strings.Contains(architecture, "every production runtime profile artifact") || !strings.Contains(architecture, "Syft and Grype operational failures fail the\nprofile matrix leg") || !strings.Contains(architecture, "root-backed Python runtime additionally rejects fixable\nHigh or Critical findings") {
 		t.Fatalf("architecture.md must describe production runtime SBOM and fail-closed scan policy")
 	}
-	if !strings.Contains(architecture, "fail-closed production profile artifact verification step") || !strings.Contains(architecture, "SBOM JSON, Grype JSON, summary, image archive, per-archive SHA256 sidecar, and\n  consolidated `SHA256SUMS` entries") {
+	if !strings.Contains(architecture, "Catalog `shared_installs` may be referenced by profiles, languages, or other\nshared blocks") || !strings.Contains(architecture, "expanded only once per generated image") {
+		t.Fatalf("architecture.md must describe shared runtime installation expansion")
+	}
+	if !strings.Contains(architecture, "fail-closed production profile artifact verification step") || !strings.Contains(architecture, "SBOM JSON, Grype JSON, and toolchain summary to be semantically complete") || !strings.Contains(architecture, "valid profile-bound skip diagnostic") || !strings.Contains(architecture, "expected production-profile inventory and sorted manifest to match the\n  uploaded bundle exactly") || !strings.Contains(architecture, "verified SPDX and Grype evidence") || !strings.Contains(architecture, "per-profile language inventories come directly from the\nproduction runtime matrix") || !strings.Contains(architecture, "exact `aonohako-ci-prod:<profile>` image") || !strings.Contains(architecture, "Artifact-download failure or an empty profile directory set fails\nthat job") || !strings.Contains(architecture, "per-archive sidecars use canonical paths\nrelative to the bundle root") {
 		t.Fatalf("architecture.md must describe production runtime artifact verification")
 	}
 	if !strings.Contains(architecture, "prevention of replacing the running process with another world-executable\n  binary from the runtime image") {

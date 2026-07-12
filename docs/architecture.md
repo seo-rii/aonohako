@@ -522,12 +522,15 @@ The following checks are enforced before the HTTP server starts:
 - unsupported runtime security contracts fail startup before request handling
 - `remote` transport requires `AONOHAKO_REMOTE_RUNNER_URL`
 - `AONOHAKO_REMOTE_RUNNER_AUTH=none` is rejected outside `dev`
+- authenticated remote runner URLs must use HTTPS outside `dev`
 - `remote + bearer` requires `AONOHAKO_REMOTE_RUNNER_TOKEN`
 - `remote + cloudrun-idtoken` defaults its audience to the remote runner URL if
   `AONOHAKO_REMOTE_RUNNER_AUDIENCE` is unset
 - remote runner SSE responses are parsed with bounded line, event, and stream
   sizes, and the remote HTTP transport sets dial, TLS handshake, response
   header, idle connection, and SSE idle heartbeat timeouts
+- Cloud Run identity-token metadata requests use a dedicated HTTP transport
+  that never consults process proxy environment variables
 - remote runner protocol-version headers fail closed when missing or unsupported
   in strict mode; `dev` can opt into the backward-compatible policy that accepts
   missing headers while still rejecting unsupported present values
@@ -636,8 +639,9 @@ Recommended Cloud Run deployment baseline:
 - firewall-denied outbound traffic except for explicitly allowed destinations
 
 For a Cloud Run API/control-plane service that forwards `/compile` and
-`/execute` to a separate runner, use `cloudrun + remote + none` with the same bounded
-`AONOHAKO_WORK_ROOT` requirement and a private `AONOHAKO_REMOTE_RUNNER_URL`.
+`/execute` to a separate runner, use `cloudrun + remote` with Cloud Run
+identity-token authentication, the same bounded `AONOHAKO_WORK_ROOT`
+requirement, and a private HTTPS `AONOHAKO_REMOTE_RUNNER_URL`.
 
 Recommended non-Cloud-Run control-plane baseline:
 
@@ -685,6 +689,9 @@ dedicated writable filesystem view for each execution.
 
 Runtime images are generated from [`runtime-images.yml`](../runtime-images.yml).
 One catalog drives both production images and CI smoke images.
+Catalog `shared_installs` may be referenced by profiles, languages, or other
+shared blocks; dependencies are validated as acyclic and each shared block is
+expanded only once per generated image.
 
 Production profiles currently group languages like this:
 
@@ -717,9 +724,9 @@ production profiles in a parallel matrix and runs
 contains the compiler/runtime version table and a language-specific compile
 options table so CI summaries show both the installed toolchain and the flags or
 compile pipeline used by the service. Each matrix leg tries to create a
-`docker save` archive and SHA256 sidecar before best-effort scanner exports in
-workflows that enable archive export. The current CI workflow skips the archive
-export to conserve runner storage and writes an archive diagnostic JSON instead.
+`docker save` archive and SHA256 sidecar in workflows that enable archive
+export. The current CI workflow skips that export to conserve runner storage and
+writes a profile-bound archive diagnostic JSON instead.
 It then uploads its summary fragment, Syft SBOM JSON, Grype JSON scan, and image
 archive diagnostic as artifacts. Syft and Grype operational failures fail the
 profile matrix leg instead of being replaced by successful-looking JSON
@@ -727,14 +734,27 @@ sentinels. The smaller root-backed Python runtime additionally rejects fixable
 High or Critical findings, while the heterogeneous production profiles retain
 their reports for profile-specific distro and bundled-toolchain upgrade review.
 The workflow prunes build cache, Go caches, and scanner temp/cache directories
-around those exports. The summary verifier also fails closed on missing, empty,
-non-JSON, or scanner-error artifact files. A final CI summary job downloads
-those artifacts, concatenates the per-profile reports into one GitHub Actions
-summary, and republishes the summaries plus archive diagnostics as a single
-bundle artifact. Because archive export is skipped in the default CI workflow,
-`SHA256SUMS` is empty unless a workflow variant produces real `.docker.tar.gz`
-archives; profiles with archive diagnostic JSON do not provide promotion-ready
-image bytes from that CI run.
+around those exports. The summary verifier also fails closed on missing or
+semantically incomplete SPDX/Grype JSON, failed toolchain version probes,
+missing required runtime probes, malformed archive diagnostics, an incomplete
+production-profile inventory, and missing or digest-mismatched archives. The
+expected profile and per-profile language inventories come directly from the
+production runtime matrix. Every profile summary, SPDX document, and Grype
+report must identify the exact `aonohako-ci-prod:<profile>` image; SPDX evidence
+must be a populated SPDX 2.3 document produced by Syft, and Grype evidence must
+contain the pinned scanner descriptor, image source, distro metadata, and
+structurally valid matches.
+
+A final CI summary job downloads those artifacts, concatenates the per-profile
+reports into one GitHub Actions summary, and republishes the summaries,
+SPDX/Grype evidence, and archives or archive diagnostics as a single bundle
+artifact. Artifact-download failure or an empty profile directory set fails
+that job. Its sorted manifest is generated from exactly that upload inventory,
+and consolidated `SHA256SUMS` paths and per-archive sidecars use canonical paths
+relative to the bundle root. Because archive export is skipped in the default
+CI workflow, `SHA256SUMS` is empty unless a workflow variant produces real
+`.docker.tar.gz` archives; profiles with archive diagnostic JSON do not provide
+promotion-ready image bytes from that CI run.
 
 Debian-based production profiles now use a digest-pinned
 `debian:trixie-slim` base, which raises the baseline Python, PyPy, and GCC
@@ -803,9 +823,11 @@ The repository verifies the design through:
   while reports are retained for diagnosis; the sandbox runtime also rejects
   fixable High or Critical findings
 - a fail-closed production profile artifact verification step that requires the
-  SBOM JSON, Grype JSON, summary, image archive, per-archive SHA256 sidecar, and
-  consolidated `SHA256SUMS` entries to be present and digest-consistent before
-  the summary bundle is uploaded
+  SBOM JSON, Grype JSON, and toolchain summary to be semantically complete;
+  requires either an image archive with consistent sidecar and consolidated
+  `SHA256SUMS` entries or a valid profile-bound skip diagnostic; and requires
+  the expected production-profile inventory and sorted manifest to match the
+  uploaded bundle exactly, including the verified SPDX and Grype evidence
 - repository policy checks that require Dockerfile base images to be
   digest-pinned or routed through digest-pinned build arguments
 - regression tests for sandbox escape attempts such as network use, process

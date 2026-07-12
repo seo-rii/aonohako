@@ -25,6 +25,9 @@ binary, configurable runtime images, and testable build metadata.
 ## Runtime image model
 
 The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
+Reusable `shared_installs` blocks hold toolchains needed by several languages;
+each referenced block is expanded once per generated image while direct
+language-specific commands keep their declared order.
 
 - Production mode builds grouped images such as `type-i` for common C/C++,
   Python, PyPy, and Java judge workloads, `type-a` for lighter scripting and
@@ -43,8 +46,12 @@ The runtime catalog lives in [`runtime-images.yml`](runtime-images.yml).
   diagnostics. Docker archive export is currently skipped in CI to conserve
   runner storage; each profile records an archive diagnostic JSON instead. A
   final CI job downloads those artifacts, publishes one consolidated GitHub
-  Actions summary, and re-uploads the collected summaries and diagnostics as a
-  single bundle.
+  Actions summary, verifies the exact profile and language inventories from the
+  production matrix, binds each summary/SBOM/scan report to its expected image,
+  and uploads the exact sorted manifest of summaries, SBOM/scan evidence, and
+  archives or skip diagnostics as a single bundle. Missing downloads, empty
+  profile sets, failed probes, malformed evidence, and non-portable archive
+  checksum paths fail the summary job.
 - The current catalog covers native binaries, Python plus bundled judge
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
@@ -296,7 +303,8 @@ aonohako-selftest cgroup-preflight
   `memory.oom.group=1`.
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
   `aonohako` runner service and must be an absolute `http(s)` URL without
-  embedded credentials, query strings, or fragments
+  embedded credentials, query strings, or fragments. Outside `dev`, bearer and
+  Cloud Run identity-token authentication require an `https` URL.
 - `AONOHAKO_REMOTE_RUNNER_AUTH` can be `none`, `bearer`, or
   `cloudrun-idtoken`; `none` is allowed only for `dev`
 - `AONOHAKO_REMOTE_RUNNER_TOKEN` provides the bearer token when
@@ -320,9 +328,10 @@ Per-request execution limits are part of the `/execute` payload:
   Server-side payload downloads reject URL credentials and any destination
   that resolves to loopback, private, link-local, multicast, unspecified, or
   otherwise reserved address space. The same policy is enforced for every
-  redirect and at connection time. URL-backed artifacts share the same decoded
-  aggregate byte limits as inline payloads and are resolved only after request
-  structure and collection counts pass validation.
+  redirect and at connection time. All execute binaries across top-level,
+  program, SPJ, and interactor fields share one request-wide 48 MiB decoded
+  budget across inline and URL-backed payloads. URLs are resolved only after
+  request structure and collection counts pass validation.
 - `enable_network`
   Cloud Run embedded-helper runners reject `true`. Self-hosted embedded-helper
   runners honor it only when `AONOHAKO_ALLOW_REQUEST_NETWORK=true`, and then
