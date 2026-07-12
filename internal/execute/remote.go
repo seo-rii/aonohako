@@ -20,14 +20,16 @@ import (
 const cloudRunMetadataIdentityURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
 
 type remoteRunner struct {
-	client      *http.Client
-	executeURL  string
-	auth        config.RemoteAuthMode
-	bearerToken string
-	audience    string
-	metadataURL string
-	idleTimeout time.Duration
-	strictProto bool
+	client           *http.Client
+	metadataClient   *http.Client
+	executeURL       string
+	auth             config.RemoteAuthMode
+	bearerToken      string
+	audience         string
+	metadataURL      string
+	idleTimeout      time.Duration
+	errorBodyTimeout time.Duration
+	strictProto      bool
 }
 
 func newRemoteRunner(cfg config.Config) Runner {
@@ -36,14 +38,16 @@ func newRemoteRunner(cfg config.Config) Runner {
 		auth = config.RemoteAuthNone
 	}
 	return &remoteRunner{
-		client:      remoteio.NewHTTPClient(),
-		executeURL:  normalizeRemoteExecuteURL(cfg.Execution.Remote.URL),
-		auth:        auth,
-		bearerToken: cfg.Execution.Remote.BearerToken,
-		audience:    cfg.Execution.Remote.Audience,
-		metadataURL: cloudRunMetadataIdentityURL,
-		idleTimeout: cfg.Execution.Remote.SSEIdleTimeout,
-		strictProto: cfg.Execution.Remote.StrictProtocol,
+		client:           remoteio.NewHTTPClient(),
+		metadataClient:   remoteio.NewMetadataHTTPClient(),
+		executeURL:       normalizeRemoteExecuteURL(cfg.Execution.Remote.URL),
+		auth:             auth,
+		bearerToken:      cfg.Execution.Remote.BearerToken,
+		audience:         cfg.Execution.Remote.Audience,
+		metadataURL:      cloudRunMetadataIdentityURL,
+		idleTimeout:      cfg.Execution.Remote.SSEIdleTimeout,
+		errorBodyTimeout: remoteio.DefaultErrorResponseBodyTimeout,
+		strictProto:      cfg.Execution.Remote.StrictProtocol,
 	}
 }
 
@@ -80,7 +84,14 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		errorBodyTimeout := r.errorBodyTimeout
+		if errorBodyTimeout <= 0 {
+			errorBodyTimeout = remoteio.DefaultErrorResponseBodyTimeout
+		}
+		raw, readErr := remoteio.ReadBoundedBodyWithTimeout(resp.Body, cancelStream, remoteio.MaxRemoteErrorResponseBytes, errorBodyTimeout)
+		if readErr != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote execute returned %s but error response body read failed: %v", resp.Status, readErr)}
+		}
 		reason := strings.TrimSpace(string(raw))
 		if reason == "" {
 			reason = resp.Status
@@ -196,12 +207,15 @@ func (r *remoteRunner) authorizationHeader(ctx context.Context) (string, error) 
 			return "", err
 		}
 		httpReq.Header.Set("Metadata-Flavor", "Google")
-		resp, err := r.client.Do(httpReq)
+		resp, err := r.metadataClient.Do(httpReq)
 		if err != nil {
 			return "", err
 		}
 		defer resp.Body.Close()
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		raw, err := remoteio.ReadBoundedBody(resp.Body, remoteio.MaxMetadataIdentityTokenBytes)
+		if err != nil {
+			return "", fmt.Errorf("metadata identity token read failed: %w", err)
+		}
 		if resp.StatusCode != http.StatusOK {
 			return "", fmt.Errorf("metadata server returned %s: %s", resp.Status, strings.TrimSpace(string(raw)))
 		}

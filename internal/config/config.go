@@ -463,6 +463,9 @@ func Load() (Config, error) {
 		if parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
 			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL must not include query or fragment components")
 		}
+		if runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev && execution.Remote.Auth != RemoteAuthNone && parsedURL.Scheme != "https" {
+			return Config{}, fmt.Errorf("AONOHAKO_REMOTE_RUNNER_URL must use https for authenticated remote execution outside dev")
+		}
 		switch execution.Remote.Auth {
 		case RemoteAuthNone:
 			if runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev {

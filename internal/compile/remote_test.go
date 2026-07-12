@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -314,5 +315,192 @@ func TestRemoteRunnerCompileRejectsMalformedErrorEvents(t *testing.T) {
 	})
 	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "remote error decode failed") {
 		t.Fatalf("expected malformed error failure, got %+v", resp)
+	}
+}
+
+func TestRemoteRunnerCompileMetadataAuthUsesProxyDisabledClient(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://proxy.invalid:3128")
+	t.Setenv("http_proxy", "http://proxy.invalid:3128")
+
+	metadata := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Metadata-Flavor"); got != "Google" {
+			t.Errorf("Metadata-Flavor = %q, want Google", got)
+		}
+		if got := r.URL.Query().Get("audience"); got != "https://runner.internal" {
+			t.Errorf("audience = %q, want runner URL", got)
+		}
+		if got := r.URL.Query().Get("format"); got != "full" {
+			t.Errorf("format = %q, want full", got)
+		}
+		_, _ = w.Write([]byte("metadata-token\n"))
+	}))
+	defer metadata.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Remote: config.RemoteExecutorConfig{
+				URL:      "https://runner.internal",
+				Auth:     config.RemoteAuthCloudRunIDToken,
+				Audience: "https://runner.internal",
+			},
+		},
+	}).(*remoteRunner)
+	if runner.metadataClient == runner.client {
+		t.Fatalf("metadata and runner requests must use separate clients")
+	}
+	transport, ok := runner.metadataClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("metadata transport type = %T, want *http.Transport", runner.metadataClient.Transport)
+	}
+	if transport.Proxy != nil {
+		t.Fatalf("metadata transport must not consult HTTP_PROXY")
+	}
+	runner.client = nil
+	runner.metadataURL = metadata.URL
+
+	header, err := runner.authorizationHeader(context.Background())
+	if err != nil {
+		t.Fatalf("authorizationHeader returned error: %v", err)
+	}
+	if header != "Bearer metadata-token" {
+		t.Fatalf("authorization header = %q, want metadata token", header)
+	}
+}
+
+func TestRemoteRunnerCompileRejectsCredentialRedirect(t *testing.T) {
+	var targetRequests atomic.Int64
+	var targetCredentialRequests atomic.Int64
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetRequests.Add(1)
+		if r.Header.Get("Authorization") != "" {
+			targetCredentialRequests.Add(1)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"OK\"}\n\n"))
+	}))
+	defer target.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer compile-secret" {
+			t.Errorf("initial authorization header = %q, want bearer token", got)
+		}
+		http.Redirect(w, r, target.URL+"/compile", http.StatusTemporaryRedirect)
+	}))
+	defer redirect.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{
+			URL:         redirect.URL,
+			Auth:        config.RemoteAuthBearer,
+			BearerToken: "compile-secret",
+		}},
+	})
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "python3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "redirects are not allowed") {
+		t.Fatalf("redirect response = %+v, want rejected remote request", resp)
+	}
+	if got := targetRequests.Load(); got != 0 {
+		t.Fatalf("redirect target requests = %d, want 0", got)
+	}
+	if got := targetCredentialRequests.Load(); got != 0 {
+		t.Fatalf("redirect target credential requests = %d, want 0", got)
+	}
+}
+
+func TestRemoteRunnerCompileMetadataAuthRejectsIncompleteTokens(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler http.HandlerFunc
+		timeout time.Duration
+		want    string
+	}{
+		{
+			name: "partial token timeout",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte("partial-token"))
+				flusher, ok := w.(http.Flusher)
+				if !ok {
+					t.Errorf("response writer does not support flushing")
+					return
+				}
+				flusher.Flush()
+				<-r.Context().Done()
+			},
+			timeout: 100 * time.Millisecond,
+			want:    "deadline exceeded",
+		},
+		{
+			name: "oversized token",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(strings.Repeat("x", remoteio.MaxMetadataIdentityTokenBytes+1)))
+			},
+			want: "response body too large",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			metadata := httptest.NewServer(tc.handler)
+			defer metadata.Close()
+
+			runner := newRemoteRunner(config.Config{
+				Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{
+					URL:      "https://runner.internal",
+					Auth:     config.RemoteAuthCloudRunIDToken,
+					Audience: "https://runner.internal",
+				}},
+			}).(*remoteRunner)
+			runner.metadataURL = metadata.URL
+			if tc.timeout > 0 {
+				runner.metadataClient.Timeout = tc.timeout
+			}
+
+			header, err := runner.authorizationHeader(context.Background())
+			if header != "" || err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("authorizationHeader = (%q, %v), want empty header and %q", header, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestRemoteRunnerCompileBoundsErrorResponseBodyRead(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Errorf("response writer does not support flushing")
+			return
+		}
+		flusher.Flush()
+		<-r.Context().Done()
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{URL: remote.URL}},
+	}).(*remoteRunner)
+	runner.errorBodyTimeout = 100 * time.Millisecond
+	started := time.Now()
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "python3",
+		Sources: []model.Source{{
+			Name:    "Main.py",
+			DataB64: "cHJpbnQoJ29rJykK",
+		}},
+	})
+
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "response body read timed out") {
+		t.Fatalf("stalled error response = %+v, want bounded body-read failure", resp)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("stalled error response returned after %v, want under 1s", elapsed)
 	}
 }

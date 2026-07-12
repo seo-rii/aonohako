@@ -200,6 +200,50 @@ func TestLoadRejectsInvalidRemoteRunnerURLs(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsAuthenticatedHTTPRemoteRunnerOutsideDev(t *testing.T) {
+	tests := []struct {
+		name  string
+		auth  string
+		token string
+	}{
+		{name: "bearer", auth: "bearer", token: "runner-token"},
+		{name: "cloudrun identity token", auth: "cloudrun-idtoken"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "selfhosted")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "http://runner.internal")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", tc.auth)
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_TOKEN", tc.token)
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "must use https") {
+				t.Fatalf("expected authenticated HTTP remote URL rejection, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadAllowsAuthenticatedHTTPRemoteRunnerInDev(t *testing.T) {
+	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+	t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "http://runner.internal")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "bearer")
+	t.Setenv("AONOHAKO_REMOTE_RUNNER_TOKEN", "runner-token")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Execution.Remote.URL != "http://runner.internal" {
+		t.Fatalf("remote URL = %q, want dev HTTP URL", cfg.Execution.Remote.URL)
+	}
+}
+
 func TestLoadRejectsBearerRemoteAuthWithoutToken(t *testing.T) {
 	t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
 	t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
