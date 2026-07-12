@@ -528,7 +528,10 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_REMOTE_RUNNER_AUDIENCE` is unset
 - remote runner SSE responses are parsed with bounded line, event, and stream
   sizes, and the remote HTTP transport sets dial, TLS handshake, response
-  header, idle connection, and SSE idle heartbeat timeouts
+  header, request-upload, idle connection, and SSE idle heartbeat timeouts;
+  successful responses must use the exact `text/event-stream` media type, and
+  endpoint URLs with a trailing slash are normalized without duplicating the
+  `/compile` or `/execute` path
 - Cloud Run identity-token metadata requests use a dedicated HTTP transport
   that never consults process proxy environment variables
 - remote runner protocol-version headers fail closed when missing or unsupported
@@ -741,9 +744,13 @@ production-profile inventory, and missing or digest-mismatched archives. The
 expected profile and per-profile language inventories come directly from the
 production runtime matrix. Every profile summary, SPDX document, and Grype
 report must identify the exact `aonohako-ci-prod:<profile>` image; SPDX evidence
-must be a populated SPDX 2.3 document produced by Syft, and Grype evidence must
-contain the pinned scanner descriptor, image source, distro metadata, and
-structurally valid matches.
+must be a populated SPDX 2.3 document produced by the pinned Syft version, and
+Grype evidence must contain the pinned scanner descriptor, image source, distro
+metadata, and structurally valid matches. A per-profile provenance record binds
+the summary and both scanner reports by SHA256 to the same immutable Docker
+image ID, which must also match Grype's source metadata. The consolidated
+summary must exactly match a fresh aggregation of all verified profile
+fragments, including versions, compile options, and profile attribution.
 
 A final CI summary job downloads those artifacts, concatenates the per-profile
 reports into one GitHub Actions summary, and republishes the summaries,
@@ -764,6 +771,9 @@ also digest pinned. Python judge libraries are pinned in the catalog so rebuilds
 stay reproducible. Deployments that need site-specific Python helpers can pass
 a custom package directory at image build time; its contents are copied into
 `/usr/local/lib/aonohako/python`, which is exported as `PYTHONPATH`.
+Catalog profile, language, and shared-install names are restricted to safe
+identifiers, duplicate languages within a profile are rejected, and the runtime
+builder refuses any catalog `base_image` that is not pinned by SHA256 digest.
 
 The runtime Docker image is also hardened to reduce the readable surface for the
 sandbox UID. Non-essential metadata and package-manager paths are made
@@ -829,7 +839,9 @@ The repository verifies the design through:
   the expected production-profile inventory and sorted manifest to match the
   uploaded bundle exactly, including the verified SPDX and Grype evidence
 - repository policy checks that require Dockerfile base images to be
-  digest-pinned or routed through digest-pinned build arguments
+  digest-pinned or routed through digest-pinned build arguments; the policy
+  strips one leading UTF-8 BOM and rejects heredoc instructions rather than
+  interpreting heredoc bodies as Dockerfile stages
 - regression tests for sandbox escape attempts such as network use, process
   creation, inherited-fd access, and writable scratch bypasses
 - root-backed sandbox regression tests executed inside a runtime container in CI,

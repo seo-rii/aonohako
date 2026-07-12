@@ -47,11 +47,12 @@ language-specific commands keep their declared order.
   runner storage; each profile records an archive diagnostic JSON instead. A
   final CI job downloads those artifacts, publishes one consolidated GitHub
   Actions summary, verifies the exact profile and language inventories from the
-  production matrix, binds each summary/SBOM/scan report to its expected image,
-  and uploads the exact sorted manifest of summaries, SBOM/scan evidence, and
-  archives or skip diagnostics as a single bundle. Missing downloads, empty
-  profile sets, failed probes, malformed evidence, and non-portable archive
-  checksum paths fail the summary job.
+  production matrix, binds each summary/SBOM/scan report and its hashes to one
+  immutable image ID, regenerates the aggregate summary for exact comparison,
+  and uploads the exact sorted manifest of summaries, provenance, SBOM/scan
+  evidence, and archives or skip diagnostics as a single bundle. Missing
+  downloads, empty profile sets, failed probes, malformed evidence, and
+  non-portable archive checksum paths fail the summary job.
 - The current catalog covers native binaries, Python plus bundled judge
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
