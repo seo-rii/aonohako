@@ -12,6 +12,7 @@ import (
 )
 
 type InstallSpec struct {
+	Shared       []string `yaml:"shared"`
 	Apt          []string `yaml:"apt"`
 	Pip          []string `yaml:"pip"`
 	NPM          []string `yaml:"npm"`
@@ -35,8 +36,9 @@ type ProfileSpec struct {
 }
 
 type Catalog struct {
-	Languages map[string]LanguageSpec `yaml:"languages"`
-	Profiles  map[string]ProfileSpec  `yaml:"profiles"`
+	SharedInstalls map[string]InstallSpec  `yaml:"shared_installs"`
+	Languages      map[string]LanguageSpec `yaml:"languages"`
+	Profiles       map[string]ProfileSpec  `yaml:"profiles"`
 }
 
 type ImageSpec struct {
@@ -74,7 +76,55 @@ func LoadCatalog(path string) (Catalog, error) {
 	if catalog.Profiles == nil {
 		catalog.Profiles = map[string]ProfileSpec{}
 	}
+	if catalog.SharedInstalls == nil {
+		catalog.SharedInstalls = map[string]InstallSpec{}
+	}
+	for sharedName, install := range catalog.SharedInstalls {
+		if strings.TrimSpace(sharedName) == "" || sharedName != strings.TrimSpace(sharedName) {
+			return Catalog{}, fmt.Errorf("shared install name %q is invalid", sharedName)
+		}
+		for _, referencedName := range install.Shared {
+			if _, ok := catalog.SharedInstalls[referencedName]; !ok {
+				return Catalog{}, fmt.Errorf("shared install %s references unknown shared install %s", sharedName, referencedName)
+			}
+		}
+	}
+	resolvedShared := make(map[string]bool, len(catalog.SharedInstalls))
+	for len(resolvedShared) < len(catalog.SharedInstalls) {
+		madeProgress := false
+		for sharedName, install := range catalog.SharedInstalls {
+			if resolvedShared[sharedName] {
+				continue
+			}
+			ready := true
+			for _, referencedName := range install.Shared {
+				if !resolvedShared[referencedName] {
+					ready = false
+					break
+				}
+			}
+			if ready {
+				resolvedShared[sharedName] = true
+				madeProgress = true
+			}
+		}
+		if !madeProgress {
+			return Catalog{}, fmt.Errorf("shared install references contain a cycle")
+		}
+	}
+	for languageName, language := range catalog.Languages {
+		for _, sharedName := range language.Install.Shared {
+			if _, ok := catalog.SharedInstalls[sharedName]; !ok {
+				return Catalog{}, fmt.Errorf("language %s references unknown shared install %s", languageName, sharedName)
+			}
+		}
+	}
 	for profileName, profile := range catalog.Profiles {
+		for _, sharedName := range profile.Install.Shared {
+			if _, ok := catalog.SharedInstalls[sharedName]; !ok {
+				return Catalog{}, fmt.Errorf("profile %s references unknown shared install %s", profileName, sharedName)
+			}
+		}
 		for _, lang := range profile.Languages {
 			if _, ok := catalog.Languages[lang]; !ok {
 				return Catalog{}, fmt.Errorf("profile %s references unknown language %s", profileName, lang)
@@ -118,18 +168,45 @@ func (c Catalog) buildImage(name string, profile ProfileSpec, smoke []string) Im
 		Languages: slices.Clone(profile.Languages),
 	}
 	sort.Strings(spec.Languages)
-	spec.AptPackages = append(spec.AptPackages, profile.Install.Apt...)
-	spec.PipPackages = append(spec.PipPackages, profile.Install.Pip...)
-	spec.NPMPackages = append(spec.NPMPackages, profile.Install.NPM...)
-	spec.InstallScript = append(spec.InstallScript, profile.Install.Script...)
-	spec.SandboxTools = append(spec.SandboxTools, profile.Install.SandboxTools...)
+	type pendingInstall struct {
+		sharedName string
+		install    InstallSpec
+	}
+	pending := make([]pendingInstall, 0, len(profile.Install.Shared)+len(spec.Languages)+1)
+	for _, sharedName := range profile.Install.Shared {
+		pending = append(pending, pendingInstall{sharedName: sharedName})
+	}
+	pending = append(pending, pendingInstall{install: profile.Install})
 	for _, lang := range spec.Languages {
 		langSpec := c.Languages[lang]
-		spec.AptPackages = append(spec.AptPackages, langSpec.Install.Apt...)
-		spec.PipPackages = append(spec.PipPackages, langSpec.Install.Pip...)
-		spec.NPMPackages = append(spec.NPMPackages, langSpec.Install.NPM...)
-		spec.InstallScript = append(spec.InstallScript, langSpec.Install.Script...)
-		spec.SandboxTools = append(spec.SandboxTools, langSpec.Install.SandboxTools...)
+		for _, sharedName := range langSpec.Install.Shared {
+			pending = append(pending, pendingInstall{sharedName: sharedName})
+		}
+		pending = append(pending, pendingInstall{install: langSpec.Install})
+	}
+	expandedShared := make(map[string]bool, len(c.SharedInstalls))
+	for len(pending) > 0 {
+		current := pending[0]
+		pending = pending[1:]
+		if current.sharedName != "" {
+			if expandedShared[current.sharedName] {
+				continue
+			}
+			expandedShared[current.sharedName] = true
+			sharedInstall := c.SharedInstalls[current.sharedName]
+			expansion := make([]pendingInstall, 0, len(sharedInstall.Shared)+1)
+			for _, sharedName := range sharedInstall.Shared {
+				expansion = append(expansion, pendingInstall{sharedName: sharedName})
+			}
+			expansion = append(expansion, pendingInstall{install: sharedInstall})
+			pending = append(expansion, pending...)
+			continue
+		}
+		spec.AptPackages = append(spec.AptPackages, current.install.Apt...)
+		spec.PipPackages = append(spec.PipPackages, current.install.Pip...)
+		spec.NPMPackages = append(spec.NPMPackages, current.install.NPM...)
+		spec.InstallScript = append(spec.InstallScript, current.install.Script...)
+		spec.SandboxTools = append(spec.SandboxTools, current.install.SandboxTools...)
 	}
 	spec.AptPackages = dedupeSorted(spec.AptPackages)
 	spec.PipPackages = dedupeSorted(spec.PipPackages)

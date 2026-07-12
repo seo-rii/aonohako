@@ -257,6 +257,14 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadCatalog returned error: %v", err)
 	}
+	ciImages, err := catalog.CILanguageImages()
+	if err != nil {
+		t.Fatalf("CILanguageImages returned error: %v", err)
+	}
+	ciByLanguage := make(map[string]ImageSpec, len(ciImages))
+	for _, image := range ciImages {
+		ciByLanguage[strings.TrimPrefix(image.Name, "ci-")] = image
+	}
 
 	tests := map[string][]string{
 		"aheui":         {"Hello, World!", "Main.aheui"},
@@ -362,11 +370,11 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 	}
 
 	for language, patterns := range tests {
-		spec, ok := catalog.Languages[language]
+		spec, ok := ciByLanguage[language]
 		if !ok {
-			t.Fatalf("missing language %q in catalog", language)
+			t.Fatalf("missing CI image for language %q", language)
 		}
-		body := strings.Join(append(append(append(append([]string{}, spec.Install.Apt...), spec.Install.Pip...), spec.Install.NPM...), append(spec.Install.Script, spec.Smoke.Command...)...), "\n")
+		body := strings.Join(append(append(append(append([]string{}, spec.AptPackages...), spec.PipPackages...), spec.NPMPackages...), append(spec.InstallScript, spec.SmokeCommand...)...), "\n")
 		for _, pattern := range patterns {
 			if !strings.Contains(body, pattern) {
 				t.Fatalf("language %q smoke command must contain %q, got %q", language, pattern, body)
@@ -494,24 +502,67 @@ func TestRepositoryCatalogPinsOfficialNode24Toolchain(t *testing.T) {
 		t.Fatalf("LoadCatalog returned error: %v", err)
 	}
 
-	for _, language := range []string{"javascript", "typescript"} {
+	nodeInstall, ok := catalog.SharedInstalls["node24"]
+	if !ok {
+		t.Fatalf("node24 shared install missing from catalog")
+	}
+	if !reflect.DeepEqual(nodeInstall.Apt, []string{"curl", "xz-utils"}) {
+		t.Fatalf("node24 apt packages = %v, want curl and xz-utils", nodeInstall.Apt)
+	}
+	installScript := strings.Join(nodeInstall.Script, "\n")
+	for _, marker := range []string{
+		"export NODE_VERSION=24.15.0",
+		"https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz",
+		`ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node`,
+		`ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm`,
+	} {
+		if !strings.Contains(installScript, marker) {
+			t.Fatalf("node24 shared install must contain %q, got %q", marker, installScript)
+		}
+	}
+
+	for _, language := range []string{"apl", "javascript", "purescript", "rescript", "typescript"} {
 		spec, ok := catalog.Languages[language]
 		if !ok {
 			t.Fatalf("%s language missing from catalog", language)
 		}
-		if !reflect.DeepEqual(spec.Install.Apt, []string{"curl", "xz-utils"}) {
-			t.Fatalf("%s apt packages = %v, want curl and xz-utils", language, spec.Install.Apt)
+		if !slices.Contains(spec.Install.Shared, "node24") {
+			t.Fatalf("%s shared installs = %v, want node24", language, spec.Install.Shared)
 		}
-		installScript := strings.Join(spec.Install.Script, "\n")
-		for _, marker := range []string{
-			"export NODE_VERSION=24.15.0",
-			"https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz",
-			`ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node`,
-			`ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm`,
-		} {
-			if !strings.Contains(installScript, marker) {
-				t.Fatalf("%s install script must contain %q, got %q", language, marker, installScript)
-			}
+	}
+}
+
+func TestRepositoryCatalogExpandsSharedInstallMarkersOncePerProductionImage(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	production, err := catalog.ProductionImages()
+	if err != nil {
+		t.Fatalf("ProductionImages returned error: %v", err)
+	}
+	images := make(map[string]ImageSpec, len(production))
+	for _, image := range production {
+		images[image.Name] = image
+	}
+
+	tests := []struct {
+		profile string
+		marker  string
+	}{
+		{profile: "type-a", marker: "export NODE_VERSION=24.15.0"},
+		{profile: "type-a", marker: "aonohako-gforth-sid.list"},
+		{profile: "type-b", marker: "export NODE_VERSION=24.15.0"},
+		{profile: "type-c", marker: "libobjc-16-dev"},
+		{profile: "type-c", marker: "export FREEBASIC_VERSION=1.10.1"},
+	}
+	for _, tc := range tests {
+		image, ok := images[tc.profile]
+		if !ok {
+			t.Fatalf("production image %q missing", tc.profile)
+		}
+		if count := strings.Count(strings.Join(image.InstallScript, "\n"), tc.marker); count != 1 {
+			t.Fatalf("%s marker %q count = %d, want 1", tc.profile, tc.marker, count)
 		}
 	}
 }

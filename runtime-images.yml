@@ -1,3 +1,53 @@
+shared_installs:
+  node24:
+    apt:
+      - curl
+      - xz-utils
+    script:
+      - export NODE_VERSION=24.15.0
+      - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+      - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
+      - mkdir -p /opt
+      - tar -xJf /tmp/node.tar.xz -C /opt
+      - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
+      - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
+      - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
+      - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
+      - rm -f /tmp/node.tar.xz
+
+  libobjc16:
+    script:
+      - apt-get update -o APT::Get::List-Cleanup=false && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid libobjc-16-dev && find /var/lib/apt/lists -mindepth 1 -delete
+
+  freebasic:
+    apt:
+      - curl
+      - gcc
+      - g++
+      - libc6-dev
+      - libncurses-dev
+    script:
+      - export FREEBASIC_VERSION=1.10.1
+      - echo 'deb http://deb.debian.org/debian bullseye main' > /etc/apt/sources.list.d/aonohako-freebasic-bullseye.list
+      - apt-get update -o APT::Get::List-Cleanup=false
+      - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libtinfo5
+      - rm -f /etc/apt/sources.list.d/aonohako-freebasic-bullseye.list
+      - rm -f /var/lib/apt/lists/deb.debian.org_debian_dists_bullseye_*
+      - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://downloads.sourceforge.net/project/fbc/FreeBASIC-${FREEBASIC_VERSION}/Binaries-Linux/FreeBASIC-${FREEBASIC_VERSION}-linux-x86_64.tar.gz" -o /tmp/freebasic.tar.gz
+      - rm -rf /opt/freebasic
+      - mkdir -p /opt/freebasic
+      - tar -xzf /tmp/freebasic.tar.gz -C /opt/freebasic --strip-components=1
+      - printf '%s\n' '#!/usr/bin/env bash' 'exec /opt/freebasic/bin/fbc "$@"' > /usr/local/bin/fbc
+      - chmod 0755 /usr/local/bin/fbc
+      - rm -f /tmp/freebasic.tar.gz
+
+  gforth:
+    script:
+      - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list.d/aonohako-gforth-sid.list
+      - apt-get update -o APT::Get::List-Cleanup=false
+      - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid gforth
+      - find /var/lib/apt/lists -mindepth 1 -delete
+
 languages:
   plain:
     install:
@@ -292,20 +342,8 @@ languages:
 
   javascript:
     install:
-      apt:
-        - curl
-        - xz-utils
-      script:
-        - export NODE_VERSION=24.15.0
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
-        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
-        - mkdir -p /opt
-        - tar -xJf /tmp/node.tar.xz -C /opt
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
-        - rm -f /tmp/node.tar.xz
+      shared:
+        - node24
     smoke:
       command:
         - bash
@@ -335,20 +373,8 @@ languages:
 
   typescript:
     install:
-      apt:
-        - curl
-        - xz-utils
-      script:
-        - export NODE_VERSION=24.15.0
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
-        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
-        - mkdir -p /opt
-        - tar -xJf /tmp/node.tar.xz -C /opt
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
-        - rm -f /tmp/node.tar.xz
+      shared:
+        - node24
       npm:
         - typescript
     smoke:
@@ -477,20 +503,9 @@ languages:
 
   rescript:
     install:
-      apt:
-        - curl
-        - xz-utils
+      shared:
+        - node24
       script:
-        - export NODE_VERSION=24.15.0
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
-        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
-        - mkdir -p /opt
-        - tar -xJf /tmp/node.tar.xz -C /opt
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
-        - rm -f /tmp/node.tar.xz
         - npm install -g --prefix /usr/local rescript@12.3.0
     smoke:
       command:
@@ -522,23 +537,13 @@ languages:
 
   purescript:
     install:
+      shared:
+        - node24
       sandbox_tools:
         - git
       apt:
-        - curl
         - git
-        - xz-utils
       script:
-        - export NODE_VERSION=24.15.0
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
-        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
-        - mkdir -p /opt
-        - tar -xJf /tmp/node.tar.xz -C /opt
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
-        - rm -f /tmp/node.tar.xz
         - npm install -g --prefix /usr/local purescript@0.15.16 spago@1.0.4
         - install -d -m 0755 /usr/local/lib/aonohako/purescript-home
         - |
@@ -1249,10 +1254,10 @@ languages:
 
   objective-c:
     install:
+      shared:
+        - libobjc16
       apt:
         - clang
-      script: &objective_c_libobjc16_install
-        - apt-get update -o APT::Get::List-Cleanup=false && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid libobjc-16-dev && find /var/lib/apt/lists -mindepth 1 -delete
     smoke:
       command:
         - bash
@@ -1270,9 +1275,10 @@ languages:
 
   objective-cpp:
     install:
+      shared:
+        - libobjc16
       apt:
         - clang
-      script: *objective_c_libobjc16_install
     smoke:
       command:
         - bash
@@ -2476,27 +2482,9 @@ languages:
           aonohako-vb6-run Main.bas | grep '^ok$'
 
   freebasic:
-    install: &freebasic_install
-      apt:
-        - curl
-        - gcc
-        - g++
-        - libc6-dev
-        - libncurses-dev
-      script:
-        - export FREEBASIC_VERSION=1.10.1
-        - echo 'deb http://deb.debian.org/debian bullseye main' > /etc/apt/sources.list.d/aonohako-freebasic-bullseye.list
-        - apt-get update -o APT::Get::List-Cleanup=false
-        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libtinfo5
-        - rm -f /etc/apt/sources.list.d/aonohako-freebasic-bullseye.list
-        - rm -f /var/lib/apt/lists/deb.debian.org_debian_dists_bullseye_*
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://downloads.sourceforge.net/project/fbc/FreeBASIC-${FREEBASIC_VERSION}/Binaries-Linux/FreeBASIC-${FREEBASIC_VERSION}-linux-x86_64.tar.gz" -o /tmp/freebasic.tar.gz
-        - rm -rf /opt/freebasic
-        - mkdir -p /opt/freebasic
-        - tar -xzf /tmp/freebasic.tar.gz -C /opt/freebasic --strip-components=1
-        - printf '%s\n' '#!/usr/bin/env bash' 'exec /opt/freebasic/bin/fbc "$@"' > /usr/local/bin/fbc
-        - chmod 0755 /usr/local/bin/fbc
-        - rm -f /tmp/freebasic.tar.gz
+    install:
+      shared:
+        - freebasic
     smoke:
       command:
         - bash
@@ -2507,7 +2495,9 @@ languages:
           ./Main | grep '^ok$'
 
   classic-basic:
-    install: *freebasic_install
+    install:
+      shared:
+        - freebasic
     smoke:
       command:
         - bash
@@ -2518,7 +2508,9 @@ languages:
           ./Main | grep '^ok$'
 
   qbasic:
-    install: *freebasic_install
+    install:
+      shared:
+        - freebasic
     smoke:
       command:
         - bash
@@ -2679,20 +2671,8 @@ languages:
 
   apl:
     install:
-      apt:
-        - curl
-        - xz-utils
-      script:
-        - export NODE_VERSION=24.15.0
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
-        - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
-        - mkdir -p /opt
-        - tar -xJf /tmp/node.tar.xz -C /opt
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/nodejs
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
-        - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
-        - rm -f /tmp/node.tar.xz
+      shared:
+        - node24
       npm:
         - kanapl@0.0.0
     smoke:
@@ -2799,12 +2779,9 @@ languages:
           bc -q Main.bc | grep '^2$'
 
   forth:
-    install: &gforth_install
-      script:
-        - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list.d/aonohako-gforth-sid.list
-        - apt-get update -o APT::Get::List-Cleanup=false
-        - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid gforth
-        - find /var/lib/apt/lists -mindepth 1 -delete
+    install:
+      shared:
+        - gforth
     smoke:
       command:
         - bash
@@ -2814,7 +2791,9 @@ languages:
           gforth Main.fs -e bye | grep '^ok$'
 
   gforth:
-    install: *gforth_install
+    install:
+      shared:
+        - gforth
     smoke:
       command:
         - bash
