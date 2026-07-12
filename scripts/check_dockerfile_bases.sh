@@ -1,12 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$#" -eq 0 ]]; then
-  echo "usage: check_dockerfile_bases.sh <dockerfile>..." >&2
+declare -A allowed_contexts=()
+declare -a files=()
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --allow-context)
+      if [[ "$#" -lt 2 ]]; then
+        echo "usage: check_dockerfile_bases.sh [--allow-context <name>]... <dockerfile>..." >&2
+        exit 2
+      fi
+      context_name=$2
+      if [[ ! "${context_name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+        echo "dockerfile base policy failed: invalid allowed context name ${context_name@Q}" >&2
+        exit 2
+      fi
+      allowed_contexts["${context_name,,}"]=1
+      shift 2
+      ;;
+    --)
+      shift
+      while [[ "$#" -gt 0 ]]; do
+        files+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      echo "dockerfile base policy failed: unknown option $1" >&2
+      exit 2
+      ;;
+    *)
+      files+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ "${#files[@]}" -eq 0 ]]; then
+  echo "usage: check_dockerfile_bases.sh [--allow-context <name>]... <dockerfile>..." >&2
   exit 2
 fi
 
-for file in "$@"; do
+for file in "${files[@]}"; do
   if [[ ! -f "${file}" ]]; then
     echo "dockerfile base policy failed: missing ${file}" >&2
     exit 1
@@ -14,6 +49,7 @@ for file in "$@"; do
 
   declare -A global_args=()
   declare -A stages=()
+  stage_count=0
   saw_from=false
   parser_directives_allowed=true
   escape_directive_seen=false
@@ -35,7 +71,12 @@ for file in "$@"; do
       if [[ "${lowered_line}" =~ ${parser_directive_pattern} ]]; then
         directive_name="${BASH_REMATCH[1]}"
         directive_value="${BASH_REMATCH[2]}"
-        if [[ "${directive_name}" == "escape" ]]; then
+        if [[ "${directive_name}" == "syntax" ]]; then
+          if [[ ! "${directive_value}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+            echo "dockerfile base policy failed: ${file}:${line_number} has unpinned syntax frontend ${directive_value}" >&2
+            exit 1
+          fi
+        elif [[ "${directive_name}" == "escape" ]]; then
           if [[ "${escape_directive_seen}" == true ]]; then
             echo "dockerfile base policy failed: ${file}:${line_number} repeats the escape parser directive" >&2
             exit 1
@@ -96,6 +137,46 @@ for file in "$@"; do
       global_args["${name}"]="${value}"
       continue
     fi
+    if [[ "${directive}" == "copy" ]]; then
+      for token in "${tokens[@]:1}"; do
+        if [[ "${token,,}" != --from=* ]]; then
+          continue
+        fi
+        source="${token#*=}"
+        source_key="${source,,}"
+        if [[ -n "${stages[${source_key}]:-}" || -n "${allowed_contexts[${source_key}]:-}" ]]; then
+          continue
+        fi
+        if [[ ! "${source}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+          echo "dockerfile base policy failed: ${file}:${instruction_line} has unpinned external COPY source ${source}" >&2
+          exit 1
+        fi
+      done
+      continue
+    fi
+    if [[ "${directive}" == "run" ]]; then
+      for token in "${tokens[@]:1}"; do
+        if [[ "${token,,}" != --mount=* ]]; then
+          continue
+        fi
+        IFS=',' read -r -a mount_options <<< "${token#*=}"
+        for mount_option in "${mount_options[@]}"; do
+          if [[ "${mount_option,,}" != from=* ]]; then
+            continue
+          fi
+          source="${mount_option#*=}"
+          source_key="${source,,}"
+          if [[ -n "${stages[${source_key}]:-}" || -n "${allowed_contexts[${source_key}]:-}" ]]; then
+            continue
+          fi
+          if [[ ! "${source}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+            echo "dockerfile base policy failed: ${file}:${instruction_line} has unpinned external RUN mount source ${source}" >&2
+            exit 1
+          fi
+        done
+      done
+      continue
+    fi
     if [[ "${directive}" != "from" ]]; then
       continue
     fi
@@ -140,6 +221,8 @@ for file in "$@"; do
       fi
       index=$((index + 1))
     done
+    stages["${stage_count}"]=1
+    stage_count=$((stage_count + 1))
   done < "${file}"
   if [[ -n "${logical_line}" ]]; then
     echo "dockerfile base policy failed: ${file}:${instruction_line} has an unterminated escape continuation" >&2
@@ -152,4 +235,4 @@ for file in "$@"; do
   unset global_args stages
 done
 
-echo "verified digest-pinned Dockerfile bases in $# file(s)"
+echo "verified digest-pinned Dockerfile sources in ${#files[@]} file(s)"

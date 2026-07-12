@@ -40,6 +40,8 @@ for pattern in "${patterns[@]}"; do
   fi
 done
 
-"${BASH}" scripts/check_dockerfile_bases.sh Dockerfile docker/runtime.Dockerfile
+"${BASH}" scripts/check_dockerfile_bases.sh \
+  --allow-context aonohako-python-packages \
+  Dockerfile docker/runtime.Dockerfile
 
 echo "repository policy check passed"
