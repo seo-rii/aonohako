@@ -40,6 +40,20 @@ func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
 	}
 }
 
+func TestSandboxCommandBaseRecognizesSystemBEAMRuntime(t *testing.T) {
+	command := []string{
+		"/usr/bin/env",
+		"ERL_AFLAGS=+S 1:1",
+		"/usr/lib/erlang/erts-15.2.7/bin/beam.smp",
+	}
+	if got := sandboxCommandBase(command, "/work/run-1"); got != "beam.smp" {
+		t.Fatalf("sandboxCommandBase() = %q, want trusted BEAM runtime", got)
+	}
+	if got := addressSpaceLimitBytes(sandboxCommandBase(command, "/work/run-1"), 768); got < 8<<30 {
+		t.Fatalf("BEAM address-space limit = %d, want at least 8 GiB", got)
+	}
+}
+
 func TestRunBlocksForkForSubmittedTrustedRuntimeName(t *testing.T) {
 	requireSandboxSupport(t)
 

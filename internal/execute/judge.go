@@ -430,6 +430,7 @@ func sandboxCommandBase(command []string, workspaceRoots ...string) string {
 		"/opt",
 		"/sbin",
 		"/usr/bin",
+		"/usr/lib/erlang",
 		"/usr/local/bin",
 		"/usr/local/cargo/bin",
 		"/usr/local/go/bin",
