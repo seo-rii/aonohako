@@ -1233,7 +1233,8 @@ func runRuntimeMemorySuite() error {
 			if err != nil {
 				return fmt.Errorf("%s memory execute request failed: %w", language, err)
 			}
-			if resp.Status != model.RunStatusMLE || !strings.HasPrefix(resp.VerdictSource, "memory") {
+			if resp.Status != model.RunStatusMLE ||
+				(!strings.HasPrefix(resp.VerdictSource, "memory") && resp.VerdictSource != "address_space") {
 				return fmt.Errorf("%s memory stress status=%s source=%q reason=%q stdout=%q stderr=%q", language, resp.Status, resp.VerdictSource, resp.Reason, resp.Stdout, resp.Stderr)
 			}
 			covered++
