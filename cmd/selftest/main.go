@@ -105,6 +105,7 @@ func main() {
 			sources: []model.Source{source("Main.rb", `chunks = []
 loop do
   chunks << ("x".b * (8 * 1024 * 1024))
+  sleep 0.005
 end
 `)},
 		},
@@ -115,6 +116,7 @@ end
 $chunks = [];
 while (true) {
     $chunks[] = str_repeat("x", 8 * 1024 * 1024);
+    usleep(5000);
 }
 `)},
 		},
@@ -134,6 +136,7 @@ end
 my @chunks;
 while (1) {
     push @chunks, "x" x (8 * 1024 * 1024);
+    select undef, undef, undef, 0.005;
 }
 `)},
 		},
