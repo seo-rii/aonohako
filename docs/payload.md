@@ -435,6 +435,7 @@ The interactor is invoked as:
 | Runtime lang | Executor |
 |---|---|
 | `binary` | Direct execution |
+| `go-binary` | Direct execution for compiled Go artifacts, with Go-compatible virtual-memory policy |
 | `clojure` | `java <JVM memory flags> -cp /usr/share/java/clojure-1.12.jar clojure.main <file>` |
 | `racket` | `racket <file>` |
 | `scheme` | `chibi-scheme <file>` |
@@ -514,7 +515,7 @@ for the compile phase and toolchain smoke tests.
 | Mechanism | What it limits |
 |---|---|
 | `RLIMIT_CPU` | CPU seconds (`time_ms / 1000 + 1`) as a helper-side hard stop |
-| `RLIMIT_AS` | Virtual address space using language-specific headroom; .NET remains the compatibility exception |
+| `RLIMIT_AS` | Virtual address space using language-specific headroom; compiled Go, Java, and .NET runtimes are compatibility exceptions because they reserve large virtual regions before user code |
 | `RLIMIT_STACK` | Native stack and argument/environment footprint. The default uses the inherited hard stack limit, usually unlimited. |
 | `RLIMIT_NOFILE` | Max open file descriptors (64 by default, raised only for known runtime needs) |
 | `RLIMIT_NPROC` | Sandbox UID task count sized from the configured thread limit |

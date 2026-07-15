@@ -103,6 +103,30 @@ func TestMaterializeFilesStoresProgramsInsideBoxWithImmutableModes(t *testing.T)
 	}
 }
 
+func TestMaterializeFilesTreatsGoBinaryAsNativeExecutable(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang:       "go-binary",
+		EntryPoint: "Main",
+		Binaries: []model.Binary{{
+			Name:    "Main",
+			DataB64: b64("go-binary-placeholder"),
+			Mode:    "exec",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "go-binary" || filepath.Base(primary) != "Main" {
+		t.Fatalf("materializeFiles = (%q, %q), want Main/go-binary", primary, lang)
+	}
+}
+
 func TestMaterializeFilesRejectsDuplicatePaths(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

@@ -234,6 +234,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		wantPath  bool
 	}{
 		{"binary", "/tmp/a.out", "/tmp/a.out", true},
+		{"go-binary", "/tmp/Main", "/tmp/Main", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
 		{"apecode", "/tmp/Main.ape", "apecc", true},
 		{"clojure", "/tmp/sol.clj", "java", true},

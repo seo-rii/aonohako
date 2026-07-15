@@ -174,6 +174,9 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	tests := map[string]string{
 		"OCAML":        "ocaml",
 		"ELIXIR":       "elixir",
+		"GO":           "go-binary",
+		"go":           "go-binary",
+		"go-binary":    "go-binary",
 		"ADA":          "binary",
 		"ADA2012":      "binary",
 		"ADA2022":      "binary",
@@ -265,5 +268,15 @@ func TestNormalizeRunLangCoffeeScriptIsCaseInsensitive(t *testing.T) {
 		if !ok || profile.RunLang != "javascript" {
 			t.Fatalf("Resolve(%q) = (%+v, %v), want JavaScript run profile", input, profile, ok)
 		}
+	}
+}
+
+func TestGoProfilePreservesRuntimeIdentityAndMemoryReserve(t *testing.T) {
+	profile, ok := Resolve("GO")
+	if !ok {
+		t.Fatal("Resolve(GO) reported unsupported language")
+	}
+	if profile.RunLang != "go-binary" || profile.MemoryOffsetMB != 1088 {
+		t.Fatalf("GO profile = %+v, want go-binary with 1088 MiB reserve", profile)
 	}
 }

@@ -135,6 +135,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 
 	runLang := profiles.NormalizeRunLang(req.Lang)
 	isC3 := runLang == "c3"
+	isGoBinary := runLang == "go-binary"
 	allowUnixSockets := false
 	switch runLang {
 	case "ocaml":
@@ -194,9 +195,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
-	// startup, so finite RLIMIT_AS values can fail before user code. It also
-	// needs a high finite RLIMIT_FSIZE floor to start reliably.
-	disableAddressSpaceLimit := isDotnet || isC3 || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
+	// startup, so finite RLIMIT_AS values can fail before user code. Go binaries
+	// likewise make large, ASLR-sensitive virtual reservations before main.
+	// Physical memory remains bounded by cgroup memory.max and the RSS watchdog.
+	// CoreCLR also needs a high finite RLIMIT_FSIZE floor to start reliably.
+	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
 	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)

@@ -193,7 +193,7 @@ The Linux helper applies:
 | Layer | Mechanism | Notes |
 | --- | --- | --- |
 | CPU hard limit | `RLIMIT_CPU` | helper-side hard stop |
-| Address space limit | `RLIMIT_AS` | based on request memory plus language-specific virtual-memory headroom; .NET remains the compatibility exception |
+| Address space limit | `RLIMIT_AS` | based on request memory plus language-specific virtual-memory headroom; compiled Go, Java, and .NET runtimes remain compatibility exceptions |
 | Stack size | Defaults to the inherited hard stack limit, usually unlimited | avoids rejecting legacy deep-recursion submissions while memory and address-space limits still bound practical growth |
 | Locked memory | `RLIMIT_MEMLOCK=0` | prevents `mlock`-style RAM pinning |
 | POSIX message queue bytes | `RLIMIT_MSGQUEUE=0` | prevents message-queue allocation by the sandbox UID |
@@ -338,7 +338,7 @@ Memory enforcement uses several layers:
 
 - live RSS sampling from `/proc/<pid>/statm`
 - `/proc/<pid>/smaps_rollup` confirmation when RSS reaches 80% of the limit or when the runtime cannot use address-space limits
-- `RLIMIT_AS` to constrain virtual address space growth; native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Deno, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps
+- `RLIMIT_AS` to constrain virtual address space growth; most native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Deno, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps; compiled Go binaries, Java, and .NET disable this limit because their startup reservations are not proportional to RSS
 - runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Deno receives a V8 old-space cap through `--v8-flags`; Java-family launchers receive heap, stack, direct-memory, metaspace/class-space, and code-cache caps as applicable; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
 - deployment-validated runtime tuning for selected JVM, Go, Erlang/Elixir,
   .NET GC, Kotlin/Native, Deno, Node, and Wasmtime
@@ -420,9 +420,14 @@ sandbox process exits and before signal fallback classification, so a kernel
 `memory.max` OOM kill is reported as memory-limit exceeded instead of being
 misclassified as a generic `SIGKILL` timeout or runtime error.
 
-.NET is the main compatibility exception for address-space limits: `dotnet`
-invocations still disable `RLIMIT_AS` because CoreCLR reserves a very large
-memfd-backed double-mapped region before user code starts. Lower file-size
+.NET is the main compatibility exception for address-space limits, and compiled
+Go binaries require the same treatment. `dotnet` invocations disable `RLIMIT_AS`
+because CoreCLR reserves a very
+large memfd-backed double-mapped region before user code starts. Go runtime
+startup likewise makes large, ASLR-sensitive virtual reservations before
+`main`, so `go-binary` execution disables `RLIMIT_AS`. Their physical memory is
+still enforced through RSS/smaps sampling, optional cgroup `memory.max`, and the
+outer container limit. Lower file-size
 rlimits can also break CoreCLR/F# startup, so `dotnet` and `dafny` receive a
 high finite 2 TiB `RLIMIT_FSIZE` floor instead of disabling the file-size rlimit
 entirely. That floor is a compatibility guard, not the effective workspace
