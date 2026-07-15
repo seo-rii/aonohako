@@ -59,6 +59,100 @@ type languageSecurityCase struct {
 	sources        []model.Source
 }
 
+type runtimeMemoryCase struct {
+	compileLang string
+	memoryMB    int
+	sources     []model.Source
+}
+
+func strictRuntimeMemoryCases() map[string]runtimeMemoryCase {
+	source := func(name, body string) model.Source {
+		return model.Source{Name: name, DataB64: encodeScript(body)}
+	}
+	return map[string]runtimeMemoryCase{
+		"go": {
+			compileLang: "GO",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.go", `package main
+
+var chunks [][]byte
+
+func main() {
+	for {
+		chunk := make([]byte, 8*1024*1024)
+		for i := 0; i < len(chunk); i += 4096 {
+			chunk[i] = 1
+		}
+		chunks = append(chunks, chunk)
+	}
+}
+`)},
+		},
+		"rust": {
+			compileLang: "RUST2021",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.rs", `fn main() {
+    let mut chunks: Vec<Vec<u8>> = Vec::new();
+    loop {
+        chunks.push(vec![1_u8; 8 * 1024 * 1024]);
+    }
+}
+`)},
+		},
+		"ruby": {
+			compileLang: "RUBY",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.rb", `chunks = []
+loop do
+  chunks << ("x".b * (8 * 1024 * 1024))
+end
+`)},
+		},
+		"php": {
+			compileLang: "PHP",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.php", `<?php
+$chunks = [];
+while (true) {
+    $chunks[] = str_repeat("x", 8 * 1024 * 1024);
+}
+`)},
+		},
+		"lua": {
+			compileLang: "LUA",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.lua", `local chunks = {}
+while true do
+  chunks[#chunks + 1] = string.rep("x", 8 * 1024 * 1024)
+end
+`)},
+		},
+		"perl": {
+			compileLang: "PERL",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.pl", `use strict;
+my @chunks;
+while (1) {
+    push @chunks, "x" x (8 * 1024 * 1024);
+}
+`)},
+		},
+	}
+}
+
+func runtimeStartupMemoryMB() map[string]int {
+	return map[string]int{
+		"go":         1120,
+		"rust":       64,
+		"zig":        160,
+		"kotlin-jvm": 1536,
+		"erlang":     1088,
+		"julia":      1088,
+		"swift":      288,
+		"dart":       288,
+	}
+}
+
 const (
 	mountNamespaceProbeEnv = "AONOHAKO_MOUNTNS_PREFLIGHT_PROBE"
 	selftestUsage          = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|two-step|language-security|runtime-memory|cgroup-preflight|mount-preflight|deployment-contract"
@@ -726,6 +820,7 @@ func runCompileExecuteSuite() error {
 	defer httpServer.Close()
 
 	cases := compileExecuteCases()
+	startupMemory := runtimeStartupMemoryMB()
 	seen := map[string]struct{}{}
 	for _, rawLanguage := range strings.Split(rawLanguages, ",") {
 		language := strings.TrimSpace(rawLanguage)
@@ -789,6 +884,27 @@ func runCompileExecuteSuite() error {
 		}
 		if runResp.Status != model.RunStatusAccepted {
 			return fmt.Errorf("%s execute failed: status=%s reason=%s stdout=%q stderr=%q", language, runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
+		}
+
+		if memoryMB, ok := startupMemory[language]; ok {
+			startupLimits := limits
+			startupLimits.MemoryMB = memoryMB
+			for attempt := 1; attempt <= 2; attempt++ {
+				startupResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+					Lang:           profile.RunLang,
+					Binaries:       binaries,
+					EntryPoint:     tc.entryPoint,
+					Stdin:          tc.stdin,
+					ExpectedStdout: tc.expectedStdout,
+					Limits:         startupLimits,
+				})
+				if err != nil {
+					return fmt.Errorf("%s constrained startup attempt %d failed: %w", language, attempt, err)
+				}
+				if startupResp.Status != model.RunStatusAccepted {
+					return fmt.Errorf("%s constrained startup attempt %d failed: memory_mb=%d status=%s reason=%s stdout=%q stderr=%q", language, attempt, memoryMB, startupResp.Status, startupResp.Reason, startupResp.Stdout, startupResp.Stderr)
+				}
+			}
 		}
 	}
 
@@ -1078,6 +1194,7 @@ func runRuntimeMemorySuite() error {
 	defer httpServer.Close()
 
 	seen := map[string]struct{}{}
+	strictCases := strictRuntimeMemoryCases()
 	covered := 0
 	for _, rawLanguage := range strings.Split(rawLanguages, ",") {
 		language := strings.TrimSpace(rawLanguage)
@@ -1088,6 +1205,40 @@ func runRuntimeMemorySuite() error {
 			continue
 		}
 		seen[language] = struct{}{}
+
+		if tc, ok := strictCases[language]; ok {
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang:    tc.compileLang,
+				Sources: tc.sources,
+			})
+			if err != nil {
+				return fmt.Errorf("%s memory compile request failed: %w", language, err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("%s memory compile failed: status=%s reason=%q stdout=%q stderr=%q", language, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			profile, ok := profiles.Resolve(tc.compileLang)
+			if !ok {
+				return fmt.Errorf("%s memory selftest could not resolve %s profile", language, tc.compileLang)
+			}
+			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:     profile.RunLang,
+				Binaries: binaries,
+				Limits:   model.Limits{TimeMs: 6000, MemoryMB: tc.memoryMB, OutputBytes: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("%s memory execute request failed: %w", language, err)
+			}
+			if resp.Status != model.RunStatusMLE || !strings.HasPrefix(resp.VerdictSource, "memory") {
+				return fmt.Errorf("%s memory stress status=%s source=%q reason=%q stdout=%q stderr=%q", language, resp.Status, resp.VerdictSource, resp.Reason, resp.Stdout, resp.Stderr)
+			}
+			covered++
+			continue
+		}
 
 		switch language {
 		case "plain":
@@ -2838,7 +2989,10 @@ val _ = case line of SOME s => print s | NONE => ()
 		"go": {
 			compileLang:    "GO",
 			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			// Saet's default 32 MiB problem limit becomes 1120 MiB after the
+			// Go runtime reserve. This used to produce an unsafe 1184 MiB
+			// RLIMIT_AS and fail before main.
+			limits: model.Limits{TimeMs: 8000, MemoryMB: 1120},
 			sources: []model.Source{
 				source("main.go", `package main
 

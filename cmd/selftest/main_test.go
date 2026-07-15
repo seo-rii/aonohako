@@ -70,6 +70,40 @@ func TestCompileExecuteCasesResolveProfilesAndSources(t *testing.T) {
 	}
 }
 
+func TestRuntimeStartupMemoryCoversResourceSensitiveLanguages(t *testing.T) {
+	limits := runtimeStartupMemoryMB()
+	compileCases := compileExecuteCases()
+	for _, language := range []string{"go", "rust", "zig", "kotlin-jvm", "erlang", "julia", "swift", "dart"} {
+		memoryMB, ok := limits[language]
+		if !ok || memoryMB <= 0 {
+			t.Fatalf("runtime startup memory is missing language %q", language)
+		}
+		if _, ok := compileCases[language]; !ok {
+			t.Fatalf("runtime startup language %q has no compile-execute case", language)
+		}
+	}
+	if got := limits["go"]; got != 1120 {
+		t.Fatalf("Go constrained startup memory = %d, want 1120", got)
+	}
+}
+
+func TestStrictRuntimeMemoryCasesCoverNativeAndScriptRuntimes(t *testing.T) {
+	cases := strictRuntimeMemoryCases()
+	for _, language := range []string{"go", "rust", "ruby", "php", "lua", "perl"} {
+		tc, ok := cases[language]
+		if !ok {
+			t.Fatalf("strict runtime-memory cases are missing language %q", language)
+		}
+		profile, ok := profiles.Resolve(tc.compileLang)
+		if !ok || profile.RunLang == "" {
+			t.Fatalf("language %q has invalid compile profile %q", language, tc.compileLang)
+		}
+		if tc.memoryMB <= 0 || len(tc.sources) == 0 {
+			t.Fatalf("language %q has incomplete runtime-memory case: %+v", language, tc)
+		}
+	}
+}
+
 func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 	cases := languageSecurityCases(1)
 	for _, language := range []string{
