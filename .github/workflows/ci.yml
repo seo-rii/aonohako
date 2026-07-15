@@ -53,21 +53,44 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
+          cache: false
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh scripts/install_anchore_tool.sh
       - run: ./scripts/build_runtime_images.sh -mode ci -only ci-python -tag-prefix "aonohako-sbom"
       - run: |
+          chmod -R u+w "${GOMODCACHE}" 2>/dev/null || true
+          rm -rf "${GOCACHE}" "${GOMODCACHE}" /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* || true
+          docker buildx prune --all --force
+          docker image prune -f
+      - run: |
+          image_ref="aonohako-sbom:ci-python"
+          sbom_path="sbom-ci-python.spdx.json"
+          syft_json_path="${RUNNER_TEMP}/sbom-ci-python.syft.json"
+          cleanup() {
+            rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/syft" || true
+            docker image rm "${image_ref}" || true
+            docker image prune -f || true
+          }
+          trap cleanup EXIT
           scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
-          "${RUNNER_TEMP}/anchore-bin/syft" "aonohako-sbom:ci-python" -o spdx-json=sbom-ci-python.spdx.json
+          "${RUNNER_TEMP}/anchore-bin/syft" "${image_ref}" --source-name "${image_ref}" \
+            -o spdx-json="${sbom_path}" \
+            -o syft-json="${syft_json_path}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: sbom-ci-python
           path: sbom-ci-python.spdx.json
       - run: |
+          syft_json_path="${RUNNER_TEMP}/sbom-ci-python.syft.json"
+          cleanup() {
+            rm -f "${syft_json_path}" || true
+            rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/grype" || true
+          }
+          trap cleanup EXIT
           scripts/install_anchore_tool.sh grype v0.111.0 "${RUNNER_TEMP}/anchore-bin"
-          "${RUNNER_TEMP}/anchore-bin/grype" "aonohako-sbom:ci-python" -o json > grype-ci-python.json
+          "${RUNNER_TEMP}/anchore-bin/grype" "sbom:${syft_json_path}" -o json > grype-ci-python.json
           python3 scripts/check_grype_report.py grype-ci-python.json
         if: ${{ !cancelled() }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -163,34 +186,53 @@ jobs:
       - run: |
           chmod -R u+w "${GOMODCACHE}" 2>/dev/null || true
           rm -rf "${GOCACHE}" "${GOMODCACHE}" /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* || true
-          docker builder prune -af
+          docker buildx prune --all --force
           docker image prune -f
-      - run: >
-          AONOHAKO_IMAGE_ID="$(docker image inspect "aonohako-ci-prod:${{ matrix.name }}" --format '{{.Id}}')"
-          AONOHAKO_LANGUAGES="${{ matrix.languages }}"
-          bash ./scripts/report_toolchain_versions.sh "aonohako-ci-prod:${{ matrix.name }}"
-          > "toolchain-artifacts/${{ matrix.name }}/summary.md"
+      - id: profile
+        run: |
+          image_ref="aonohako-ci-prod:${{ matrix.name }}"
+          image_id="$(docker image inspect "${image_ref}" --format '{{.Id}}')"
+          echo "image_id=${image_id}" >> "${GITHUB_OUTPUT}"
+          AONOHAKO_IMAGE_ID="${image_id}" \
+          AONOHAKO_LANGUAGES="${{ matrix.languages }}" \
+          bash ./scripts/report_toolchain_versions.sh "${image_ref}" \
+            > "toolchain-artifacts/${{ matrix.name }}/summary.md"
       - run: |
           archive_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.docker.tar.gz"
           rm -f "${archive_path}.tmp" "${archive_path}" "${archive_path}.sha256"
           printf '{"skipped":"docker archive export skipped to conserve CI storage","profile":"%s"}\n' "${{ matrix.name }}" > "${archive_path}.error.json"
       - run: |
-          scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
+          image_ref="aonohako-ci-prod:${{ matrix.name }}"
           sbom_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.sbom.spdx.json"
+          syft_json_path="${RUNNER_TEMP}/${{ matrix.name }}.syft.json"
+          cleanup() {
+            rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/syft" || true
+            docker image rm "${image_ref}" || true
+            docker image prune -f || true
+          }
+          trap cleanup EXIT
+          scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
           scan_status=0
-          "${RUNNER_TEMP}/anchore-bin/syft" "aonohako-ci-prod:${{ matrix.name }}" --source-name "aonohako-ci-prod:${{ matrix.name }}" -o spdx-json="${sbom_path}" || scan_status=$?
-          rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/syft"
+          "${RUNNER_TEMP}/anchore-bin/syft" "${image_ref}" --source-name "${image_ref}" \
+            -o spdx-json="${sbom_path}" \
+            -o syft-json="${syft_json_path}" || scan_status=$?
           exit "${scan_status}"
       - run: |
-          scripts/install_anchore_tool.sh grype v0.111.0 "${RUNNER_TEMP}/anchore-bin"
           image_ref="aonohako-ci-prod:${{ matrix.name }}"
-          image_id="$(docker image inspect "${image_ref}" --format '{{.Id}}')"
+          image_id="${{ steps.profile.outputs.image_id }}"
           summary_path="toolchain-artifacts/${{ matrix.name }}/summary.md"
           sbom_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.sbom.spdx.json"
+          syft_json_path="${RUNNER_TEMP}/${{ matrix.name }}.syft.json"
           report_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.grype.json"
           provenance_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.provenance.json"
+          cleanup() {
+            rm -f "${syft_json_path}" || true
+            rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/grype" || true
+          }
+          trap cleanup EXIT
+          scripts/install_anchore_tool.sh grype v0.111.0 "${RUNNER_TEMP}/anchore-bin"
           scan_status=0
-          "${RUNNER_TEMP}/anchore-bin/grype" "${image_ref}" -o json > "${report_path}" || scan_status=$?
+          "${RUNNER_TEMP}/anchore-bin/grype" "sbom:${syft_json_path}" -o json > "${report_path}" || scan_status=$?
           if [ "${scan_status}" -eq 0 ]; then
             jq -n \
               --arg profile "${{ matrix.name }}" \
@@ -202,9 +244,6 @@ jobs:
               '{profile:$profile,image:$image,image_id:$image_id,artifacts:{"summary.md":$summary_sha256,"sbom.spdx.json":$sbom_sha256,"grype.json":$grype_sha256}}' \
               > "${provenance_path}"
           fi
-          rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/grype"
-          docker image rm "${image_ref}" || true
-          docker image prune -f
           exit "${scan_status}"
         if: ${{ !cancelled() }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

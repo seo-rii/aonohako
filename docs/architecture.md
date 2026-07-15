@@ -736,13 +736,18 @@ compile pipeline used by the service. Each matrix leg tries to create a
 export. The current CI workflow skips that export to conserve runner storage and
 writes a profile-bound archive diagnostic JSON instead.
 It then uploads its summary fragment, Syft SBOM JSON, Grype JSON scan, and image
-archive diagnostic as artifacts. Syft and Grype operational failures fail the
+archive diagnostic as artifacts. Syft emits the published SPDX document and a
+temporary native catalog from one image traversal; Grype consumes that catalog
+instead of exporting the same Docker image a second time. The native catalog
+preserves the immutable image metadata used by Grype and is deleted before
+artifact upload. Syft and Grype operational failures fail the
 profile matrix leg instead of being replaced by successful-looking JSON
 sentinels. The smaller root-backed Python runtime additionally rejects fixable
 High or Critical findings, while the heterogeneous production profiles retain
 their reports for profile-specific distro and bundled-toolchain upgrade review.
-The workflow prunes build cache, Go caches, and scanner temp/cache directories
-around those exports. The summary verifier also fails closed on missing or
+The workflow prunes the active Buildx cache, Go caches, scanner temp/cache
+directories, and the local image before the Grype catalog scan. The summary
+verifier also fails closed on missing or
 semantically incomplete SPDX/Grype JSON, failed toolchain version probes,
 missing required runtime probes, malformed archive diagnostics, an incomplete
 production-profile inventory, and missing or digest-mismatched archives. The

@@ -1138,14 +1138,23 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "image-sbom:") {
 		t.Fatalf("ci workflow must define a dedicated runtime image SBOM job")
 	}
-	if !strings.Contains(body, "scripts/install_anchore_tool.sh syft v1.42.4") || !strings.Contains(body, "-o spdx-json=sbom-ci-python.spdx.json") {
-		t.Fatalf("ci workflow must generate SBOMs with a retryable pinned Syft install")
+	imageSBOMStart := strings.Index(body, "\n  image-sbom:")
+	sandboxStart := strings.Index(body, "\n  sandbox:")
+	if imageSBOMStart < 0 || sandboxStart <= imageSBOMStart {
+		t.Fatalf("ci workflow has malformed image-sbom job boundaries")
+	}
+	imageSBOMSection := body[imageSBOMStart:sandboxStart]
+	if !strings.Contains(imageSBOMSection, "scripts/install_anchore_tool.sh syft v1.42.4") ||
+		!strings.Contains(imageSBOMSection, `-o spdx-json="${sbom_path}"`) ||
+		!strings.Contains(imageSBOMSection, `-o syft-json="${syft_json_path}"`) {
+		t.Fatalf("ci workflow must generate SPDX and reusable native SBOMs with one retryable pinned Syft install")
 	}
 	if !strings.Contains(body, "sbom-ci-python.spdx.json") {
 		t.Fatalf("ci workflow must publish a named SBOM artifact for the sandbox runtime image")
 	}
-	if !strings.Contains(body, "scripts/install_anchore_tool.sh grype v0.111.0") || !strings.Contains(body, `"${RUNNER_TEMP}/anchore-bin/grype" "aonohako-sbom:ci-python" -o json > grype-ci-python.json`) {
-		t.Fatalf("ci workflow must scan the sandbox runtime image with a retryable pinned Grype install")
+	if !strings.Contains(imageSBOMSection, "scripts/install_anchore_tool.sh grype v0.111.0") ||
+		!strings.Contains(imageSBOMSection, `"${RUNNER_TEMP}/anchore-bin/grype" "sbom:${syft_json_path}" -o json > grype-ci-python.json`) {
+		t.Fatalf("ci workflow must scan the reusable sandbox runtime SBOM with a retryable pinned Grype install")
 	}
 	if strings.Contains(body, `printf '{"error":"grype scan failed"}`) || strings.Contains(body, `printf '{"error":"syft scan failed"`) {
 		t.Fatalf("ci workflow must fail closed instead of replacing scanner failures with JSON sentinels")
@@ -1179,8 +1188,15 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(body, "aonohako-ci-prod:${{ matrix.name }}") {
 		t.Fatalf("ci workflow must build production-profile images in the profile matrix")
 	}
-	if !strings.Contains(body, "docker builder prune -af") || !strings.Contains(body, "docker image prune -f") {
-		t.Fatalf("ci workflow must prune build cache before production-profile SBOM scans to avoid daemon-export disk exhaustion")
+	for name, section := range map[string]string{"image-sbom": imageSBOMSection, "toolchain-profile": profileSection} {
+		pruneIdx := strings.Index(section, "docker buildx prune --all --force")
+		syftIdx := strings.Index(section, "scripts/install_anchore_tool.sh syft v1.42.4")
+		if pruneIdx < 0 || syftIdx < 0 || pruneIdx > syftIdx || !strings.Contains(section, "docker image prune -f") {
+			t.Fatalf("%s job must prune the active Buildx cache before SBOM scans to avoid daemon-export disk exhaustion", name)
+		}
+	}
+	if strings.Contains(body, "docker builder prune -af") {
+		t.Fatalf("ci workflow must not use legacy builder pruning for docker-container Buildx caches")
 	}
 	if !strings.Contains(body, `chmod -R u+w "${GOMODCACHE}" 2>/dev/null || true`) ||
 		!strings.Contains(body, `rm -rf "${GOCACHE}" "${GOMODCACHE}" /tmp/stereoscope-*`) ||
@@ -1188,33 +1204,45 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 		t.Fatalf("ci workflow must clean Go caches and stale stereoscope temp files best-effort before production-profile exports")
 	}
 	archiveIdx := strings.Index(profileSection, `docker archive export skipped to conserve CI storage`)
+	pruneIdx := strings.Index(profileSection, "docker buildx prune --all --force")
 	syftIdx := strings.Index(profileSection, "scripts/install_anchore_tool.sh syft v1.42.4")
-	if archiveIdx < 0 || syftIdx < 0 || archiveIdx > syftIdx {
-		t.Fatalf("ci workflow must write production-profile archive diagnostics before best-effort scanner exports")
+	if archiveIdx < 0 || pruneIdx < 0 || syftIdx < 0 || archiveIdx > syftIdx || pruneIdx > syftIdx {
+		t.Fatalf("ci workflow must write archive diagnostics and prune the active builder before production-profile scanner exports")
 	}
-	if !strings.Contains(profileSection, `--source-name "aonohako-ci-prod:${{ matrix.name }}"`) {
+	if !strings.Contains(profileSection, `image_ref="aonohako-ci-prod:${{ matrix.name }}"`) || !strings.Contains(profileSection, `--source-name "${image_ref}"`) {
 		t.Fatalf("ci workflow must preserve the tagged image reference in SPDX document provenance")
 	}
-	if !strings.Contains(profileSection, `AONOHAKO_IMAGE_ID="$(docker image inspect "aonohako-ci-prod:${{ matrix.name }}" --format '{{.Id}}')"`) || !strings.Contains(profileSection, `image_id="$(docker image inspect "${image_ref}" --format '{{.Id}}')"`) {
+	if !strings.Contains(profileSection, `image_id="$(docker image inspect "${image_ref}" --format '{{.Id}}')"`) ||
+		!strings.Contains(profileSection, `echo "image_id=${image_id}" >> "${GITHUB_OUTPUT}"`) ||
+		!strings.Contains(profileSection, `image_id="${{ steps.profile.outputs.image_id }}"`) {
 		t.Fatalf("ci workflow must capture one immutable image ID for the summary and scanner provenance")
 	}
 	if !strings.Contains(profileSection, `"${HOME}/.cache/syft"`) || !strings.Contains(profileSection, `"${HOME}/.cache/grype"`) {
 		t.Fatalf("ci workflow must clean scanner caches after production-profile scans")
 	}
 	if !strings.Contains(profileSection, `docker image rm "${image_ref}" || true`) {
-		t.Fatalf("ci workflow must remove production-profile images after scanner reports are generated")
+		t.Fatalf("ci workflow must remove production-profile images after the reusable Syft catalog is generated")
 	}
-	if !strings.Contains(profileSection, `"${RUNNER_TEMP}/anchore-bin/grype" "${image_ref}" -o json > "${report_path}" || scan_status=$?`) ||
+	if !strings.Contains(profileSection, `-o syft-json="${syft_json_path}"`) ||
+		!strings.Contains(profileSection, `"${RUNNER_TEMP}/anchore-bin/grype" "sbom:${syft_json_path}" -o json > "${report_path}" || scan_status=$?`) ||
+		!strings.Contains(profileSection, `rm -f "${syft_json_path}"`) ||
 		!strings.Contains(profileSection, `exit "${scan_status}"`) {
-		t.Fatalf("ci workflow must fail closed on production-profile Grype operational errors")
+		t.Fatalf("ci workflow must reuse and clean the native Syft catalog while failing closed on Grype operational errors")
+	}
+	if strings.Contains(profileSection, `"${RUNNER_TEMP}/anchore-bin/grype" "${image_ref}"`) ||
+		strings.Contains(imageSBOMSection, `"${RUNNER_TEMP}/anchore-bin/grype" "${image_ref}"`) ||
+		strings.Contains(imageSBOMSection, `"${RUNNER_TEMP}/anchore-bin/grype" "aonohako-sbom:ci-python"`) {
+		t.Fatalf("ci workflow must not export Docker images a second time for Grype scans")
 	}
 	if !strings.Contains(profileSection, `provenance_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.provenance.json"`) || !strings.Contains(profileSection, `"summary.md":$summary_sha256`) || !strings.Contains(profileSection, `"sbom.spdx.json":$sbom_sha256`) || !strings.Contains(profileSection, `"grype.json":$grype_sha256`) {
 		t.Fatalf("ci workflow must bind profile reports to immutable image provenance and their exact digests")
 	}
-	setupGoIdx := strings.Index(profileSection, "uses: actions/setup-go@")
-	buildxIdx := strings.Index(profileSection, "uses: docker/setup-buildx-action@")
-	if setupGoIdx < 0 || buildxIdx < 0 || setupGoIdx > buildxIdx || !strings.Contains(profileSection[setupGoIdx:buildxIdx], "cache: false") {
-		t.Fatalf("toolchain-profile setup-go step must disable its unused host cache")
+	for name, section := range map[string]string{"image-sbom": imageSBOMSection, "toolchain-profile": profileSection} {
+		setupGoIdx := strings.Index(section, "uses: actions/setup-go@")
+		buildxIdx := strings.Index(section, "uses: docker/setup-buildx-action@")
+		if setupGoIdx < 0 || buildxIdx < 0 || setupGoIdx > buildxIdx || !strings.Contains(section[setupGoIdx:buildxIdx], "cache: false") {
+			t.Fatalf("%s setup-go step must disable its unused host cache", name)
+		}
 	}
 	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
 		t.Fatalf("ci workflow must include the language list in the profile summaries")
