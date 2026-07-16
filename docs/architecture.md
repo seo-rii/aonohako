@@ -137,7 +137,14 @@ of `spj` or `programs`/`steps`. The runner starts the contestant and interactor
 concurrently in separate sandbox workspaces, streams contestant stdout to
 interactor stdin, and streams interactor stdout to contestant stdin. The
 interactor receives read-only input and answer files through argv, plus a
-writable output path for optional protocol logging.
+writable output path for optional protocol logging. The contestant workspace
+uses role UID/GID `65532`, and the trusted interactor uses role UID/GID `65531`.
+Their roots stay server-owned with the selected role GID and mode `0710`, giving
+that role traverse permission without giving it root-directory write
+permission. This is a fixed trust-role split, not a general per-run UID
+allocator. A concurrent .NET contestant and .NET interactor fail initialization
+because CoreCLR uses container-global `/tmp/.dotnet` state that cannot safely
+be reassigned to both identities at once.
 
 ## Sandbox Process Model
 
@@ -164,6 +171,12 @@ The runtime uses a parent/helper/target split:
    - changes directory to `box/`
    - `execve()`s the target runtime or binary
 
+   `PR_SET_DUMPABLE=0` protects the helper before `execve()`. Linux resets the
+   dumpable state for an ordinary target image during `execve()`, so the helper
+   setting is not treated as a persistent target-to-target boundary. Interactive
+   peer confidentiality instead comes from distinct UIDs/GIDs and the
+   server-owned role-traversable workspace roots.
+
 3. Target process:
    - runs with a request-specific environment built from fixed base variables,
      workspace-scoped tool/cache directories, and explicit per-runtime entries;
@@ -174,9 +187,13 @@ The runtime uses a parent/helper/target split:
    - inherits the helper's limits and seccomp filter
    - stays in the same process group for cleanup
 
-`/execute` requires a root parent. The parent drops the helper/target to
-UID/GID `65532`, while the runtime image is hardened so only explicitly
-readable paths remain accessible to that account.
+`/execute` requires a root parent. The parent drops ordinary and contestant
+helpers/targets to UID/GID `65532`, and trusted interactive judge targets to
+UID/GID `65531`. Each workspace root remains owned by the root parent, is
+assigned to the selected role GID, and is set to mode `0710` before the helper
+starts. The target can traverse but cannot rename root-level judge files or
+workspace directories. The runtime image is hardened so only explicitly
+readable paths remain accessible to either account.
 
 The normal embedded-helper path does not materialize the helper request as a
 workspace file. The parent writes the request JSON to an inherited pipe fd and
@@ -203,7 +220,7 @@ The Linux helper applies:
 | Workspace breadth | periodic workspace scan | enforces total bytes plus entry-count and depth caps |
 | Core dumps | `RLIMIT_CORE=0` | disables core files |
 | Privilege escalation | `PR_SET_NO_NEW_PRIVS` | prevents gaining new privileges after exec |
-| Dumpability | `PR_SET_DUMPABLE=0` | blocks ptrace-style exposure |
+| Dumpability | `PR_SET_DUMPABLE=0` | protects the long-lived parent and pre-`execve()` helper; ordinary target `execve()` may reset dumpability, so this is not the interactive peer boundary |
 | FD inheritance | `CloseRange(3, ..., CLOSE_RANGE_CLOEXEC)` fallback `CloseOnExec` loop | blocks descriptor inheritance across `execve` |
 | Process cleanup | `Setpgid` + group kill | kills helper and target together |
 
@@ -288,6 +305,12 @@ The execution workspace is intentionally split:
 | `.mix`, `.hex` | Elixir caches |
 | `.pip-cache`, `.mpl`, `.nuget`, `.konan*` | language/runtime-specific caches |
 | `__img__/` | image sidecar output |
+
+The workspace root containing these paths is server-owned, assigned to the
+target role GID, and mode `0710`. `box/` remains sticky and writable inside
+that role-traversable root, so a program can create ordinary output files
+without gaining root-level mutation rights or making the workspace traversable
+by the other interactive peer.
 
 Environment variables redirect common runtime scratch paths into the per-run
 workspace, for example `HOME`, `TMPDIR`, `JAVA_TOOL_OPTIONS`,
@@ -508,7 +531,7 @@ The supported shapes map to an explicit runtime security contract in
 
 | Shape | Contract | Local guarantees | Missing local boundary |
 | --- | --- | --- | --- |
-| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting; self-hosted deployments can add per-run cgroup and child-process accounting by setting `AONOHAKO_CGROUP_PARENT` | mount namespace, read-only rootfs, masked `/proc`, per-run UID, seccomp allowlist, post-start `execve()` blocking; per-run cgroup and child-process accounting remain missing unless `AONOHAKO_CGROUP_PARENT` is configured |
+| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, server-owned role-traversable workspace roots, distinct fixed contestant/trusted-interactor identities for interactive requests, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting; self-hosted deployments can add per-run cgroup and child-process accounting by setting `AONOHAKO_CGROUP_PARENT` | mount namespace, read-only rootfs, masked `/proc`, per-request UID allocation or user namespace, seccomp allowlist, post-start `execve()` blocking; per-run cgroup and child-process accounting remain missing unless `AONOHAKO_CGROUP_PARENT` is configured |
 | `remote + none` | `remote-control-plane` | `/compile` and `/execute` are forwarded to the configured runner and no local untrusted compile/run work is performed | isolation is delegated to the downstream runner and its private ingress/auth boundary |
 | `embedded + container` | `reserved-container-isolation` | not implemented | must provide per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID or user namespace, child-process accounting, allowlist-oriented seccomp, and post-start `execve()` blocking before it can be enabled |
 
@@ -671,15 +694,20 @@ Why the design looks this way:
 - the runtime does not assume Landlock availability
 - Cloud Run marker env vars alone do not switch security policy; the deployment
   target is explicit to avoid accidental partial hardening
-- the helper backend intentionally serializes active runs because every
-  sandboxed process currently drops to the same UID/GID pair inside the runner
+- the helper backend intentionally serializes active requests because ordinary
+  executions across requests reuse UID/GID `65532`; the fixed `65532`/`65531`
+  split only separates contestant and trusted-interactor roles within one
+  interactive request
 
 ## Self-Hosted Scale Path
 
 `selfhosted + embedded + helper` is supported, but it deliberately keeps one
 active execution per instance. The helper backend drops targets to a shared
-sandbox UID and depends on a dedicated work root plus immutable submitted
-files, so startup rejects `AONOHAKO_MAX_ACTIVE_RUNS` values other than `1`.
+sandbox UID across requests and depends on a dedicated work root plus immutable
+submitted files, so startup rejects `AONOHAKO_MAX_ACTIVE_RUNS` values other
+than `1`. Interactive peers are the narrow exception: contestant and trusted
+interactor use distinct fixed identities and server-owned, role-traversable
+workspace roots.
 
 For higher-throughput self-hosted deployments, prefer this shape:
 

@@ -25,6 +25,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/security"
 	"aonohako/internal/workspacequota"
 )
 
@@ -3370,6 +3371,247 @@ if line != expected:
 	if len(resp.Steps) != 2 || resp.Steps[0].ID != "contestant" || resp.Steps[1].ID != "interactor" {
 		t.Fatalf("expected contestant and interactor step results, got %+v", resp.Steps)
 	}
+}
+
+func TestRunInteractiveKeepsJudgeFixturesUnreadableToContestant(t *testing.T) {
+	requireSandboxSupport(t)
+
+	contestant := `import os
+import sys
+import time
+
+sys.stdin.readline()
+compromised = []
+try:
+    with open(os.path.join(os.path.dirname(os.getcwd()), 'contestant-root-marker'), 'wb') as marker:
+        marker.write(b'mutated')
+    compromised.append('write-own-root')
+except OSError:
+    pass
+try:
+    with open('contestant-rename-source', 'wb') as source:
+        source.write(b'mutated')
+    os.rename('contestant-rename-source', '../contestant-root-renamed')
+    compromised.append('rename-into-own-root')
+except OSError:
+    pass
+deadline = time.monotonic() + 1.0
+while time.monotonic() < deadline and not compromised:
+    found_fixture_path = False
+    for pid in os.listdir('/proc'):
+        if not pid.isdigit():
+            continue
+        try:
+            command = open('/proc/' + pid + '/cmdline', 'rb').read()
+        except OSError:
+            continue
+        fixture_paths = [raw_path for raw_path in command.split(b'\0')
+                         if b'interactive-input-' in raw_path or b'interactive-answer-' in raw_path]
+        if not fixture_paths:
+            continue
+        found_fixture_path = True
+        for raw_path in fixture_paths:
+            try:
+                with open(os.fsdecode(raw_path), 'rb') as fixture:
+                    compromised.append('read-fixture')
+            except OSError:
+                pass
+            fixture_path = os.fsdecode(raw_path)
+            try:
+                with open(os.path.join(os.path.dirname(fixture_path), 'contestant-marker'), 'wb') as marker:
+                    marker.write(b'mutated')
+                compromised.append('write-judge-tmp')
+            except OSError:
+                pass
+            try:
+                os.unlink(fixture_path)
+                compromised.append('unlink-fixture')
+            except OSError:
+                pass
+        for raw_path in command.split(b'\0'):
+            if b'/box/' not in raw_path:
+                continue
+            try:
+                box_path = os.path.dirname(os.fsdecode(raw_path))
+                with open(os.path.join(box_path, 'contestant-marker'), 'wb') as marker:
+                    marker.write(b'mutated')
+                compromised.append('write-judge-box')
+            except OSError:
+                pass
+    if found_fixture_path:
+        break
+    time.sleep(0.01)
+
+print('compromised' if compromised else 'blocked', flush=True)
+`
+	interactor := `import sys
+
+input_path, output_path, answer_path = sys.argv[1:4]
+with open(input_path, 'r', encoding='utf-8') as fixture:
+    if fixture.read() != 'fixture-secret\n':
+        raise SystemExit(3)
+with open(answer_path, 'r', encoding='utf-8') as fixture:
+    if fixture.read() != 'judge-secret\n':
+        raise SystemExit(3)
+
+print('probe', flush=True)
+result = sys.stdin.readline().strip()
+with open(output_path, 'w', encoding='utf-8') as transcript:
+    transcript.write(result + '\n')
+if result != 'blocked':
+    raise SystemExit(1)
+`
+
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: b64(contestant),
+		}},
+		Stdin:          "fixture-secret\n",
+		ExpectedStdout: "judge-secret\n",
+		Interactor: &model.InteractorSpec{
+			Lang: "python",
+			Binaries: []model.Binary{{
+				Name:    "interactor.py",
+				DataB64: b64(interactor),
+			}},
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("contestant read an interactive judge fixture or isolation failed: %+v", resp)
+	}
+}
+
+func TestValidateInteractivePeerRuntimeIsolation(t *testing.T) {
+	if err := validateInteractivePeerRuntimeIsolation("csharp", "fsharp"); err == nil {
+		t.Fatal("two concurrent .NET peers must fail closed instead of racing shared CoreCLR state")
+	}
+	for _, pair := range [][2]string{{"csharp", "python"}, {"python", "vbnet"}, {"python", "java"}} {
+		if err := validateInteractivePeerRuntimeIsolation(pair[0], pair[1]); err != nil {
+			t.Fatalf("validateInteractivePeerRuntimeIsolation(%q, %q): %v", pair[0], pair[1], err)
+		}
+	}
+}
+
+func benchmarkSandboxIdentity() sandboxIdentity {
+	if os.Geteuid() == 0 {
+		return sandboxIdentity{uid: interactiveJudgeSandboxUID, gid: interactiveJudgeSandboxGID}
+	}
+	identity := sandboxIdentity{uid: uint32(os.Geteuid()), gid: uint32(os.Getegid())}
+	if groups, err := os.Getgroups(); err == nil {
+		for _, gid := range groups {
+			if gid != os.Getegid() {
+				identity.gid = uint32(gid)
+				break
+			}
+		}
+	}
+	return identity
+}
+
+func benchmarkInteractiveWorkspacePreparation(b *testing.B, separateRole bool) {
+	identity := benchmarkSandboxIdentity()
+	req := &model.RunRequest{
+		Lang: "python",
+		Binaries: []model.Binary{{
+			Name:    "main.py",
+			DataB64: b64("print('ok')\n"),
+		}},
+	}
+	root := b.TempDir()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		workDir, err := os.MkdirTemp(root, "interactive-bench-*")
+		if err != nil {
+			b.Fatal(err)
+		}
+		ws, err := prepareWorkspaceDirs(workDir)
+		if err == nil {
+			_, _, err = materializeFiles(ws, req)
+		}
+		if err == nil {
+			if separateRole {
+				err = hardenWorkspaceForIdentity(ws, "python3", identity)
+			} else {
+				err = os.Chmod(ws.RootDir, 0o755)
+				for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+					if err == nil {
+						err = os.Chown(dir, int(identity.uid), int(identity.gid))
+					}
+				}
+				if err == nil {
+					err = os.Chmod(ws.BoxDir, 0o777|os.ModeSticky)
+				}
+				for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+					if err == nil {
+						err = os.Chmod(dir, 0o700)
+					}
+				}
+			}
+		}
+		b.StopTimer()
+		removeErr := os.RemoveAll(workDir)
+		b.StartTimer()
+		if err != nil {
+			b.Fatal(err)
+		}
+		if removeErr != nil {
+			b.Fatal(removeErr)
+		}
+	}
+}
+
+func BenchmarkInteractiveWorkspacePreparationSharedRole(b *testing.B) {
+	benchmarkInteractiveWorkspacePreparation(b, false)
+}
+
+func BenchmarkInteractiveWorkspacePreparationSeparatedRole(b *testing.B) {
+	benchmarkInteractiveWorkspacePreparation(b, true)
+}
+
+func benchmarkWorkspaceOwnershipHardening(b *testing.B, separateRole bool) {
+	identity := benchmarkSandboxIdentity()
+	ws, err := prepareWorkspaceDirs(b.TempDir())
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if separateRole {
+			err = hardenWorkspaceForIdentity(ws, "python3", identity)
+		} else {
+			err = os.Chmod(ws.RootDir, 0o755)
+			for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+				if err == nil {
+					err = os.Chown(dir, int(identity.uid), int(identity.gid))
+				}
+			}
+			if err == nil {
+				err = os.Chmod(ws.BoxDir, 0o777|os.ModeSticky)
+			}
+			for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+				if err == nil {
+					err = os.Chmod(dir, 0o700)
+				}
+			}
+		}
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkWorkspaceOwnershipHardeningSharedRole(b *testing.B) {
+	benchmarkWorkspaceOwnershipHardening(b, false)
+}
+
+func BenchmarkWorkspaceOwnershipHardeningSeparatedRole(b *testing.B) {
+	benchmarkWorkspaceOwnershipHardening(b, true)
 }
 
 func TestRunInteractiveIOReportsInteractorWrongAnswer(t *testing.T) {

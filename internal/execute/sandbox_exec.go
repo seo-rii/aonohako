@@ -52,7 +52,20 @@ type sandboxStreamConfig struct {
 	onStdoutDone  func()
 	stderr        io.Writer
 	onStderrDone  func()
+	identity      sandboxIdentity
 }
+
+type sandboxIdentity struct {
+	uid uint32
+	gid uint32
+}
+
+const (
+	defaultSandboxUID          uint32 = 65532
+	defaultSandboxGID          uint32 = 65532
+	interactiveJudgeSandboxUID uint32 = 65531
+	interactiveJudgeSandboxGID uint32 = 65531
+)
 
 type sandboxPreparedStdin struct {
 	file *os.File
@@ -68,6 +81,42 @@ func (s *sandboxPreparedStdin) Read(p []byte) (int, error) {
 type teeCaptureWriter struct {
 	capture *cappedBuffer
 	forward io.Writer
+}
+
+func hardenWorkspaceForIdentity(ws Workspace, runtimeBase string, identity sandboxIdentity) error {
+	if err := os.Chown(ws.RootDir, os.Geteuid(), int(identity.gid)); err != nil {
+		return fmt.Errorf("workspace chown failed: %w", err)
+	}
+	if err := os.Chmod(ws.RootDir, 0o710); err != nil {
+		return fmt.Errorf("workspace chmod failed: %w", err)
+	}
+	for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+		if err := os.Chown(dir, int(identity.uid), int(identity.gid)); err != nil {
+			return fmt.Errorf("workspace chown failed: %w", err)
+		}
+	}
+	if err := os.Chmod(ws.BoxDir, 0o777|os.ModeSticky); err != nil {
+		return fmt.Errorf("workspace chmod failed: %w", err)
+	}
+	if runtimeBase == "aonohako-gleam-run" {
+		if err := filepath.WalkDir(ws.BoxDir, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.Type()&os.ModeSymlink != 0 {
+				return fmt.Errorf("workspace path contains a symlink: %s", path)
+			}
+			return os.Chown(path, int(identity.uid), int(identity.gid))
+		}); err != nil {
+			return fmt.Errorf("workspace chown failed: %w", err)
+		}
+	}
+	for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return fmt.Errorf("workspace chmod failed: %w", err)
+		}
+	}
+	return nil
 }
 
 func (w teeCaptureWriter) Write(p []byte) (int, error) {
@@ -114,6 +163,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	if cgroupParentDir != "" && memoryLimitKB <= 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "cgroup execution requires a positive memory limit"}
+	}
+	identity := streams.identity
+	if identity.uid == 0 || identity.gid == 0 {
+		identity = sandboxIdentity{uid: defaultSandboxUID, gid: defaultSandboxGID}
 	}
 	workspaceLimitBytes := req.Limits.WorkspaceBytes
 	if workspaceLimitBytes <= 0 {
@@ -190,7 +243,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	if isDotnet {
-		if err := security.ResetDotnetSharedState(); err != nil {
+		if err := security.ResetDotnetSharedStateForIdentity(int(identity.uid), int(identity.gid)); err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "dotnet state cleanup failed: " + err.Error()}
 		}
 	}
@@ -205,36 +258,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)
 
 	if os.Geteuid() == 0 {
-		const sandboxUID = 65532
-		const sandboxGID = 65532
-		if err := os.Chmod(ws.RootDir, 0o755); err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
-		}
-		for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
-			if err := os.Chown(dir, sandboxUID, sandboxGID); err != nil {
-				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
-			}
-		}
-		if err := os.Chmod(ws.BoxDir, 0o777|os.ModeSticky); err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
-		}
-		if runtimeBase == "aonohako-gleam-run" {
-			if err := filepath.WalkDir(ws.BoxDir, func(path string, entry os.DirEntry, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				if entry.Type()&os.ModeSymlink != 0 {
-					return fmt.Errorf("workspace path contains a symlink: %s", path)
-				}
-				return os.Chown(path, sandboxUID, sandboxGID)
-			}); err != nil {
-				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chown failed: " + err.Error()}
-			}
-		}
-		for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
-			if err := os.Chmod(dir, 0o700); err != nil {
-				return execResult{Status: model.RunStatusInitFail, Reason: "workspace chmod failed: " + err.Error()}
-			}
+		if err := hardenWorkspaceForIdentity(ws, runtimeBase, identity); err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
 
@@ -333,7 +358,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			if written > stdinMaxBytes {
 				return execResult{Status: model.RunStatusInitFail, Reason: "stdin too large"}
 			}
-			if err := stdinTemp.Chown(65532, 65532); err != nil {
+			if err := stdinTemp.Chown(int(identity.uid), int(identity.gid)); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
 			}
 			if err := stdinTemp.Chmod(0o400); err != nil {
@@ -350,7 +375,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		Pdeathsig: syscall.SIGKILL,
 	}
 	if os.Geteuid() == 0 {
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
+		cmd.SysProcAttr.Credential = &syscall.Credential{
+			Uid:    identity.uid,
+			Gid:    identity.gid,
+			Groups: []uint32{identity.gid},
+		}
 	}
 	cmd.ExtraFiles = []*os.File{requestRead}
 	cmd.Env = append(append(baseEnv[:0:0], baseEnv...), sandbox.HelperModeEnv+"="+sandbox.HelperModeExec, sandbox.RequestFDEnv+"=3")

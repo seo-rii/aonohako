@@ -35,6 +35,10 @@ It is intentionally serialized. The helper backend drops the target process to a
 shared sandbox UID and relies on a dedicated work root plus immutable submitted
 files. Running more than one active helper-backed execution in the same process
 would weaken ownership isolation, so startup rejects values other than `1`.
+Within one interactive request only, the contestant and trusted interactor use
+fixed distinct UID/GID pairs. Each root stays server-owned with mode `0710` and
+group traverse permission for its selected role; this does not provide
+per-request UID allocation for increasing runner concurrency.
 
 ### Non-root control plane with remote execution
 
@@ -73,6 +77,8 @@ This keeps the same invariants as the Cloud Run baseline:
 
 - one active untrusted execution per helper-backed instance
 - root parent, sandbox UID child
+- fixed UID/GID `65532` contestant and `65531` trusted-interactor roles for
+  interactive requests
 - dedicated writable work root
 - immutable submitted files
 - no shared mutable scratch between concurrent submissions in the same process
@@ -106,7 +112,7 @@ not exist yet:
 | `setrlimit` and workspace accounting | private mount namespace |
 | `PR_SET_NO_NEW_PRIVS` and seccomp denylist | read-only rootfs |
 | network syscall gate | masked `/proc` |
-| fd cleanup and process-group cleanup | per-run UID or user namespace |
+| fd cleanup, process-group cleanup, and fixed interactive role separation | per-request UID allocation or user namespace |
 | immutable submissions and symlink-safe output capture | child-process accounting, seccomp allowlists, and post-start `execve()` blocking |
 
 ## Optional cgroup guardrail

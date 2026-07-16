@@ -355,10 +355,17 @@ digest-pinned or routed through digest-pinned build arguments.
 The local execution path now enforces these invariants:
 
 - the process working directory is `box/`
+- each execution workspace root remains server-owned, is assigned to its
+  sandbox role's GID, and is mode `0710` (group traverse only)
 - submitted files are materialized with immutable permissions (`0444` or
   `0555`)
 - the `box/` directory is writable so submissions can create new files beside
   their own sources or binaries
+- interactive contestants run as UID/GID `65532`, while the trusted interactor
+  runs as UID/GID `65531` behind a different group-traversal boundary; this
+  prevents either peer from traversing or mutating the other's workspace while
+  preserving server ownership of the workspace root, even though the helper
+  backend still shares the host mount and `/proc` namespaces
 - captured outputs reject symlinks to avoid read-through escapes
 
 The runtime sandbox uses helper-process hardening rather than mount-based
@@ -391,8 +398,9 @@ Security posture depends on where it runs:
   untrusted compile and execute work is forwarded to the remote runner.
 - `selfhosted + embedded + helper` applies the same dedicated work-root
   contract for local root-backed containers and VMs, including
-  `AONOHAKO_MAX_ACTIVE_RUNS=1` so concurrent runs do not share the same sandbox
-  UID.
+  `AONOHAKO_MAX_ACTIVE_RUNS=1` because separate requests still reuse the same
+  sandbox UID. Interactive peers within one request use the distinct fixed
+  role identities described above.
 - `dev + remote + none` is the non-root development path. The local server
   forwards `/compile` and `/execute` to a remote hardened runner instead of
   building or running untrusted inputs locally.

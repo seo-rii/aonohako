@@ -14,6 +14,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/profiles"
 	"aonohako/internal/timing"
 )
 
@@ -76,6 +77,9 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 		return *interactorInit
 	}
 	defer os.RemoveAll(interactorWorkDir)
+	if err := validateInteractivePeerRuntimeIsolation(req.Lang, interactorReq.Lang); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 
 	inputPath, err := writeStdinTempFile(ctx, filepath.Join(interactorWS.RootDir, ".tmp"), "interactive-input-*", req, "")
 	if err != nil {
@@ -162,6 +166,10 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 				liveStdin:    true,
 				stdout:       contestantIn,
 				onStdoutDone: contestantIn.Close,
+				identity: sandboxIdentity{
+					uid: interactiveJudgeSandboxUID,
+					gid: interactiveJudgeSandboxGID,
+				},
 			},
 			Hooks{},
 			outputLimitBytes(interactorReq),
@@ -237,6 +245,20 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 	}
 
 	return resp
+}
+
+func validateInteractivePeerRuntimeIsolation(contestantLang, interactorLang string) error {
+	dotnetPeers := 0
+	for _, lang := range []string{contestantLang, interactorLang} {
+		switch profiles.NormalizeRunLang(lang) {
+		case "csharp", "fsharp", "vbnet":
+			dotnetPeers++
+		}
+	}
+	if dotnetPeers > 1 {
+		return fmt.Errorf("concurrent .NET contestant and interactor runtimes are unsupported: CoreCLR shared state cannot cross the isolated peer identities")
+	}
+	return nil
 }
 
 func prepareInteractiveCommand(req *model.RunRequest, tuning config.RuntimeTuningConfig, label string) (string, Workspace, []string, *model.RunResponse) {

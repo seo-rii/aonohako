@@ -9,6 +9,10 @@ import (
 const dotnetSandboxUID = 65532
 
 func ResetDotnetSharedState() error {
+	return ResetDotnetSharedStateForIdentity(dotnetSandboxUID, dotnetSandboxUID)
+}
+
+func ResetDotnetSharedStateForIdentity(uid, gid int) error {
 	if os.Geteuid() != 0 {
 		return nil
 	}
@@ -29,7 +33,7 @@ func ResetDotnetSharedState() error {
 		if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 			return err
 		}
-		if err := os.Chown(dir, dotnetSandboxUID, dotnetSandboxUID); err != nil {
+		if err := os.Chown(dir, uid, gid); err != nil {
 			return err
 		}
 		if err := os.Chmod(dir, 0o700); err != nil {
