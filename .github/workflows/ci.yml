@@ -107,7 +107,25 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - id: runtime-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aonohako-runtime-cache
+          key: ${{ github.workflow }}-runtime-seed-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
       - run: docker image prune -af
+      - run: >
+          docker buildx build
+          --target runtime-seed
+          --cache-to "type=local,dest=${RUNNER_TEMP}/aonohako-runtime-cache,mode=max"
+          -f docker/runtime.Dockerfile
+          .
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/aonohako-runtime-cache
+          key: ${{ github.workflow }}-runtime-seed-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+      - run: echo "AONOHAKO_DOCKER_CACHE_FROM=type=local,src=${RUNNER_TEMP}/aonohako-runtime-cache" >> "${GITHUB_ENV}"
       - run: chmod +x scripts/build_runtime_images.sh
       - run: ./scripts/build_runtime_images.sh -mode ci -only ci-python -tag-prefix "aonohako-ci-sandbox"
       - run: >
@@ -154,6 +172,13 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - id: runtime-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aonohako-runtime-cache
+          key: ${{ github.workflow }}-runtime-seed-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+      - run: echo "AONOHAKO_DOCKER_CACHE_FROM=type=local,src=${RUNNER_TEMP}/aonohako-runtime-cache" >> "${GITHUB_ENV}"
+        if: steps.runtime-cache.outputs.cache-hit == 'true'
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh scripts/smoke_runtime.sh
       - run: ./scripts/build_runtime_images.sh -mode ci -only "${{ matrix.name }}" -tag-prefix "aonohako-ci"
@@ -178,6 +203,13 @@ jobs:
           go-version-file: go.mod
           cache: false
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - id: runtime-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aonohako-runtime-cache
+          key: ${{ github.workflow }}-runtime-seed-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+      - run: echo "AONOHAKO_DOCKER_CACHE_FROM=type=local,src=${RUNNER_TEMP}/aonohako-runtime-cache" >> "${GITHUB_ENV}"
+        if: steps.runtime-cache.outputs.cache-hit == 'true'
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh scripts/report_toolchain_versions.sh scripts/install_anchore_tool.sh
       - run: mkdir -p "toolchain-artifacts/${{ matrix.name }}"
@@ -336,6 +368,13 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - id: runtime-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aonohako-runtime-cache
+          key: ${{ github.workflow }}-runtime-seed-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+      - run: echo "AONOHAKO_DOCKER_CACHE_FROM=type=local,src=${RUNNER_TEMP}/aonohako-runtime-cache" >> "${GITHUB_ENV}"
+        if: steps.runtime-cache.outputs.cache-hit == 'true'
       - run: docker image prune -af
       - run: chmod +x scripts/build_runtime_images.sh
       - run: ./scripts/build_runtime_images.sh -mode production -only type-i -tag-prefix "aonohako-ci-mix"

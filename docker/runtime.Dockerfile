@@ -2,7 +2,9 @@
 
 ARG GO_IMAGE=golang:1.26.5-bookworm@sha256:18aedc16aa19b3fd7ded7245fc14b109e054d65d22ed53c355c899582bbb2113
 ARG RUNTIME_BASE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
-FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS go-toolchain
+
+FROM go-toolchain AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -13,9 +15,21 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako-selftest ./cmd/selftest
 
-FROM ${RUNTIME_BASE} AS runtime
+FROM ${RUNTIME_BASE} AS runtime-foundation
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux && \
+    rm -rf /var/lib/apt/lists/*
+
+FROM runtime-foundation AS runtime-seed
+
+COPY --from=go-toolchain /usr/local/go /usr/local/go
+COPY --from=builder /out/aonohako /usr/local/bin/aonohako
+COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
+
+FROM runtime-foundation AS runtime
 
 ARG IMAGE_NAME=runtime
 ARG LANGUAGES=
@@ -26,9 +40,8 @@ ARG INSTALL_SCRIPT=
 ARG SANDBOX_TOOLS=
 ARG SMOKE_COMMAND=
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux && \
-    if [[ -n "${APT_PACKAGES}" ]]; then \
+RUN if [[ -n "${APT_PACKAGES}" ]]; then \
+      apt-get update && \
       apt-get install -y --no-install-recommends ${APT_PACKAGES}; \
     fi && \
     rm -rf /var/lib/apt/lists/*
@@ -37,7 +50,7 @@ RUN if [[ -n "${PIP_PACKAGES}" ]]; then \
       python3 -m pip install --break-system-packages --no-cache-dir ${PIP_PACKAGES}; \
     fi
 
-COPY --from=builder /usr/local/go /usr/local/go
+COPY --from=go-toolchain /usr/local/go /usr/local/go
 
 RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
       env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
