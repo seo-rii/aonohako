@@ -20,17 +20,40 @@ func TestRuntimeDockerfileDeclaresRuntimeBaseBeforeFirstFrom(t *testing.T) {
 	argIndex := strings.Index(body, "ARG RUNTIME_BASE=")
 	goFromIndex := strings.Index(body, "FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS go-toolchain")
 	builderFromIndex := strings.Index(body, "FROM go-toolchain AS builder")
+	artifactsFromIndex := strings.Index(body, "FROM scratch AS ci-runtime-artifacts")
 	foundationFromIndex := strings.Index(body, "FROM ${RUNTIME_BASE} AS runtime-foundation")
-	seedFromIndex := strings.Index(body, "FROM runtime-foundation AS runtime-seed")
-	runtimeFromIndex := strings.Index(body, "FROM runtime-foundation AS runtime\n")
-	if argIndex == -1 || goFromIndex == -1 || builderFromIndex == -1 || foundationFromIndex == -1 || seedFromIndex == -1 || runtimeFromIndex == -1 {
+	toolchainFromIndex := strings.Index(body, "FROM runtime-foundation AS runtime-toolchain")
+	runtimeFromIndex := strings.Index(body, "FROM runtime-toolchain AS runtime\n")
+	if argIndex == -1 || goFromIndex == -1 || builderFromIndex == -1 || artifactsFromIndex == -1 || foundationFromIndex == -1 || toolchainFromIndex == -1 || runtimeFromIndex == -1 {
 		t.Fatalf("runtime.Dockerfile is missing expected markers")
 	}
-	if !(argIndex < goFromIndex && goFromIndex < builderFromIndex && builderFromIndex < foundationFromIndex && foundationFromIndex < seedFromIndex && seedFromIndex < runtimeFromIndex) {
+	if !(argIndex < goFromIndex && goFromIndex < builderFromIndex && builderFromIndex < artifactsFromIndex && artifactsFromIndex < foundationFromIndex && foundationFromIndex < toolchainFromIndex && toolchainFromIndex < runtimeFromIndex) {
 		t.Fatalf("ARG RUNTIME_BASE must be declared before the first FROM to be usable in a later FROM")
 	}
 	if !strings.Contains(body, "ARG RUNTIME_BASE=debian:trixie-slim@sha256:") {
 		t.Fatalf("runtime.Dockerfile must default runtime images to digest-pinned debian:trixie-slim")
+	}
+}
+
+func TestDockerignoreExcludesVolatileCheckoutAndGoCaches(t *testing.T) {
+	path := filepath.Join("..", "..", ".dockerignore")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	lines := strings.Fields(string(data))
+	for _, required := range []string{".git", ".cache", "toolchain-artifacts"} {
+		found := false
+		for _, line := range lines {
+			if line == required {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf(".dockerignore must exclude volatile context path %q", required)
+		}
 	}
 }
 
@@ -225,7 +248,7 @@ func TestRuntimeDockerfileAllowsSystemPipPackagesForPythonRuntime(t *testing.T) 
 	}
 }
 
-func TestRuntimeDockerfileBuildsReusableRuntimeSeed(t *testing.T) {
+func TestRuntimeDockerfileExportsReusableRuntimeArtifacts(t *testing.T) {
 	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -239,53 +262,66 @@ func TestRuntimeDockerfileBuildsReusableRuntimeSeed(t *testing.T) {
 	if !strings.Contains(body, "FROM go-toolchain AS builder") {
 		t.Fatalf("runtime.Dockerfile builder must derive from the shared go-toolchain stage")
 	}
-	seedMarker := "FROM runtime-foundation AS runtime-seed"
-	runtimeMarker := "FROM runtime-foundation AS runtime\n"
-	seedIndex := strings.Index(body, seedMarker)
+	binariesMarker := "FROM scratch AS aonohako-runtime-binaries"
+	artifactsMarker := "FROM scratch AS ci-runtime-artifacts"
+	foundationMarker := "FROM ${RUNTIME_BASE} AS runtime-foundation"
+	runtimeMarker := "FROM runtime-toolchain AS runtime\n"
+	binariesIndex := strings.Index(body, binariesMarker)
+	artifactsIndex := strings.Index(body, artifactsMarker)
+	foundationIndex := strings.Index(body, foundationMarker)
 	runtimeIndex := strings.Index(body, runtimeMarker)
-	if seedIndex == -1 || runtimeIndex == -1 || seedIndex >= runtimeIndex {
-		t.Fatalf("runtime.Dockerfile must declare the reusable runtime-seed before the independent runtime target")
+	if binariesIndex == -1 || artifactsIndex == -1 || foundationIndex == -1 || runtimeIndex == -1 || binariesIndex >= artifactsIndex || artifactsIndex >= foundationIndex || foundationIndex >= runtimeIndex {
+		t.Fatalf("runtime.Dockerfile must export reusable binaries before its runtime stages")
 	}
 
-	seedBody := body[seedIndex:runtimeIndex]
+	binariesBody := body[binariesIndex:artifactsIndex]
 	for _, marker := range []string{
-		"COPY --from=go-toolchain /usr/local/go /usr/local/go",
-		"COPY --from=builder /out/aonohako /usr/local/bin/aonohako",
-		"COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest",
+		"COPY --chmod=0755 --from=builder /out/aonohako /aonohako",
+		"COPY --chmod=0755 --from=builder /out/aonohako-selftest /aonohako-selftest",
 	} {
-		if !strings.Contains(seedBody, marker) {
-			t.Fatalf("runtime-seed must contain reusable build output %q", marker)
+		if !strings.Contains(binariesBody, marker) {
+			t.Fatalf("aonohako-runtime-binaries must contain reusable build output %q", marker)
 		}
 	}
-	if strings.Contains(body, "FROM runtime-seed AS runtime") {
-		t.Fatal("runtime must not derive from runtime-seed because language installs need to run in parallel with builder")
-	}
-	for _, marker := range []string{"APT_PACKAGES", "PIP_PACKAGES", "NPM_PACKAGES", "INSTALL_SCRIPT"} {
-		if strings.Contains(seedBody, marker) {
-			t.Fatalf("runtime-seed must not depend on language-specific build arg %q", marker)
+	artifactsBody := body[artifactsIndex:foundationIndex]
+	for _, marker := range []string{
+		"COPY --from=aonohako-runtime-binaries / /",
+		"/out/aonohako-runtime-builder /aonohako-runtime-builder",
+	} {
+		if !strings.Contains(artifactsBody, marker) {
+			t.Fatalf("ci-runtime-artifacts must export %q", marker)
 		}
+	}
+	if !strings.Contains(body, "go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako-runtime-builder ./cmd/runtime-builder") {
+		t.Fatal("ci-runtime-artifacts must build the host runtime-builder executable")
 	}
 
 	runtimeBody := body[runtimeIndex:]
-	goCopyIndex := strings.Index(runtimeBody, "COPY --from=go-toolchain /usr/local/go /usr/local/go")
-	installRunIndex := strings.Index(runtimeBody, "env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"")
-	if goCopyIndex == -1 || installRunIndex == -1 {
-		t.Fatalf("runtime.Dockerfile is missing go toolchain copy or strict install script execution")
+	for _, marker := range []string{
+		"COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako /usr/local/bin/aonohako",
+		"COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako-selftest /usr/local/bin/aonohako-selftest",
+	} {
+		if !strings.Contains(runtimeBody, marker) {
+			t.Fatalf("runtime must consume the overrideable binary context with %q", marker)
+		}
+	}
+	if strings.Contains(runtimeBody, "--from=builder") {
+		t.Fatal("runtime must not depend directly on builder when CI provides prebuilt binaries")
+	}
+
+	toolchainIndex := strings.Index(body, "FROM runtime-foundation AS runtime-toolchain")
+	toolchainBody := body[toolchainIndex:runtimeIndex]
+	goCopyIndex := strings.Index(toolchainBody, "COPY --from=go-toolchain /usr/local/go /usr/local/go")
+	installRunIndex := strings.Index(toolchainBody, "env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c \"${INSTALL_SCRIPT}\"")
+	npmRunIndex := strings.Index(toolchainBody, "env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}")
+	if goCopyIndex == -1 || installRunIndex == -1 || npmRunIndex == -1 {
+		t.Fatal("runtime-toolchain is missing Go or a root-level language installer")
 	}
 	if goCopyIndex > installRunIndex {
-		t.Fatalf("runtime.Dockerfile must seed /usr/local/go before INSTALL_SCRIPT so go-based installers work")
+		t.Fatal("runtime-toolchain must provide Go before INSTALL_SCRIPT")
 	}
-	serverCopyIndex := strings.Index(runtimeBody, "COPY --from=builder /out/aonohako /usr/local/bin/aonohako")
-	selftestCopyIndex := strings.Index(runtimeBody, "COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest")
-	npmRunIndex := strings.Index(runtimeBody, "env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}")
-	if serverCopyIndex == -1 || selftestCopyIndex == -1 || npmRunIndex == -1 {
-		t.Fatal("runtime.Dockerfile is missing final binaries or npm package installation")
-	}
-	if serverCopyIndex < installRunIndex || serverCopyIndex < npmRunIndex || selftestCopyIndex < installRunIndex || selftestCopyIndex < npmRunIndex {
+	if strings.Index(body, "COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako /usr/local/bin/aonohako") < npmRunIndex+toolchainIndex {
 		t.Fatal("runtime must copy trusted binaries after root-level language installers finish")
-	}
-	if strings.Contains(body, "COPY --from=builder /usr/local/go /usr/local/go") {
-		t.Fatalf("runtime.Dockerfile must source the reusable toolchain directly from go-toolchain")
 	}
 }
 
@@ -298,16 +334,16 @@ func TestRuntimeDockerfileSeparatesCommonAndRuntimeAptPackages(t *testing.T) {
 
 	body := string(data)
 	foundationMarker := "FROM ${RUNTIME_BASE} AS runtime-foundation"
-	seedMarker := "FROM runtime-foundation AS runtime-seed"
-	runtimeMarker := "FROM runtime-foundation AS runtime\n"
+	toolchainMarker := "FROM runtime-foundation AS runtime-toolchain"
+	runtimeMarker := "FROM runtime-toolchain AS runtime\n"
 	foundationIndex := strings.Index(body, foundationMarker)
-	seedIndex := strings.Index(body, seedMarker)
+	toolchainIndex := strings.Index(body, toolchainMarker)
 	runtimeIndex := strings.Index(body, runtimeMarker)
-	if foundationIndex == -1 || seedIndex == -1 || runtimeIndex == -1 || foundationIndex >= seedIndex || seedIndex >= runtimeIndex {
-		t.Fatalf("runtime.Dockerfile must derive runtime-seed and runtime independently from runtime-foundation")
+	if foundationIndex == -1 || toolchainIndex == -1 || runtimeIndex == -1 || foundationIndex >= toolchainIndex || toolchainIndex >= runtimeIndex {
+		t.Fatalf("runtime.Dockerfile must derive runtime through the cacheable runtime-toolchain target")
 	}
 
-	foundationBody := body[foundationIndex:seedIndex]
+	foundationBody := body[foundationIndex:toolchainIndex]
 	if !strings.Contains(foundationBody, "apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux") {
 		t.Fatalf("runtime-foundation must install the common runtime packages")
 	}
@@ -318,14 +354,14 @@ func TestRuntimeDockerfileSeparatesCommonAndRuntimeAptPackages(t *testing.T) {
 		t.Fatalf("runtime-foundation must contain only one common package installation")
 	}
 
-	runtimeBody := body[runtimeIndex:]
+	toolchainBody := body[toolchainIndex:runtimeIndex]
 	for _, marker := range []string{
 		"ARG APT_PACKAGES=",
 		"if [[ -n \"${APT_PACKAGES}\" ]]",
 		"apt-get install -y --no-install-recommends ${APT_PACKAGES}",
 	} {
-		if !strings.Contains(runtimeBody, marker) {
-			t.Fatalf("runtime stage must install language-specific packages separately with %q", marker)
+		if !strings.Contains(toolchainBody, marker) {
+			t.Fatalf("runtime-toolchain must install language-specific packages separately with %q", marker)
 		}
 	}
 }
@@ -359,7 +395,7 @@ func TestRuntimeDockerfileCopiesSandboxSelftestBinary(t *testing.T) {
 	if !strings.Contains(body, "go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako-selftest ./cmd/selftest") {
 		t.Fatalf("runtime.Dockerfile must build the sandbox selftest binary")
 	}
-	if !strings.Contains(body, "COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest") {
+	if !strings.Contains(body, "COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako-selftest /usr/local/bin/aonohako-selftest") {
 		t.Fatalf("runtime.Dockerfile must copy the sandbox selftest binary into runtime images")
 	}
 	if !strings.Contains(body, "COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/") {

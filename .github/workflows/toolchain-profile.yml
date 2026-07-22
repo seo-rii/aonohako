@@ -1,0 +1,127 @@
+name: toolchain-profile
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+      languages:
+        required: true
+        type: string
+      cache_ref:
+        required: false
+        type: string
+        default: ""
+      cache_write:
+        required: false
+        type: boolean
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  GOCACHE: ${{ github.workspace }}/.cache/go-build
+  GOMODCACHE: ${{ github.workspace }}/.cache/go-mod
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: runtime-binaries-${{ github.sha }}
+          path: ${{ runner.temp }}/aonohako-runtime-artifacts
+      - run: |
+          chmod 0755 "${RUNNER_TEMP}/aonohako-runtime-artifacts/aonohako-runtime-builder"
+          echo "AONOHAKO_RUNTIME_BUILDER=${RUNNER_TEMP}/aonohako-runtime-artifacts/aonohako-runtime-builder" >> "${GITHUB_ENV}"
+          echo "AONOHAKO_RUNTIME_BINARIES_CONTEXT=${RUNNER_TEMP}/aonohako-runtime-artifacts" >> "${GITHUB_ENV}"
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - id: registry-login
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        if: inputs.cache_ref != ''
+        continue-on-error: true
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - run: echo "AONOHAKO_DOCKER_CACHE_FROM=type=registry,ref=${{ inputs.cache_ref }}" >> "${GITHUB_ENV}"
+        if: inputs.cache_ref != '' && steps.registry-login.outcome == 'success'
+      - run: |
+          echo "AONOHAKO_DOCKER_CACHE_TO=type=registry,ref=${{ inputs.cache_ref }},mode=min,oci-mediatypes=true,image-manifest=true,ignore-error=true" >> "${GITHUB_ENV}"
+          echo "AONOHAKO_DOCKER_CACHE_TARGET=runtime-toolchain" >> "${GITHUB_ENV}"
+        if: inputs.cache_write && steps.registry-login.outcome == 'success'
+      - run: docker image prune -af
+      - run: chmod +x scripts/build_runtime_images.sh scripts/report_toolchain_versions.sh scripts/install_anchore_tool.sh
+      - run: mkdir -p "toolchain-artifacts/${{ inputs.image_name }}"
+      - run: ./scripts/build_runtime_images.sh -mode production -only "${{ inputs.image_name }}" -tag-prefix "aonohako-ci-prod"
+      - run: docker run --rm "aonohako-ci-prod:${{ inputs.image_name }}" aonohako-smoke
+      - run: |
+          chmod -R u+w "${GOMODCACHE}" 2>/dev/null || true
+          rm -rf "${GOCACHE}" "${GOMODCACHE}" /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* || true
+          docker buildx prune --all --force
+          docker image prune -f
+      - id: profile
+        run: |
+          image_ref="aonohako-ci-prod:${{ inputs.image_name }}"
+          image_id="$(docker image inspect "${image_ref}" --format '{{.Id}}')"
+          echo "image_id=${image_id}" >> "${GITHUB_OUTPUT}"
+          AONOHAKO_IMAGE_ID="${image_id}" \
+          AONOHAKO_LANGUAGES="${{ inputs.languages }}" \
+          bash ./scripts/report_toolchain_versions.sh "${image_ref}" \
+            > "toolchain-artifacts/${{ inputs.image_name }}/summary.md"
+      - run: |
+          archive_path="toolchain-artifacts/${{ inputs.image_name }}/${{ inputs.image_name }}.docker.tar.gz"
+          rm -f "${archive_path}.tmp" "${archive_path}" "${archive_path}.sha256"
+          printf '{"skipped":"docker archive export skipped to conserve CI storage","profile":"%s"}\n' "${{ inputs.image_name }}" > "${archive_path}.error.json"
+      - run: |
+          image_ref="aonohako-ci-prod:${{ inputs.image_name }}"
+          sbom_path="toolchain-artifacts/${{ inputs.image_name }}/${{ inputs.image_name }}.sbom.spdx.json"
+          syft_json_path="${RUNNER_TEMP}/${{ inputs.image_name }}.syft.json"
+          cleanup() {
+            rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/syft" || true
+            docker image rm "${image_ref}" || true
+            docker image prune -f || true
+          }
+          trap cleanup EXIT
+          scripts/install_anchore_tool.sh syft v1.42.4 "${RUNNER_TEMP}/anchore-bin"
+          scan_status=0
+          "${RUNNER_TEMP}/anchore-bin/syft" "${image_ref}" --source-name "${image_ref}" \
+            -o spdx-json="${sbom_path}" \
+            -o syft-json="${syft_json_path}" || scan_status=$?
+          exit "${scan_status}"
+      - run: |
+          image_ref="aonohako-ci-prod:${{ inputs.image_name }}"
+          image_id="${{ steps.profile.outputs.image_id }}"
+          summary_path="toolchain-artifacts/${{ inputs.image_name }}/summary.md"
+          sbom_path="toolchain-artifacts/${{ inputs.image_name }}/${{ inputs.image_name }}.sbom.spdx.json"
+          syft_json_path="${RUNNER_TEMP}/${{ inputs.image_name }}.syft.json"
+          report_path="toolchain-artifacts/${{ inputs.image_name }}/${{ inputs.image_name }}.grype.json"
+          provenance_path="toolchain-artifacts/${{ inputs.image_name }}/${{ inputs.image_name }}.provenance.json"
+          cleanup() {
+            rm -f "${syft_json_path}" || true
+            rm -rf /tmp/stereoscope-* "${RUNNER_TEMP}"/stereoscope-* "${HOME}/.cache/anchore" "${HOME}/.cache/grype" || true
+          }
+          trap cleanup EXIT
+          scripts/install_anchore_tool.sh grype v0.111.0 "${RUNNER_TEMP}/anchore-bin"
+          scan_status=0
+          "${RUNNER_TEMP}/anchore-bin/grype" "sbom:${syft_json_path}" -o json > "${report_path}" || scan_status=$?
+          if [ "${scan_status}" -eq 0 ]; then
+            jq -n \
+              --arg profile "${{ inputs.image_name }}" \
+              --arg image "${image_ref}" \
+              --arg image_id "${image_id}" \
+              --arg summary_sha256 "$(sha256sum "${summary_path}" | cut -d ' ' -f 1)" \
+              --arg sbom_sha256 "$(sha256sum "${sbom_path}" | cut -d ' ' -f 1)" \
+              --arg grype_sha256 "$(sha256sum "${report_path}" | cut -d ' ' -f 1)" \
+              '{profile:$profile,image:$image,image_id:$image_id,artifacts:{"summary.md":$summary_sha256,"sbom.spdx.json":$sbom_sha256,"grype.json":$grype_sha256}}' \
+              > "${provenance_path}"
+          fi
+          exit "${scan_status}"
+        if: ${{ !cancelled() }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: ${{ always() }}
+        with:
+          name: toolchain-profile-${{ inputs.image_name }}
+          path: toolchain-artifacts/${{ inputs.image_name }}
+          compression-level: 0

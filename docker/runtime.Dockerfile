@@ -15,6 +15,21 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako-selftest ./cmd/selftest
 
+FROM builder AS ci-artifact-builder
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako-runtime-builder ./cmd/runtime-builder
+
+FROM scratch AS aonohako-runtime-binaries
+
+COPY --chmod=0755 --from=builder /out/aonohako /aonohako
+COPY --chmod=0755 --from=builder /out/aonohako-selftest /aonohako-selftest
+
+FROM scratch AS ci-runtime-artifacts
+
+COPY --from=aonohako-runtime-binaries / /
+COPY --chmod=0755 --from=ci-artifact-builder /out/aonohako-runtime-builder /aonohako-runtime-builder
+
 FROM ${RUNTIME_BASE} AS runtime-foundation
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -23,22 +38,12 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux && \
     rm -rf /var/lib/apt/lists/*
 
-FROM runtime-foundation AS runtime-seed
+FROM runtime-foundation AS runtime-toolchain
 
-COPY --from=go-toolchain /usr/local/go /usr/local/go
-COPY --from=builder /out/aonohako /usr/local/bin/aonohako
-COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
-
-FROM runtime-foundation AS runtime
-
-ARG IMAGE_NAME=runtime
-ARG LANGUAGES=
 ARG APT_PACKAGES=
 ARG PIP_PACKAGES=
 ARG NPM_PACKAGES=
 ARG INSTALL_SCRIPT=
-ARG SANDBOX_TOOLS=
-ARG SMOKE_COMMAND=
 
 RUN if [[ -n "${APT_PACKAGES}" ]]; then \
       apt-get update && \
@@ -60,11 +65,18 @@ RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
       env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}; \
     fi
 
+FROM runtime-toolchain AS runtime
+
+ARG IMAGE_NAME=runtime
+ARG LANGUAGES=
+ARG SANDBOX_TOOLS=
+ARG SMOKE_COMMAND=
+
 RUN install -d -m 0755 /usr/local/lib/aonohako /usr/local/lib/aonohako/python /usr/local/include
 COPY --chmod=0644 third_party/testlib/testlib.h /usr/local/include/testlib.h
 
-COPY --from=builder /out/aonohako /usr/local/bin/aonohako
-COPY --from=builder /out/aonohako-selftest /usr/local/bin/aonohako-selftest
+COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako /usr/local/bin/aonohako
+COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py

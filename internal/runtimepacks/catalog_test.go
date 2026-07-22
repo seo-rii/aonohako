@@ -1237,12 +1237,16 @@ func TestWorkflowPublishesConsolidatedToolchainSummary(t *testing.T) {
 	if !strings.Contains(profileSection, `provenance_path="toolchain-artifacts/${{ matrix.name }}/${{ matrix.name }}.provenance.json"`) || !strings.Contains(profileSection, `"summary.md":$summary_sha256`) || !strings.Contains(profileSection, `"sbom.spdx.json":$sbom_sha256`) || !strings.Contains(profileSection, `"grype.json":$grype_sha256`) {
 		t.Fatalf("ci workflow must bind profile reports to immutable image provenance and their exact digests")
 	}
-	for name, section := range map[string]string{"image-sbom": imageSBOMSection, "toolchain-profile": profileSection} {
-		setupGoIdx := strings.Index(section, "uses: actions/setup-go@")
-		buildxIdx := strings.Index(section, "uses: docker/setup-buildx-action@")
-		if setupGoIdx < 0 || buildxIdx < 0 || setupGoIdx > buildxIdx || !strings.Contains(section[setupGoIdx:buildxIdx], "cache: false") {
-			t.Fatalf("%s setup-go step must disable its unused host cache", name)
-		}
+	setupGoIdx := strings.Index(imageSBOMSection, "uses: actions/setup-go@")
+	buildxIdx := strings.Index(imageSBOMSection, "uses: docker/setup-buildx-action@")
+	if setupGoIdx < 0 || buildxIdx < 0 || setupGoIdx > buildxIdx || !strings.Contains(imageSBOMSection[setupGoIdx:buildxIdx], "cache: false") {
+		t.Fatal("image-sbom setup-go step must disable its unused host cache")
+	}
+	if strings.Contains(profileSection, "uses: actions/setup-go@") {
+		t.Fatal("toolchain-profile jobs must use the prebuilt runtime-builder artifact instead of restoring a host Go cache")
+	}
+	if !strings.Contains(profileSection, "AONOHAKO_RUNTIME_BUILDER=") || !strings.Contains(profileSection, "AONOHAKO_RUNTIME_BINARIES_CONTEXT=") {
+		t.Fatal("toolchain-profile jobs must consume the prebuilt runtime binary artifact")
 	}
 	if !strings.Contains(body, "AONOHAKO_LANGUAGES=\"${{ matrix.languages }}\"") {
 		t.Fatalf("ci workflow must include the language list in the profile summaries")

@@ -112,3 +112,89 @@ profiles:
 		t.Fatalf("runtime-builder error did not explain unpinned base image: %s", out)
 	}
 }
+
+func TestRuntimeBuilderAddsPrebuiltRuntimeBinariesContext(t *testing.T) {
+	contextDir := t.TempDir()
+	for _, name := range []string{"aonohako", "aonohako-selftest"} {
+		if err := os.WriteFile(filepath.Join(contextDir, name), nil, 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	catalogPath := filepath.Join("..", "..", "runtime-images.yml")
+	cmd := exec.Command("go", "run", ".", "-catalog", catalogPath, "-mode", "production", "-dry-run", "-only", "type-a")
+	cmd.Env = append(os.Environ(), "AONOHAKO_RUNTIME_BINARIES_CONTEXT="+contextDir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("runtime-builder failed: %v\n%s", err, out)
+	}
+	marker := "--build-context aonohako-runtime-binaries=" + contextDir
+	if !strings.Contains(string(out), marker) {
+		t.Fatalf("runtime-builder output is missing %q:\n%s", marker, out)
+	}
+}
+
+func TestRuntimeBuilderKeepsDockerfileBinaryFallbackByDefault(t *testing.T) {
+	catalogPath := filepath.Join("..", "..", "runtime-images.yml")
+	cmd := exec.Command("go", "run", ".", "-catalog", catalogPath, "-mode", "production", "-dry-run", "-only", "type-a")
+	cmd.Env = append(os.Environ(), "AONOHAKO_RUNTIME_BINARIES_CONTEXT=")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("runtime-builder failed: %v\n%s", err, out)
+	}
+	if strings.Contains(string(out), "--build-context aonohako-runtime-binaries=") {
+		t.Fatalf("runtime-builder must leave the Dockerfile binary stage as the default fallback:\n%s", out)
+	}
+}
+
+func TestRuntimeBuilderRejectsIncompleteRuntimeBinariesContext(t *testing.T) {
+	contextDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(contextDir, "aonohako"), nil, 0o644); err != nil {
+		t.Fatalf("write aonohako: %v", err)
+	}
+
+	catalogPath := filepath.Join("..", "..", "runtime-images.yml")
+	cmd := exec.Command("go", "run", ".", "-catalog", catalogPath, "-mode", "production", "-dry-run", "-only", "type-a")
+	cmd.Env = append(os.Environ(), "AONOHAKO_RUNTIME_BINARIES_CONTEXT="+contextDir)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("runtime-builder accepted an incomplete binary context: %s", out)
+	}
+	if !strings.Contains(string(out), "runtime binaries context is missing aonohako-selftest") {
+		t.Fatalf("runtime-builder error did not identify the missing binary: %s", out)
+	}
+}
+
+func TestRuntimeBuilderExportsOnlyDedicatedCacheTarget(t *testing.T) {
+	catalogPath := filepath.Join("..", "..", "runtime-images.yml")
+	cmd := exec.Command(
+		"go", "run", ".",
+		"-catalog", catalogPath,
+		"-mode", "production",
+		"-dry-run",
+		"-only", "type-a",
+		"-cache-from", "type=registry,ref=example.invalid/cache:type-a",
+		"-cache-to", "type=registry,ref=example.invalid/cache:type-a,mode=max",
+		"-cache-target", "runtime-toolchain",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("runtime-builder failed: %v\n%s", err, out)
+	}
+	body := string(out)
+	if count := strings.Count(body, "docker buildx build"); count != 2 {
+		t.Fatalf("runtime-builder emitted %d commands, want cache target and final image:\n%s", count, out)
+	}
+	finalIndex := strings.LastIndex(body, "docker buildx build")
+	cacheCommand := body[:finalIndex]
+	finalCommand := body[finalIndex:]
+	if !strings.Contains(cacheCommand, "--target runtime-toolchain") || !strings.Contains(cacheCommand, "--cache-to type=registry,ref=example.invalid/cache:type-a,mode=max") {
+		t.Fatalf("cache target command is incomplete: %s", cacheCommand)
+	}
+	if !strings.Contains(finalCommand, "--cache-from type=registry,ref=example.invalid/cache:type-a") {
+		t.Fatalf("final image command must import the persistent cache: %s", finalCommand)
+	}
+	if strings.Contains(finalCommand, "--cache-to") {
+		t.Fatalf("final image command must not export app-specific layers: %s", finalCommand)
+	}
+}
