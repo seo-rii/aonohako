@@ -219,8 +219,10 @@ aonohako-selftest cgroup-preflight
   authenticated or platform principal; `0` disables the per-principal cap.
 - `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev` and
   `60` for `cloudrun` or `selfhosted`. It caps accepted `/compile` and
-  `/execute` requests per principal per fixed one-minute window; `0` disables
-  the per-principal request-rate cap.
+  `/execute` requests per principal per fixed one-minute window. Set it to `0`
+  on any deployment target to disable the per-process request-rate cap. This is
+  intended for trusted Cloud Run or self-hosted runners whose concurrency and
+  fleet capacity are bounded at the deployment layer.
 - `AONOHAKO_HEARTBEAT_INTERVAL_SEC` defaults to `10`
 - `AONOHAKO_BODY_READ_TIMEOUT_SEC` defaults to `30` and bounds how long the
   HTTP server will spend reading one `/compile` or `/execute` request body.

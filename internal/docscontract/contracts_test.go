@@ -61,6 +61,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"`AONOHAKO_MAX_ACTIVE_STREAMS`",
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE`",
+		"Set it to `0` on any deployment target to disable this\n  process-local cap",
 		"Stale per-principal windows are cleaned up after they age out",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`",
 		"`X-Aonohako-Protocol-Version`",
@@ -156,8 +157,11 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "malformed or out-of-range") || !strings.Contains(architecture, "values fail startup") {
 		t.Fatalf("architecture.md must describe strict numeric env parsing")
 	}
-	if !strings.Contains(architecture, "non-dev deployments also reject `0` for pending queue, global stream,\n  per-principal stream, and per-principal request-rate caps") {
+	if !strings.Contains(architecture, "non-dev deployments also reject `0` for pending queue, global stream, and\n  per-principal stream caps") {
 		t.Fatalf("architecture.md must describe non-dev rejection of unlimited queue and stream caps")
+	}
+	if !strings.Contains(architecture, "`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE=0` is accepted on every\n  deployment target and disables the process-local fixed-window rate limiter") {
+		t.Fatalf("architecture.md must describe disabling the per-principal request-rate cap outside dev")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`") {
 		t.Fatalf("architecture.md must describe the remote SSE idle timeout env")
@@ -264,6 +268,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_MAX_ACTIVE_STREAMS` defaults to `64`",
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
+		"Set it to `0`\n  on any deployment target to disable the per-process request-rate cap",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30`",
 		"`AONOHAKO_RUNTIME_TUNING_PROFILES` may define named, policy-owned runtime\n  profiles as a JSON object",
 		"`AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE` controls whether `/compile` and\n  `/execute` may honor request-supplied `runtime_profile`",
@@ -384,7 +389,6 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 			}
 			requireEnv(name, env, "AONOHAKO_MAX_PENDING_QUEUE", "16")
 			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "16")
-			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "60")
 			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_NETWORK", "false")
 			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "false")
 		}
@@ -395,6 +399,7 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 		requireEnv(name, env, "AONOHAKO_EXECUTION_TRANSPORT", "embedded")
 		requireEnv(name, env, "AONOHAKO_SANDBOX_BACKEND", "helper")
 		requireEnv(name, env, "AONOHAKO_MAX_ACTIVE_RUNS", "1")
+		requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "0")
 		requireEnv(name, env, "AONOHAKO_TRUSTED_RUNNER_INGRESS", "true")
 		requirePresent(name, env, "AONOHAKO_WORK_ROOT")
 	}
@@ -402,6 +407,7 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 	cloudRemote := examples["cloudrun-control-plane.env"]
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_EXECUTION_TRANSPORT", "remote")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_SANDBOX_BACKEND", "none")
+	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "60")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_WORK_ROOT_MAX_BYTES", "1073741824")
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_REMOTE_RUNNER_AUTH", "cloudrun-idtoken")

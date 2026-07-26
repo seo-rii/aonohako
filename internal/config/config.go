@@ -192,9 +192,6 @@ func Load() (Config, error) {
 		if maxPrincipalStreams == 0 {
 			return Config{}, fmt.Errorf("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
 		}
-		if maxPrincipalRequestsPerMinute == 0 {
-			return Config{}, fmt.Errorf("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
-		}
 	}
 	maxDurationSeconds64 := int64(^uint64(0)>>1) / int64(time.Second)
 	maxDurationSeconds := int(^uint(0) >> 1)

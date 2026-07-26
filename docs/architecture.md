@@ -601,9 +601,13 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_REMOTE_STRICT_PROTOCOL` is a strict boolean; it defaults to `true`
   outside `dev` so remote responses without `X-Aonohako-Protocol-Version` are
   rejected in production remote fleets
-- non-dev deployments also reject `0` for pending queue, global stream,
-  per-principal stream, and per-principal request-rate caps so unlimited queue
-  or stream settings stay development-only
+- non-dev deployments also reject `0` for pending queue, global stream, and
+  per-principal stream caps so unlimited queue or open-stream settings stay
+  development-only
+- `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE=0` is accepted on every
+  deployment target and disables the process-local fixed-window rate limiter.
+  This is intended for trusted Cloud Run or self-hosted runners whose
+  concurrency and fleet capacity are bounded at the deployment layer
 - `AONOHAKO_ALLOW_REQUEST_NETWORK` is strict boolean configuration and defaults
   to `true` only for `dev`; outside `dev`, client-supplied `enable_network=true`
   is rejected unless this is explicitly enabled for a dedicated runner policy
@@ -639,8 +643,11 @@ The following checks are enforced before the HTTP server starts:
   verifies the principal signature itself over method, request URI, principal,
   timestamp, and body digest; outside `dev`, startup rejects platform auth
   unless that signing secret is configured.
-- Outside `dev`, `/compile` and `/execute` requests are also capped per
-  principal in a fixed one-minute window before they enter the run queue.
+- By default outside `dev`, `/compile` and `/execute` requests are also capped
+  per principal in a process-local fixed one-minute window before they enter
+  the run queue. Trusted runners may set
+  `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE=0` when deployment-layer
+  concurrency and fleet limits provide the capacity boundary.
 - `aonohako-selftest deployment-contract` reports the active execution shape,
   named contract, whether that contract is implemented, effective and missing
   local capabilities, auth posture, queue/stream limits, cgroup parent presence,

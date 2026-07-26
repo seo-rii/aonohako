@@ -1035,7 +1035,7 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsUnlimitedCapsOutsideDev(t *testing.T) {
+func TestLoadRejectsUnlimitedQueueAndStreamCapsOutsideDev(t *testing.T) {
 	tests := []struct {
 		name string
 		key  string
@@ -1043,7 +1043,6 @@ func TestLoadRejectsUnlimitedCapsOutsideDev(t *testing.T) {
 		{name: "pending queue", key: "AONOHAKO_MAX_PENDING_QUEUE"},
 		{name: "active streams", key: "AONOHAKO_MAX_ACTIVE_STREAMS"},
 		{name: "principal streams", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS"},
-		{name: "principal request rate", key: "AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1063,6 +1062,33 @@ func TestLoadRejectsUnlimitedCapsOutsideDev(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.key) {
 				t.Fatalf("error %q should mention %s", err, tc.key)
+			}
+		})
+	}
+}
+
+func TestLoadAllowsDisabledPrincipalRequestRateOutsideDev(t *testing.T) {
+	for _, target := range []string{"cloudrun", "selfhosted"} {
+		t.Run(target, func(t *testing.T) {
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", target)
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "bearer")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_TOKEN", "runner-token")
+			t.Setenv("AONOHAKO_INBOUND_AUTH", "bearer")
+			t.Setenv("AONOHAKO_API_BEARER_TOKEN", "api-token")
+			t.Setenv("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "0")
+			if target == "cloudrun" {
+				t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
+			}
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load returned error: %v", err)
+			}
+			if cfg.MaxPrincipalRequestsPerMinute != 0 {
+				t.Fatalf("max principal requests per minute = %d, want 0", cfg.MaxPrincipalRequestsPerMinute)
 			}
 		})
 	}
