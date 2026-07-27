@@ -285,12 +285,16 @@ aonohako-selftest cgroup-preflight
   application. Do not expose platform mode directly to the public internet.
 - `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET` is required for
   `AONOHAKO_INBOUND_AUTH=platform` outside `dev`. It makes platform mode verify
-  `X-Aonohako-Principal-Signature: v3=<hex-hmac-sha256>` over
+  `X-Aonohako-Principal-Signature: v4=<hex-hmac-sha256>` over
   `method + "\n" + request_uri + "\n" + principal + "\n" + timestamp + "\n" +
-  sha256_hex(body)` before accepting the request. `request_uri` includes the
-  path and query string. The timestamp comes from
+  nonce + "\n" + sha256_hex(body)` before accepting the request. `request_uri`
+  includes the path and query string. The timestamp comes from
   `X-Aonohako-Principal-Timestamp` in RFC3339 format and must be within five
-  minutes of the server clock. Legacy bodyless `v2=` signatures are rejected.
+  minutes of the server clock. `X-Aonohako-Principal-Nonce` must be a fresh,
+  cryptographically random 128-bit value encoded as 32 lowercase hex
+  characters. A bounded replay cache rejects reuse by the same principal until
+  the signature validity window expires; it fails closed when capacity is
+  exhausted. Legacy replayable `v3=` and bodyless `v2=` signatures are rejected.
   Concurrent pre-auth body hashing first requires global and claimed-principal
   upload admission, and is additionally capped by
   `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY`, so invalid signatures cannot force

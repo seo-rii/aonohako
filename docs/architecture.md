@@ -636,11 +636,12 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`; the application verifies
   `X-Aonohako-Principal-Signature` and
   `X-Aonohako-Principal-Timestamp` over the request method, request URI
-  including query string, principal, RFC3339 timestamp, and SHA-256
-  request-body digest with a five-minute replay window,
-  so unsigned trusted
-  platform headers are not accepted outside `dev`; legacy bodyless signatures
-  are rejected
+  including query string, principal, RFC3339 timestamp, a fresh 128-bit
+  `X-Aonohako-Principal-Nonce`, and the SHA-256 request-body digest with a
+  five-minute validity window; a bounded per-principal replay cache rejects
+  nonce reuse and fails closed at capacity, so unsigned trusted platform
+  headers are not accepted outside `dev`; legacy replayable signatures are
+  rejected
 - every request to `/compile` or `/execute` acquires
   `AONOHAKO_MAX_ACTIVE_UPLOADS` and claimed-principal
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS` admission before authentication can

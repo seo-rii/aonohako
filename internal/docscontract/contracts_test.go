@@ -191,7 +191,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`AONOHAKO_INBOUND_AUTH=none` is rejected outside `dev`") {
 		t.Fatalf("architecture.md must describe production inbound-auth none rejection")
 	}
-	if !strings.Contains(architecture, "`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Signature`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Timestamp`") || !strings.Contains(architecture, "five-minute replay window") || !strings.Contains(architecture, "unsigned trusted\n  platform headers are not accepted outside `dev`") || !strings.Contains(architecture, "`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`") || !strings.Contains(architecture, "`AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`") {
+	if !strings.Contains(architecture, "`AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Signature`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Timestamp`") || !strings.Contains(architecture, "`X-Aonohako-Principal-Nonce`") || !strings.Contains(architecture, "bounded per-principal replay cache") || !strings.Contains(architecture, "five-minute validity window") || !strings.Contains(architecture, "unsigned trusted platform\n  headers are not accepted outside `dev`") || !strings.Contains(architecture, "`AONOHAKO_TRUSTED_PLATFORM_HEADERS=true`") || !strings.Contains(architecture, "`AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS`") {
 		t.Fatalf("architecture.md must describe signed platform auth and optional trusted-proxy assertions")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_TRUSTED_RUNNER_INGRESS=true` is required for non-dev") {

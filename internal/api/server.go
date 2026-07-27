@@ -49,6 +49,7 @@ const (
 	platformPrincipalHeader           = "X-Aonohako-Principal"
 	platformPrincipalSignatureHeader  = "X-Aonohako-Principal-Signature"
 	platformPrincipalTimestampHeader  = "X-Aonohako-Principal-Timestamp"
+	platformPrincipalNonceHeader      = "X-Aonohako-Principal-Nonce"
 	platformPrincipalSignatureSkew    = 5 * time.Minute
 )
 
@@ -90,6 +91,7 @@ type Server struct {
 	rateLastCleanup  time.Time
 
 	platformBodyHashSlots chan struct{}
+	platformReplayCache   *platformReplayCache
 	payloadURLFetchSlots  chan struct{}
 	payloadURLTimeout     time.Duration
 	sseWriteTimeout       time.Duration
@@ -129,6 +131,7 @@ func NewWithServices(cfg config.Config, compileService interface {
 			chan struct{},
 			platformBodyHashConcurrency(cfg),
 		),
+		platformReplayCache:  newPlatformReplayCache(),
 		payloadURLFetchSlots: make(chan struct{}, payloadURLFetchSlots),
 		payloadURLTimeout:    payloadURLRequestTimeout,
 		sseWriteTimeout:      sse.DefaultWriteTimeout,
@@ -695,16 +698,25 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			value := strings.TrimSpace(r.Header.Get(platformPrincipalHeader))
 			if s.cfg.InboundAuth.PlatformPrincipalHMACSecret != "" {
 				signature := strings.TrimSpace(r.Header.Get(platformPrincipalSignatureHeader))
-				if value == "" || !strings.HasPrefix(signature, "v3=") {
+				if value == "" || !strings.HasPrefix(signature, "v4=") {
 					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
 				timestamp := strings.TrimSpace(r.Header.Get(platformPrincipalTimestampHeader))
+				nonce := strings.TrimSpace(r.Header.Get(platformPrincipalNonceHeader))
 				parsedTimestamp, err := time.Parse(time.RFC3339, timestamp)
 				now := time.Now()
-				rawSignature := strings.TrimPrefix(signature, "v3=")
+				rawSignature := strings.TrimPrefix(signature, "v4=")
 				decodedSignature, decodeErr := hex.DecodeString(rawSignature)
-				if err != nil || now.Sub(parsedTimestamp) > platformPrincipalSignatureSkew || parsedTimestamp.Sub(now) > platformPrincipalSignatureSkew || decodeErr != nil || len(decodedSignature) != sha256.Size {
+				decodedNonce, nonceErr := hex.DecodeString(nonce)
+				if err != nil ||
+					now.Sub(parsedTimestamp) > platformPrincipalSignatureSkew ||
+					parsedTimestamp.Sub(now) > platformPrincipalSignatureSkew ||
+					nonceErr != nil ||
+					len(decodedNonce) != 16 ||
+					nonce != strings.ToLower(nonce) ||
+					decodeErr != nil ||
+					len(decodedSignature) != sha256.Size {
 					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
@@ -728,8 +740,19 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					writeJSONErrorMessage(w, status, "invalid_request_body", "invalid request body")
 					return
 				}
-				if !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.RequestURI(), value, timestamp, signature, bodyHash, time.Now()) {
+				verifiedAt := time.Now()
+				if !verifyPlatformPrincipalSignature(s.cfg.InboundAuth.PlatformPrincipalHMACSecret, r.Method, r.URL.RequestURI(), value, timestamp, nonce, signature, bodyHash, verifiedAt) {
 					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+					return
+				}
+				var replayNonce [16]byte
+				copy(replayNonce[:], decodedNonce)
+				switch s.platformReplayCache.admit(value, replayNonce, parsedTimestamp.Add(platformPrincipalSignatureSkew), verifiedAt) {
+				case platformReplayDuplicate:
+					writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+					return
+				case platformReplayCapacity:
+					writeJSONError(w, http.StatusTooManyRequests, "platform_replay_cache_limit_exceeded")
 					return
 				}
 			} else if s.cfg.TrustedPlatformHeaders && len(s.cfg.TrustedPlatformHeaderCIDRs) > 0 && s.cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetDev {
@@ -836,7 +859,7 @@ func hashAndRestoreRequestBody(w http.ResponseWriter, r *http.Request) (string, 
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func verifyPlatformPrincipalSignature(secret, method, requestURI, principal, timestamp, signature, bodyHash string, now time.Time) bool {
+func verifyPlatformPrincipalSignature(secret, method, requestURI, principal, timestamp, nonce, signature, bodyHash string, now time.Time) bool {
 	timestamp = strings.TrimSpace(timestamp)
 	parsedTimestamp, err := time.Parse(time.RFC3339, timestamp)
 	if err != nil {
@@ -846,8 +869,8 @@ func verifyPlatformPrincipalSignature(secret, method, requestURI, principal, tim
 		return false
 	}
 	signature = strings.TrimSpace(signature)
-	if strings.HasPrefix(signature, "v3=") {
-		signature = strings.TrimPrefix(signature, "v3=")
+	if strings.HasPrefix(signature, "v4=") {
+		signature = strings.TrimPrefix(signature, "v4=")
 	} else {
 		return false
 	}
@@ -855,7 +878,7 @@ func verifyPlatformPrincipalSignature(secret, method, requestURI, principal, tim
 		return false
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(method + "\n" + requestURI + "\n" + principal + "\n" + timestamp + "\n" + bodyHash))
+	_, _ = mac.Write([]byte(method + "\n" + requestURI + "\n" + principal + "\n" + timestamp + "\n" + nonce + "\n" + bodyHash))
 	want := hex.EncodeToString(mac.Sum(nil))
 	return constantTimeEqual(strings.ToLower(signature), want)
 }

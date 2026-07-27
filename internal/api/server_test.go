@@ -80,11 +80,15 @@ func (b *blockingBody) Close() error {
 	return nil
 }
 
-func platformPrincipalSignatureForTest(secret, method, requestURI, principal, timestamp string, body []byte) string {
+func platformPrincipalNonceForTest(id int) string {
+	return fmt.Sprintf("%032x", id)
+}
+
+func platformPrincipalSignatureForTest(secret, method, requestURI, principal, timestamp, nonce string, body []byte) string {
 	sum := sha256.Sum256(body)
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(method + "\n" + requestURI + "\n" + principal + "\n" + timestamp + "\n" + hex.EncodeToString(sum[:])))
-	return "v3=" + hex.EncodeToString(mac.Sum(nil))
+	_, _ = mac.Write([]byte(method + "\n" + requestURI + "\n" + principal + "\n" + timestamp + "\n" + nonce + "\n" + hex.EncodeToString(sum[:])))
+	return "v4=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 func TestConstantTimeEqualRequiresDigestAndLengthMatch(t *testing.T) {
@@ -977,20 +981,24 @@ func TestPlatformAuthRequiresValidPrincipalSignatureWhenConfigured(t *testing.T)
 		name      string
 		principal string
 		timestamp string
+		nonce     string
 		url       string
 		signature string
 		want      int
 	}{
 		{name: "missing signature", principal: "alice", want: http.StatusUnauthorized},
 		{name: "missing timestamp", principal: "alice", signature: "v2=bad", want: http.StatusUnauthorized},
-		{name: "stale timestamp", principal: "alice", timestamp: staleTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", staleTimestamp, body), want: http.StatusUnauthorized},
+		{name: "missing nonce", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", validTimestamp, platformPrincipalNonceForTest(1), body), want: http.StatusUnauthorized},
+		{name: "malformed nonce", principal: "alice", timestamp: validTimestamp, nonce: "bad", signature: "v4=bad", want: http.StatusUnauthorized},
+		{name: "stale timestamp", principal: "alice", timestamp: staleTimestamp, nonce: platformPrincipalNonceForTest(2), signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", staleTimestamp, platformPrincipalNonceForTest(2), body), want: http.StatusUnauthorized},
 		{name: "legacy principal only signature", principal: "alice", timestamp: validTimestamp, signature: "v1=bad", want: http.StatusUnauthorized},
 		{name: "legacy bodyless signature", principal: "alice", timestamp: validTimestamp, signature: "v2=bad", want: http.StatusUnauthorized},
-		{name: "bad signature", principal: "alice", timestamp: validTimestamp, signature: "v3=bad", want: http.StatusUnauthorized},
-		{name: "wrong path signature", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/compile", "alice", validTimestamp, body), want: http.StatusUnauthorized},
-		{name: "wrong query signature", principal: "alice", timestamp: validTimestamp, url: "/execute?trace=1", signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", validTimestamp, body), want: http.StatusUnauthorized},
-		{name: "valid query signature", principal: "alice", timestamp: validTimestamp, url: "/execute?trace=1", signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute?trace=1", "alice", validTimestamp, body), want: http.StatusOK},
-		{name: "valid signature", principal: "alice", timestamp: validTimestamp, signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", validTimestamp, body), want: http.StatusOK},
+		{name: "legacy replayable signature", principal: "alice", timestamp: validTimestamp, nonce: platformPrincipalNonceForTest(3), signature: "v3=" + strings.Repeat("0", sha256.Size*2), want: http.StatusUnauthorized},
+		{name: "bad signature", principal: "alice", timestamp: validTimestamp, nonce: platformPrincipalNonceForTest(4), signature: "v4=bad", want: http.StatusUnauthorized},
+		{name: "wrong path signature", principal: "alice", timestamp: validTimestamp, nonce: platformPrincipalNonceForTest(5), signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/compile", "alice", validTimestamp, platformPrincipalNonceForTest(5), body), want: http.StatusUnauthorized},
+		{name: "wrong query signature", principal: "alice", timestamp: validTimestamp, nonce: platformPrincipalNonceForTest(6), url: "/execute?trace=1", signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", validTimestamp, platformPrincipalNonceForTest(6), body), want: http.StatusUnauthorized},
+		{name: "valid query signature", principal: "alice", timestamp: validTimestamp, nonce: platformPrincipalNonceForTest(7), url: "/execute?trace=1", signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute?trace=1", "alice", validTimestamp, platformPrincipalNonceForTest(7), body), want: http.StatusOK},
+		{name: "valid signature", principal: "alice", timestamp: validTimestamp, nonce: platformPrincipalNonceForTest(8), signature: platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", validTimestamp, platformPrincipalNonceForTest(8), body), want: http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := tc.url
@@ -1004,6 +1012,9 @@ func TestPlatformAuthRequiresValidPrincipalSignatureWhenConfigured(t *testing.T)
 			}
 			if tc.timestamp != "" {
 				req.Header.Set(platformPrincipalTimestampHeader, tc.timestamp)
+			}
+			if tc.nonce != "" {
+				req.Header.Set(platformPrincipalNonceHeader, tc.nonce)
 			}
 			if tc.signature != "" {
 				req.Header.Set(platformPrincipalSignatureHeader, tc.signature)
@@ -1051,7 +1062,9 @@ func TestPlatformAuthEnforcesTrustedProxyCIDRsForSignedHeaders(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set(platformPrincipalHeader, "alice")
 			req.Header.Set(platformPrincipalTimestampHeader, timestamp)
-			req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, body))
+			nonce := platformPrincipalNonceForTest(1)
+			req.Header.Set(platformPrincipalNonceHeader, nonce)
+			req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, nonce, body))
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
@@ -1089,7 +1102,8 @@ func TestPlatformAuthRejectsCheapMetadataFailuresBeforeBodyHashing(t *testing.T)
 			req.RemoteAddr = tc.remoteAddr
 			req.Header.Set(platformPrincipalHeader, "alice")
 			req.Header.Set(platformPrincipalTimestampHeader, tc.timestamp)
-			req.Header.Set(platformPrincipalSignatureHeader, "v3="+strings.Repeat("0", sha256.Size*2))
+			req.Header.Set(platformPrincipalNonceHeader, platformPrincipalNonceForTest(1))
+			req.Header.Set(platformPrincipalSignatureHeader, "v4="+strings.Repeat("0", sha256.Size*2))
 			rr := httptest.NewRecorder()
 
 			s.Handler().ServeHTTP(rr, req)
@@ -1125,7 +1139,9 @@ func TestPlatformAuthRejectsBodySubstitutionReplay(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(platformPrincipalHeader, "alice")
 	req.Header.Set(platformPrincipalTimestampHeader, timestamp)
-	req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, signedBody))
+	nonce := platformPrincipalNonceForTest(1)
+	req.Header.Set(platformPrincipalNonceHeader, nonce)
+	req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, nonce, signedBody))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1136,6 +1152,47 @@ func TestPlatformAuthRejectsBodySubstitutionReplay(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
+}
+
+func TestPlatformAuthRejectsReusedNonce(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "platform-secret"}
+	cfg.MaxActiveRuns = 4
+	cfg.MaxPendingQueue = 8
+	cfg.MaxActiveStreams = 8
+	cfg.MaxPrincipalStreams = 8
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	body := executePayload(t)
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	nonce := platformPrincipalNonceForTest(1)
+	signature := platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, nonce, body)
+	send := func() int {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(platformPrincipalHeader, "alice")
+		req.Header.Set(platformPrincipalTimestampHeader, timestamp)
+		req.Header.Set(platformPrincipalNonceHeader, nonce)
+		req.Header.Set(platformPrincipalSignatureHeader, signature)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return resp.StatusCode
+	}
+
+	if got := send(); got != http.StatusOK {
+		t.Fatalf("first request status = %d, want %d", got, http.StatusOK)
+	}
+	if got := send(); got != http.StatusUnauthorized {
+		t.Fatalf("replayed request status = %d, want %d", got, http.StatusUnauthorized)
+	}
 }
 
 func TestPlatformAuthLimitsConcurrentBodyHashing(t *testing.T) {
@@ -1164,7 +1221,9 @@ func TestPlatformAuthLimitsConcurrentBodyHashing(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(platformPrincipalHeader, "alice")
 	req.Header.Set(platformPrincipalTimestampHeader, timestamp)
-	req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, body))
+	nonce := platformPrincipalNonceForTest(1)
+	req.Header.Set(platformPrincipalNonceHeader, nonce)
+	req.Header.Set(platformPrincipalSignatureHeader, platformPrincipalSignatureForTest("platform-secret", http.MethodPost, "/execute", "alice", timestamp, nonce, body))
 	resp2, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
@@ -1197,7 +1256,8 @@ func TestUploadAdmissionPrecedesPlatformBodyHashing(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/execute", body)
 	req.Header.Set(platformPrincipalHeader, "alice")
 	req.Header.Set(platformPrincipalTimestampHeader, time.Now().UTC().Format(time.RFC3339))
-	req.Header.Set(platformPrincipalSignatureHeader, "v3="+strings.Repeat("0", sha256.Size*2))
+	req.Header.Set(platformPrincipalNonceHeader, platformPrincipalNonceForTest(1))
+	req.Header.Set(platformPrincipalSignatureHeader, "v4="+strings.Repeat("0", sha256.Size*2))
 	rr := httptest.NewRecorder()
 
 	s.Handler().ServeHTTP(rr, req)
