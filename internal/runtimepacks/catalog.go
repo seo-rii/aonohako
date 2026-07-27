@@ -9,7 +9,10 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
+
+	"aonohako/internal/pythonpolicy"
 
 	"gopkg.in/yaml.v3"
 )
@@ -268,15 +271,17 @@ func (s ImageSpec) DockerBuild(contextDir, tagPrefix string) DockerBuildSpec {
 		File:    filepath.ToSlash(filepath.Join("docker", "runtime.Dockerfile")),
 		Context: contextDir,
 		BuildArgs: map[string]string{
-			"IMAGE_NAME":     s.Name,
-			"LANGUAGES":      strings.Join(s.Languages, ","),
-			"RUNTIME_BASE":   s.BaseImage,
-			"APT_PACKAGES":   strings.Join(s.AptPackages, " "),
-			"PIP_PACKAGES":   strings.Join(s.PipPackages, " "),
-			"NPM_PACKAGES":   strings.Join(s.NPMPackages, " "),
-			"INSTALL_SCRIPT": strings.Join(s.InstallScript, "\n"),
-			"SANDBOX_TOOLS":  strings.Join(s.SandboxTools, " "),
-			"SMOKE_COMMAND":  strings.Join(s.SmokeCommand, "\t"),
+			"IMAGE_NAME":                  s.Name,
+			"LANGUAGES":                   strings.Join(s.Languages, ","),
+			"RUNTIME_BASE":                s.BaseImage,
+			"APT_PACKAGES":                strings.Join(s.AptPackages, " "),
+			"PIP_PACKAGES":                strings.Join(s.PipPackages, " "),
+			"NPM_PACKAGES":                strings.Join(s.NPMPackages, " "),
+			"INSTALL_SCRIPT":              strings.Join(s.InstallScript, "\n"),
+			"SANDBOX_TOOLS":               strings.Join(s.SandboxTools, " "),
+			"SMOKE_COMMAND":               strings.Join(s.SmokeCommand, "\t"),
+			"PYTHON_LIBRARY_ISOLATION":    strconv.FormatBool(slices.Contains(s.Languages, "python")),
+			"PYTHON_EXTERNAL_LIBRARY_GID": strconv.FormatUint(uint64(pythonpolicy.ExternalLibraryGID), 10),
 		},
 	}
 }

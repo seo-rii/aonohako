@@ -21,6 +21,7 @@ import (
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
@@ -58,6 +59,15 @@ type sandboxStreamConfig struct {
 type sandboxIdentity struct {
 	uid uint32
 	gid uint32
+}
+
+func sandboxSupplementaryGroups(identity sandboxIdentity, runLang string, mode pythonpolicy.LibraryMode) []uint32 {
+	groups := []uint32{identity.gid}
+	if profiles.NormalizeRunLang(runLang) == "python" &&
+		pythonpolicy.EffectiveLibraryMode(mode) == pythonpolicy.LibraryModeInstalled {
+		groups = append(groups, pythonpolicy.ExternalLibraryGID)
+	}
+	return groups
 }
 
 const (
@@ -403,7 +413,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		cmd.SysProcAttr.Credential = &syscall.Credential{
 			Uid:    identity.uid,
 			Gid:    identity.gid,
-			Groups: []uint32{identity.gid},
+			Groups: sandboxSupplementaryGroups(identity, runLang, req.PythonLibraryMode),
 		}
 	}
 	cmd.ExtraFiles = []*os.File{requestRead, targetReadyWrite, targetReleaseRead}

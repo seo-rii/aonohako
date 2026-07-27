@@ -26,6 +26,7 @@ import (
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/queue"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimepolicy"
@@ -379,6 +380,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
+		return
+	}
+	if err := s.applyPythonLibraryPolicy(&req); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_python_library_mode", err.Error())
 		return
 	}
 	if err := runvalidation.Validate(&req); err != nil {
@@ -945,6 +950,50 @@ func (s *Server) applyRuntimeProfilePolicy(problemID string, runtimeProfile *str
 		return nil
 	}
 	return s.validateRuntimeProfileAllowed(*runtimeProfile)
+}
+
+func (s *Server) applyPythonLibraryPolicy(req *model.RunRequest) error {
+	if req == nil {
+		return fmt.Errorf("request is required")
+	}
+	if err := pythonpolicy.ValidateOptionalLibraryMode(req.PythonLibraryMode); err != nil {
+		return fmt.Errorf("invalid python_library_mode: %w", err)
+	}
+	if !runvalidation.UsesPython(req) {
+		if req.PythonLibraryMode != "" {
+			return fmt.Errorf("python_library_mode requires a Python contestant, step program, interactor, or spj")
+		}
+		return nil
+	}
+
+	if mappedMode := s.cfg.ProblemPythonLibraryModes[req.ProblemID]; mappedMode != "" {
+		if err := pythonpolicy.ValidateOptionalLibraryMode(mappedMode); err != nil {
+			return fmt.Errorf("problem_id %s maps to invalid python_library_mode: %w", req.ProblemID, err)
+		}
+		if req.PythonLibraryMode != "" && req.PythonLibraryMode != mappedMode {
+			return fmt.Errorf("python_library_mode conflicts with problem policy")
+		}
+		req.PythonLibraryMode = mappedMode
+		return nil
+	}
+
+	defaultMode := s.cfg.DefaultPythonLibraryMode
+	if defaultMode == "" {
+		defaultMode = pythonpolicy.LibraryModeStdlib
+	}
+	if err := pythonpolicy.ValidateOptionalLibraryMode(defaultMode); err != nil {
+		return fmt.Errorf("server default python_library_mode is invalid: %w", err)
+	}
+	if req.PythonLibraryMode == "" {
+		req.PythonLibraryMode = defaultMode
+		return nil
+	}
+	if req.PythonLibraryMode == pythonpolicy.LibraryModeInstalled &&
+		defaultMode != pythonpolicy.LibraryModeInstalled &&
+		!s.cfg.AllowRequestPythonInstalledLibraries {
+		return fmt.Errorf("python_library_mode %q is not allowed by server policy", pythonpolicy.LibraryModeInstalled)
+	}
+	return nil
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {

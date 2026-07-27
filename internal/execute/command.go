@@ -8,6 +8,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/pythonpolicy"
 )
 
 func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
@@ -66,7 +67,10 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			primaryPath,
 		}
 	case "python":
-		return []string{"python3", primaryPath}
+		if pythonpolicy.EffectiveLibraryMode(req.PythonLibraryMode) == pythonpolicy.LibraryModeInstalled {
+			return []string{"python3", primaryPath}
+		}
+		return []string{"python3", "-E", "-s", "-S", primaryPath}
 	case "pypy":
 		return []string{"pypy3", primaryPath}
 	case "racket":

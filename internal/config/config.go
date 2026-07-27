@@ -16,6 +16,7 @@ import (
 
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/platform"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimepolicy"
 )
@@ -135,28 +136,31 @@ const (
 )
 
 type Config struct {
-	Port                          string
-	MaxActiveRuns                 int
-	MaxPendingQueue               int
-	MaxActiveStreams              int
-	MaxActiveUploads              int
-	MaxPrincipalUploads           int
-	PlatformBodyHashConcurrency   int
-	MaxPrincipalStreams           int
-	MaxPrincipalRequestsPerMinute int
-	HeartbeatInterval             time.Duration
-	BodyReadTimeout               time.Duration
-	AllowRequestNetwork           bool
-	NetworkEgressIsolated         bool
-	AllowRequestRuntimeProfile    bool
-	RequireWorkRootTmpfs          bool
-	WorkRootMaxBytes              int
-	WorkRootMaxFiles              int
-	TrustedRunnerIngress          bool
-	TrustedPlatformHeaders        bool
-	TrustedPlatformHeaderCIDRs    []string
-	Execution                     ExecutionConfig
-	InboundAuth                   InboundAuthConfig
+	Port                                 string
+	MaxActiveRuns                        int
+	MaxPendingQueue                      int
+	MaxActiveStreams                     int
+	MaxActiveUploads                     int
+	MaxPrincipalUploads                  int
+	PlatformBodyHashConcurrency          int
+	MaxPrincipalStreams                  int
+	MaxPrincipalRequestsPerMinute        int
+	HeartbeatInterval                    time.Duration
+	BodyReadTimeout                      time.Duration
+	AllowRequestNetwork                  bool
+	NetworkEgressIsolated                bool
+	AllowRequestRuntimeProfile           bool
+	DefaultPythonLibraryMode             pythonpolicy.LibraryMode
+	AllowRequestPythonInstalledLibraries bool
+	ProblemPythonLibraryModes            map[string]pythonpolicy.LibraryMode
+	RequireWorkRootTmpfs                 bool
+	WorkRootMaxBytes                     int
+	WorkRootMaxFiles                     int
+	TrustedRunnerIngress                 bool
+	TrustedPlatformHeaders               bool
+	TrustedPlatformHeaderCIDRs           []string
+	Execution                            ExecutionConfig
+	InboundAuth                          InboundAuthConfig
 }
 
 func Load() (Config, error) {
@@ -247,6 +251,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	allowRequestRuntimeProfile, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", os.Getenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE"), defaultAllowRequestRuntimeProfile(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	defaultPythonLibraryMode, err := pythonpolicy.ParseLibraryMode(getenv("AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE", string(pythonpolicy.LibraryModeStdlib)))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE %w", err)
+	}
+	allowRequestPythonLibraries, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_PYTHON_INSTALLED_LIBRARIES", os.Getenv("AONOHAKO_ALLOW_REQUEST_PYTHON_INSTALLED_LIBRARIES"), defaultAllowRequestPythonLibraries(runtimePlatform))
 	if err != nil {
 		return Config{}, err
 	}
@@ -431,6 +443,30 @@ func Load() (Config, error) {
 				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUNTIME_PROFILES problem_id %q maps to unknown runtime_profile %q", problemID, profileName)
 			}
 			problemRuntimeProfiles[problemID] = profileName
+		}
+	}
+	problemPythonLibraryModes := map[string]pythonpolicy.LibraryMode(nil)
+	if rawProblemModes := strings.TrimSpace(os.Getenv("AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES")); rawProblemModes != "" {
+		parsedProblemModes := map[string]string{}
+		if err := json.Unmarshal([]byte(rawProblemModes), &parsedProblemModes); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES must be a JSON object mapping problem IDs to Python library modes: %w", err)
+		}
+		if len(parsedProblemModes) == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES must define at least one problem mapping when set")
+		}
+		problemPythonLibraryModes = make(map[string]pythonpolicy.LibraryMode, len(parsedProblemModes))
+		for problemID, rawMode := range parsedProblemModes {
+			if problemID == "" {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES contains an empty problem_id")
+			}
+			if err := runtimepolicy.ValidateProblemID(problemID); err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES problem_id %q is invalid: %w", problemID, err)
+			}
+			mode, err := pythonpolicy.ParseLibraryMode(rawMode)
+			if err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES problem_id %q %w", problemID, err)
+			}
+			problemPythonLibraryModes[problemID] = mode
 		}
 	}
 	execution := ExecutionConfig{
@@ -618,28 +654,31 @@ func Load() (Config, error) {
 		}
 	}
 	return Config{
-		Port:                          port,
-		MaxActiveRuns:                 maxActive,
-		MaxPendingQueue:               maxPending,
-		MaxActiveStreams:              maxActiveStreams,
-		MaxActiveUploads:              maxActiveUploads,
-		MaxPrincipalUploads:           maxPrincipalUploads,
-		PlatformBodyHashConcurrency:   platformBodyHashConcurrency,
-		MaxPrincipalStreams:           maxPrincipalStreams,
-		MaxPrincipalRequestsPerMinute: maxPrincipalRequestsPerMinute,
-		HeartbeatInterval:             time.Duration(heartbeatSec) * time.Second,
-		BodyReadTimeout:               time.Duration(bodyReadTimeoutSec) * time.Second,
-		AllowRequestNetwork:           allowRequestNetwork,
-		NetworkEgressIsolated:         networkEgressIsolated,
-		AllowRequestRuntimeProfile:    allowRequestRuntimeProfile,
-		RequireWorkRootTmpfs:          requireWorkRootTmpfs,
-		WorkRootMaxBytes:              workRootMaxBytes,
-		WorkRootMaxFiles:              workRootMaxFiles,
-		TrustedRunnerIngress:          trustedRunnerIngress,
-		TrustedPlatformHeaders:        trustedPlatformHeaders,
-		TrustedPlatformHeaderCIDRs:    trustedPlatformHeaderCIDRs,
-		Execution:                     execution,
-		InboundAuth:                   inboundAuth,
+		Port:                                 port,
+		MaxActiveRuns:                        maxActive,
+		MaxPendingQueue:                      maxPending,
+		MaxActiveStreams:                     maxActiveStreams,
+		MaxActiveUploads:                     maxActiveUploads,
+		MaxPrincipalUploads:                  maxPrincipalUploads,
+		PlatformBodyHashConcurrency:          platformBodyHashConcurrency,
+		MaxPrincipalStreams:                  maxPrincipalStreams,
+		MaxPrincipalRequestsPerMinute:        maxPrincipalRequestsPerMinute,
+		HeartbeatInterval:                    time.Duration(heartbeatSec) * time.Second,
+		BodyReadTimeout:                      time.Duration(bodyReadTimeoutSec) * time.Second,
+		AllowRequestNetwork:                  allowRequestNetwork,
+		NetworkEgressIsolated:                networkEgressIsolated,
+		AllowRequestRuntimeProfile:           allowRequestRuntimeProfile,
+		DefaultPythonLibraryMode:             defaultPythonLibraryMode,
+		AllowRequestPythonInstalledLibraries: allowRequestPythonLibraries,
+		ProblemPythonLibraryModes:            problemPythonLibraryModes,
+		RequireWorkRootTmpfs:                 requireWorkRootTmpfs,
+		WorkRootMaxBytes:                     workRootMaxBytes,
+		WorkRootMaxFiles:                     workRootMaxFiles,
+		TrustedRunnerIngress:                 trustedRunnerIngress,
+		TrustedPlatformHeaders:               trustedPlatformHeaders,
+		TrustedPlatformHeaderCIDRs:           trustedPlatformHeaderCIDRs,
+		Execution:                            execution,
+		InboundAuth:                          inboundAuth,
 	}, nil
 }
 
@@ -805,6 +844,10 @@ func validateNetworkEgressPolicy(opts platform.RuntimeOptions, allowRequestNetwo
 }
 
 func defaultAllowRequestRuntimeProfile(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget == platform.DeploymentTargetDev
+}
+
+func defaultAllowRequestPythonLibraries(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetDev
 }
 

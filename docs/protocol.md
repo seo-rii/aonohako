@@ -183,8 +183,10 @@ Both `/compile` and `/execute` share the same bounded queue:
 - `/execute` rejects oversized `stdin` / `expected_stdout`, a request-wide
   decoded binary total over 48 MiB, out-of-range run limits, invalid or unknown
   `runtime_profile` values, invalid `problem_id` values, profile conflicts with
-  problem policy, policy-disabled direct profile requests, and disallowed
-  `enable_network=true` before acquiring a stream or queue slot.
+  problem policy, policy-disabled direct profile requests, invalid or
+  policy-disabled `python_library_mode` values, Python-library problem-policy
+  conflicts, and disallowed `enable_network=true` before acquiring a stream or
+  queue slot.
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `1` for
   `embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`,
   otherwise `max(1, cpu−2)`). The `embedded + helper` backend rejects values
@@ -298,10 +300,11 @@ omitted for terse policy errors:
 Pre-SSE failures include method mismatches (`method_not_allowed`), malformed or
 oversized JSON (`invalid_json` / `invalid_request_body`), auth failures
 (`unauthorized` / `server_auth_misconfigured`), request validation failures
-(`invalid_request`, `invalid_runtime_profile`, `network_not_allowed`), queue
-and stream admission failures, and SSE initialization failure
-(`stream_init_failed`). After the SSE stream is admitted, terminal failures are
-reported as SSE `error` events before the final `result` event.
+(`invalid_request`, `invalid_runtime_profile`, `network_not_allowed`,
+`invalid_python_library_mode`), queue and stream admission failures, and SSE
+initialization failure (`stream_init_failed`). After the SSE stream is
+admitted, terminal failures are reported as SSE `error` events before the final
+`result` event.
 
 Callers should implement exponential backoff on 429.
 
@@ -315,7 +318,7 @@ Callers should implement exponential backoff on 429.
 | `Cache-Control` | `no-cache` |
 | `Connection` | `keep-alive` |
 | `X-Accel-Buffering` | `no` |
-| `X-Aonohako-Protocol-Version` | `2026-04-24` |
+| `X-Aonohako-Protocol-Version` | `2026-07-27` |
 
 Remote control planes use the configured protocol policy. In the default
 non-dev strict mode, missing or mismatched `X-Aonohako-Protocol-Version`

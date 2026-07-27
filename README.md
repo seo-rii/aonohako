@@ -264,6 +264,22 @@ aonohako-selftest cgroup-preflight
   With `remote` transport, deploy the same profile definitions and
   `problem_id` mapping to the downstream runner whenever the control plane
   forwards policy-selected `runtime_profile` values.
+- `AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE` selects the request-wide default for
+  Python imports: `stdlib` (default) or `installed`. `stdlib` keeps submitted
+  sibling modules and the standard library available while hiding packages
+  installed in the runtime image.
+- `AONOHAKO_ALLOW_REQUEST_PYTHON_INSTALLED_LIBRARIES` controls whether a
+  request may elevate from the `stdlib` default with
+  `python_library_mode=installed`. It defaults to `true` only for `dev` and
+  `false` for `cloudrun` or `selfhosted`. Outside a problem-owned mapping, a
+  request may always choose the safer `stdlib` mode.
+- `AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES` may define a JSON object mapping
+  request `problem_id` values to `stdlib` or `installed`. A problem mapping
+  wins over direct request policy and conflicting request values are rejected
+  before stream or queue admission. With `remote` transport, deploy the same
+  default and problem mappings to the downstream runner, or explicitly allow
+  the trusted runner boundary to receive the control plane's selected
+  `installed` mode.
 - `AONOHAKO_TRUSTED_RUNNER_INGRESS` asserts that a root-backed embedded helper
   runner is reachable only through trusted/private ingress, Cloud Run IAM, mTLS,
   a gateway, or an equivalent control-plane boundary. It defaults to `true` for

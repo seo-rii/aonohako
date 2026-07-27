@@ -71,6 +71,8 @@ ARG IMAGE_NAME=runtime
 ARG LANGUAGES=
 ARG SANDBOX_TOOLS=
 ARG SMOKE_COMMAND=
+ARG PYTHON_LIBRARY_ISOLATION=false
+ARG PYTHON_EXTERNAL_LIBRARY_GID=65530
 
 RUN install -d -m 0755 /usr/local/lib/aonohako /usr/local/lib/aonohako/python /usr/local/include
 COPY --chmod=0644 third_party/testlib/testlib.h /usr/local/include/testlib.h
@@ -131,6 +133,15 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
       if command -v "${tool}" >/dev/null 2>&1; then chmod 0755 "$(command -v "${tool}")"; fi; \
     done && \
     shopt -s nullglob && \
+    if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" ]]; then \
+      for path in /usr/lib/python*/dist-packages /usr/local/lib/python*/dist-packages /usr/lib/python*/site-packages /usr/local/lib/python*/site-packages /usr/share/python-wheels /usr/local/lib/aonohako/python; do \
+        if [[ ! -e "${path}" ]]; then continue; fi; \
+        chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}" "${path}"; \
+        find "${path}" -type d -exec chmod 0750 {} +; \
+        find "${path}" -type f -perm /0111 -exec chmod 0750 {} +; \
+        find "${path}" -type f ! -perm /0111 -exec chmod 0640 {} +; \
+      done; \
+    fi && \
     for path in /usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip /usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip /usr/local/lib/node_modules/npm /opt/node-*/lib/node_modules/npm; do \
       if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
     done
@@ -143,6 +154,8 @@ ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/
     CARGO_HOME=/usr/local/cargo \
     AONOHAKO_IMAGE_NAME=${IMAGE_NAME} \
     AONOHAKO_LANGUAGES=${LANGUAGES} \
+    AONOHAKO_PYTHON_LIBRARY_ISOLATION=${PYTHON_LIBRARY_ISOLATION} \
+    AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID=${PYTHON_EXTERNAL_LIBRARY_GID} \
     AONOHAKO_SANDBOX_TOOLS=${SANDBOX_TOOLS} \
     AONOHAKO_SMOKE_COMMAND=${SMOKE_COMMAND}
 

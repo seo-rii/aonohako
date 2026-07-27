@@ -243,7 +243,12 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 			spjLimits.WorkspaceBytes = defaultWorkspaceBytes
 		}
 	}
-	spjReq := &model.RunRequest{Lang: spjLang, Limits: spjLimits, EnableNetwork: false}
+	spjReq := &model.RunRequest{
+		Lang:              spjLang,
+		Limits:            spjLimits,
+		PythonLibraryMode: req.PythonLibraryMode,
+		EnableNetwork:     false,
+	}
 	args := buildCommandWithRuntimeTuning(spjPath, spjLang, spjReq, tuning)
 	args = append(args, inputPath, outputPath, solutionPath)
 	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, nil, 0, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)

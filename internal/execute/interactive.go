@@ -358,11 +358,12 @@ func interactorRunRequest(req *model.RunRequest) *model.RunRequest {
 		}
 	}
 	return &model.RunRequest{
-		Lang:           req.Interactor.Lang,
-		Binaries:       req.Interactor.Binaries,
-		Limits:         limits,
-		RuntimeProfile: req.RuntimeProfile,
-		EntryPoint:     req.Interactor.EntryPoint,
+		Lang:              req.Interactor.Lang,
+		Binaries:          req.Interactor.Binaries,
+		Limits:            limits,
+		RuntimeProfile:    req.RuntimeProfile,
+		PythonLibraryMode: req.PythonLibraryMode,
+		EntryPoint:        req.Interactor.EntryPoint,
 	}
 }
 

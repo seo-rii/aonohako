@@ -9,6 +9,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/payloadurl"
 	"aonohako/internal/profiles"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/util"
 )
@@ -54,6 +55,12 @@ func Validate(req *model.RunRequest) error {
 	}
 	if err := runtimepolicy.ValidateProblemID(req.ProblemID); err != nil {
 		return fmt.Errorf("invalid problem_id: %w", err)
+	}
+	if err := pythonpolicy.ValidateOptionalLibraryMode(req.PythonLibraryMode); err != nil {
+		return fmt.Errorf("invalid python_library_mode: %w", err)
+	}
+	if req.PythonLibraryMode != "" && !UsesPython(req) {
+		return fmt.Errorf("python_library_mode requires a Python contestant, step program, interactor, or spj")
 	}
 	if UsesSteps(req) {
 		if err := ValidateStepPipeline(req); err != nil {
@@ -492,6 +499,24 @@ func ProgramsEnableNetwork(req *model.RunRequest) bool {
 		}
 	}
 	return false
+}
+
+func UsesPython(req *model.RunRequest) bool {
+	if req == nil {
+		return false
+	}
+	if profiles.NormalizeRunLang(req.Lang) == "python" {
+		return true
+	}
+	for _, program := range req.Programs {
+		if profiles.NormalizeRunLang(program.Lang) == "python" {
+			return true
+		}
+	}
+	if req.Interactor != nil && profiles.NormalizeRunLang(req.Interactor.Lang) == "python" {
+		return true
+	}
+	return req.SPJ != nil && profiles.NormalizeRunLang(req.SPJ.Lang) == "python"
 }
 
 func LimitsAreZero(l model.Limits) bool {

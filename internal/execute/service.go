@@ -14,6 +14,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/timing"
@@ -126,6 +127,12 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 	if _, err := runvalidation.ValidateBinaryBudget(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if err := pythonpolicy.ValidateOptionalLibraryMode(req.PythonLibraryMode); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid python_library_mode: " + err.Error()}
+	}
+	if req.PythonLibraryMode != "" && !runvalidation.UsesPython(req) {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "python_library_mode requires a Python execution target"}
 	}
 	if req.SPJ != nil {
 		if err := runvalidation.ValidateSPJ(req.SPJ); err != nil {
@@ -374,13 +381,14 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			}, stepResults)
 		}
 		stepReq := &model.RunRequest{
-			Lang:           program.Lang,
-			Binaries:       program.Binaries,
-			Stdin:          stdin,
-			Limits:         step.Limits,
-			RuntimeProfile: req.RuntimeProfile,
-			EnableNetwork:  program.EnableNetwork,
-			EntryPoint:     program.EntryPoint,
+			Lang:              program.Lang,
+			Binaries:          program.Binaries,
+			Stdin:             stdin,
+			Limits:            step.Limits,
+			RuntimeProfile:    req.RuntimeProfile,
+			PythonLibraryMode: req.PythonLibraryMode,
+			EnableNetwork:     program.EnableNetwork,
+			EntryPoint:        program.EntryPoint,
 		}
 		handoffFromFile := false
 		if step.Handoff != nil {

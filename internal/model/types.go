@@ -1,5 +1,7 @@
 package model
 
+import "aonohako/internal/pythonpolicy"
+
 type Source struct {
 	Name    string `json:"name"`
 	DataB64 string `json:"data_b64"`
@@ -130,24 +132,25 @@ type SidecarError struct {
 }
 
 type RunRequest struct {
-	Lang              string          `json:"lang"`
-	Binaries          []Binary        `json:"binaries"`
-	Programs          []RunProgram    `json:"programs,omitempty"`
-	Steps             []RunStep       `json:"steps,omitempty"`
-	Stdin             string          `json:"stdin"`
-	StdinURL          string          `json:"stdin_url,omitempty"`
-	ExpectedStdout    string          `json:"expected_stdout,omitempty"`
-	ExpectedStdoutURL string          `json:"expected_stdout_url,omitempty"`
-	Limits            Limits          `json:"limits"`
-	ProblemID         string          `json:"problem_id,omitempty"`
-	RuntimeProfile    string          `json:"runtime_profile,omitempty"`
-	EnableNetwork     bool            `json:"enable_network,omitempty"`
-	EntryPoint        string          `json:"entry_point,omitempty"`
-	SPJ               *SPJSpec        `json:"spj,omitempty"`
-	Interactor        *InteractorSpec `json:"interactor,omitempty"`
-	FileOutputs       []OutputFile    `json:"file_outputs,omitempty"`
-	SidecarOutputs    []OutputFile    `json:"sidecar_outputs,omitempty"`
-	IgnoreTLE         bool            `json:"ignore_tle,omitempty"`
+	Lang              string                   `json:"lang"`
+	Binaries          []Binary                 `json:"binaries"`
+	Programs          []RunProgram             `json:"programs,omitempty"`
+	Steps             []RunStep                `json:"steps,omitempty"`
+	Stdin             string                   `json:"stdin"`
+	StdinURL          string                   `json:"stdin_url,omitempty"`
+	ExpectedStdout    string                   `json:"expected_stdout,omitempty"`
+	ExpectedStdoutURL string                   `json:"expected_stdout_url,omitempty"`
+	Limits            Limits                   `json:"limits"`
+	ProblemID         string                   `json:"problem_id,omitempty"`
+	RuntimeProfile    string                   `json:"runtime_profile,omitempty"`
+	PythonLibraryMode pythonpolicy.LibraryMode `json:"python_library_mode,omitempty"`
+	EnableNetwork     bool                     `json:"enable_network,omitempty"`
+	EntryPoint        string                   `json:"entry_point,omitempty"`
+	SPJ               *SPJSpec                 `json:"spj,omitempty"`
+	Interactor        *InteractorSpec          `json:"interactor,omitempty"`
+	FileOutputs       []OutputFile             `json:"file_outputs,omitempty"`
+	SidecarOutputs    []OutputFile             `json:"sidecar_outputs,omitempty"`
+	IgnoreTLE         bool                     `json:"ignore_tle,omitempty"`
 }
 
 type RunResponse struct {

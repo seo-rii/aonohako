@@ -30,6 +30,7 @@ import (
 	"aonohako/internal/platform"
 	"aonohako/internal/processhardening"
 	"aonohako/internal/profiles"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/sandbox"
 
 	"golang.org/x/sys/unix"
@@ -42,12 +43,13 @@ type suiteCase struct {
 }
 
 type compileExecuteCase struct {
-	compileLang    string
-	entryPoint     string
-	stdin          string
-	expectedStdout string
-	limits         model.Limits
-	sources        []model.Source
+	compileLang       string
+	entryPoint        string
+	stdin             string
+	expectedStdout    string
+	limits            model.Limits
+	sources           []model.Source
+	pythonLibraryMode pythonpolicy.LibraryMode
 }
 
 type languageSecurityCase struct {
@@ -812,9 +814,10 @@ func runCompileExecuteSuite() error {
 
 	server := api.NewWithServices(
 		config.Config{
-			MaxActiveRuns:     1,
-			MaxPendingQueue:   1,
-			HeartbeatInterval: time.Second,
+			MaxActiveRuns:                        1,
+			MaxPendingQueue:                      1,
+			HeartbeatInterval:                    time.Second,
+			AllowRequestPythonInstalledLibraries: true,
 		},
 		compile.New(),
 		execute.New(),
@@ -875,12 +878,13 @@ func runCompileExecuteSuite() error {
 		}
 
 		runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
-			Lang:           profile.RunLang,
-			Binaries:       binaries,
-			EntryPoint:     tc.entryPoint,
-			Stdin:          tc.stdin,
-			ExpectedStdout: tc.expectedStdout,
-			Limits:         limits,
+			Lang:              profile.RunLang,
+			Binaries:          binaries,
+			EntryPoint:        tc.entryPoint,
+			Stdin:             tc.stdin,
+			ExpectedStdout:    tc.expectedStdout,
+			Limits:            limits,
+			PythonLibraryMode: tc.pythonLibraryMode,
 		})
 		if err != nil {
 			return fmt.Errorf("%s execute request failed: %w", language, err)
@@ -894,12 +898,13 @@ func runCompileExecuteSuite() error {
 			startupLimits.MemoryMB = memoryMB
 			for attempt := 1; attempt <= 2; attempt++ {
 				startupResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
-					Lang:           profile.RunLang,
-					Binaries:       binaries,
-					EntryPoint:     tc.entryPoint,
-					Stdin:          tc.stdin,
-					ExpectedStdout: tc.expectedStdout,
-					Limits:         startupLimits,
+					Lang:              profile.RunLang,
+					Binaries:          binaries,
+					EntryPoint:        tc.entryPoint,
+					Stdin:             tc.stdin,
+					ExpectedStdout:    tc.expectedStdout,
+					Limits:            startupLimits,
+					PythonLibraryMode: tc.pythonLibraryMode,
 				})
 				if err != nil {
 					return fmt.Errorf("%s constrained startup attempt %d failed: %w", language, attempt, err)
@@ -3333,9 +3338,10 @@ print(Path("same-folder.txt").read_text(encoding="utf-8"))`),
 			},
 		},
 		"python": {
-			compileLang:    "PYTHON3",
-			expectedStdout: "10\n",
-			limits:         model.Limits{TimeMs: 30000, MemoryMB: 1024},
+			compileLang:       "PYTHON3",
+			expectedStdout:    "10\n",
+			limits:            model.Limits{TimeMs: 30000, MemoryMB: 1024},
+			pythonLibraryMode: pythonpolicy.LibraryModeInstalled,
 			sources: []model.Source{
 				source("Main.py", `import pathlib
 import numpy as np
@@ -3914,6 +3920,48 @@ func runDirectImagePermissionChecks() error {
 		}
 	}
 
+	if os.Getenv("AONOHAKO_PYTHON_LIBRARY_ISOLATION") == "true" {
+		if got := strings.TrimSpace(os.Getenv("AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID")); got != strconv.FormatUint(uint64(pythonpolicy.ExternalLibraryGID), 10) {
+			return fmt.Errorf("python-library-gid: got %q, want %d", got, pythonpolicy.ExternalLibraryGID)
+		}
+		pythonOut, pythonErr, err := runAsSandboxUser(
+			"checked=0; "+
+				"for p in /usr/lib/python*/dist-packages /usr/local/lib/python*/dist-packages /usr/lib/python*/site-packages /usr/local/lib/python*/site-packages /usr/share/python-wheels /usr/local/lib/aonohako/python; do "+
+				"if [ -e \"$p\" ]; then checked=$((checked+1)); if [ -r \"$p\" ] || [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; fi; "+
+				"done; "+
+				"if [ \"$checked\" -eq 0 ]; then exit 9; fi",
+			"",
+		)
+		if err != nil {
+			return fmt.Errorf("python-library-paths-are-not-readable: %w\n%s", err, pythonErr)
+		}
+		pythonFields := strings.Fields(strings.TrimSpace(pythonOut))
+		if len(pythonFields) == 0 || len(pythonFields)%2 != 0 {
+			return fmt.Errorf("python-library-paths-are-not-readable: unexpected stdout %q stderr %q", pythonOut, pythonErr)
+		}
+		for i := 0; i+1 < len(pythonFields); i += 2 {
+			if pythonFields[i+1] != "blocked" {
+				return fmt.Errorf("python-library-paths-are-not-readable: unexpected stdout %q stderr %q", pythonOut, pythonErr)
+			}
+		}
+
+		importOut, importErr, err := runAsSandboxUser(
+			"if python3 -c 'import numpy' >/dev/null 2>&1; then echo leaked; else echo blocked; fi",
+			"",
+		)
+		if err != nil || importOut != "blocked\n" {
+			return fmt.Errorf("python-library-import-without-group: stdout %q stderr %q err %v", importOut, importErr, err)
+		}
+		importOut, importErr, err = runAsSandboxUserWithGroups(
+			"python3 -c 'import numpy; print(\"allowed\")'",
+			"",
+			[]uint32{pythonpolicy.ExternalLibraryGID},
+		)
+		if err != nil || importOut != "allowed\n" {
+			return fmt.Errorf("python-library-import-with-group: stdout %q stderr %q err %v", importOut, importErr, err)
+		}
+	}
+
 	scratchOut, scratchErr, err := runAsSandboxUser(
 		"for p in /tmp /var/tmp /run/lock /dev/shm /dev/mqueue; do "+
 			"if [ -e \"$p\" ]; then "+
@@ -4007,6 +4055,10 @@ func sandboxIdentityOwnedImagePaths(root string) ([]string, error) {
 }
 
 func runAsSandboxUser(script, dir string) (string, string, error) {
+	return runAsSandboxUserWithGroups(script, dir, nil)
+}
+
+func runAsSandboxUserWithGroups(script, dir string, supplementaryGroups []uint32) (string, string, error) {
 	cmd := exec.Command("/bin/sh", "-lc", script)
 	if dir != "" {
 		cmd.Dir = dir
@@ -4018,8 +4070,9 @@ func runAsSandboxUser(script, dir string) (string, string, error) {
 		"HOME=/tmp",
 	}
 	if os.Geteuid() == 0 {
+		groups := append([]uint32{65532}, supplementaryGroups...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Credential: &syscall.Credential{Uid: 65532, Gid: 65532},
+			Credential: &syscall.Credential{Uid: 65532, Gid: 65532, Groups: groups},
 		}
 	}
 	var stdout bytes.Buffer
