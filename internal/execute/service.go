@@ -83,6 +83,7 @@ type Service struct {
 	runtimeTuning         config.RuntimeTuningConfig
 	runtimeTuningProfiles map[string]config.RuntimeTuningConfig
 	cgroupParentDir       string
+	networkEgressIsolated bool
 	stdinURLTimeout       time.Duration
 }
 
@@ -109,6 +110,7 @@ func NewWithConfig(cfg config.Config) *Service {
 		runtimeTuning:         cfg.Execution.RuntimeTuning.WithSafeDefaults(),
 		runtimeTuningProfiles: profiles,
 		cgroupParentDir:       cfg.Execution.Cgroup.ParentDir,
+		networkEgressIsolated: cfg.NetworkEgressIsolated,
 		stdinURLTimeout:       stdinURLDownloadTimeout,
 	}
 }
@@ -151,10 +153,10 @@ func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks
 
 func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput bool) sandboxRunResult {
 	startWall := timing.MonotonicNow()
-	if req.EnableNetwork && s.deploymentTarget == platform.DeploymentTargetCloudRun {
+	if reason := s.networkRequestRejection(req.EnableNetwork); reason != "" {
 		return sandboxRunResult{response: model.RunResponse{
 			Status: model.RunStatusInitFail,
-			Reason: "embedded helper execution on cloudrun does not support enable_network=true; use a self-hosted remote runner for networked workloads",
+			Reason: reason,
 		}}
 	}
 	if len(req.FileOutputs) > 1 {
@@ -317,6 +319,19 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		},
 		judgeOut: append([]byte(nil), judgeOut...),
 	}
+}
+
+func (s *Service) networkRequestRejection(enabled bool) string {
+	if !enabled {
+		return ""
+	}
+	if s.deploymentTarget == platform.DeploymentTargetCloudRun {
+		return "embedded helper execution on cloudrun does not support enable_network=true; use an egress-isolated self-hosted remote runner for networked workloads"
+	}
+	if s.deploymentTarget != platform.DeploymentTargetDev && !s.networkEgressIsolated {
+		return "enable_network=true outside dev requires an egress-isolated runner"
+	}
+	return ""
 }
 
 func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {

@@ -13,7 +13,6 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
-	"aonohako/internal/platform"
 	"aonohako/internal/profiles"
 	"aonohako/internal/timing"
 )
@@ -49,10 +48,10 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 	if req.Interactor == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor is required"}
 	}
-	if req.EnableNetwork && s.deploymentTarget == platform.DeploymentTargetCloudRun {
+	if reason := s.networkRequestRejection(req.EnableNetwork); reason != "" {
 		return model.RunResponse{
 			Status: model.RunStatusInitFail,
-			Reason: "embedded helper execution on cloudrun does not support enable_network=true; use a self-hosted remote runner for networked workloads",
+			Reason: reason,
 		}
 	}
 	if len(req.SidecarOutputs) > maxSidecarOutputSpecs {

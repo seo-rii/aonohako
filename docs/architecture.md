@@ -304,10 +304,14 @@ still keeps the surface narrower than the default host namespace:
 - host `AF_UNIX` sockets remain blocked; only explicit local socketpair
   allowances for managed runtimes survive
 
-This is paired with two additional protections:
+This is paired with fail-closed deployment requirements:
 
 - proxy-related environment variables are cleared for network-disabled requests
-- deployment-level egress policy should still be deny-by-default on Cloud Run
+- outside `dev`, `AONOHAKO_ALLOW_REQUEST_NETWORK=true` also requires
+  `AONOHAKO_NETWORK_EGRESS_ISOLATED=true`; this is an explicit operator
+  assertion that a deny-by-default network namespace, nftables/cgroup-BPF
+  policy, constrained proxy boundary, or equivalent blocks loopback, private,
+  link-local, and metadata destinations before the helper starts
 - Cloud Run embedded-helper execution rejects `enable_network=true` outright
   because metadata endpoints cannot be reliably excluded inside the helper
   process alone; networked workloads should run through a self-hosted runner,
@@ -670,7 +674,9 @@ The following checks are enforced before the HTTP server starts:
   concurrency and fleet capacity are bounded at the deployment layer
 - `AONOHAKO_ALLOW_REQUEST_NETWORK` is strict boolean configuration and defaults
   to `true` only for `dev`; outside `dev`, client-supplied `enable_network=true`
-  is rejected unless this is explicitly enabled for a dedicated runner policy
+  is rejected unless this is explicitly enabled for a dedicated runner policy,
+  and startup requires `AONOHAKO_NETWORK_EGRESS_ISOLATED=true`; Cloud Run
+  embedded helpers reject the opt-in even with that assertion
 - `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE` is strict boolean configuration and
   defaults to `true` only for `dev`; outside `dev`, request-supplied
   `runtime_profile` is rejected unless an upstream trusted control plane has

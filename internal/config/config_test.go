@@ -103,6 +103,39 @@ func TestDefaultAllowRequestNetwork(t *testing.T) {
 	}
 }
 
+func TestValidateNetworkEgressPolicy(t *testing.T) {
+	dev := platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetDev,
+		ExecutionTransport: platform.ExecutionTransportEmbedded,
+		SandboxBackend:     platform.SandboxBackendHelper,
+	}
+	selfHosted := platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+		ExecutionTransport: platform.ExecutionTransportEmbedded,
+		SandboxBackend:     platform.SandboxBackendHelper,
+	}
+	cloudRun := platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetCloudRun,
+		ExecutionTransport: platform.ExecutionTransportEmbedded,
+		SandboxBackend:     platform.SandboxBackendHelper,
+	}
+	if err := validateNetworkEgressPolicy(dev, true, false); err != nil {
+		t.Fatalf("dev network policy should remain available: %v", err)
+	}
+	if err := validateNetworkEgressPolicy(selfHosted, false, false); err != nil {
+		t.Fatalf("disabled self-hosted network should not require egress policy: %v", err)
+	}
+	if err := validateNetworkEgressPolicy(selfHosted, true, false); err == nil || !strings.Contains(err.Error(), "AONOHAKO_NETWORK_EGRESS_ISOLATED") {
+		t.Fatalf("self-hosted network without egress isolation error = %v", err)
+	}
+	if err := validateNetworkEgressPolicy(selfHosted, true, true); err != nil {
+		t.Fatalf("egress-isolated self-hosted network should be allowed: %v", err)
+	}
+	if err := validateNetworkEgressPolicy(cloudRun, true, true); err == nil || !strings.Contains(err.Error(), "does not support") {
+		t.Fatalf("cloudrun embedded helper network error = %v", err)
+	}
+}
+
 func TestDefaultAllowRequestRuntimeProfile(t *testing.T) {
 	if !defaultAllowRequestRuntimeProfile(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}) {
 		t.Fatalf("dev should allow request-selected runtime profiles by default")
@@ -977,6 +1010,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_BODY_READ_TIMEOUT_SEC", "9")
 	t.Setenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", "4")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
+	t.Setenv("AONOHAKO_NETWORK_EGRESS_ISOLATED", "true")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "true")
 	t.Setenv("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", "true")
 	t.Setenv("AONOHAKO_WORK_ROOT_MAX_BYTES", "123456789")
@@ -1030,6 +1064,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	}
 	if !cfg.AllowRequestNetwork {
 		t.Fatalf("allow request network should be parsed from env")
+	}
+	if !cfg.NetworkEgressIsolated {
+		t.Fatalf("network egress isolation should be parsed from env")
 	}
 	if !cfg.AllowRequestRuntimeProfile {
 		t.Fatalf("allow request runtime profile should be parsed from env")
@@ -1091,6 +1128,7 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
 		{name: "remote sse idle overflow", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: maxInt64Text},
 		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
+		{name: "network egress isolated malformed", key: "AONOHAKO_NETWORK_EGRESS_ISOLATED", value: "sometimes"},
 		{name: "allow runtime profile malformed", key: "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", value: "sometimes"},
 		{name: "require work root tmpfs malformed", key: "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS", value: "sometimes"},
 		{name: "work root max negative", key: "AONOHAKO_WORK_ROOT_MAX_BYTES", value: "-1"},

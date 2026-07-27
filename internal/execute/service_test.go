@@ -352,9 +352,24 @@ func TestRunRejectsNetworkEnabledRequestsOnCloudRun(t *testing.T) {
 	}
 }
 
-func TestRunAllowsOutboundNetworkWhenEnabledOutsideCloudRun(t *testing.T) {
+func TestRunRejectsNetworkEnabledRequestsWithoutEgressIsolation(t *testing.T) {
+	svc := &Service{
+		deploymentTarget: platform.DeploymentTargetSelfHosted,
+		runtimeTuning:    config.DefaultRuntimeTuningConfig(),
+	}
+	resp := svc.Run(context.Background(), &model.RunRequest{
+		Lang:          "binary",
+		EnableNetwork: true,
+		Limits:        model.Limits{TimeMs: 1000, MemoryMB: 128},
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "egress-isolated") {
+		t.Fatalf("expected self-hosted network request to fail closed, got %+v", resp)
+	}
+}
+
+func TestRunAllowsOutboundNetworkWhenEnabledInDev(t *testing.T) {
+	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-dev")
 	requireSandboxSupport(t)
-	t.Setenv("AONOHAKO_EXECUTION_MODE", "local-root")
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

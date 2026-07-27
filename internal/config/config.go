@@ -147,6 +147,7 @@ type Config struct {
 	HeartbeatInterval             time.Duration
 	BodyReadTimeout               time.Duration
 	AllowRequestNetwork           bool
+	NetworkEgressIsolated         bool
 	AllowRequestRuntimeProfile    bool
 	RequireWorkRootTmpfs          bool
 	WorkRootMaxBytes              int
@@ -236,6 +237,13 @@ func Load() (Config, error) {
 	}
 	allowRequestNetwork, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_NETWORK", os.Getenv("AONOHAKO_ALLOW_REQUEST_NETWORK"), defaultAllowRequestNetwork(runtimePlatform))
 	if err != nil {
+		return Config{}, err
+	}
+	networkEgressIsolated, err := parseBoolEnv("AONOHAKO_NETWORK_EGRESS_ISOLATED", os.Getenv("AONOHAKO_NETWORK_EGRESS_ISOLATED"), false)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateNetworkEgressPolicy(runtimePlatform, allowRequestNetwork, networkEgressIsolated); err != nil {
 		return Config{}, err
 	}
 	allowRequestRuntimeProfile, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", os.Getenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE"), defaultAllowRequestRuntimeProfile(runtimePlatform))
@@ -622,6 +630,7 @@ func Load() (Config, error) {
 		HeartbeatInterval:             time.Duration(heartbeatSec) * time.Second,
 		BodyReadTimeout:               time.Duration(bodyReadTimeoutSec) * time.Second,
 		AllowRequestNetwork:           allowRequestNetwork,
+		NetworkEgressIsolated:         networkEgressIsolated,
 		AllowRequestRuntimeProfile:    allowRequestRuntimeProfile,
 		RequireWorkRootTmpfs:          requireWorkRootTmpfs,
 		WorkRootMaxBytes:              workRootMaxBytes,
@@ -778,6 +787,21 @@ func defaultMaxPrincipalRequestsPerMinute(opts platform.RuntimeOptions) int {
 
 func defaultAllowRequestNetwork(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetDev
+}
+
+func validateNetworkEgressPolicy(opts platform.RuntimeOptions, allowRequestNetwork, egressIsolated bool) error {
+	if !allowRequestNetwork || opts.DeploymentTarget == platform.DeploymentTargetDev {
+		return nil
+	}
+	if opts.DeploymentTarget == platform.DeploymentTargetCloudRun &&
+		opts.ExecutionTransport == platform.ExecutionTransportEmbedded &&
+		opts.SandboxBackend == platform.SandboxBackendHelper {
+		return fmt.Errorf("cloudrun embedded helper execution does not support AONOHAKO_ALLOW_REQUEST_NETWORK=true")
+	}
+	if !egressIsolated {
+		return fmt.Errorf("AONOHAKO_ALLOW_REQUEST_NETWORK=true outside dev requires AONOHAKO_NETWORK_EGRESS_ISOLATED=true")
+	}
+	return nil
 }
 
 func defaultAllowRequestRuntimeProfile(opts platform.RuntimeOptions) bool {

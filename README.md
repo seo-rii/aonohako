@@ -245,6 +245,12 @@ aonohako-selftest cgroup-preflight
   client-supplied `enable_network=true`. It defaults to `true` only for `dev`
   and `false` for `cloudrun` or `selfhosted`; public runners should route
   network-enabled problems to an explicitly opted-in runner pool.
+  Outside `dev`, enabling it also requires
+  `AONOHAKO_NETWORK_EGRESS_ISOLATED=true`, which asserts that the selected
+  embedded runner or downstream remote runner is already inside a
+  deny-by-default network namespace/cgroup-BPF/nftables or equivalent egress
+  boundary that blocks loopback, private, link-local, and metadata addresses.
+  The assertion does not create that infrastructure.
 - `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE` controls whether `/compile` and
   `/execute` may honor request-supplied `runtime_profile`. It defaults to
   `true` only for `dev` and `false` for `cloudrun` or `selfhosted`; production
@@ -346,10 +352,11 @@ Per-request execution limits are part of the `/execute` payload:
   request structure and collection counts pass validation.
 - `enable_network`
   Cloud Run embedded-helper runners reject `true`. Self-hosted embedded-helper
-  runners honor it only when `AONOHAKO_ALLOW_REQUEST_NETWORK=true`, and then
-  allow outbound `AF_INET`/`AF_INET6` client sockets only; listener syscalls and
-  host `AF_UNIX` sockets stay blocked. Control-plane instances can forward
-  networked workloads to explicitly opted-in runners with `remote` transport.
+  runners honor it only when `AONOHAKO_ALLOW_REQUEST_NETWORK=true` and
+  `AONOHAKO_NETWORK_EGRESS_ISOLATED=true`, and then allow outbound
+  `AF_INET`/`AF_INET6` client sockets only; listener syscalls and host `AF_UNIX`
+  sockets stay blocked. Control-plane instances can forward networked workloads
+  only to egress-isolated opted-in runners with `remote` transport.
 - `runtime_profile`
   Requests may select an operator-defined `AONOHAKO_RUNTIME_TUNING_PROFILES`
   entry only when `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`. Public entry

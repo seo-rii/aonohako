@@ -280,6 +280,8 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS` defaults to `2`",
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
+		"`AONOHAKO_NETWORK_EGRESS_ISOLATED=true`",
+		"The assertion does not create that infrastructure",
 		"Set it to `0`\n  on any deployment target to disable the per-process request-rate cap",
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC` defaults to `30`",
 		"`AONOHAKO_RUNTIME_TUNING_PROFILES` may define named, policy-owned runtime\n  profiles as a JSON object",
@@ -404,6 +406,7 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", "2")
 			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "16")
 			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_NETWORK", "false")
+			requireEnv(name, env, "AONOHAKO_NETWORK_EGRESS_ISOLATED", "false")
 			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "false")
 		}
 	}
