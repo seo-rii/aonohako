@@ -200,6 +200,9 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`AONOHAKO_MAX_ACTIVE_STREAMS`") {
 		t.Fatalf("architecture.md must describe active stream cap validation")
 	}
+	if !strings.Contains(architecture, "`/livez` is a process-liveness signal") || !strings.Contains(architecture, "`/readyz` rechecks the mandatory dedicated work-root") || !strings.Contains(architecture, "`/healthz` is retained as a readiness alias") {
+		t.Fatalf("architecture.md must describe separated liveness and readiness")
+	}
 	if !strings.Contains(architecture, "`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`") || !strings.Contains(architecture, "token fingerprint as the\n  principal key") {
 		t.Fatalf("architecture.md must describe per-principal stream caps")
 	}

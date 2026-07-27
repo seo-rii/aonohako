@@ -6,7 +6,7 @@ binary, configurable runtime images, and testable build metadata.
 
 ## What is in this repository
 
-- `POST /compile`, `POST /execute`, and `GET /healthz`
+- `POST /compile`, `POST /execute`, `GET /livez`, and `GET /readyz`
 - queue-controlled SSE responses with `progress`, `log`, `image`, `error`, and
   final `result` events
 - a `box` workspace layout that keeps submitted files immutable while allowing
@@ -323,6 +323,10 @@ aonohako-selftest cgroup-preflight
   exposes `cpu`, `memory`, and `pids`; each compile/execute/SPJ run is placed in
   a per-run cgroup with `memory.max`, `pids.max`,
   `cpu.max=100000 100000`, and `memory.oom.group=1`.
+- `GET /livez` reports only API-process liveness. `GET /readyz` additionally
+  rechecks mandatory work-root and delegated-cgroup invariants and returns
+  `503` if they disappear. `GET /healthz` remains a compatibility alias for
+  readiness. These endpoints do not require application authentication.
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
   `aonohako` runner service and must be an absolute `http(s)` URL without
   embedded credentials, query strings, or fragments. Outside `dev`, bearer and

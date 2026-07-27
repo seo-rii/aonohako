@@ -15,6 +15,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1421,6 +1423,90 @@ func TestHealthz(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if strings.TrimSpace(string(body)) != "ok" {
 		t.Fatalf("unexpected healthz response: %q", string(body))
+	}
+}
+
+func TestLivenessRemainsHealthyWhenReadinessFails(t *testing.T) {
+	s := newServerForTest(t)
+	s.readinessCheck = func() error { return errors.New("sandbox dependency unavailable") }
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	for _, tc := range []struct {
+		path string
+		want int
+	}{
+		{path: "/livez", want: http.StatusOK},
+		{path: "/readyz", want: http.StatusServiceUnavailable},
+		{path: "/healthz", want: http.StatusServiceUnavailable},
+	} {
+		resp, err := http.Get(ts.URL + tc.path)
+		if err != nil {
+			t.Fatalf("%s request failed: %v", tc.path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != tc.want {
+			t.Fatalf("%s status = %d, want %d", tc.path, resp.StatusCode, tc.want)
+		}
+	}
+}
+
+func TestRuntimeReadinessDetectsWorkRootContractLoss(t *testing.T) {
+	workRoot := t.TempDir()
+	if err := os.Chmod(workRoot, 0o755); err != nil {
+		t.Fatalf("Chmod(work root): %v", err)
+	}
+	t.Setenv("AONOHAKO_WORK_ROOT", workRoot)
+	cfg := configForTest(t)
+	cfg.Execution.Platform = platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetCloudRun,
+		ExecutionTransport: platform.ExecutionTransportRemote,
+		SandboxBackend:     platform.SandboxBackendNone,
+	}
+	check := newRuntimeReadinessCheck(cfg)
+	if err := check(); err != nil {
+		t.Fatalf("initial readiness check: %v", err)
+	}
+	if err := os.Chmod(workRoot, 0o777); err != nil {
+		t.Fatalf("Chmod(work root writable): %v", err)
+	}
+	if err := check(); err == nil || !strings.Contains(err.Error(), "group/world writable") {
+		t.Fatalf("readiness after work-root permission loss = %v", err)
+	}
+}
+
+func TestRuntimeReadinessDetectsCgroupControllerLoss(t *testing.T) {
+	workRoot := t.TempDir()
+	if err := os.Chmod(workRoot, 0o755); err != nil {
+		t.Fatalf("Chmod(work root): %v", err)
+	}
+	t.Setenv("AONOHAKO_WORK_ROOT", workRoot)
+	cgroupParent := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cgroupParent, "cgroup.controllers"), []byte("cpu memory pids\n"), 0o644); err != nil {
+		t.Fatalf("write cgroup.controllers: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cgroupParent, "cgroup.subtree_control"), nil, 0o644); err != nil {
+		t.Fatalf("write cgroup.subtree_control: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cgroupParent, "cgroup.procs"), nil, 0o644); err != nil {
+		t.Fatalf("write cgroup.procs: %v", err)
+	}
+	cfg := configForTest(t)
+	cfg.Execution.Platform = platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+		ExecutionTransport: platform.ExecutionTransportEmbedded,
+		SandboxBackend:     platform.SandboxBackendHelper,
+	}
+	cfg.Execution.Cgroup.ParentDir = cgroupParent
+	check := newRuntimeReadinessCheck(cfg)
+	if err := check(); err != nil {
+		t.Fatalf("initial readiness check: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cgroupParent, "cgroup.controllers"), []byte("cpu memory\n"), 0o644); err != nil {
+		t.Fatalf("remove pids controller: %v", err)
+	}
+	if err := check(); err == nil || !strings.Contains(err.Error(), "lost pids controller") {
+		t.Fatalf("readiness after cgroup controller loss = %v", err)
 	}
 }
 

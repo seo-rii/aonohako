@@ -95,6 +95,7 @@ type Server struct {
 	payloadURLFetchSlots  chan struct{}
 	payloadURLTimeout     time.Duration
 	sseWriteTimeout       time.Duration
+	readinessCheck        func() error
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -135,6 +136,7 @@ func NewWithServices(cfg config.Config, compileService interface {
 		payloadURLFetchSlots: make(chan struct{}, payloadURLFetchSlots),
 		payloadURLTimeout:    payloadURLRequestTimeout,
 		sseWriteTimeout:      sse.DefaultWriteTimeout,
+		readinessCheck:       newRuntimeReadinessCheck(cfg),
 	}
 }
 
@@ -153,7 +155,9 @@ func platformBodyHashConcurrency(cfg config.Config) int {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", s.healthz)
+	mux.HandleFunc("/livez", s.livez)
+	mux.HandleFunc("/readyz", s.readyz)
+	mux.HandleFunc("/healthz", s.readyz)
 	mux.Handle("/compile", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler))))
 	mux.Handle("/execute", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler))))
 	return mux
@@ -164,7 +168,18 @@ func (s *Server) nextID(prefix string) string {
 	return prefix + "-" + strconv.FormatUint(n, 10)
 }
 
-func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) livez(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
+}
+
+func (s *Server) readyz(w http.ResponseWriter, _ *http.Request) {
+	if s.readinessCheck != nil {
+		if err := s.readinessCheck(); err != nil {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }

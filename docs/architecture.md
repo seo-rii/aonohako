@@ -728,6 +728,13 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_WORK_ROOT_MAX_BYTES` / `AONOHAKO_WORK_ROOT_MAX_FILES` state as JSON
   for deployment checks.
 
+`/livez` is a process-liveness signal and remains healthy while the server can
+serve HTTP. `/readyz` rechecks the mandatory dedicated work-root identity,
+permissions and configured filesystem bounds, plus delegated cgroup
+controllers and parent emptiness. It fails with `503` if those runtime
+preconditions disappear. `/healthz` is retained as a readiness alias for
+existing deployments.
+
 Recommended Cloud Run deployment baseline:
 
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
