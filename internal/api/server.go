@@ -35,15 +35,17 @@ import (
 )
 
 const (
+	MaxJSONBodyBytes = 64 << 20
+
 	maxRunTextFieldBytes              = runvalidation.MaxTextFieldBytes
 	maxRunTimeMs                      = runvalidation.MaxTimeMs
 	maxRunMemoryMB                    = runvalidation.MaxMemoryMB
 	maxRunOutputBytes                 = runvalidation.MaxOutputBytes
 	maxRunWorkspaceBytes              = runvalidation.MaxWorkspaceBytes
-	maxCompileSourceFiles             = 512
-	maxCompileDecodedSourceBytes      = 16 << 20
-	maxCompileDecodedSourceTotalBytes = 48 << 20
-	maxJSONBodyBytes                  = 64 << 20
+	maxCompileSourceFiles             = compile.MaxSourceFiles
+	maxCompileDecodedSourceBytes      = compile.MaxDecodedSourceBytes
+	maxCompileDecodedSourceTotalBytes = compile.MaxDecodedSourceTotalBytes
+	maxJSONBodyBytes                  = MaxJSONBodyBytes
 	defaultPlatformBodyHashSlots      = 4
 	defaultPayloadURLFetchSlots       = 4
 	platformPrincipalHeader           = "X-Aonohako-Principal"

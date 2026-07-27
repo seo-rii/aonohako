@@ -20,16 +20,21 @@ import (
 const buildTimeout = 60 * time.Second
 
 const (
-	maxDecodedSourceBytes      = 16 << 20
-	maxDecodedSourceTotalBytes = 48 << 20
+	MaxDecodedSourceBytes      = 16 << 20
+	MaxDecodedSourceTotalBytes = 48 << 20
+	MaxSourceFiles             = 512
+	OutputCaptureBytes         = 1 << 20
+
+	maxDecodedSourceBytes      = MaxDecodedSourceBytes
+	maxDecodedSourceTotalBytes = MaxDecodedSourceTotalBytes
 	maxArtifactBytes           = 16 << 20
 	maxArtifactTotalBytes      = 48 << 20
-	maxSourceFiles             = 512
+	maxSourceFiles             = MaxSourceFiles
 	ocamlCompileRunParam       = "s=32k"
 	compileSandboxMemoryMB     = 2048
 	compileSandboxThreadLimit  = 256
 	compileWorkspaceBytes      = 512 << 20
-	compileOutputCaptureBytes  = 1 << 20
+	compileOutputCaptureBytes  = OutputCaptureBytes
 )
 
 type Service struct {

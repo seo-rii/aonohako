@@ -1,5 +1,8 @@
 # Payload Schema
 
+The canonical numeric request and capture limits are generated from code in
+[Public request limits](limits.md).
+
 ## `POST /compile` — Request
 
 ```jsonc
@@ -75,8 +78,8 @@ error.
       "mode": "exec"                         // "exec" → chmod 0555; otherwise chmod 0444
     }
   ],
-  "stdin": "hello\n",                        // input fed to process stdin (max 16 MiB)
-  "expected_stdout": "hello\n",              // expected output for built-in diff (max 16 MiB)
+  "stdin": "hello\n",                        // input fed to process stdin (max 64 MiB)
+  "expected_stdout": "hello\n",              // expected output for built-in diff (max 64 MiB)
   "limits": {
     "time_ms": 2000,                         // wall-clock time limit, 1..600000 ms
     "memory_mb": 256,                        // memory limit, 1..4096 MB

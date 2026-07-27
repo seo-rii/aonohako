@@ -1,5 +1,8 @@
 # aonohako SSE Protocol
 
+The canonical numeric request and capture limits are generated from code in
+[Public request limits](limits.md).
+
 Both `/compile` and `/execute` open SSE streams and terminate with exactly
 one `result` event.
 

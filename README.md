@@ -338,7 +338,9 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_REMOTE_RUNNER_AUDIENCE` overrides the ID-token audience for
   `cloudrun-idtoken` auth; it defaults to `AONOHAKO_REMOTE_RUNNER_URL`
 
-Per-request execution limits are part of the `/execute` payload:
+Per-request execution limits are part of the `/execute` payload. The
+[generated public limit table](docs/limits.md) is the canonical numeric
+contract:
 
 - `limits.time_ms`
 - `limits.memory_mb`

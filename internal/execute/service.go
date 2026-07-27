@@ -20,18 +20,23 @@ import (
 )
 
 const (
-	defaultMaxOutputBytes        = 64 << 10
-	hardMaxOutputBytes           = 8 << 20
-	defaultWorkspaceBytes        = 128 << 20
-	hardMaxWorkspaceBytes        = 1 << 30
+	DefaultOutputBytes           = 64 << 10
+	DefaultWorkspaceBytes        = 128 << 20
+	MaxCapturedFileBytes         = 8 << 20
+	MaxCapturedSidecarTotalBytes = 16 << 20
+
+	defaultMaxOutputBytes        = DefaultOutputBytes
+	hardMaxOutputBytes           = runvalidation.MaxOutputBytes
+	defaultWorkspaceBytes        = DefaultWorkspaceBytes
+	hardMaxWorkspaceBytes        = runvalidation.MaxWorkspaceBytes
 	maxBinaryFiles               = runvalidation.MaxBinaryFiles
 	maxSidecarOutputSpecs        = 64
 	addressSpaceSlackKB          = 8 << 10
 	sandboxThreadLimit           = 128
 	maxBinaryFileBytes           = runvalidation.MaxBinaryFileBytes
 	maxBinaryTotalBytes          = runvalidation.MaxBinaryTotalBytes
-	maxCapturedFileBytes         = 8 << 20
-	maxCapturedSidecarTotalBytes = 16 << 20
+	maxCapturedFileBytes         = MaxCapturedFileBytes
+	maxCapturedSidecarTotalBytes = MaxCapturedSidecarTotalBytes
 	maxImageStreamBytes          = 8 << 20
 	maxImageReadChunkBytes       = 256 << 10
 	maxImageEventBytes           = 1 << 20

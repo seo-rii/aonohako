@@ -1,14 +1,66 @@
 package docscontract
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"aonohako/internal/api"
+	"aonohako/internal/compile"
 	"aonohako/internal/config"
+	"aonohako/internal/execute"
+	"aonohako/internal/limitdoc"
 	"aonohako/internal/platform"
+	"aonohako/internal/runvalidation"
 )
+
+func TestGeneratedLimitDocumentationIsCurrent(t *testing.T) {
+	got := mustRead(t, filepath.Join("..", "..", "docs", "limits.md"))
+	if got != limitdoc.Markdown() {
+		t.Fatalf("docs/limits.md is stale; run go run ./cmd/limitsdoc -write docs/limits.md")
+	}
+}
+
+func TestManualLimitReferencesMatchCodeConstants(t *testing.T) {
+	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
+	payload := mustRead(t, filepath.Join("..", "..", "docs", "payload.md"))
+	protocol := mustRead(t, filepath.Join("..", "..", "docs", "protocol.md"))
+
+	checks := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "readme generated table", body: readme, want: "[generated public limit table](docs/limits.md)"},
+		{name: "readme output", body: readme, want: fmt.Sprintf("Defaults to `%s` when omitted and is capped internally at `%s`", limitdoc.HumanBytes(execute.DefaultOutputBytes), limitdoc.HumanBytes(runvalidation.MaxOutputBytes))},
+		{name: "readme text", body: readme, want: fmt.Sprintf("Each inline field is capped at `%s`", limitdoc.HumanBytes(runvalidation.MaxTextFieldBytes))},
+		{name: "readme binary total", body: readme, want: fmt.Sprintf("share one request-wide %s decoded", limitdoc.HumanBytes(runvalidation.MaxBinaryTotalBytes))},
+		{name: "readme body hash", body: readme, want: fmt.Sprintf("unbounded parallel %s body buffers", limitdoc.HumanBytes(api.MaxJSONBodyBytes))},
+		{name: "payload generated table", body: payload, want: "[Public request limits](limits.md)"},
+		{name: "payload source count", body: payload, want: fmt.Sprintf("source files to compile (max %d entries)", compile.MaxSourceFiles)},
+		{name: "payload binary count", body: payload, want: fmt.Sprintf("files to place in work directory (max %d entries)", runvalidation.MaxBinaryFiles)},
+		{name: "payload text", body: payload, want: fmt.Sprintf("input fed to process stdin (max %s)", limitdoc.HumanBytes(runvalidation.MaxTextFieldBytes))},
+		{name: "payload time", body: payload, want: fmt.Sprintf("wall-clock time limit, 1..%d ms", runvalidation.MaxTimeMs)},
+		{name: "payload memory", body: payload, want: fmt.Sprintf("memory limit, 1..%d MB", runvalidation.MaxMemoryMB)},
+		{name: "payload output", body: payload, want: fmt.Sprintf("stdout/stderr capture cap, 0..%d", runvalidation.MaxOutputBytes)},
+		{name: "payload workspace", body: payload, want: fmt.Sprintf("workspace cap, 0..%d", runvalidation.MaxWorkspaceBytes)},
+		{name: "payload sidecars", body: payload, want: fmt.Sprintf("capture extra files after execution (max %d paths)", runvalidation.MaxSidecarOutputs)},
+		{name: "payload binary total", body: payload, want: fmt.Sprintf("share one request-wide %s decoded budget", limitdoc.HumanBytes(runvalidation.MaxBinaryTotalBytes))},
+		{name: "payload step handoff", body: payload, want: fmt.Sprintf("is capped at %s", limitdoc.HumanBytes(runvalidation.MaxStepHandoffBytes))},
+		{name: "protocol generated table", body: protocol, want: "[Public request limits](limits.md)"},
+		{name: "protocol compile output", body: protocol, want: fmt.Sprintf("compiler stdout, capped at %s", limitdoc.HumanBytes(compile.OutputCaptureBytes))},
+		{name: "protocol run output", body: protocol, want: fmt.Sprintf("default `%s`, hard cap `%s`", limitdoc.HumanBytes(execute.DefaultOutputBytes), limitdoc.HumanBytes(runvalidation.MaxOutputBytes))},
+		{name: "protocol compile limits", body: protocol, want: fmt.Sprintf("more than %d sources, source files over\n  %s decoded, source totals over %s decoded", compile.MaxSourceFiles, limitdoc.HumanBytes(compile.MaxDecodedSourceBytes), limitdoc.HumanBytes(compile.MaxDecodedSourceTotalBytes))},
+		{name: "protocol binary total", body: protocol, want: fmt.Sprintf("decoded binary total over %s", limitdoc.HumanBytes(runvalidation.MaxBinaryTotalBytes))},
+	}
+	for _, check := range checks {
+		if !strings.Contains(check.body, check.want) {
+			t.Errorf("%s documentation missing code-owned value %q", check.name, check.want)
+		}
+	}
+}
 
 func TestPayloadDocMatchesRuntimeLimitsAndModes(t *testing.T) {
 	body := mustRead(t, filepath.Join("..", "..", "docs", "payload.md"))
