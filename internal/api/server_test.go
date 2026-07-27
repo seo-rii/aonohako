@@ -1182,6 +1182,98 @@ func TestPlatformAuthLimitsConcurrentBodyHashing(t *testing.T) {
 	}
 }
 
+func TestUploadAdmissionPrecedesPlatformBodyHashing(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "platform-secret"}
+	cfg.MaxActiveUploads = 1
+	s := NewWithServices(cfg, compile.New(), execute.New())
+	release, ok, code := s.acquireUpload("occupied")
+	if !ok {
+		t.Fatalf("failed to occupy upload slot: %s", code)
+	}
+	defer release()
+
+	body := &readCountingBody{}
+	req := httptest.NewRequest(http.MethodPost, "/execute", body)
+	req.Header.Set(platformPrincipalHeader, "alice")
+	req.Header.Set(platformPrincipalTimestampHeader, time.Now().UTC().Format(time.RFC3339))
+	req.Header.Set(platformPrincipalSignatureHeader, "v3="+strings.Repeat("0", sha256.Size*2))
+	rr := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusTooManyRequests, rr.Body.String())
+	}
+	if body.reads != 0 {
+		t.Fatalf("request body was read %d times without upload admission", body.reads)
+	}
+}
+
+func TestUploadAdmissionRejectsBeforeReadingJSONBody(t *testing.T) {
+	for _, endpoint := range []string{"/compile", "/execute"} {
+		for _, tc := range []struct {
+			name         string
+			activeLimit  int
+			principalCap int
+			wantCode     string
+		}{
+			{name: "global", activeLimit: 1, wantCode: "upload_limit_exceeded"},
+			{name: "principal", activeLimit: 2, principalCap: 1, wantCode: "principal_upload_limit_exceeded"},
+		} {
+			t.Run(strings.TrimPrefix(endpoint, "/")+"/"+tc.name, func(t *testing.T) {
+				cfg := configForTest(t)
+				cfg.MaxActiveUploads = tc.activeLimit
+				cfg.MaxPrincipalUploads = tc.principalCap
+				s := NewWithServices(cfg, compile.New(), execute.New())
+
+				blocked := newBlockingBody()
+				firstDone := make(chan struct{})
+				go func() {
+					defer close(firstDone)
+					req := httptest.NewRequest(http.MethodPost, endpoint, blocked)
+					req.RemoteAddr = "192.0.2.10:1234"
+					s.Handler().ServeHTTP(httptest.NewRecorder(), req)
+				}()
+				select {
+				case <-blocked.started:
+				case <-time.After(2 * time.Second):
+					t.Fatal("first request did not start reading its body")
+				}
+
+				rejectedBody := &readCountingBody{}
+				req := httptest.NewRequest(http.MethodPost, endpoint, rejectedBody)
+				req.RemoteAddr = "192.0.2.10:5678"
+				rr := httptest.NewRecorder()
+				s.Handler().ServeHTTP(rr, req)
+				if rr.Code != http.StatusTooManyRequests {
+					t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusTooManyRequests, rr.Body.String())
+				}
+				var payload map[string]string
+				if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+					t.Fatalf("decode rejection: %v", err)
+				}
+				if payload["error"] != tc.wantCode {
+					t.Fatalf("error = %q, want %q", payload["error"], tc.wantCode)
+				}
+				if rejectedBody.reads != 0 {
+					t.Fatalf("rejected body was read %d times", rejectedBody.reads)
+				}
+
+				close(blocked.unblock)
+				select {
+				case <-firstDone:
+				case <-time.After(2 * time.Second):
+					t.Fatal("first request did not release upload admission")
+				}
+				if got := s.uploads.Load(); got != 0 {
+					t.Fatalf("active uploads = %d, want 0", got)
+				}
+			})
+		}
+	}
+}
+
 func TestPlatformAuthEnforcesTrustedProxyCIDRsForUnsignedHeaders(t *testing.T) {
 	body := executePayload(t)
 	for _, tc := range []struct {

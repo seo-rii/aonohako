@@ -65,6 +65,20 @@ func TestDefaultMaxPrincipalStreams(t *testing.T) {
 	}
 }
 
+func TestDefaultUploadLimits(t *testing.T) {
+	dev := platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}
+	production := platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetSelfHosted}
+	if got := defaultUploadLimit(dev, defaultMaxActiveUploads); got != 0 {
+		t.Fatalf("dev default active upload cap = %d, want 0", got)
+	}
+	if got := defaultUploadLimit(production, defaultMaxActiveUploads); got != 4 {
+		t.Fatalf("production default active upload cap = %d, want 4", got)
+	}
+	if got := defaultUploadLimit(production, defaultMaxPrincipalUploads); got != 2 {
+		t.Fatalf("production default principal upload cap = %d, want 2", got)
+	}
+}
+
 func TestDefaultMaxPrincipalRequestsPerMinute(t *testing.T) {
 	if got := defaultMaxPrincipalRequestsPerMinute(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}); got != 0 {
 		t.Fatalf("dev default principal request rate = %d, want 0", got)
@@ -954,6 +968,8 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_MAX_ACTIVE_RUNS", "3")
 	t.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "7")
 	t.Setenv("AONOHAKO_MAX_ACTIVE_STREAMS", "11")
+	t.Setenv("AONOHAKO_MAX_ACTIVE_UPLOADS", "4")
+	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", "2")
 	t.Setenv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", "6")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "5")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE", "13")
@@ -987,6 +1003,12 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	}
 	if cfg.MaxActiveStreams != 11 {
 		t.Fatalf("max active streams mismatch: %d", cfg.MaxActiveStreams)
+	}
+	if cfg.MaxActiveUploads != 4 {
+		t.Fatalf("max active uploads mismatch: %d", cfg.MaxActiveUploads)
+	}
+	if cfg.MaxPrincipalUploads != 2 {
+		t.Fatalf("max principal uploads mismatch: %d", cfg.MaxPrincipalUploads)
 	}
 	if cfg.PlatformBodyHashConcurrency != 6 {
 		t.Fatalf("platform body hash concurrency mismatch: %d", cfg.PlatformBodyHashConcurrency)
@@ -1043,6 +1065,10 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "pending malformed", key: "AONOHAKO_MAX_PENDING_QUEUE", value: "many"},
 		{name: "streams negative", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "-1"},
 		{name: "streams malformed", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "many"},
+		{name: "uploads negative", key: "AONOHAKO_MAX_ACTIVE_UPLOADS", value: "-1"},
+		{name: "uploads malformed", key: "AONOHAKO_MAX_ACTIVE_UPLOADS", value: "many"},
+		{name: "principal uploads negative", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", value: "-1"},
+		{name: "principal uploads malformed", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", value: "many"},
 		{name: "platform body hash zero", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "0"},
 		{name: "platform body hash negative", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "-1"},
 		{name: "platform body hash malformed", key: "AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", value: "many"},
@@ -1101,6 +1127,8 @@ func TestLoadRejectsUnlimitedQueueAndStreamCapsOutsideDev(t *testing.T) {
 	}{
 		{name: "pending queue", key: "AONOHAKO_MAX_PENDING_QUEUE"},
 		{name: "active streams", key: "AONOHAKO_MAX_ACTIVE_STREAMS"},
+		{name: "active uploads", key: "AONOHAKO_MAX_ACTIVE_UPLOADS"},
+		{name: "principal uploads", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS"},
 		{name: "principal streams", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS"},
 	}
 	for _, tc := range tests {
@@ -1177,6 +1205,9 @@ func TestLoadIgnoresLegacyEnvFallbacks(t *testing.T) {
 	}
 	if cfg.MaxActiveStreams != defaultMaxActiveStreams {
 		t.Fatalf("legacy max active streams env should be ignored, got %d", cfg.MaxActiveStreams)
+	}
+	if cfg.MaxActiveUploads != 0 || cfg.MaxPrincipalUploads != 0 {
+		t.Fatalf("dev upload limits = %d/%d, want disabled", cfg.MaxActiveUploads, cfg.MaxPrincipalUploads)
 	}
 	if cfg.PlatformBodyHashConcurrency != defaultPlatformBodyHashConcurrency(cfg.MaxActiveStreams, cfg.MaxActiveRuns) {
 		t.Fatalf("platform body hash concurrency default = %d", cfg.PlatformBodyHashConcurrency)

@@ -208,6 +208,12 @@ aonohako-selftest cgroup-preflight
   `/compile` and `/execute` request streams before they can occupy more server
   resources. Set it explicitly to `0` only for development cases that
   intentionally need unlimited open streams.
+- `AONOHAKO_MAX_ACTIVE_UPLOADS` defaults to `4` outside development and
+  `AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS` defaults to `2`. These slots are
+  acquired before authentication reads a signed request body, JSON decoding,
+  Base64 validation, or payload URL fetches. The slot is released only after
+  the request enters the bounded run queue or terminates early. Both limits
+  default to `0` in development; production targets reject `0`.
 - `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY` defaults to
   `min(4, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
   `min(4, AONOHAKO_MAX_ACTIVE_RUNS)` and accepts values from `1` through `64`.
@@ -279,7 +285,8 @@ aonohako-selftest cgroup-preflight
   path and query string. The timestamp comes from
   `X-Aonohako-Principal-Timestamp` in RFC3339 format and must be within five
   minutes of the server clock. Legacy bodyless `v2=` signatures are rejected.
-  Concurrent pre-auth body hashing is capped by
+  Concurrent pre-auth body hashing first requires global and claimed-principal
+  upload admission, and is additionally capped by
   `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY`, so invalid signatures cannot force
   unbounded parallel 64 MiB body buffers.
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS` and

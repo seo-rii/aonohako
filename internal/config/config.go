@@ -86,6 +86,8 @@ type RuntimeTuningConfig struct {
 const (
 	defaultMaxPendingQueue       = 16
 	defaultMaxActiveStreams      = 64
+	defaultMaxActiveUploads      = 4
+	defaultMaxPrincipalUploads   = 2
 	defaultPlatformBodyHashSlots = 4
 	maxPlatformBodyHashSlots     = 64
 
@@ -137,6 +139,8 @@ type Config struct {
 	MaxActiveRuns                 int
 	MaxPendingQueue               int
 	MaxActiveStreams              int
+	MaxActiveUploads              int
+	MaxPrincipalUploads           int
 	PlatformBodyHashConcurrency   int
 	MaxPrincipalStreams           int
 	MaxPrincipalRequestsPerMinute int
@@ -172,6 +176,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	maxActiveUploads, err := parseNonNegativeIntEnv("AONOHAKO_MAX_ACTIVE_UPLOADS", os.Getenv("AONOHAKO_MAX_ACTIVE_UPLOADS"), defaultUploadLimit(runtimePlatform, defaultMaxActiveUploads))
+	if err != nil {
+		return Config{}, err
+	}
+	maxPrincipalUploads, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", os.Getenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS"), defaultUploadLimit(runtimePlatform, defaultMaxPrincipalUploads))
+	if err != nil {
+		return Config{}, err
+	}
 	platformBodyHashConcurrency, err := parseBoundedIntEnv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", os.Getenv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY"), defaultPlatformBodyHashConcurrency(maxActiveStreams, maxActive), 1, maxPlatformBodyHashSlots)
 	if err != nil {
 		return Config{}, err
@@ -190,6 +202,12 @@ func Load() (Config, error) {
 		}
 		if maxActiveStreams == 0 {
 			return Config{}, fmt.Errorf("AONOHAKO_MAX_ACTIVE_STREAMS=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
+		}
+		if maxActiveUploads == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_MAX_ACTIVE_UPLOADS=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
+		}
+		if maxPrincipalUploads == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
 		}
 		if maxPrincipalStreams == 0 {
 			return Config{}, fmt.Errorf("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS=0 is only allowed with AONOHAKO_DEPLOYMENT_TARGET=dev")
@@ -596,6 +614,8 @@ func Load() (Config, error) {
 		MaxActiveRuns:                 maxActive,
 		MaxPendingQueue:               maxPending,
 		MaxActiveStreams:              maxActiveStreams,
+		MaxActiveUploads:              maxActiveUploads,
+		MaxPrincipalUploads:           maxPrincipalUploads,
 		PlatformBodyHashConcurrency:   platformBodyHashConcurrency,
 		MaxPrincipalStreams:           maxPrincipalStreams,
 		MaxPrincipalRequestsPerMinute: maxPrincipalRequestsPerMinute,
@@ -612,6 +632,13 @@ func Load() (Config, error) {
 		Execution:                     execution,
 		InboundAuth:                   inboundAuth,
 	}, nil
+}
+
+func defaultUploadLimit(opts platform.RuntimeOptions, productionDefault int) int {
+	if opts.DeploymentTarget == platform.DeploymentTargetDev {
+		return 0
+	}
+	return productionDefault
 }
 
 func defaultMaxActiveRuns(opts platform.RuntimeOptions) int {

@@ -611,14 +611,22 @@ The following checks are enforced before the HTTP server starts:
   so unsigned trusted
   platform headers are not accepted outside `dev`; legacy bodyless signatures
   are rejected
+- every request to `/compile` or `/execute` acquires
+  `AONOHAKO_MAX_ACTIVE_UPLOADS` and claimed-principal
+  `AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS` admission before authentication can
+  read a signed body, JSON decoding, Base64 validation, or payload URL fetches;
+  the upload admission is released after bounded queue admission or any early
+  failure
 - platform body hashing happens before principal rate limiting, so concurrent
-  hash operations are capped by `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY`
-  instead of request stream concurrency
+  hash operations are additionally capped by
+  `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY`
 - `AONOHAKO_TRUSTED_PLATFORM_HEADERS=true` and
   `AONOHAKO_PLATFORM_TRUSTED_PROXY_CIDRS` remain optional defense-in-depth
   assertions for source-CIDR checks in addition to signed platform principals
 - numeric values such as `AONOHAKO_MAX_ACTIVE_RUNS`,
   `AONOHAKO_MAX_PENDING_QUEUE`, `AONOHAKO_MAX_ACTIVE_STREAMS`,
+  `AONOHAKO_MAX_ACTIVE_UPLOADS`,
+  `AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS`,
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`,
   `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE`, and
   `AONOHAKO_HEARTBEAT_INTERVAL_SEC`, and
@@ -627,9 +635,9 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_REMOTE_STRICT_PROTOCOL` is a strict boolean; it defaults to `true`
   outside `dev` so remote responses without `X-Aonohako-Protocol-Version` are
   rejected in production remote fleets
-- non-dev deployments also reject `0` for pending queue, global stream, and
-  per-principal stream caps so unlimited queue or open-stream settings stay
-  development-only
+- non-dev deployments also reject `0` for pending queue, global and
+  per-principal upload, global stream, and per-principal stream caps so
+  unlimited queue, upload, or open-stream settings stay development-only
 - `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE=0` is accepted on every
   deployment target and disables the process-local fixed-window rate limiter.
   This is intended for trusted Cloud Run or self-hosted runners whose

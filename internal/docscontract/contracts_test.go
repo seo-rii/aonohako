@@ -59,6 +59,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	protocolWants := []string{
 		"Both `/compile` and `/execute` share the same bounded queue",
 		"`AONOHAKO_MAX_ACTIVE_STREAMS`",
+		"`AONOHAKO_MAX_ACTIVE_UPLOADS`",
+		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS`",
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE`",
 		"Set it to `0` on any deployment target to disable this\n  process-local cap",
@@ -66,6 +68,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"`AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC`",
 		"`X-Aonohako-Protocol-Version`",
 		`"stream_limit_exceeded"`,
+		`"upload_limit_exceeded"`,
+		`"principal_upload_limit_exceeded"`,
 		`"principal_stream_limit_exceeded"`,
 		`"principal_rate_limited"`,
 		"Before an SSE stream is admitted, every rejected `/compile` or `/execute`\nrequest returns a JSON error envelope",
@@ -163,8 +167,8 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "malformed or out-of-range") || !strings.Contains(architecture, "values fail startup") {
 		t.Fatalf("architecture.md must describe strict numeric env parsing")
 	}
-	if !strings.Contains(architecture, "non-dev deployments also reject `0` for pending queue, global stream, and\n  per-principal stream caps") {
-		t.Fatalf("architecture.md must describe non-dev rejection of unlimited queue and stream caps")
+	if !strings.Contains(architecture, "non-dev deployments also reject `0` for pending queue, global and\n  per-principal upload, global stream, and per-principal stream caps") {
+		t.Fatalf("architecture.md must describe non-dev rejection of unlimited queue, upload, and stream caps")
 	}
 	if !strings.Contains(architecture, "`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE=0` is accepted on every\n  deployment target and disables the process-local fixed-window rate limiter") {
 		t.Fatalf("architecture.md must describe disabling the per-principal request-rate cap outside dev")
@@ -272,6 +276,8 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_EXECUTION_MODE` remains as a compatibility shorthand",
 		"non-root development path)",
 		"`AONOHAKO_MAX_ACTIVE_STREAMS` defaults to `64`",
+		"`AONOHAKO_MAX_ACTIVE_UPLOADS` defaults to `4` outside development",
+		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS` defaults to `2`",
 		"`AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` defaults to `0` for `dev`",
 		"`AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` defaults to `0` for `dev`",
 		"Set it to `0`\n  on any deployment target to disable the per-process request-rate cap",
@@ -394,6 +400,8 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 				t.Fatalf("%s must not use unauthenticated inbound auth", name)
 			}
 			requireEnv(name, env, "AONOHAKO_MAX_PENDING_QUEUE", "16")
+			requireEnv(name, env, "AONOHAKO_MAX_ACTIVE_UPLOADS", "4")
+			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", "2")
 			requireEnv(name, env, "AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "16")
 			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_NETWORK", "false")
 			requireEnv(name, env, "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "false")

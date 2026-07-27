@@ -185,6 +185,14 @@ Both `/compile` and `/execute` share the same bounded queue:
 - **Open request streams**: `AONOHAKO_MAX_ACTIVE_STREAMS` (default: `64`; set
   `0` explicitly only for unlimited development streams). This caps
   simultaneous `/compile` and `/execute` streams before they join the run queue.
+- **Request upload admission**: `AONOHAKO_MAX_ACTIVE_UPLOADS` (default: `0` in
+  `dev`, `4` in `cloudrun` or `selfhosted`) and
+  `AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS` (default: `0` in `dev`, `2` in
+  `cloudrun` or `selfhosted`). Admission happens before signed-body hashing,
+  JSON decoding, Base64 validation, and payload URL fetches. It is retained
+  until the request enters the bounded queue or terminates early. A platform
+  request uses the claimed principal for this pre-auth cap; the global cap
+  remains authoritative until its signature is verified.
 - **Platform body hash concurrency**:
   `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY` (default:
   `min(4, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
@@ -229,6 +237,17 @@ HTTP/1.1 429 Too Many Requests
 Content-Type: application/json
 
 {"error": "stream_limit_exceeded"}
+```
+
+When the global or claimed-principal upload cap is reached before the request
+body is read, the server returns one of:
+
+```json
+{"error": "upload_limit_exceeded"}
+```
+
+```json
+{"error": "principal_upload_limit_exceeded"}
 ```
 
 When the per-principal stream cap is reached, the server returns:

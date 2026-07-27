@@ -53,10 +53,23 @@ const (
 )
 
 type principalContextKey struct{}
+type uploadAdmissionContextKey struct{}
 
 type principalRateWindow struct {
 	start time.Time
 	count int
+}
+
+type uploadAdmission struct {
+	once    sync.Once
+	release func()
+}
+
+func (a *uploadAdmission) Release() {
+	if a == nil {
+		return
+	}
+	a.once.Do(a.release)
 }
 
 type Server struct {
@@ -68,9 +81,11 @@ type Server struct {
 	queue   *queue.Manager
 	seq     atomic.Uint64
 	streams atomic.Int64
+	uploads atomic.Int64
 
 	principalMu      sync.Mutex
 	principalStreams map[string]int
+	principalUploads map[string]int
 	principalRates   map[string]principalRateWindow
 	rateLastCleanup  time.Time
 
@@ -108,6 +123,7 @@ func NewWithServices(cfg config.Config, compileService interface {
 		execute:          executeRunner,
 		queue:            queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
 		principalStreams: map[string]int{},
+		principalUploads: map[string]int{},
 		principalRates:   map[string]principalRateWindow{},
 		platformBodyHashSlots: make(
 			chan struct{},
@@ -135,8 +151,8 @@ func platformBodyHashConcurrency(cfg config.Config) int {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.healthz)
-	mux.Handle("/compile", s.requireAuth(http.HandlerFunc(s.compileHandler)))
-	mux.Handle("/execute", s.requireAuth(http.HandlerFunc(s.executeHandler)))
+	mux.Handle("/compile", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler))))
+	mux.Handle("/execute", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler))))
 	return mux
 }
 
@@ -253,6 +269,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusInternalServerError, "queue_error", "queue error")
 		return
 	}
+	releaseUploadAdmission(r.Context())
 
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
 	stream, err := sse.New(w, s.sseWriteTimeout)
@@ -396,6 +413,7 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusInternalServerError, "queue_error", "queue error")
 		return
 	}
+	releaseUploadAdmission(r.Context())
 
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
 	stream, err := sse.New(w, s.sseWriteTimeout)
@@ -483,6 +501,97 @@ func principalFromContext(ctx context.Context) string {
 		return principal
 	}
 	return "anonymous:unknown"
+}
+
+func releaseUploadAdmission(ctx context.Context) {
+	if admission, ok := ctx.Value(uploadAdmissionContextKey{}).(*uploadAdmission); ok {
+		admission.Release()
+	}
+}
+
+func (s *Server) withUploadAdmission(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		release, ok, code := s.acquireUpload(s.preAuthPrincipal(r))
+		if !ok {
+			writeJSONError(w, http.StatusTooManyRequests, code)
+			return
+		}
+		admission := &uploadAdmission{release: release}
+		defer admission.Release()
+		ctx := context.WithValue(r.Context(), uploadAdmissionContextKey{}, admission)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (s *Server) acquireUpload(principal string) (func(), bool, string) {
+	if s.cfg.MaxActiveUploads <= 0 {
+		if s.cfg.MaxPrincipalUploads <= 0 {
+			return func() {}, true, ""
+		}
+	} else {
+		active := s.uploads.Add(1)
+		if active > int64(s.cfg.MaxActiveUploads) {
+			s.uploads.Add(-1)
+			return nil, false, "upload_limit_exceeded"
+		}
+	}
+	principalAcquired := false
+	if s.cfg.MaxPrincipalUploads > 0 {
+		s.principalMu.Lock()
+		if s.principalUploads == nil {
+			s.principalUploads = map[string]int{}
+		}
+		if s.principalUploads[principal] >= s.cfg.MaxPrincipalUploads {
+			s.principalMu.Unlock()
+			if s.cfg.MaxActiveUploads > 0 {
+				s.uploads.Add(-1)
+			}
+			return nil, false, "principal_upload_limit_exceeded"
+		}
+		s.principalUploads[principal]++
+		principalAcquired = true
+		s.principalMu.Unlock()
+	}
+	return func() {
+		if s.cfg.MaxActiveUploads > 0 {
+			s.uploads.Add(-1)
+		}
+		if principalAcquired {
+			s.principalMu.Lock()
+			if s.principalUploads[principal] <= 1 {
+				delete(s.principalUploads, principal)
+			} else {
+				s.principalUploads[principal]--
+			}
+			s.principalMu.Unlock()
+		}
+	}, true, ""
+}
+
+func (s *Server) preAuthPrincipal(r *http.Request) string {
+	switch s.cfg.InboundAuth.Mode {
+	case config.InboundAuthBearer:
+		value := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		sum := sha256.Sum256([]byte(value))
+		return "bearer-claim:" + hex.EncodeToString(sum[:8])
+	case config.InboundAuthPlatform:
+		value := strings.TrimSpace(r.Header.Get(platformPrincipalHeader))
+		sum := sha256.Sum256([]byte(value))
+		return "platform-claim:" + hex.EncodeToString(sum[:8])
+	default:
+		return anonymousPrincipal(r)
+	}
+}
+
+func anonymousPrincipal(r *http.Request) string {
+	principal := "anonymous:"
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host != "" {
+		return principal + host
+	}
+	if r.RemoteAddr != "" {
+		return principal + r.RemoteAddr
+	}
+	return principal + "unknown"
 }
 
 func (s *Server) acquireStream(principal string) (func(), bool, string) {
@@ -578,14 +687,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch s.cfg.InboundAuth.Mode {
 		case "", config.InboundAuthNone:
-			principal := "anonymous:"
-			if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host != "" {
-				principal += host
-			} else if r.RemoteAddr != "" {
-				principal += r.RemoteAddr
-			} else {
-				principal += "unknown"
-			}
+			principal := anonymousPrincipal(r)
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
 			return
 		case config.InboundAuthPlatform:
