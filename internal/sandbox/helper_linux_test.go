@@ -55,3 +55,24 @@ func TestHelperPolicyIncludesPeerControlAndSysVIPCGuards(t *testing.T) {
 		}
 	}
 }
+
+func TestHelperRejectsX32SyscallNumbersAndUnsupportedArchitectures(t *testing.T) {
+	raw, err := os.ReadFile("helper_linux.go")
+	if err != nil {
+		t.Fatalf("read helper_linux.go: %v", err)
+	}
+	source := string(raw)
+	for _, marker := range []string{
+		`runtime.GOARCH != "amd64"`,
+		"unsupported sandbox helper architecture",
+		"x32SyscallBit = uint32(0x40000000)",
+		"unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, x32SyscallBit",
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("helper policy is missing alternate-ABI guard %q", marker)
+		}
+	}
+	if strings.Contains(source, `case "386"`) || strings.Contains(source, "unix.AUDIT_ARCH_I386") {
+		t.Fatal("helper must not advertise unsupported 386 syscall filtering")
+	}
+}

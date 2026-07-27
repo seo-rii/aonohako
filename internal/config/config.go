@@ -515,6 +515,9 @@ func Load() (Config, error) {
 	if contract.RequiresSingleActiveRun && maxActive != 1 {
 		return Config{}, fmt.Errorf("embedded helper execution requires AONOHAKO_MAX_ACTIVE_RUNS=1")
 	}
+	if contract.RequiresRootParent && (runtime.GOOS != "linux" || runtime.GOARCH != "amd64") {
+		return Config{}, fmt.Errorf("embedded helper execution supports only linux/amd64; got %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
 	if contract.RequiresRootParent && os.Geteuid() != 0 {
 		return Config{}, fmt.Errorf("execution backend %s/%s requires root; for non-root development set AONOHAKO_EXECUTION_TRANSPORT=remote and AONOHAKO_SANDBOX_BACKEND=none with AONOHAKO_REMOTE_RUNNER_URL pointing at a hardened runner", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
 	}

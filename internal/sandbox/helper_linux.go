@@ -66,6 +66,9 @@ func MaybeRunFromEnv() bool {
 	if len(req.Command) == 0 {
 		fail("empty command")
 	}
+	if runtime.GOARCH != "amd64" {
+		fail("unsupported sandbox helper architecture: linux/%s", runtime.GOARCH)
+	}
 	if !filepath.IsAbs(req.Command[0]) {
 		fail("command must be absolute: %s", req.Command[0])
 	}
@@ -216,22 +219,7 @@ func MaybeRunFromEnv() bool {
 	kill := uint32(unix.SECCOMP_RET_KILL_PROCESS)
 
 	archAudit := uint32(unix.AUDIT_ARCH_X86_64)
-	switch runtime.GOARCH {
-	case "arm64":
-		archAudit = unix.AUDIT_ARCH_AARCH64
-	case "amd64":
-		archAudit = unix.AUDIT_ARCH_X86_64
-	case "386":
-		archAudit = unix.AUDIT_ARCH_I386
-	case "arm":
-		archAudit = unix.AUDIT_ARCH_ARM
-	case "ppc64le":
-		archAudit = unix.AUDIT_ARCH_PPC64LE
-	case "riscv64":
-		archAudit = unix.AUDIT_ARCH_RISCV64
-	case "s390x":
-		archAudit = unix.AUDIT_ARCH_S390X
-	}
+	const x32SyscallBit = uint32(0x40000000)
 
 	program := make([]unix.SockFilter, 0, 112)
 	appendStmt := func(code uint16, k uint32) {
@@ -267,6 +255,8 @@ func MaybeRunFromEnv() bool {
 	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, archAudit, 1, 0)
 	appendStmt(unix.BPF_RET|unix.BPF_K, kill)
 	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataNrOffset)
+	appendJump(unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, x32SyscallBit, 0, 1)
+	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 
 	for _, sysno := range []uint32{
 		uint32(unix.SYS_UNSHARE),

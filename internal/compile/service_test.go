@@ -1320,8 +1320,23 @@ static int check_personality(void) {
 	return 1;
 }
 
+static int check_x32_socket(void) {
+#if defined(__x86_64__) && defined(SYS_socket)
+	errno = 0;
+	long rc = syscall(0x40000000UL | SYS_socket, 2, 1, 0, 0, 0, 0);
+	if (rc == -1 && errno == EPERM) {
+		return 0;
+	}
+	printf("x32_socket:%ld:%s\n", rc, strerror(errno));
+	return 1;
+#else
+	return 0;
+#endif
+}
+
 int main(void) {
 	int failed = 0;
+	failed |= check_x32_socket();
 #ifdef SYS_bpf
 	failed |= check("bpf", SYS_bpf);
 #endif

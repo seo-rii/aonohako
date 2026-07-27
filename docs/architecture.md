@@ -163,6 +163,8 @@ The runtime uses a parent/helper/target split:
 
 2. Helper process:
    - runs from the same `aonohako` binary in internal mode
+   - supports only Linux/amd64; other build targets fail closed instead of
+     claiming an incomplete alternate syscall ABI policy
    - reads the helper request from the inherited pipe file descriptor
    - applies `setrlimit`
    - enables `PR_SET_DUMPABLE=0`
@@ -206,7 +208,14 @@ compatibility.
 
 ### Process and syscall controls
 
-The Linux helper applies:
+The syscall filter first requires `AUDIT_ARCH_X86_64` and rejects syscall
+numbers carrying the x32 ABI bit (`0x40000000`) before any syscall-specific
+rule. This prevents x32 numbers from bypassing exact native syscall matches on
+kernels that enable the x32 ABI. The helper does not advertise 386 support;
+legacy multiplexers such as `socketcall` and `ipc` therefore cannot fall
+through an incomplete 32-bit policy.
+
+The Linux helper applies these resource and process controls:
 
 | Layer | Mechanism | Notes |
 | --- | --- | --- |

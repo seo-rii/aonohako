@@ -1978,6 +1978,7 @@ func languageSecurityCases(tcpPort int) map[string][]languageSecurityCase {
 	managedLimits := model.Limits{TimeMs: 10000, MemoryMB: 1024, OutputBytes: 4096}
 	expectedProcessNetwork := "process:blocked\nnetwork:blocked\n"
 	expectedNative := "network:blocked\nfork:blocked\nunshare:blocked\n"
+	expectedCNative := "network:blocked\nfork:blocked\nunshare:blocked\nx32:blocked\n"
 	expectedNativeProcess := "network:blocked\nprocess:blocked\nunshare:blocked\n"
 	pythonProcessNetwork := fmt.Sprintf(`import socket
 import subprocess
@@ -2031,7 +2032,7 @@ const socket = net.connect({ host: '127.0.0.1', port: %d }, () => {
 			{
 				name:           "native-syscall-denies",
 				compileLang:    "C11",
-				expectedStdout: expectedNative,
+				expectedStdout: expectedCNative,
 				limits:         limits,
 				sources: []model.Source{
 					source("Main.c", `#define _GNU_SOURCE
@@ -2039,6 +2040,7 @@ const socket = net.connect({ host: '127.0.0.1', port: %d }, () => {
 #include <sched.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -2073,6 +2075,14 @@ int main(void) {
     } else {
         print_check("unshare", 1);
     }
+
+#if defined(__x86_64__) && defined(SYS_socket)
+    errno = 0;
+    long x32_rc = syscall(0x40000000UL | SYS_socket, AF_INET, SOCK_STREAM, 0);
+    print_check("x32", x32_rc == -1 && errno == EPERM);
+#else
+    print_check("x32", 1);
+#endif
     return 0;
 }`),
 				},
