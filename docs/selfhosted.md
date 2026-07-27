@@ -16,6 +16,10 @@ Use this when the same process is expected to execute submissions directly:
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
 - `AONOHAKO_WORK_ROOT=/work`
+- `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true`
+- `AONOHAKO_WORK_ROOT_MAX_BYTES=1073741824`
+- `AONOHAKO_WORK_ROOT_MAX_FILES=131072`
+- `AONOHAKO_CGROUP_PARENT=/sys/fs/cgroup/aonohako`
 - `AONOHAKO_MAX_ACTIVE_RUNS=1`
 - `AONOHAKO_TRUSTED_RUNNER_INGRESS=true`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
@@ -65,11 +69,10 @@ multi-slot helper execution:
 2. Run a separate pool of runner instances in
    `selfhosted + embedded + helper`.
 3. Keep each runner instance at `AONOHAKO_MAX_ACTIVE_RUNS=1`.
-4. Give every runner instance its own dedicated `AONOHAKO_WORK_ROOT`.
-   Set `AONOHAKO_WORK_ROOT_MAX_BYTES` when the work root is backed by a
-   bounded filesystem or tmpfs that should fail startup if it is accidentally
-   replaced by a larger shared volume. Set `AONOHAKO_WORK_ROOT_MAX_FILES` when
-   the filesystem inode budget should be checked the same way.
+4. Give every runner instance its own dedicated bounded tmpfs
+   `AONOHAKO_WORK_ROOT` and delegated `AONOHAKO_CGROUP_PARENT`. Startup requires
+   byte and inode ceilings for the whole work-root filesystem and validates the
+   cgroup v2 CPU, memory, and pids controllers.
 5. Scale throughput by adding more runner instances, not by increasing helper
    slots inside one process.
 
@@ -82,6 +85,7 @@ This keeps the same invariants as the Cloud Run baseline:
 - dedicated writable work root
 - immutable submitted files
 - no shared mutable scratch between concurrent submissions in the same process
+- cgroup-backed aggregate CPU, memory, pids, and process cleanup for every run
 - optional outbound network only on dedicated self-hosted runners when
   `enable_network=true` is explicitly requested
 
@@ -108,25 +112,25 @@ not exist yet:
 
 | Present today | Still missing |
 | --- | --- |
-| root parent with dropped UID child | per-run cgroup |
-| `setrlimit` and workspace accounting | private mount namespace |
-| `PR_SET_NO_NEW_PRIVS` and seccomp denylist | read-only rootfs |
-| network syscall gate | masked `/proc` |
-| fd cleanup, process-group cleanup, and fixed interactive role separation | per-request UID allocation or user namespace |
-| immutable submissions and symlink-safe output capture | child-process accounting, seccomp allowlists, and post-start `execve()` blocking |
+| root parent with dropped UID child and per-run cgroup | private mount namespace |
+| `setrlimit` and workspace accounting | read-only rootfs |
+| `PR_SET_NO_NEW_PRIVS` and seccomp denylist | masked `/proc` |
+| network syscall gate | per-request UID allocation or user namespace |
+| fd and cgroup cleanup plus fixed interactive role separation | seccomp allowlists and post-start `execve()` blocking |
+| immutable submissions and symlink-safe output capture | mount-isolated private runtime state |
 
-## Optional cgroup guardrail
+## Required cgroup guardrail
 
 `embedded + container` remains reserved for a future self-hosted backend. It is
 not implemented today.
 
-The helper backend can optionally add per-run cgroup v2 memory, pids, and CPU
-bandwidth limits when the runner is deployed as `selfhosted + embedded +
-helper` and `AONOHAKO_CGROUP_PARENT` points at a writable parent cgroup. This is
-not a full container backend: it does not add a mount namespace, masked `/proc`,
-per-run UID, or seccomp allowlist. It does give the kernel a run-level
-memory/pids boundary and one-vCPU bandwidth guardrail that are stronger than
-RSS polling alone.
+The helper backend requires per-run cgroup v2 memory, pids, and CPU bandwidth
+limits when deployed as `selfhosted + embedded + helper`.
+`AONOHAKO_CGROUP_PARENT` must point at a writable delegated parent cgroup.
+This is not a full container backend: it does not add a mount namespace, masked
+`/proc`, per-run UID, or seccomp allowlist. It gives the kernel a run-level
+memory/pids boundary and one-vCPU bandwidth guardrail, and makes the run cgroup
+the authoritative process cleanup source.
 
 The standalone cgroup preflight in `internal/isolation/cgroup` checks that:
 
@@ -136,7 +140,7 @@ The standalone cgroup preflight in `internal/isolation/cgroup` checks that:
 - `cpu`, `memory`, and `pids` controllers are available
 - the optional `io` controller is reported when present
 
-This check is still useful before enabling `AONOHAKO_CGROUP_PARENT`, and the
+This check should run before configuring `AONOHAKO_CGROUP_PARENT`, and the
 future container backend should use the same controls as a startup gate before
 adding mount and UID isolation.
 
@@ -190,8 +194,8 @@ run cgroup:
   exposes it, then remove the run cgroup without recursive deletion, using a
   short retry window for process cleanup races
 
-The same package also defines the read contract used by the optional cgroup
-watchdog, final post-exit classification, and the future isolated backend:
+The same package also defines the read contract used by the cgroup watchdog,
+final post-exit classification, and the future isolated backend:
 
 - `memory.current`
 - `memory.peak` when the kernel exposes it

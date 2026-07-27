@@ -54,6 +54,21 @@ func TestBuildEmbeddedRunnerPassesCgroupParent(t *testing.T) {
 	}
 }
 
+func TestBuildRejectsSelfHostedEmbeddedRunnerWithoutCgroupParent(t *testing.T) {
+	_, err := Build(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires a cgroup parent") {
+		t.Fatalf("Build() error = %v", err)
+	}
+}
+
 func sandboxWritableTempDir(t *testing.T) string {
 	t.Helper()
 	if os.Geteuid() != 0 {

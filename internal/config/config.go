@@ -503,6 +503,9 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_TRUSTED_RUNNER_INGRESS=true")
 	}
 
+	selfHostedHelper := runtimePlatform.DeploymentTarget == platform.DeploymentTargetSelfHosted &&
+		runtimePlatform.ExecutionTransport == platform.ExecutionTransportEmbedded &&
+		runtimePlatform.SandboxBackend == platform.SandboxBackendHelper
 	if execution.Cgroup.ParentDir != "" {
 		if runtimePlatform.DeploymentTarget != platform.DeploymentTargetSelfHosted || runtimePlatform.ExecutionTransport != platform.ExecutionTransportEmbedded || runtimePlatform.SandboxBackend != platform.SandboxBackendHelper {
 			return Config{}, fmt.Errorf("AONOHAKO_CGROUP_PARENT is supported only with selfhosted embedded helper execution")
@@ -520,6 +523,9 @@ func Load() (Config, error) {
 	}
 	if contract.RequiresRootParent && os.Geteuid() != 0 {
 		return Config{}, fmt.Errorf("execution backend %s/%s requires root; for non-root development set AONOHAKO_EXECUTION_TRANSPORT=remote and AONOHAKO_SANDBOX_BACKEND=none with AONOHAKO_REMOTE_RUNNER_URL pointing at a hardened runner", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
+	}
+	if err := validateSelfHostedCgroupPolicy(selfHostedHelper, execution.Cgroup.ParentDir); err != nil {
+		return Config{}, err
 	}
 
 	requiresAuthoritativeWorkRoot := contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev
@@ -638,6 +644,13 @@ func validateAuthoritativeWorkRootPolicy(required, requireTmpfs bool, maxBytes, 
 	}
 	if maxFiles <= 0 || maxFiles > maxAuthoritativeWorkRootFiles {
 		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_FILES between 1 and %d", maxAuthoritativeWorkRootFiles)
+	}
+	return nil
+}
+
+func validateSelfHostedCgroupPolicy(required bool, parentDir string) error {
+	if required && strings.TrimSpace(parentDir) == "" {
+		return fmt.Errorf("selfhosted embedded helper execution requires AONOHAKO_CGROUP_PARENT")
 	}
 	return nil
 }

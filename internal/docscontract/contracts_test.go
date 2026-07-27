@@ -139,7 +139,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`aonohako-selftest mount-preflight` can probe self-hosted runner hosts") || !strings.Contains(architecture, "`unshare(CLONE_NEWNS)`, private mount propagation, a bounded tmpfs mount, a\nprocfs mount with `hidepid=2`, and a read-only bind remount") || !strings.Contains(architecture, "does not add mount namespace") || !strings.Contains(architecture, "read-only rootfs, or masked `/proc` capabilities") {
 		t.Fatalf("architecture.md must describe mount namespace preflight as a prerequisite-only check")
 	}
-	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") || !strings.Contains(architecture, "not group/world writable") || !strings.Contains(architecture, "probe run-group create/remove cycle") || !strings.Contains(architecture, "parent `cgroup.procs` to be empty") || !strings.Contains(architecture, "`cgroup.subtree_control` at startup") {
+	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is required") || !strings.Contains(architecture, "not group/world writable") || !strings.Contains(architecture, "probe run-group create/remove cycle") || !strings.Contains(architecture, "parent `cgroup.procs` to be empty") || !strings.Contains(architecture, "`cgroup.subtree_control` at startup") {
 		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
 	}
 	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "not the effective workspace\nquota") || !strings.Contains(architecture, "root-created symlink") || !strings.Contains(architecture, "Kotlin/Native's global cache") {
@@ -292,7 +292,7 @@ func TestReadmeDocumentsExplicitExecutionModeContract(t *testing.T) {
 		"`AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is a strict boolean",
 		"`AONOHAKO_WORK_ROOT_MAX_BYTES`, when nonzero",
 		"`AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero",
-		"`AONOHAKO_CGROUP_PARENT` is optional and supported only for",
+		"`AONOHAKO_CGROUP_PARENT` is required for",
 		"`AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another",
 		"`verdict_source` diagnostics",
 		"`cloudrun-idtoken`; `none` is allowed only for `dev`",
@@ -412,6 +412,7 @@ func TestDeploymentEnvironmentExamplesEncodeSafeContracts(t *testing.T) {
 		requireEnv(name, env, "AONOHAKO_WORK_ROOT_MAX_FILES", "131072")
 		requirePresent(name, env, "AONOHAKO_WORK_ROOT")
 	}
+	requireEnv("selfhosted-runner.env", examples["selfhosted-runner.env"], "AONOHAKO_CGROUP_PARENT", "/sys/fs/cgroup/aonohako")
 
 	cloudRemote := examples["cloudrun-control-plane.env"]
 	requireEnv("cloudrun-control-plane.env", cloudRemote, "AONOHAKO_EXECUTION_TRANSPORT", "remote")

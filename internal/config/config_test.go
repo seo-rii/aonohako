@@ -751,6 +751,16 @@ func TestLoadRejectsCgroupParentOutsideSelfHostedHelper(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsSelfHostedHelperWithoutCgroupParent(t *testing.T) {
+	err := validateSelfHostedCgroupPolicy(true, "")
+	if err == nil || !strings.Contains(err.Error(), "requires AONOHAKO_CGROUP_PARENT") {
+		t.Fatalf("validateSelfHostedCgroupPolicy() error = %v", err)
+	}
+	if err := validateSelfHostedCgroupPolicy(false, ""); err != nil {
+		t.Fatalf("non-selfhosted policy should not require cgroup parent: %v", err)
+	}
+}
+
 func TestLoadRejectsInvalidCgroupParent(t *testing.T) {
 	parent := t.TempDir()
 	os.WriteFile(filepath.Join(parent, "cgroup.controllers"), []byte("cpu memory\n"), 0o644)

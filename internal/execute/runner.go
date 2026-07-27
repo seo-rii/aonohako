@@ -3,6 +3,7 @@ package execute
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
@@ -18,6 +19,9 @@ func Build(cfg config.Config) (Runner, error) {
 	case platform.ExecutionTransportEmbedded:
 		if cfg.Execution.Platform.SandboxBackend != platform.SandboxBackendHelper {
 			return nil, fmt.Errorf("embedded execution does not support sandbox backend %s", cfg.Execution.Platform.SandboxBackend)
+		}
+		if cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetSelfHosted && strings.TrimSpace(cfg.Execution.Cgroup.ParentDir) == "" {
+			return nil, fmt.Errorf("selfhosted embedded helper execution requires a cgroup parent")
 		}
 		return NewWithConfig(cfg), nil
 	case platform.ExecutionTransportRemote:

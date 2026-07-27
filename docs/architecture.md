@@ -467,13 +467,13 @@ because CoreCLR reserves a very
 large memfd-backed double-mapped region before user code starts. Go runtime
 startup likewise makes large, ASLR-sensitive virtual reservations before
 `main`, so `go-binary` execution disables `RLIMIT_AS`. Their physical memory is
-still enforced through RSS/smaps sampling, optional cgroup `memory.max`, and the
-outer container limit. Lower file-size
+still enforced through RSS/smaps sampling, mandatory self-hosted cgroup
+`memory.max`, and the outer container limit. Lower file-size
 rlimits can also break CoreCLR/F# startup, so `dotnet` and `dafny` receive a
 high finite 2 TiB `RLIMIT_FSIZE` floor instead of disabling the file-size rlimit
 entirely. That floor is a compatibility guard, not the effective workspace
 quota: .NET/Dafny disk burst protection still comes from workspace scanning,
-bounded `AONOHAKO_WORK_ROOT` storage, optional self-hosted cgroups, and the
+bounded `AONOHAKO_WORK_ROOT` storage, mandatory self-hosted cgroups, and the
 outer container or filesystem limit. The helper still applies a request-memory-derived
 `DOTNET_GCHeapHardLimit`, RSS watchdogs, workspace byte accounting, output caps,
 open-file limits, thread limits, OOM-victim preference, and single-slot
@@ -492,8 +492,9 @@ operator-selected parent cgroup. `internal/isolation/cgroup` checks for a cgroup
 v2 mount, `cgroup.controllers`, `cgroup.subtree_control`, and the required
 `cpu`, `memory`, and `pids` controllers. The `io` controller is reported
 separately because it is useful for future throttling but not required for the
-first hard memory/process boundary. Setting `AONOHAKO_CGROUP_PARENT` is allowed
-only for `selfhosted + embedded + helper`, and startup validates the selected
+first hard memory/process boundary. `AONOHAKO_CGROUP_PARENT` is required for
+`selfhosted + embedded + helper` and rejected for other shapes. Startup
+validates the selected
 parent is under a cgroup v2 mount, is not group/world writable, and accepts a
 probe run-group create/remove cycle before request handling. The probe uses the
 same `memory.max`, `memory.swap.max`, `memory.oom.group`, `pids.max`, and
@@ -501,15 +502,15 @@ same `memory.max`, `memory.swap.max`, `memory.oom.group`, `pids.max`, and
 so delegation failures are reported before the runner accepts work.
 
 The same package owns the low-level run-group write contract used by the
-optional cgroup guardrail and the future isolated backend. Parent cgroups enable
+self-hosted cgroup guardrail and the future isolated backend. Parent cgroups enable
 child controllers by writing values such as `+cpu +memory +pids` to
 `cgroup.subtree_control`. A run group must then be created with positive
 `memory.max` and `pids.max` values. When the kernel exposes `memory.swap.max`,
 the guardrail writes `0` so swap cannot extend the run's effective memory
 budget, and `memory.oom.group` is set so the kernel treats the run as one OOM
 domain. Compile, execute, and SPJ run groups also write
-`cpu.max=100000 100000` so one sandbox cannot burst beyond one vCPU when
-the optional cgroup guardrail is enabled. A target process is admitted by
+`cpu.max=100000 100000` so one self-hosted sandbox cannot burst beyond one
+vCPU. A target process is admitted by
 writing its PID to `cgroup.procs`. Cleanup removes the run cgroup directory
 without recursive deletion so leftover processes or files surface as cleanup
 errors, with a short retry window for kernel-side process cleanup races.
@@ -556,7 +557,7 @@ The supported shapes map to an explicit runtime security contract in
 
 | Shape | Contract | Local guarantees | Missing local boundary |
 | --- | --- | --- | --- |
-| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, a dedicated bounded tmpfs work-root mount and single active request, server-owned role-traversable workspace roots, distinct fixed contestant/trusted-interactor identities for interactive requests, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting; self-hosted deployments can add per-run cgroup and child-process accounting by setting `AONOHAKO_CGROUP_PARENT` | mount namespace, read-only rootfs, masked `/proc`, per-request UID allocation or user namespace, seccomp allowlist, post-start `execve()` blocking; per-run cgroup and child-process accounting remain missing unless `AONOHAKO_CGROUP_PARENT` is configured |
+| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, a dedicated bounded tmpfs work-root mount and single active request, server-owned role-traversable workspace roots, distinct fixed contestant/trusted-interactor identities for interactive requests, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting; self-hosted deployments require per-run cgroup and child-process accounting through `AONOHAKO_CGROUP_PARENT`, while Cloud Run delegates that final aggregate boundary to its disposable outer container | mount namespace, read-only rootfs, masked `/proc`, per-request UID allocation or user namespace, seccomp allowlist, post-start `execve()` blocking; Cloud Run helper mode has no child cgroup control |
 | `remote + none` | `remote-control-plane` | `/compile` and `/execute` are forwarded to the configured runner and no local untrusted compile/run work is performed | isolation is delegated to the downstream runner and its private ingress/auth boundary |
 | `embedded + container` | `reserved-container-isolation` | not implemented | must provide per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID or user namespace, child-process accounting, allowlist-oriented seccomp, and post-start `execve()` blocking before it can be enabled |
 
@@ -648,6 +649,8 @@ The following checks are enforced before the HTTP server starts:
   ingress or platform-auth boundary before starting a root helper parent
 - `cloudrun` always requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper` requires `AONOHAKO_WORK_ROOT`
+- `selfhosted + embedded + helper` requires `AONOHAKO_CGROUP_PARENT`; startup
+  validates and probes its delegated CPU, memory, and pids controllers
 - every required work root must already exist, be a directory, be owned by the
   current server UID, not be group/world writable, and accept a probe
   directory create/remove cycle

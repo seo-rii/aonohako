@@ -300,12 +300,12 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero, verifies through `statfs` that
   the required work-root filesystem exposes no more than that many inodes.
   Production helper runners require a positive value no greater than 131072.
-- `AONOHAKO_CGROUP_PARENT` is optional and supported only for
-  `selfhosted + embedded + helper`. When set, startup validates that the parent
-  directory is under a cgroup v2 mount and exposes `cpu`, `memory`, and `pids`,
-  and each compile/execute/SPJ run is placed in a per-run cgroup with
-  `memory.max`, `pids.max`, `cpu.max=100000 100000`, and
-  `memory.oom.group=1`.
+- `AONOHAKO_CGROUP_PARENT` is required for
+  `selfhosted + embedded + helper` and rejected for other deployment shapes.
+  Startup validates that the parent directory is under a cgroup v2 mount and
+  exposes `cpu`, `memory`, and `pids`; each compile/execute/SPJ run is placed in
+  a per-run cgroup with `memory.max`, `pids.max`,
+  `cpu.max=100000 100000`, and `memory.oom.group=1`.
 - `AONOHAKO_REMOTE_RUNNER_URL` points `remote` transport at another
   `aonohako` runner service and must be an absolute `http(s)` URL without
   embedded credentials, query strings, or fragments. Outside `dev`, bearer and
@@ -406,8 +406,10 @@ Security posture depends on where it runs:
   sandbox UID. Its work root must be a dedicated bounded tmpfs mount with byte
   and inode ceilings. Because only one request runs at a time, that kernel
   backing-store ceiling also covers unlinked-open files and write/unlink bursts
-  that directory scanning cannot observe. Interactive peers within one request
-  use the distinct fixed role identities described above.
+  that directory scanning cannot observe. A delegated cgroup v2 parent is also
+  mandatory, so compiler children and process-spawning runtime wrappers stay
+  inside aggregate CPU, memory, pids, and cleanup accounting. Interactive peers
+  within one request use the distinct fixed role identities described above.
 - `dev + remote + none` is the non-root development path. The local server
   forwards `/compile` and `/execute` to a remote hardened runner instead of
   building or running untrusted inputs locally.
