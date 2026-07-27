@@ -508,6 +508,51 @@ func TestCappedBufferTracksTruncation(t *testing.T) {
 	}
 }
 
+func TestInteractivePipeWriterPropagatesTransportErrors(t *testing.T) {
+	reader, pipeWriter := io.Pipe()
+	writer := &interactivePipeWriter{w: pipeWriter}
+	transportErr := errors.New("peer input failed")
+	if err := reader.CloseWithError(transportErr); err != nil {
+		t.Fatalf("CloseWithError() error = %v", err)
+	}
+
+	n, err := writer.Write([]byte("payload"))
+	if n != 0 || !errors.Is(err, transportErr) {
+		t.Fatalf("Write() = (%d, %v), want (0, peer input failed)", n, err)
+	}
+	if !errors.Is(writer.Err(), transportErr) {
+		t.Fatalf("Err() = %v, want peer input failed", writer.Err())
+	}
+}
+
+func TestInteractivePipeWriterReportsWriteAfterDestinationClose(t *testing.T) {
+	reader, pipeWriter := io.Pipe()
+	defer reader.Close()
+	writer := &interactivePipeWriter{w: pipeWriter}
+	writer.Close()
+
+	n, err := writer.Write([]byte("payload"))
+	if n != 0 || !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("Write() = (%d, %v), want (0, io.ErrClosedPipe)", n, err)
+	}
+	if !errors.Is(writer.Err(), io.ErrClosedPipe) {
+		t.Fatalf("Err() = %v, want io.ErrClosedPipe", writer.Err())
+	}
+}
+
+func TestTeeCaptureWriterPropagatesForwardErrors(t *testing.T) {
+	capture := cappedBuffer{limit: 32}
+	writer := teeCaptureWriter{capture: &capture, forward: failingWriter{}}
+
+	n, err := writer.Write([]byte("payload"))
+	if n != 0 || err == nil {
+		t.Fatalf("Write() = (%d, %v), want forwarding error", n, err)
+	}
+	if string(capture.Bytes()) != "payload" {
+		t.Fatalf("captured output = %q, want payload", capture.Bytes())
+	}
+}
+
 func TestRunCapturesSidecarOutput(t *testing.T) {
 	forceDirectMode(t)
 	svc := New()

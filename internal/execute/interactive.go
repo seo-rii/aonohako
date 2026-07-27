@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,28 +20,52 @@ import (
 
 const interactiveAcceptedGrace = 100 * time.Millisecond
 
-type forgivingPipeWriter struct {
+type interactivePipeWriter struct {
 	w      *io.PipeWriter
 	closed atomic.Bool
+	errMu  sync.Mutex
+	err    error
 }
 
-func (w *forgivingPipeWriter) Write(p []byte) (int, error) {
+func (w *interactivePipeWriter) Write(p []byte) (int, error) {
 	if w == nil || w.w == nil || w.closed.Load() {
-		return len(p), nil
+		if w != nil {
+			w.recordError(io.ErrClosedPipe)
+		}
+		return 0, io.ErrClosedPipe
 	}
-	if _, err := w.w.Write(p); err != nil {
-		return len(p), nil
-	}
-	return len(p), nil
+	n, err := w.w.Write(p)
+	w.recordError(err)
+	return n, err
 }
 
-func (w *forgivingPipeWriter) Close() {
+func (w *interactivePipeWriter) Close() {
 	if w == nil || w.w == nil {
 		return
 	}
 	if w.closed.CompareAndSwap(false, true) {
-		_ = w.w.Close()
+		w.recordError(w.w.Close())
 	}
+}
+
+func (w *interactivePipeWriter) recordError(err error) {
+	if w == nil || err == nil {
+		return
+	}
+	w.errMu.Lock()
+	defer w.errMu.Unlock()
+	if w.err == nil {
+		w.err = err
+	}
+}
+
+func (w *interactivePipeWriter) Err() error {
+	if w == nil {
+		return nil
+	}
+	w.errMu.Lock()
+	defer w.errMu.Unlock()
+	return w.err
 }
 
 func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
@@ -93,8 +118,8 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 
 	contestantInR, contestantInW := io.Pipe()
 	interactorInR, interactorInW := io.Pipe()
-	contestantIn := &forgivingPipeWriter{w: contestantInW}
-	interactorIn := &forgivingPipeWriter{w: interactorInW}
+	contestantIn := &interactivePipeWriter{w: contestantInW}
+	interactorIn := &interactivePipeWriter{w: interactorInW}
 	defer contestantInR.Close()
 	defer interactorInR.Close()
 	defer contestantIn.Close()
@@ -189,7 +214,7 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 			contestantRes = res
 			gotContestant = true
 			contestantTimer.Stop()
-			interactorIn.Close()
+			contestantIn.Close()
 			contestantStatus, _, _ := classifyRunStatusWithoutOutput(req, res)
 			if contestantStatus != "OK" {
 				cancelInteractor()
@@ -198,7 +223,7 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 			interactorRes = res
 			gotInteractor = true
 			interactorTimer.Stop()
-			contestantIn.Close()
+			interactorIn.Close()
 			interactorStatus, _, _ := classifyInteractorStatus(interactorReq, res)
 			if interactorStatus == model.RunStatusAccepted {
 				time.AfterFunc(interactiveAcceptedGrace, func() {
@@ -219,6 +244,16 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 	cancelInteractor()
 	contestantIn.Close()
 	interactorIn.Close()
+	if err := interactorIn.Err(); err != nil && contestantRes.Status == "OK" {
+		contestantRes.Status = model.RunStatusRE
+		contestantRes.Reason = "interactive relay to interactor failed: " + err.Error()
+		contestantRes.VerdictSource = "stream_io"
+	}
+	if err := contestantIn.Err(); err != nil && interactorRes.Status == "OK" {
+		interactorRes.Status = model.RunStatusRE
+		interactorRes.Reason = "interactive relay to contestant failed: " + err.Error()
+		interactorRes.VerdictSource = "stream_io"
+	}
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(contestantWS, req.SidecarOutputs)
 	resp := interactiveResponse(

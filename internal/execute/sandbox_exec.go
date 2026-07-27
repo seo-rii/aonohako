@@ -126,7 +126,13 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 		}
 	}
 	if w.forward != nil {
-		_, _ = w.forward.Write(p)
+		n, err := w.forward.Write(p)
+		if err != nil {
+			return n, err
+		}
+		if n != len(p) {
+			return n, io.ErrShortWrite
+		}
 	}
 	return len(p), nil
 }
@@ -322,6 +328,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	var stdinLiveReader io.Reader
 	var stdinLiveWrite *os.File
 	var stdinCopyDone chan struct{}
+	var stdinCopyErr chan error
 	if streams.liveStdin {
 		stdinLiveReader = streams.stdin
 		if stdinLiveReader == nil {
@@ -333,6 +340,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 		stdinLiveWrite = stdinWrite
 		stdinCopyDone = make(chan struct{})
+		stdinCopyErr = make(chan error, 1)
 		defer func() {
 			_ = stdinRead.Close()
 			_ = stdinWrite.Close()
@@ -429,8 +437,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		_ = cmd.Stdin.(*os.File).Close()
 		go func() {
 			defer close(stdinCopyDone)
-			defer stdinLiveWrite.Close()
-			_, _ = ioCopy(stdinLiveWrite, stdinLiveReader)
+			_, copyErr := ioCopy(stdinLiveWrite, stdinLiveReader)
+			if closeErr := stdinLiveWrite.Close(); copyErr == nil {
+				copyErr = closeErr
+			}
+			stdinCopyErr <- copyErr
 		}()
 	}
 	var runGroup cgroup.Group
@@ -730,6 +741,22 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 done:
 	killTarget("")
 	stopImageStream()
+	var stdinRelayErr error
+	if streams.liveStdin {
+		if closer, ok := stdinLiveReader.(io.Closer); ok {
+			if err := closer.Close(); err != nil && !errors.Is(err, io.ErrClosedPipe) && !errors.Is(err, os.ErrClosed) {
+				stdinRelayErr = err
+			}
+		}
+		select {
+		case <-stdinCopyDone:
+			if err := <-stdinCopyErr; err != nil {
+				stdinRelayErr = err
+			}
+		case <-time.After(100 * time.Millisecond):
+			stdinRelayErr = fmt.Errorf("stdin relay did not stop")
+		}
+	}
 
 	if streams.onStdoutDone != nil {
 		streams.onStdoutDone()
@@ -738,6 +765,11 @@ done:
 		streams.onStderrDone()
 	}
 	<-imageDone
+	if stdinRelayErr != nil && result.Status == "OK" {
+		result.Status = model.RunStatusRE
+		result.Reason = "sandbox stdin relay failed: " + stdinRelayErr.Error()
+		result.VerdictSource = "stream_io"
+	}
 
 	result.WallTimeMs = timing.SinceMillis(wallStart)
 	result.CPUTimeMs = maxCPUTimeMs
@@ -831,7 +863,13 @@ done:
 		}
 		if result.Status == "OK" && waitErr != nil {
 			result.Status = model.RunStatusRE
-			result.VerdictSource = "wait_status"
+			if streams.stdout != nil || streams.stderr != nil {
+				result.Reason = "sandbox stream relay failed: " + waitErr.Error()
+				result.VerdictSource = "stream_io"
+			} else {
+				result.Reason = "sandbox process wait failed: " + waitErr.Error()
+				result.VerdictSource = "wait_status"
+			}
 		}
 		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > 0 {
 			result.ProcessCPUTimeMs = usageCPU
@@ -940,7 +978,7 @@ func ioCopy(dst interface{ Write([]byte) (int, error) }, src any) (int64, error)
 			}
 		}
 		if readErr != nil {
-			if errors.Is(readErr, io.EOF) || errors.Is(readErr, os.ErrClosed) || errors.Is(readErr, context.Canceled) || strings.Contains(readErr.Error(), "file already closed") {
+			if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrClosedPipe) || errors.Is(readErr, os.ErrClosed) || errors.Is(readErr, context.Canceled) || strings.Contains(readErr.Error(), "file already closed") {
 				return n, nil
 			}
 			return n, readErr
