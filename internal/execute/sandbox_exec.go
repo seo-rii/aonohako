@@ -576,10 +576,17 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	var waitErr error
 
 	result := execResult{Status: "OK"}
+	parentKillReason := ""
+	killTarget := func(reason string) {
+		if reason != "" && parentKillReason == "" {
+			parentKillReason = reason
+		}
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 	for {
 		select {
 		case <-ctx.Done():
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			killTarget("wall_time")
 			<-waitCh
 			if result.Status == "OK" {
 				result.Status = model.RunStatusTLE
@@ -627,7 +634,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 						result.Status = model.RunStatusMLE
 						result.Reason = "memory limit exceeded"
 						result.VerdictSource = "memory_rss"
-						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+						killTarget(result.VerdictSource)
 					}
 				}
 			}
@@ -646,7 +653,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 							result.Status = model.RunStatusTLE
 							result.Reason = "cpu time limit exceeded"
 							result.VerdictSource = "cpu_time_cgroup"
-							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+							killTarget(result.VerdictSource)
 						}
 					}
 					if targetStarted && result.Status == "OK" {
@@ -658,12 +665,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 							if memoryLimitKB > maxRSSKB {
 								maxRSSKB = memoryLimitKB
 							}
-							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+							killTarget(result.VerdictSource)
 						case cgroup.LimitBreachPids:
 							result.Status = model.RunStatusRE
 							result.Reason = "process limit exceeded"
 							result.VerdictSource = "pids_cgroup"
-							_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+							killTarget(result.VerdictSource)
 						}
 					}
 				}
@@ -682,7 +689,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 						result.Status = model.RunStatusTLE
 						result.Reason = "cpu time limit exceeded"
 						result.VerdictSource = "cpu_time"
-						_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+						killTarget(result.VerdictSource)
 					}
 				}
 			}
@@ -694,34 +701,34 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace entry limit exceeded"
 					result.VerdictSource = "workspace_entries"
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					killTarget(result.VerdictSource)
 					continue
 				}
 				if errors.Is(err, workspacequota.ErrDepthExceeded) {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace depth exceeded"
 					result.VerdictSource = "workspace_depth"
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					killTarget(result.VerdictSource)
 					continue
 				}
 				if err != nil {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace scan failed"
 					result.VerdictSource = "workspace_scan"
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					killTarget(result.VerdictSource)
 					continue
 				}
 				if usage.Bytes > workspaceLimitBytes {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace quota exceeded"
 					result.VerdictSource = "workspace_bytes"
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					killTarget(result.VerdictSource)
 				}
 			}
 		}
 	}
 done:
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	killTarget("")
 	stopImageStream()
 
 	if streams.onStdoutDone != nil {
@@ -812,21 +819,14 @@ done:
 				result.ExitCode = &c
 			}
 			if ws.Signaled() {
-				if result.Status == "OK" {
-					if ws.Signal() == syscall.SIGKILL || ws.Signal() == syscall.SIGXCPU {
-						result.Status = model.RunStatusTLE
-						if ctx.Err() != nil {
-							result.VerdictSource = "wall_time"
-						} else if ws.Signal() == syscall.SIGXCPU {
-							result.VerdictSource = "cpu_rlimit"
-						} else {
-							result.VerdictSource = "signal"
-						}
-					} else {
-						result.Status = model.RunStatusRE
-						result.VerdictSource = "signal"
-					}
-				}
+				result.Status, result.Reason, result.VerdictSource = classifySandboxSignal(
+					result.Status,
+					result.Reason,
+					result.VerdictSource,
+					ws.Signal(),
+					ctx.Err(),
+					parentKillReason,
+				)
 			}
 		}
 		if result.Status == "OK" && waitErr != nil {
@@ -863,6 +863,34 @@ done:
 		result.VerdictSource = "wall_time"
 	}
 	return result
+}
+
+func classifySandboxSignal(status, reason, source string, signal syscall.Signal, ctxErr error, parentKillReason string) (string, string, string) {
+	if status != "OK" {
+		return status, reason, source
+	}
+	if signal == syscall.SIGXCPU {
+		return model.RunStatusTLE, "cpu time limit exceeded", "cpu_rlimit"
+	}
+	if signal != syscall.SIGKILL {
+		return model.RunStatusRE, reason, "signal"
+	}
+	switch parentKillReason {
+	case "wall_time":
+		return model.RunStatusTLE, "wall time limit exceeded", "wall_time"
+	case "cpu_time", "cpu_time_cgroup":
+		return model.RunStatusTLE, "cpu time limit exceeded", parentKillReason
+	case "memory_rss", "memory_cgroup":
+		return model.RunStatusMLE, "memory limit exceeded", parentKillReason
+	case "workspace_bytes", "workspace_entries", "workspace_depth", "workspace_scan":
+		return model.RunStatusWLE, reason, parentKillReason
+	case "pids_cgroup":
+		return model.RunStatusRE, "process limit exceeded", parentKillReason
+	}
+	if errors.Is(ctxErr, context.DeadlineExceeded) {
+		return model.RunStatusTLE, "wall time limit exceeded", "wall_time"
+	}
+	return model.RunStatusRE, "process received SIGKILL without a recorded sandbox limit", "signal_unattributed"
 }
 
 func cgroupLimitBreachSince(stats, baseline cgroup.Stats, hasBaseline bool) cgroup.LimitBreach {

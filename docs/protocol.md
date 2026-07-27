@@ -152,13 +152,19 @@ Client                        aonohako
 `verdict_source` is optional diagnostic metadata. Local helper runners use it
 to distinguish output comparison (`stdout`, `file_output`, `spj`,
 `interactor`, `contestant:*`, `interactor:*`), process exit (`exit_code`,
-`signal`, `wait_status`, `sandbox_init`), wall/CPU time (`wall_time`,
+`signal`, `signal_unattributed`, `wait_status`, `sandbox_init`), wall/CPU time (`wall_time`,
 `cpu_time`, `cpu_time_final`, `cpu_time_cgroup`, `cpu_time_cgroup_final`,
 `cpu_rlimit`), memory sources
 (`memory_rss`, `memory_cgroup`, `memory_cgroup_final`, `memory_reported`,
 `address_space`), pids limits (`pids_cgroup`, `pids_cgroup_final`), and
 workspace sources (`workspace_bytes`, `workspace_entries`, `workspace_depth`,
 `workspace_scan`). Remote runners may omit it.
+
+`SIGKILL` is not itself evidence of a time limit. The local runner reports TLE
+only when the parent recorded a wall/CPU kill reason or the request deadline is
+confirmed. A host/container OOM kill, operator kill, or other unexplained
+`SIGKILL` is reported as `Runtime Error` with
+`verdict_source=signal_unattributed`.
 
 ---
 

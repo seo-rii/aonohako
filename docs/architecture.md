@@ -437,6 +437,10 @@ The stable contract is:
   files fail closed as WLE so unreadable subtrees cannot hide quota usage
 - when a watchdog observes TLE, MLE, or WLE, that first resource verdict kills
   the process group and is preserved through process exit
+- the parent records the source for every watchdog/context `SIGKILL`; only a
+  recorded wall/CPU limit or a confirmed context deadline becomes TLE, while an
+  unexplained `SIGKILL` becomes `Runtime Error` with
+  `verdict_source=signal_unattributed`
 - after a normal `OK` resource run, non-zero exit becomes `Runtime Error`; then
   stdout/file-output or SPJ evaluation decides between `Accepted` and
   `Wrong Answer`
@@ -446,7 +450,7 @@ runner can identify the source that selected the final status. The field is
 intended for operations and judge debugging, not as a security boundary. Typical
 values identify output comparison (`stdout`, `file_output`, `spj`,
 `interactor`, `contestant:*`, `interactor:*`), process exit (`exit_code`,
-`signal`), time (`wall_time`, `cpu_time`,
+`signal`, `signal_unattributed`), time (`wall_time`, `cpu_time`,
 `cpu_time_final`, `cpu_time_cgroup`, `cpu_time_cgroup_final`, `cpu_rlimit`),
 memory (`memory_rss`, `memory_cgroup`, `memory_reported`, `address_space`),
 cgroup pids (`pids_cgroup`), and

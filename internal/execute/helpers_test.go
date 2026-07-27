@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -57,6 +58,83 @@ func TestCgroupLimitBreachSinceIgnoresBaselineHelperEvents(t *testing.T) {
 	}
 	if got := cgroupLimitBreachSince(pidsStats, baseline, true); got != cgroup.LimitBreachPids {
 		t.Fatalf("cgroupLimitBreachSince() = %q, want pids", got)
+	}
+}
+
+func TestClassifySandboxSignalRequiresAttributedSIGKILL(t *testing.T) {
+	tests := []struct {
+		name             string
+		status           string
+		signal           syscall.Signal
+		ctxErr           error
+		parentKillReason string
+		wantStatus       string
+		wantReason       string
+		wantSource       string
+	}{
+		{
+			name:       "unattributed sigkill",
+			status:     "OK",
+			signal:     syscall.SIGKILL,
+			wantStatus: model.RunStatusRE,
+			wantReason: "process received SIGKILL without a recorded sandbox limit",
+			wantSource: "signal_unattributed",
+		},
+		{
+			name:       "confirmed context deadline",
+			status:     "OK",
+			signal:     syscall.SIGKILL,
+			ctxErr:     context.DeadlineExceeded,
+			wantStatus: model.RunStatusTLE,
+			wantReason: "wall time limit exceeded",
+			wantSource: "wall_time",
+		},
+		{
+			name:             "recorded cpu kill",
+			status:           "OK",
+			signal:           syscall.SIGKILL,
+			parentKillReason: "cpu_time",
+			wantStatus:       model.RunStatusTLE,
+			wantReason:       "cpu time limit exceeded",
+			wantSource:       "cpu_time",
+		},
+		{
+			name:       "kernel cpu signal",
+			status:     "OK",
+			signal:     syscall.SIGXCPU,
+			wantStatus: model.RunStatusTLE,
+			wantReason: "cpu time limit exceeded",
+			wantSource: "cpu_rlimit",
+		},
+		{
+			name:       "ordinary fatal signal",
+			status:     "OK",
+			signal:     syscall.SIGSEGV,
+			wantStatus: model.RunStatusRE,
+			wantSource: "signal",
+		},
+		{
+			name:       "prior resource verdict wins",
+			status:     model.RunStatusMLE,
+			signal:     syscall.SIGKILL,
+			wantStatus: model.RunStatusMLE,
+			wantReason: "memory limit exceeded",
+			wantSource: "memory_rss",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reason := ""
+			source := ""
+			if tc.status == model.RunStatusMLE {
+				reason = tc.wantReason
+				source = tc.wantSource
+			}
+			status, reason, source := classifySandboxSignal(tc.status, reason, source, tc.signal, tc.ctxErr, tc.parentKillReason)
+			if status != tc.wantStatus || reason != tc.wantReason || source != tc.wantSource {
+				t.Fatalf("classifySandboxSignal() = (%q, %q, %q), want (%q, %q, %q)", status, reason, source, tc.wantStatus, tc.wantReason, tc.wantSource)
+			}
+		})
 	}
 }
 
