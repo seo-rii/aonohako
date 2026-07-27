@@ -1,9 +1,12 @@
 package cgroup
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -361,7 +364,7 @@ func TestGroupKillWritesCgroupKillWhenAvailable(t *testing.T) {
 	assertFile(t, filepath.Join(group.Path, "cgroup.kill"), "1")
 }
 
-func TestGroupKillIgnoresMissingCgroupKill(t *testing.T) {
+func TestGroupKillFallsBackToCgroupProcsUntilEmpty(t *testing.T) {
 	parent := t.TempDir()
 	group, err := CreateRunGroup(parent, "run-no-kill", Limits{
 		MemoryMaxBytes: 64 << 20,
@@ -370,12 +373,61 @@ func TestGroupKillIgnoresMissingCgroupKill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRunGroup() error = %v", err)
 	}
+	procsPath := filepath.Join(group.Path, "cgroup.procs")
+	writeFile(t, procsPath, "123\n")
 
-	if err := group.Kill(); err != nil {
-		t.Fatalf("Kill() with missing cgroup.kill should be ignored, got %v", err)
+	var killed []int
+	if err := group.killWithTimeout(100*time.Millisecond, func(pid int) error {
+		killed = append(killed, pid)
+		if pid == 123 {
+			writeFile(t, procsPath, "456\n")
+			return syscall.ESRCH
+		}
+		writeFile(t, procsPath, "")
+		return nil
+	}); err != nil {
+		t.Fatalf("Kill() fallback error = %v", err)
+	}
+	if !slices.Equal(killed, []int{123, 456}) {
+		t.Fatalf("fallback killed PIDs %v, want [123 456]", killed)
 	}
 	if _, err := os.Stat(filepath.Join(group.Path, "cgroup.kill")); !os.IsNotExist(err) {
 		t.Fatalf("Kill should not create fake cgroup.kill, stat err=%v", err)
+	}
+}
+
+func TestGroupKillFallbackReportsErrorsAfterSignalingEveryProcess(t *testing.T) {
+	parent := t.TempDir()
+	group := Group{Path: filepath.Join(parent, "run-no-kill")}
+	if err := os.Mkdir(group.Path, 0o700); err != nil {
+		t.Fatalf("Mkdir() error = %v", err)
+	}
+	writeFile(t, filepath.Join(group.Path, "cgroup.procs"), "123\n456\n")
+
+	var killed []int
+	err := group.killWithTimeout(20*time.Millisecond, func(pid int) error {
+		killed = append(killed, pid)
+		return errors.New("denied")
+	})
+	if err == nil || !strings.Contains(err.Error(), "kill cgroup process 123") || !strings.Contains(err.Error(), "kill cgroup process 456") {
+		t.Fatalf("Kill() fallback error = %v", err)
+	}
+	if !slices.Equal(killed, []int{123, 456}) {
+		t.Fatalf("fallback killed PIDs %v, want [123 456]", killed)
+	}
+}
+
+func TestGroupKillFallbackRejectsPersistentlyPopulatedGroup(t *testing.T) {
+	parent := t.TempDir()
+	group := Group{Path: filepath.Join(parent, "run-no-kill")}
+	if err := os.Mkdir(group.Path, 0o700); err != nil {
+		t.Fatalf("Mkdir() error = %v", err)
+	}
+	writeFile(t, filepath.Join(group.Path, "cgroup.procs"), "123\n")
+
+	err := group.killWithTimeout(20*time.Millisecond, func(int) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "remained populated") {
+		t.Fatalf("Kill() persistent-group error = %v", err)
 	}
 }
 

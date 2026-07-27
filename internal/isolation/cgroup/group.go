@@ -2,11 +2,13 @@ package cgroup
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -18,8 +20,10 @@ type Limits struct {
 }
 
 const (
-	SingleCPUQuotaMicros   int64 = 100000
-	DefaultCPUPeriodMicros int64 = 100000
+	SingleCPUQuotaMicros      int64 = 100000
+	DefaultCPUPeriodMicros    int64 = 100000
+	fallbackKillTimeout             = 250 * time.Millisecond
+	fallbackKillRetryInterval       = 10 * time.Millisecond
 )
 
 type Group struct {
@@ -257,13 +261,55 @@ func (g Group) Remove() error {
 }
 
 func (g Group) Kill() error {
+	return g.killWithTimeout(fallbackKillTimeout, func(pid int) error {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			return err
+		}
+		return process.Kill()
+	})
+}
+
+func (g Group) killWithTimeout(timeout time.Duration, killProcess func(int) error) error {
 	if strings.TrimSpace(g.Path) == "" {
 		return nil
 	}
 	killPath := filepath.Join(g.Path, "cgroup.kill")
 	if _, err := os.Stat(killPath); err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			procsPath := filepath.Join(g.Path, "cgroup.procs")
+			until := time.Now().Add(timeout)
+			for {
+				body, err := os.ReadFile(procsPath)
+				if err != nil {
+					if errors.Is(err, os.ErrNotExist) {
+						return nil
+					}
+					return fmt.Errorf("read cgroup.procs: %w", err)
+				}
+				fields := strings.Fields(string(body))
+				if len(fields) == 0 {
+					return nil
+				}
+
+				var killErrors []error
+				for _, field := range fields {
+					pid, err := strconv.Atoi(field)
+					if err != nil || pid <= 0 {
+						return fmt.Errorf("parse cgroup.procs pid %q", field)
+					}
+					if err := killProcess(pid); err != nil && !errors.Is(err, os.ErrProcessDone) && !errors.Is(err, syscall.ESRCH) {
+						killErrors = append(killErrors, fmt.Errorf("kill cgroup process %d: %w", pid, err))
+					}
+				}
+				if err := errors.Join(killErrors...); err != nil {
+					return err
+				}
+				if timeout <= 0 || !time.Now().Before(until) {
+					return fmt.Errorf("cgroup.procs remained populated after SIGKILL: %s", strings.Join(fields, " "))
+				}
+				time.Sleep(fallbackKillRetryInterval)
+			}
 		}
 		return fmt.Errorf("stat cgroup.kill: %w", err)
 	}
