@@ -418,7 +418,7 @@ func TestRemoteRunnerRejectsOversizedLogAndImageEvents(t *testing.T) {
 		event   string
 		payload string
 	}{
-		{name: "log", event: "log", payload: `{"stream":"stdout","chunk":"` + strings.Repeat("x", maxResponseOutputBytes+1) + `"}`},
+		{name: "log", event: "log", payload: `{"stream":"stdout","chunk":"` + strings.Repeat("x", defaultMaxOutputBytes+1) + `"}`},
 		{name: "image", event: "image", payload: `{"mime":"image/png","b64":"` + strings.Repeat("A", 4*((maxImageEventBytes/3)+1)) + `"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -445,7 +445,7 @@ func TestRemoteRunnerRejectsOversizedLogAndImageEvents(t *testing.T) {
 }
 
 func TestRemoteRunnerRejectsCumulativeLogOverflow(t *testing.T) {
-	chunk := strings.Repeat("x", maxResponseOutputBytes/2+1)
+	chunk := strings.Repeat("x", defaultMaxOutputBytes/2+1)
 	raw, err := json.Marshal(map[string]string{"stream": "stdout", "chunk": chunk})
 	if err != nil {
 		t.Fatal(err)
@@ -469,7 +469,7 @@ func TestRemoteRunnerRejectsCumulativeLogOverflow(t *testing.T) {
 func TestRemoteRunnerCapsFinalOutputLikeLocalExecution(t *testing.T) {
 	raw, err := json.Marshal(model.RunResponse{
 		Status: model.RunStatusRE,
-		Stdout: strings.Repeat("x", maxResponseOutputBytes+1),
+		Stdout: strings.Repeat("x", defaultMaxOutputBytes+1),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -482,8 +482,32 @@ func TestRemoteRunnerCapsFinalOutputLikeLocalExecution(t *testing.T) {
 
 	runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
 	resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}}, Hooks{})
-	if resp.Status != model.RunStatusRE || len(resp.Stdout) != maxResponseOutputBytes || !resp.StdoutTruncated {
+	if resp.Status != model.RunStatusRE || len(resp.Stdout) != defaultMaxOutputBytes || !resp.StdoutTruncated {
 		t.Fatalf("response output was not capped: status=%q len=%d truncated=%v", resp.Status, len(resp.Stdout), resp.StdoutTruncated)
+	}
+}
+
+func TestRemoteRunnerHonorsConfiguredResponseOutputLimit(t *testing.T) {
+	configuredLimit := defaultMaxOutputBytes + 4096
+	raw, err := json.Marshal(model.RunResponse{
+		Status: model.RunStatusRE,
+		Stdout: strings.Repeat("x", configuredLimit),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "event: result\ndata: %s\n\n", raw)
+	}))
+	defer remote.Close()
+
+	runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Limits: model.Limits{TimeMs: 1000, MemoryMB: 64, OutputBytes: configuredLimit},
+	}, Hooks{})
+	if resp.Status != model.RunStatusRE || len(resp.Stdout) != configuredLimit || resp.StdoutTruncated {
+		t.Fatalf("configured response limit was not honored: status=%q len=%d truncated=%v", resp.Status, len(resp.Stdout), resp.StdoutTruncated)
 	}
 }
 

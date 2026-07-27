@@ -959,7 +959,7 @@ func outputLimitBytes(req *model.RunRequest) int {
 }
 
 func responseOutputLimitBytes(req *model.RunRequest) int {
-	return min(outputLimitBytes(req), maxResponseOutputBytes)
+	return outputLimitBytes(req)
 }
 
 func firstImagePath(paths []model.OutputFile) string {

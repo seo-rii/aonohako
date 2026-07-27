@@ -21,8 +21,7 @@ import (
 
 const (
 	defaultMaxOutputBytes        = 64 << 10
-	hardMaxOutputBytes           = 64 << 20
-	maxResponseOutputBytes       = defaultMaxOutputBytes
+	hardMaxOutputBytes           = 8 << 20
 	defaultWorkspaceBytes        = 128 << 20
 	hardMaxWorkspaceBytes        = 1 << 30
 	maxBinaryFiles               = runvalidation.MaxBinaryFiles

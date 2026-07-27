@@ -355,10 +355,13 @@ owned by the shared sandbox UID or GID.
 ### Output capture
 
 `stdout` and `stderr` are captured through pipes into capped in-memory buffers.
-The request field `limits.output_bytes` controls both:
+The request field `limits.output_bytes` controls each stream consistently:
 
 - the live capture buffer size
 - the maximum response payload returned to the caller
+
+The cap applies separately to stdout and stderr, so the hard-cap case retains
+at most 16 MiB across both buffers rather than the former 128 MiB.
 
 Defaults and caps:
 

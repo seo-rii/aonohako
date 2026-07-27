@@ -1377,7 +1377,7 @@ func TestRunOutputLimitUsesConfiguredUnifiedCap(t *testing.T) {
 	}
 }
 
-func TestRunLargeOutputUsesFullJudgeCapButCapsResponseSample(t *testing.T) {
+func TestRunLargeOutputUsesConfiguredCapForJudgeAndResponse(t *testing.T) {
 	forceDirectMode(t)
 
 	svc := New()
@@ -1405,7 +1405,7 @@ func TestRunLargeOutputUsesFullJudgeCapButCapsResponseSample(t *testing.T) {
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("expected Accepted, got %+v", resp)
 	}
-	if stdoutLog != output[:defaultMaxOutputBytes] {
+	if stdoutLog != output {
 		t.Fatalf("unexpected stdout log length=%d", len(stdoutLog))
 	}
 
@@ -1422,18 +1422,21 @@ func TestRunLargeOutputUsesFullJudgeCapButCapsResponseSample(t *testing.T) {
 	if resp.Status != model.RunStatusWA {
 		t.Fatalf("expected WA, got %+v", resp)
 	}
-	if resp.Stdout != output[:defaultMaxOutputBytes] {
+	if resp.Stdout != output {
 		t.Fatalf("unexpected stdout response length=%d", len(resp.Stdout))
 	}
 }
 
 func TestOutputLimitAllowsLargeJudgeCap(t *testing.T) {
+	if hardMaxOutputBytes != runvalidation.MaxOutputBytes {
+		t.Fatalf("execute hard output cap = %d, validation cap = %d", hardMaxOutputBytes, runvalidation.MaxOutputBytes)
+	}
 	req := &model.RunRequest{Limits: model.Limits{OutputBytes: hardMaxOutputBytes}}
 	if got := outputLimitBytes(req); got != hardMaxOutputBytes {
 		t.Fatalf("outputLimitBytes() = %d, want %d", got, hardMaxOutputBytes)
 	}
-	if got := responseOutputLimitBytes(req); got != defaultMaxOutputBytes {
-		t.Fatalf("responseOutputLimitBytes() = %d, want %d", got, defaultMaxOutputBytes)
+	if got := responseOutputLimitBytes(req); got != hardMaxOutputBytes {
+		t.Fatalf("responseOutputLimitBytes() = %d, want %d", got, hardMaxOutputBytes)
 	}
 }
 

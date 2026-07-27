@@ -17,7 +17,7 @@ const (
 	MaxTextFieldBytes   = 64 << 20
 	MaxTimeMs           = 600_000
 	MaxMemoryMB         = 4096
-	MaxOutputBytes      = 64 << 20
+	MaxOutputBytes      = 8 << 20
 	MaxWorkspaceBytes   = 1 << 30
 	MaxBinaryFiles      = 512
 	MaxPrograms         = 8
