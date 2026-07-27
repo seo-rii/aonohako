@@ -323,7 +323,12 @@ non-writable permissions for the sandbox UID. Because container runtimes mount
 `/dev/shm` and `/dev/mqueue` after image construction, the root entrypoint also
 tightens those mounts to `0755`. It tightens a Cloud Run mounted
 `AONOHAKO_WORK_ROOT` to mode `0711` because the in-memory volume is likewise
-created after the image filesystem has already been built. Image-permission
+created after the image filesystem has already been built. Production helper
+runners require that work root to be the dedicated tmpfs mount point, enforce
+positive whole-filesystem byte and inode ceilings, and keep one active request.
+The bounded backing filesystem is authoritative for unlinked-open files and
+short write/unlink bursts; directory scanning remains the per-request
+entry/depth check and byte-verdict telemetry. Image-permission
 selftests scan the root filesystem device and reject every unexpected object
 owned by the shared sandbox UID or GID.
 
@@ -530,6 +535,7 @@ Supported combinations today:
   forwards `/compile` and `/execute` to another hardened runner; it still
   requires `AONOHAKO_WORK_ROOT`
 - `selfhosted + embedded + helper`: supported root-backed local/container target
+  with a dedicated bounded tmpfs work-root mount
 - `dev + remote + none`: supported non-root control-plane target that forwards
   `/compile` and `/execute` to another runner
 
@@ -541,7 +547,7 @@ The supported shapes map to an explicit runtime security contract in
 
 | Shape | Contract | Local guarantees | Missing local boundary |
 | --- | --- | --- | --- |
-| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, server-owned role-traversable workspace roots, distinct fixed contestant/trusted-interactor identities for interactive requests, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting; self-hosted deployments can add per-run cgroup and child-process accounting by setting `AONOHAKO_CGROUP_PARENT` | mount namespace, read-only rootfs, masked `/proc`, per-request UID allocation or user namespace, seccomp allowlist, post-start `execve()` blocking; per-run cgroup and child-process accounting remain missing unless `AONOHAKO_CGROUP_PARENT` is configured |
+| `embedded + helper` | `embedded-helper-process-hardening` | root parent with dropped UID child, a dedicated bounded tmpfs work-root mount and single active request, server-owned role-traversable workspace roots, distinct fixed contestant/trusted-interactor identities for interactive requests, `setrlimit`, `PR_SET_NO_NEW_PRIVS`, seccomp denylist, network syscall gate, fd cleanup, process-group cleanup, immutable submissions, symlink-safe output capture, workspace accounting; self-hosted deployments can add per-run cgroup and child-process accounting by setting `AONOHAKO_CGROUP_PARENT` | mount namespace, read-only rootfs, masked `/proc`, per-request UID allocation or user namespace, seccomp allowlist, post-start `execve()` blocking; per-run cgroup and child-process accounting remain missing unless `AONOHAKO_CGROUP_PARENT` is configured |
 | `remote + none` | `remote-control-plane` | `/compile` and `/execute` are forwarded to the configured runner and no local untrusted compile/run work is performed | isolation is delegated to the downstream runner and its private ingress/auth boundary |
 | `embedded + container` | `reserved-container-isolation` | not implemented | must provide per-run cgroup, mount namespace, read-only rootfs, masked `/proc`, per-run UID or user namespace, child-process accounting, allowlist-oriented seccomp, and post-start `execve()` blocking before it can be enabled |
 
@@ -636,12 +642,16 @@ The following checks are enforced before the HTTP server starts:
 - every required work root must already exist, be a directory, be owned by the
   current server UID, not be group/world writable, and accept a probe
   directory create/remove cycle
-- `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` additionally verifies through
-  `/proc/self/mountinfo` that the required work root is backed by `tmpfs`
-- `AONOHAKO_WORK_ROOT_MAX_BYTES`, when nonzero, verifies through `statfs` that
-  the required work root filesystem is bounded to that many bytes or less
-- `AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero, verifies through `statfs` that
-  the required work root filesystem exposes no more than that many inodes
+- production `embedded + helper` requires
+  `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true` and verifies through
+  `/proc/self/mountinfo` that the required work root is the exact tmpfs mount
+  point, not a subdirectory on a shared tmpfs
+- production `embedded + helper` requires
+  `AONOHAKO_WORK_ROOT_MAX_BYTES` between 1 and 1 GiB and verifies through
+  `statfs` that the entire work-root filesystem fits the configured ceiling
+- production `embedded + helper` requires
+  `AONOHAKO_WORK_ROOT_MAX_FILES` between 1 and 131072 and verifies through
+  `statfs` that the entire work-root filesystem fits the inode ceiling
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
   executions do not overlap under the shared sandbox UID

@@ -128,6 +128,8 @@ const (
 	defaultWasmtimeMaxWasmStackBytes  = 1 << 20
 	minWasmtimeMaxWasmStackBytes      = 256 << 10
 	maxWasmtimeMaxWasmStackBytes      = 8 << 20
+	maxAuthoritativeWorkRootBytes     = 1 << 30
+	maxAuthoritativeWorkRootFiles     = 131072
 )
 
 type Config struct {
@@ -513,6 +515,14 @@ func Load() (Config, error) {
 	if contract.RequiresSingleActiveRun && maxActive != 1 {
 		return Config{}, fmt.Errorf("embedded helper execution requires AONOHAKO_MAX_ACTIVE_RUNS=1")
 	}
+	if contract.RequiresRootParent && os.Geteuid() != 0 {
+		return Config{}, fmt.Errorf("execution backend %s/%s requires root; for non-root development set AONOHAKO_EXECUTION_TRANSPORT=remote and AONOHAKO_SANDBOX_BACKEND=none with AONOHAKO_REMOTE_RUNNER_URL pointing at a hardened runner", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
+	}
+
+	requiresAuthoritativeWorkRoot := contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev
+	if err := validateAuthoritativeWorkRootPolicy(requiresAuthoritativeWorkRoot, requireWorkRootTmpfs, workRootMaxBytes, workRootMaxFiles); err != nil {
+		return Config{}, err
+	}
 
 	if contract.RequiresDedicatedWorkRoot {
 		if workRoot == "" {
@@ -537,12 +547,15 @@ func Load() (Config, error) {
 		}
 		_ = os.RemoveAll(probe)
 		if requireWorkRootTmpfs {
-			fsType, err := workRootFilesystemAt(workRoot, "/proc/self/mountinfo")
+			mount, err := workRootMountAt(workRoot, "/proc/self/mountinfo")
 			if err != nil {
 				return Config{}, fmt.Errorf("AONOHAKO_REQUIRE_WORK_ROOT_TMPFS validation failed: %w", err)
 			}
-			if fsType != "tmpfs" {
-				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT must be on tmpfs when AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true; got %s", fsType)
+			if mount.FSType != "tmpfs" {
+				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT must be on tmpfs when AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true; got %s", mount.FSType)
+			}
+			if requiresAuthoritativeWorkRoot && mount.MountPoint != mount.ResolvedRoot {
+				return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT must be the dedicated tmpfs mount point for embedded helper execution; root=%s mount=%s", mount.ResolvedRoot, mount.MountPoint)
 			}
 		}
 		if workRootMaxBytes > 0 || workRootMaxFiles > 0 {
@@ -569,10 +582,6 @@ func Load() (Config, error) {
 			}
 		}
 	}
-	if contract.RequiresRootParent && os.Geteuid() != 0 {
-		return Config{}, fmt.Errorf("execution backend %s/%s requires root; for non-root development set AONOHAKO_EXECUTION_TRANSPORT=remote and AONOHAKO_SANDBOX_BACKEND=none with AONOHAKO_REMOTE_RUNNER_URL pointing at a hardened runner", execution.Platform.ExecutionTransport, execution.Platform.SandboxBackend)
-	}
-
 	return Config{
 		Port:                          port,
 		MaxActiveRuns:                 maxActive,
@@ -614,20 +623,43 @@ func defaultMaxActiveRuns(opts platform.RuntimeOptions) int {
 	return v
 }
 
-func workRootFilesystemAt(workRoot, mountInfoPath string) (string, error) {
+func validateAuthoritativeWorkRootPolicy(required, requireTmpfs bool, maxBytes, maxFiles int) error {
+	if !required {
+		return nil
+	}
+	if !requireTmpfs {
+		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true")
+	}
+	if maxBytes <= 0 || maxBytes > maxAuthoritativeWorkRootBytes {
+		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_BYTES between 1 and %d", maxAuthoritativeWorkRootBytes)
+	}
+	if maxFiles <= 0 || maxFiles > maxAuthoritativeWorkRootFiles {
+		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_FILES between 1 and %d", maxAuthoritativeWorkRootFiles)
+	}
+	return nil
+}
+
+type workRootMount struct {
+	ResolvedRoot string
+	MountPoint   string
+	FSType       string
+}
+
+func workRootMountAt(workRoot, mountInfoPath string) (workRootMount, error) {
 	workRoot, err := filepath.Abs(workRoot)
 	if err != nil {
-		return "", fmt.Errorf("resolve work root: %w", err)
+		return workRootMount{}, fmt.Errorf("resolve work root: %w", err)
 	}
 	workRoot, err = filepath.EvalSymlinks(workRoot)
 	if err != nil {
-		return "", fmt.Errorf("resolve work root symlinks: %w", err)
+		return workRootMount{}, fmt.Errorf("resolve work root symlinks: %w", err)
 	}
 	mountInfo, err := os.ReadFile(mountInfoPath)
 	if err != nil {
-		return "", fmt.Errorf("read mountinfo: %w", err)
+		return workRootMount{}, fmt.Errorf("read mountinfo: %w", err)
 	}
 	bestMountLen := -1
+	bestMountPoint := ""
 	bestFSType := ""
 	scanner := bufio.NewScanner(strings.NewReader(string(mountInfo)))
 	for scanner.Scan() {
@@ -651,16 +683,25 @@ func workRootFilesystemAt(workRoot, mountInfoPath string) (string, error) {
 		}
 		if len(mountPoint) > bestMountLen {
 			bestMountLen = len(mountPoint)
+			bestMountPoint = mountPoint
 			bestFSType = fields[separator+1]
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("scan mountinfo: %w", err)
+		return workRootMount{}, fmt.Errorf("scan mountinfo: %w", err)
 	}
 	if bestFSType == "" {
-		return "", fmt.Errorf("no mountinfo entry covers %s", workRoot)
+		return workRootMount{}, fmt.Errorf("no mountinfo entry covers %s", workRoot)
 	}
-	return bestFSType, nil
+	return workRootMount{ResolvedRoot: workRoot, MountPoint: bestMountPoint, FSType: bestFSType}, nil
+}
+
+func workRootFilesystemAt(workRoot, mountInfoPath string) (string, error) {
+	mount, err := workRootMountAt(workRoot, mountInfoPath)
+	if err != nil {
+		return "", err
+	}
+	return mount.FSType, nil
 }
 
 func unescapeMountInfoField(path string) string {

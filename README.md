@@ -290,14 +290,16 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_WORK_ROOT` points compile/run directories at a dedicated work root
   and is required for `cloudrun`, and for `selfhosted + embedded + helper`
 - `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is a strict boolean and defaults to
-  `false`. When enabled, startup also verifies through `/proc/self/mountinfo`
-  that a required `AONOHAKO_WORK_ROOT` is backed by `tmpfs`. Use this for
-  Cloud Run memory volumes or self-hosted runners that intentionally place
-  workspaces on bounded tmpfs storage.
+  `false` for development and remote control planes. Production
+  `embedded + helper` runners require it to be `true`; startup verifies through
+  `/proc/self/mountinfo` that `AONOHAKO_WORK_ROOT` is the tmpfs mount point,
+  rather than merely a directory somewhere on a shared tmpfs.
 - `AONOHAKO_WORK_ROOT_MAX_BYTES`, when nonzero, verifies through `statfs` that
   the required work-root filesystem is bounded to that many bytes or less.
+  Production helper runners require a positive value no greater than 1 GiB.
 - `AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero, verifies through `statfs` that
   the required work-root filesystem exposes no more than that many inodes.
+  Production helper runners require a positive value no greater than 131072.
 - `AONOHAKO_CGROUP_PARENT` is optional and supported only for
   `selfhosted + embedded + helper`. When set, startup validates that the parent
   directory is under a cgroup v2 mount and exposes `cpu`, `memory`, and `pids`,
@@ -401,8 +403,11 @@ Security posture depends on where it runs:
 - `selfhosted + embedded + helper` applies the same dedicated work-root
   contract for local root-backed containers and VMs, including
   `AONOHAKO_MAX_ACTIVE_RUNS=1` because separate requests still reuse the same
-  sandbox UID. Interactive peers within one request use the distinct fixed
-  role identities described above.
+  sandbox UID. Its work root must be a dedicated bounded tmpfs mount with byte
+  and inode ceilings. Because only one request runs at a time, that kernel
+  backing-store ceiling also covers unlinked-open files and write/unlink bursts
+  that directory scanning cannot observe. Interactive peers within one request
+  use the distinct fixed role identities described above.
 - `dev + remote + none` is the non-root development path. The local server
   forwards `/compile` and `/execute` to a remote hardened runner instead of
   building or running untrusted inputs locally.

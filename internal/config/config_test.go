@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -703,6 +704,37 @@ func TestLoadRejectsEmbeddedHelperWithParallelActiveRuns(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsEmbeddedHelperWithoutAuthoritativeWorkRoot(t *testing.T) {
+	tests := []struct {
+		name      string
+		tmpfs     string
+		maxBytes  string
+		maxFiles  string
+		wantError string
+	}{
+		{name: "tmpfs required", wantError: "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true"},
+		{name: "byte bound required", tmpfs: "true", wantError: "AONOHAKO_WORK_ROOT_MAX_BYTES"},
+		{name: "inode bound required", tmpfs: "true", maxBytes: "1073741824", wantError: "AONOHAKO_WORK_ROOT_MAX_FILES"},
+		{name: "byte bound capped", tmpfs: "true", maxBytes: "1073741825", maxFiles: "131072", wantError: "AONOHAKO_WORK_ROOT_MAX_BYTES"},
+		{name: "inode bound capped", tmpfs: "true", maxBytes: "1073741824", maxFiles: "131073", wantError: "AONOHAKO_WORK_ROOT_MAX_FILES"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpfs, _ := strconv.ParseBool(tc.tmpfs)
+			maxBytes, _ := strconv.Atoi(tc.maxBytes)
+			maxFiles, _ := strconv.Atoi(tc.maxFiles)
+			err := validateAuthoritativeWorkRootPolicy(true, tmpfs, maxBytes, maxFiles)
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("validateAuthoritativeWorkRootPolicy() error = %v, want %q", err, tc.wantError)
+			}
+		})
+	}
+	if err := validateAuthoritativeWorkRootPolicy(false, false, 0, 0); err != nil {
+		t.Fatalf("non-helper policy should not require bounded tmpfs: %v", err)
+	}
+}
+
 func TestLoadRejectsCgroupParentOutsideSelfHostedHelper(t *testing.T) {
 	parent := t.TempDir()
 	os.WriteFile(filepath.Join(parent, "cgroup.controllers"), []byte("cpu memory pids\n"), 0o644)
@@ -853,6 +885,9 @@ func TestWorkRootFilesystemAtUsesMostSpecificMount(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "nested"), 0o755); err != nil {
 		t.Fatalf("mkdir nested: %v", err)
 	}
+	if err := os.Mkdir(filepath.Join(root, "nested", "child"), 0o755); err != nil {
+		t.Fatalf("mkdir nested child: %v", err)
+	}
 
 	fsType, err := workRootFilesystemAt(root, mountInfo)
 	if err != nil {
@@ -861,12 +896,26 @@ func TestWorkRootFilesystemAtUsesMostSpecificMount(t *testing.T) {
 	if fsType != "tmpfs" {
 		t.Fatalf("root fs type = %q, want tmpfs", fsType)
 	}
+	mount, err := workRootMountAt(root, mountInfo)
+	if err != nil {
+		t.Fatalf("workRootMountAt(root): %v", err)
+	}
+	if mount.ResolvedRoot != root || mount.MountPoint != root || mount.FSType != "tmpfs" {
+		t.Fatalf("root mount = %+v", mount)
+	}
 	fsType, err = workRootFilesystemAt(filepath.Join(root, "nested"), mountInfo)
 	if err != nil {
 		t.Fatalf("workRootFilesystemAt(nested): %v", err)
 	}
 	if fsType != "ext4" {
 		t.Fatalf("nested fs type = %q, want ext4", fsType)
+	}
+	mount, err = workRootMountAt(filepath.Join(root, "nested", "child"), mountInfo)
+	if err != nil {
+		t.Fatalf("workRootMountAt(nested child): %v", err)
+	}
+	if mount.MountPoint != filepath.Join(root, "nested") || mount.ResolvedRoot == mount.MountPoint {
+		t.Fatalf("nested child mount = %+v", mount)
 	}
 }
 
