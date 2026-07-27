@@ -157,6 +157,8 @@ The runtime uses a parent/helper/target split:
      the long-lived API/selftest process
    - prepares the workspace
    - passes the helper request JSON through an inherited pipe file descriptor
+   - for execution, creates one ready pipe and one release pipe so the helper
+     cannot `execve()` the target before CPU/cgroup baselines are captured
    - opens stdout and stderr pipes
    - starts the helper in its own process group
    - kills the entire group on timeout or quota violation
@@ -172,6 +174,9 @@ The runtime uses a parent/helper/target split:
    - installs seccomp
    - closes inherited file descriptors
    - changes directory to `box/`
+   - signals the execute parent immediately before target `execve()`, then
+     blocks until the parent captures process CPU and cgroup CPU/event baselines
+     and sends the release byte
    - `execve()`s the target runtime or binary
 
    `PR_SET_DUMPABLE=0` protects the helper before `execve()`. Linux resets the
@@ -411,9 +416,11 @@ The stable contract is:
   `Time Limit Exceeded` with reason `wall time limit exceeded` unless an earlier
   resource verdict was already recorded
 - CPU time is sampled from `CLOCK_PROCESS_CPUTIME_ID` after the helper has
-  execed the target; because the execute sandbox denies process creation and
-  allows only thread-form `clone`, this includes all target threads
-- RSS is sampled from procfs immediately after helper start, refined with
+  completed sandbox setup but before the parent releases the target `execve()`;
+  because the execute sandbox denies process creation and allows only
+  thread-form `clone`, this includes all target threads without charging helper
+  setup time
+- RSS is sampled from procfs after the synchronized target release, refined with
   `smaps_rollup` near the limit or when address-space limits are disabled, and
   falls back to `rusage.Maxrss` after exit for reporting
 - workspace limit classification is based on periodic workspace scans for total

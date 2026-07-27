@@ -76,3 +76,21 @@ func TestHelperRejectsX32SyscallNumbersAndUnsupportedArchitectures(t *testing.T)
 		t.Fatal("helper must not advertise unsupported 386 syscall filtering")
 	}
 }
+
+func TestHelperWaitsForParentBaselineBeforeTargetExec(t *testing.T) {
+	raw, err := os.ReadFile("helper_linux.go")
+	if err != nil {
+		t.Fatalf("read helper_linux.go: %v", err)
+	}
+	source := string(raw)
+	closeDescriptors := strings.Index(source, "unix.CloseRange(3")
+	signalReady := strings.Index(source, "targetReadyFile.Write")
+	waitRelease := strings.Index(source, "io.ReadFull(targetReleaseFile")
+	targetExec := strings.Index(source, "unix.RawSyscall(unix.SYS_EXECVE")
+	if closeDescriptors < 0 || signalReady < 0 || waitRelease < 0 || targetExec < 0 {
+		t.Fatalf("helper_linux.go is missing target synchronization anchors")
+	}
+	if !(closeDescriptors < signalReady && signalReady < waitRelease && waitRelease < targetExec) {
+		t.Fatalf("helper must signal readiness and wait for the parent immediately before target exec")
+	}
+}

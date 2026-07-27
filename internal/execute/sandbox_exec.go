@@ -299,6 +299,19 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	defer requestRead.Close()
 	defer requestWrite.Close()
 
+	targetReadyRead, targetReadyWrite, err := os.Pipe()
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox target ready pipe failed: " + err.Error()}
+	}
+	defer targetReadyRead.Close()
+	defer targetReadyWrite.Close()
+	targetReleaseRead, targetReleaseWrite, err := os.Pipe()
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox target release pipe failed: " + err.Error()}
+	}
+	defer targetReleaseRead.Close()
+	defer targetReleaseWrite.Close()
+
 	helperPath, err := os.Executable()
 	if err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "resolve helper failed: " + err.Error()}
@@ -385,8 +398,14 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			Groups: []uint32{identity.gid},
 		}
 	}
-	cmd.ExtraFiles = []*os.File{requestRead}
-	cmd.Env = append(append(baseEnv[:0:0], baseEnv...), sandbox.HelperModeEnv+"="+sandbox.HelperModeExec, sandbox.RequestFDEnv+"=3")
+	cmd.ExtraFiles = []*os.File{requestRead, targetReadyWrite, targetReleaseRead}
+	cmd.Env = append(
+		append(baseEnv[:0:0], baseEnv...),
+		sandbox.HelperModeEnv+"="+sandbox.HelperModeExec,
+		sandbox.RequestFDEnv+"=3",
+		sandbox.TargetReadyFDEnv+"=4",
+		sandbox.TargetReleaseFDEnv+"=5",
+	)
 
 	stdoutBuf := cappedBuffer{limit: outputLimitBytes}
 	stderrBuf := cappedBuffer{limit: outputLimitBytes}
@@ -404,6 +423,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
 	}
+	_ = targetReadyWrite.Close()
+	_ = targetReleaseRead.Close()
 	if streams.liveStdin {
 		_ = cmd.Stdin.(*os.File).Close()
 		go func() {
@@ -416,6 +437,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	cgroupCPUBaselineMicros := int64(0)
 	var cgroupLimitBaseline cgroup.Stats
 	cgroupLimitBaselineSet := false
+	cpuBaselineNs := uint64(0)
 	if cgroupParentDir != "" {
 		if err := cgroup.EnableControllers(cgroupParentDir, []string{"cpu", "memory", "pids"}); err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -467,6 +489,71 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
 	}
 
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- cmd.Wait()
+	}()
+	readyCh := make(chan error, 1)
+	go func() {
+		var ready [1]byte
+		_, err := io.ReadFull(targetReadyRead, ready[:])
+		readyCh <- err
+	}()
+	select {
+	case err := <-readyCh:
+		if err != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			<-waitCh
+			return execResult{
+				Status: model.RunStatusInitFail,
+				Reason: "sandbox target synchronization failed: " + err.Error(),
+				Stderr: stderrBuf.Bytes(),
+			}
+		}
+	case waitErr := <-waitCh:
+		reason := "sandbox helper exited before target synchronization"
+		if waitErr != nil {
+			reason += ": " + waitErr.Error()
+		}
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: reason,
+			Stderr: stderrBuf.Bytes(),
+		}
+	case <-ctx.Done():
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		<-waitCh
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "sandbox target synchronization timed out",
+			Stderr: stderrBuf.Bytes(),
+		}
+	}
+	_ = targetReadyRead.Close()
+	cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
+	if runGroup.Path != "" {
+		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
+			cgroupLimitBaseline = stats
+			cgroupLimitBaselineSet = true
+			cgroupCPUBaselineMicros = stats.CPUUsageMicros
+		}
+	}
+	wallStart := timing.MonotonicNow()
+	targetStarted := true
+	if n, err := targetReleaseWrite.Write([]byte{1}); err != nil || n != 1 {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		<-waitCh
+		if err == nil {
+			err = io.ErrShortWrite
+		}
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "sandbox target release failed: " + err.Error(),
+			Stderr: stderrBuf.Bytes(),
+		}
+	}
+	_ = targetReleaseWrite.Close()
+
 	imageDone := make(chan struct{})
 	stopImageStream := func() {}
 	if imgPath != "" {
@@ -480,18 +567,6 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		close(imageDone)
 	}
 
-	wallStart := timing.MonotonicNow()
-	waitCh := make(chan error, 1)
-	go func() {
-		waitCh <- cmd.Wait()
-	}()
-	resolvedHelperPath := helperPath
-	if realHelperPath, err := filepath.EvalSymlinks(helperPath); err == nil && realHelperPath != "" {
-		resolvedHelperPath = realHelperPath
-	}
-	cpuBaselineNs := uint64(0)
-	targetStarted := false
-	targetStartGraceDeadline := time.Now().Add(100 * time.Millisecond)
 	watchdog := time.NewTicker(1 * time.Millisecond)
 	defer watchdog.Stop()
 	lastWorkspaceScan := time.Time{}
@@ -516,36 +591,6 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			waitErr = err
 			goto done
 		case <-watchdog.C:
-			if !targetStarted {
-				startTargetChecks := false
-				exePath, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", cmd.Process.Pid))
-				if err != nil {
-					startTargetChecks = !time.Now().Before(targetStartGraceDeadline)
-				} else {
-					if realExePath, err := filepath.EvalSymlinks(exePath); err == nil && realExePath != "" {
-						exePath = realExePath
-					}
-					startTargetChecks = exePath != resolvedHelperPath || !time.Now().Before(targetStartGraceDeadline)
-				}
-				if startTargetChecks {
-					// Some kernels/container settings hide /proc/<pid>/exe after
-					// the helper sets PR_SET_DUMPABLE=0. Start user accounting
-					// only after this point; the trusted Go helper can have a
-					// much larger RSS/cgroup peak than the submitted program.
-					targetStarted = true
-					maxCPUTimeMs = 0
-					cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
-					if runGroup.Path != "" {
-						if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
-							cgroupLimitBaseline = stats
-							cgroupLimitBaselineSet = true
-							cgroupCPUBaselineMicros = stats.CPUUsageMicros
-						}
-					}
-					lastWorkspaceScan = time.Time{}
-				}
-			}
-
 			if targetStarted {
 				if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", cmd.Process.Pid)); err == nil {
 					fields := strings.Fields(string(raw))

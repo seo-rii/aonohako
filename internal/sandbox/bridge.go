@@ -3,10 +3,12 @@ package sandbox
 import "aonohako/internal/model"
 
 const (
-	HelperModeEnv  = "AONOHAKO_INTERNAL_MODE"
-	HelperModeExec = "sandbox-exec"
-	RequestPathEnv = "AONOHAKO_SANDBOX_REQUEST"
-	RequestFDEnv   = "AONOHAKO_SANDBOX_REQUEST_FD"
+	HelperModeEnv      = "AONOHAKO_INTERNAL_MODE"
+	HelperModeExec     = "sandbox-exec"
+	RequestPathEnv     = "AONOHAKO_SANDBOX_REQUEST"
+	RequestFDEnv       = "AONOHAKO_SANDBOX_REQUEST_FD"
+	TargetReadyFDEnv   = "AONOHAKO_SANDBOX_TARGET_READY_FD"
+	TargetReleaseFDEnv = "AONOHAKO_SANDBOX_TARGET_RELEASE_FD"
 )
 
 type ExecRequest struct {

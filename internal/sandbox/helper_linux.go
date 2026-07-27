@@ -75,6 +75,28 @@ func MaybeRunFromEnv() bool {
 	if req.Dir == "" || !filepath.IsAbs(req.Dir) {
 		fail("dir must be absolute: %s", req.Dir)
 	}
+	var targetReadyFile *os.File
+	var targetReleaseFile *os.File
+	targetReadyFD := os.Getenv(TargetReadyFDEnv)
+	targetReleaseFD := os.Getenv(TargetReleaseFDEnv)
+	if (targetReadyFD == "") != (targetReleaseFD == "") {
+		fail("%s and %s must be configured together", TargetReadyFDEnv, TargetReleaseFDEnv)
+	}
+	if targetReadyFD != "" {
+		readyFD, err := strconv.Atoi(targetReadyFD)
+		if err != nil || readyFD < 3 {
+			fail("invalid %s: %q", TargetReadyFDEnv, targetReadyFD)
+		}
+		releaseFD, err := strconv.Atoi(targetReleaseFD)
+		if err != nil || releaseFD < 3 || releaseFD == readyFD {
+			fail("invalid %s: %q", TargetReleaseFDEnv, targetReleaseFD)
+		}
+		targetReadyFile = os.NewFile(uintptr(readyFD), "sandbox-target-ready")
+		targetReleaseFile = os.NewFile(uintptr(releaseFD), "sandbox-target-release")
+		if targetReadyFile == nil || targetReleaseFile == nil {
+			fail("open target synchronization fds")
+		}
+	}
 	execPath, err := unix.BytePtrFromString(req.Command[0])
 	if err != nil {
 		fail("encode exec path: %v", err)
@@ -536,6 +558,17 @@ func MaybeRunFromEnv() bool {
 		for fd := 3; fd < 1024; fd++ {
 			unix.CloseOnExec(fd)
 		}
+	}
+	if targetReadyFile != nil {
+		if _, err := targetReadyFile.Write([]byte{1}); err != nil {
+			fail("signal target ready: %v", err)
+		}
+		var release [1]byte
+		if _, err := io.ReadFull(targetReleaseFile, release[:]); err != nil {
+			fail("wait for target release: %v", err)
+		}
+		_ = targetReadyFile.Close()
+		_ = targetReleaseFile.Close()
 	}
 	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(execPath)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&envv[0])))
 	runtime.KeepAlive(execPath)

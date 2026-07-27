@@ -315,17 +315,30 @@ func TestStreamImageEventsFlushesFinalUnterminatedEvent(t *testing.T) {
 	}
 }
 
-func TestSandboxCgroupAccountingResetsTargetCPUAndChecksFinalEvents(t *testing.T) {
+func TestSandboxTargetSynchronizationSetsBaselinesBeforeRelease(t *testing.T) {
 	raw, err := os.ReadFile("sandbox_exec.go")
 	if err != nil {
 		t.Fatalf("read sandbox_exec.go: %v", err)
 	}
 	body := string(raw)
-	if !strings.Contains(body, "targetStarted = true\n\t\t\t\t\tmaxCPUTimeMs = 0") {
-		t.Fatalf("target accounting must discard the sandbox helper CPU maximum")
+	ready := strings.Index(body, "case err := <-readyCh:")
+	processBaseline := strings.Index(body, "cpuBaselineNs, _ = timing.ProcessCPUTimeNs")
+	release := strings.Index(body, "targetReleaseWrite.Write")
+	if ready < 0 || processBaseline < 0 || release < 0 {
+		t.Fatalf("sandbox_exec.go is missing target synchronization anchors")
 	}
-	if !strings.Contains(body, "cgroupCPUBaselineMicros = stats.CPUUsageMicros\n\t\t\tcgroupLimitBaseline = stats") {
-		t.Fatalf("cgroup event baseline must be captured when the helper joins the run group")
+	if !(ready < processBaseline && processBaseline < release) {
+		t.Fatalf("process CPU baseline must be captured after helper readiness and before target release")
+	}
+	baselineBlock := body[processBaseline:release]
+	if !strings.Contains(baselineBlock, "cgroupLimitBaseline = stats") || !strings.Contains(baselineBlock, "cgroupCPUBaselineMicros = stats.CPUUsageMicros") {
+		t.Fatalf("cgroup CPU and event baselines must be captured before target release")
+	}
+	if !strings.Contains(baselineBlock, "targetStarted := true") {
+		t.Fatalf("target accounting must be enabled before target release")
+	}
+	if strings.Contains(body, `os.Readlink(fmt.Sprintf("/proc/%d/exe"`) || strings.Contains(body, "targetStartGraceDeadline") {
+		t.Fatalf("target start must not depend on procfs polling or a grace timeout")
 	}
 	finalStart := strings.Index(body, "result.MemoryKB = maxRSSKB")
 	finalEnd := strings.Index(body, "if result.Status == \"OK\" {\n\t\tusage, err := workspacequota.Scan")
