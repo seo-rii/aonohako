@@ -1229,6 +1229,78 @@ func TestRunCommandRejectsNamespaceEscape(t *testing.T) {
 	}
 }
 
+func TestRunCommandRejectsUnsafeCloneFlagsAndClone3(t *testing.T) {
+	cc, err := exec.LookPath("cc")
+	if err != nil {
+		cc, err = exec.LookPath("gcc")
+	}
+	if err != nil {
+		t.Skip("C compiler is unavailable on this runner")
+	}
+	workDir := sandboxWritableTempDir(t)
+	binaryPath := filepath.Join(workDir, "clone-probe")
+	source := `
+#define _GNU_SOURCE
+#include <errno.h>
+#include <linux/sched.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+static int reject_child(long rc, const char *name) {
+	if (rc == 0) {
+		_exit(101);
+	}
+	if (rc > 0) {
+		int status = 0;
+		waitpid((pid_t)rc, &status, 0);
+		fprintf(stderr, "%s escaped\n", name);
+		return 1;
+	}
+	return 0;
+}
+
+int main(void) {
+	errno = 0;
+	long classic = syscall(SYS_clone, (unsigned long)CLONE_UNTRACED | SIGCHLD, 0, 0, 0, 0);
+	if (reject_child(classic, "clone") != 0 || errno != EPERM) {
+		fprintf(stderr, "clone errno=%d (%s)\n", errno, strerror(errno));
+		return 1;
+	}
+#ifdef SYS_clone3
+	struct clone_args args = {0};
+	args.exit_signal = SIGCHLD;
+	errno = 0;
+	long modern = syscall(SYS_clone3, &args, sizeof(args));
+	if (reject_child(modern, "clone3") != 0 || errno != ENOSYS) {
+		fprintf(stderr, "clone3 errno=%d (%s)\n", errno, strerror(errno));
+		return 1;
+	}
+#endif
+	return 0;
+}
+`
+	build := exec.Command(cc, "-O2", "-x", "c", "-", "-o", binaryPath)
+	build.Stdin = strings.NewReader(source)
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("compile clone probe: %v\n%s", err, string(output))
+	}
+
+	stdout, stderr, status, reason := runCommand(
+		context.Background(),
+		workDir,
+		binaryPath,
+		nil,
+		nil,
+	)
+	if status != model.CompileStatusOK {
+		t.Fatalf("expected unsafe clone denial, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
+	}
+}
+
 func TestRunCommandRejectsProcessGroupEscape(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {

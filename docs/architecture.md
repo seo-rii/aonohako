@@ -241,8 +241,14 @@ The Linux helper applies these resource and process controls:
 
 The seccomp filter denies high-risk operations, including:
 
-- `fork`, `vfork`, and `clone3`
-- `clone` without `CLONE_THREAD`
+- `clone3` in every profile with `ENOSYS`, so runtimes can use a legacy
+  fallback without exposing an argument structure that classic BPF cannot
+  inspect
+- `CLONE_NEW*`, `CLONE_PARENT`, `CLONE_PTRACE`, `CLONE_UNTRACED`, and unknown
+  high-word flags in classic `clone`, including process-enabled compiler
+  profiles
+- `fork`, `vfork`, and `clone` without `CLONE_THREAD` in execution profiles
+  that do not permit child processes
 - `unshare`, `setns`, `chroot`, `mount`, `pivot_root`, and newer mount APIs
   including `statmount` and `listmount`
 - `ptrace`, `process_vm_*`, `process_madvise`, `process_mrelease`, `pidfd_*`
@@ -458,7 +464,10 @@ the main way to absorb known JIT or GC cost.
 Compile commands use the same helper process-hardening path. Because compilers
 can legitimately spawn child processes, compile memory enforcement samples the
 helper process tree and kills the compile sandbox when aggregate RSS exceeds the
-compile sandbox memory budget. Compile watchdogs also run the shared workspace
+compile sandbox memory budget. Process-enabled compilation still rejects all
+namespace, parentage, tracing, and unknown high-word clone flags, and rejects
+`clone3`; ordinary `fork`, `vfork`, and safe classic `clone` remain available
+for compiler subprocesses. Compile watchdogs also run the shared workspace
 scanner, so total bytes, entry count, directory depth limits, and fail-closed
 scan-error handling apply during compile as well as execute. If
 `AONOHAKO_CGROUP_PARENT` is configured for a self-hosted helper runner, compile,

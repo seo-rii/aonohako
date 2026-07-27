@@ -242,6 +242,19 @@ func MaybeRunFromEnv() bool {
 
 	archAudit := uint32(unix.AUDIT_ARCH_X86_64)
 	const x32SyscallBit = uint32(0x40000000)
+	unsafeCloneFlags := uint32(
+		unix.CLONE_NEWCGROUP |
+			unix.CLONE_NEWIPC |
+			unix.CLONE_NEWNET |
+			unix.CLONE_NEWNS |
+			unix.CLONE_NEWPID |
+			unix.CLONE_NEWTIME |
+			unix.CLONE_NEWUSER |
+			unix.CLONE_NEWUTS |
+			unix.CLONE_PARENT |
+			unix.CLONE_PTRACE |
+			unix.CLONE_UNTRACED,
+	)
 
 	program := make([]unix.SockFilter, 0, 112)
 	appendStmt := func(code uint16, k uint32) {
@@ -445,6 +458,18 @@ func MaybeRunFromEnv() bool {
 		}
 	}
 
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE3), 0, 1)
+	appendStmt(unix.BPF_RET|unix.BPF_K, clone3Deny)
+
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE), 0, 7)
+	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset+4)
+	appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 1, 0)
+	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
+	appendJump(unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, unsafeCloneFlags, 0, 1)
+	appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataNrOffset)
+
 	if !req.AllowProcesses {
 		for _, sysno := range []uint32{
 			uint32(unix.SYS_FORK),
@@ -453,9 +478,6 @@ func MaybeRunFromEnv() bool {
 			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 		}
-
-		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE3), 0, 1)
-		appendStmt(unix.BPF_RET|unix.BPF_K, clone3Deny)
 
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE), 0, 4)
 		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)

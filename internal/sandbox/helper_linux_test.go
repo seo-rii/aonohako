@@ -94,3 +94,36 @@ func TestHelperWaitsForParentBaselineBeforeTargetExec(t *testing.T) {
 		t.Fatalf("helper must signal readiness and wait for the parent immediately before target exec")
 	}
 }
+
+func TestHelperAlwaysRejectsUnsafeCloneForms(t *testing.T) {
+	raw, err := os.ReadFile("helper_linux.go")
+	if err != nil {
+		t.Fatalf("read helper_linux.go: %v", err)
+	}
+	source := string(raw)
+	for _, marker := range []string{
+		"unsafeCloneFlags := uint32(",
+		"unix.CLONE_NEWCGROUP",
+		"unix.CLONE_NEWIPC",
+		"unix.CLONE_NEWNET",
+		"unix.CLONE_NEWNS",
+		"unix.CLONE_NEWPID",
+		"unix.CLONE_NEWTIME",
+		"unix.CLONE_NEWUSER",
+		"unix.CLONE_NEWUTS",
+		"unix.CLONE_PARENT",
+		"unix.CLONE_PTRACE",
+		"unix.CLONE_UNTRACED",
+		"seccompDataArg0Offset+4",
+		"unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, unsafeCloneFlags",
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("helper clone policy is missing %q", marker)
+		}
+	}
+	clone3 := strings.Index(source, "uint32(unix.SYS_CLONE3)")
+	processOptIn := strings.Index(source, "if !req.AllowProcesses")
+	if clone3 < 0 || processOptIn < 0 || clone3 > processOptIn {
+		t.Fatalf("clone3 must be denied independently of AllowProcesses")
+	}
+}
