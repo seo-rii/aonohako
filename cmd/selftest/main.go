@@ -3803,6 +3803,12 @@ func runDirectImagePermissionChecks() error {
 		allowedExecutableTools[tool] = struct{}{}
 	}
 
+	if owned, err := sandboxIdentityOwnedImagePaths("/"); err != nil {
+		return fmt.Errorf("sandbox-owned-image-paths: %w", err)
+	} else if len(owned) != 0 {
+		return fmt.Errorf("sandbox-owned-image-paths: unexpected uid/gid 65532 paths: %s", strings.Join(owned, ", "))
+	}
+
 	protectedOut, protectedErr, err := runAsSandboxUser(
 		"if [ -x /var/aonohako/protected ]; then echo leaked; else echo blocked; fi; "+
 			"if [ -r /var/aonohako/protected/probe.txt ]; then echo leaked; else echo blocked; fi; "+
@@ -3899,7 +3905,7 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	scratchOut, scratchErr, err := runAsSandboxUser(
-		"for p in /tmp /var/tmp /run/lock; do "+
+		"for p in /tmp /var/tmp /run/lock /dev/shm /dev/mqueue; do "+
 			"if [ -e \"$p\" ]; then "+
 			"if [ -w \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
 			"fi; "+
@@ -3951,6 +3957,43 @@ func runDirectImagePermissionChecks() error {
 		return fmt.Errorf("workspace-is-writable-but-submission-is-immutable: unexpected stdout %q stderr %q", workspaceOut, workspaceErr)
 	}
 	return nil
+}
+
+func sandboxIdentityOwnedImagePaths(root string) ([]string, error) {
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return nil, err
+	}
+	rootStat, ok := rootInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return nil, fmt.Errorf("root stat does not expose device information")
+	}
+	rootDevice := rootStat.Dev
+	var owned []string
+	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("stat does not expose ownership for %s", path)
+		}
+		if stat.Dev != rootDevice {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if stat.Uid == 65532 || stat.Gid == 65532 {
+			owned = append(owned, path)
+		}
+		return nil
+	})
+	return owned, err
 }
 
 func runAsSandboxUser(script, dir string) (string, string, error) {

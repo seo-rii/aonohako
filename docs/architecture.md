@@ -142,9 +142,10 @@ uses role UID/GID `65532`, and the trusted interactor uses role UID/GID `65531`.
 Their roots stay server-owned with the selected role GID and mode `0710`, giving
 that role traverse permission without giving it root-directory write
 permission. This is a fixed trust-role split, not a general per-run UID
-allocator. A concurrent .NET contestant and .NET interactor fail initialization
-because CoreCLR uses container-global `/tmp/.dotnet` state that cannot safely
-be reassigned to both identities at once.
+allocator. Concurrent interactive peers that need fixed runtime compatibility
+state fail closed: CoreCLR still opens `/tmp/.dotnet`, but the parent exposes
+that name only as a root-created link to the active peer's workspace and never
+allows another sandbox command to overlap it.
 
 ## Sandbox Process Model
 
@@ -318,10 +319,13 @@ workspace, for example `HOME`, `TMPDIR`, `JAVA_TOOL_OPTIONS`,
 
 To avoid escaping into global writable directories, the runtime image itself
 ships shared scratch paths such as `/tmp`, `/var/tmp`, and `/run/lock` with
-non-writable permissions for the sandbox UID. The entrypoint does not mutate
-container-global scratch state at startup, but it tightens a Cloud Run mounted
-`AONOHAKO_WORK_ROOT` to mode `0711` because the in-memory volume is created
-after the image filesystem has already been built.
+non-writable permissions for the sandbox UID. Because container runtimes mount
+`/dev/shm` and `/dev/mqueue` after image construction, the root entrypoint also
+tightens those mounts to `0755`. It tightens a Cloud Run mounted
+`AONOHAKO_WORK_ROOT` to mode `0711` because the in-memory volume is likewise
+created after the image filesystem has already been built. Image-permission
+selftests scan the root filesystem device and reject every unexpected object
+owned by the shared sandbox UID or GID.
 
 ### Output capture
 
@@ -459,9 +463,15 @@ bounded `AONOHAKO_WORK_ROOT` storage, optional self-hosted cgroups, and the
 outer container or filesystem limit. The helper still applies a request-memory-derived
 `DOTNET_GCHeapHardLimit`, RSS watchdogs, workspace byte accounting, output caps,
 open-file limits, thread limits, OOM-victim preference, and single-slot
-execution. Before each sandboxed `dotnet` invocation, the runner recreates `/tmp/.dotnet`
-with the sandbox UID and `0700` modes so CoreCLR/F# shared lock and
-shared-memory state does not leak between sequential runs in the same container.
+execution. The image keeps `/tmp/.dotnet` root-owned and non-traversable. For
+each sandboxed `dotnet` invocation, the runner temporarily replaces that name
+with a root-created symlink to a `0700`, sandbox-owned directory inside the
+active workspace, then restores a root-owned sealed directory after the whole
+sandbox command and its cgroup cleanup finish. Kotlin/Native's global cache
+stays root-owned and read-only; its compatibility lock is similarly linked to
+a per-compile workspace file only for the command lifetime. A process-wide
+runtime-state lease prevents another sandbox command from overlapping either
+fixed path.
 
 Self-hosted cgroup support is gated by an explicit preflight layer and an
 operator-selected parent cgroup. `internal/isolation/cgroup` checks for a cgroup

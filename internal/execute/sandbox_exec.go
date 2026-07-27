@@ -242,11 +242,15 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			innerEnv = append(innerEnv, "DOTNET_GCHeapHardLimit="+heapLimit)
 		}
 	}
-	if isDotnet {
-		if err := security.ResetDotnetSharedStateForIdentity(int(identity.uid), int(identity.gid)); err != nil {
-			return execResult{Status: model.RunStatusInitFail, Reason: "dotnet state cleanup failed: " + err.Error()}
-		}
+	runtimeState, err := security.AcquireRuntimeState(ws.RootDir, runtimeBase, int(identity.uid), int(identity.gid))
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: "runtime state preparation failed: " + err.Error()}
 	}
+	defer func() {
+		if releaseErr := runtimeState.Release(); releaseErr != nil {
+			slog.Error("execute runtime state cleanup failed", "command", runtimeBase, "err", releaseErr)
+		}
+	}()
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS values can fail before user code. Go binaries
 	// likewise make large, ASLR-sensitive virtual reservations before main.

@@ -1654,8 +1654,8 @@ languages:
         - rm -rf /tmp/KonanWarmup.kt /tmp/KonanWarmup.kexe /tmp/.konan.home
         - chmod -R a+rX /usr/local/lib/aonohako/konan
         - touch /usr/local/lib/aonohako/konan/cache/.lock
-        - chown 65532:65532 /usr/local/lib/aonohako/konan/cache/.lock
-        - chmod 0600 /usr/local/lib/aonohako/konan/cache/.lock
+        - chown 0:0 /usr/local/lib/aonohako/konan/cache/.lock
+        - chmod 0400 /usr/local/lib/aonohako/konan/cache/.lock
     smoke:
       command:
         - bash

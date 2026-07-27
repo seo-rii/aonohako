@@ -114,11 +114,19 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	isDotnet := commandName == "dotnet"
 	isDotnetLike := isDotnet || commandName == "dafny"
 	isIsabelle := commandName == "isabelle"
-	if isDotnetLike {
-		if err := security.ResetDotnetSharedState(); err != nil {
-			return "", "", model.CompileStatusInternal, "dotnet state cleanup failed: " + err.Error()
-		}
+	runtimeState, err := security.AcquireRuntimeState(workDir, commandName, 65532, 65532)
+	if err != nil {
+		return "", "", model.CompileStatusInternal, "runtime state preparation failed: " + err.Error()
 	}
+	defer func() {
+		if releaseErr := runtimeState.Release(); releaseErr != nil {
+			slog.Error("compile runtime state cleanup failed", "command", commandName, "err", releaseErr)
+			if status == "" || status == model.CompileStatusOK {
+				status = model.CompileStatusInternal
+				reason = "runtime state cleanup failed"
+			}
+		}
+	}()
 	// CoreCLR and some toolchain WebAssembly runtimes reserve very large virtual
 	// address ranges during startup, so finite RLIMIT_AS values can fail before
 	// user code. Dotnet-like commands get a high finite RLIMIT_FSIZE floor

@@ -106,7 +106,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "request-specific environment built from fixed base variables") || !strings.Contains(architecture, "does not inherit the server process environment") {
 		t.Fatalf("architecture.md must describe sandbox environment inheritance boundaries")
 	}
-	if !strings.Contains(architecture, "ships shared scratch paths such as `/tmp`, `/var/tmp`, and `/run/lock`") || !strings.Contains(architecture, "it tightens a Cloud Run mounted\n`AONOHAKO_WORK_ROOT` to mode `0711`") {
+	if !strings.Contains(architecture, "ships shared scratch paths such as `/tmp`, `/var/tmp`, and `/run/lock`") || !strings.Contains(architecture, "`/dev/shm` and `/dev/mqueue`") || !strings.Contains(architecture, "It tightens a Cloud Run mounted\n`AONOHAKO_WORK_ROOT` to mode `0711`") {
 		t.Fatalf("architecture.md must describe static scratch hardening and Cloud Run work root mode tightening")
 	}
 	if !strings.Contains(architecture, "Server startup validates the deployment contract instead of trusting docs alone.") || !strings.Contains(architecture, "The following checks are enforced before the HTTP server starts") {
@@ -136,7 +136,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`internal/isolation/cgroup` checks") || !strings.Contains(architecture, "required\n`cpu`, `memory`, and `pids` controllers") || !strings.Contains(architecture, "`AONOHAKO_CGROUP_PARENT` is allowed") || !strings.Contains(architecture, "not group/world writable") || !strings.Contains(architecture, "probe run-group create/remove cycle") || !strings.Contains(architecture, "parent `cgroup.procs` to be empty") || !strings.Contains(architecture, "`cgroup.subtree_control` at startup") {
 		t.Fatalf("architecture.md must describe cgroup v2 preflight requirements")
 	}
-	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "not the effective workspace\nquota") || !strings.Contains(architecture, "recreates `/tmp/.dotnet`") {
+	if !strings.Contains(architecture, ".NET is the main compatibility exception") || !strings.Contains(architecture, "memfd-backed double-mapped region") || !strings.Contains(architecture, "not the effective workspace\nquota") || !strings.Contains(architecture, "root-created symlink") || !strings.Contains(architecture, "Kotlin/Native's global cache") {
 		t.Fatalf("architecture.md must describe dotnet rlimit and shared-state compatibility exceptions")
 	}
 	if !strings.Contains(architecture, "writing values such as `+cpu +memory +pids` to\n`cgroup.subtree_control`") || !strings.Contains(architecture, "positive\n`memory.max` and `pids.max` values") || !strings.Contains(architecture, "`memory.swap.max`") || !strings.Contains(architecture, "`memory.oom.group` is set") || !strings.Contains(architecture, "`cpu.max=100000 100000`") || !strings.Contains(architecture, "writing its PID to `cgroup.procs`") || !strings.Contains(architecture, "without recursive deletion") || !strings.Contains(architecture, "short retry window") {

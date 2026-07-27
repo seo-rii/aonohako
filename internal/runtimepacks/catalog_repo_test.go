@@ -696,8 +696,8 @@ func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
 			"KONAN_DATA_DIR=/usr/local/lib/aonohako/konan",
 			"kotlinc-native -J-Xms64m -J-Xmx1024m -J-Xss1m",
 			"chmod -R a+rX /usr/local/lib/aonohako/konan",
-			"chown 65532:65532 /usr/local/lib/aonohako/konan/cache/.lock",
-			"chmod 0600 /usr/local/lib/aonohako/konan/cache/.lock",
+			"chown 0:0 /usr/local/lib/aonohako/konan/cache/.lock",
+			"chmod 0400 /usr/local/lib/aonohako/konan/cache/.lock",
 		} {
 			if !strings.Contains(body, marker) {
 				t.Fatalf("ci-kotlin must prewarm readonly Kotlin/Native dependencies with %q, got %q", marker, body)

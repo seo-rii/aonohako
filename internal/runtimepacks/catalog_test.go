@@ -354,6 +354,15 @@ func TestSmokeScriptRunsSandboxSelftestBeforeLanguageSmoke(t *testing.T) {
 
 func TestRuntimeEntrypointPassesThroughToRequestedCommand(t *testing.T) {
 	path := filepath.Join("..", "..", "scripts", "runtime_entrypoint.sh")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+	for _, marker := range []string{"/dev/shm", "/dev/mqueue", "chmod 0755"} {
+		if !strings.Contains(string(body), marker) {
+			t.Fatalf("runtime_entrypoint.sh must re-harden container-mounted scratch path with %q", marker)
+		}
+	}
 	cmd := exec.Command("/bin/sh", path, "sh", "-c", "printf ok")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
