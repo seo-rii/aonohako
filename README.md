@@ -388,7 +388,8 @@ per-run cgroup with kernel-enforced memory, pids, and one-vCPU CPU bandwidth
 limits.
 
 Verdicts are classified from wall time, target CPU time, procfs RSS samples,
-workspace scans, process exit state, and output/SPJ evaluation in that order.
+post-exit `rusage.Maxrss` or cgroup `memory.peak`, workspace scans, process exit
+state, and output/SPJ evaluation in that order.
 Final run responses include optional `verdict_source` diagnostics such as
 `cpu_time`, `memory_rss`, `workspace_bytes`, `file_output`, or `spj` so
 operators can see which measurement or judge step selected the status. See

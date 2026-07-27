@@ -371,7 +371,7 @@ reported as runtime failure instead of silently falling back to process stdout.
 | --- | --- | --- |
 | `wall_time_ms` | `CLOCK_MONOTONIC` | stable wall clock, not affected by time jumps |
 | `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec` for run-cgroup CPU usage | aggregates all threads inside the process and, when cgroups are enabled, covers the run cgroup rather than only the main PID |
-| `memory_kb` | `/proc/<pid>/statm` sampled during execution, `/proc/<pid>/smaps_rollup` near the limit or when AS is disabled, then `rusage.Maxrss` fallback | captures live RSS peaks, uses a more accurate procfs source in risky ranges, and keeps a post-exit fallback |
+| `memory_kb` | `/proc/<pid>/statm` sampled during execution and `/proc/<pid>/smaps_rollup` near the limit or when AS is disabled; no-cgroup runs merge post-exit `rusage.Maxrss`, while cgroup runs use aggregate `memory.peak` | captures live RSS peaks, keeps a post-exit fallback for fast single-process exits, and reports the kernel aggregate peak for cgroup process trees |
 
 Important consequence:
 
@@ -384,6 +384,8 @@ Memory enforcement uses several layers:
 
 - live RSS sampling from `/proc/<pid>/statm`
 - `/proc/<pid>/smaps_rollup` confirmation when RSS reaches 80% of the limit or when the runtime cannot use address-space limits
+- post-exit `rusage.Maxrss` merging when no run cgroup exists, and cgroup
+  `memory.peak` reporting when aggregate process-tree accounting is active
 - `RLIMIT_AS` to constrain virtual address space growth; most native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Deno, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps; compiled Go binaries, Java, and .NET disable this limit because their startup reservations are not proportional to RSS
 - runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Deno receives a V8 old-space cap through `--v8-flags`; Java-family launchers receive heap, stack, direct-memory, metaspace/class-space, and code-cache caps as applicable; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
 - deployment-validated runtime tuning for selected JVM, Go, Erlang/Elixir,
@@ -422,7 +424,8 @@ The stable contract is:
   setup time
 - RSS is sampled from procfs after the synchronized target release, refined with
   `smaps_rollup` near the limit or when address-space limits are disabled, and
-  falls back to `rusage.Maxrss` after exit for reporting
+  merges `rusage.Maxrss` after exit for no-cgroup reporting; cgroup runs instead
+  report aggregate `memory.peak`
 - workspace limit classification is based on periodic workspace scans for total
   bytes, entry count, and directory depth; scanner errors other than disappearing
   files fail closed as WLE so unreadable subtrees cannot hide quota usage

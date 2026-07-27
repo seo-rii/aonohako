@@ -352,4 +352,11 @@ func TestSandboxTargetSynchronizationSetsBaselinesBeforeRelease(t *testing.T) {
 	if !strings.Contains(finalAccounting, "cgroupLimitBreachSince(stats, cgroupLimitBaseline, cgroupLimitBaselineSet)") {
 		t.Fatalf("final cgroup accounting must compare events to the captured baseline")
 	}
+	if !strings.Contains(finalAccounting, "stats.MemoryPeakBytes") || !strings.Contains(finalAccounting, "result.MemoryKB = peakKB") {
+		t.Fatalf("final cgroup accounting must report aggregate memory.peak")
+	}
+	processAccounting := body[finalEnd:]
+	if !strings.Contains(processAccounting, "runGroup.Path == \"\"") || !strings.Contains(processAccounting, "ps.SysUsage().(*syscall.Rusage)") || !strings.Contains(processAccounting, "usage.Maxrss > result.MemoryKB") {
+		t.Fatalf("no-cgroup accounting must merge post-exit rusage.Maxrss")
+	}
 }

@@ -742,6 +742,15 @@ done:
 
 	if runGroup.Path != "" {
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
+			if stats.MemoryPeakBytes > 0 {
+				peakKB := stats.MemoryPeakBytes / 1024
+				if stats.MemoryPeakBytes%1024 != 0 {
+					peakKB++
+				}
+				if peakKB > result.MemoryKB {
+					result.MemoryKB = peakKB
+				}
+			}
 			if stats.CPUUsageMicros > 0 {
 				cpuUsageMicros := stats.CPUUsageMicros
 				if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
@@ -792,6 +801,11 @@ done:
 	}
 
 	if ps := cmd.ProcessState; ps != nil {
+		if runGroup.Path == "" {
+			if usage, ok := ps.SysUsage().(*syscall.Rusage); ok && usage.Maxrss > result.MemoryKB {
+				result.MemoryKB = usage.Maxrss
+			}
+		}
 		if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
 			if ws.Exited() {
 				c := ws.ExitStatus()
