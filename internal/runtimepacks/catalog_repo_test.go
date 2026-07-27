@@ -609,7 +609,7 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 		"pandas==3.0.2",
 		"seaborn==0.13.2",
 		"matplotlib==3.10.8",
-		"pillow==12.2.0",
+		"pillow==12.3.0",
 		"six==1.17.0",
 		"qiskit==2.4.0",
 		"pyparsing==3.3.2",
