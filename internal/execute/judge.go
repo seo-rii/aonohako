@@ -397,6 +397,43 @@ func clipUTF8(b []byte, n int) string {
 }
 
 func sandboxCommandBase(command []string, workspaceRoots ...string) string {
+	return sandboxCommandBaseWithTrustedRoots(command, sandboxTrustedExecutableRoots(), workspaceRoots...)
+}
+
+func sandboxTrustedExecutableRoots() []string {
+	return []string{
+		"/bin",
+		"/opt",
+		"/sbin",
+		"/usr/bin",
+		"/usr/lib/R",
+		"/usr/lib/elixir",
+		"/usr/lib/erlang",
+		"/usr/lib/jvm",
+		"/usr/lib/swi-prolog",
+		"/usr/local/bin",
+		"/usr/local/cargo/bin",
+		"/usr/local/go/bin",
+		"/usr/local/julia",
+		"/usr/local/sbin",
+		"/usr/sbin",
+	}
+}
+
+func isPathWithinTrustedRoots(path string, trustedRoots []string) bool {
+	for _, trustedRoot := range trustedRoots {
+		if strings.TrimSpace(trustedRoot) == "" {
+			continue
+		}
+		rel, err := filepath.Rel(filepath.Clean(trustedRoot), path)
+		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return true
+		}
+	}
+	return false
+}
+
+func sandboxCommandBaseWithTrustedRoots(command, trustedRoots []string, workspaceRoots ...string) string {
 	if len(command) == 0 {
 		return ""
 	}
@@ -414,10 +451,11 @@ func sandboxCommandBase(command []string, workspaceRoots ...string) string {
 		return ""
 	}
 	cleanExecutable := filepath.Clean(executable)
-	resolvedExecutable := cleanExecutable
-	if resolved, err := filepath.EvalSymlinks(cleanExecutable); err == nil && resolved != "" {
-		resolvedExecutable = filepath.Clean(resolved)
+	resolved, err := filepath.EvalSymlinks(cleanExecutable)
+	if err != nil || resolved == "" {
+		return ""
 	}
+	resolvedExecutable := filepath.Clean(resolved)
 	for _, workspaceRoot := range workspaceRoots {
 		if strings.TrimSpace(workspaceRoot) == "" {
 			continue
@@ -430,23 +468,12 @@ func sandboxCommandBase(command []string, workspaceRoots ...string) string {
 			}
 		}
 	}
-	for _, trustedRoot := range []string{
-		"/bin",
-		"/opt",
-		"/sbin",
-		"/usr/bin",
-		"/usr/lib/R",
-		"/usr/lib/erlang",
-		"/usr/local/bin",
-		"/usr/local/cargo/bin",
-		"/usr/local/go/bin",
-		"/usr/local/sbin",
-		"/usr/sbin",
-	} {
-		rel, err := filepath.Rel(trustedRoot, resolvedExecutable)
-		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-			return filepath.Base(cleanExecutable)
-		}
+	// Both the launcher and its final target must stay under immutable system
+	// roots. This preserves identities such as /usr/bin/java -> /usr/lib/jvm/...
+	// without allowing an otherwise trusted-looking symlink to grant a runtime
+	// policy to a submitted or other untrusted executable.
+	if isPathWithinTrustedRoots(cleanExecutable, trustedRoots) && isPathWithinTrustedRoots(resolvedExecutable, trustedRoots) {
+		return filepath.Base(cleanExecutable)
 	}
 	return ""
 }
@@ -465,7 +492,7 @@ func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
 		limitMB = max(65536, memoryMB*4+1024)
 	case "wasmtime":
 		limitMB = max(1024, memoryMB*4+1024)
-	case "erlexec", "erl", "beam.smp", "aonohako-gleam-run":
+	case "erlexec", "erl", "elixir", "beam.smp", "aonohako-gleam-run":
 		limitMB = max(8192, memoryMB*6+2048)
 	case "ghdl", "vvp":
 		limitMB = max(2048, memoryMB*4+512)
@@ -477,9 +504,25 @@ func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
 	return uint64(limitMB) * 1024 * 1024
 }
 
-func addressSpaceProximityCanClassifyMLE(commandBase string) bool {
+func isJVMRunLang(runLang string) bool {
+	switch profiles.NormalizeRunLang(runLang) {
+	case "clojure", "groovy", "java", "kotlin-jvm", "scala":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTrustedJVMRuntime(runLang, commandBase string) bool {
+	return isJVMRunLang(runLang) && commandBase == "java"
+}
+
+func addressSpaceProximityCanClassifyMLE(commandBase, runLang string) bool {
+	if isJVMRunLang(runLang) {
+		return false
+	}
 	switch commandBase {
-	case "aonohako-gleam-run", "beam.smp", "deno", "dotnet", "erl", "erlexec", "ghdl", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "vvp", "wasmtime":
+	case "aonohako-gleam-run", "beam.smp", "deno", "dotnet", "elixir", "erl", "erlexec", "ghdl", "java", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "vvp", "wasmtime":
 		return false
 	default:
 		return true

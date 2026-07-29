@@ -245,6 +245,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	runtimeBase := sandboxCommandBase(finalCommand, ws.RootDir)
+	if isJVMRunLang(runLang) && !isTrustedJVMRuntime(runLang, runtimeBase) {
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "JVM runtime executable is outside trusted system roots",
+		}
+	}
 	isDotnet := runtimeBase == "dotnet"
 	isTLA := runtimeBase == "aonohako-tla-run"
 	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
@@ -272,7 +278,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// likewise make large, ASLR-sensitive virtual reservations before main.
 	// Physical memory remains bounded by cgroup memory.max and the RSS watchdog.
 	// CoreCLR also needs a high finite RLIMIT_FSIZE floor to start reliably.
-	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
+	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
 	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)
@@ -895,7 +901,7 @@ done:
 		result.Reason = "sandbox helper failed before target start: out of memory"
 		result.VerdictSource = "sandbox_helper_oom"
 	}
-	if addressSpaceProximityCanClassifyMLE(runtimeBase) && !disableAddressSpaceLimit && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
+	if addressSpaceProximityCanClassifyMLE(runtimeBase, runLang) && !disableAddressSpaceLimit && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
 		result.Status = model.RunStatusMLE
 		result.Reason = "memory limit exceeded"
 		result.VerdictSource = "address_space"

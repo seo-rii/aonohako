@@ -150,6 +150,7 @@ func runtimeStartupMemoryMB() map[string]int {
 		"go":         1120,
 		"rust":       64,
 		"zig":        160,
+		"java":       64,
 		"kotlin-jvm": 1536,
 		"erlang":     1088,
 		"julia":      1088,
@@ -896,7 +897,11 @@ func runCompileExecuteSuite() error {
 		if memoryMB, ok := startupMemory[language]; ok {
 			startupLimits := limits
 			startupLimits.MemoryMB = memoryMB
-			for attempt := 1; attempt <= 2; attempt++ {
+			attempts := 2
+			if language == "java" {
+				attempts = 5
+			}
+			for attempt := 1; attempt <= attempts; attempt++ {
 				startupResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
 					Lang:              profile.RunLang,
 					Binaries:          binaries,

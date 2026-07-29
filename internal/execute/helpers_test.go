@@ -895,6 +895,7 @@ func TestAddressSpaceLimitBytes(t *testing.T) {
 		{"deno_virtual_cap", "deno", 256, 65536 * 1024 * 1024},
 		{"wasmtime_virtual_cap", "wasmtime", 256, 2048 * 1024 * 1024},
 		{"go_interpreter_virtual_cap", "umjunsik-lang-go", 128, 1024 * 1024 * 1024},
+		{"elixir_virtual_cap", "elixir", 256, 8192 * 1024 * 1024},
 		{"dotnet_virtual_cap", "dotnet", 256, 3584 * 1024 * 1024},
 	}
 	for _, tc := range tests {
@@ -918,12 +919,12 @@ func TestAddressSpaceLimitBytesAlwaysAtLeast512MB(t *testing.T) {
 }
 
 func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) {
-	for _, commandBase := range []string{"deno", "dotnet", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "wasmtime"} {
-		if addressSpaceProximityCanClassifyMLE(commandBase) {
+	for _, commandBase := range []string{"deno", "dotnet", "elixir", "java", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "wasmtime"} {
+		if addressSpaceProximityCanClassifyMLE(commandBase, "") {
 			t.Fatalf("%s should not use address-space proximity for MLE classification", commandBase)
 		}
 	}
-	if !addressSpaceProximityCanClassifyMLE("runner") {
+	if !addressSpaceProximityCanClassifyMLE("runner", "binary") {
 		t.Fatalf("native runner should use address-space proximity for MLE classification")
 	}
 }
@@ -944,7 +945,15 @@ func TestEvaluateRunStatusClassifiesFinalCPUOverrun(t *testing.T) {
 }
 
 func TestSandboxCommandBaseSkipsEnvAssignments(t *testing.T) {
-	got := sandboxCommandBase([]string{"/usr/bin/env", "GOMEMLIMIT=64MiB", "/usr/bin/umjunsik-lang-go", "/tmp/Main.umm"})
+	trustedRoot := filepath.Join(t.TempDir(), "usr", "local", "bin")
+	runtimePath := filepath.Join(trustedRoot, "umjunsik-lang-go")
+	if err := os.MkdirAll(trustedRoot, 0o755); err != nil {
+		t.Fatalf("create trusted runtime directory: %v", err)
+	}
+	if err := os.WriteFile(runtimePath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("create trusted runtime: %v", err)
+	}
+	got := sandboxCommandBaseWithTrustedRoots([]string{"/usr/bin/env", "GOMEMLIMIT=64MiB", runtimePath, "/tmp/Main.umm"}, []string{trustedRoot})
 	if got != "umjunsik-lang-go" {
 		t.Fatalf("sandboxCommandBase returned %q", got)
 	}

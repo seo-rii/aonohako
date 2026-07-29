@@ -73,7 +73,7 @@ func TestCompileExecuteCasesResolveProfilesAndSources(t *testing.T) {
 func TestRuntimeStartupMemoryCoversResourceSensitiveLanguages(t *testing.T) {
 	limits := runtimeStartupMemoryMB()
 	compileCases := compileExecuteCases()
-	for _, language := range []string{"go", "rust", "zig", "kotlin-jvm", "erlang", "julia", "swift", "dart"} {
+	for _, language := range []string{"go", "rust", "zig", "java", "kotlin-jvm", "erlang", "julia", "swift", "dart"} {
 		memoryMB, ok := limits[language]
 		if !ok || memoryMB <= 0 {
 			t.Fatalf("runtime startup memory is missing language %q", language)
@@ -84,6 +84,9 @@ func TestRuntimeStartupMemoryCoversResourceSensitiveLanguages(t *testing.T) {
 	}
 	if got := limits["go"]; got != 1120 {
 		t.Fatalf("Go constrained startup memory = %d, want 1120", got)
+	}
+	if got := limits["java"]; got != 64 {
+		t.Fatalf("Java constrained startup memory = %d, want 64", got)
 	}
 }
 

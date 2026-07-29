@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -32,8 +33,8 @@ func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
 		}
 	}
 
-	if got := sandboxCommandBase([]string{"/usr/local/bin/aonohako-tla-run"}); got != "aonohako-tla-run" {
-		t.Fatalf("trusted runtime base = %q, want aonohako-tla-run", got)
+	if got := sandboxCommandBase([]string{"/usr/bin/true"}); got != "true" {
+		t.Fatalf("trusted runtime base = %q, want true", got)
 	}
 	optWorkspaceRoot := "/opt/aonohako-work/run-1"
 	if got := sandboxCommandBase([]string{filepath.Join(optWorkspaceRoot, "box", "dotnet")}, optWorkspaceRoot); got != "" {
@@ -42,31 +43,226 @@ func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
 }
 
 func TestSandboxCommandBaseRecognizesSystemBEAMRuntime(t *testing.T) {
+	root := t.TempDir()
+	trustedRoot := filepath.Join(root, "usr", "lib", "erlang")
+	runtimePath := filepath.Join(trustedRoot, "erts-15.2.7", "bin", "beam.smp")
+	if err := os.MkdirAll(filepath.Dir(runtimePath), 0o755); err != nil {
+		t.Fatalf("create BEAM runtime directory: %v", err)
+	}
+	if err := os.WriteFile(runtimePath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("create BEAM runtime: %v", err)
+	}
 	command := []string{
 		"/usr/bin/env",
 		"ERL_AFLAGS=+S 1:1",
-		"/usr/lib/erlang/erts-15.2.7/bin/beam.smp",
+		runtimePath,
 	}
-	if got := sandboxCommandBase(command, "/work/run-1"); got != "beam.smp" {
-		t.Fatalf("sandboxCommandBase() = %q, want trusted BEAM runtime", got)
+	commandBase := sandboxCommandBaseWithTrustedRoots(command, []string{trustedRoot}, filepath.Join(root, "work", "run-1"))
+	if commandBase != "beam.smp" {
+		t.Fatalf("sandboxCommandBase() = %q, want trusted BEAM runtime", commandBase)
 	}
-	if got := addressSpaceLimitBytes(sandboxCommandBase(command, "/work/run-1"), 768); got < 8<<30 {
+	if got := addressSpaceLimitBytes(commandBase, 768); got < 8<<30 {
 		t.Fatalf("BEAM address-space limit = %d, want at least 8 GiB", got)
 	}
 }
 
 func TestSandboxCommandBaseRecognizesSystemRRuntime(t *testing.T) {
+	root := t.TempDir()
+	trustedRoot := filepath.Join(root, "usr", "lib", "R")
+	runtimePath := filepath.Join(trustedRoot, "bin", "exec", "R")
+	if err := os.MkdirAll(filepath.Dir(runtimePath), 0o755); err != nil {
+		t.Fatalf("create R runtime directory: %v", err)
+	}
+	if err := os.WriteFile(runtimePath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("create R runtime: %v", err)
+	}
 	command := []string{
 		"/usr/bin/env",
-		"R_HOME=/usr/lib/R",
-		"/usr/lib/R/bin/exec/R",
+		"R_HOME=" + trustedRoot,
+		runtimePath,
 	}
-	commandBase := sandboxCommandBase(command, "/work/run-1")
+	commandBase := sandboxCommandBaseWithTrustedRoots(command, []string{trustedRoot}, filepath.Join(root, "work", "run-1"))
 	if commandBase != "R" {
 		t.Fatalf("sandboxCommandBase() = %q, want trusted R runtime", commandBase)
 	}
 	if got, want := security.OpenFileLimitForCommand(commandBase), security.OpenFileLimitForCommand("R"); got != want {
 		t.Fatalf("R open-file limit = %d, want %d", got, want)
+	}
+}
+
+func TestSandboxCommandBaseRecognizesSystemJavaRuntime(t *testing.T) {
+	javaPath, err := exec.LookPath("java")
+	if err != nil {
+		t.Skip("java is not installed")
+	}
+	javaPath, err = filepath.Abs(javaPath)
+	if err != nil {
+		t.Fatalf("resolve java path: %v", err)
+	}
+	if got := sandboxCommandBase([]string{javaPath}, "/work/run-1"); got != "java" {
+		resolvedPath, _ := filepath.EvalSymlinks(javaPath)
+		t.Fatalf("sandboxCommandBase(%q -> %q) = %q, want trusted Java runtime", javaPath, resolvedPath, got)
+	}
+}
+
+func TestSandboxTrustedRootsCoverRuntimeImageSymlinkTargets(t *testing.T) {
+	trustedRoots := sandboxTrustedExecutableRoots()
+	for name, targetPath := range map[string]string{
+		"BEAM":          "/usr/lib/erlang/erts-15.2.7/bin/beam.smp",
+		"Elixir":        "/usr/lib/elixir/bin/elixir",
+		"Java":          "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+		"Julia":         "/usr/local/julia/bin/julia",
+		"R":             "/usr/lib/R/bin/exec/R",
+		"SWI-Prolog":    "/usr/lib/swi-prolog/bin/x86_64-linux/swipl",
+		"system binary": "/usr/bin/true",
+	} {
+		if !isPathWithinTrustedRoots(targetPath, trustedRoots) {
+			t.Errorf("%s runtime target %q is outside sandbox trusted roots", name, targetPath)
+		}
+	}
+}
+
+func TestSandboxCommandBasePreservesTrustedLauncherAcrossSystemSymlinks(t *testing.T) {
+	root := t.TempDir()
+	systemBinRoot := filepath.Join(root, "usr", "bin")
+	elixirRoot := filepath.Join(root, "usr", "lib", "elixir")
+	javaRoot := filepath.Join(root, "usr", "lib", "jvm")
+	prologRoot := filepath.Join(root, "usr", "lib", "swi-prolog")
+	localBinRoot := filepath.Join(root, "usr", "local", "bin")
+	juliaRoot := filepath.Join(root, "usr", "local", "julia")
+	trustedRoots := []string{
+		systemBinRoot,
+		elixirRoot,
+		javaRoot,
+		prologRoot,
+		localBinRoot,
+		juliaRoot,
+	}
+	tests := []struct {
+		name       string
+		launcher   string
+		targetPath string
+	}{
+		{
+			name:       "elixir",
+			launcher:   filepath.Join(systemBinRoot, "elixir"),
+			targetPath: filepath.Join(elixirRoot, "bin", "elixir"),
+		},
+		{
+			name:       "java",
+			launcher:   filepath.Join(systemBinRoot, "java"),
+			targetPath: filepath.Join(javaRoot, "default-java", "bin", "java"),
+		},
+		{
+			name:       "swipl",
+			launcher:   filepath.Join(systemBinRoot, "swipl"),
+			targetPath: filepath.Join(prologRoot, "bin", "swipl"),
+		},
+		{
+			name:       "julia",
+			launcher:   filepath.Join(localBinRoot, "julia"),
+			targetPath: filepath.Join(juliaRoot, "bin", "julia"),
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.MkdirAll(filepath.Dir(tc.launcher), 0o755); err != nil {
+				t.Fatalf("create launcher directory: %v", err)
+			}
+			if err := os.MkdirAll(filepath.Dir(tc.targetPath), 0o755); err != nil {
+				t.Fatalf("create runtime directory: %v", err)
+			}
+			if err := os.WriteFile(tc.targetPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+				t.Fatalf("create runtime executable: %v", err)
+			}
+			if err := os.Symlink(tc.targetPath, tc.launcher); err != nil {
+				t.Fatalf("create launcher symlink: %v", err)
+			}
+			if got := sandboxCommandBaseWithTrustedRoots([]string{tc.launcher}, trustedRoots); got != tc.name {
+				t.Fatalf("sandboxCommandBaseWithTrustedRoots(%q) = %q, want %q", tc.launcher, got, tc.name)
+			}
+		})
+	}
+}
+
+func TestSandboxCommandBaseRejectsTrustedLauncherIntoWorkspace(t *testing.T) {
+	root := t.TempDir()
+	trustedRoot := filepath.Join(root, "usr", "bin")
+	workspaceRoot := filepath.Join(root, "work", "run-1")
+	targetPath := filepath.Join(workspaceRoot, "box", "java")
+	launcher := filepath.Join(trustedRoot, "java")
+	for _, dir := range []string{trustedRoot, filepath.Dir(targetPath)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create directory: %v", err)
+		}
+	}
+	if err := os.WriteFile(targetPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("create workspace executable: %v", err)
+	}
+	if err := os.Symlink(targetPath, launcher); err != nil {
+		t.Fatalf("create launcher symlink: %v", err)
+	}
+	if got := sandboxCommandBaseWithTrustedRoots([]string{launcher}, []string{trustedRoot, workspaceRoot}, workspaceRoot); got != "" {
+		t.Fatalf("workspace-targeting launcher base = %q, want untrusted empty base", got)
+	}
+}
+
+func TestSandboxCommandBaseRejectsUntrustedSymlinkEndpoints(t *testing.T) {
+	root := t.TempDir()
+	trustedLauncherRoot := filepath.Join(root, "usr", "bin")
+	trustedTargetRoot := filepath.Join(root, "usr", "lib", "jvm")
+	untrustedRoot := filepath.Join(root, "tmp")
+	for _, dir := range []string{trustedLauncherRoot, trustedTargetRoot, untrustedRoot} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create directory: %v", err)
+		}
+	}
+	trustedTarget := filepath.Join(trustedTargetRoot, "java")
+	untrustedTarget := filepath.Join(untrustedRoot, "java-target")
+	for _, target := range []string{trustedTarget, untrustedTarget} {
+		if err := os.WriteFile(target, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatalf("create executable: %v", err)
+		}
+	}
+	trustedRoots := []string{trustedLauncherRoot, trustedTargetRoot}
+	tests := []struct {
+		name     string
+		launcher string
+		target   string
+	}{
+		{name: "untrusted launcher", launcher: filepath.Join(untrustedRoot, "java"), target: trustedTarget},
+		{name: "untrusted target", launcher: filepath.Join(trustedLauncherRoot, "java-untrusted-target"), target: untrustedTarget},
+		{name: "broken target", launcher: filepath.Join(trustedLauncherRoot, "java-broken"), target: filepath.Join(untrustedRoot, "missing")},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.Symlink(tc.target, tc.launcher); err != nil {
+				t.Fatalf("create symlink: %v", err)
+			}
+			if got := sandboxCommandBaseWithTrustedRoots([]string{tc.launcher}, trustedRoots); got != "" {
+				t.Fatalf("sandboxCommandBaseWithTrustedRoots(%q) = %q, want untrusted empty base", tc.launcher, got)
+			}
+		})
+	}
+}
+
+func TestJVMRunLanguagesDoNotUseAddressSpaceProximityMLE(t *testing.T) {
+	for _, runLang := range []string{"clojure", "groovy", "java", "kotlin-jvm", "scala"} {
+		if !isJVMRunLang(runLang) {
+			t.Errorf("isJVMRunLang(%q) = false", runLang)
+		}
+		if !isTrustedJVMRuntime(runLang, "java") {
+			t.Errorf("isTrustedJVMRuntime(%q, \"java\") = false", runLang)
+		}
+		if isTrustedJVMRuntime(runLang, "") {
+			t.Errorf("isTrustedJVMRuntime(%q, \"\") = true", runLang)
+		}
+		if addressSpaceProximityCanClassifyMLE("", runLang) {
+			t.Errorf("%s must not use RLIMIT_AS proximity to classify MLE when command detection is unavailable", runLang)
+		}
+	}
+	if isJVMRunLang("javascript") {
+		t.Fatal("JavaScript must not be classified as a JVM run language")
 	}
 }
 
