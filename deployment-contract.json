@@ -1,4 +1,8 @@
 {
+  "execute_request_limits": {
+    "max_output_bytes": 8388608,
+    "max_step_handoff_bytes": 8388608
+  },
   "authoritative_work_root": {
     "max_bytes": 1073741824,
     "max_files": 1048576

@@ -11,14 +11,19 @@ import (
 	"time"
 
 	"aonohako/internal/platform"
+	"aonohako/internal/runvalidation"
 )
 
-func TestAuthoritativeWorkRootLimitsMatchDeploymentContract(t *testing.T) {
+func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join("..", "..", "deployment-contract.json"))
 	if err != nil {
 		t.Fatalf("read deployment contract: %v", err)
 	}
 	var contract struct {
+		ExecuteRequestLimits struct {
+			MaxOutputBytes      int `json:"max_output_bytes"`
+			MaxStepHandoffBytes int `json:"max_step_handoff_bytes"`
+		} `json:"execute_request_limits"`
 		AuthoritativeWorkRoot struct {
 			MaxBytes int `json:"max_bytes"`
 			MaxFiles int `json:"max_files"`
@@ -26,6 +31,12 @@ func TestAuthoritativeWorkRootLimitsMatchDeploymentContract(t *testing.T) {
 	}
 	if err := json.Unmarshal(body, &contract); err != nil {
 		t.Fatalf("parse deployment contract: %v", err)
+	}
+	if contract.ExecuteRequestLimits.MaxOutputBytes != runvalidation.MaxOutputBytes {
+		t.Fatalf("deployment max output bytes = %d, validation max = %d", contract.ExecuteRequestLimits.MaxOutputBytes, runvalidation.MaxOutputBytes)
+	}
+	if contract.ExecuteRequestLimits.MaxStepHandoffBytes != runvalidation.MaxStepHandoffBytes {
+		t.Fatalf("deployment max handoff bytes = %d, validation max = %d", contract.ExecuteRequestLimits.MaxStepHandoffBytes, runvalidation.MaxStepHandoffBytes)
 	}
 	if contract.AuthoritativeWorkRoot.MaxBytes != maxAuthoritativeWorkRootBytes {
 		t.Fatalf("deployment max bytes = %d, config max = %d", contract.AuthoritativeWorkRoot.MaxBytes, maxAuthoritativeWorkRootBytes)
