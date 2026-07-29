@@ -426,6 +426,7 @@ func TestRunBlocksUnixSocketConnectWhenNetworkEnabled(t *testing.T) {
 	defer listener.Close()
 
 	svc := New()
+	svc.networkEgressIsolated = true
 	script := fmt.Sprintf(
 		"import socket\ntry:\n    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n    s.settimeout(0.5)\n    s.connect(%q)\n    print('connected')\nexcept OSError:\n    print('blocked')\n",
 		socketPath,
