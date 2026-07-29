@@ -103,7 +103,7 @@ Client                        aonohako
   "time_ms": 42,                        // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                   // wall-clock execution time (ms)
   "cpu_time_ms": 17,                    // CPU time from process CPU clock (ms)
-  "memory_kb": 8192,                    // best observed peak memory (RSS/cgroup/rusage, KB)
+  "memory_kb": 8192,                    // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                       // nullable; process exit code
   "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)
   "stderr": "",                         // truncated stderr (up to `limits.output_bytes`; on non-zero exit)

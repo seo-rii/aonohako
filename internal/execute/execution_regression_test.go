@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -289,6 +290,38 @@ done
 		if resp.Status != model.RunStatusAccepted {
 			t.Fatalf("fast script attempt %d inherited helper accounting: %+v", attempt, resp)
 		}
+	}
+}
+
+func TestSandboxRunDoesNotChargeParentHeapToTargetMemory(t *testing.T) {
+	requireSandboxSupport(t)
+
+	// Cloud Run keeps the API server and its request payloads in the parent
+	// process. The forked sandbox child briefly inherits those resident pages
+	// before it execs the helper and target, but they are not target memory.
+	parentHeap := make([]byte, 96<<20)
+	for offset := 0; offset < len(parentHeap); offset += os.Getpagesize() {
+		parentHeap[offset] = 1
+	}
+
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64("#!/bin/sh\nprintf 'ok\\n'\n"),
+			Mode:    "exec",
+		}},
+		EntryPoint:     "run.sh",
+		ExpectedStdout: "ok\n",
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}, Hooks{})
+	runtime.KeepAlive(parentHeap)
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("target inherited parent memory accounting: %+v", resp)
+	}
+	if resp.MemoryKB > 64*1024 {
+		t.Fatalf("target memory includes parent heap: %+v", resp)
 	}
 }
 
@@ -580,7 +613,7 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 		t.Fatalf("final cgroup accounting must report aggregate memory.peak")
 	}
 	processAccounting := body[finalEnd:]
-	if !strings.Contains(processAccounting, "runGroup.Path == \"\"") || !strings.Contains(processAccounting, "ps.SysUsage().(*syscall.Rusage)") || !strings.Contains(processAccounting, "usage.Maxrss > result.MemoryKB") {
-		t.Fatalf("no-cgroup accounting must merge post-exit rusage.Maxrss")
+	if strings.Contains(processAccounting, "Maxrss") {
+		t.Fatalf("no-cgroup accounting must not charge pre-exec parent/helper RSS to the target")
 	}
 }

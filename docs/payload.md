@@ -241,7 +241,7 @@ completed downloads does not consume that budget.
   "time_ms": 42,                            // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                       // wall-clock time from CLOCK_MONOTONIC (ms)
   "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
-  "memory_kb": 8192,                        // best observed peak memory (RSS/cgroup/rusage, KB)
+  "memory_kb": 8192,                        // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                           // nullable; process exit code
   "stdout": "",                             // truncated stdout (up to limits.output_bytes, on WA/RE only)
   "stderr": "",                             // truncated stderr (up to limits.output_bytes, on non-zero exit only)

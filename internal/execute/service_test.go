@@ -3849,45 +3849,6 @@ func TestRunReportsMemoryUsageForPythonAllocation(t *testing.T) {
 	}
 }
 
-func TestRunReportsPostExitPeakForFastNativeAllocation(t *testing.T) {
-	forceDirectMode(t)
-
-	code := `
-#include <stdlib.h>
-#include <unistd.h>
-
-int main(void) {
-	const size_t bytes = 24 * 1024 * 1024;
-	volatile unsigned char *p = malloc(bytes);
-	if (p == NULL) {
-		return 2;
-	}
-	for (size_t i = 0; i < bytes; i += 4096) {
-		p[i] = 1;
-	}
-	_exit(0);
-}
-`
-	svc := New()
-	resp := svc.Run(context.Background(), &model.RunRequest{
-		Lang: "binary",
-		Binaries: []model.Binary{{
-			Name:    "runner",
-			DataB64: buildCTestBinary(t, code),
-			Mode:    "exec",
-		}},
-		ExpectedStdout: "",
-		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
-	}, Hooks{})
-
-	if resp.Status != model.RunStatusAccepted {
-		t.Fatalf("expected Accepted, got %+v", resp)
-	}
-	if resp.MemoryKB < 16*1024 {
-		t.Fatalf("expected post-exit peak memory reporting, got %+v", resp)
-	}
-}
-
 func TestRunMarksMemoryLimitExceededEvenIfProgramHandlesAllocationFailure(t *testing.T) {
 	forceDirectMode(t)
 

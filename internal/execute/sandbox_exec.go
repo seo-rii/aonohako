@@ -890,11 +890,6 @@ done:
 	}
 
 	if ps := cmd.ProcessState; ps != nil {
-		if runGroup.Path == "" {
-			if usage, ok := ps.SysUsage().(*syscall.Rusage); ok && usage.Maxrss > result.MemoryKB {
-				result.MemoryKB = usage.Maxrss
-			}
-		}
 		if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
 			if ws.Exited() {
 				c := ws.ExitStatus()
