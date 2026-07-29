@@ -722,7 +722,7 @@ The following checks are enforced before the HTTP server starts:
   `AONOHAKO_WORK_ROOT_MAX_BYTES` between 1 and 1 GiB and verifies through
   `statfs` that the entire work-root filesystem fits the configured ceiling
 - production `embedded + helper` requires
-  `AONOHAKO_WORK_ROOT_MAX_FILES` between 1 and 131072 and verifies through
+  `AONOHAKO_WORK_ROOT_MAX_FILES` between 1 and 1048576 and verifies through
   `statfs` that the entire work-root filesystem fits the inode ceiling
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper

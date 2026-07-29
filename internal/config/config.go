@@ -132,7 +132,7 @@ const (
 	minWasmtimeMaxWasmStackBytes      = 256 << 10
 	maxWasmtimeMaxWasmStackBytes      = 8 << 20
 	maxAuthoritativeWorkRootBytes     = 1 << 30
-	maxAuthoritativeWorkRootFiles     = 131072
+	maxAuthoritativeWorkRootFiles     = 1 << 20
 )
 
 type Config struct {

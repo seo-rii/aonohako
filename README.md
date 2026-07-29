@@ -157,6 +157,10 @@ parent presence, whether `AONOHAKO_REQUIRE_WORK_ROOT_TMPFS` is active, and the
 configured `AONOHAKO_WORK_ROOT_MAX_BYTES` and `AONOHAKO_WORK_ROOT_MAX_FILES`
 values.
 
+Repository deployment tooling can validate its configured ceilings against the
+machine-readable [`deployment-contract.json`](deployment-contract.json)
+manifest before creating a revision.
+
 Checked deployment environment examples live under
 [`docs/examples/`](docs/examples/): `cloudrun-runner.env`,
 `cloudrun-control-plane.env`, `selfhosted-runner.env`, and
@@ -332,7 +336,9 @@ aonohako-selftest cgroup-preflight
   Production helper runners require a positive value no greater than 1 GiB.
 - `AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero, verifies through `statfs` that
   the required work-root filesystem exposes no more than that many inodes.
-  Production helper runners require a positive value no greater than 131072.
+  Production helper runners require a positive value no greater than 1048576.
+  The Cloud Run in-memory volume advertises that bounded inode ceiling even
+  when its byte size is configured substantially lower.
 - `AONOHAKO_CGROUP_PARENT` is required for
   `selfhosted + embedded + helper` and rejected for other deployment shapes.
   Startup validates that the parent directory is under a cgroup v2 mount and

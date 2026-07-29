@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +12,28 @@ import (
 
 	"aonohako/internal/platform"
 )
+
+func TestAuthoritativeWorkRootLimitsMatchDeploymentContract(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "deployment-contract.json"))
+	if err != nil {
+		t.Fatalf("read deployment contract: %v", err)
+	}
+	var contract struct {
+		AuthoritativeWorkRoot struct {
+			MaxBytes int `json:"max_bytes"`
+			MaxFiles int `json:"max_files"`
+		} `json:"authoritative_work_root"`
+	}
+	if err := json.Unmarshal(body, &contract); err != nil {
+		t.Fatalf("parse deployment contract: %v", err)
+	}
+	if contract.AuthoritativeWorkRoot.MaxBytes != maxAuthoritativeWorkRootBytes {
+		t.Fatalf("deployment max bytes = %d, config max = %d", contract.AuthoritativeWorkRoot.MaxBytes, maxAuthoritativeWorkRootBytes)
+	}
+	if contract.AuthoritativeWorkRoot.MaxFiles != maxAuthoritativeWorkRootFiles {
+		t.Fatalf("deployment max files = %d, config max = %d", contract.AuthoritativeWorkRoot.MaxFiles, maxAuthoritativeWorkRootFiles)
+	}
+}
 
 func TestDefaultMaxActiveRuns(t *testing.T) {
 	got := defaultMaxActiveRuns(platform.RuntimeOptions{
@@ -762,8 +785,8 @@ func TestLoadRejectsEmbeddedHelperWithoutAuthoritativeWorkRoot(t *testing.T) {
 		{name: "tmpfs required", wantError: "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true"},
 		{name: "byte bound required", tmpfs: "true", wantError: "AONOHAKO_WORK_ROOT_MAX_BYTES"},
 		{name: "inode bound required", tmpfs: "true", maxBytes: "1073741824", wantError: "AONOHAKO_WORK_ROOT_MAX_FILES"},
-		{name: "byte bound capped", tmpfs: "true", maxBytes: "1073741825", maxFiles: "131072", wantError: "AONOHAKO_WORK_ROOT_MAX_BYTES"},
-		{name: "inode bound capped", tmpfs: "true", maxBytes: "1073741824", maxFiles: "131073", wantError: "AONOHAKO_WORK_ROOT_MAX_FILES"},
+		{name: "byte bound capped", tmpfs: "true", maxBytes: "1073741825", maxFiles: "1048576", wantError: "AONOHAKO_WORK_ROOT_MAX_BYTES"},
+		{name: "inode bound capped", tmpfs: "true", maxBytes: "1073741824", maxFiles: "1048577", wantError: "AONOHAKO_WORK_ROOT_MAX_FILES"},
 	}
 
 	for _, tc := range tests {
@@ -776,6 +799,9 @@ func TestLoadRejectsEmbeddedHelperWithoutAuthoritativeWorkRoot(t *testing.T) {
 				t.Fatalf("validateAuthoritativeWorkRootPolicy() error = %v, want %q", err, tc.wantError)
 			}
 		})
+	}
+	if err := validateAuthoritativeWorkRootPolicy(true, true, 1<<30, 1<<20); err != nil {
+		t.Fatalf("Cloud Run bounded tmpfs policy should be accepted: %v", err)
 	}
 	if err := validateAuthoritativeWorkRootPolicy(false, false, 0, 0); err != nil {
 		t.Fatalf("non-helper policy should not require bounded tmpfs: %v", err)

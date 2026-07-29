@@ -1,0 +1,6 @@
+{
+  "authoritative_work_root": {
+    "max_bytes": 1073741824,
+    "max_files": 1048576
+  }
+}
