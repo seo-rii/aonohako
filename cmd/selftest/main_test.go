@@ -90,6 +90,12 @@ func TestRuntimeStartupMemoryCoversResourceSensitiveLanguages(t *testing.T) {
 	}
 }
 
+func TestTwoStepSuiteStressesFastTargetTransitions(t *testing.T) {
+	if twoStepStabilityRuns < 20 {
+		t.Fatalf("two-step stability runs = %d, want at least 20", twoStepStabilityRuns)
+	}
+}
+
 func TestStrictRuntimeMemoryCasesCoverNativeAndScriptRuntimes(t *testing.T) {
 	cases := strictRuntimeMemoryCases()
 	for _, language := range []string{"go", "rust", "ruby", "php", "lua", "perl"} {

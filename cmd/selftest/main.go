@@ -162,6 +162,7 @@ func runtimeStartupMemoryMB() map[string]int {
 const (
 	mountNamespaceProbeEnv = "AONOHAKO_MOUNTNS_PREFLIGHT_PROBE"
 	selftestUsage          = "usage: aonohako-selftest image-permissions|permissions|compile-security|compile-execute|two-step|language-security|runtime-memory|cgroup-preflight|mount-preflight|deployment-contract"
+	twoStepStabilityRuns   = 25
 )
 
 func main() {
@@ -1013,7 +1014,7 @@ func runTwoStepSuite() error {
 		baseURL = httpServer.URL
 	}
 
-	resp, err := postExecuteRequest(baseURL, model.RunRequest{
+	request := model.RunRequest{
 		Programs: []model.RunProgram{
 			{
 				ID:   "encoder",
@@ -1058,16 +1059,19 @@ done
 			},
 		},
 		ExpectedStdout: "two-step-ok\n",
-	})
-	if err != nil {
-		return fmt.Errorf("two-step execute request failed: %w", err)
 	}
-	if resp.Status != model.RunStatusAccepted {
-		stepsJSON, _ := json.Marshal(resp.Steps)
-		return fmt.Errorf("two-step execute failed: status=%s reason=%s stdout=%q stderr=%q steps=%s", resp.Status, resp.Reason, resp.Stdout, resp.Stderr, stepsJSON)
-	}
-	if len(resp.Steps) != 2 || resp.Steps[0].Status != model.RunStatusAccepted || resp.Steps[1].Status != model.RunStatusAccepted {
-		return fmt.Errorf("two-step execute returned unexpected step results: %+v", resp.Steps)
+	for attempt := 1; attempt <= twoStepStabilityRuns; attempt++ {
+		resp, err := postExecuteRequest(baseURL, request)
+		if err != nil {
+			return fmt.Errorf("two-step execute attempt %d failed: %w", attempt, err)
+		}
+		if resp.Status != model.RunStatusAccepted {
+			stepsJSON, _ := json.Marshal(resp.Steps)
+			return fmt.Errorf("two-step execute attempt %d failed: status=%s reason=%s stdout=%q stderr=%q steps=%s", attempt, resp.Status, resp.Reason, resp.Stdout, resp.Stderr, stepsJSON)
+		}
+		if len(resp.Steps) != 2 || resp.Steps[0].Status != model.RunStatusAccepted || resp.Steps[1].Status != model.RunStatusAccepted {
+			return fmt.Errorf("two-step execute attempt %d returned unexpected step results: %+v", attempt, resp.Steps)
+		}
 	}
 
 	_, _ = fmt.Fprintln(os.Stdout, "two step ok")

@@ -589,10 +589,10 @@ func MaybeRunFromEnv() bool {
 		if _, err := io.ReadFull(targetReleaseFile, release[:]); err != nil {
 			fail("wait for target release: %v", err)
 		}
-		_ = targetReadyFile.Close()
 		_ = targetReleaseFile.Close()
 	}
 	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(execPath)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&envv[0])))
+	runtime.KeepAlive(targetReadyFile)
 	runtime.KeepAlive(execPath)
 	runtime.KeepAlive(argv)
 	runtime.KeepAlive(envv)

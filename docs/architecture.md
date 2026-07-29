@@ -173,7 +173,9 @@ The runtime uses a parent/helper/target split:
    - prepares the workspace
    - passes the helper request JSON through an inherited pipe file descriptor
    - for execution, creates one ready pipe and one release pipe so the helper
-     cannot `execve()` the target before CPU/cgroup baselines are captured
+     cannot `execve()` the target before CPU/cgroup baselines are captured; the
+     ready descriptor remains open with `CLOEXEC` so its EOF also marks the
+     helper-to-target execution transition
    - opens stdout and stderr pipes
    - starts the helper in its own process group
    - kills the entire group on timeout or quota violation
@@ -192,7 +194,8 @@ The runtime uses a parent/helper/target split:
    - signals the execute parent immediately before target `execve()`, then
      blocks until the parent captures process CPU and cgroup CPU/event baselines
      and sends the release byte
-   - `execve()`s the target runtime or binary
+   - leaves the ready descriptor open and `execve()`s the target runtime or
+     binary, letting close-on-exec notify the parent before target VM sampling
 
    `PR_SET_DUMPABLE=0` protects the helper before `execve()`. Linux resets the
    dumpable state for an ordinary target image during `execve()`, so the helper
@@ -450,10 +453,11 @@ The stable contract is:
   because the execute sandbox denies process creation and allows only
   thread-form `clone`, this includes all target threads without charging helper
   setup time
-- RSS is sampled from procfs after the synchronized target release, refined with
-  `smaps_rollup` near the limit or when address-space limits are disabled, and
-  merges `rusage.Maxrss` after exit for no-cgroup reporting; cgroup runs instead
-  report aggregate `memory.peak`
+- RSS and virtual size are sampled from procfs only after the ready pipe reports
+  the close-on-exec target transition, refined with `smaps_rollup` near the
+  limit or when address-space limits are disabled, and merge `rusage.Maxrss`
+  after exit for no-cgroup reporting; cgroup runs instead report aggregate
+  `memory.peak`
 - workspace limit classification is based on periodic workspace scans for total
   bytes, entry count, and directory depth; scanner errors other than disappearing
   files fail closed as WLE so unreadable subtrees cannot hide quota usage

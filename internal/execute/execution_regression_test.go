@@ -266,6 +266,32 @@ func TestJVMRunLanguagesDoNotUseAddressSpaceProximityMLE(t *testing.T) {
 	}
 }
 
+func TestFastWorkspaceScriptDoesNotInheritSandboxHelperVMSize(t *testing.T) {
+	requireSandboxSupport(t)
+
+	svc := New()
+	for attempt := 1; attempt <= 100; attempt++ {
+		resp := svc.Run(context.Background(), &model.RunRequest{
+			Lang: "binary",
+			Binaries: []model.Binary{{
+				Name: "fast.sh",
+				DataB64: b64(`#!/bin/sh
+while IFS= read -r line; do
+	printf 'seen:%s\n' "$line"
+done
+`),
+				Mode: "exec",
+			}},
+			Stdin:          "ok\n",
+			ExpectedStdout: "seen:ok\n",
+			Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128},
+		}, Hooks{})
+		if resp.Status != model.RunStatusAccepted {
+			t.Fatalf("fast script attempt %d inherited helper accounting: %+v", attempt, resp)
+		}
+	}
+}
+
 func TestRunBlocksForkForSubmittedTrustedRuntimeName(t *testing.T) {
 	requireSandboxSupport(t)
 
@@ -511,7 +537,7 @@ func TestStreamImageEventsFlushesFinalUnterminatedEvent(t *testing.T) {
 	}
 }
 
-func TestSandboxTargetSynchronizationSetsBaselinesBeforeRelease(t *testing.T) {
+func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 	raw, err := os.ReadFile("sandbox_exec.go")
 	if err != nil {
 		t.Fatalf("read sandbox_exec.go: %v", err)
@@ -520,18 +546,20 @@ func TestSandboxTargetSynchronizationSetsBaselinesBeforeRelease(t *testing.T) {
 	ready := strings.Index(body, "case err := <-readyCh:")
 	processBaseline := strings.Index(body, "cpuBaselineNs, _ = timing.ProcessCPUTimeNs")
 	release := strings.Index(body, "targetReleaseWrite.Write")
-	if ready < 0 || processBaseline < 0 || release < 0 {
+	execTransition := strings.Index(body, "case err := <-targetExecCh:")
+	targetAccounting := strings.Index(body, "targetStarted := true")
+	if ready < 0 || processBaseline < 0 || release < 0 || execTransition < 0 || targetAccounting < 0 {
 		t.Fatalf("sandbox_exec.go is missing target synchronization anchors")
 	}
-	if !(ready < processBaseline && processBaseline < release) {
-		t.Fatalf("process CPU baseline must be captured after helper readiness and before target release")
+	if !(ready < processBaseline && processBaseline < release && release < execTransition && execTransition < targetAccounting) {
+		t.Fatalf("baselines must precede target release and accounting must wait for the exec transition")
 	}
 	baselineBlock := body[processBaseline:release]
 	if !strings.Contains(baselineBlock, "cgroupLimitBaseline = stats") || !strings.Contains(baselineBlock, "cgroupCPUBaselineMicros = stats.CPUUsageMicros") {
 		t.Fatalf("cgroup CPU and event baselines must be captured before target release")
 	}
-	if !strings.Contains(baselineBlock, "targetStarted := true") {
-		t.Fatalf("target accounting must be enabled before target release")
+	if !strings.Contains(baselineBlock, "targetReadyRead.Read") {
+		t.Fatalf("parent must prepare to observe the close-on-exec transition before target release")
 	}
 	if strings.Contains(body, `os.Readlink(fmt.Sprintf("/proc/%d/exe"`) || strings.Contains(body, "targetStartGraceDeadline") {
 		t.Fatalf("target start must not depend on procfs polling or a grace timeout")

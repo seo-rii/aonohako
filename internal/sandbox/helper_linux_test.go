@@ -93,6 +93,12 @@ func TestHelperWaitsForParentBaselineBeforeTargetExec(t *testing.T) {
 	if !(closeDescriptors < signalReady && signalReady < waitRelease && waitRelease < targetExec) {
 		t.Fatalf("helper must signal readiness and wait for the parent immediately before target exec")
 	}
+	if strings.Contains(source[waitRelease:targetExec], "targetReadyFile.Close()") {
+		t.Fatal("target ready descriptor must stay open until close-on-exec signals the target transition")
+	}
+	if !strings.Contains(source[targetExec:], "runtime.KeepAlive(targetReadyFile)") {
+		t.Fatal("target ready descriptor must remain live through the exec syscall")
+	}
 }
 
 func TestHelperAlwaysRejectsUnsafeCloneForms(t *testing.T) {

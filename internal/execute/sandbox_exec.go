@@ -556,7 +556,6 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			Stderr: stderrBuf.Bytes(),
 		}
 	}
-	_ = targetReadyRead.Close()
 	cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
 	if runGroup.Path != "" {
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
@@ -565,8 +564,21 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			cgroupCPUBaselineMicros = stats.CPUUsageMicros
 		}
 	}
+	targetExecCh := make(chan error, 1)
+	go func() {
+		var unexpected [1]byte
+		n, err := targetReadyRead.Read(unexpected[:])
+		switch {
+		case n != 0:
+			err = fmt.Errorf("unexpected target synchronization data")
+		case errors.Is(err, io.EOF):
+			err = nil
+		case err == nil:
+			err = io.ErrNoProgress
+		}
+		targetExecCh <- err
+	}()
 	wallStart := timing.MonotonicNow()
-	targetStarted := true
 	if n, err := targetReleaseWrite.Write([]byte{1}); err != nil || n != 1 {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		<-waitCh
@@ -580,6 +592,28 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	_ = targetReleaseWrite.Close()
+	select {
+	case err := <-targetExecCh:
+		if err != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			<-waitCh
+			return execResult{
+				Status: model.RunStatusInitFail,
+				Reason: "sandbox target exec synchronization failed: " + err.Error(),
+				Stderr: stderrBuf.Bytes(),
+			}
+		}
+	case <-ctx.Done():
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		<-waitCh
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "sandbox target exec synchronization timed out",
+			Stderr: stderrBuf.Bytes(),
+		}
+	}
+	_ = targetReadyRead.Close()
+	targetStarted := true
 
 	imageDone := make(chan struct{})
 	stopImageStream := func() {}
