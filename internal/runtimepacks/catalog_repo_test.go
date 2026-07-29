@@ -343,7 +343,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"vbnet":         {"App.vbproj", "dotnet publish App.vbproj"},
 		"verilog":       {"iverilog -g2012", "Main.v"},
 		"vhdl":          {"ghdl -a --std=08", "main_tb"},
-		"vlang":         {"V_COMMIT=e632a84cd573bb05f3f72a0ae0cb9bbcaae404da", "v -o Main Main.v"},
+		"vlang":         {"V_VERSION=0.5.2", "86caf9e70c3342d48ef19eb4f6c47b709f18c90ae86255520d5c29df6b482e23", "v_linux.zip", "sha256sum -c -", "v -o Main Main.v"},
 		"why3":          {"aonohako-why3-prove Main.mlw", "goal G: true"},
 		"zig":           {"Broken.zig", "zig build-exe"},
 		"r":             {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
@@ -422,6 +422,37 @@ func TestRepositoryCatalogPinsRustToolchain(t *testing.T) {
 	}
 	if strings.Contains(body, "--default-toolchain stable") {
 		t.Fatalf("rust install script must pin the requested toolchain instead of stable")
+	}
+}
+
+func TestRepositoryCatalogPinsOfficialVReleaseArtifact(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	spec, ok := catalog.Languages["vlang"]
+	if !ok {
+		t.Fatalf("vlang language missing from catalog")
+	}
+	body := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"export V_VERSION=0.5.2",
+		"export V_LINUX_SHA256=86caf9e70c3342d48ef19eb4f6c47b709f18c90ae86255520d5c29df6b482e23",
+		"releases/download/${V_VERSION}/v_linux.zip",
+		"sha256sum -c -",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("V install script must contain %q", marker)
+		}
+	}
+	for _, forbidden := range []string{"git clone", "V_COMMIT"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("V install script must not contain drifting bootstrap input %q", forbidden)
+		}
+	}
+	if !slices.Contains(spec.Install.Apt, "curl") || !slices.Contains(spec.Install.Apt, "unzip") {
+		t.Fatalf("V apt packages = %v, want curl and unzip", spec.Install.Apt)
 	}
 }
 

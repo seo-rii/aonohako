@@ -1515,16 +1515,20 @@ languages:
   vlang:
     install:
       apt:
+        - curl
         - g++
         - gcc
-        - git
         - libc6-dev
-        - make
+        - unzip
       script:
-        - export V_COMMIT=e632a84cd573bb05f3f72a0ae0cb9bbcaae404da
-        - git clone https://github.com/vlang/v /opt/v
-        - cd /opt/v && git checkout "${V_COMMIT}" && make
+        - export V_VERSION=0.5.2
+        - export V_LINUX_SHA256=86caf9e70c3342d48ef19eb4f6c47b709f18c90ae86255520d5c29df6b482e23
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip" -o /tmp/v_linux.zip
+        - echo "${V_LINUX_SHA256}  /tmp/v_linux.zip" | sha256sum -c -
+        - install -d -m 0755 /opt
+        - unzip -q /tmp/v_linux.zip -d /opt
         - ln -sfn /opt/v/v /usr/local/bin/v
+        - rm -f /tmp/v_linux.zip
     smoke:
       command:
         - bash
