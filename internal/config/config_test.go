@@ -23,6 +23,7 @@ func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 	var contract struct {
 		ExecuteRequestLimits struct {
 			MaxOutputBytes      int `json:"max_output_bytes"`
+			MaxCaptureBytes     int `json:"max_capture_bytes"`
 			MaxStepHandoffBytes int `json:"max_step_handoff_bytes"`
 		} `json:"execute_request_limits"`
 		AuthoritativeWorkRoot struct {
@@ -38,6 +39,9 @@ func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 	}
 	if contract.ExecuteRequestLimits.MaxOutputBytes != expectedMaxOutputBytes {
 		t.Fatalf("deployment max output bytes = %d, want restored 64 MiB cap %d", contract.ExecuteRequestLimits.MaxOutputBytes, expectedMaxOutputBytes)
+	}
+	if contract.ExecuteRequestLimits.MaxCaptureBytes != runvalidation.MaxCaptureBytes {
+		t.Fatalf("deployment max capture bytes = %d, validation max = %d", contract.ExecuteRequestLimits.MaxCaptureBytes, runvalidation.MaxCaptureBytes)
 	}
 	if contract.ExecuteRequestLimits.MaxStepHandoffBytes != runvalidation.MaxStepHandoffBytes {
 		t.Fatalf("deployment max handoff bytes = %d, validation max = %d", contract.ExecuteRequestLimits.MaxStepHandoffBytes, runvalidation.MaxStepHandoffBytes)

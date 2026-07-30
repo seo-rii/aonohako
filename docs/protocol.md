@@ -116,8 +116,8 @@ not duplicate stdout/stderr before `result`.
   "cpu_time_ms": 17,                    // CPU time from process CPU clock (ms)
   "memory_kb": 8192,                    // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                       // nullable; process exit code
-  "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `64 MiB`)
-  "stderr": "",                         // truncated stderr (up to `limits.output_bytes`; on non-zero exit)
+  "stdout": "",                         // response-clipped stdout (default max `64 KiB`; explicit max `8 MiB`)
+  "stderr": "",                         // response-clipped stderr (same caps; returned on non-zero exit)
   "stdout_truncated": false,            // true when stdout exceeded the capture cap
   "stderr_truncated": false,            // true when stderr exceeded the capture cap
   "reason": "",                         // failure reason
@@ -155,13 +155,14 @@ not duplicate stdout/stderr before `result`.
 apply a separate, per-stream cap to `log` events and the top-level and step
 output fields above. An omitted object or member preserves the legacy
 `min(limits.output_bytes, 64 KiB)` response cap; explicit `0` suppresses that
-stream.
+stream. Each explicit member must be between `0` and `8 MiB`.
 These response limits do not alter output comparison, SPJ evaluation,
-`limits.output_bytes` OLE detection, or step handoff data. Truncation flags
-cover both execution-limit and response-capture clipping. A configured cap
-cannot expose bytes beyond the execution capture boundary. Output-derived
-interactive and sandbox-initialization reasons obey the stderr cap and fall
-back to a short structural reason when it is zero.
+`limits.output_bytes` OLE detection, or step handoff data.
+`limits.output_bytes` may be set up to `64 MiB` and remains the judging
+boundary. Truncation flags cover both execution-limit and response-capture
+clipping. A configured cap cannot expose bytes beyond the execution capture
+boundary. Output-derived interactive and sandbox-initialization reasons obey
+the stderr cap and fall back to a short structural reason when it is zero.
 
 ### Status Codes
 

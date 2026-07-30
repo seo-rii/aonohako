@@ -396,6 +396,11 @@ Defaults and caps:
   `8 MiB` through the corresponding explicit `capture_limits` member
   (`0` suppresses the stream)
 
+`/compile` and `/execute` emit buffered `log` SSE events by default for
+compatibility. Setting `emit_logs=false` suppresses those events only; judging,
+output-limit detection, truncation metadata, and the final `result` remain
+unchanged.
+
 Requested file outputs are validated as relative paths. At most one file output
 may replace judged stdout; missing, symlinked, or non-regular outputs are
 reported as runtime failure instead of silently falling back to process stdout.
