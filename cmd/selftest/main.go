@@ -3180,14 +3180,15 @@ main() ->
 :- import_module io.
 :- pred main(io::di, io::uo) is det.
 :- implementation.
-:- import_module int.
+:- import_module int, list, string.
 
 main(!IO) :-
-    io.read_int(ResultA, !IO),
-    io.read_int(ResultB, !IO),
+    io.read_line_as_string(Result, !IO),
     ( if
-        ResultA = ok(A),
-        ResultB = ok(B)
+        Result = ok(Line),
+        string.words(Line) = [AString, BString],
+        string.to_int(AString, A),
+        string.to_int(BString, B)
       then
         io.write_int(A + B, !IO),
         io.nl(!IO)
@@ -3280,9 +3281,9 @@ read_sum() ->
 			judgeIO:     standardABJudgeIO,
 			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.sml", `val scanInt = TextIO.scanStream (Int.scan StringCvt.DEC) TextIO.stdIn
-val a = valOf scanInt
-val b = valOf scanInt
+				source("Main.sml", `fun scanInt () = valOf (TextIO.scanStream (Int.scan StringCvt.DEC) TextIO.stdIn)
+val a = scanInt ()
+val b = scanInt ()
 val _ = print (Int.toString (a + b) ^ "\n")
 `),
 			},
@@ -3786,7 +3787,7 @@ s/^7[[:space:]][[:space:]]*13$/20/`),
 			judgeIO:     standardABJudgeIO,
 			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.scm", `(import (scheme base) (scheme write))
+				source("Main.scm", `(import (scheme base) (scheme read) (scheme write))
 (display (+ (read) (read)))
 (newline)`),
 			},
