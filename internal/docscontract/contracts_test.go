@@ -137,7 +137,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 		"`/compile` rejects missing sources, more than 512 sources, source files over\n  16 MiB decoded, source totals over 48 MiB decoded, and invalid or unknown\n  `runtime_profile` values, invalid `problem_id` values, profile conflicts with\n  problem policy, and policy-disabled direct profile requests before acquiring\n  a stream or queue slot",
 		"`/execute` rejects oversized `stdin` / `expected_stdout`, a request-wide\n  decoded binary total over 48 MiB",
 		"each initial flush and event write has a 10-second\n  deadline",
-		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)",
+		"truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `32 MiB`)",
 		"`verdict_source` is optional diagnostic metadata",
 		"`AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",
 		"`embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`",

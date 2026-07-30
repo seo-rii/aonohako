@@ -105,7 +105,7 @@ Client                        aonohako
   "cpu_time_ms": 17,                    // CPU time from process CPU clock (ms)
   "memory_kb": 8192,                    // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                       // nullable; process exit code
-  "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `8 MiB`)
+  "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `32 MiB`)
   "stderr": "",                         // truncated stderr (up to `limits.output_bytes`; on non-zero exit)
   "stdout_truncated": false,            // true when stdout exceeded the capture cap
   "stderr_truncated": false,            // true when stderr exceeded the capture cap

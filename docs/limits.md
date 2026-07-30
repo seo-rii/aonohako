@@ -17,7 +17,7 @@ This table is generated from the constants enforced by the API, compile, and exe
 | `stdin` / `expected_stdout` inline text | — | 64 MiB each |
 | Wall time | required | 600000 ms |
 | Memory | required | 4096 MiB |
-| Stdout / stderr capture and response | 64 KiB | 8 MiB each |
+| Stdout / stderr capture and response | 64 KiB | 32 MiB each |
 | Workspace | 128 MiB | 1 GiB |
 | Captured file output | — | 8 MiB |
 | Captured sidecar total | — | 16 MiB |
@@ -25,4 +25,4 @@ This table is generated from the constants enforced by the API, compile, and exe
 | Step programs | — | 8 programs |
 | Pipeline steps | — | 2 steps |
 | Step stdin parts | — | 32 parts |
-| Step handoff | — | 8 MiB |
+| Step handoff | — | 32 MiB |

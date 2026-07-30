@@ -83,7 +83,7 @@ error.
   "limits": {
     "time_ms": 2000,                         // wall-clock time limit, 1..600000 ms
     "memory_mb": 256,                        // memory limit, 1..4096 MB
-    "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..8388608
+    "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..33554432
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
   },
   "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
@@ -227,7 +227,7 @@ temporary handoff file and streamed into the second step stdin. `handoff.from`
 defaults to `stdout`; `file`/`file_output` handoff
 requires `handoff.path` and captures that file through the same symlink-safe
 output path as `file_outputs`. `handoff.max_bytes` defaults to the step output
-capture limit and is capped at 8 MiB. A step that sets `stdin_from` must not
+capture limit and is capped at 32 MiB. A step that sets `stdin_from` must not
 also set `stdin`; the handoff stream is the only stdin source for that step.
 All `stdin_url` and text-part `data_url` downloads used by the two steps share
 one cumulative 60-second download budget. Time spent running a sandbox between
