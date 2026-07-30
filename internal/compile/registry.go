@@ -21,7 +21,7 @@ var compileRegistry = map[string]Compiler{
 		return []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--out:" + outputPath(job), sourcePath}
 	}},
 	"zig": singleSourceExecutableCompiler{exts: []string{".zig"}, preferredBases: []string{"Main.zig"}, noSourceReason: "no zig sources", bin: "zig", args: func(job CompileJob, sourcePath string) []string {
-		return []string{"build-exe", sourcePath, "-O", "ReleaseSafe", "-femit-bin=" + outputPath(job)}
+		return []string{"build-exe", sourcePath, "-O", "ReleaseSafe", "-mcpu=baseline", "-femit-bin=" + outputPath(job)}
 	}},
 	"sml": singleSourceExecutableCompiler{exts: []string{".sml"}, preferredBases: []string{"Main.sml"}, noSourceReason: "no sml sources", bin: "mlton", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"-output", outputPath(job), sourcePath}

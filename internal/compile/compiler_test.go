@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -56,6 +57,20 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestZigCompilerTargetsPortableBaselineCPU(t *testing.T) {
+	compiler, ok := compileRegistry["zig"].(singleSourceExecutableCompiler)
+	if !ok {
+		t.Fatalf("zig compiler = %T, want singleSourceExecutableCompiler", compileRegistry["zig"])
+	}
+	args := compiler.args(
+		CompileJob{WorkDir: "/work", Target: "Main"},
+		"/work/Main.zig",
+	)
+	if !slices.Contains(args, "-mcpu=baseline") {
+		t.Fatalf("zig compiler args = %v, want portable CPU baseline", args)
 	}
 }
 

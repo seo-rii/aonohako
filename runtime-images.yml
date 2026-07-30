@@ -1183,14 +1183,14 @@ languages:
               try std.io.getStdOut().writer().print("{s}\n", .{data});
           }
           ZIG
-          zig build-exe Main.zig -O ReleaseSafe -femit-bin=Main
+          zig build-exe Main.zig -O ReleaseSafe -mcpu=baseline -femit-bin=Main
           ./Main | grep '^ok$'
           cat > Broken.zig <<'ZIG'
           pub fn main() void {
               this is invalid
           }
           ZIG
-          if zig build-exe Broken.zig -O ReleaseSafe -femit-bin=Broken >/dev/null 2>&1; then exit 1; fi
+          if zig build-exe Broken.zig -O ReleaseSafe -mcpu=baseline -femit-bin=Broken >/dev/null 2>&1; then exit 1; fi
 
   fortran:
     install:
