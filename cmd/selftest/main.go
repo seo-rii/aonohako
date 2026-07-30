@@ -4146,8 +4146,8 @@ export const printSum = () => {
 			judgeIO:     lineSeparatedABJudgeIO,
 			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.janet", `(def a (scan-number (file/read stdin :line)))
-(def b (scan-number (file/read stdin :line)))
+				source("Main.janet", `(def a (scan-number (string/trim (string (file/read stdin :line)))))
+(def b (scan-number (string/trim (string (file/read stdin :line)))))
 (print (+ a b))`),
 			},
 		},
