@@ -414,11 +414,17 @@ func TestRemoteRunnerRejectsMissingOrUnknownResultStatus(t *testing.T) {
 
 func TestRemoteRunnerRejectsOversizedLogAndImageEvents(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		event   string
-		payload string
+		name        string
+		event       string
+		payload     string
+		outputBytes int
 	}{
-		{name: "log", event: "log", payload: `{"stream":"stdout","chunk":"` + strings.Repeat("x", defaultMaxOutputBytes+1) + `"}`},
+		{
+			name:        "log",
+			event:       "log",
+			payload:     `{"stream":"stdout","chunk":"` + strings.Repeat("x", maxResponseCaptureBytes+1) + `"}`,
+			outputBytes: hardMaxOutputBytes,
+		},
 		{name: "image", event: "image", payload: `{"mime":"image/png","b64":"` + strings.Repeat("A", 4*((maxImageEventBytes/3)+1)) + `"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -430,7 +436,7 @@ func TestRemoteRunnerRejectsOversizedLogAndImageEvents(t *testing.T) {
 
 			called := false
 			runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
-			resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}}, Hooks{
+			resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64, OutputBytes: tc.outputBytes}}, Hooks{
 				OnLog:   func(string, string) { called = true },
 				OnImage: func(string, string, int64) { called = true },
 			})
@@ -445,7 +451,7 @@ func TestRemoteRunnerRejectsOversizedLogAndImageEvents(t *testing.T) {
 }
 
 func TestRemoteRunnerRejectsCumulativeLogOverflow(t *testing.T) {
-	chunk := strings.Repeat("x", defaultMaxOutputBytes/2+1)
+	chunk := strings.Repeat("x", maxResponseCaptureBytes/2+1)
 	raw, err := json.Marshal(map[string]string{"stream": "stdout", "chunk": chunk})
 	if err != nil {
 		t.Fatal(err)
@@ -460,7 +466,9 @@ func TestRemoteRunnerRejectsCumulativeLogOverflow(t *testing.T) {
 	defer remote.Close()
 
 	runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
-	resp := runner.Run(context.Background(), &model.RunRequest{Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}}, Hooks{})
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Limits: model.Limits{TimeMs: 1000, MemoryMB: 64, OutputBytes: hardMaxOutputBytes},
+	}, Hooks{})
 	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "log stream too large") {
 		t.Fatalf("response = %+v, want cumulative log rejection", resp)
 	}
@@ -504,10 +512,90 @@ func TestRemoteRunnerHonorsConfiguredResponseOutputLimit(t *testing.T) {
 
 	runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
 	resp := runner.Run(context.Background(), &model.RunRequest{
-		Limits: model.Limits{TimeMs: 1000, MemoryMB: 64, OutputBytes: configuredLimit},
+		Limits:        model.Limits{TimeMs: 1000, MemoryMB: 64, OutputBytes: configuredLimit},
+		CaptureLimits: &model.CaptureLimits{StdoutBytes: &configuredLimit},
 	}, Hooks{})
 	if resp.Status != model.RunStatusRE || len(resp.Stdout) != configuredLimit || resp.StdoutTruncated {
 		t.Fatalf("configured response limit was not honored: status=%q len=%d truncated=%v", resp.Status, len(resp.Stdout), resp.StdoutTruncated)
+	}
+}
+
+func TestRemoteRunnerHonorsPerStreamCaptureLimitsForLogsAndResults(t *testing.T) {
+	stdout := strings.Repeat("o", 2048)
+	stderr := strings.Repeat("e", 2048)
+	raw, err := json.Marshal(model.RunResponse{
+		Status:        model.RunStatusRE,
+		Stdout:        stdout,
+		Stderr:        stderr,
+		Reason:        "process exited with code 7",
+		VerdictSource: "exit_code",
+		Steps: []model.StepResult{
+			{ID: "first", Status: model.RunStatusAccepted, Stdout: stdout, Stderr: stderr},
+			{ID: "second", Status: model.RunStatusRE, Stdout: stdout, Stderr: stderr},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteRequest := make(chan model.RunRequest, 1)
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req model.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode remote request: %v", err)
+		}
+		remoteRequest <- req
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "event: log\ndata: {\"stream\":\"stdout\",\"chunk\":%q}\n\n", stdout)
+		_, _ = fmt.Fprintf(w, "event: log\ndata: {\"stream\":\"stderr\",\"chunk\":%q}\n\n", stderr)
+		_, _ = fmt.Fprintf(w, "event: result\ndata: %s\n\n", raw)
+	}))
+	defer remote.Close()
+
+	stdoutLimit := 0
+	stderrLimit := 1024
+	logs := map[string]string{}
+	runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL + "/execute"}
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Limits: model.Limits{TimeMs: 1000, MemoryMB: 64, OutputBytes: 4096},
+		CaptureLimits: &model.CaptureLimits{
+			StdoutBytes: &stdoutLimit,
+			StderrBytes: &stderrLimit,
+		},
+	}, Hooks{OnLog: func(stream, msg string) {
+		logs[stream] += msg
+	}})
+
+	forwarded := <-remoteRequest
+	if forwarded.CaptureLimits == nil ||
+		forwarded.CaptureLimits.StdoutBytes == nil ||
+		*forwarded.CaptureLimits.StdoutBytes != 0 ||
+		forwarded.CaptureLimits.StderrBytes == nil ||
+		*forwarded.CaptureLimits.StderrBytes != stderrLimit {
+		t.Fatalf("remote capture_limits = %+v, want stdout 0 and stderr %d", forwarded.CaptureLimits, stderrLimit)
+	}
+	if _, ok := logs["stdout"]; ok {
+		t.Fatalf("stdout_bytes=0 forwarded a log: %q", logs["stdout"])
+	}
+	if logs["stderr"] != stderr[:stderrLimit] {
+		t.Fatalf("stderr log length = %d, want %d", len(logs["stderr"]), stderrLimit)
+	}
+	if resp.Status != model.RunStatusRE ||
+		resp.Reason != "process exited with code 7" ||
+		resp.VerdictSource != "exit_code" {
+		t.Fatalf("capture limits changed remote verdict: %+v", resp)
+	}
+	if resp.Stdout != "" || resp.Stderr != stderr[:stderrLimit] ||
+		!resp.StdoutTruncated || !resp.StderrTruncated {
+		t.Fatalf("top-level remote capture = stdout:%d stderr:%d flags:(%v,%v)", len(resp.Stdout), len(resp.Stderr), resp.StdoutTruncated, resp.StderrTruncated)
+	}
+	if len(resp.Steps) != 2 {
+		t.Fatalf("steps = %+v, want two", resp.Steps)
+	}
+	for _, step := range resp.Steps {
+		if step.Stdout != "" || step.Stderr != stderr[:stderrLimit] ||
+			!step.StdoutTruncated || !step.StderrTruncated {
+			t.Fatalf("step %q capture = %+v", step.ID, step)
+		}
 	}
 }
 

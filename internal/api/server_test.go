@@ -126,6 +126,24 @@ func TestDecodeJSONBodyReleasesRawBodyReference(t *testing.T) {
 	}
 }
 
+func TestDecodeExecuteCaptureLimitsPreservesExplicitZero(t *testing.T) {
+	body := []byte(`{"capture_limits":{"stdout_bytes":0,"stderr_bytes":1024}}`)
+	req := httptest.NewRequest(http.MethodPost, "/execute", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	var decoded model.RunRequest
+	if err := decodeJSONBody(rr, req, &decoded); err != nil {
+		t.Fatalf("decodeJSONBody returned error: %v", err)
+	}
+	if decoded.CaptureLimits == nil ||
+		decoded.CaptureLimits.StdoutBytes == nil ||
+		*decoded.CaptureLimits.StdoutBytes != 0 ||
+		decoded.CaptureLimits.StderrBytes == nil ||
+		*decoded.CaptureLimits.StderrBytes != 1024 {
+		t.Fatalf("decoded capture_limits = %+v, want explicit stdout 0 and stderr 1024", decoded.CaptureLimits)
+	}
+}
+
 func TestPreSSEErrorsUseJSONEnvelope(t *testing.T) {
 	t.Run("method mismatch", func(t *testing.T) {
 		s := newServerForTest(t)
@@ -1623,10 +1641,11 @@ func TestExecuteRejectsInvalidLimitsBeforeQueueing(t *testing.T) {
 
 	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
 	tests := []struct {
-		name   string
-		limits map[string]any
-		spj    map[string]any
-		want   string
+		name          string
+		limits        map[string]any
+		captureLimits map[string]any
+		spj           map[string]any
+		want          string
 	}{
 		{name: "time zero", limits: map[string]any{"time_ms": 0, "memory_mb": 64}, want: "limits.time_ms"},
 		{name: "time too high", limits: map[string]any{"time_ms": maxRunTimeMs + 1, "memory_mb": 64}, want: "limits.time_ms"},
@@ -1636,6 +1655,18 @@ func TestExecuteRejectsInvalidLimitsBeforeQueueing(t *testing.T) {
 		{name: "output too high", limits: map[string]any{"time_ms": 1000, "memory_mb": 64, "output_bytes": maxRunOutputBytes + 1}, want: "limits.output_bytes"},
 		{name: "workspace negative", limits: map[string]any{"time_ms": 1000, "memory_mb": 64, "workspace_bytes": -1}, want: "limits.workspace_bytes"},
 		{name: "workspace too high", limits: map[string]any{"time_ms": 1000, "memory_mb": 64, "workspace_bytes": int64(maxRunWorkspaceBytes) + 1}, want: "limits.workspace_bytes"},
+		{
+			name:          "capture stdout negative",
+			limits:        map[string]any{"time_ms": 1000, "memory_mb": 64},
+			captureLimits: map[string]any{"stdout_bytes": -1},
+			want:          "capture_limits.stdout_bytes",
+		},
+		{
+			name:          "capture stderr too high",
+			limits:        map[string]any{"time_ms": 1000, "memory_mb": 64},
+			captureLimits: map[string]any{"stderr_bytes": maxRunCaptureBytes + 1},
+			want:          "capture_limits.stderr_bytes",
+		},
 		{
 			name:   "spj too high",
 			limits: map[string]any{"time_ms": 1000, "memory_mb": 64},
@@ -1656,6 +1687,9 @@ func TestExecuteRejectsInvalidLimitsBeforeQueueing(t *testing.T) {
 			}
 			if tc.spj != nil {
 				payload["spj"] = tc.spj
+			}
+			if tc.captureLimits != nil {
+				payload["capture_limits"] = tc.captureLimits
 			}
 			body, _ := json.Marshal(payload)
 			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
@@ -1988,12 +2022,12 @@ func TestExecuteCanDisableLogEventsWithoutChangingResult(t *testing.T) {
 		onLogNil bool
 	}
 	observed := make(chan observation, 1)
-	exitCode := 7
+	exitCode := 120
 	s := newServerForTest(t)
 	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
 		observed <- observation{emitLogs: req.EmitLogs, onLogNil: hooks.OnLog == nil}
 		return model.RunResponse{
-			Status:        model.RunStatusRE,
+			Status:        model.RunStatusInitFail,
 			TimeMs:        9,
 			WallTimeMs:    9,
 			CPUTimeMs:     4,
@@ -2001,8 +2035,8 @@ func TestExecuteCanDisableLogEventsWithoutChangingResult(t *testing.T) {
 			ExitCode:      &exitCode,
 			Stdout:        "contestant stdout\n",
 			Stderr:        "contestant stderr\n",
-			Reason:        "process exited with code 7",
-			VerdictSource: "exit_code",
+			Reason:        "sandbox initialization failed",
+			VerdictSource: "sandbox_init",
 		}
 	}}
 	ts := httptest.NewServer(s.Handler())
@@ -2036,20 +2070,30 @@ func TestExecuteCanDisableLogEventsWithoutChangingResult(t *testing.T) {
 	}
 
 	events := readSSEEvents(resp.Body, t)
+	errorSeen := false
 	for _, event := range events {
 		if event.Name == "log" {
 			t.Fatalf("emit_logs=false emitted a log event: %#v", event)
 		}
+		if event.Name == "error" {
+			errorSeen = true
+			if event.JSON["message"] != "sandbox initialization failed" {
+				t.Fatalf("emit_logs=false leaked output through error event: %#v", event)
+			}
+		}
+	}
+	if !errorSeen {
+		t.Fatal("container initialization failure should emit a structural error event")
 	}
 	last := events[len(events)-1]
 	if last.Name != "result" {
 		t.Fatalf("last event should be result, got %#v", last)
 	}
-	if last.JSON["status"] != model.RunStatusRE ||
+	if last.JSON["status"] != model.RunStatusInitFail ||
 		last.JSON["stdout"] != "contestant stdout\n" ||
 		last.JSON["stderr"] != "contestant stderr\n" ||
-		last.JSON["reason"] != "process exited with code 7" ||
-		last.JSON["verdict_source"] != "exit_code" {
+		last.JSON["reason"] != "sandbox initialization failed" ||
+		last.JSON["verdict_source"] != "sandbox_init" {
 		t.Fatalf("emit_logs=false changed the result payload: %#v", last.JSON)
 	}
 }
@@ -2451,6 +2495,69 @@ func TestCompileSSEHasProgressEvents(t *testing.T) {
 	}
 	if events[0].JSON["stage"] != "accepted" {
 		t.Fatalf("first progress stage should be accepted: %#v", events[0].JSON)
+	}
+}
+
+func TestCompileCanDisableLogEventsWithoutChangingResult(t *testing.T) {
+	observed := make(chan *bool, 1)
+	s := newServerForTest(t)
+	s.compile = compileRunnerStub{run: func(_ context.Context, req *model.CompileRequest) model.CompileResponse {
+		observed <- req.EmitLogs
+		return model.CompileResponse{
+			Status: model.CompileStatusCompileError,
+			Stdout: "compiler stdout\n",
+			Stderr: "compiler stderr\n",
+		}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	payload := map[string]any{
+		"lang":      "CPP17",
+		"emit_logs": false,
+		"sources": []map[string]any{{
+			"name":     "Main.cpp",
+			"data_b64": base64.StdEncoding.EncodeToString([]byte("int main(){}")),
+		}},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/compile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	emitLogs := <-observed
+	if emitLogs == nil || *emitLogs {
+		t.Fatalf("compile runner received emit_logs = %v, want explicit false", emitLogs)
+	}
+	events := readSSEEvents(resp.Body, t)
+	errorSeen := false
+	for _, event := range events {
+		if event.Name == "log" {
+			t.Fatalf("emit_logs=false emitted a compile log event: %#v", event)
+		}
+		if event.Name == "error" {
+			errorSeen = true
+			if event.JSON["message"] != "compile failed" {
+				t.Fatalf("emit_logs=false leaked compiler output through error event: %#v", event)
+			}
+		}
+	}
+	if !errorSeen {
+		t.Fatal("compile failure should emit a structural error event")
+	}
+	last := events[len(events)-1]
+	if last.Name != "result" ||
+		last.JSON["status"] != model.CompileStatusCompileError ||
+		last.JSON["stdout"] != "compiler stdout\n" ||
+		last.JSON["stderr"] != "compiler stderr\n" {
+		t.Fatalf("emit_logs=false changed compile result: %#v", last)
 	}
 }
 

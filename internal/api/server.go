@@ -42,6 +42,7 @@ const (
 	maxRunTimeMs                      = runvalidation.MaxTimeMs
 	maxRunMemoryMB                    = runvalidation.MaxMemoryMB
 	maxRunOutputBytes                 = runvalidation.MaxOutputBytes
+	maxRunCaptureBytes                = runvalidation.MaxCaptureBytes
 	maxRunWorkspaceBytes              = runvalidation.MaxWorkspaceBytes
 	maxCompileSourceFiles             = compile.MaxSourceFiles
 	maxCompileDecodedSourceBytes      = compile.MaxDecodedSourceBytes
@@ -342,18 +343,24 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	if streamCtx.Err() != nil {
 		return
 	}
-	if resp.Stdout != "" {
-		if err := stream.Event("log", map[string]any{"stream": "stdout", "chunk": resp.Stdout}); err != nil {
-			return
+	if req.EmitLogs == nil || *req.EmitLogs {
+		if resp.Stdout != "" {
+			if err := stream.Event("log", map[string]any{"stream": "stdout", "chunk": resp.Stdout}); err != nil {
+				return
+			}
 		}
-	}
-	if resp.Stderr != "" {
-		if err := stream.Event("log", map[string]any{"stream": "stderr", "chunk": resp.Stderr}); err != nil {
-			return
+		if resp.Stderr != "" {
+			if err := stream.Event("log", map[string]any{"stream": "stderr", "chunk": resp.Stderr}); err != nil {
+				return
+			}
 		}
 	}
 	if resp.Status != model.CompileStatusOK {
-		if err := stream.Event("error", map[string]any{"message": firstNonEmpty(resp.Reason, resp.Stderr, resp.Stdout, "compile failed")}); err != nil {
+		errorMessage := firstNonEmpty(resp.Reason, "compile failed")
+		if req.EmitLogs == nil || *req.EmitLogs {
+			errorMessage = firstNonEmpty(resp.Reason, resp.Stderr, resp.Stdout, "compile failed")
+		}
+		if err := stream.Event("error", map[string]any{"message": errorMessage}); err != nil {
 			return
 		}
 	}
@@ -506,7 +513,11 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if resp.Status == model.RunStatusInitFail {
-		if err := stream.Event("error", map[string]any{"message": firstNonEmpty(resp.Reason, resp.Stderr, resp.Stdout, "execution failed")}); err != nil {
+		errorMessage := firstNonEmpty(resp.Reason, "execution failed")
+		if req.EmitLogs == nil || *req.EmitLogs {
+			errorMessage = firstNonEmpty(resp.Reason, resp.Stderr, resp.Stdout, "execution failed")
+		}
+		if err := stream.Event("error", map[string]any{"message": errorMessage}); err != nil {
 			return
 		}
 	}

@@ -450,9 +450,60 @@ func TestInteractiveResponseDoesNotMaskResourceFailures(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := interactiveResponse(req, interactorReq, tc.contestantRes, tc.interactorRes, 10, false, false, 1024)
+			resp := interactiveResponse(req, interactorReq, tc.contestantRes, tc.interactorRes, 10, false, false)
 			if resp.Status != tc.wantStatus || resp.VerdictSource != tc.wantSource {
 				t.Fatalf("interactiveResponse() = %+v, want status %q source %q", resp, tc.wantStatus, tc.wantSource)
+			}
+		})
+	}
+}
+
+func TestInteractiveZeroStderrCaptureDoesNotLeakOutputThroughReason(t *testing.T) {
+	exitZero := 0
+	stderrLimit := 0
+	stderr := []byte(strings.Repeat("private diagnostic ", 128))
+	req := &model.RunRequest{
+		Limits:        model.Limits{TimeMs: 1000, MemoryMB: 64, OutputBytes: 4096},
+		CaptureLimits: &model.CaptureLimits{StderrBytes: &stderrLimit},
+	}
+	interactorReq := &model.RunRequest{
+		Limits:        req.Limits,
+		CaptureLimits: req.CaptureLimits,
+	}
+
+	for _, tc := range []struct {
+		name       string
+		exitCode   int
+		wantStatus string
+		wantReason string
+	}{
+		{name: "wrong answer", exitCode: 4, wantStatus: model.RunStatusWA, wantReason: "wrong answer"},
+		{name: "interactor error", exitCode: 3, wantStatus: model.RunStatusRE, wantReason: "interactor failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := interactiveResponse(
+				req,
+				interactorReq,
+				execResult{Status: "OK", ExitCode: &exitZero},
+				execResult{Status: "OK", ExitCode: &tc.exitCode, Stderr: stderr},
+				10,
+				false,
+				false,
+			)
+
+			if resp.Status != tc.wantStatus || resp.Reason != tc.wantReason {
+				t.Fatalf("interactive response = %+v, want status %q reason %q", resp, tc.wantStatus, tc.wantReason)
+			}
+			if resp.Stderr != "" || !resp.StderrTruncated {
+				t.Fatalf("top-level stderr = %q truncated=%v, want empty and truncated", resp.Stderr, resp.StderrTruncated)
+			}
+			for _, step := range resp.Steps {
+				if step.Stderr != "" {
+					t.Fatalf("step %q leaked stderr: %q", step.ID, step.Stderr)
+				}
+			}
+			if strings.Contains(resp.Reason, "private diagnostic") {
+				t.Fatalf("reason leaked stderr: %q", resp.Reason)
 			}
 		})
 	}

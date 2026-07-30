@@ -18,7 +18,8 @@ The canonical numeric request and capture limits are generated from code in
   "target": "Main",                          // optional output binary name (default: "Main")
   "entry_point": "src/main.c",               // optional submitted source path to validate as the intended entry file
   "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
-  "runtime_profile": "low-memory"            // optional operator-defined runtime tuning profile
+  "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
+  "emit_logs": true                          // optional compiler stdout/stderr log SSE events; defaults to true
 }
 ```
 
@@ -28,6 +29,10 @@ When `entry_point` names a source path, it must exactly match one submitted
 source after path cleaning. Native multi-file compilers such as C/C++ still
 compile all source files of the language, so `entry_point` is validation
 metadata rather than an argument that drops helper sources.
+`emit_logs=false` omits compiler stdout/stderr `log` SSE events. Compiler
+diagnostics remain in the final `result`; a failed compile still emits a
+structural `error` event before that result without duplicating the diagnostic
+output.
 
 `version` is optional and currently applies to C, C++, Java, Kotlin/JVM, and
 Rust compile profiles. C/C++ values select the language standard (`"c99"`,
@@ -83,8 +88,12 @@ error.
   "limits": {
     "time_ms": 2000,                         // wall-clock time limit, 1..600000 ms
     "memory_mb": 256,                        // memory limit, 1..4096 MB
-    "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..33554432
+    "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..67108864
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
+  },
+  "capture_limits": {                        // optional response/log clipping; each member is 0..8388608
+    "stdout_bytes": 1024,                    // explicit 0 suppresses returned/logged stdout
+    "stderr_bytes": 1024                     // explicit 0 suppresses returned/logged stderr
   },
   "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
@@ -144,6 +153,16 @@ rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
 `interactor.limits` uses the same caps; omitted values inherit the contestant
 time/output policy and use safe memory/workspace defaults where needed.
+`capture_limits` is separate from `limits.output_bytes`. An omitted object or
+member retains the legacy response cap of `min(limits.output_bytes, 64 KiB)`;
+an explicit `0` returns no content for that stream. These limits clip
+top-level and step `stdout`/`stderr` fields and `/execute` `log` events only.
+They do not change output comparison, SPJ input, output-limit verdicts, or
+step handoff bytes. `stdout_truncated` and `stderr_truncated` are true when
+either the execution boundary or the smaller response capture boundary was
+exceeded. Output-derived interactive and sandbox-initialization reasons obey
+the stderr response cap; explicit zero retains a short structural reason
+instead of copying stderr.
 `emit_logs` defaults to `true` for backward compatibility. Setting it to
 `false` suppresses contestant stdout/stderr `log` SSE events for the whole
 request without changing output capture, judging, or the final `result`
@@ -185,9 +204,10 @@ rejected before any outbound request is made.
 When `programs` or `steps` is present, the legacy top-level `lang`, `binaries`,
 `stdin`, `limits`, `entry_point`, and `enable_network` fields must be omitted.
 Top-level `expected_stdout`, `spj`, `file_outputs`, `sidecar_outputs`,
-`emit_logs`, `ignore_tle`, `problem_id`, and `runtime_profile` still apply to
-the request or final step as appropriate. `interactor` is not supported with
-two-step execute mode.
+`capture_limits`, `emit_logs`, `ignore_tle`, `problem_id`, and
+`runtime_profile` still apply to the request or final step as appropriate.
+`capture_limits` clips exposed step/result fields but never reduces
+`handoff.max_bytes`. `interactor` is not supported with two-step execute mode.
 
 ```jsonc
 {
@@ -233,7 +253,7 @@ temporary handoff file and streamed into the second step stdin. `handoff.from`
 defaults to `stdout`; `file`/`file_output` handoff
 requires `handoff.path` and captures that file through the same symlink-safe
 output path as `file_outputs`. `handoff.max_bytes` defaults to the step output
-capture limit and is capped at 32 MiB. A step that sets `stdin_from` must not
+capture limit and is capped at 64 MiB. A step that sets `stdin_from` must not
 also set `stdin`; the handoff stream is the only stdin source for that step.
 All `stdin_url` and text-part `data_url` downloads used by the two steps share
 one cumulative 60-second download budget. Time spent running a sandbox between
@@ -249,8 +269,8 @@ completed downloads does not consume that budget.
   "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
   "memory_kb": 8192,                        // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                           // nullable; process exit code
-  "stdout": "",                             // truncated stdout (up to limits.output_bytes, on WA/RE only)
-  "stderr": "",                             // truncated stderr (up to limits.output_bytes, on non-zero exit only)
+  "stdout": "",                             // truncated stdout (up to capture_limits.stdout_bytes when set, on WA/RE only)
+  "stderr": "",                             // truncated stderr (up to capture_limits.stderr_bytes when set, on non-zero exit only)
   "stdout_truncated": false,                // true when stdout exceeded the capture cap
   "stderr_truncated": false,                // true when stderr exceeded the capture cap
   "reason": "",                             // human-readable error

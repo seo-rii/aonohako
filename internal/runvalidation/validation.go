@@ -18,7 +18,8 @@ const (
 	MaxTextFieldBytes   = 64 << 20
 	MaxTimeMs           = 600_000
 	MaxMemoryMB         = 4096
-	MaxOutputBytes      = 32 << 20
+	MaxOutputBytes      = 64 << 20
+	MaxCaptureBytes     = 8 << 20
 	MaxWorkspaceBytes   = 1 << 30
 	MaxBinaryFiles      = 512
 	MaxPrograms         = 8
@@ -61,6 +62,9 @@ func Validate(req *model.RunRequest) error {
 	}
 	if req.PythonLibraryMode != "" && !UsesPython(req) {
 		return fmt.Errorf("python_library_mode requires a Python contestant, step program, interactor, or spj")
+	}
+	if err := ValidateCaptureLimits(req.CaptureLimits); err != nil {
+		return err
 	}
 	if UsesSteps(req) {
 		if err := ValidateStepPipeline(req); err != nil {
@@ -484,6 +488,24 @@ func ValidateOptionalLimits(name string, limits model.Limits) error {
 	}
 	if limits.WorkspaceBytes < 0 || limits.WorkspaceBytes > MaxWorkspaceBytes {
 		return fmt.Errorf("%s.workspace_bytes must be between 0 and %d", name, MaxWorkspaceBytes)
+	}
+	return nil
+}
+
+func ValidateCaptureLimits(limits *model.CaptureLimits) error {
+	if limits == nil {
+		return nil
+	}
+	for _, field := range []struct {
+		name  string
+		value *int
+	}{
+		{name: "stdout_bytes", value: limits.StdoutBytes},
+		{name: "stderr_bytes", value: limits.StderrBytes},
+	} {
+		if field.value != nil && (*field.value < 0 || *field.value > MaxCaptureBytes) {
+			return fmt.Errorf("capture_limits.%s must be between 0 and %d", field.name, MaxCaptureBytes)
+		}
 	}
 	return nil
 }

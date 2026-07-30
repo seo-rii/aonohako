@@ -742,6 +742,61 @@ func TestRunTwoStepPipelineAcceptsStdoutHandoff(t *testing.T) {
 	}
 }
 
+func TestRunTwoStepPipelineCaptureLimitDoesNotReduceHandoffLimit(t *testing.T) {
+	forceDirectMode(t)
+	captureLimit := 1024
+	handoff := strings.Repeat("h", 1536)
+
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Programs: []model.RunProgram{
+			{
+				ID:   "encoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "encode.sh",
+					DataB64: b64(fmt.Sprintf("#!/bin/sh\nprintf '%%s' '%s'\n", handoff)),
+					Mode:    "exec",
+				}},
+			},
+			{
+				ID:   "decoder",
+				Lang: "binary",
+				Binaries: []model.Binary{{
+					Name:    "decode.sh",
+					DataB64: b64("#!/bin/sh\ncat\n"),
+					Mode:    "exec",
+				}},
+			},
+		},
+		Steps: []model.RunStep{
+			{
+				ID:        "encode",
+				ProgramID: "encoder",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 2048},
+				Handoff:   &model.StepHandoff{ID: "encoded", From: "stdout", MaxBytes: 2048},
+			},
+			{
+				ID:        "decode",
+				ProgramID: "decoder",
+				StdinFrom: "encoded",
+				Limits:    model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 2048},
+			},
+		},
+		ExpectedStdout: handoff,
+		CaptureLimits:  &model.CaptureLimits{StdoutBytes: &captureLimit},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("capture limit changed pipeline verdict: %+v", resp)
+	}
+	if len(resp.Steps) != 2 ||
+		resp.Steps[0].HandoffBytes != int64(len(handoff)) ||
+		resp.Steps[0].Status != model.RunStatusAccepted ||
+		resp.Steps[1].Status != model.RunStatusAccepted {
+		t.Fatalf("capture limit changed handoff or step results: %+v", resp.Steps)
+	}
+}
+
 func TestRunTwoStepPipelineComposesStdinParts(t *testing.T) {
 	forceDirectMode(t)
 
@@ -1489,6 +1544,10 @@ func TestRunLargeOutputUsesConfiguredCapForJudgeAndResponse(t *testing.T) {
 }
 
 func TestOutputLimitAllowsLargeJudgeCap(t *testing.T) {
+	const expectedMaxOutputBytes = 64 << 20
+	if hardMaxOutputBytes != expectedMaxOutputBytes {
+		t.Fatalf("execute hard output cap = %d, want restored 64 MiB cap %d", hardMaxOutputBytes, expectedMaxOutputBytes)
+	}
 	if hardMaxOutputBytes != runvalidation.MaxOutputBytes {
 		t.Fatalf("execute hard output cap = %d, validation cap = %d", hardMaxOutputBytes, runvalidation.MaxOutputBytes)
 	}
@@ -1496,8 +1555,124 @@ func TestOutputLimitAllowsLargeJudgeCap(t *testing.T) {
 	if got := outputLimitBytes(req); got != hardMaxOutputBytes {
 		t.Fatalf("outputLimitBytes() = %d, want %d", got, hardMaxOutputBytes)
 	}
-	if got := responseOutputLimitBytes(req); got != hardMaxOutputBytes {
-		t.Fatalf("responseOutputLimitBytes() = %d, want %d", got, hardMaxOutputBytes)
+	if got := responseOutputLimitBytes(req); got != maxResponseOutputBytes {
+		t.Fatalf("responseOutputLimitBytes() = %d, want %d", got, maxResponseOutputBytes)
+	}
+}
+
+func TestResponseCaptureLimitCannotExceedExecutionLimit(t *testing.T) {
+	executionLimit := 4096
+	configuredLimit := 8192
+	req := &model.RunRequest{
+		Limits:        model.Limits{OutputBytes: executionLimit},
+		CaptureLimits: &model.CaptureLimits{StdoutBytes: &configuredLimit},
+	}
+	if got := responseStdoutLimitBytes(req); got != executionLimit {
+		t.Fatalf("responseStdoutLimitBytes() = %d, want execution limit %d", got, executionLimit)
+	}
+}
+
+func TestRunCaptureLimitsClipStreamsIndependently(t *testing.T) {
+	forceDirectMode(t)
+	stdoutLimit := 1024
+	stderrLimit := 0
+	stdout := strings.Repeat("o", 2048)
+	stderr := strings.Repeat("e", 2048)
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s' '%s'\nprintf '%%s' '%s' >&2\nexit 7\n", stdout, stderr)
+	logs := map[string]string{}
+
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64(script),
+			Mode:    "exec",
+		}},
+		Limits: model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 4096},
+		CaptureLimits: &model.CaptureLimits{
+			StdoutBytes: &stdoutLimit,
+			StderrBytes: &stderrLimit,
+		},
+	}, Hooks{OnLog: func(stream, msg string) {
+		logs[stream] += msg
+	}})
+
+	if resp.Status != model.RunStatusRE || resp.VerdictSource != "exit_code" {
+		t.Fatalf("response verdict = %+v, want exit-code runtime error", resp)
+	}
+	if resp.Stdout != stdout[:stdoutLimit] || resp.Stderr != "" {
+		t.Fatalf("captured output lengths = (%d, %d), want (%d, 0)", len(resp.Stdout), len(resp.Stderr), stdoutLimit)
+	}
+	if !resp.StdoutTruncated || !resp.StderrTruncated {
+		t.Fatalf("capture truncation flags = (%v, %v), want both true", resp.StdoutTruncated, resp.StderrTruncated)
+	}
+	if logs["stdout"] != stdout[:stdoutLimit] {
+		t.Fatalf("stdout log length = %d, want %d", len(logs["stdout"]), stdoutLimit)
+	}
+	if _, ok := logs["stderr"]; ok {
+		t.Fatalf("stderr_bytes=0 emitted a log: %q", logs["stderr"])
+	}
+}
+
+func TestCaptureLimitZeroDoesNotDisableOutputLimitVerdict(t *testing.T) {
+	forceDirectMode(t)
+	stdoutLimit := 0
+	output := strings.Repeat("x", 2048)
+	var logs int
+
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name:    "run.sh",
+			DataB64: b64(fmt.Sprintf("#!/bin/sh\nprintf '%%s' '%s'\n", output)),
+			Mode:    "exec",
+		}},
+		ExpectedStdout: strings.Repeat("x", 1024),
+		Limits:         model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 1024},
+		CaptureLimits:  &model.CaptureLimits{StdoutBytes: &stdoutLimit},
+	}, Hooks{OnLog: func(string, string) {
+		logs++
+	}})
+
+	if resp.Status != model.RunStatusWA ||
+		resp.Reason != "stdout exceeded output limit" ||
+		resp.VerdictSource != "stdout_limit" {
+		t.Fatalf("capture limit changed output-limit verdict: %+v", resp)
+	}
+	if resp.Stdout != "" || !resp.StdoutTruncated {
+		t.Fatalf("stdout capture = %q truncated=%v, want empty and truncated", resp.Stdout, resp.StdoutTruncated)
+	}
+	if logs != 0 {
+		t.Fatalf("stdout_bytes=0 emitted %d logs", logs)
+	}
+}
+
+func TestSandboxInitReasonHonorsZeroStderrCaptureLimit(t *testing.T) {
+	forceDirectMode(t)
+	stderrLimit := 0
+	privateDiagnostic := strings.Repeat("private sandbox detail ", 64)
+
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "binary",
+		Binaries: []model.Binary{{
+			Name: "run.sh",
+			DataB64: b64(fmt.Sprintf(
+				"#!/bin/sh\nprintf 'sandbox-init: %%s' '%s' >&2\nexit 120\n",
+				privateDiagnostic,
+			)),
+			Mode: "exec",
+		}},
+		Limits:        model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 4096},
+		CaptureLimits: &model.CaptureLimits{StderrBytes: &stderrLimit},
+	}, Hooks{})
+
+	if resp.Status != model.RunStatusInitFail ||
+		resp.VerdictSource != "sandbox_init" ||
+		resp.Reason != "sandbox initialization failed" {
+		t.Fatalf("sandbox init response = %+v, want structural reason without stderr", resp)
+	}
+	if strings.Contains(resp.Reason, "private sandbox detail") {
+		t.Fatalf("sandbox init reason leaked stderr: %q", resp.Reason)
 	}
 }
 

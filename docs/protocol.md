@@ -6,7 +6,7 @@ The canonical numeric request and capture limits are generated from code in
 Both `/compile` and `/execute` open SSE streams and terminate with exactly
 one `result` event.
 
-When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. `/compile` returns the remote compile result with the same buffered `log` and `result` shape.
+When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. `/compile` returns the remote compile result with the same buffered `log` and `result` shape, also honoring `emit_logs=false`.
 
 ## Event Types
 
@@ -14,7 +14,7 @@ When `aonohako` is configured with remote execution transport, the local server 
 |---|---|---|
 | `progress` | both | Acceptance, queue position, and start notifications |
 | `image` | `/execute` | Real-time image frames from sidecar output |
-| `log` | both | buffered stdout / stderr payloads emitted before `result`; optional for `/execute` when `emit_logs=false` |
+| `log` | both | buffered stdout / stderr payloads emitted before `result`; omitted when `emit_logs=false` |
 | `result` | both | **Final** response (exactly once per request) |
 | `error` | both | Terminal error (emitted **before** `result` on failure) |
 | `heartbeat` | both | Periodic keep-alive |
@@ -28,7 +28,7 @@ Client                        aonohako
   |--- POST /compile --------->|
   |                            |  (if shared queue is full → 429)
   |<-- progress (accepted) ----|
-  |<-- log (buffered stderr) --|
+  |<-- log (buffered stderr) --|  (omitted when emit_logs=false)
   |<-- result (CompileResp) ---|
 ```
 
@@ -58,6 +58,11 @@ Client                        aonohako
   "reason_code": ""                      // optional machine-readable reason, e.g. "memory_limit_exceeded"
 }
 ```
+
+`/compile` emits compiler output as `log` events by default. With
+`emit_logs=false`, those events are omitted while the final result retains its
+captured compiler diagnostics. Failed compilation still emits a structural
+`error` event without copying stdout/stderr into that event.
 
 ---
 
@@ -95,9 +100,11 @@ Client                        aonohako
 {"stream": "stderr", "chunk": "warning: ..."}
 ```
 
-`/execute` emits these contestant output events by default for compatibility.
-The request may set `emit_logs=false` to omit them. Output capture, judging,
-truncation metadata, and the final `result` event are unchanged.
+Both endpoints emit output events by default for compatibility. The request
+may set `emit_logs=false` to omit them. Output capture, judging, truncation
+metadata, and the final `result` event are unchanged. When logs are disabled,
+a terminal `error` event uses only the structural reason or fallback and does
+not duplicate stdout/stderr before `result`.
 
 ### `result` (RunResponse)
 
@@ -109,7 +116,7 @@ truncation metadata, and the final `result` event are unchanged.
   "cpu_time_ms": 17,                    // CPU time from process CPU clock (ms)
   "memory_kb": 8192,                    // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                       // nullable; process exit code
-  "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `32 MiB`)
+  "stdout": "",                         // truncated stdout (up to `limits.output_bytes`; default `64 KiB`, hard cap `64 MiB`)
   "stderr": "",                         // truncated stderr (up to `limits.output_bytes`; on non-zero exit)
   "stdout_truncated": false,            // true when stdout exceeded the capture cap
   "stderr_truncated": false,            // true when stderr exceeded the capture cap
@@ -143,6 +150,18 @@ truncation metadata, and the final `result` event are unchanged.
   ]
 }
 ```
+
+`capture_limits.stdout_bytes` and `capture_limits.stderr_bytes` optionally
+apply a separate, per-stream cap to `log` events and the top-level and step
+output fields above. An omitted object or member preserves the legacy
+`min(limits.output_bytes, 64 KiB)` response cap; explicit `0` suppresses that
+stream.
+These response limits do not alter output comparison, SPJ evaluation,
+`limits.output_bytes` OLE detection, or step handoff data. Truncation flags
+cover both execution-limit and response-capture clipping. A configured cap
+cannot expose bytes beyond the execution capture boundary. Output-derived
+interactive and sandbox-initialization reasons obey the stderr cap and fall
+back to a short structural reason when it is zero.
 
 ### Status Codes
 
@@ -322,7 +341,7 @@ Callers should implement exponential backoff on 429.
 | `Cache-Control` | `no-cache` |
 | `Connection` | `keep-alive` |
 | `X-Accel-Buffering` | `no` |
-| `X-Aonohako-Protocol-Version` | `2026-07-27` |
+| `X-Aonohako-Protocol-Version` | `2026-07-30` |
 
 Remote control planes use the configured protocol policy. In the default
 non-dev strict mode, missing or mismatched `X-Aonohako-Protocol-Version`

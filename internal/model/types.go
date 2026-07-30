@@ -22,6 +22,7 @@ type CompileRequest struct {
 	EntryPoint     string   `json:"entry_point,omitempty"`
 	ProblemID      string   `json:"problem_id,omitempty"`
 	RuntimeProfile string   `json:"runtime_profile,omitempty"`
+	EmitLogs       *bool    `json:"emit_logs,omitempty"`
 }
 
 type CompileResponse struct {
@@ -47,6 +48,11 @@ type Limits struct {
 	MemoryMB       int   `json:"memory_mb"`
 	OutputBytes    int   `json:"output_bytes,omitempty"`
 	WorkspaceBytes int64 `json:"workspace_bytes,omitempty"`
+}
+
+type CaptureLimits struct {
+	StdoutBytes *int `json:"stdout_bytes,omitempty"`
+	StderrBytes *int `json:"stderr_bytes,omitempty"`
 }
 
 type SPJSpec struct {
@@ -141,6 +147,7 @@ type RunRequest struct {
 	ExpectedStdout    string                   `json:"expected_stdout,omitempty"`
 	ExpectedStdoutURL string                   `json:"expected_stdout_url,omitempty"`
 	Limits            Limits                   `json:"limits"`
+	CaptureLimits     *CaptureLimits           `json:"capture_limits,omitempty"`
 	ProblemID         string                   `json:"problem_id,omitempty"`
 	RuntimeProfile    string                   `json:"runtime_profile,omitempty"`
 	PythonLibraryMode pythonpolicy.LibraryMode `json:"python_library_mode,omitempty"`

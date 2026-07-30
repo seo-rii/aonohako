@@ -28,6 +28,8 @@ const (
 
 	defaultMaxOutputBytes        = DefaultOutputBytes
 	hardMaxOutputBytes           = runvalidation.MaxOutputBytes
+	maxResponseOutputBytes       = DefaultOutputBytes
+	maxResponseCaptureBytes      = runvalidation.MaxCaptureBytes
 	defaultWorkspaceBytes        = DefaultWorkspaceBytes
 	hardMaxWorkspaceBytes        = runvalidation.MaxWorkspaceBytes
 	maxBinaryFiles               = runvalidation.MaxBinaryFiles
@@ -84,6 +86,21 @@ func (b *cappedBuffer) Truncated() bool {
 	return b.truncated
 }
 
+func capturedOutputValue(output []byte, limit int) (string, bool) {
+	value := clipUTF8(output, limit)
+	return value, len(value) < len(output)
+}
+
+func emitCapturedLog(hooks Hooks, stream string, output []byte, limit int) {
+	if hooks.OnLog == nil || len(output) == 0 {
+		return
+	}
+	value, _ := capturedOutputValue(output, limit)
+	if value != "" {
+		hooks.OnLog(stream, value)
+	}
+}
+
 type Service struct {
 	deploymentTarget      platform.DeploymentTarget
 	runtimeTuning         config.RuntimeTuningConfig
@@ -94,8 +111,9 @@ type Service struct {
 }
 
 type sandboxRunResult struct {
-	response model.RunResponse
-	judgeOut []byte
+	response            model.RunResponse
+	judgeOut            []byte
+	stdoutLimitExceeded bool
 }
 
 func New() *Service {
@@ -292,23 +310,20 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		reason = evalReason
 	}
 
-	responseOutputLimit := responseOutputLimitBytes(req)
+	stdoutResponseLimit := responseStdoutLimitBytes(req)
+	stderrResponseLimit := responseStderrLimitBytes(req)
 	var outResp, errResp string
+	stdoutResponseTruncated := false
+	stderrResponseTruncated := false
 	if status == model.RunStatusWA || status == model.RunStatusRE || (status == model.RunStatusTLE && req.IgnoreTLE) {
-		outResp = clipUTF8(judgeOut, responseOutputLimit)
+		outResp, stdoutResponseTruncated = capturedOutputValue(judgeOut, stdoutResponseLimit)
 	}
 	if res.ExitCode != nil && *res.ExitCode != 0 {
-		errResp = clipUTF8(fullErr, responseOutputLimit)
+		errResp, stderrResponseTruncated = capturedOutputValue(fullErr, stderrResponseLimit)
 	}
 
-	if hooks.OnLog != nil {
-		if len(rawOut) > 0 {
-			hooks.OnLog("stdout", clipUTF8(rawOut, responseOutputLimit))
-		}
-		if len(fullErr) > 0 {
-			hooks.OnLog("stderr", clipUTF8(fullErr, responseOutputLimit))
-		}
-	}
+	emitCapturedLog(hooks, "stdout", rawOut, stdoutResponseLimit)
+	emitCapturedLog(hooks, "stderr", fullErr, stderrResponseLimit)
 
 	return sandboxRunResult{
 		response: model.RunResponse{
@@ -321,15 +336,16 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			ExitCode:         res.ExitCode,
 			Stdout:           outResp,
 			Stderr:           errResp,
-			StdoutTruncated:  res.StdoutTruncated,
-			StderrTruncated:  res.StderrTruncated,
+			StdoutTruncated:  res.StdoutTruncated || stdoutResponseTruncated,
+			StderrTruncated:  res.StderrTruncated || stderrResponseTruncated,
 			Reason:           reason,
 			VerdictSource:    verdictSource,
 			Score:            score,
 			SidecarOutputs:   sidecarOutputs,
 			SidecarErrors:    sidecarErrors,
 		},
-		judgeOut: append([]byte(nil), judgeOut...),
+		judgeOut:            append([]byte(nil), judgeOut...),
+		stdoutLimitExceeded: res.StdoutTruncated,
 	}
 }
 
@@ -385,6 +401,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			Binaries:          program.Binaries,
 			Stdin:             stdin,
 			Limits:            step.Limits,
+			CaptureLimits:     req.CaptureLimits,
 			RuntimeProfile:    req.RuntimeProfile,
 			PythonLibraryMode: req.PythonLibraryMode,
 			EnableNetwork:     program.EnableNetwork,
@@ -427,7 +444,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			}
 			stepResults[len(stepResults)-1].HandoffBytes = int64(len(run.judgeOut))
 			handoffExceeded := int64(len(run.judgeOut)) > maxBytes
-			if !handoffFromFile && run.response.StdoutTruncated {
+			if !handoffFromFile && run.stdoutLimitExceeded {
 				handoffExceeded = true
 			}
 			if handoffExceeded {
@@ -437,7 +454,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 					VerdictSource: "step:" + step.ID + ":handoff",
 				}, stepResults)
 			}
-			if handoffFromFile && run.response.StdoutTruncated {
+			if handoffFromFile && run.stdoutLimitExceeded {
 				return aggregateStepResponse(model.RunResponse{
 					Status:        model.RunStatusRE,
 					Reason:        fmt.Sprintf("step %s stdout exceeded output limit", step.ID),

@@ -939,7 +939,10 @@ done:
 	result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatus(result.Status, result.Reason, result.VerdictSource, result.CPUTimeMs, timeLimitMs, runGroup.Path != "")
 	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
 		result.Status = model.RunStatusInitFail
-		result.Reason = clipUTF8(result.Stderr, outputLimitBytes)
+		result.Reason = clipUTF8(result.Stderr, responseStderrLimitBytes(req))
+		if strings.TrimSpace(result.Reason) == "" {
+			result.Reason = "sandbox initialization failed"
+		}
 		result.VerdictSource = "sandbox_init"
 	}
 	if result.Status == "OK" && errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -1043,7 +1046,31 @@ func outputLimitBytes(req *model.RunRequest) int {
 }
 
 func responseOutputLimitBytes(req *model.RunRequest) int {
-	return outputLimitBytes(req)
+	return min(outputLimitBytes(req), maxResponseOutputBytes)
+}
+
+func responseStdoutLimitBytes(req *model.RunRequest) int {
+	if req == nil || req.CaptureLimits == nil {
+		return responseOutputLimitBytes(req)
+	}
+	return responseCaptureLimitBytes(req.CaptureLimits.StdoutBytes, outputLimitBytes(req))
+}
+
+func responseStderrLimitBytes(req *model.RunRequest) int {
+	if req == nil || req.CaptureLimits == nil {
+		return responseOutputLimitBytes(req)
+	}
+	return responseCaptureLimitBytes(req.CaptureLimits.StderrBytes, outputLimitBytes(req))
+}
+
+func responseCaptureLimitBytes(configured *int, executionLimit int) int {
+	if configured == nil {
+		return min(executionLimit, maxResponseOutputBytes)
+	}
+	if *configured <= 0 {
+		return 0
+	}
+	return min(*configured, executionLimit, maxResponseCaptureBytes)
 }
 
 func firstImagePath(paths []model.OutputFile) string {

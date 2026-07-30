@@ -192,6 +192,7 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	result := model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute stream ended without result"}
 	remoteErrorReason := ""
 	logBytes := map[string]int{"stdout": 0, "stderr": 0}
+	logCaptureBytes := map[string]int{"stdout": 0, "stderr": 0}
 	var imageBytes int
 
 	for {
@@ -223,15 +224,27 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if chunk.Stream != "stdout" && chunk.Stream != "stderr" {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote log event has invalid stream"}
 			}
-			if len(chunk.Chunk) > responseOutputLimitBytes(req) {
-				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log event too large: max %d bytes", responseOutputLimitBytes(req))}
+			logSafetyLimit := min(outputLimitBytes(req), maxResponseCaptureBytes)
+			if len(chunk.Chunk) > logSafetyLimit {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log event too large: max %d bytes", logSafetyLimit)}
 			}
 			logBytes[chunk.Stream] += len(chunk.Chunk)
-			if logBytes[chunk.Stream] > responseOutputLimitBytes(req) {
-				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log stream too large: max %d bytes", responseOutputLimitBytes(req))}
+			if logBytes[chunk.Stream] > logSafetyLimit {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log stream too large: max %d bytes", logSafetyLimit)}
 			}
 			if hooks.OnLog != nil {
-				hooks.OnLog(chunk.Stream, chunk.Chunk)
+				captureLimit := responseStdoutLimitBytes(req)
+				if chunk.Stream == "stderr" {
+					captureLimit = responseStderrLimitBytes(req)
+				}
+				remaining := captureLimit - logCaptureBytes[chunk.Stream]
+				if remaining > 0 {
+					value, _ := capturedOutputValue([]byte(chunk.Chunk), remaining)
+					if value != "" {
+						logCaptureBytes[chunk.Stream] += len(value)
+						hooks.OnLog(chunk.Stream, value)
+					}
+				}
 			}
 		case "image":
 			var image struct {
@@ -295,7 +308,8 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if len(remoteResult.Steps) > runvalidation.MaxSteps {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote result: too many steps: max %d", runvalidation.MaxSteps)}
 			}
-			responseLimit := responseOutputLimitBytes(req)
+			stdoutResponseLimit := responseStdoutLimitBytes(req)
+			stderrResponseLimit := responseStderrLimitBytes(req)
 			for i := range remoteResult.Steps {
 				step := &remoteResult.Steps[i]
 				switch step.Status {
@@ -306,12 +320,13 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				if step.TimeMs < 0 || step.WallTimeMs < 0 || step.CPUTimeMs < 0 || step.ProcessCPUTimeMs < 0 || step.MemoryKB < 0 || step.HandoffBytes < 0 {
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative measurement"}
 				}
-				if len(step.Stdout) > responseLimit {
-					step.Stdout = clipUTF8([]byte(step.Stdout), responseLimit)
+				var truncated bool
+				step.Stdout, truncated = capturedOutputValue([]byte(step.Stdout), stdoutResponseLimit)
+				if truncated {
 					step.StdoutTruncated = true
 				}
-				if len(step.Stderr) > responseLimit {
-					step.Stderr = clipUTF8([]byte(step.Stderr), responseLimit)
+				step.Stderr, truncated = capturedOutputValue([]byte(step.Stderr), stderrResponseLimit)
+				if truncated {
 					step.StderrTruncated = true
 				}
 			}
@@ -359,12 +374,13 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: unrequested sidecar error path: " + clean}
 				}
 			}
-			if len(remoteResult.Stdout) > responseLimit {
-				remoteResult.Stdout = clipUTF8([]byte(remoteResult.Stdout), responseLimit)
+			var truncated bool
+			remoteResult.Stdout, truncated = capturedOutputValue([]byte(remoteResult.Stdout), stdoutResponseLimit)
+			if truncated {
 				remoteResult.StdoutTruncated = true
 			}
-			if len(remoteResult.Stderr) > responseLimit {
-				remoteResult.Stderr = clipUTF8([]byte(remoteResult.Stderr), responseLimit)
+			remoteResult.Stderr, truncated = capturedOutputValue([]byte(remoteResult.Stderr), stderrResponseLimit)
+			if truncated {
 				remoteResult.StderrTruncated = true
 			}
 			remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))

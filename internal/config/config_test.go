@@ -15,6 +15,7 @@ import (
 )
 
 func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
+	const expectedMaxOutputBytes = 64 << 20
 	body, err := os.ReadFile(filepath.Join("..", "..", "deployment-contract.json"))
 	if err != nil {
 		t.Fatalf("read deployment contract: %v", err)
@@ -34,6 +35,9 @@ func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 	}
 	if contract.ExecuteRequestLimits.MaxOutputBytes != runvalidation.MaxOutputBytes {
 		t.Fatalf("deployment max output bytes = %d, validation max = %d", contract.ExecuteRequestLimits.MaxOutputBytes, runvalidation.MaxOutputBytes)
+	}
+	if contract.ExecuteRequestLimits.MaxOutputBytes != expectedMaxOutputBytes {
+		t.Fatalf("deployment max output bytes = %d, want restored 64 MiB cap %d", contract.ExecuteRequestLimits.MaxOutputBytes, expectedMaxOutputBytes)
 	}
 	if contract.ExecuteRequestLimits.MaxStepHandoffBytes != runvalidation.MaxStepHandoffBytes {
 		t.Fatalf("deployment max handoff bytes = %d, validation max = %d", contract.ExecuteRequestLimits.MaxStepHandoffBytes, runvalidation.MaxStepHandoffBytes)

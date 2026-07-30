@@ -264,19 +264,17 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 		timing.SinceMillis(startWall),
 		contestantDeadlineHit.Load() || ctx.Err() != nil,
 		contestantCanceledByInteractor.Load(),
-		responseOutputLimitBytes(req),
 	)
 	resp.SidecarOutputs = sidecarOutputs
 	resp.SidecarErrors = sidecarErrors
 
-	if hooks.OnLog != nil {
-		if len(contestantRes.Stdout) > 0 {
-			hooks.OnLog("stdout", clipUTF8(contestantRes.Stdout, responseOutputLimitBytes(req)))
-		}
-		if stderr := firstNonEmptyBytes(interactorRes.Stderr, contestantRes.Stderr); len(stderr) > 0 {
-			hooks.OnLog("stderr", clipUTF8(stderr, responseOutputLimitBytes(req)))
-		}
-	}
+	emitCapturedLog(hooks, "stdout", contestantRes.Stdout, responseStdoutLimitBytes(req))
+	emitCapturedLog(
+		hooks,
+		"stderr",
+		firstNonEmptyBytes(interactorRes.Stderr, contestantRes.Stderr),
+		responseStderrLimitBytes(req),
+	)
 
 	return resp
 }
@@ -361,17 +359,19 @@ func interactorRunRequest(req *model.RunRequest) *model.RunRequest {
 		Lang:              req.Interactor.Lang,
 		Binaries:          req.Interactor.Binaries,
 		Limits:            limits,
+		CaptureLimits:     req.CaptureLimits,
 		RuntimeProfile:    req.RuntimeProfile,
 		PythonLibraryMode: req.PythonLibraryMode,
 		EntryPoint:        req.Interactor.EntryPoint,
 	}
 }
 
-func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, interactorRes execResult, wallMs int64, deadlineExceeded, contestantCanceledByInteractor bool, outputLimit int) model.RunResponse {
+func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, interactorRes execResult, wallMs int64, deadlineExceeded, contestantCanceledByInteractor bool) model.RunResponse {
 	status := model.RunStatusRE
 	reason := ""
 	source := "interactive"
 	scoreVal := 0.0
+	stderrResponseLimit := responseStderrLimitBytes(req)
 
 	contestantStatus, contestantReason, contestantSource := classifyRunStatusWithoutOutput(req, contestantRes)
 	if contestantStatus == "OK" {
@@ -404,11 +404,11 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		scoreVal = 1
 	case interactorStatus == model.RunStatusRE:
 		status = model.RunStatusRE
-		reason = firstNonEmptyString(interactorReason, interactiveFailureMessage(contestantRes, interactorRes, outputLimit), "interactor failed")
+		reason = firstNonEmptyString(interactorReason, interactiveFailureMessage(contestantRes, interactorRes, stderrResponseLimit), "interactor failed")
 		source = prefixInteractiveSource("interactor", interactorSource)
 	case interactorStatus != model.RunStatusAccepted:
 		status = interactorStatus
-		reason = firstNonEmptyString(interactorReason, interactiveFailureMessage(contestantRes, interactorRes, outputLimit))
+		reason = firstNonEmptyString(interactorReason, interactiveFailureMessage(contestantRes, interactorRes, stderrResponseLimit))
 		source = prefixInteractiveSource("interactor", interactorSource)
 	default:
 		status = model.RunStatusRE
@@ -420,7 +420,7 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		reason = "wrong answer"
 	}
 	if status == model.RunStatusRE && strings.TrimSpace(reason) == "" {
-		reason = interactiveFailureMessage(contestantRes, interactorRes, outputLimit)
+		reason = interactiveFailureMessage(contestantRes, interactorRes, stderrResponseLimit)
 		if strings.TrimSpace(reason) == "" {
 			reason = "interactive execution failed"
 		}
@@ -428,9 +428,17 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 
 	stdout := ""
 	stderr := ""
+	stdoutResponseTruncated := false
+	stderrResponseTruncated := false
 	if status != model.RunStatusAccepted {
-		stdout = clipUTF8(contestantRes.Stdout, outputLimit)
-		stderr = clipUTF8(firstNonEmptyBytes(interactorRes.Stderr, contestantRes.Stderr), outputLimit)
+		stdout, stdoutResponseTruncated = capturedOutputValue(
+			contestantRes.Stdout,
+			responseStdoutLimitBytes(req),
+		)
+		stderr, stderrResponseTruncated = capturedOutputValue(
+			firstNonEmptyBytes(interactorRes.Stderr, contestantRes.Stderr),
+			responseStderrLimitBytes(req),
+		)
 	}
 	score := &scoreVal
 	return model.RunResponse{
@@ -443,8 +451,8 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		ExitCode:         contestantRes.ExitCode,
 		Stdout:           stdout,
 		Stderr:           stderr,
-		StdoutTruncated:  contestantRes.StdoutTruncated,
-		StderrTruncated:  contestantRes.StderrTruncated || interactorRes.StderrTruncated,
+		StdoutTruncated:  contestantRes.StdoutTruncated || stdoutResponseTruncated,
+		StderrTruncated:  contestantRes.StderrTruncated || interactorRes.StderrTruncated || stderrResponseTruncated,
 		Reason:           reason,
 		VerdictSource:    source,
 		Score:            score,
@@ -473,9 +481,9 @@ func classifyInteractorStatus(req *model.RunRequest, res execResult) (string, st
 	case 0:
 		return model.RunStatusAccepted, "", "exit_code"
 	case 3:
-		return model.RunStatusRE, firstNonEmptyString(clipUTF8(res.Stderr, responseOutputLimitBytes(req)), "interactor failed"), "exit_code"
+		return model.RunStatusRE, firstNonEmptyString(clipUTF8(res.Stderr, responseStderrLimitBytes(req)), "interactor failed"), "exit_code"
 	default:
-		return model.RunStatusWA, clipUTF8(res.Stderr, responseOutputLimitBytes(req)), "exit_code"
+		return model.RunStatusWA, clipUTF8(res.Stderr, responseStderrLimitBytes(req)), "exit_code"
 	}
 }
 
@@ -484,6 +492,14 @@ func interactiveContestantStepResult(req *model.RunRequest, res execResult) mode
 	if status == "OK" {
 		status = model.RunStatusAccepted
 	}
+	stdout, stdoutResponseTruncated := capturedOutputValue(
+		res.Stdout,
+		responseStdoutLimitBytes(req),
+	)
+	stderr, stderrResponseTruncated := capturedOutputValue(
+		res.Stderr,
+		responseStderrLimitBytes(req),
+	)
 	return model.StepResult{
 		ID:               "contestant",
 		ProgramID:        "contestant",
@@ -494,10 +510,10 @@ func interactiveContestantStepResult(req *model.RunRequest, res execResult) mode
 		ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB:         res.MemoryKB,
 		ExitCode:         res.ExitCode,
-		Stdout:           clipUTF8(res.Stdout, responseOutputLimitBytes(req)),
-		Stderr:           clipUTF8(res.Stderr, responseOutputLimitBytes(req)),
-		StdoutTruncated:  res.StdoutTruncated,
-		StderrTruncated:  res.StderrTruncated,
+		Stdout:           stdout,
+		Stderr:           stderr,
+		StdoutTruncated:  res.StdoutTruncated || stdoutResponseTruncated,
+		StderrTruncated:  res.StderrTruncated || stderrResponseTruncated,
 		Reason:           firstNonEmptyString(reason, res.Reason),
 		VerdictSource:    prefixInteractiveSource("contestant", source),
 	}
@@ -505,6 +521,10 @@ func interactiveContestantStepResult(req *model.RunRequest, res execResult) mode
 
 func interactiveInteractorStepResult(req *model.RunRequest, res execResult) model.StepResult {
 	status, reason, source := classifyInteractorStatus(req, res)
+	stderr, stderrResponseTruncated := capturedOutputValue(
+		res.Stderr,
+		responseStderrLimitBytes(req),
+	)
 	return model.StepResult{
 		ID:               "interactor",
 		ProgramID:        "interactor",
@@ -515,9 +535,9 @@ func interactiveInteractorStepResult(req *model.RunRequest, res execResult) mode
 		ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB:         res.MemoryKB,
 		ExitCode:         res.ExitCode,
-		Stderr:           clipUTF8(res.Stderr, responseOutputLimitBytes(req)),
+		Stderr:           stderr,
 		StdoutTruncated:  res.StdoutTruncated,
-		StderrTruncated:  res.StderrTruncated,
+		StderrTruncated:  res.StderrTruncated || stderrResponseTruncated,
 		Reason:           firstNonEmptyString(reason, res.Reason),
 		VerdictSource:    prefixInteractiveSource("interactor", source),
 	}

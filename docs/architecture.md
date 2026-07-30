@@ -377,18 +377,24 @@ owned by the shared sandbox UID or GID.
 ### Output capture
 
 `stdout` and `stderr` are captured through pipes into capped in-memory buffers.
-The request field `limits.output_bytes` controls each stream consistently:
+The request field `limits.output_bytes` controls the judging boundary for each
+stream:
 
 - the live capture buffer size
-- the maximum response payload returned to the caller
+- output-limit detection and verdicts
+- step handoff data
 
-The cap applies separately to stdout and stderr, so the hard-cap case retains
-at most 16 MiB across both buffers rather than the former 128 MiB.
+`capture_limits.stdout_bytes` and `capture_limits.stderr_bytes` independently
+clip response fields and live log events without changing that judging
+boundary. The cap applies separately to stdout and stderr.
 
 Defaults and caps:
 
 - default: `64 KiB`
-- hard cap: `8 MiB`
+- hard judging cap: `64 MiB`
+- response/log cap: `min(limits.output_bytes, 64 KiB)` by default, or up to
+  `8 MiB` through the corresponding explicit `capture_limits` member
+  (`0` suppresses the stream)
 
 Requested file outputs are validated as relative paths. At most one file output
 may replace judged stdout; missing, symlinked, or non-regular outputs are
