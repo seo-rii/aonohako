@@ -330,7 +330,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"qbasic":        {compileKind: "classic-basic", runLang: "binary"},
 		"smalltalk":     {compileKind: "smalltalk", runLang: "smalltalk"},
 		"golfscript":    {compileKind: "golfscript", runLang: "golfscript"},
-		"mojo":          {compileKind: "mojo", runLang: "binary"},
+		"mojo":          {compileKind: "mojo", runLang: "mojo-binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
 		"elm":           {compileKind: "elm", runLang: "javascript"},
 		"kotlin-jvm":    {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},

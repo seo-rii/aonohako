@@ -155,7 +155,7 @@ var profiles = map[string]Profile{
 	"SMALLTALK":     {SourceLang: "SMALLTALK", Extension: "st", CompileKind: "smalltalk", RunLang: "smalltalk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"GST":           {SourceLang: "GST", Extension: "st", CompileKind: "smalltalk", RunLang: "smalltalk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"GOLFSCRIPT":    {SourceLang: "GOLFSCRIPT", Extension: "gs", CompileKind: "golfscript", RunLang: "golfscript", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
-	"MOJO":          {SourceLang: "MOJO", Extension: "mojo", DefaultTarget: "Main", CompileKind: "mojo", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"MOJO":          {SourceLang: "MOJO", Extension: "mojo", DefaultTarget: "Main", CompileKind: "mojo", RunLang: "mojo-binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"DENO":          {SourceLang: "DENO", Extension: "ts", CompileKind: "deno", RunLang: "deno", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"KOTLIN_JVM":    {SourceLang: "KOTLIN_JVM", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "8", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"KOTLIN_JVM8":   {SourceLang: "KOTLIN_JVM8", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "8", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
@@ -205,7 +205,7 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
-	case "binary", "go-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth":
+	case "binary", "go-binary", "mojo-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth":
 		return key
 	case "coffeescript":
 		// The CoffeeScript compiler emits JavaScript artifacts, so execute uses
@@ -255,6 +255,8 @@ func NormalizeRunLang(language string) string {
 		return "binary"
 	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic", "vala", "mercury", "idris2", "delphi", "object-pascal", "object_pascal", "objpascal", "objfpc":
 		return "binary"
+	case "mojo":
+		return "mojo-binary"
 	case "gforth":
 		return "forth"
 	}

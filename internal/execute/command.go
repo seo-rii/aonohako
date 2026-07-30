@@ -25,7 +25,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	}
 
 	switch lang {
-	case "binary", "go-binary", "c3":
+	case "binary", "go-binary", "mojo-binary", "c3":
 		return []string{primaryPath}
 	case "aheui":
 		return []string{
