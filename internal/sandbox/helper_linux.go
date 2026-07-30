@@ -316,10 +316,7 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_PIDFD_GETFD),
 		uint32(unix.SYS_PIDFD_SEND_SIGNAL),
 		uint32(unix.SYS_KILL),
-		uint32(unix.SYS_TKILL),
-		uint32(unix.SYS_TGKILL),
 		uint32(unix.SYS_RT_SIGQUEUEINFO),
-		uint32(unix.SYS_RT_TGSIGQUEUEINFO),
 		uint32(unix.SYS_SETPRIORITY),
 		uint32(unix.SYS_BPF),
 		uint32(unix.SYS_IO_SETUP),
@@ -399,6 +396,16 @@ func MaybeRunFromEnv() bool {
 	} {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	}
+	if !req.AllowThreadSignals {
+		for _, sysno := range []uint32{
+			uint32(unix.SYS_TKILL),
+			uint32(unix.SYS_TGKILL),
+			uint32(unix.SYS_RT_TGSIGQUEUEINFO),
+		} {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
 	}
 	// prlimit64(0, resource, NULL, old_limit) is needed by managed
 	// runtimes. A non-zero pid could alter a same-UID peer, while a non-NULL

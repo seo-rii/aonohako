@@ -170,6 +170,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 		AllowSocketServer:        isIsabelle,
 		AllowProcesses:           true,
 		AllowProcessGroups:       allowProcessGroups,
+		AllowThreadSignals:       isDotnetLike,
 		AllowMemfdCreate:         isDotnetLike || isIsabelle,
 		AllowNumaPolicy:          isDotnetLike || isIsabelle,
 		AllowChmod:               allowChmod,
@@ -468,20 +469,30 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			}
 			if err != nil {
 				reason := err.Error()
+				status := model.CompileStatusCompileError
 				if ps := cmd.ProcessState; ps != nil {
 					if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
-						if ws.Signaled() {
-							reason = fmt.Sprintf("sandbox command killed by signal %s", ws.Signal())
-						} else if ws.Exited() {
-							reason = fmt.Sprintf("sandbox command exited with code %d", ws.ExitStatus())
-						}
+						status, reason = classifyCompileWaitStatus(ws)
 					}
 				}
-				return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusCompileError, reason
+				return readCaptured(stdoutFile), readCaptured(stderrFile), status, reason
 			}
 			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusOK, ""
 		}
 	}
+}
+
+func classifyCompileWaitStatus(status syscall.WaitStatus) (string, string) {
+	if status.Signaled() {
+		if status.Signal() == syscall.SIGXCPU {
+			return model.CompileStatusTimeout, "sandbox command exceeded CPU time limit"
+		}
+		return model.CompileStatusInternal, fmt.Sprintf("sandbox command killed by signal %s", status.Signal())
+	}
+	if status.Exited() {
+		return model.CompileStatusCompileError, fmt.Sprintf("sandbox command exited with code %d", status.ExitStatus())
+	}
+	return model.CompileStatusCompileError, "sandbox command failed"
 }
 
 func cleanupCompileCgroup(group cgroup.Group) {

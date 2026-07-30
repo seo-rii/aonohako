@@ -133,3 +133,25 @@ func TestHelperAlwaysRejectsUnsafeCloneForms(t *testing.T) {
 		t.Fatalf("clone3 must be denied independently of AllowProcesses")
 	}
 }
+
+func TestHelperGuardsThreadSignalsBehindRuntimeOptIn(t *testing.T) {
+	raw, err := os.ReadFile("helper_linux.go")
+	if err != nil {
+		t.Fatalf("read helper_linux.go: %v", err)
+	}
+	source := string(raw)
+	optIn := strings.Index(source, "if !req.AllowThreadSignals")
+	if optIn < 0 {
+		t.Fatal("helper policy is missing the thread-signal opt-in guard")
+	}
+	for _, marker := range []string{
+		"unix.SYS_TKILL",
+		"unix.SYS_TGKILL",
+		"unix.SYS_RT_TGSIGQUEUEINFO",
+	} {
+		position := strings.Index(source, marker)
+		if position < optIn {
+			t.Fatalf("%s must only be denied behind AllowThreadSignals", marker)
+		}
+	}
+}

@@ -1987,7 +1987,7 @@ languages:
       script:
         - mkdir -p /opt/dotnet
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-        - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
+        - bash /tmp/dotnet-install.sh --version 8.0.423 --install-dir /opt/dotnet
         - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
         - rm -f /tmp/dotnet-install.sh
     smoke:
@@ -1996,9 +1996,9 @@ languages:
         - -lc
         - |
           mkdir -p /tmp/csharp-home /tmp/csharp-packages
-          env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet new console --force --no-restore --verbosity quiet -n App -o app
+          env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_PROCESSOR_COUNT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet new console --force --no-restore --verbosity quiet -n App -o app
           printf '%s\n' 'Console.WriteLine("ok");' > app/Program.cs
-          env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish app --configuration Release -o publish
+          env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_PROCESSOR_COUNT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish app --configuration Release -o publish
           env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
 
   fsharp:
@@ -2009,7 +2009,7 @@ languages:
       script:
         - mkdir -p /opt/dotnet
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-        - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
+        - bash /tmp/dotnet-install.sh --version 8.0.423 --install-dir /opt/dotnet
         - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
         - rm -f /tmp/dotnet-install.sh
     smoke:
@@ -2037,7 +2037,7 @@ languages:
               printfn "%s" (File.ReadAllText("same-folder.txt"))
               0
           FS
-          env HOME=/tmp/fsharp-home DOTNET_CLI_HOME=/tmp/fsharp-home NUGET_PACKAGES=/tmp/fsharp-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.fsproj --configuration Release -o publish -p:UseAppHost=false
+          env HOME=/tmp/fsharp-home DOTNET_CLI_HOME=/tmp/fsharp-home NUGET_PACKAGES=/tmp/fsharp-packages DOTNET_PROCESSOR_COUNT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.fsproj --configuration Release -o publish -p:UseAppHost=false
           env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
 
   vbnet:
@@ -2048,7 +2048,7 @@ languages:
       script:
         - mkdir -p /opt/dotnet
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-        - bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /opt/dotnet
+        - bash /tmp/dotnet-install.sh --version 8.0.423 --install-dir /opt/dotnet
         - ln -sfn /opt/dotnet/dotnet /usr/local/bin/dotnet
         - rm -f /tmp/dotnet-install.sh
     smoke:
@@ -2079,7 +2079,7 @@ languages:
             End Sub
           End Module
           VB
-          env HOME=/tmp/vbnet-home DOTNET_CLI_HOME=/tmp/vbnet-home NUGET_PACKAGES=/tmp/vbnet-packages DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.vbproj --configuration Release -o publish -p:UseAppHost=false
+          env HOME=/tmp/vbnet-home DOTNET_CLI_HOME=/tmp/vbnet-home NUGET_PACKAGES=/tmp/vbnet-packages DOTNET_PROCESSOR_COUNT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.vbproj --configuration Release -o publish -p:UseAppHost=false
           env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
 
   gleam:

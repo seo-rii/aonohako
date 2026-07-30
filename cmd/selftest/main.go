@@ -44,6 +44,7 @@ type suiteCase struct {
 
 type compileExecuteCase struct {
 	compileLang       string
+	compileAttempts   int
 	entryPoint        string
 	stdin             string
 	expectedStdout    string
@@ -850,16 +851,51 @@ func runCompileExecuteSuite() error {
 			return fmt.Errorf("compile-execute selftest could not resolve compile profile %q", tc.compileLang)
 		}
 
-		compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
-			Lang:       tc.compileLang,
-			Sources:    tc.sources,
-			EntryPoint: tc.entryPoint,
-		})
-		if err != nil {
-			return fmt.Errorf("%s compile request failed: %w", language, err)
+		compileAttempts := max(tc.compileAttempts, 1)
+		var compileResp model.CompileResponse
+		for attempt := 1; attempt <= compileAttempts; attempt++ {
+			var err error
+			compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang:       tc.compileLang,
+				Sources:    tc.sources,
+				EntryPoint: tc.entryPoint,
+			})
+			if err != nil {
+				return fmt.Errorf("%s compile request %d/%d failed: %w", language, attempt, compileAttempts, err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("%s compile %d/%d failed: status=%s reason=%s stdout=%q stderr=%q", language, attempt, compileAttempts, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
 		}
-		if compileResp.Status != model.CompileStatusOK {
-			return fmt.Errorf("%s compile failed: status=%s reason=%s stdout=%q stderr=%q", language, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+		if language == "fsharp" {
+			regressionSource := model.Source{Name: "Main.fs", DataB64: encodeScript(`let rec fac n =
+    if n <= 1I then
+        1I
+    else
+        n * fac(n - 1I)
+
+let rec getans num cnt =
+    if num % 10I = 0I then
+        getans(num / 10I)(cnt + 1I)
+    else
+        cnt
+
+let a = bigint(System.Console.ReadLine())
+printfn"%A"(getans(fac(a))0I)
+`)}
+			for attempt := 1; attempt <= 20; attempt++ {
+				regressionResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+					Lang:    tc.compileLang,
+					Sources: []model.Source{regressionSource},
+				})
+				if err != nil {
+					return fmt.Errorf("fsharp regression compile request %d/20 failed: %w", attempt, err)
+				}
+				output := regressionResp.Stdout + regressionResp.Stderr
+				if regressionResp.Status != model.CompileStatusCompileError || !strings.Contains(output, "FS0041") {
+					return fmt.Errorf("fsharp regression compile %d/20 returned status=%s reason=%s stdout=%q stderr=%q", attempt, regressionResp.Status, regressionResp.Reason, regressionResp.Stdout, regressionResp.Stderr)
+				}
+			}
 		}
 
 		limits := tc.limits
@@ -2754,9 +2790,10 @@ endmodule`),
 			},
 		},
 		"csharp": {
-			compileLang:    "CSHARP",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang:     "CSHARP",
+			compileAttempts: 8,
+			expectedStdout:  "ok\n",
+			limits:          model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Program.cs", `System.IO.File.WriteAllText("same-folder.txt", "ok");
 Console.WriteLine(System.IO.File.ReadAllText("same-folder.txt"));`),
@@ -2967,9 +3004,10 @@ end program main`),
 			},
 		},
 		"fsharp": {
-			compileLang:    "FSHARP",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			compileLang:     "FSHARP",
+			compileAttempts: 20,
+			expectedStdout:  "ok\n",
+			limits:          model.Limits{TimeMs: 12000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Program.fs", `open System.IO
 
@@ -3502,9 +3540,10 @@ console.log(fs.readFileSync('same-folder.txt', 'utf8'));`),
 			},
 		},
 		"vbnet": {
-			compileLang:    "VBNET",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			compileLang:     "VBNET",
+			compileAttempts: 8,
+			expectedStdout:  "ok\n",
+			limits:          model.Limits{TimeMs: 12000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Program.vb", `Imports System
 

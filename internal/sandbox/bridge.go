@@ -29,6 +29,7 @@ type ExecRequest struct {
 	AllowSocketServer        bool         `json:"allow_socket_server,omitempty"`
 	AllowProcesses           bool         `json:"allow_processes,omitempty"`
 	AllowProcessGroups       bool         `json:"allow_process_groups,omitempty"`
+	AllowThreadSignals       bool         `json:"allow_thread_signals,omitempty"`
 	AllowMemfdCreate         bool         `json:"allow_memfd_create,omitempty"`
 	AllowNumaPolicy          bool         `json:"allow_numa_policy,omitempty"`
 	AllowChmod               bool         `json:"allow_chmod,omitempty"`

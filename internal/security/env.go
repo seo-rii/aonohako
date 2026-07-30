@@ -86,6 +86,7 @@ func WorkspaceScopedEnv(workDir string) []string {
 		fmt.Sprintf("NUGET_SCRATCH=%s", nugetScratch),
 		fmt.Sprintf("NUGET_HTTP_CACHE_PATH=%s", nugetHTTPCache),
 		fmt.Sprintf("NUGET_PLUGINS_CACHE_PATH=%s", nugetPluginsCache),
+		"DOTNET_PROCESSOR_COUNT=1",
 		"DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
 		"DOTNET_CLI_TELEMETRY_OPTOUT=1",
 		"DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",

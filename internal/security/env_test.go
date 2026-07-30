@@ -27,6 +27,7 @@ func TestWorkspaceScopedEnvIncludesWritableToolchainHomes(t *testing.T) {
 		"PIP_CACHE_DIR=" + filepath.Join(root, ".pip-cache"),
 		"DOTNET_CLI_HOME=" + filepath.Join(root, ".dotnet-home"),
 		"NUGET_PACKAGES=" + filepath.Join(root, ".nuget"),
+		"DOTNET_PROCESSOR_COUNT=1",
 		"DOTNET_EnableDiagnostics=0",
 		"COMPlus_EnableDiagnostics=0",
 		"KONAN_USER_HOME=" + filepath.Join(root, ".konan-home"),

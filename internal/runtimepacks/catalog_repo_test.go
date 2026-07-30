@@ -495,8 +495,15 @@ func TestRepositoryCatalogUsesTrixieAndUpdatedICUForDebianProfiles(t *testing.T)
 		if !slices.Contains(spec.Install.Apt, "libicu76") {
 			t.Fatalf("%s apt packages = %v, want libicu76", language, spec.Install.Apt)
 		}
+		install := strings.Join(spec.Install.Script, "\n")
+		if !strings.Contains(install, "dotnet-install.sh --version 8.0.423") {
+			t.Fatalf("%s install script must pin .NET SDK 8.0.423, got %q", language, install)
+		}
+		if strings.Contains(install, "dotnet-install.sh --channel") {
+			t.Fatalf("%s install script must not use a drifting .NET channel, got %q", language, install)
+		}
 		smoke := strings.Join(spec.Smoke.Command, "\n")
-		for _, marker := range []string{"DOTNET_GCHeapHardLimit=8000000", "DOTNET_EnableDiagnostics=0", "COMPlus_EnableDiagnostics=0"} {
+		for _, marker := range []string{"DOTNET_PROCESSOR_COUNT=1", "DOTNET_GCHeapHardLimit=8000000", "DOTNET_EnableDiagnostics=0", "COMPlus_EnableDiagnostics=0"} {
 			if !strings.Contains(smoke, marker) {
 				t.Fatalf("%s smoke command must contain %q, got %q", language, marker, smoke)
 			}
