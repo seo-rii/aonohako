@@ -3133,7 +3133,7 @@ void main() {
 				source("Main.dart", `import 'dart:io';
 
 void main() {
-  final values = stdin.readAsStringSync().trim().split(RegExp(r'\s+')).map(int.parse).toList();
+  final values = stdin.readLineSync()!.trim().split(RegExp(r'\s+')).map(int.parse).toList();
   File('same-folder.txt').writeAsStringSync('${values[0] + values[1]}');
   stdout.writeln(File('same-folder.txt').readAsStringSync());
 }`),
@@ -3355,7 +3355,7 @@ main : IO ()
 main = do
   a <- getLine
   b <- getLine
-  printLn ((cast a : Integer) + (cast b : Integer))
+  printLn (the Integer (cast a + cast b))
 `),
 			},
 		},
@@ -4070,9 +4070,9 @@ foreign import printSum :: Effect Unit
 main :: Effect Unit
 main = printSum
 `),
-				source("Main.js", `export const printSum = () => {
-  const fs = require("fs");
-  const values = fs.readFileSync(0, "utf8").trim().split(/\s+/).map(Number);
+				source("Main.js", `import { readFileSync } from "node:fs";
+export const printSum = () => {
+  const values = readFileSync(0, "utf8").trim().split(/\s+/).map(Number);
   console.log(values[0] + values[1]);
 };`),
 			},
