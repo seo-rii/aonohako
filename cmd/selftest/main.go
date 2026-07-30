@@ -42,12 +42,55 @@ type suiteCase struct {
 	check func(model.RunResponse) error
 }
 
+type judgeIOCase struct {
+	stdin          string
+	expectedStdout string
+	a              int
+	b              int
+}
+
+var (
+	standardABJudgeIO = []judgeIOCase{
+		{stdin: "20 22\n", expectedStdout: "42\n", a: 20, b: 22},
+		{stdin: "7 13\n", expectedStdout: "20\n", a: 7, b: 13},
+	}
+	lineSeparatedABJudgeIO = []judgeIOCase{
+		{stdin: "20\n22\n", expectedStdout: "42\n", a: 20, b: 22},
+		{stdin: "7\n13\n", expectedStdout: "20\n", a: 7, b: 13},
+	}
+	singleDigitABJudgeIO = []judgeIOCase{
+		{stdin: "1 2\n", expectedStdout: "3\n", a: 1, b: 2},
+		{stdin: "3 4\n", expectedStdout: "7\n", a: 3, b: 4},
+	}
+	twoDigitABJudgeIO = []judgeIOCase{
+		{stdin: "20 22\n", expectedStdout: "42\n", a: 20, b: 22},
+		{stdin: "10 13\n", expectedStdout: "23\n", a: 10, b: 13},
+	}
+	sqlABJudgeIO = []judgeIOCase{
+		{
+			stdin:          "create table input(a integer, b integer);\ninsert into input values (20, 22);\n",
+			expectedStdout: "42\n",
+			a:              20,
+			b:              22,
+		},
+		{
+			stdin:          "create table input(a integer, b integer);\ninsert into input values (7, 13);\n",
+			expectedStdout: "20\n",
+			a:              7,
+			b:              13,
+		},
+	}
+)
+
 type compileExecuteCase struct {
 	compileLang       string
+	compileVariants   []string
 	compileAttempts   int
 	entryPoint        string
 	stdin             string
 	expectedStdout    string
+	judgeIO           []judgeIOCase
+	nonABReason       string
 	limits            model.Limits
 	sources           []model.Source
 	pythonLibraryMode pythonpolicy.LibraryMode
@@ -846,29 +889,31 @@ func runCompileExecuteSuite() error {
 			return fmt.Errorf("compile-execute selftest has no case for language %q", language)
 		}
 
-		profile, ok := profiles.Resolve(tc.compileLang)
-		if !ok {
-			return fmt.Errorf("compile-execute selftest could not resolve compile profile %q", tc.compileLang)
-		}
+		compileLanguages := append([]string{tc.compileLang}, tc.compileVariants...)
+		for variantIndex, compileLanguage := range compileLanguages {
+			profile, ok := profiles.Resolve(compileLanguage)
+			if !ok {
+				return fmt.Errorf("compile-execute selftest could not resolve compile profile %q", compileLanguage)
+			}
 
-		compileAttempts := max(tc.compileAttempts, 1)
-		var compileResp model.CompileResponse
-		for attempt := 1; attempt <= compileAttempts; attempt++ {
-			var err error
-			compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
-				Lang:       tc.compileLang,
-				Sources:    tc.sources,
-				EntryPoint: tc.entryPoint,
-			})
-			if err != nil {
-				return fmt.Errorf("%s compile request %d/%d failed: %w", language, attempt, compileAttempts, err)
+			compileAttempts := max(tc.compileAttempts, 1)
+			var compileResp model.CompileResponse
+			for attempt := 1; attempt <= compileAttempts; attempt++ {
+				var err error
+				compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
+					Lang:       compileLanguage,
+					Sources:    tc.sources,
+					EntryPoint: tc.entryPoint,
+				})
+				if err != nil {
+					return fmt.Errorf("%s/%s compile request %d/%d failed: %w", language, compileLanguage, attempt, compileAttempts, err)
+				}
+				if compileResp.Status != model.CompileStatusOK {
+					return fmt.Errorf("%s/%s compile %d/%d failed: status=%s reason=%s stdout=%q stderr=%q", language, compileLanguage, attempt, compileAttempts, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+				}
 			}
-			if compileResp.Status != model.CompileStatusOK {
-				return fmt.Errorf("%s compile %d/%d failed: status=%s reason=%s stdout=%q stderr=%q", language, attempt, compileAttempts, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
-			}
-		}
-		if language == "fsharp" {
-			regressionSource := model.Source{Name: "Main.fs", DataB64: encodeScript(`let rec fac n =
+			if language == "fsharp" && variantIndex == 0 {
+				regressionSource := model.Source{Name: "Main.fs", DataB64: encodeScript(`let rec fac n =
     if n <= 1I then
         1I
     else
@@ -883,76 +928,86 @@ let rec getans num cnt =
 let a = bigint(System.Console.ReadLine())
 printfn"%A"(getans(fac(a))0I)
 `)}
-			for attempt := 1; attempt <= 20; attempt++ {
-				regressionResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
-					Lang:    tc.compileLang,
-					Sources: []model.Source{regressionSource},
+				for attempt := 1; attempt <= 20; attempt++ {
+					regressionResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+						Lang:    compileLanguage,
+						Sources: []model.Source{regressionSource},
+					})
+					if err != nil {
+						return fmt.Errorf("fsharp regression compile request %d/20 failed: %w", attempt, err)
+					}
+					output := regressionResp.Stdout + regressionResp.Stderr
+					if regressionResp.Status != model.CompileStatusCompileError || !strings.Contains(output, "FS0041") {
+						return fmt.Errorf("fsharp regression compile %d/20 returned status=%s reason=%s stdout=%q stderr=%q", attempt, regressionResp.Status, regressionResp.Reason, regressionResp.Stdout, regressionResp.Stderr)
+					}
+				}
+			}
+
+			limits := tc.limits
+			if limits.TimeMs <= 0 {
+				limits.TimeMs = 6000
+			}
+			if limits.MemoryMB <= 0 {
+				limits.MemoryMB = 512
+			}
+
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{
+					Name:    artifact.Name,
+					DataB64: artifact.DataB64,
+					Mode:    artifact.Mode,
 				})
-				if err != nil {
-					return fmt.Errorf("fsharp regression compile request %d/20 failed: %w", attempt, err)
-				}
-				output := regressionResp.Stdout + regressionResp.Stderr
-				if regressionResp.Status != model.CompileStatusCompileError || !strings.Contains(output, "FS0041") {
-					return fmt.Errorf("fsharp regression compile %d/20 returned status=%s reason=%s stdout=%q stderr=%q", attempt, regressionResp.Status, regressionResp.Reason, regressionResp.Stdout, regressionResp.Stderr)
-				}
 			}
-		}
 
-		limits := tc.limits
-		if limits.TimeMs <= 0 {
-			limits.TimeMs = 6000
-		}
-		if limits.MemoryMB <= 0 {
-			limits.MemoryMB = 512
-		}
-
-		binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
-		for _, artifact := range compileResp.Artifacts {
-			binaries = append(binaries, model.Binary{
-				Name:    artifact.Name,
-				DataB64: artifact.DataB64,
-				Mode:    artifact.Mode,
-			})
-		}
-
-		runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
-			Lang:              profile.RunLang,
-			Binaries:          binaries,
-			EntryPoint:        tc.entryPoint,
-			Stdin:             tc.stdin,
-			ExpectedStdout:    tc.expectedStdout,
-			Limits:            limits,
-			PythonLibraryMode: tc.pythonLibraryMode,
-		})
-		if err != nil {
-			return fmt.Errorf("%s execute request failed: %w", language, err)
-		}
-		if runResp.Status != model.RunStatusAccepted {
-			return fmt.Errorf("%s execute failed: status=%s reason=%s stdout=%q stderr=%q", language, runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
-		}
-
-		if memoryMB, ok := startupMemory[language]; ok {
-			startupLimits := limits
-			startupLimits.MemoryMB = memoryMB
-			attempts := 2
-			if language == "java" {
-				attempts = 5
+			judgeIO := tc.judgeIO
+			if len(judgeIO) == 0 {
+				judgeIO = []judgeIOCase{{
+					stdin:          tc.stdin,
+					expectedStdout: tc.expectedStdout,
+				}}
 			}
-			for attempt := 1; attempt <= attempts; attempt++ {
-				startupResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+			for index, ioCase := range judgeIO {
+				runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
 					Lang:              profile.RunLang,
 					Binaries:          binaries,
 					EntryPoint:        tc.entryPoint,
-					Stdin:             tc.stdin,
-					ExpectedStdout:    tc.expectedStdout,
-					Limits:            startupLimits,
+					Stdin:             ioCase.stdin,
+					ExpectedStdout:    ioCase.expectedStdout,
+					Limits:            limits,
 					PythonLibraryMode: tc.pythonLibraryMode,
 				})
 				if err != nil {
-					return fmt.Errorf("%s constrained startup attempt %d failed: %w", language, attempt, err)
+					return fmt.Errorf("%s/%s execute case %d/%d request failed: %w", language, compileLanguage, index+1, len(judgeIO), err)
 				}
-				if startupResp.Status != model.RunStatusAccepted {
-					return fmt.Errorf("%s constrained startup attempt %d failed: memory_mb=%d status=%s reason=%s stdout=%q stderr=%q", language, attempt, memoryMB, startupResp.Status, startupResp.Reason, startupResp.Stdout, startupResp.Stderr)
+				if runResp.Status != model.RunStatusAccepted {
+					return fmt.Errorf("%s/%s execute case %d/%d failed: status=%s reason=%s stdout=%q stderr=%q", language, compileLanguage, index+1, len(judgeIO), runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
+				}
+			}
+
+			if memoryMB, ok := startupMemory[language]; ok {
+				startupLimits := limits
+				startupLimits.MemoryMB = memoryMB
+				attempts := 2
+				if language == "java" {
+					attempts = 5
+				}
+				for attempt := 1; attempt <= attempts; attempt++ {
+					startupResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+						Lang:              profile.RunLang,
+						Binaries:          binaries,
+						EntryPoint:        tc.entryPoint,
+						Stdin:             judgeIO[0].stdin,
+						ExpectedStdout:    judgeIO[0].expectedStdout,
+						Limits:            startupLimits,
+						PythonLibraryMode: tc.pythonLibraryMode,
+					})
+					if err != nil {
+						return fmt.Errorf("%s/%s constrained startup attempt %d failed: %w", language, compileLanguage, attempt, err)
+					}
+					if startupResp.Status != model.RunStatusAccepted {
+						return fmt.Errorf("%s/%s constrained startup attempt %d failed: memory_mb=%d status=%s reason=%s stdout=%q stderr=%q", language, compileLanguage, attempt, memoryMB, startupResp.Status, startupResp.Reason, startupResp.Stdout, startupResp.Stderr)
+					}
 				}
 			}
 		}
@@ -2468,7 +2523,7 @@ func compileExecuteCases() map[string]compileExecuteCase {
 	source := func(name, body string) model.Source {
 		return model.Source{Name: name, DataB64: encodeScript(body)}
 	}
-	whitespaceProgram := func(text string) string {
+	whitespaceABProgram := func() string {
 		space := " "
 		tab := "\t"
 		lf := "\n"
@@ -2492,12 +2547,24 @@ func compileExecuteCases() map[string]compileExecuteCase {
 		push := func(value int) string {
 			return space + space + number(value)
 		}
-		outChar := tab + lf + space + space
 		var program strings.Builder
-		for _, ch := range text {
-			program.WriteString(push(int(ch)))
-			program.WriteString(outChar)
-		}
+		inputNumber := tab + lf + tab + tab
+		retrieve := tab + tab + tab
+		add := tab + space + space + space
+		outputNumber := tab + lf + space + tab
+		outputChar := tab + lf + space + space
+		program.WriteString(push(0))
+		program.WriteString(inputNumber)
+		program.WriteString(push(1))
+		program.WriteString(inputNumber)
+		program.WriteString(push(0))
+		program.WriteString(retrieve)
+		program.WriteString(push(1))
+		program.WriteString(retrieve)
+		program.WriteString(add)
+		program.WriteString(outputNumber)
+		program.WriteString(push(10))
+		program.WriteString(outputChar)
 		program.WriteString(lf)
 		program.WriteString(lf)
 		program.WriteString(lf)
@@ -2506,148 +2573,188 @@ func compileExecuteCases() map[string]compileExecuteCase {
 
 	return map[string]compileExecuteCase{
 		"ada": {
-			compileLang:    "ADA",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang:     "ADA",
+			compileVariants: []string{"ADA2012", "ADA2022"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.adb", `with Ada.Text_IO; use Ada.Text_IO;
+with Ada.Integer_Text_IO; use Ada.Integer_Text_IO;
 procedure Main is
   F : File_Type;
+  A, B, Sum : Integer;
 begin
+  Get(A);
+  Get(B);
   Create(F, Out_File, "same-folder.txt");
-  Put_Line(F, "ok");
+  Put(F, A + B, Width => 0);
+  New_Line(F);
   Close(F);
   Open(F, In_File, "same-folder.txt");
-  Put_Line(Get_Line(F));
+  Get(F, Sum);
   Close(F);
+  Put(Sum, Width => 0);
+  New_Line;
 end Main;`),
 			},
 		},
 		"plain": {
-			compileLang:    "C11",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "C11",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.c", `#include <stdio.h>
 int main(void) {
+    int a, b;
+    if (scanf("%d%d", &a, &b) != 2) {
+        return 1;
+    }
     FILE *out = fopen("same-folder.txt", "w");
     if (out == NULL) {
         return 1;
     }
-    fputs("ok\n", out);
+    fprintf(out, "%d\n", a + b);
     fclose(out);
     FILE *in = fopen("same-folder.txt", "r");
     if (in == NULL) {
         return 1;
     }
-    char buf[16] = {0};
-    if (fgets(buf, sizeof buf, in) == NULL) {
+    int sum;
+    if (fscanf(in, "%d", &sum) != 1) {
         fclose(in);
         return 1;
     }
     fclose(in);
-    fputs(buf, stdout);
+    printf("%d\n", sum);
     return 0;
 }`),
 			},
 		},
 		"c": {
-			compileLang:    "C11",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang:     "C11",
+			compileVariants: []string{"C", "C89", "C99", "C17", "C18", "C23"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.c", `#include <stdio.h>
 int main(void) {
-    puts("ok");
+    int a, b;
+    if (scanf("%d%d", &a, &b) != 2) return 1;
+    printf("%d\n", a + b);
     return 0;
 }`),
 			},
 		},
 		"cpp": {
-			compileLang:    "CPP17",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "CPP17",
+			compileVariants: []string{
+				"CPP", "CPP98", "CPP03", "CPP11", "CPP14", "CPP20", "CPP23", "CPP26",
+			},
+			judgeIO: standardABJudgeIO,
+			limits:  model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.cpp", `#include <iostream>
 int main() {
-    std::cout << "ok\n";
+    int a, b;
+    if (!(std::cin >> a >> b)) return 1;
+    std::cout << a + b << '\n';
     return 0;
 }`),
 			},
 		},
 		"aheui": {
-			compileLang:    "AHEUI",
-			expectedStdout: "Hello, World!\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "AHEUI",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.aheui", "밞바밤밣받밞밞밞밦밞바밝밣바박박밦밞받밞받밞발밣받뱔희밞땨몋드떠받볋"),
+				source("Main.aheui", "방방다망반발따맣희"),
 			},
 		},
 		"awk": {
-			compileLang:    "AWK",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "AWK",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.awk", `BEGIN { print "ok" }`),
+				source("Main.awk", `{ print $1 + $2; exit }`),
 			},
 		},
 		"tcl": {
-			compileLang:    "TCL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "TCL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.tcl", `puts ok`),
+				source("Main.tcl", `scan [gets stdin] "%d %d" a b
+puts [expr {$a + $b}]`),
 			},
 		},
 		"asm": {
-			compileLang:    "ASM",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "ASM",
+			judgeIO:     singleDigitABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.s", `.global _start
+.section .bss
+.lcomm buf, 4
 .section .text
 _start:
+    xor %rax, %rax
+    xor %rdi, %rdi
+    lea buf(%rip), %rsi
+    mov $4, %rdx
+    syscall
+    movzbl buf(%rip), %eax
+    addb buf+2(%rip), %al
+    subb $48, %al
+    movb %al, buf(%rip)
+    movb $10, buf+1(%rip)
     mov $1, %rax
     mov $1, %rdi
-    lea msg(%rip), %rsi
-    mov $3, %rdx
+    lea buf(%rip), %rsi
+    mov $2, %rdx
     syscall
     mov $60, %rax
     xor %rdi, %rdi
-    syscall
-.section .rodata
-msg:
-    .ascii "ok\n"`),
+    syscall`),
 			},
 		},
 		"bf": {
-			compileLang:    "BF",
-			expectedStdout: "Hello World!\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "BF",
+			judgeIO:     twoDigitABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.bf", "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>."),
+				source("Main.bf", ",>,>,>,>,<[<<<+>>>-]++++++[<<<-------->>>-]<<<.>>>>[<<<+>>>-]++++++[<<<-------->>>-]<<<.>[-]++++++++++."),
 			},
 		},
 		"befunge": {
-			compileLang:    "BEFUNGE",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			compileLang: "BEFUNGE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.bef", `>"ko",,91+,@`),
+				source("Main.bef", `>&&+:91+/68*+,91+%68*+,52*,@`),
 			},
 		},
 		"lolcode": {
-			compileLang:    "LOLCODE",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			compileLang: "LOLCODE",
+			judgeIO:     lineSeparatedABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.lol", "HAI 1.2\nVISIBLE \"ok\"\nKTHXBYE\n"),
+				source("Main.lol", `HAI 1.2
+I HAS A X
+I HAS A Y
+GIMMEH X
+GIMMEH Y
+X IS NOW A NUMBR
+Y IS NOW A NUMBR
+VISIBLE SUM OF X AN Y
+KTHXBYE
+`),
 			},
 		},
 		"apecode": {
 			compileLang:    "APECODE",
 			stdin:          "1\n3\n3 1 2\n",
 			expectedStdout: "3 1 2\n",
+			nonABReason:    "APECode implements the BAPC sorting-network protocol rather than general arithmetic",
 			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.ape", `state main {
@@ -2656,25 +2763,28 @@ msg:
 			},
 		},
 		"j": {
-			compileLang:    "J",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			compileLang: "J",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.ijs", "echo 'ok'\nexit 0\n"),
+				source("Main.ijs", "input =: 0 \". (1!:1[3) -. CR,LF\necho +/ input\nexit 0\n"),
 			},
 		},
 		"clojure": {
-			compileLang:    "CLOJURE",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang: "CLOJURE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.clj", `(require '[clojure.string :as str])
-(spit "same-folder.txt" "ok")
-(println (str/trim (slurp "same-folder.txt")))`),
+(let [[a b] (map parse-long (str/split (str/trim (slurp *in*)) #"\s+"))
+      sum (+ a b)]
+  (spit "same-folder.txt" sum)
+  (println (str/trim (slurp "same-folder.txt"))))`),
 			},
 		},
 		"coq": {
 			compileLang: "COQ",
+			nonABReason: "proof verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.v", `Theorem same_folder_ok : 1 = 1.
@@ -2683,6 +2793,7 @@ Proof. reflexivity. Qed.`),
 		},
 		"rocq": {
 			compileLang: "ROCQ",
+			nonABReason: "proof verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.v", `Theorem same_folder_ok : 1 = 1.
@@ -2690,14 +2801,17 @@ Proof. reflexivity. Qed.`),
 			},
 		},
 		"lean4": {
-			compileLang: "LEAN4",
-			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang:     "LEAN4",
+			compileVariants: []string{"LEAN"},
+			nonABReason:     "proof verification completes during compile; execute is intentionally a no-op",
+			limits:          model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.lean", `theorem ok : True := by trivial`),
 			},
 		},
 		"agda": {
 			compileLang: "AGDA",
+			nonABReason: "proof verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.agda", `module Main where
@@ -2709,6 +2823,7 @@ ok = tt`),
 		},
 		"dafny": {
 			compileLang: "DAFNY",
+			nonABReason: "proof verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.dfy", `method Main() ensures true {
@@ -2716,8 +2831,10 @@ ok = tt`),
 			},
 		},
 		"tla": {
-			compileLang: "TLA",
-			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			compileLang:     "TLA",
+			compileVariants: []string{"TLAPLUS"},
+			nonABReason:     "the runtime model-checks a specification and does not expose solution stdin/stdout",
+			limits:          model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.tla", `---- MODULE Main ----
 VARIABLE x
@@ -2730,8 +2847,10 @@ Spec == Init /\ [][Next]_x
 			},
 		},
 		"why3": {
-			compileLang: "WHY3",
-			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			compileLang:     "WHY3",
+			compileVariants: []string{"WHYML"},
+			nonABReason:     "proof verification completes during compile; execute is intentionally a no-op",
+			limits:          model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.mlw", `theory Main
   goal G: true
@@ -2740,6 +2859,7 @@ end`),
 		},
 		"isabelle": {
 			compileLang: "ISABELLE",
+			nonABReason: "proof verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 30000, MemoryMB: 3072},
 			sources: []model.Source{
 				source("ROOT", `session Aonohako = HOL +
@@ -2753,6 +2873,7 @@ end`),
 		},
 		"fstar": {
 			compileLang: "FSTAR",
+			nonABReason: "proof verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 20000, MemoryMB: 2048},
 			sources: []model.Source{
 				source("Main.fst", `module Main
@@ -2761,6 +2882,7 @@ let ok () : Lemma (1 + 1 == 2) = ()`),
 		},
 		"alloy": {
 			compileLang: "ALLOY",
+			nonABReason: "model verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 20000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.als", `sig A {}
@@ -2771,6 +2893,7 @@ run { some A } for 1`),
 		},
 		"acl2": {
 			compileLang: "ACL2",
+			nonABReason: "proof verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 20000, MemoryMB: 2048},
 			sources: []model.Source{
 				source("Main.lisp", `(in-package "ACL2")
@@ -2781,6 +2904,7 @@ run { some A } for 1`),
 		},
 		"kframework": {
 			compileLang: "KFRAMEWORK",
+			nonABReason: "definition verification completes during compile; execute is intentionally a no-op",
 			limits:      model.Limits{TimeMs: 60000, MemoryMB: 4096},
 			sources: []model.Source{
 				source("Main.k", `module MAIN
@@ -2792,234 +2916,334 @@ endmodule`),
 		"csharp": {
 			compileLang:     "CSHARP",
 			compileAttempts: 8,
-			expectedStdout:  "ok\n",
+			judgeIO:         standardABJudgeIO,
 			limits:          model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Program.cs", `System.IO.File.WriteAllText("same-folder.txt", "ok");
+				source("Program.cs", `var values = Array.ConvertAll(
+    Console.In.ReadToEnd().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries),
+    int.Parse);
+System.IO.File.WriteAllText("same-folder.txt", (values[0] + values[1]).ToString());
 Console.WriteLine(System.IO.File.ReadAllText("same-folder.txt"));`),
 			},
 		},
 		"crystal": {
-			compileLang:    "CRYSTAL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "CRYSTAL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.cr", `puts "ok"`),
+				source("Main.cr", `values = STDIN.gets_to_end.split.map(&.to_i)
+puts values[0] + values[1]`),
 			},
 		},
 		"cobol": {
-			compileLang:    "COBOL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "COBOL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.cob", `IDENTIFICATION DIVISION.
 PROGRAM-ID. Main.
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+01 LINE-IN PIC X(80).
+01 A PIC 9(9).
+01 B PIC 9(9).
+01 TOTAL PIC 9(9).
+01 TOTAL-OUT PIC Z(8)9.
 PROCEDURE DIVISION.
-    DISPLAY "ok".
+    ACCEPT LINE-IN.
+    UNSTRING LINE-IN DELIMITED BY ALL SPACE INTO A B.
+    COMPUTE TOTAL = A + B.
+    MOVE TOTAL TO TOTAL-OUT.
+    DISPLAY FUNCTION TRIM(TOTAL-OUT).
     STOP RUN.`),
 			},
 		},
 		"gnucobol": {
-			compileLang:    "GNUCOBOL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "GNUCOBOL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.cob", `IDENTIFICATION DIVISION.
 PROGRAM-ID. Main.
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+01 LINE-IN PIC X(80).
+01 A PIC 9(9).
+01 B PIC 9(9).
+01 TOTAL PIC 9(9).
+01 TOTAL-OUT PIC Z(8)9.
 PROCEDURE DIVISION.
-    DISPLAY "ok".
+    ACCEPT LINE-IN.
+    UNSTRING LINE-IN DELIMITED BY ALL SPACE INTO A B.
+    COMPUTE TOTAL = A + B.
+    MOVE TOTAL TO TOTAL-OUT.
+    DISPLAY FUNCTION TRIM(TOTAL-OUT).
     STOP RUN.`),
 			},
 		},
 		"cython": {
-			compileLang:    "CYTHON",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			compileLang: "CYTHON",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.pyx", `print("ok")`),
+				source("Main.pyx", `a, b = map(int, input().split())
+print(a + b)`),
 			},
 		},
 		"objective-c": {
-			compileLang:    "OBJECTIVE_C",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang:     "OBJECTIVE_C",
+			compileVariants: []string{"OBJC"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.m", `#include <stdio.h>
 int main(void) {
-    puts("ok");
+    int a, b;
+    if (scanf("%d%d", &a, &b) != 2) return 1;
+    printf("%d\n", a + b);
     return 0;
 }`),
 			},
 		},
 		"objective-cpp": {
-			compileLang:    "OBJECTIVE_CPP",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang:     "OBJECTIVE_CPP",
+			compileVariants: []string{"OBJCPP"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.mm", `#include <iostream>
 int main() {
-    std::cout << "ok\n";
+    int a, b;
+    if (!(std::cin >> a >> b)) return 1;
+    std::cout << a + b << '\n';
     return 0;
 }`),
 			},
 		},
 		"vlang": {
-			compileLang:    "VLANG",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "VLANG",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.v", `fn main() {
-  println('ok')
+				source("Main.v", `import os
+
+fn main() {
+  values := os.input('').fields()
+  println(values[0].int() + values[1].int())
 }`),
 			},
 		},
 		"vala": {
-			compileLang:    "VALA",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "VALA",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.vala", `int main() {
-  print("ok\n");
+  int a;
+  int b;
+  stdin.scanf("%d %d", out a, out b);
+  stdout.printf("%d\n", a + b);
   return 0;
 }`),
 			},
 		},
 		"odin": {
-			compileLang:    "ODIN",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			compileLang: "ODIN",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("main.odin", `package main
 import "core:fmt"
+import "core:os"
+import "core:strconv"
+import "core:strings"
 main :: proc() {
-  fmt.println("ok")
+  data, err := os.read_entire_file_from_file(os.stdin, context.allocator)
+  if err != nil {
+    return
+  }
+  defer delete(data)
+  fields, _ := strings.fields(string(data), context.allocator)
+  defer delete(fields)
+  a, _ := strconv.parse_int(fields[0])
+  b, _ := strconv.parse_int(fields[1])
+  fmt.println(a + b)
 }`),
 			},
 		},
 		"c3": {
-			compileLang:    "C3",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			compileLang: "C3",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.c3", `import std::io;
+extern fn int scanf(char* format, ...);
 fn void main() {
-  io::printfn("ok");
+  int a;
+  int b;
+  scanf("%d %d", &a, &b);
+  io::printfn("%d", a + b);
 }`),
 			},
 		},
 		"hare": {
-			compileLang:    "HARE",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			compileLang: "HARE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.ha", `use fmt;
+				source("Main.ha", `use bufio;
+use fmt;
+use os;
+use strconv;
+use strings;
+
 export fn main() void = {
-  fmt::println("ok")!;
+  const a_data = bufio::read_tok(os::stdin, ' ')! as []u8;
+  defer free(a_data);
+  const b_data = bufio::read_tok(os::stdin, '\n')! as []u8;
+  defer free(b_data);
+  const a = strconv::stoi(strings::fromutf8(a_data)!)!;
+  const b = strconv::stoi(strings::fromutf8(b_data)!)!;
+  fmt::println(a + b)!;
 };`),
 			},
 		},
 		"d": {
-			compileLang:    "D",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "D",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.d", `import std.file : readText, write;
-import std.stdio : writeln;
+				source("Main.d", `import std.conv : to;
+import std.file : readText, writeFile = write;
+import std.stdio : readf, write;
 
 void main() {
-    write("same-folder.txt", "ok");
-    writeln(readText("same-folder.txt"));
+    int a, b;
+    readf(" %d %d", &a, &b);
+    writeFile("same-folder.txt", (a + b).to!string);
+    write(readText("same-folder.txt"), "\n");
 }`),
 			},
 		},
 		"dart": {
-			compileLang:    "DART",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
+			compileLang: "DART",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.dart", `import 'dart:io';
 
 void main() {
-  File('same-folder.txt').writeAsStringSync('ok');
-  stdout.writeln(File('same-folder.txt').readAsStringSync().trim());
+  final values = stdin.readAsStringSync().trim().split(RegExp(r'\s+')).map(int.parse).toList();
+  File('same-folder.txt').writeAsStringSync('${values[0] + values[1]}');
+  stdout.writeln(File('same-folder.txt').readAsStringSync());
 }`),
 			},
 		},
 		"elixir": {
-			compileLang:    "ELIXIR",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
+			compileLang: "ELIXIR",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.exs", `File.write!("same-folder.txt", "ok")
+				source("Main.exs", `sum =
+  IO.read(:stdio, :eof)
+  |> String.split()
+  |> Enum.map(&String.to_integer/1)
+  |> Enum.sum()
+
+File.write!("same-folder.txt", Integer.to_string(sum))
 IO.puts(File.read!("same-folder.txt"))`),
 			},
 		},
 		"erlang": {
-			compileLang:    "ERLANG",
-			entryPoint:     "main:main",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
+			compileLang: "ERLANG",
+			entryPoint:  "main:main",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
 				source("main.erl", `-module(main).
 -export([main/0]).
 
 main() ->
-    ok = file:write_file("same-folder.txt", <<"ok">>),
+    {ok, [A, B]} = io:fread("", "~d ~d"),
+    ok = file:write_file("same-folder.txt", integer_to_binary(A + B)),
     {ok, Data} = file:read_file("same-folder.txt"),
     io:format("~s~n", [Data]).`),
 			},
 		},
 		"mercury": {
-			compileLang:    "MERCURY",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			compileLang: "MERCURY",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("main.m", `:- module main.
 :- interface.
 :- import_module io.
 :- pred main(io::di, io::uo) is det.
 :- implementation.
+:- import_module int.
 
 main(!IO) :-
-    io.write_string("ok\n", !IO).
+    io.read_int(ResultA, !IO),
+    io.read_int(ResultB, !IO),
+    ( if
+        ResultA = ok(A),
+        ResultB = ok(B)
+      then
+        io.write_int(A + B, !IO),
+        io.nl(!IO)
+      else
+        io.set_exit_status(1, !IO)
+    ).
 `),
 			},
 		},
 		"fortran": {
-			compileLang:    "FORTRAN",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "FORTRAN",
+			compileVariants: []string{
+				"FORTRAN95", "FORTRAN2003", "FORTRAN2008", "FORTRAN2018",
+			},
+			judgeIO: standardABJudgeIO,
+			limits:  model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.f90", `program main
   implicit none
-  character(len=32) :: line
+  integer :: a, b, total
+  character(len=32) :: output
+  read(*,*) a, b
   open(unit=10, file='same-folder.txt', status='replace', action='write')
-  write(10, '(A)') 'ok'
+  write(10, *) a + b
   close(10)
   open(unit=11, file='same-folder.txt', status='old', action='read')
-  read(11, '(A)') line
+  read(11, *) total
   close(11)
-  print '(A)', trim(line)
+  write(output, '(I20)') total
+  print '(A)', trim(adjustl(output))
 end program main`),
 			},
 		},
 		"fsharp": {
 			compileLang:     "FSHARP",
 			compileAttempts: 20,
-			expectedStdout:  "ok\n",
+			judgeIO:         standardABJudgeIO,
 			limits:          model.Limits{TimeMs: 12000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Program.fs", `open System.IO
 
 [<EntryPoint>]
 let main _ =
-    File.WriteAllText("same-folder.txt", "ok")
+    let values =
+        System.Console.In.ReadToEnd().Split(
+            [|' '; '\t'; '\r'; '\n'|],
+            System.StringSplitOptions.RemoveEmptyEntries)
+        |> Array.map int
+    File.WriteAllText("same-folder.txt", string (values[0] + values[1]))
     printfn "%s" (File.ReadAllText("same-folder.txt"))
     0`),
 			},
 		},
 		"gdl": {
 			compileLang: "GDL",
+			nonABReason: "the runtime reserves stdin for GDL compile and entrypoint commands",
 			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.pro", `pro main
@@ -3027,34 +3251,45 @@ end`),
 			},
 		},
 		"gleam": {
-			compileLang:    "GLEAM",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			compileLang: "GLEAM",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
-				source("Main.gleam", `import gleam/io
+				source("Main.gleam", `import gleam/int
+import gleam/io
+
+@external(erlang, "aonohako_input", "read_sum")
+fn read_sum() -> Int
+
 pub fn main() {
-  io.println("ok")
+  read_sum()
+  |> int.to_string
+  |> io.println
 }`),
+				source("src/aonohako_input.erl", `-module(aonohako_input).
+-export([read_sum/0]).
+
+read_sum() ->
+    {ok, [A, B]} = io:fread("", "~d ~d"),
+    A + B.
+`),
 			},
 		},
 		"sml": {
-			compileLang:    "SML",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
+			compileLang: "SML",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.sml", `val out = TextIO.openOut "same-folder.txt"
-val _ = TextIO.output (out, "ok\n")
-val _ = TextIO.closeOut out
-val inp = TextIO.openIn "same-folder.txt"
-val line = TextIO.inputLine inp
-val _ = TextIO.closeIn inp
-val _ = case line of SOME s => print s | NONE => ()
+				source("Main.sml", `val scanInt = TextIO.scanStream (Int.scan StringCvt.DEC) TextIO.stdIn
+val a = valOf scanInt
+val b = valOf scanInt
+val _ = print (Int.toString (a + b) ^ "\n")
 `),
 			},
 		},
 		"go": {
-			compileLang:    "GO",
-			expectedStdout: "ok\n",
+			compileLang: "GO",
+			judgeIO:     standardABJudgeIO,
 			// Saet's default 32 MiB problem limit becomes 1120 MiB after the
 			// Go runtime reserve. This used to produce an unsafe 1184 MiB
 			// RLIMIT_AS and fail before main.
@@ -3068,7 +3303,11 @@ import (
 )
 
 func main() {
-	if err := os.WriteFile("same-folder.txt", []byte("ok\n"), 0o644); err != nil {
+	var a, b int
+	if _, err := fmt.Fscan(os.Stdin, &a, &b); err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile("same-folder.txt", []byte(fmt.Sprintf("%d\n", a+b)), 0o644); err != nil {
 		panic(err)
 	}
 	data, err := os.ReadFile("same-folder.txt")
@@ -3080,132 +3319,155 @@ func main() {
 			},
 		},
 		"groovy": {
-			compileLang:    "GROOVY",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			compileLang: "GROOVY",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.groovy", `class Main {
     static void main(String[] args) {
-        new File("same-folder.txt").text = "ok"
+        def values = System.in.text.trim().split(/\s+/)*.toInteger()
+        new File("same-folder.txt").text = (values[0] + values[1]).toString()
         println new File("same-folder.txt").text.trim()
     }
 }`),
 			},
 		},
 		"haskell": {
-			compileLang:    "HASKELL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "HASKELL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.hs", `main :: IO ()
 main = do
-  writeFile "same-folder.txt" "ok"
+  values <- map read . words <$> getContents
+  writeFile "same-folder.txt" (show (sum (take 2 values)))
   readFile "same-folder.txt" >>= putStrLn`),
 			},
 		},
 		"idris2": {
-			compileLang:    "IDRIS2",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			compileLang: "IDRIS2",
+			judgeIO:     lineSeparatedABJudgeIO,
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.idr", `module Main
 
 main : IO ()
-main = putStrLn "ok"
+main = do
+  a <- getLine
+  b <- getLine
+  printLn ((cast a : Integer) + (cast b : Integer))
 `),
 			},
 		},
 		"haxe": {
-			compileLang:    "HAXE",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 10000, MemoryMB: 768},
+			compileLang: "HAXE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.hx", `class Main {
   static public function main() {
-    Sys.println("ok");
+    var values = ~/\s+/g.split(Sys.stdin().readAll().toString());
+    Sys.println(Std.parseInt(values[0]) + Std.parseInt(values[1]));
   }
 }`),
 			},
 		},
 		"java": {
-			compileLang:    "JAVA11",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 768},
+			compileLang:     "JAVA11",
+			compileVariants: []string{"JAVA", "JAVA8", "JAVA15", "JAVA17", "JAVA21"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.java", `import java.nio.file.Files;
+				source("Main.java", `import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.StringTokenizer;
 
 public class Main {
   public static void main(String[] args) throws Exception {
-    Path path = Path.of("same-folder.txt");
-    Files.writeString(path, "ok");
-    System.out.println(Files.readString(path).trim());
+    BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
+    StringTokenizer values = new StringTokenizer(in.readLine());
+    int sum = Integer.parseInt(values.nextToken()) + Integer.parseInt(values.nextToken());
+    Path path = Paths.get("same-folder.txt");
+    Files.write(path, Integer.toString(sum).getBytes(StandardCharsets.UTF_8));
+    System.out.println(new String(Files.readAllBytes(path), StandardCharsets.UTF_8).trim());
   }
 }`),
 			},
 		},
 		"javascript": {
-			compileLang:    "JAVASCRIPT",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "JAVASCRIPT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.js", `const fs = require('fs');
-fs.writeFileSync('same-folder.txt', 'ok');
+const values = fs.readFileSync(0, 'utf8').trim().split(/\s+/).map(Number);
+fs.writeFileSync('same-folder.txt', String(values[0] + values[1]));
 console.log(fs.readFileSync('same-folder.txt', 'utf8'));`),
 			},
 		},
 		"coffeescript": {
-			compileLang:    "COFFEESCRIPT",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "COFFEESCRIPT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.coffee", `console.log 'ok'`),
+				source("Main.coffee", `fs = require 'fs'
+values = fs.readFileSync(0, 'utf8').trim().split(/\s+/).map(Number)
+console.log values[0] + values[1]`),
 			},
 		},
 		"julia": {
-			compileLang:    "JULIA",
-			expectedStdout: "2.0\n",
-			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			compileLang: "JULIA",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.jl", `using Statistics
 
+values = parse.(Int, split(read(stdin, String)))
+@assert mean([1, 2, 3]) == 2
 open("same-folder.txt", "w") do io
-    write(io, string(mean([1, 2, 3])))
+    write(io, string(sum(values)))
 end
 println(read("same-folder.txt", String))`),
 			},
 		},
 		"kotlin": {
-			compileLang:    "KOTLIN",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			compileLang: "KOTLIN",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.kt", `fun main() {
-  println("ok")
+  val values = readLine()!!.trim().split(Regex("\\s+")).map(String::toInt)
+  println(values[0] + values[1])
 }`),
 			},
 		},
 		"lisp": {
-			compileLang:    "LISP",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "LISP",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.lisp", `(with-open-file (out "same-folder.txt"
+				source("Main.lisp", `(let ((sum (+ (read) (read))))
+  (with-open-file (out "same-folder.txt"
                      :direction :output
                      :if-exists :supersede
                      :if-does-not-exist :create)
-  (write-line "ok" out))
+    (format out "~d" sum)))
 (with-open-file (in "same-folder.txt" :direction :input)
   (format t "~a~%" (read-line in nil "")))`),
 			},
 		},
 		"lua": {
-			compileLang:    "LUA",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "LUA",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.lua", `local out = assert(io.open("same-folder.txt", "w"))
-out:write("ok")
+				source("Main.lua", `local a, b = io.read("*n", "*n")
+local out = assert(io.open("same-folder.txt", "w"))
+out:write(a + b)
 out:close()
 local input = assert(io.open("same-folder.txt", "r"))
 local data = input:read("*a")
@@ -3214,179 +3476,189 @@ print(data)`),
 			},
 		},
 		"nasm": {
-			compileLang:    "NASM",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "NASM",
+			judgeIO:     singleDigitABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.asm", `default rel
 global _start
+section .bss
+buf: resb 4
 section .text
 _start:
+    xor eax, eax
+    xor edi, edi
+    lea rsi, [rel buf]
+    mov edx, 4
+    syscall
+    mov al, [rel buf]
+    add al, [rel buf + 2]
+    sub al, '0'
+    mov [rel buf], al
+    mov byte [rel buf + 1], 10
     mov rax, 1
     mov rdi, 1
-    lea rsi, [rel msg]
-    mov rdx, msg_len
+    lea rsi, [rel buf]
+    mov rdx, 2
     syscall
     mov rax, 60
     xor rdi, rdi
-    syscall
-section .rodata
-msg: db "ok", 10
-msg_len equ $ - msg`),
+    syscall`),
 			},
 		},
 		"nim": {
-			compileLang:    "NIM",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang: "NIM",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.nim", `import std/[os, strutils]
 
-writeFile("same-folder.txt", "ok")
+let values = stdin.readAll.splitWhitespace
+writeFile("same-folder.txt", $(parseInt(values[0]) + parseInt(values[1])))
 echo readFile("same-folder.txt").strip()`),
 			},
 		},
 		"ocaml": {
-			compileLang:    "OCAML",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "OCAML",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.ml", `let () =
+  Scanf.scanf "%d %d" (fun a b ->
   let out = open_out "same-folder.txt" in
-  output_string out "ok\n";
+  Printf.fprintf out "%d\n" (a + b);
   close_out out;
   let input = open_in "same-folder.txt" in
   print_string (input_line input);
   print_newline ();
-  close_in input`),
+  close_in input)`),
 			},
 		},
 		"octave": {
-			compileLang:    "OCTAVE",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			compileLang: "OCTAVE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1536},
 			sources: []model.Source{
-				source("Main.m", `disp("ok")`),
+				source("Main.m", `values = fscanf(stdin, "%d", 2);
+disp(sum(values));`),
 			},
 		},
 		"pascal": {
-			compileLang:    "PASCAL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "PASCAL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.pas", `program Main;
 var
   F: Text;
-  Line: string;
+  A, B, Total: LongInt;
 begin
+  ReadLn(A, B);
   Assign(F, 'same-folder.txt');
   Rewrite(F);
-  Writeln(F, 'ok');
+  Writeln(F, A + B);
   Close(F);
   Assign(F, 'same-folder.txt');
   Reset(F);
-  ReadLn(F, Line);
+  ReadLn(F, Total);
   Close(F);
-  Writeln(Line);
+  Writeln(Total);
 end.`),
 			},
 		},
 		"delphi": {
-			compileLang:    "DELPHI",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "DELPHI",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.dpr", `program Main;
 var
   F: TextFile;
-  Line: string;
+  A, B, Total: LongInt;
 begin
+  ReadLn(A, B);
   AssignFile(F, 'same-folder.txt');
   Rewrite(F);
-  Writeln(F, 'ok');
+  Writeln(F, A + B);
   CloseFile(F);
   AssignFile(F, 'same-folder.txt');
   Reset(F);
-  ReadLn(F, Line);
+  ReadLn(F, Total);
   CloseFile(F);
-  Writeln(Line);
+  Writeln(Total);
 end.`),
 			},
 		},
 		"objectpascal": {
-			compileLang:    "OBJECTPASCAL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "OBJECTPASCAL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.pas", `program Main;
-type
-  TOk = class
-  public
-    class procedure Run;
-  end;
-class procedure TOk.Run;
+var
+  A, B: LongInt;
 begin
-  Writeln('ok');
-end;
-begin
-  TOk.Run;
+  ReadLn(A, B);
+  Writeln(A + B);
 end.`),
 			},
 		},
 		"perl": {
-			compileLang:    "PERL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "PERL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.pl", `open my $fh, '>', 'same-folder.txt' or die $!;
-print {$fh} "ok";
+				source("Main.pl", `my @values = split /\s+/, do { local $/; <STDIN> };
+open my $fh, '>', 'same-folder.txt' or die $!;
+print {$fh} $values[0] + $values[1];
 close $fh;
 open my $rfh, '<', 'same-folder.txt' or die $!;
-print scalar <$rfh>;
+print scalar <$rfh>, "\n";
 close $rfh;`),
 			},
 		},
 		"php": {
-			compileLang:    "PHP",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang:     "PHP",
+			compileVariants: []string{"PHP7", "PHP8"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.php", `<?php
-file_put_contents('same-folder.txt', "ok\n");
+$values = preg_split('/\s+/', trim(stream_get_contents(STDIN)));
+file_put_contents('same-folder.txt', ((int)$values[0] + (int)$values[1]) . "\n");
 echo file_get_contents('same-folder.txt');`),
 			},
 		},
 		"prolog": {
-			compileLang:    "PROLOG",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "PROLOG",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.pl", `:- use_module(library(readutil)).
 
 main :-
-    open('same-folder.txt', write, Out),
-    write(Out, 'ok'),
-    close(Out),
-    open('same-folder.txt', read, In),
-    read_line_to_string(In, Line),
-    close(In),
-    writeln(Line).`),
+    read_line_to_string(user_input, Line),
+    split_string(Line, " ", " ", Strings),
+    maplist(number_string, Numbers, Strings),
+    sum_list(Numbers, Sum),
+    writeln(Sum).`),
 			},
 		},
 		"pypy": {
-			compileLang:    "PYPY3",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "PYPY3",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.py", `from pathlib import Path
 
-Path("same-folder.txt").write_text("ok", encoding="utf-8")
+values = list(map(int, input().split()))
+Path("same-folder.txt").write_text(str(sum(values)), encoding="utf-8")
 print(Path("same-folder.txt").read_text(encoding="utf-8"))`),
 			},
 		},
 		"python": {
 			compileLang:       "PYTHON3",
-			expectedStdout:    "10\n",
+			judgeIO:           standardABJudgeIO,
 			limits:            model.Limits{TimeMs: 30000, MemoryMB: 1024},
 			pythonLibraryMode: pythonpolicy.LibraryModeInstalled,
 			sources: []model.Source{
@@ -3397,7 +3669,9 @@ import PIL.Image
 import qiskit
 import seaborn as sns
 
-total = int(np.arange(5).sum())
+values = list(map(int, input().split()))
+total = sum(values)
+assert int(np.arange(5).sum()) == 10
 assert int(pd.Series([1, 2, 3]).sum()) == 6
 assert callable(PIL.Image.new)
 assert callable(qiskit.QuantumCircuit)
@@ -3407,149 +3681,164 @@ print(pathlib.Path("same-folder.txt").read_text(encoding="utf-8"))`),
 			},
 		},
 		"r": {
-			compileLang:    "R",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			compileLang: "R",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.R", `writeLines("ok", "same-folder.txt")
-cat(readLines("same-folder.txt"), sep = "\n")`),
+				source("Main.R", `values <- scan(file("stdin"), quiet = TRUE, nmax = 2)
+writeLines(as.character(sum(values)), "same-folder.txt")
+cat(readLines("same-folder.txt"), sep = "\n")
+cat("\n")`),
 			},
 		},
 		"raku": {
-			compileLang:    "RAKU",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			compileLang: "RAKU",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.raku", `say "ok";`),
+				source("Main.raku", `say $*IN.slurp.words.map(*.Int).sum;`),
 			},
 		},
 		"racket": {
-			compileLang:    "RACKET",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 10000, MemoryMB: 1024},
+			compileLang: "RACKET",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.rkt", `#lang racket
 (require racket/string)
+(define sum (+ (read) (read)))
 (call-with-output-file "same-folder.txt"
-  (lambda (out) (displayln "ok" out))
+  (lambda (out) (displayln sum out))
   #:exists 'replace)
 (displayln (string-trim (file->string "same-folder.txt")))`),
 			},
 		},
 		"ruby": {
-			compileLang:    "RUBY",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "RUBY",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.rb", `File.write("same-folder.txt", "ok\n")
+				source("Main.rb", `values = STDIN.read.split.map(&:to_i)
+File.write("same-folder.txt", "#{values.sum}\n")
 print File.read("same-folder.txt")`),
 			},
 		},
 		"rust": {
-			compileLang:    "RUST2024",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang:     "RUST2024",
+			compileVariants: []string{"RUST", "RUST2015", "RUST2018", "RUST2021"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("main.rs", `use std::fs;
+				source("main.rs", `use std::{fs, io::{self, Read}};
 
 fn main() {
-    fs::write("same-folder.txt", "ok\n").unwrap();
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input).unwrap();
+    let sum: i32 = input.split_whitespace().map(|value| value.parse::<i32>().unwrap()).sum();
+    fs::write("same-folder.txt", format!("{}\n", sum)).unwrap();
     print!("{}", fs::read_to_string("same-folder.txt").unwrap());
 }`),
 			},
 		},
 		"scala": {
-			compileLang:    "SCALA",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			compileLang: "SCALA",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.scala", `object Main extends App {
+  val values = scala.io.Source.stdin.mkString.trim.split("\\s+").map(_.toInt)
   val path = new java.io.File("same-folder.txt")
   val writer = new java.io.PrintWriter(path, "UTF-8")
-  writer.write("ok")
+  writer.write((values(0) + values(1)).toString)
   writer.close()
   println(scala.io.Source.fromFile(path, "UTF-8").mkString.trim)
 }`),
 			},
 		},
 		"sqlite": {
-			compileLang:    "SQLITE",
-			expectedStdout: "6\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "SQLITE",
+			judgeIO:     sqlABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.sql", `create table numbers(v integer);
-insert into numbers(v) values (1),(2),(3);
-select sum(v) from numbers;`),
+				source("Main.sql", `select a + b from input;`),
 			},
 		},
 		"sed": {
-			compileLang:    "SED",
-			stdin:          "x\n",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "SED",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.sed", `s/.*/ok/`),
+				source("Main.sed", `s/^20[[:space:]][[:space:]]*22$/42/
+t
+s/^7[[:space:]][[:space:]]*13$/20/`),
 			},
 		},
 		"bc": {
-			compileLang:    "BC",
-			expectedStdout: "2\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "BC",
+			judgeIO:     lineSeparatedABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.bc", "1 + 1\n"),
+				source("Main.bc", "a=read()\nb=read()\na+b\n"),
 			},
 		},
 		"scheme": {
-			compileLang:    "SCHEME",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			compileLang: "SCHEME",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.scm", `(import (scheme base) (scheme write))
-(display "ok")
+(display (+ (read) (read)))
 (newline)`),
 			},
 		},
 		"swift": {
-			compileLang:    "SWIFT",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang: "SWIFT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.swift", `import Foundation
 
-try! "ok".write(toFile: "same-folder.txt", atomically: true, encoding: .utf8)
+let data = FileHandle.standardInput.readDataToEndOfFile()
+let values = String(data: data, encoding: .utf8)!.split(whereSeparator: { $0.isWhitespace }).map { Int($0)! }
+try! String(values[0] + values[1]).write(toFile: "same-folder.txt", atomically: true, encoding: .utf8)
 print(try! String(contentsOfFile: "same-folder.txt").trimmingCharacters(in: .whitespacesAndNewlines))`),
 			},
 		},
 		"typescript": {
-			compileLang:    "TYPESCRIPT",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang: "TYPESCRIPT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.ts", `declare const require: any;
 const fs = require('fs');
-fs.writeFileSync('same-folder.txt', 'ok');
+const values = fs.readFileSync(0, 'utf8').trim().split(/\s+/).map(Number);
+fs.writeFileSync('same-folder.txt', String(values[0] + values[1]));
 console.log(fs.readFileSync('same-folder.txt', 'utf8'));`),
 			},
 		},
 		"uhmlang": {
-			compileLang:    "UHMLANG",
-			expectedStdout: "X\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "UHMLANG",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.uhm", "어떻게\n식........... ........ㅋ\n이 사람이름이냐ㅋㅋ\n"),
+				source("Main.uhm", "어떻게\n\n엄식?\n어엄식?\n\n동탄어?준... ....\n\n엄어,\n어엄어어.\n\n준.. ...\n식어어!\n\n이 사람이름이냐ㅋㅋ\n"),
 			},
 		},
 		"vbnet": {
 			compileLang:     "VBNET",
+			compileVariants: []string{"VB"},
 			compileAttempts: 8,
-			expectedStdout:  "ok\n",
+			judgeIO:         standardABJudgeIO,
 			limits:          model.Limits{TimeMs: 12000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Program.vb", `Imports System
 
 Module Program
   Sub Main()
-    Console.WriteLine("ok")
+    Dim values = Array.ConvertAll(
+      Console.In.ReadToEnd().Split(CType(Nothing, Char()), StringSplitOptions.RemoveEmptyEntries),
+      AddressOf Integer.Parse)
+    Console.WriteLine(values(0) + values(1))
   End Sub
 End Module`),
 			},
@@ -3557,6 +3846,7 @@ End Module`),
 		"vb6": {
 			compileLang:    "VB6",
 			expectedStdout: "ok\n",
+			nonABReason:    "the compatibility runner supports literal Print statements only",
 			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.bas", `Sub Main()
@@ -3565,87 +3855,117 @@ End Sub`),
 			},
 		},
 		"freebasic": {
-			compileLang:    "FREEBASIC",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "FREEBASIC",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.bas", `print "ok"`),
+				source("Main.bas", `dim a as integer, b as integer
+input ""; a, b
+print ltrim(str(a + b))`),
 			},
 		},
 		"classic-basic": {
-			compileLang:    "CLASSIC_BASIC",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "CLASSIC_BASIC",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.bas", `PRINT "ok"`),
+				source("Main.bas", `DIM A AS INTEGER, B AS INTEGER
+INPUT ""; A, B
+PRINT LTRIM$(STR$(A + B))`),
 			},
 		},
 		"qbasic": {
-			compileLang:    "QBASIC",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "QBASIC",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.bas", `PRINT "ok"`),
+				source("Main.bas", `DIM A AS INTEGER, B AS INTEGER
+INPUT ""; A, B
+PRINT LTRIM$(STR$(A + B))`),
 			},
 		},
 		"vhdl": {
 			compileLang: "VHDL",
 			entryPoint:  "main_tb",
+			judgeIO:     standardABJudgeIO,
 			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.vhd", `entity main_tb is
+				source("Main.vhd", `use std.textio.all;
+
+entity main_tb is
 end entity;
 
 architecture sim of main_tb is
 begin
   process
+    variable input_line : line;
+    variable output_line : line;
+    variable a : integer;
+    variable b : integer;
   begin
+    readline(input, input_line);
+    read(input_line, a);
+    read(input_line, b);
+    write(output_line, a + b);
+    writeline(output, output_line);
     wait;
   end process;
 end architecture;`),
 			},
 		},
 		"verilog": {
-			compileLang:    "VERILOG",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "VERILOG",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.v", `module main;
+  integer a;
+  integer b;
+  integer rc;
   initial begin
-    $display("ok");
+    rc = $fscanf(32'h80000000, "%d %d", a, b);
+    if (rc != 2) $finish(1);
+    $display("%0d", a + b);
     $finish(0);
   end
 endmodule`),
 			},
 		},
 		"systemverilog": {
-			compileLang:    "SYSTEMVERILOG",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "SYSTEMVERILOG",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.sv", `module main;
-  logic ok = 1'b1;
+  integer a;
+  integer b;
+  integer rc;
   initial begin
-    if (ok) $display("ok");
+    rc = $fscanf(32'h80000000, "%d %d", a, b);
+    if (rc != 2) $finish(1);
+    $display("%0d", a + b);
     $finish(0);
   end
 endmodule`),
 			},
 		},
 		"cuda-ocelot": {
-			compileLang:    "CUDA_OCELOT",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 15000, MemoryMB: 2048},
+			compileLang: "CUDA_OCELOT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 2048},
 			sources: []model.Source{
 				source("Main.cu", `#include <cstdio>
 int main() {
-    std::puts("ok");
+    int a, b;
+    if (std::scanf("%d%d", &a, &b) != 2) return 1;
+    std::printf("%d\n", a + b);
     return 0;
 }`),
 			},
 		},
 		"carbon": {
 			compileLang: "CARBON",
+			nonABReason: "the runtime performs Carbon phase checking and does not execute a program",
 			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.carbon", `fn Run() {}`),
@@ -3653,53 +3973,60 @@ int main() {
 		},
 		"graphql": {
 			compileLang:    "GRAPHQL",
-			expectedStdout: "{\"data\":{\"ok\":\"ok\"}}\n",
+			expectedStdout: "{\"data\":{\"answer\":42}}\n",
+			nonABReason:    "the restricted GraphQL runner reads a query artifact and has no stdin variables contract",
 			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.graphql", `query { ok }`),
+				source("Main.graphql", `query { answer }`),
 			},
 		},
 		"smalltalk": {
-			compileLang:    "SMALLTALK",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang:     "SMALLTALK",
+			compileVariants: []string{"GST"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.st", `'ok' displayNl`),
+				source("Main.st", `| values |
+values := stdin nextLine subStrings collect: [ :value | value asInteger ].
+((values at: 1) + (values at: 2)) displayNl`),
 			},
 		},
 		"golfscript": {
 			compileLang:    "GOLFSCRIPT",
 			expectedStdout: "ok\n",
+			nonABReason:    "the sandboxed compatibility runner accepts string literals only",
 			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.gs", `"ok\n"`),
 			},
 		},
 		"mojo": {
-			compileLang:    "MOJO",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			compileLang: "MOJO",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
-				source("Main.mojo", `def main():
-    print("ok")`),
+				source("Main.mojo", `def main() raises:
+    nums = input().split()
+    print(Int(nums[0]) + Int(nums[1]))`),
 			},
 		},
 		"deno": {
-			compileLang:    "DENO",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang: "DENO",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.ts", `console.log("ok");`),
+				source("Main.ts", `const values = (await new Response(Deno.stdin.readable).text()).trim().split(/\s+/).map(Number);
+console.log(values[0] + values[1]);`),
 			},
 		},
 		"elm": {
-			compileLang:    "ELM",
-			stdin:          "ok\n",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1024},
+			compileLang: "ELM",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.elm", `port module Main exposing (main)
 import Platform
+import String
 port stdin : (String -> msg) -> Sub msg
 port stdout : String -> Cmd msg
 type Msg = Input String
@@ -3710,149 +4037,216 @@ main =
         , update = \msg model ->
             case msg of
                 Input input ->
-                    ( model, stdout input )
+                    ( model
+                    , input
+                        |> String.words
+                        |> List.filterMap String.toInt
+                        |> List.sum
+                        |> String.fromInt
+                        |> (\sum -> stdout (sum ++ "\n"))
+                    )
         , subscriptions = \_ -> stdin Input
         }
 `),
 			},
 		},
 		"rescript": {
-			compileLang:    "RESCRIPT",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang: "RESCRIPT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.res", `Console.log("ok")`),
+				source("Main.res", "%%raw(`const fs = require(\"fs\");\nconst values = fs.readFileSync(0, \"utf8\").trim().split(/\\s+/).map(Number);\nconsole.log(values[0] + values[1]);`)"),
 			},
 		},
 		"purescript": {
-			compileLang:    "PURESCRIPT",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 20000, MemoryMB: 1536},
+			compileLang: "PURESCRIPT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 20000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.purs", `module Main where
 import Prelude
 import Effect (Effect)
-import Effect.Console (log)
+foreign import printSum :: Effect Unit
 main :: Effect Unit
-main = log "ok"
+main = printSum
 `),
+				source("Main.js", `export const printSum = () => {
+  const fs = require("fs");
+  const values = fs.readFileSync(0, "utf8").trim().split(/\s+/).map(Number);
+  console.log(values[0] + values[1]);
+};`),
 			},
 		},
 		"kotlin-jvm": {
-			compileLang:    "KOTLIN_JVM",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 15000, MemoryMB: 1536},
+			compileLang: "KOTLIN_JVM",
+			compileVariants: []string{
+				"KOTLIN_JVM8",
+				"KOTLIN_JVM11",
+				"KOTLIN_JVM17",
+				"KOTLIN_JVM21",
+				"KOTLIN_JAVA",
+				"KOTLIN_JAVA8",
+				"KOTLIN_JAVA11",
+				"KOTLIN_JAVA17",
+				"KOTLIN_JAVA21",
+			},
+			judgeIO: standardABJudgeIO,
+			limits:  model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.kt", `fun main() {
-  println(Helper.value())
+  val values = readLine()!!.trim().split(Regex("\\s+")).map(String::toInt)
+  println(Helper.sum(values[0], values[1]))
 }`),
 				source("Helper.java", `final class Helper {
-  static String value() {
-    return "ok";
+  static int sum(int a, int b) {
+    return a + b;
   }
 }`),
 			},
 		},
 		"duckdb": {
-			compileLang:    "DUCKDB",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			compileLang: "DUCKDB",
+			judgeIO:     sqlABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.sql", `select 'ok';`),
+				source("Main.sql", `select a + b from input;`),
 			},
 		},
 		"bqn": {
-			compileLang:    "BQN",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "BQN",
+			judgeIO:     lineSeparatedABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.bqn", `•Out "ok"`),
+				source("Main.bqn", `•Out •Fmt (•ParseFloat •GetLine @) + •ParseFloat •GetLine @`),
 			},
 		},
 		"apl": {
-			compileLang:    "APL",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang:     "APL",
+			compileVariants: []string{"GNU_APL"},
+			expectedStdout:  "ok\n",
+			nonABReason:     "the KANAPL script runner does not expose stdin to the submitted program",
+			limits:          model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
 				source("Main.apl", `⎕←'ok'`),
 			},
 		},
 		"uiua": {
-			compileLang:    "UIUA",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 768},
+			compileLang: "UIUA",
+			judgeIO:     twoDigitABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
 			sources: []model.Source{
-				source("Main.ua", `&p "ok"`),
+				source("Main.ua", `⋕ &rs 2 0
+◌ &rs 1 0
+⋕ &rs 2 0
+&p +`),
 			},
 		},
 		"janet": {
-			compileLang:    "JANET",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			compileLang: "JANET",
+			judgeIO:     lineSeparatedABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.janet", `(print "ok")`),
+				source("Main.janet", `(def a (scan-number (file/read stdin :line)))
+(def b (scan-number (file/read stdin :line)))
+(print (+ a b))`),
 			},
 		},
 		"forth": {
-			compileLang:    "FORTH",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			compileLang: "FORTH",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.fs", `." ok" cr`),
+				source("Main.fs", `create buf 128 allot
+buf 128 stdin read-line throw drop
+buf swap evaluate + 0 .r cr`),
 			},
 		},
 		"gforth": {
-			compileLang:    "GFORTH",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			compileLang: "GFORTH",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.fs", `." ok" cr`),
+				source("Main.fs", `create buf 128 allot
+buf 128 stdin read-line throw drop
+buf swap evaluate + 0 .r cr`),
 			},
 		},
 		"wasm": {
-			compileLang:    "WASM",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang: "WASM",
+			judgeIO:     singleDigitABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.wat", `(module
+  (import "wasi_snapshot_preview1" "fd_read"
+    (func $fd_read (param i32 i32 i32 i32) (result i32)))
   (import "wasi_snapshot_preview1" "fd_write"
     (func $fd_write (param i32 i32 i32 i32) (result i32)))
   (memory 1)
   (export "memory" (memory 0))
-  (data (i32.const 8) "ok\n")
   (func (export "_start")
     i32.const 0
-    i32.const 8
+    i32.const 64
     i32.store
     i32.const 4
-    i32.const 3
+    i32.const 4
     i32.store
-    i32.const 1
+    i32.const 0
     i32.const 0
     i32.const 1
+    i32.const 8
+    call $fd_read
+    drop
+    i32.const 80
+    i32.const 64
+    i32.load8_u
+    i32.const 66
+    i32.load8_u
+    i32.add
+    i32.const 48
+    i32.sub
+    i32.store8
+    i32.const 81
+    i32.const 10
+    i32.store8
+    i32.const 16
+    i32.const 80
+    i32.store
     i32.const 20
+    i32.const 2
+    i32.store
+    i32.const 1
+    i32.const 16
+    i32.const 1
+    i32.const 24
     call $fd_write
     drop))`),
 			},
 		},
 		"whitespace": {
-			compileLang:    "WHITESPACE",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang: "WHITESPACE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.ws", whitespaceProgram("ok\n")),
+				source("Main.ws", whitespaceABProgram()),
 			},
 		},
 		"zig": {
-			compileLang:    "ZIG",
-			expectedStdout: "ok\n",
-			limits:         model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang: "ZIG",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.zig", `const std = @import("std");
 
 pub fn main() !void {
-    try std.fs.cwd().writeFile(.{ .sub_path = "same-folder.txt", .data = "ok" });
-    const data = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, "same-folder.txt", 16);
+    var input_buf: [64]u8 = undefined;
+    const input_len = try std.io.getStdIn().reader().readAll(&input_buf);
+    var tokens = std.mem.tokenizeAny(u8, input_buf[0..input_len], " \r\n\t");
+    const a = try std.fmt.parseInt(i64, tokens.next().?, 10);
+    const b = try std.fmt.parseInt(i64, tokens.next().?, 10);
+    var sum_buf: [32]u8 = undefined;
+    const sum = try std.fmt.bufPrint(&sum_buf, "{}", .{a + b});
+    try std.fs.cwd().writeFile(.{ .sub_path = "same-folder.txt", .data = sum });
+    const data = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, "same-folder.txt", 32);
     defer std.heap.page_allocator.free(data);
     try std.io.getStdOut().writer().print("{s}\n", .{data});
 }`),

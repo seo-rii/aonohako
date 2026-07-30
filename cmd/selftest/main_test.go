@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -52,12 +53,26 @@ func TestCompileExecuteCasesCoverMixinLanguages(t *testing.T) {
 func TestCompileExecuteCasesResolveProfilesAndSources(t *testing.T) {
 	cases := compileExecuteCases()
 	for language, tc := range cases {
-		profile, ok := profiles.Resolve(tc.compileLang)
-		if !ok {
-			t.Fatalf("language %q uses unknown compile profile %q", language, tc.compileLang)
-		}
-		if profile.RunLang == "" {
-			t.Fatalf("language %q resolved profile %q without run language", language, tc.compileLang)
+		compileLanguages := append([]string{tc.compileLang}, tc.compileVariants...)
+		seen := map[string]struct{}{}
+		for _, compileLanguage := range compileLanguages {
+			if _, ok := seen[compileLanguage]; ok {
+				t.Errorf("language %q repeats compile profile %q", language, compileLanguage)
+				continue
+			}
+			seen[compileLanguage] = struct{}{}
+			profile, ok := profiles.Resolve(compileLanguage)
+			if !ok {
+				t.Errorf("language %q uses unknown compile profile %q", language, compileLanguage)
+				continue
+			}
+			if profile.RunLang == "" {
+				t.Errorf(
+					"language %q resolved profile %q without run language",
+					language,
+					compileLanguage,
+				)
+			}
 		}
 		if len(tc.sources) == 0 {
 			t.Fatalf("language %q has no sources", language)
@@ -66,6 +81,105 @@ func TestCompileExecuteCasesResolveProfilesAndSources(t *testing.T) {
 			if strings.TrimSpace(src.Name) == "" || strings.TrimSpace(src.DataB64) == "" {
 				t.Fatalf("language %q contains an empty source entry: %+v", language, src)
 			}
+		}
+	}
+}
+
+func TestCompileExecuteCasesCoverVersionedAndAliasProfiles(t *testing.T) {
+	expected := map[string][]string{
+		"ada":           {"ADA", "ADA2012", "ADA2022"},
+		"c":             {"C", "C89", "C99", "C11", "C17", "C18", "C23"},
+		"cpp":           {"CPP", "CPP98", "CPP03", "CPP11", "CPP14", "CPP17", "CPP20", "CPP23", "CPP26"},
+		"fortran":       {"FORTRAN", "FORTRAN95", "FORTRAN2003", "FORTRAN2008", "FORTRAN2018"},
+		"java":          {"JAVA", "JAVA8", "JAVA11", "JAVA15", "JAVA17", "JAVA21"},
+		"kotlin-jvm":    {"KOTLIN_JVM", "KOTLIN_JVM8", "KOTLIN_JVM11", "KOTLIN_JVM17", "KOTLIN_JVM21", "KOTLIN_JAVA", "KOTLIN_JAVA8", "KOTLIN_JAVA11", "KOTLIN_JAVA17", "KOTLIN_JAVA21"},
+		"objective-c":   {"OBJECTIVE_C", "OBJC"},
+		"objective-cpp": {"OBJECTIVE_CPP", "OBJCPP"},
+		"php":           {"PHP", "PHP7", "PHP8"},
+		"rust":          {"RUST", "RUST2015", "RUST2018", "RUST2021", "RUST2024"},
+		"vbnet":         {"VBNET", "VB"},
+		"lean4":         {"LEAN4", "LEAN"},
+		"tla":           {"TLA", "TLAPLUS"},
+		"why3":          {"WHY3", "WHYML"},
+		"smalltalk":     {"SMALLTALK", "GST"},
+		"apl":           {"APL", "GNU_APL"},
+	}
+
+	cases := compileExecuteCases()
+	for language, expectedProfiles := range expected {
+		tc, ok := cases[language]
+		if !ok {
+			t.Errorf("compile-execute cases are missing language %q", language)
+			continue
+		}
+		actual := map[string]struct{}{}
+		for _, compileLanguage := range append([]string{tc.compileLang}, tc.compileVariants...) {
+			actual[compileLanguage] = struct{}{}
+		}
+		for _, expectedProfile := range expectedProfiles {
+			if _, ok := actual[expectedProfile]; !ok {
+				t.Errorf(
+					"language %q does not exercise compile profile %q",
+					language,
+					expectedProfile,
+				)
+			}
+		}
+	}
+}
+
+func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
+	nonInteractive := map[string]struct{}{
+		"acl2":       {},
+		"agda":       {},
+		"alloy":      {},
+		"apecode":    {},
+		"apl":        {},
+		"carbon":     {},
+		"coq":        {},
+		"dafny":      {},
+		"fstar":      {},
+		"gdl":        {},
+		"golfscript": {},
+		"graphql":    {},
+		"isabelle":   {},
+		"kframework": {},
+		"lean4":      {},
+		"rocq":       {},
+		"tla":        {},
+		"vb6":        {},
+		"why3":       {},
+	}
+
+	for language, tc := range compileExecuteCases() {
+		if _, ok := nonInteractive[language]; ok {
+			if strings.TrimSpace(tc.nonABReason) == "" {
+				t.Errorf("non-interactive language %q has no documented A+B exception", language)
+			}
+			continue
+		}
+		if tc.nonABReason != "" {
+			t.Errorf("interactive language %q unexpectedly opts out of A+B: %s", language, tc.nonABReason)
+			continue
+		}
+		if len(tc.judgeIO) < 2 {
+			t.Errorf("language %q has %d A+B judge cases, want at least 2", language, len(tc.judgeIO))
+			continue
+		}
+
+		outputs := map[string]struct{}{}
+		for index, ioCase := range tc.judgeIO {
+			if ioCase.stdin == "" {
+				t.Errorf("language %q judge case %d has empty stdin", language, index+1)
+			}
+			want := fmt.Sprintf("%d\n", ioCase.a+ioCase.b)
+			if ioCase.expectedStdout != want {
+				t.Errorf("language %q judge case %d expected stdout = %q, want %q", language, index+1, ioCase.expectedStdout, want)
+			}
+			outputs[ioCase.expectedStdout] = struct{}{}
+		}
+		if len(outputs) < 2 {
+			t.Errorf("language %q A+B cases do not require input-dependent outputs", language)
 		}
 	}
 }
