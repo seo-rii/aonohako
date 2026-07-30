@@ -6,7 +6,7 @@ The canonical numeric request and capture limits are generated from code in
 Both `/compile` and `/execute` open SSE streams and terminate with exactly
 one `result` event.
 
-When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner. `/compile` returns the remote compile result with the same buffered `log` and `result` shape.
+When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. `/compile` returns the remote compile result with the same buffered `log` and `result` shape.
 
 ## Event Types
 
@@ -14,7 +14,7 @@ When `aonohako` is configured with remote execution transport, the local server 
 |---|---|---|
 | `progress` | both | Acceptance, queue position, and start notifications |
 | `image` | `/execute` | Real-time image frames from sidecar output |
-| `log` | both | buffered stdout / stderr payloads emitted before `result` |
+| `log` | both | buffered stdout / stderr payloads emitted before `result`; optional for `/execute` when `emit_logs=false` |
 | `result` | both | **Final** response (exactly once per request) |
 | `error` | both | Terminal error (emitted **before** `result` on failure) |
 | `heartbeat` | both | Periodic keep-alive |
@@ -71,7 +71,7 @@ Client                        aonohako
   |        ...waiting...       |  (queued until slot available)
   |<-- progress (start) -------|
   |<-- image ------------------|  (if sidecar image output)
-  |<-- log (buffered stdout/stderr) --|
+  |<-- log (buffered stdout/stderr) --|  (omitted when emit_logs=false)
   |<-- result (RunResponse) ---|
 ```
 
@@ -94,6 +94,10 @@ Client                        aonohako
 {"stream": "stdout", "chunk": "hello world\n"}
 {"stream": "stderr", "chunk": "warning: ..."}
 ```
+
+`/execute` emits these contestant output events by default for compatibility.
+The request may set `emit_logs=false` to omit them. Output capture, judging,
+truncation metadata, and the final `result` event are unchanged.
 
 ### `result` (RunResponse)
 

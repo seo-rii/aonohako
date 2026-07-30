@@ -486,18 +486,21 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := s.execute.Run(streamCtx, &req, execute.Hooks{
+	hooks := execute.Hooks{
 		OnImage: func(mime, b64 string, ts int64) {
 			if err := stream.Event("image", map[string]any{"mime": mime, "b64": b64, "ts": ts}); err != nil {
 				stopStream()
 			}
 		},
-		OnLog: func(streamName, msg string) {
+	}
+	if req.EmitLogs == nil || *req.EmitLogs {
+		hooks.OnLog = func(streamName, msg string) {
 			if err := stream.Event("log", map[string]any{"stream": streamName, "chunk": msg}); err != nil {
 				stopStream()
 			}
-		},
-	})
+		}
+	}
+	resp := s.execute.Run(streamCtx, &req, hooks)
 	if streamCtx.Err() != nil {
 		return
 	}

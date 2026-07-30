@@ -90,6 +90,7 @@ error.
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
   "python_library_mode": "stdlib",           // optional request-wide Python imports: "stdlib" | "installed"
   "enable_network": false,                   // outbound network request flag; honored only when server policy allows request-controlled network
+  "emit_logs": true,                         // optional contestant stdout/stderr log SSE events; defaults to true
   "entry_point": "src/main.py",              // optional submitted file path to run; some runtimes use a class/module/procedure/top-level name
   "spj": {                                   // optional special judge
     "binary": {                              // pre-compiled SPJ binary
@@ -143,6 +144,10 @@ rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
 `interactor.limits` uses the same caps; omitted values inherit the contestant
 time/output policy and use safe memory/workspace defaults where needed.
+`emit_logs` defaults to `true` for backward compatibility. Setting it to
+`false` suppresses contestant stdout/stderr `log` SSE events for the whole
+request without changing output capture, judging, or the final `result`
+payload.
 `runtime_profile`, when present, must name a profile configured by the runner
 operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded
 numeric tuning values and cannot pass arbitrary runtime flags. Non-dev servers
@@ -180,8 +185,9 @@ rejected before any outbound request is made.
 When `programs` or `steps` is present, the legacy top-level `lang`, `binaries`,
 `stdin`, `limits`, `entry_point`, and `enable_network` fields must be omitted.
 Top-level `expected_stdout`, `spj`, `file_outputs`, `sidecar_outputs`,
-`ignore_tle`, `problem_id`, and `runtime_profile` still apply to the final
-step. `interactor` is not supported with two-step execute mode.
+`emit_logs`, `ignore_tle`, `problem_id`, and `runtime_profile` still apply to
+the request or final step as appropriate. `interactor` is not supported with
+two-step execute mode.
 
 ```jsonc
 {

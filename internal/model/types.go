@@ -150,6 +150,7 @@ type RunRequest struct {
 	Interactor        *InteractorSpec          `json:"interactor,omitempty"`
 	FileOutputs       []OutputFile             `json:"file_outputs,omitempty"`
 	SidecarOutputs    []OutputFile             `json:"sidecar_outputs,omitempty"`
+	EmitLogs          *bool                    `json:"emit_logs,omitempty"`
 	IgnoreTLE         bool                     `json:"ignore_tle,omitempty"`
 }
 

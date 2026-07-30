@@ -1949,8 +1949,8 @@ func TestExecuteSSESequence(t *testing.T) {
 	}
 
 	events := readSSEEvents(resp.Body, t)
-	if len(events) < 3 {
-		t.Fatalf("expected at least 3 events, got %d", len(events))
+	if len(events) < 4 {
+		t.Fatalf("expected accepted/start/log/result events, got %d", len(events))
 	}
 	if events[0].Name != "progress" {
 		t.Fatalf("first event should be progress, got %s", events[0].Name)
@@ -1960,6 +1960,9 @@ func TestExecuteSSESequence(t *testing.T) {
 	}
 	if events[1].Name != "progress" || events[1].JSON["stage"] != "start" {
 		t.Fatalf("second event should be start progress: %#v", events[1])
+	}
+	if events[2].Name != "log" || events[2].JSON["stream"] != "stdout" || events[2].JSON["chunk"] != "ok\n" {
+		t.Fatalf("omitted emit_logs should preserve stdout log events: %#v", events[2])
 	}
 	last := events[len(events)-1]
 	if last.Name != "result" {
@@ -1976,6 +1979,78 @@ func TestExecuteSSESequence(t *testing.T) {
 	}
 	if last.JSON["time_ms"] != last.JSON["wall_time_ms"] {
 		t.Fatalf("time_ms should mirror wall_time_ms for compatibility: %#v", last.JSON)
+	}
+}
+
+func TestExecuteCanDisableLogEventsWithoutChangingResult(t *testing.T) {
+	type observation struct {
+		emitLogs *bool
+		onLogNil bool
+	}
+	observed := make(chan observation, 1)
+	exitCode := 7
+	s := newServerForTest(t)
+	s.execute = executeRunnerStub{run: func(ctx context.Context, req *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		observed <- observation{emitLogs: req.EmitLogs, onLogNil: hooks.OnLog == nil}
+		return model.RunResponse{
+			Status:        model.RunStatusRE,
+			TimeMs:        9,
+			WallTimeMs:    9,
+			CPUTimeMs:     4,
+			MemoryKB:      1234,
+			ExitCode:      &exitCode,
+			Stdout:        "contestant stdout\n",
+			Stderr:        "contestant stderr\n",
+			Reason:        "process exited with code 7",
+			VerdictSource: "exit_code",
+		}
+	}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 7\n"))
+	payload := map[string]any{
+		"lang":      "binary",
+		"binaries":  []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"emit_logs": false,
+		"limits":    map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	gotObservation := <-observed
+	if gotObservation.emitLogs == nil || *gotObservation.emitLogs {
+		t.Fatalf("execute runner received emit_logs = %v, want explicit false", gotObservation.emitLogs)
+	}
+	if !gotObservation.onLogNil {
+		t.Fatal("emit_logs=false should omit the OnLog hook and its output copies")
+	}
+
+	events := readSSEEvents(resp.Body, t)
+	for _, event := range events {
+		if event.Name == "log" {
+			t.Fatalf("emit_logs=false emitted a log event: %#v", event)
+		}
+	}
+	last := events[len(events)-1]
+	if last.Name != "result" {
+		t.Fatalf("last event should be result, got %#v", last)
+	}
+	if last.JSON["status"] != model.RunStatusRE ||
+		last.JSON["stdout"] != "contestant stdout\n" ||
+		last.JSON["stderr"] != "contestant stderr\n" ||
+		last.JSON["reason"] != "process exited with code 7" ||
+		last.JSON["verdict_source"] != "exit_code" {
+		t.Fatalf("emit_logs=false changed the result payload: %#v", last.JSON)
 	}
 }
 
@@ -2047,6 +2122,89 @@ func TestExecuteSSESequenceViaRemoteRunner(t *testing.T) {
 	last := events[len(events)-1]
 	if last.Name != "result" || last.JSON["status"] != "Accepted" {
 		t.Fatalf("unexpected result event: %#v", last)
+	}
+}
+
+func TestExecuteCanDisableLogEventsViaRemoteRunner(t *testing.T) {
+	remoteRequest := make(chan model.RunRequest, 1)
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/execute" {
+			t.Fatalf("unexpected remote path: %s", r.URL.Path)
+		}
+		var req model.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode remote request: %v", err)
+		}
+		remoteRequest <- req
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: log\n"))
+		_, _ = w.Write([]byte("data: {\"stream\":\"stdout\",\"chunk\":\"must-not-leak\\n\"}\n\n"))
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"Accepted\",\"time_ms\":7,\"wall_time_ms\":7,\"cpu_time_ms\":4,\"stdout\":\"kept-in-result\\n\",\"stderr\":\"kept-error\\n\"}\n\n"))
+	}))
+	defer remote.Close()
+
+	s, err := New(config.Config{
+		Port:              "0",
+		MaxActiveRuns:     1,
+		MaxPendingQueue:   1,
+		HeartbeatInterval: 100 * time.Millisecond,
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{
+				URL: remote.URL,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	script := base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 0\n"))
+	payload := map[string]any{
+		"lang":            "binary",
+		"binaries":        []map[string]any{{"name": "run.sh", "data_b64": script, "mode": "exec"}},
+		"expected_stdout": "",
+		"emit_logs":       false,
+		"limits":          map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	forwarded := <-remoteRequest
+	if forwarded.EmitLogs == nil || *forwarded.EmitLogs {
+		t.Fatalf("remote runner received emit_logs = %v, want explicit false", forwarded.EmitLogs)
+	}
+
+	events := readSSEEvents(resp.Body, t)
+	for _, event := range events {
+		if event.Name == "log" {
+			t.Fatalf("emit_logs=false forwarded a remote log event: %#v", event)
+		}
+	}
+	last := events[len(events)-1]
+	if last.Name != "result" ||
+		last.JSON["status"] != model.RunStatusAccepted ||
+		last.JSON["stdout"] != "kept-in-result\n" ||
+		last.JSON["stderr"] != "kept-error\n" {
+		t.Fatalf("emit_logs=false changed the remote result event: %#v", last)
 	}
 }
 

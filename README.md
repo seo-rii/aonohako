@@ -368,6 +368,9 @@ contract:
 - `limits.memory_mb`
 - `limits.output_bytes`
   Defaults to `64 KiB` when omitted and is capped internally at `32 MiB`
+- `emit_logs`
+  Defaults to `true`. Set it to `false` to suppress contestant stdout/stderr
+  `log` SSE events without changing judging or the final result payload.
 - `stdin` and `expected_stdout`
   Each inline field is capped at `64 MiB` before a request enters the shared
   queue. Use `stdin_url` and `expected_stdout_url` to have Aonohako download
