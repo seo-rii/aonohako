@@ -907,7 +907,7 @@ done:
 				)
 			}
 		}
-		if result.Status == "OK" && waitErr != nil {
+		if result.Status == "OK" && waitErr != nil && !waitErrorIsProcessExit(waitErr) {
 			result.Status = model.RunStatusRE
 			if streams.stdout != nil || streams.stderr != nil {
 				result.Reason = "sandbox stream relay failed: " + waitErr.Error()
@@ -950,6 +950,15 @@ done:
 		result.VerdictSource = "wall_time"
 	}
 	return result
+}
+
+// waitErrorIsProcessExit reports whether cmd.Wait returned the target's normal
+// non-zero exit status. The caller must preserve this for the higher-level
+// contestant, SPJ, or interactor verdict classifier instead of treating it as
+// a sandbox transport failure.
+func waitErrorIsProcessExit(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr)
 }
 
 func classifySandboxSignal(status, reason, source string, signal syscall.Signal, ctxErr error, parentKillReason string) (string, string, string) {
