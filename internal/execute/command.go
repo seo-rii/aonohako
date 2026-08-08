@@ -11,6 +11,15 @@ import (
 	"aonohako/internal/pythonpolicy"
 )
 
+const pythonStdlibRunner = `import os, runpy, site, sys
+path = sys.argv.pop(1)
+site.setquit()
+site.setcopyright()
+site.sethelper()
+sys.path.insert(0, os.path.dirname(path))
+runpy.run_path(path, run_name="__main__")
+`
+
 func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	return buildCommandWithRuntimeTuning(primaryPath, lang, req, config.DefaultRuntimeTuningConfig())
 }
@@ -70,7 +79,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		if pythonpolicy.EffectiveLibraryMode(req.PythonLibraryMode) == pythonpolicy.LibraryModeInstalled {
 			return []string{"python3", primaryPath}
 		}
-		return []string{"python3", "-E", "-s", "-S", primaryPath}
+		return []string{"python3", "-I", "-S", "-c", pythonStdlibRunner, primaryPath}
 	case "pypy":
 		return []string{"pypy3", primaryPath}
 	case "racket":

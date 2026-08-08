@@ -22,12 +22,12 @@ func TestBuildCommandSelectsPythonLibraryMode(t *testing.T) {
 	}{
 		{
 			name: "omitted defaults to stdlib",
-			want: []string{"python3", "-E", "-s", "-S", path},
+			want: []string{"python3", "-I", "-S", "-c", pythonStdlibRunner, path},
 		},
 		{
 			name: "stdlib",
 			mode: pythonpolicy.LibraryModeStdlib,
-			want: []string{"python3", "-E", "-s", "-S", path},
+			want: []string{"python3", "-I", "-S", "-c", pythonStdlibRunner, path},
 		},
 		{
 			name: "installed",
@@ -84,7 +84,9 @@ func TestStdlibPythonCommandKeepsSubmissionImportsAndIgnoresPythonPath(t *testin
 	mainPath := filepath.Join(workDir, "Main.py")
 	if err := os.WriteFile(mainPath, []byte(
 		"import importlib.util\n"+
+			"import sys\n"+
 			"import helper\n"+
+			"assert sys.argv == [__file__]\n"+
 			"assert helper.VALUE == 'local-ok'\n"+
 			"assert importlib.util.find_spec('external_probe') is None\n"+
 			"print('ok')\n",
@@ -99,6 +101,62 @@ func TestStdlibPythonCommandKeepsSubmissionImportsAndIgnoresPythonPath(t *testin
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("stdlib command failed: %v\n%s", err, out)
+	}
+	if string(out) != "ok\n" {
+		t.Fatalf("stdout = %q, want ok", out)
+	}
+}
+
+func TestStdlibPythonCommandProvidesExitAndQuit(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is unavailable")
+	}
+	for _, name := range []string{"exit", "quit"} {
+		t.Run(name, func(t *testing.T) {
+			workDir := t.TempDir()
+			mainPath := filepath.Join(workDir, "Main.py")
+			body := "print('before')\n" + name + "(0)\nraise AssertionError('unreachable')\n"
+			if err := os.WriteFile(mainPath, []byte(body), 0o644); err != nil {
+				t.Fatalf("write Main.py: %v", err)
+			}
+
+			args := buildCommand(mainPath, "python", &model.RunRequest{PythonLibraryMode: pythonpolicy.LibraryModeStdlib})
+			cmd := exec.Command(python, args[1:]...)
+			cmd.Dir = workDir
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("%s(0) failed: %v\n%s", name, err, out)
+			}
+			if string(out) != "before\n" {
+				t.Fatalf("stdout = %q, want before", out)
+			}
+		})
+	}
+}
+
+func TestStdlibPythonCommandProvidesOtherSiteBuiltins(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is unavailable")
+	}
+	workDir := t.TempDir()
+	mainPath := filepath.Join(workDir, "Main.py")
+	body := "import builtins\n" +
+		"names = ('help', 'copyright', 'credits', 'license')\n" +
+		"assert all(hasattr(builtins, name) for name in names)\n" +
+		"assert callable(help)\n" +
+		"print('ok')\n"
+	if err := os.WriteFile(mainPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write Main.py: %v", err)
+	}
+
+	args := buildCommand(mainPath, "python", &model.RunRequest{PythonLibraryMode: pythonpolicy.LibraryModeStdlib})
+	cmd := exec.Command(python, args[1:]...)
+	cmd.Dir = workDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("site builtins failed: %v\n%s", err, out)
 	}
 	if string(out) != "ok\n" {
 		t.Fatalf("stdout = %q, want ok", out)

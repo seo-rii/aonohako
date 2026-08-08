@@ -152,15 +152,18 @@ container image. Python runtime images assign site/dist-packages,
 `/usr/share/python-wheels`, and `/usr/local/lib/aonohako/python` to the
 root-owned supplementary GID `65530`; directories are `0750`, ordinary files
 are `0640`, and executable files are `0750`. In `stdlib` mode the target does
-not receive that group and Python starts with `-E -s -S`. This blocks both
-normal imports and direct path reads while preserving standard-library and
-submitted sibling-module imports. In `installed` mode only Python targets
-receive GID `65530` and use normal site initialization. The request-wide mode
-is propagated to two-step programs, interactors, Python SPJs, and remote
-runners. Runtime-image permission selftests verify that imports fail without
-the group and succeed with it. This is a package-visibility boundary; enabled
-package code still runs under the target's existing syscall, network, and
-resource limits.
+not receive that group and Python starts through an isolated `-I -S` launcher.
+The launcher restores the normal script-level `exit`, `quit`, `help`,
+`copyright`, `credits`, and `license` helpers without running site
+initialization, then executes the submission with its entry-point directory at
+the front of `sys.path`. This blocks both normal imports and direct path reads
+while preserving standard-library and submitted sibling-module imports. In
+`installed` mode only Python targets receive GID `65530` and use normal site
+initialization. The request-wide mode is propagated to two-step programs,
+interactors, Python SPJs, and remote runners. Runtime-image permission selftests
+verify that imports fail without the group and succeed with it. This is a
+package-visibility boundary; enabled package code still runs under the target's
+existing syscall, network, and resource limits.
 
 ## Sandbox Process Model
 
