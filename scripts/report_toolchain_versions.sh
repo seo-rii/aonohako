@@ -175,6 +175,10 @@ if has_language "befunge"; then
     report_once "Befunge interpreter" sh -c 'test -f /usr/local/lib/aonohako/befunge.py && printf bundled'
 fi
 
+if has_language "malbolge"; then
+    report_once "Malbolge interpreter" sh -c 'test -f /usr/local/lib/aonohako/malbolge.py && printf "bundled (1998 reference)"'
+fi
+
 if has_language "pypy"; then
     report_once "PyPy" pypy3 --version
 fi
@@ -658,6 +662,7 @@ report_compile_option "janet" "pass-through .janet artifacts"
 report_compile_option "sed" "pass-through .sed artifacts"
 report_compile_option "bc" "pass-through .bc artifacts"
 report_compile_option "befunge" "pass-through .bef/.bf93 artifacts"
+report_compile_option "malbolge" "validate reference opcodes, then pass-through .mal/.mb artifacts"
 report_compile_option "lolcode" "pass-through .lol artifacts"
 report_compile_option "forth" "pass-through .fs artifacts"
 report_compile_option "gforth" "pass-through .fs/.fth/.4th artifacts"

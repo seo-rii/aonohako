@@ -321,6 +321,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"whitespace":    {compileKind: "whitespace", runLang: "whitespace"},
 		"befunge":       {compileKind: "befunge", runLang: "befunge"},
 		"bf":            {compileKind: "brainfuck", runLang: "brainfuck"},
+		"malbolge":      {compileKind: "malbolge", runLang: "malbolge"},
 		"lolcode":       {compileKind: "lolcode", runLang: "lolcode"},
 		"apecode":       {compileKind: "apecode", runLang: "binary"},
 		"wasm":          {compileKind: "wasm", runLang: "wasm"},
@@ -525,6 +526,96 @@ func TestRunRejectsInvalidBrainfuckProgram(t *testing.T) {
 	})
 	if resp.Status != model.CompileStatusCompileError {
 		t.Fatalf("status=%q want=%q", resp.Status, model.CompileStatusCompileError)
+	}
+}
+
+func encodeMalbolgeOpcodes(opcodes string) string {
+	var source strings.Builder
+	source.Grow(len(opcodes))
+	for position, opcode := range []byte(opcodes) {
+		index := strings.IndexByte(malbolgeXlat1, opcode)
+		if index < 0 {
+			panic(fmt.Sprintf("unsupported Malbolge test opcode %q", opcode))
+		}
+		source.WriteByte(byte(33 + (index-position%len(malbolgeXlat1)+len(malbolgeXlat1))%len(malbolgeXlat1)))
+	}
+	return source.String()
+}
+
+func TestRunAcceptsMalbolgeExtensionsAndIgnoresASCIIWhitespace(t *testing.T) {
+	for _, extension := range []string{".mal", ".mb"} {
+		t.Run(extension, func(t *testing.T) {
+			program := encodeMalbolgeOpcodes("ov")
+			program = program[:1] + " \t\r\n\v\f" + program[1:]
+			resp := New().Run(context.Background(), &model.CompileRequest{
+				Lang: "MALBOLGE",
+				Sources: []model.Source{{
+					Name:    "Main" + extension,
+					DataB64: b64String(program),
+				}},
+			})
+			if resp.Status != model.CompileStatusOK {
+				t.Fatalf("status=%q reason=%q, want OK", resp.Status, resp.Reason)
+			}
+			if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main"+extension {
+				t.Fatalf("artifacts=%+v, want preserved %s source", resp.Artifacts, extension)
+			}
+		})
+	}
+}
+
+func TestRunAcceptsReferenceMalbolgeHelloWorld(t *testing.T) {
+	if len(malbolgeXlat1) != 94 {
+		t.Fatalf("Malbolge XLAT1 length = %d, want 94", len(malbolgeXlat1))
+	}
+	const source = "('&%:9]!~}|z2Vxwv-,POqponl$Hjig%eB@@>}=<M:9wv6WsU2T|nm-,jcL(I&%$#\"`CB]V?Tx<uVtT`Rpo3NlF.Jh++FdbCBA@?]!~|4XzyTT43Qsqq(Lnmkj\"Fhg${z@>"
+	resp := New().Run(context.Background(), &model.CompileRequest{
+		Lang: "MALBOLGE",
+		Sources: []model.Source{{
+			Name:    "Main.mal",
+			DataB64: b64String(source),
+		}},
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("reference program response=%+v, want OK", resp)
+	}
+}
+
+func TestRunRejectsMalformedMalbolgePrograms(t *testing.T) {
+	invalidOpcode := byte(0)
+	for candidate := 33; candidate <= 126; candidate++ {
+		if !strings.ContainsRune(validMalbolgeOpcodes, rune(malbolgeXlat1[candidate-33])) {
+			invalidOpcode = byte(candidate)
+			break
+		}
+	}
+	if invalidOpcode == 0 {
+		t.Fatal("could not construct invalid Malbolge opcode")
+	}
+
+	tests := []struct {
+		name   string
+		source string
+		reason string
+	}{
+		{name: "too short", source: encodeMalbolgeOpcodes("v"), reason: "at least two instructions"},
+		{name: "non graphical", source: encodeMalbolgeOpcodes("o") + "\x80", reason: "non-graphical ASCII"},
+		{name: "invalid positional opcode", source: string([]byte{invalidOpcode}) + encodeMalbolgeOpcodes("v"), reason: "invalid opcode"},
+		{name: "too long", source: encodeMalbolgeOpcodes(strings.Repeat("o", malbolgeMemorySize+1)), reason: "exceeds 59049 instructions"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := New().Run(context.Background(), &model.CompileRequest{
+				Lang: "MALBOLGE",
+				Sources: []model.Source{{
+					Name:    "Main.mal",
+					DataB64: b64String(tc.source),
+				}},
+			})
+			if resp.Status != model.CompileStatusCompileError || !strings.Contains(resp.Reason, tc.reason) {
+				t.Fatalf("response=%+v, want Compile Error containing %q", resp, tc.reason)
+			}
+		})
 	}
 }
 

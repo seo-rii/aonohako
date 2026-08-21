@@ -51,7 +51,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {

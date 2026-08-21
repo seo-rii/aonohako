@@ -113,6 +113,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"WHITESPACE",
 		"BEFUNGE",
 		"BF",
+		"MALBOLGE",
 		"LOLCODE",
 		"APECODE",
 		"WASM",
@@ -220,6 +221,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"WASM":         "wasm",
 		"BF":           "brainfuck",
 		"BEFUNGE":      "befunge",
+		"MALBOLGE":     "malbolge",
 		"LOLCODE":      "lolcode",
 		"APECODE":      "binary",
 		"WHITESPACE":   "whitespace",
@@ -281,5 +283,18 @@ func TestGoProfilePreservesRuntimeIdentityAndMemoryReserve(t *testing.T) {
 	}
 	if profile.RunLang != "go-binary" || profile.MemoryOffsetMB != 1088 {
 		t.Fatalf("GO profile = %+v, want go-binary with 1088 MiB reserve", profile)
+	}
+}
+
+func TestMalbolgeProfileUsesValidatedBundledRuntime(t *testing.T) {
+	profile, ok := Resolve("MALBOLGE")
+	if !ok {
+		t.Fatal("Resolve(MALBOLGE) reported unsupported language")
+	}
+	if profile.Extension != "mal" || profile.CompileKind != "malbolge" || profile.RunLang != "malbolge" {
+		t.Fatalf("MALBOLGE profile = %+v, want .mal validated interpreter runtime", profile)
+	}
+	if profile.TimeMultiplier != 5 || profile.TimeOffsetMs != 1000 || profile.MemoryOffsetMB != 64 {
+		t.Fatalf("MALBOLGE resource profile = %+v, want 5x+1000ms and 64 MiB reserve", profile)
 	}
 }

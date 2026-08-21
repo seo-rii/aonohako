@@ -22,7 +22,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 21 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -160,6 +160,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-lisp",
 		"ci-lolcode",
 		"ci-lua",
+		"ci-malbolge",
 		"ci-mercury",
 		"ci-mojo",
 		"ci-nasm",
@@ -317,8 +318,9 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "default-jdk-headless", "kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar", "javac --release 8 -cp Main.jar Helper.java", "jar uf Main.jar Helper.class", "java -Xms64m -Xmx128m -Xss1m -XX:+UseSerialGC -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -DONLINE_JUDGE=1 -jar Main.jar"},
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
 		"lolcode":       {"LCI_VERSION=0.11.2", "cb1065936d3a7463928dcddfc345a8d7d8602678394efc0e54981f9dd98c27d2", "lci Main.lol", `VISIBLE "ok"`},
+		"malbolge":      {"python3 /usr/local/lib/aonohako/malbolge.py Main.mal", "Hello World!"},
 		"mercury":       {"dl.mercurylang.org/deb/ trixie main", "mercury-recommended", "mmc --make --grade hlc.gc main"},
-		"mojo":          {"mojo==0.26.2.0", "mojo build Main.mojo"},
+		"mojo":          {"mojo==1.0.0", "mojo build Main.mojo"},
 		"nim":           {"nim c", "Broken.nim"},
 		"objective-c":   {"clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objective-cpp": {"clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
@@ -337,7 +339,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},
 		"tla":           {"TLA_VERSION=1.7.4", "install -d -m 0755 /usr/local/lib/aonohako", "curl --retry 6", "wget --tries=6", "aonohako-tla-run Main.tla"},
-		"uiua":          {"UIUA_VERSION=0.18.1", "uiua run Main.ua --no-format"},
+		"uiua":          {"UIUA_VERSION=0.18.1", "UIUA_SHA256=83ce782e1c843937fee1aae1dc7db0480bed425a88fe0c18109df7a0d1970470", "sha256sum -c -", "uiua run Main.ua --no-format"},
 		"vala":          {"valac --define=ONLINE_JUDGE -o Main Main.vala", "Broken.vala"},
 		"vb6":           {"aonohako-vb6-run Main.bas", "Sub Main()"},
 		"vbnet":         {"App.vbproj", "dotnet publish App.vbproj"},
@@ -398,6 +400,60 @@ func TestRepositoryCatalogIncludesAheuiRuntime(t *testing.T) {
 	}
 	if !slices.Contains(spec.Install.Pip, "aheui==1.2.5") {
 		t.Fatalf("aheui pip packages = %v, want aheui==1.2.5", spec.Install.Pip)
+	}
+}
+
+func TestRepositoryCatalogIncludesMalbolgeRuntime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	spec, ok := catalog.Languages["malbolge"]
+	if !ok {
+		t.Fatal("malbolge language missing from catalog")
+	}
+	if !slices.Contains(spec.Install.Apt, "python3") {
+		t.Fatalf("malbolge apt packages = %v, want python3", spec.Install.Apt)
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, marker := range []string{"Main.mal", "/usr/local/lib/aonohako/malbolge.py", "Hello World!"} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("malbolge smoke must contain %q, got %q", marker, smoke)
+		}
+	}
+}
+
+func TestRepositoryCatalogUsesOfficialMojoRelease(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	mojoScript := strings.Join(catalog.Languages["mojo"].Install.Script, "\n")
+	if !strings.Contains(mojoScript, "pip install --no-cache-dir mojo==1.0.0") {
+		t.Fatalf("mojo install script must use official PyPI 1.0.0 release:\n%s", mojoScript)
+	}
+	if strings.Contains(mojoScript, "modular.gateway.scarf.sh") || strings.Contains(mojoScript, "--extra-index-url") {
+		t.Fatalf("mojo install script must not use the obsolete extra index:\n%s", mojoScript)
+	}
+}
+
+func TestRepositoryCatalogVerifiesUiuaArchive(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	uiuaScript := strings.Join(catalog.Languages["uiua"].Install.Script, "\n")
+	for _, marker := range []string{
+		"UIUA_VERSION=0.18.1",
+		"UIUA_SHA256=83ce782e1c843937fee1aae1dc7db0480bed425a88fe0c18109df7a0d1970470",
+		"sha256sum -c -",
+	} {
+		if !strings.Contains(uiuaScript, marker) {
+			t.Fatalf("uiua install script must contain %q:\n%s", marker, uiuaScript)
+		}
 	}
 }
 

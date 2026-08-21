@@ -879,7 +879,7 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `mercury`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
 | `type-b` | `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
@@ -898,6 +898,16 @@ Production profiles currently group languages like this:
 | `type-q` | `dafny` |
 | `type-r` | `isabelle` |
 | `type-s` | `lean4` |
+
+The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
+`.mb` for compatibility. Compile strips ASCII whitespace, validates every
+remaining byte against the position-dependent reference opcode translation,
+and enforces the fixed 59049-word memory limit before passing source artifacts
+through. The bundled interpreter follows the original public-domain
+interpreter's practical I/O mapping (`<` writes and `/` reads, with EOF represented
+as 59048), while malformed non-graphical runtime memory terminates safely
+instead of reproducing the reference C implementation's undefined access or
+busy loop.
 
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the

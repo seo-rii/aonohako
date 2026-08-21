@@ -173,6 +173,45 @@ func TestMaterializeFilesUsesExplicitPythonEntrypoint(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesPrefersMalbolgePrimaryExtensionAndAcceptsMB(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		binaries   []model.Binary
+		wantSource string
+	}{
+		{
+			name: "mal preferred over mb",
+			binaries: []model.Binary{
+				{Name: "legacy.mb", DataB64: b64("legacy")},
+				{Name: "Main.mal", DataB64: b64("primary")},
+			},
+			wantSource: "Main.mal",
+		},
+		{
+			name:       "mb compatibility",
+			binaries:   []model.Binary{{Name: "Main.mb", DataB64: b64("legacy")}},
+			wantSource: "Main.mb",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws, err := prepareWorkspaceDirs(t.TempDir())
+			if err != nil {
+				t.Fatalf("prepareWorkspaceDirs: %v", err)
+			}
+			primary, lang, err := materializeFiles(ws, &model.RunRequest{
+				Lang:     "MALBOLGE",
+				Binaries: tc.binaries,
+			})
+			if err != nil {
+				t.Fatalf("materializeFiles: %v", err)
+			}
+			if lang != "malbolge" || filepath.Base(primary) != tc.wantSource {
+				t.Fatalf("materializeFiles = (%q, %q), want %s/malbolge", primary, lang, tc.wantSource)
+			}
+		})
+	}
+}
+
 func TestMaterializeFilesRejectsMissingEntrypoint(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

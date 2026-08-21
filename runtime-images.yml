@@ -969,6 +969,20 @@ languages:
           printf '%s' '>"ko",,91+,@' > Main.bef
           python3 /usr/local/lib/aonohako/befunge.py Main.bef | grep '^ok$'
 
+  malbolge:
+    install:
+      apt:
+        - python3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.mal <<'MALBOLGE'
+          ('&%:9]!~}|z2Vxwv-,POqponl$Hjig%eB@@>}=<M:9wv6WsU2T|nm-,jcL(I&%$#"`CB]V?Tx<uVtT`Rpo3NlF.Jh++FdbCBA@?]!~|4XzyTT43Qsqq(Lnmkj"Fhg${z@>
+          MALBOLGE
+          [ "$(python3 /usr/local/lib/aonohako/malbolge.py Main.mal)" = 'Hello World!' ]
+
   lolcode:
     install:
       apt:
@@ -2579,7 +2593,7 @@ languages:
         - python3-venv
       script:
         - python3 -m venv /opt/mojo-venv
-        - /opt/mojo-venv/bin/pip install --no-cache-dir --extra-index-url https://modular.gateway.scarf.sh/simple/ mojo==0.26.2.0
+        - /opt/mojo-venv/bin/pip install --no-cache-dir mojo==1.0.0
         - ln -sfn /opt/mojo-venv/bin/mojo /usr/local/bin/mojo
     smoke:
       command:
@@ -2726,7 +2740,9 @@ languages:
         - unzip
       script:
         - export UIUA_VERSION=0.18.1
+        - export UIUA_SHA256=83ce782e1c843937fee1aae1dc7db0480bed425a88fe0c18109df7a0d1970470
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/uiua-lang/uiua/releases/download/${UIUA_VERSION}/uiua-bin-x86_64-unknown-linux-gnu-no-audio.zip" -o /tmp/uiua.zip
+        - echo "${UIUA_SHA256}  /tmp/uiua.zip" | sha256sum -c -
         - unzip -q /tmp/uiua.zip -d /usr/local/bin
         - chmod 0755 /usr/local/bin/uiua
         - rm -f /tmp/uiua.zip
@@ -2866,6 +2882,7 @@ profiles:
       - lisp
       - lolcode
       - lua
+      - malbolge
       - mercury
       - ocaml
       - perl
