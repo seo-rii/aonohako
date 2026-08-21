@@ -137,6 +137,7 @@ var compileRegistry = map[string]Compiler{
 	"whitespace":    whitespaceCompiler{},
 	"befunge":       passThroughCompiler{exts: []string{".bef", ".bf93"}, noSourceReason: "no befunge sources"},
 	"brainfuck":     brainfuckCompiler{},
+	"malbolge":      malbolgeCompiler{},
 	"lolcode":       passThroughCompiler{exts: []string{".lol"}, noSourceReason: "no lolcode sources"},
 	"apecode":       apeCodeCompiler{},
 	"wasm":          wasmCompiler{},
