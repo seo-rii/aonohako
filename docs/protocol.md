@@ -199,6 +199,15 @@ For `communication-v1`, a successful response has
 `verdict_source=manager`. Manager setup, runtime, and result-protocol failures
 are `Runtime Error` with a `manager:*` source. Participant failures use a
 `participant:<id>:*` source and retain ordinary RE/TLE/MLE status codes.
+Cloud Run embedded helpers with `AONOHAKO_COMMUNICATION_ENABLED=true` provide
+these semantics without child cgroups:
+process groups and per-process limits handle normal cancellation and verdicts,
+while the outer container remains the final aggregate memory, CPU, and PID
+boundary. If that outer boundary kills the instance, no per-participant MLE is
+available and the caller observes a transport/runtime failure.
+Only Cloud Run's parent-side wall allowance is scaled for the manager and
+participants according to runnable-process count and `GOMAXPROCS`; process CPU
+limits remain the requested values.
 
 ---
 

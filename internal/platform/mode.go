@@ -43,6 +43,20 @@ type RuntimeOptions struct {
 	SandboxBackend     SandboxBackend
 }
 
+func SupportsCommunicationV1(opts RuntimeOptions, cgroupParent string, cloudRunEnabled bool) bool {
+	if opts.ExecutionTransport != ExecutionTransportEmbedded || opts.SandboxBackend != SandboxBackendHelper {
+		return false
+	}
+	switch opts.DeploymentTarget {
+	case DeploymentTargetCloudRun:
+		return cloudRunEnabled && strings.TrimSpace(cgroupParent) == ""
+	case DeploymentTargetSelfHosted:
+		return strings.TrimSpace(cgroupParent) != ""
+	default:
+		return false
+	}
+}
+
 func CurrentExecutionMode() (ExecutionMode, error) {
 	switch raw := strings.TrimSpace(strings.ToLower(os.Getenv("AONOHAKO_EXECUTION_MODE"))); raw {
 	case "":

@@ -486,11 +486,16 @@ func MaybeRunFromEnv() bool {
 			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 		}
 
-		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE), 0, 4)
-		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
-		appendJump(unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, unix.CLONE_THREAD, 0, 1)
-		appendStmt(unix.BPF_RET|unix.BPF_K, allow)
-		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		if req.DenyThreads {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE), 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		} else {
+			appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_CLONE), 0, 4)
+			appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
+			appendJump(unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, unix.CLONE_THREAD, 0, 1)
+			appendStmt(unix.BPF_RET|unix.BPF_K, allow)
+			appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		}
 	}
 
 	if !req.EnableNetwork {
