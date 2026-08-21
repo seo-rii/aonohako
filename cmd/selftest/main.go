@@ -3199,6 +3199,15 @@ main(!IO) :-
 `),
 			},
 		},
+		"malbolge": {
+			compileLang:    "MALBOLGE",
+			expectedStdout: "Hello World!",
+			nonABReason:    "the canonical reference conformance vector is used to exercise Malbolge self-modification",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.mal", "('&%:9]!~}|z2Vxwv-,POqponl$Hjig%eB@@>}=<M:9wv6WsU2T|nm-,jcL(I&%$#\"`CB]V?Tx<uVtT`Rpo3NlF.Jh++FdbCBA@?]!~|4XzyTT43Qsqq(Lnmkj\"Fhg${z@>"),
+			},
+		},
 		"fortran": {
 			compileLang: "FORTRAN",
 			compileVariants: []string{
@@ -4018,7 +4027,7 @@ values := stdin nextLine subStrings collect: [ :value | value asInteger ].
 			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.mojo", `def main() raises:
-    nums = input().split()
+    var nums = input().split()
     print(Int(nums[0]) + Int(nums[1]))`),
 			},
 		},
@@ -4240,6 +4249,17 @@ buf swap evaluate + 0 .r cr`),
 			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.ws", whitespaceABProgram()),
+			},
+		},
+		"zerolang": {
+			compileLang:    "ZEROLANG",
+			expectedStdout: "ok\n",
+			nonABReason:    "Zerolang v0.3.4 does not expose a stable stdin capability in its canonical source projection",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.0", `pub fn main(world: World) -> Void raises {
+  check world.out.write("ok\n")
+}`),
 			},
 		},
 		"zig": {

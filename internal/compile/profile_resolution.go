@@ -26,6 +26,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "GO"
 	case "zig":
 		l = "ZIG"
+	case "zero", "zerolang":
+		l = "ZEROLANG"
 	case "pascal", "freepascal", "fpc":
 		l = "PASCAL"
 	case "delphi":
@@ -230,6 +232,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "BEFUNGE"
 	case "bf", "brainfuck":
 		l = "BF"
+	case "malbolge":
+		l = "MALBOLGE"
 	case "lolcode", "lol":
 		l = "LOLCODE"
 	case "wasm", "webassembly":

@@ -344,6 +344,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"whitespace", "/tmp/sol.ws", "python3", true},
 		{"befunge", "/tmp/sol.bef", "python3", true},
 		{"brainfuck", "/tmp/sol.bf", "python3", true},
+		{"malbolge", "/tmp/sol.mal", "python3", true},
 		{"lolcode", "/tmp/sol.lol", "lci", true},
 		{"wasm", "/tmp/sol.wasm", "wasmtime", true},
 		{"ruby", "/tmp/sol.rb", "ruby", true},
@@ -472,6 +473,9 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 			}
 			if tc.lang == "aheui" && (len(args) < 3 || !strings.Contains(args[2], "from aheui.aheui import entry_point")) {
 				t.Errorf("buildCommand(%s) missing aheui python wrapper body in %v", tc.lang, args)
+			}
+			if tc.lang == "malbolge" && !containsArg(args, "/usr/local/lib/aonohako/malbolge.py") {
+				t.Errorf("buildCommand(%s) missing bundled interpreter path in %v", tc.lang, args)
 			}
 		})
 	}

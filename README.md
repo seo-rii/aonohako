@@ -14,9 +14,9 @@ binary, configurable runtime images, and testable build metadata.
 - symlink-safe output capture for file outputs and sidecar artifacts
 - SPJ and interactive IO judging support for problems that need custom verdict
   logic or bidirectional contestant/interactor communication
-- `communication-v1` execution on dedicated self-hosted cgroup runners: one
-  private manager process coordinates 2–64 isolated launches of one shared,
-  read-only participant binary
+- `communication-v1` execution on explicitly enabled Cloud Run embedded helpers
+  and dedicated self-hosted cgroup runners: one private manager process
+  coordinates 2–64 isolated launches of one shared, read-only participant binary
 - `runtime-images.yml` as the source of truth for runtime image groups
 - Docker build tooling that can emit production multi-language images and
   single-language CI smoke images from the same YAML catalog
@@ -63,13 +63,18 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
-  Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
+  Mojo, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
+  Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
   submitters compile into binaries and should target the `plain` runtime image
   rather than dedicated native runtime images. Add new languages by extending
   the YAML file instead of editing shell loops or workflow matrices.
+- Zerolang is pinned to the official v0.3.4 Linux x64 release. Compilation
+  imports canonical `.0` text into a graph and then builds a native executable
+  with the `release-fast` profile. Its stable source projection does not yet
+  expose a stdin contract, so runtime smoke coverage currently uses fixed
+  output while still exercising import, validation, compilation, and execution.
 - Compile and execute environments set `ONLINE_JUDGE=1`. Languages with
   compiler-supported defines or build tags also receive an `ONLINE_JUDGE`
   compile flag where appropriate, such as C/C++/Objective-C, NASM, Rust, Go,
@@ -340,8 +345,11 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero, verifies through `statfs` that
   the required work-root filesystem exposes no more than that many inodes.
   Production helper runners require a positive value no greater than 1048576.
-  The Cloud Run in-memory volume advertises that bounded inode ceiling even
-  when its byte size is configured substantially lower.
+  The only exception is the dedicated Cloud Run communication runner, which
+  permits up to 4194304 advertised inodes because its 32 GiB instance exposes
+  about 4.1 million inodes even on the bounded 1 GiB volume. This does not
+  raise the ordinary runner ceiling; communication still allows only one
+  session and scans each of its 65 workspaces with the 8192-entry limit.
 - `AONOHAKO_CGROUP_PARENT` is required for
   `selfhosted + embedded + helper` and rejected for other deployment shapes.
   Startup validates that the parent directory is under a cgroup v2 mount and
@@ -504,6 +512,22 @@ For Cloud Run deployments, use this baseline:
 - container memory sized above the work-root byte budget plus runtime headroom,
   because Cloud Run/no-cgroup runners rely on the outer container limit as the
   final OOM boundary
+- communication runner memory sized for every participant limit plus the
+  512 MiB manager and server/work-root headroom; without child cgroups an outer
+  container OOM terminates the instance and cannot be attributed to one
+  participant
+- `AONOHAKO_COMMUNICATION_ENABLED=true` only on a dedicated communication
+  service; ordinary Cloud Run runners do not advertise `communication-v1`
+- `AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB=24576` (for the planned 32 GiB
+  service) to reject requests whose declared participant memory plus the
+  512 MiB manager allowance exceeds the reserved 24 GiB execution budget
+- `AONOHAKO_COMMUNICATION_CPU_COUNT=8`, `GOMAXPROCS=8`, and
+  `AONOHAKO_COMMUNICATION_WALL_BUDGET_MS=600000` on the dedicated eight-vCPU
+  service; startup rejects a CPU-count mismatch and requests whose
+  contention-adjusted wall allowance cannot finish inside that session budget
+- a 1 GiB communication work root. Communication participants use a fixed
+  8 MiB per-process workspace cap, the manager uses 128 MiB, and admission
+  reserves 20% of the work root before any process starts
 - Direct VPC egress with `all-traffic` routing and firewall-denied outbound
   traffic except for explicitly allowed targets
 - a dedicated service account with no unnecessary IAM permissions and no baked

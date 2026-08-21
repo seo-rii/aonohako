@@ -6,6 +6,7 @@
   },
   "authoritative_work_root": {
     "max_bytes": 1073741824,
-    "max_files": 1048576
+    "max_files": 1048576,
+    "cloudrun_communication_max_files": 4194304
   }
 }

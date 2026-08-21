@@ -136,6 +136,8 @@ const (
 	maxAuthoritativeWorkRootFiles     = 1 << 20
 )
 
+const maxCloudRunCommunicationWorkRootFiles = 1 << 22
+
 type Config struct {
 	Port                                 string
 	MaxActiveRuns                        int
@@ -148,6 +150,10 @@ type Config struct {
 	MaxPrincipalRequestsPerMinute        int
 	HeartbeatInterval                    time.Duration
 	BodyReadTimeout                      time.Duration
+	CommunicationEnabled                 bool
+	CommunicationMemoryBudgetMB          int
+	CommunicationCPUCount                int
+	CommunicationWallBudgetMs            int
 	AllowRequestNetwork                  bool
 	NetworkEgressIsolated                bool
 	AllowRequestRuntimeProfile           bool
@@ -238,6 +244,31 @@ func Load() (Config, error) {
 	}
 	remoteStrictProtocol, err := parseBoolEnv("AONOHAKO_REMOTE_STRICT_PROTOCOL", os.Getenv("AONOHAKO_REMOTE_STRICT_PROTOCOL"), defaultRemoteStrictProtocol(runtimePlatform))
 	if err != nil {
+		return Config{}, err
+	}
+	communicationEnabled, err := parseBoolEnv("AONOHAKO_COMMUNICATION_ENABLED", os.Getenv("AONOHAKO_COMMUNICATION_ENABLED"), false)
+	if err != nil {
+		return Config{}, err
+	}
+	communicationMemoryBudgetMB, err := parseNonNegativeIntEnv("AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB", os.Getenv("AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB"), 0)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateCommunicationMemoryBudget(runtimePlatform, communicationEnabled, communicationMemoryBudgetMB); err != nil {
+		return Config{}, err
+	}
+	communicationCPUCount, err := parseNonNegativeIntEnv("AONOHAKO_COMMUNICATION_CPU_COUNT", os.Getenv("AONOHAKO_COMMUNICATION_CPU_COUNT"), 0)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateCommunicationCPUCount(runtimePlatform, communicationEnabled, communicationCPUCount, runtime.GOMAXPROCS(0)); err != nil {
+		return Config{}, err
+	}
+	communicationWallBudgetMs, err := parseNonNegativeIntEnv("AONOHAKO_COMMUNICATION_WALL_BUDGET_MS", os.Getenv("AONOHAKO_COMMUNICATION_WALL_BUDGET_MS"), 0)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateCommunicationWallBudget(runtimePlatform, communicationEnabled, communicationWallBudgetMs); err != nil {
 		return Config{}, err
 	}
 	allowRequestNetwork, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_NETWORK", os.Getenv("AONOHAKO_ALLOW_REQUEST_NETWORK"), defaultAllowRequestNetwork(runtimePlatform))
@@ -592,7 +623,9 @@ func Load() (Config, error) {
 	}
 
 	requiresAuthoritativeWorkRoot := contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev
-	if err := validateAuthoritativeWorkRootPolicy(requiresAuthoritativeWorkRoot, requireWorkRootTmpfs, workRootMaxBytes, workRootMaxFiles); err != nil {
+	cloudRunCommunication := runtimePlatform.DeploymentTarget == platform.DeploymentTargetCloudRun &&
+		platform.SupportsCommunicationV1(runtimePlatform, execution.Cgroup.ParentDir, communicationEnabled)
+	if err := validateAuthoritativeWorkRootPolicy(requiresAuthoritativeWorkRoot, requireWorkRootTmpfs, cloudRunCommunication, workRootMaxBytes, workRootMaxFiles); err != nil {
 		return Config{}, err
 	}
 
@@ -654,10 +687,8 @@ func Load() (Config, error) {
 			}
 		}
 	}
-	if selfHostedHelper && execution.Cgroup.ParentDir != "" {
-		if err := security.ValidateCommunicationIdentityReservation(); err != nil {
-			return Config{}, fmt.Errorf("communication sandbox identity reservation validation failed: %w", err)
-		}
+	if err := validateCommunicationIdentityPolicy(runtimePlatform, execution.Cgroup.ParentDir, communicationEnabled, security.ValidateCommunicationIdentityReservation); err != nil {
+		return Config{}, err
 	}
 	return Config{
 		Port:                                 port,
@@ -671,6 +702,10 @@ func Load() (Config, error) {
 		MaxPrincipalRequestsPerMinute:        maxPrincipalRequestsPerMinute,
 		HeartbeatInterval:                    time.Duration(heartbeatSec) * time.Second,
 		BodyReadTimeout:                      time.Duration(bodyReadTimeoutSec) * time.Second,
+		CommunicationEnabled:                 communicationEnabled,
+		CommunicationMemoryBudgetMB:          communicationMemoryBudgetMB,
+		CommunicationCPUCount:                communicationCPUCount,
+		CommunicationWallBudgetMs:            communicationWallBudgetMs,
 		AllowRequestNetwork:                  allowRequestNetwork,
 		NetworkEgressIsolated:                networkEgressIsolated,
 		AllowRequestRuntimeProfile:           allowRequestRuntimeProfile,
@@ -713,7 +748,7 @@ func defaultMaxActiveRuns(opts platform.RuntimeOptions) int {
 	return v
 }
 
-func validateAuthoritativeWorkRootPolicy(required, requireTmpfs bool, maxBytes, maxFiles int) error {
+func validateAuthoritativeWorkRootPolicy(required, requireTmpfs, cloudRunCommunication bool, maxBytes, maxFiles int) error {
 	if !required {
 		return nil
 	}
@@ -723,8 +758,12 @@ func validateAuthoritativeWorkRootPolicy(required, requireTmpfs bool, maxBytes, 
 	if maxBytes <= 0 || maxBytes > maxAuthoritativeWorkRootBytes {
 		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_BYTES between 1 and %d", maxAuthoritativeWorkRootBytes)
 	}
-	if maxFiles <= 0 || maxFiles > maxAuthoritativeWorkRootFiles {
-		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_FILES between 1 and %d", maxAuthoritativeWorkRootFiles)
+	maxAllowedFiles := maxAuthoritativeWorkRootFiles
+	if cloudRunCommunication {
+		maxAllowedFiles = maxCloudRunCommunicationWorkRootFiles
+	}
+	if maxFiles <= 0 || maxFiles > maxAllowedFiles {
+		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_FILES between 1 and %d", maxAllowedFiles)
 	}
 	return nil
 }
@@ -732,6 +771,43 @@ func validateAuthoritativeWorkRootPolicy(required, requireTmpfs bool, maxBytes, 
 func validateSelfHostedCgroupPolicy(required bool, parentDir string) error {
 	if required && strings.TrimSpace(parentDir) == "" {
 		return fmt.Errorf("selfhosted embedded helper execution requires AONOHAKO_CGROUP_PARENT")
+	}
+	return nil
+}
+
+func validateCommunicationIdentityPolicy(opts platform.RuntimeOptions, cgroupParent string, cloudRunEnabled bool, validate func() error) error {
+	if !platform.SupportsCommunicationV1(opts, cgroupParent, cloudRunEnabled) {
+		return nil
+	}
+	if err := validate(); err != nil {
+		return fmt.Errorf("communication sandbox identity reservation validation failed: %w", err)
+	}
+	return nil
+}
+
+func validateCommunicationMemoryBudget(opts platform.RuntimeOptions, cloudRunEnabled bool, budgetMB int) error {
+	if opts.DeploymentTarget == platform.DeploymentTargetCloudRun && cloudRunEnabled && budgetMB <= 0 {
+		return fmt.Errorf("Cloud Run communication requires a positive AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB")
+	}
+	return nil
+}
+
+func validateCommunicationCPUCount(opts platform.RuntimeOptions, cloudRunEnabled bool, configured, observed int) error {
+	if opts.DeploymentTarget != platform.DeploymentTargetCloudRun || !cloudRunEnabled {
+		return nil
+	}
+	if configured <= 0 {
+		return fmt.Errorf("Cloud Run communication requires a positive AONOHAKO_COMMUNICATION_CPU_COUNT")
+	}
+	if observed != configured {
+		return fmt.Errorf("Cloud Run communication requires GOMAXPROCS=%d to match AONOHAKO_COMMUNICATION_CPU_COUNT; observed %d", configured, observed)
+	}
+	return nil
+}
+
+func validateCommunicationWallBudget(opts platform.RuntimeOptions, cloudRunEnabled bool, budgetMs int) error {
+	if opts.DeploymentTarget == platform.DeploymentTargetCloudRun && cloudRunEnabled && budgetMs <= 0 {
+		return fmt.Errorf("Cloud Run communication requires a positive AONOHAKO_COMMUNICATION_WALL_BUDGET_MS")
 	}
 	return nil
 }

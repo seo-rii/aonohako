@@ -490,6 +490,64 @@ func compileBrainfuck(workDir string, sources []model.Source) model.CompileRespo
 	return passThroughArtifacts(workDir, sources)
 }
 
+const (
+	malbolgeMemorySize   = 59049
+	malbolgeXlat1        = "+b(29e*j1VMEKLyC})8&m#~W>qxdRp0wkrUo[D7,XTcA\"lI.v%{gJh4G\\-=O@5`_3i<?Z';FNQuY]szf$!BS/|t:Pn6^Ha"
+	validMalbolgeOpcodes = "ji*p</vo"
+)
+
+type malbolgeCompiler struct{}
+
+func (malbolgeCompiler) Compile(_ context.Context, job CompileJob) model.CompileResponse {
+	return compileMalbolge(job.WorkDir, job.Request.Sources)
+}
+
+func compileMalbolge(workDir string, sources []model.Source) model.CompileResponse {
+	var hasSource bool
+	for _, src := range sources {
+		ext := strings.ToLower(filepath.Ext(src.Name))
+		if ext != ".mal" && ext != ".mb" {
+			continue
+		}
+		hasSource = true
+		data, err := util.DecodeB64(src.DataB64)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		position := 0
+		for offset, b := range data {
+			switch b {
+			case ' ', '\t', '\n', '\r', '\v', '\f':
+				continue
+			}
+			if position >= malbolgeMemorySize {
+				return model.CompileResponse{Status: model.CompileStatusCompileError, Reason: "malbolge source exceeds 59049 instructions"}
+			}
+			if b < 33 || b > 126 {
+				return model.CompileResponse{
+					Status: model.CompileStatusCompileError,
+					Reason: fmt.Sprintf("malbolge source %q contains non-graphical ASCII at byte %d", src.Name, offset),
+				}
+			}
+			opcode := malbolgeXlat1[(int(b)-33+position)%len(malbolgeXlat1)]
+			if !strings.ContainsRune(validMalbolgeOpcodes, rune(opcode)) {
+				return model.CompileResponse{
+					Status: model.CompileStatusCompileError,
+					Reason: fmt.Sprintf("malbolge source %q has an invalid opcode at instruction %d", src.Name, position),
+				}
+			}
+			position++
+		}
+		if position < 2 {
+			return model.CompileResponse{Status: model.CompileStatusCompileError, Reason: "malbolge source must contain at least two instructions"}
+		}
+	}
+	if !hasSource {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no malbolge sources"}
+	}
+	return passThroughArtifacts(workDir, sources)
+}
+
 type wasmCompiler struct{}
 
 func (wasmCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {

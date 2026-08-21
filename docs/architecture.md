@@ -743,9 +743,22 @@ The following checks are enforced before the HTTP server starts:
 - production `embedded + helper` requires
   `AONOHAKO_WORK_ROOT_MAX_FILES` between 1 and 1048576 and verifies through
   `statfs` that the entire work-root filesystem fits the inode ceiling
+- the dedicated Cloud Run communication runner permits
+  `AONOHAKO_WORK_ROOT_MAX_FILES` up to 4194304 because its 32 GiB instance
+  advertises about 4.1 million tmpfs inodes; ordinary runners retain the
+  1048576 ceiling, while the single communication session still enforces the
+  8192-entry scan limit independently on each of its 65 workspaces
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
   executions do not overlap under the shared sandbox UID
+- communication-capable embedded helpers reserve UID/GID `65531` for the
+  manager and `64937..65000` for participants; both Cloud Run helpers and
+  self-hosted cgroup helpers fail startup if those identities are assigned,
+  active, or own objects on the runtime image filesystem
+- Cloud Run advertises that capability only when the dedicated service sets
+  `AONOHAKO_COMMUNICATION_ENABLED=true`; capable Cloud Run services also require
+  a positive memory budget, an explicit CPU count matching `GOMAXPROCS`, and a
+  positive end-to-end communication wall budget
 - `/compile` and `/execute` streams are capped globally, and outside `dev` they
   are also capped per principal. Bearer auth uses a token fingerprint as the
   principal key; platform auth uses the upstream principal header such as
@@ -815,6 +828,14 @@ Why the design looks this way:
 - Cloud Run is the intended security boundary, not nested container tricks
 - the Cloud Run runtime does not depend on child cgroup creation; self-hosted
   helpers may opt into it with `AONOHAKO_CGROUP_PARENT`
+- `communication-v1` therefore uses per-process helper limits and process-group
+  cleanup on Cloud Run, while the outer instance supplies aggregate memory,
+  CPU, PID, and final-kill behavior; self-hosted communication retains its
+  aggregate cgroup
+- communication targets use a server-selected native-binary profile, cannot
+  create processes or threads, and receive separate immutable artifact inodes;
+  the one-GiB Cloud Run work root is statically admitted with 8 MiB per
+  participant, 128 MiB for the manager, and a 20% reserve
 - the runtime does not depend on mount-based filesystem isolation
 - the runtime does not assume Landlock availability
 - Cloud Run marker env vars alone do not switch security policy; the deployment
@@ -858,9 +879,9 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
 | `type-b` | `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
-| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zig` |
+| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `vbnet` |
 | `type-f` | `uhmlang` |
@@ -877,6 +898,16 @@ Production profiles currently group languages like this:
 | `type-q` | `dafny` |
 | `type-r` | `isabelle` |
 | `type-s` | `lean4` |
+
+The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
+`.mb` for compatibility. Compile strips ASCII whitespace, validates every
+remaining byte against the position-dependent reference opcode translation,
+and enforces the fixed 59049-word memory limit before passing source artifacts
+through. The bundled interpreter follows the original public-domain
+interpreter's practical I/O mapping (`<` writes and `/` reads, with EOF represented
+as 59048), while malformed non-graphical runtime memory terminates safely
+instead of reproducing the reference C implementation's undefined access or
+busy loop.
 
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the

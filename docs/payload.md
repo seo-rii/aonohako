@@ -263,8 +263,10 @@ completed downloads does not consume that budget.
 
 `communication-v1` runs one private manager and 2–64 independent participant
 processes. The request contains each compiled artifact only once; the runner
-materializes the participant program once and hard-links its immutable files
-into separate workspaces before launching the requested number of processes.
+materializes the participant program once and copies its immutable bytes to
+distinct inodes in separate workspaces before launching the requested number
+of processes. The executable basename and sandbox profile are selected by the
+server, not by submitted artifact names.
 
 ```jsonc
 {
@@ -325,9 +327,31 @@ Participant runtime, time, and memory failures retain the ordinary RE/TLE/MLE
 statuses. This protocol does not introduce a judge-error status.
 
 Clients must first require `communication-v1` from `GET /capabilities`. The
-capability is advertised only by self-hosted, embedded helper runners with a
-configured cgroup v2 parent; Cloud Run and control-plane-only instances do not
-advertise it and must not receive communication requests.
+capability is advertised by Cloud Run embedded helpers only when the dedicated
+runner sets `AONOHAKO_COMMUNICATION_ENABLED=true`; they use process-group
+cleanup and the outer container as the aggregate resource boundary, and by
+self-hosted embedded helpers with a configured cgroup v2 parent. Remote
+control-plane-only instances and self-hosted helpers without a cgroup do not
+advertise it and must not receive communication requests. A Cloud Run runner
+must be provisioned for all participant memory limits, the 512 MiB manager,
+server overhead, and its bounded work-root volume; an outer-container OOM may
+terminate the instance before a per-participant verdict can be returned.
+Startup requires a positive `AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB` when the
+Cloud Run capability is enabled. Before starting processes, Aonohako requires
+`participant_count * limits.memory_mb + 512` to fit that budget; the planned
+32 GiB service uses `24576` MiB so the remainder stays available to the server,
+workspaces, and runtime overhead.
+Cloud Run also requires `AONOHAKO_COMMUNICATION_CPU_COUNT` to match the process
+`GOMAXPROCS` value and a positive `AONOHAKO_COMMUNICATION_WALL_BUDGET_MS`.
+The wall allowance reserves one configured CPU for supervision, rounds the
+remaining targets into scheduling waves, and adds 15% or at least one second
+of slack. Each participant and manager keeps its original CPU watchdog and
+`RLIMIT_CPU`; a request whose adjusted allowance exceeds the session budget is
+rejected before launch. Communication targets use a fixed native-binary
+profile, cannot create threads or processes, and receive distinct artifact
+inodes. On Cloud Run, participants are capped at 8 MiB of total workspace,
+the manager at 128 MiB, and admission reserves 20% of the authoritative work
+root. Self-hosted cgroup timing is unchanged.
 
 ## `POST /execute` — Response
 

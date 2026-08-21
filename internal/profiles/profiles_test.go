@@ -73,6 +73,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"RUST2018",
 		"RUST2021",
 		"RUST2024",
+		"ZEROLANG",
 		"KOTLIN",
 		"ADA",
 		"ADA2012",
@@ -114,6 +115,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"WHITESPACE",
 		"BEFUNGE",
 		"BF",
+		"MALBOLGE",
 		"LOLCODE",
 		"APECODE",
 		"WASM",
@@ -181,6 +183,9 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"MOJO":         "mojo-binary",
 		"mojo":         "mojo-binary",
 		"mojo-binary":  "mojo-binary",
+		"ZEROLANG":     "binary",
+		"zerolang":     "binary",
+		"zero":         "binary",
 		"ADA":          "binary",
 		"ADA2012":      "binary",
 		"ADA2022":      "binary",
@@ -223,6 +228,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"WASM":         "wasm",
 		"BF":           "brainfuck",
 		"BEFUNGE":      "befunge",
+		"MALBOLGE":     "malbolge",
 		"LOLCODE":      "lolcode",
 		"APECODE":      "binary",
 		"WHITESPACE":   "whitespace",
@@ -297,5 +303,31 @@ func TestPicoLispProfileUsesDotLSourceAndInterpreterRuntime(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("PICOLISP resource profile = %+v, want 2x+1000ms and 1x+256MiB", profile)
+	}
+}
+
+func TestZerolangProfileBuildsNativeExecutableFromDotZeroSource(t *testing.T) {
+	profile, ok := Resolve("ZEROLANG")
+	if !ok {
+		t.Fatal("Resolve(ZEROLANG) reported unsupported language")
+	}
+	if profile.Extension != "0" || profile.DefaultTarget != "Main" || profile.CompileKind != "zerolang" || profile.RunLang != "binary" {
+		t.Fatalf("ZEROLANG profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 0 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 16 {
+		t.Fatalf("ZEROLANG resource profile = %+v, want native defaults with 16 MiB reserve", profile)
+	}
+}
+
+func TestMalbolgeProfileUsesValidatedBundledRuntime(t *testing.T) {
+	profile, ok := Resolve("MALBOLGE")
+	if !ok {
+		t.Fatal("Resolve(MALBOLGE) reported unsupported language")
+	}
+	if profile.Extension != "mal" || profile.CompileKind != "malbolge" || profile.RunLang != "malbolge" {
+		t.Fatalf("MALBOLGE profile = %+v, want .mal validated interpreter runtime", profile)
+	}
+	if profile.TimeMultiplier != 5 || profile.TimeOffsetMs != 1000 || profile.MemoryOffsetMB != 64 {
+		t.Fatalf("MALBOLGE resource profile = %+v, want 5x+1000ms and 64 MiB reserve", profile)
 	}
 }

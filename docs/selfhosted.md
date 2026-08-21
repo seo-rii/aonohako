@@ -58,6 +58,12 @@ host accounts; communication capability must not be exposed from a shared host.
 Startup fails closed if those identities appear in `/etc/passwd`, `/etc/group`,
 an existing process credential, or ownership metadata on the runner image's root
 filesystem. The direct-image self-test applies the same ownership check.
+Cloud Run embedded helpers expose the same communication protocol only when
+`AONOHAKO_COMMUNICATION_ENABLED=true`, and use fixed identity separation without
+child cgroups. Their process groups provide normal
+cancellation cleanup, while the disposable outer container is the aggregate
+memory, CPU, and PID boundary. Self-hosted communication continues to require
+the aggregate cgroup described here.
 
 ### Non-root control plane with remote execution
 

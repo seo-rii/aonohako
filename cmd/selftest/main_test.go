@@ -145,10 +145,12 @@ func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
 		"isabelle":   {},
 		"kframework": {},
 		"lean4":      {},
+		"malbolge":   {},
 		"rocq":       {},
 		"tla":        {},
 		"vb6":        {},
 		"why3":       {},
+		"zerolang":   {},
 	}
 
 	for language, tc := range compileExecuteCases() {

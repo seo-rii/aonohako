@@ -174,11 +174,7 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	capabilities := make([]string, 0, 1)
-	platformConfig := s.cfg.Execution.Platform
-	if platformConfig.DeploymentTarget == platform.DeploymentTargetSelfHosted &&
-		platformConfig.ExecutionTransport == platform.ExecutionTransportEmbedded &&
-		platformConfig.SandboxBackend == platform.SandboxBackendHelper &&
-		strings.TrimSpace(s.cfg.Execution.Cgroup.ParentDir) != "" {
+	if platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled) {
 		capabilities = append(capabilities, "communication-v1")
 	}
 	w.Header().Set("Content-Type", "application/json")

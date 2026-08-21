@@ -175,6 +175,10 @@ if has_language "befunge"; then
     report_once "Befunge interpreter" sh -c 'test -f /usr/local/lib/aonohako/befunge.py && printf bundled'
 fi
 
+if has_language "malbolge"; then
+    report_once "Malbolge interpreter" sh -c 'test -f /usr/local/lib/aonohako/malbolge.py && printf "bundled (1998 reference)"'
+fi
+
 if has_language "pypy"; then
     report_once "PyPy" pypy3 --version
 fi
@@ -302,6 +306,10 @@ fi
 
 if has_language "mojo"; then
     report_once "Mojo" mojo --version
+fi
+
+if has_language "zerolang"; then
+    report_once "Zerolang" zero --version
 fi
 
 if has_language "swift"; then
@@ -637,6 +645,7 @@ report_compile_option "odin" "odin build . -define:ONLINE_JUDGE=true -out:<targe
 report_compile_option "c3" "c3c compile -D ONLINE_JUDGE -O2"
 report_compile_option "hare" "hare build -o <target>"
 report_compile_option "mojo" "mojo build -o <target>"
+report_compile_option "zerolang" "zero import --out <graph> <source.0>; zero build --release release-fast --out <target> <graph>"
 report_compile_option "kotlin" "kotlinc-native -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -J-XX:ReservedCodeCacheSize=32m -J-XX:MaxMetaspaceSize=192m -J-XX:CompressedClassSpaceSize=64m -opt -o <target>"
 report_compile_option "kotlin-jvm" "kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"
 report_compile_option "swift" "swiftc -O -D ONLINE_JUDGE -module-cache-path <workdir>/.cache/swift-module-cache"
@@ -663,6 +672,7 @@ report_compile_option "janet" "pass-through .janet artifacts"
 report_compile_option "sed" "pass-through .sed artifacts"
 report_compile_option "bc" "pass-through .bc artifacts"
 report_compile_option "befunge" "pass-through .bef/.bf93 artifacts"
+report_compile_option "malbolge" "validate reference opcodes, then pass-through .mal/.mb artifacts"
 report_compile_option "lolcode" "pass-through .lol artifacts"
 report_compile_option "forth" "pass-through .fs artifacts"
 report_compile_option "gforth" "pass-through .fs/.fth/.4th artifacts"

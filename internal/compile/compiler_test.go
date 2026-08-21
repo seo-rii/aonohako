@@ -51,7 +51,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -104,6 +104,47 @@ func TestAPECodeCompilerBuildsExecutable(t *testing.T) {
 	wantArgs := []string{"-o", filepath.Join(workDir, "Main"), filepath.Join(workDir, "Main.ape")}
 	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
 		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, wantArgs)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+}
+
+func TestZerolangCompilerImportsGraphThenBuildsExecutable(t *testing.T) {
+	workDir := t.TempDir()
+	sourcePath := filepath.Join(workDir, "Main.0")
+	if err := os.WriteFile(sourcePath, []byte(`pub fn main(world: World) -> Void raises { check world.out.write("ok\n") }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, args, _ []string) {
+			if len(args) > 0 && args[0] == "build" {
+				if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("native"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+		},
+	}
+
+	resp := zerolangCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.0"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s, reason = %s", resp.Status, resp.Reason)
+	}
+	graphPath := filepath.Join(workDir, ".cache", "zerolang-Main.graph")
+	cacheEnv := []string{"ZERO_CACHE_DIR=" + filepath.Join(workDir, ".cache", "zerolang-native")}
+	wantCommands := []recordedCommand{
+		{workDir: workDir, bin: "zero", args: []string{"import", "--out", graphPath, sourcePath}, env: cacheEnv},
+		{workDir: workDir, bin: "zero", args: []string{"build", "--release", "release-fast", "--out", filepath.Join(workDir, "Main"), graphPath}, env: cacheEnv},
+	}
+	if !reflect.DeepEqual(runner.commands, wantCommands) {
+		t.Fatalf("runner commands = %#v, want %#v", runner.commands, wantCommands)
 	}
 	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
 		t.Fatalf("artifacts = %+v", resp.Artifacts)
