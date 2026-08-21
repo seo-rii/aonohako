@@ -259,6 +259,76 @@ All `stdin_url` and text-part `data_url` downloads used by the two steps share
 one cumulative 60-second download budget. Time spent running a sandbox between
 completed downloads does not consume that budget.
 
+### Communication execute mode
+
+`communication-v1` runs one private manager and 2–64 independent participant
+processes. The request contains each compiled artifact only once; the runner
+materializes the participant program once and hard-links its immutable files
+into separate workspaces before launching the requested number of processes.
+
+```jsonc
+{
+  "programs": [
+    {
+      "id": "participant",
+      "lang": "binary",
+      "binaries": [{"name": "Main", "data_b64": "<base64>", "mode": "exec"}]
+    },
+    {
+      "id": "manager",
+      "lang": "binary",
+      "binaries": [{"name": "manager", "data_b64": "<base64>", "mode": "exec"}]
+    }
+  ],
+  "communication": {
+    "version": 1,
+    "participant_program_id": "participant",
+    "manager_program_id": "manager",
+    "participant_count": 64,
+    "result_protocol": "manager-result-v1",
+    "input_url": "https://storage.example/input",
+    "answer_url": "https://storage.example/answer"
+  },
+  "limits": {"time_ms": 2000, "memory_mb": 256}
+}
+```
+
+Only native `binary` programs are accepted. Communication mode is mutually
+exclusive with legacy execute fields, steps, SPJ, interactive mode, network,
+file/sidecar output capture, and `ignore_tle`. `input`/`input_url` and the
+optional `answer`/`answer_url` pairs are mutually exclusive. `limits` applies
+to every participant. Manager and aggregate ceilings are runner policy: the
+manager currently receives 512 MiB and up to the participant time plus one
+second, within the public time cap.
+
+Every participant receives its zero-based participant ID as the final command
+argument. The manager receives these arguments in order:
+
+1. private input path;
+2. private answer path (an empty file when no answer is supplied);
+3. `/proc/self/fd/<n>` for its dedicated result descriptor;
+4. participant count;
+5. for each participant from ID 0 upward, a read descriptor path for that
+   participant's stdout followed by a write descriptor path for its stdin.
+
+The manager must write exactly one UTF-8 JSON object of at most 64 KiB to the
+result descriptor and close it before exiting successfully:
+
+```json
+{"verdict":"accepted","score":0.725,"message":""}
+```
+
+`verdict` is `accepted` or `wrong_answer`, `score` is required and finite in
+`[0,1]`, and `message` is at most 8 KiB. A manager start/runtime failure or an
+invalid/missing result is `Runtime Error` with a `manager:*` verdict source.
+Participant runtime, time, and memory failures retain the ordinary RE/TLE/MLE
+statuses. This protocol does not introduce a judge-error status.
+
+Clients must first require `communication-v1` from `GET /capabilities`. The
+capability is advertised only by self-hosted, embedded helper runners with a
+configured cgroup v2 parent; Cloud Run and control-plane-only instances do not
+advertise it and must not receive communication requests.
+
 ## `POST /execute` — Response
 
 ```jsonc
@@ -275,7 +345,8 @@ completed downloads does not consume that budget.
   "stderr_truncated": false,                // true when stderr exceeded the capture cap
   "reason": "",                             // human-readable error
   "verdict_source": "stdout",               // source that selected the final verdict, when known
-  "score": null,                            // nullable float 0.0–1.0 (SPJ or interactive score)
+  "score": null,                            // nullable float 0.0–1.0 (SPJ, interactive, or communication score)
+  "started_participants": 64,               // communication-v1 only; participant targets whose exec was confirmed
   "steps": [                                // present for two-step or interactive execute mode
     {
       "id": "encode",

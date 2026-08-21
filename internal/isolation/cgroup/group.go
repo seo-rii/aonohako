@@ -277,27 +277,18 @@ func (g Group) killWithTimeout(timeout time.Duration, killProcess func(int) erro
 	killPath := filepath.Join(g.Path, "cgroup.kill")
 	if _, err := os.Stat(killPath); err != nil {
 		if os.IsNotExist(err) {
-			procsPath := filepath.Join(g.Path, "cgroup.procs")
 			until := time.Now().Add(timeout)
 			for {
-				body, err := os.ReadFile(procsPath)
+				pids, err := descendantProcesses(g.Path)
 				if err != nil {
-					if errors.Is(err, os.ErrNotExist) {
-						return nil
-					}
-					return fmt.Errorf("read cgroup.procs: %w", err)
+					return err
 				}
-				fields := strings.Fields(string(body))
-				if len(fields) == 0 {
+				if len(pids) == 0 {
 					return nil
 				}
 
 				var killErrors []error
-				for _, field := range fields {
-					pid, err := strconv.Atoi(field)
-					if err != nil || pid <= 0 {
-						return fmt.Errorf("parse cgroup.procs pid %q", field)
-					}
+				for _, pid := range pids {
 					if err := killProcess(pid); err != nil && !errors.Is(err, os.ErrProcessDone) && !errors.Is(err, syscall.ESRCH) {
 						killErrors = append(killErrors, fmt.Errorf("kill cgroup process %d: %w", pid, err))
 					}
@@ -306,7 +297,11 @@ func (g Group) killWithTimeout(timeout time.Duration, killProcess func(int) erro
 					return err
 				}
 				if timeout <= 0 || !time.Now().Before(until) {
-					return fmt.Errorf("cgroup.procs remained populated after SIGKILL: %s", strings.Join(fields, " "))
+					values := make([]string, 0, len(pids))
+					for _, pid := range pids {
+						values = append(values, strconv.Itoa(pid))
+					}
+					return fmt.Errorf("descendant cgroup.procs remained populated after SIGKILL: %s", strings.Join(values, " "))
 				}
 				time.Sleep(fallbackKillRetryInterval)
 			}
@@ -317,6 +312,40 @@ func (g Group) killWithTimeout(timeout time.Duration, killProcess func(int) erro
 		return fmt.Errorf("write cgroup.kill: %w", err)
 	}
 	return nil
+}
+
+func descendantProcesses(groupPath string) ([]int, error) {
+	var pids []int
+	if body, err := os.ReadFile(filepath.Join(groupPath, "cgroup.procs")); err == nil {
+		for _, field := range strings.Fields(string(body)) {
+			pid, err := strconv.Atoi(field)
+			if err != nil || pid <= 0 {
+				return nil, fmt.Errorf("parse %s/cgroup.procs pid %q", groupPath, field)
+			}
+			pids = append(pids, pid)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("read %s/cgroup.procs: %w", groupPath, err)
+	}
+
+	entries, err := os.ReadDir(groupPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return pids, nil
+		}
+		return nil, fmt.Errorf("read cgroup directory %s: %w", groupPath, err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		childPIDs, err := descendantProcesses(filepath.Join(groupPath, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		pids = append(pids, childPIDs...)
+	}
+	return pids, nil
 }
 
 func (g Group) KillAndRemoveWithRetry(deadline time.Duration) error {

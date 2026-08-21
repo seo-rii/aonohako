@@ -19,6 +19,7 @@ import (
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimepolicy"
+	"aonohako/internal/security"
 )
 
 type RemoteAuthMode string
@@ -651,6 +652,11 @@ func Load() (Config, error) {
 					return Config{}, fmt.Errorf("AONOHAKO_WORK_ROOT filesystem inode count %d exceeds AONOHAKO_WORK_ROOT_MAX_FILES=%d", fs.Files, workRootMaxFiles)
 				}
 			}
+		}
+	}
+	if selfHostedHelper && execution.Cgroup.ParentDir != "" {
+		if err := security.ValidateCommunicationIdentityReservation(); err != nil {
+			return Config{}, fmt.Errorf("communication sandbox identity reservation validation failed: %w", err)
 		}
 	}
 	return Config{

@@ -168,6 +168,9 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		}
 		tuning = profileTuning.WithSafeDefaults()
 	}
+	if req.Communication != nil {
+		return s.runCommunication(ctx, req, hooks, tuning)
+	}
 	if req.Interactor != nil {
 		return s.runInteractive(ctx, req, hooks, tuning)
 	}

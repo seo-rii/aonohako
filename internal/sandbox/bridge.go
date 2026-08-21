@@ -34,6 +34,7 @@ type ExecRequest struct {
 	AllowNumaPolicy          bool         `json:"allow_numa_policy,omitempty"`
 	AllowChmod               bool         `json:"allow_chmod,omitempty"`
 	AllowExecveat            bool         `json:"allow_execveat,omitempty"`
+	PreserveFDs              []int        `json:"preserve_fds,omitempty"`
 	DisableFileSizeLimit     bool         `json:"disable_file_size_limit,omitempty"`
 	DisableAddressSpaceLimit bool         `json:"disable_address_space_limit,omitempty"`
 }

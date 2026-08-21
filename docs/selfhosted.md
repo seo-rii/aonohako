@@ -34,6 +34,8 @@ This shape is supported for:
 - local debugging
 - a dedicated single-tenant runner VM
 - a single active runner container behind a queue
+- `communication-v1`, when the cgroup parent is configured and the host reserves
+  numeric UID/GID 65531 for the trusted manager and 64937–65000 for participants
 
 It is intentionally serialized. The helper backend drops the target process to a
 shared sandbox UID and relies on a dedicated work root plus immutable submitted
@@ -43,6 +45,19 @@ Within one interactive request only, the contestant and trusted interactor use
 fixed distinct UID/GID pairs. Each root stays server-owned with mode `0710` and
 group traverse permission for its selected role; this does not provide
 per-request UID allocation for increasing runner concurrency.
+
+Within one communication request, every participant instead receives a distinct
+UID/GID and writable workspace while all participant workspaces hard-link the
+same read-only artifacts. Only the manager inherits the participant pipes and
+private test-data paths. The helper seccomp policy keeps network, process
+creation, and ptrace unavailable to the native participant programs. The
+aggregate cgroup owns the manager and all participant subgroups so cancellation
+and resource-limit cleanup kill the whole process tree. These guarantees assume
+a dedicated runner where the reserved numeric identities are not assigned to
+host accounts; communication capability must not be exposed from a shared host.
+Startup fails closed if those identities appear in `/etc/passwd`, `/etc/group`,
+an existing process credential, or ownership metadata on the runner image's root
+filesystem. The direct-image self-test applies the same ownership check.
 
 ### Non-root control plane with remote execution
 
@@ -152,6 +167,18 @@ aonohako-selftest cgroup-preflight
 
 The command prints the preflight result as JSON and exits non-zero when required
 cgroup v2 controls are unavailable.
+
+On a privileged runner host, the communication end-to-end test can exercise the
+same delegated cgroup with 64 participant processes:
+
+```bash
+AONOHAKO_COMMUNICATION_TEST_CGROUP=/sys/fs/cgroup/aonohako \
+  go test ./internal/execute -run TestCommunicationEndToEndWithDelegatedCgroup -count=1 -v
+```
+
+The test compiles its participant and manager fixtures before checking the host
+gate, and skips unless the environment variable names a writable delegated
+cgroup and the test process is running as root.
 
 ## Mount namespace preflight
 

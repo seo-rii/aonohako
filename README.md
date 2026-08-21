@@ -14,6 +14,9 @@ binary, configurable runtime images, and testable build metadata.
 - symlink-safe output capture for file outputs and sidecar artifacts
 - SPJ and interactive IO judging support for problems that need custom verdict
   logic or bidirectional contestant/interactor communication
+- `communication-v1` execution on dedicated self-hosted cgroup runners: one
+  private manager process coordinates 2–64 isolated launches of one shared,
+  read-only participant binary
 - `runtime-images.yml` as the source of truth for runtime image groups
 - Docker build tooling that can emit production multi-language images and
   single-language CI smoke images from the same YAML catalog
