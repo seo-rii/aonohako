@@ -521,7 +521,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			firstParticipantFailure == nil &&
 			!cancellationTriggered &&
 			ctx.Err() == nil &&
-			(managerCompletedAt.IsZero() || process.completedAt.Before(managerCompletedAt)) {
+			communicationParticipantFailureOverridesManager(process, managerCompletedAt) {
 			failure := process
 			firstParticipantFailure = &failure
 			cancellationTriggered = true
@@ -941,6 +941,13 @@ func communicationProcessFailed(process communicationProcessResult) bool {
 		return true
 	}
 	return process.result.ExitCode == nil || *process.result.ExitCode != 0
+}
+
+func communicationParticipantFailureOverridesManager(process communicationProcessResult, managerCompletedAt time.Time) bool {
+	if process.result.VerdictSource == "sandbox_helper_oom" || process.result.VerdictSource == "sandbox_init" {
+		return true
+	}
+	return managerCompletedAt.IsZero() || process.completedAt.Before(managerCompletedAt)
 }
 
 func buildCommunicationResponse(processes []communicationProcessResult, managerResult communicationManagerResult, managerResultErr error, startedParticipants int, wallTimeMs int64, firstParticipantFailure *communicationProcessResult) model.RunResponse {

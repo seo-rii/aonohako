@@ -576,15 +576,6 @@ func MaybeRunFromEnv() bool {
 	appendStmt(unix.BPF_RET|unix.BPF_K, allow)
 
 	prog := unix.SockFprog{Len: uint16(len(program)), Filter: &program[0]}
-	if !req.DisableAddressSpaceLimit {
-		if err := unix.Setrlimit(unix.RLIMIT_AS, &unix.Rlimit{Cur: addressSpaceLimitBytes, Max: addressSpaceLimitBytes}); err != nil {
-			fail("setrlimit(%d): %v", unix.RLIMIT_AS, err)
-		}
-	}
-	if err := unix.Prctl(unix.PR_SET_SECCOMP, uintptr(unix.SECCOMP_MODE_FILTER), uintptr(unsafe.Pointer(&prog)), 0, 0); err != nil {
-		fail("prctl seccomp: %v", err)
-	}
-
 	if err := unix.Chdir(req.Dir); err != nil {
 		fail("chdir %s: %v", req.Dir, err)
 	}
@@ -617,6 +608,21 @@ func MaybeRunFromEnv() bool {
 			fail("wait for target release: %v", err)
 		}
 		_ = targetReleaseFile.Close()
+	}
+	// RLIMIT_AS is inherited across exec. Apply it only after the Go helper has
+	// completed all allocation-heavy setup and the start barrier; otherwise a
+	// native target's deliberately small limit can starve the helper runtime
+	// before the target exists. Install seccomp after Setrlimit because Go uses
+	// prlimit64 to change the limit and the target policy forbids that mutation.
+	// Keep both operations immediately adjacent to exec so the target retains the
+	// same enforcement without exposing the Go bootstrap to its limit.
+	if !req.DisableAddressSpaceLimit {
+		if err := unix.Setrlimit(unix.RLIMIT_AS, &unix.Rlimit{Cur: addressSpaceLimitBytes, Max: addressSpaceLimitBytes}); err != nil {
+			fail("setrlimit(%d): %v", unix.RLIMIT_AS, err)
+		}
+	}
+	if err := unix.Prctl(unix.PR_SET_SECCOMP, uintptr(unix.SECCOMP_MODE_FILTER), uintptr(unsafe.Pointer(&prog)), 0, 0); err != nil {
+		fail("prctl seccomp: %v", err)
 	}
 	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(execPath)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&envv[0])))
 	runtime.KeepAlive(targetReadyFile)

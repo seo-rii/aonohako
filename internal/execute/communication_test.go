@@ -114,6 +114,26 @@ func TestCommunicationResponseTrustsManagerAfterParticipantsAreStopped(t *testin
 	}
 }
 
+func TestCommunicationHelperStartupFailureOverridesEarlyManagerResult(t *testing.T) {
+	managerCompletedAt := time.Now()
+	for _, source := range []string{"sandbox_helper_oom", "sandbox_init"} {
+		process := communicationProcessResult{
+			result:      execResult{Status: model.RunStatusInitFail, VerdictSource: source},
+			completedAt: managerCompletedAt.Add(time.Millisecond),
+		}
+		if !communicationParticipantFailureOverridesManager(process, managerCompletedAt) {
+			t.Fatalf("%s must override an earlier manager result", source)
+		}
+	}
+	shutdownArtifact := communicationProcessResult{
+		result:      execResult{Status: model.RunStatusRE, VerdictSource: "stream_io"},
+		completedAt: managerCompletedAt.Add(time.Millisecond),
+	}
+	if communicationParticipantFailureOverridesManager(shutdownArtifact, managerCompletedAt) {
+		t.Fatal("post-manager stream shutdown must remain a masked cancellation artifact")
+	}
+}
+
 func TestCommunicationOutputWriterCapsForwardedBytes(t *testing.T) {
 	var forwarded bytes.Buffer
 	cancelCount := 0

@@ -31,6 +31,7 @@ func testCommunicationEndToEnd(t *testing.T, deploymentTarget platform.Deploymen
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -74,7 +75,9 @@ int main(int argc, char **argv) {
   int id = atoi(argv[1]);
   int value = 0;
   if (scanf("%d", &value) != 1) return fail_participant(11);
-  printf("%d %d\n", id + value, (int)getuid());
+  struct rlimit address_space;
+  if (getrlimit(RLIMIT_AS, &address_space) != 0) return fail_participant(30);
+  printf("%d %d %llu\n", id + value, (int)getuid(), (unsigned long long)address_space.rlim_cur);
   fflush(stdout);
   return 0;
 }
@@ -118,7 +121,9 @@ int main(int argc, char **argv) {
   for (int id = 0; id < count; id++) {
     int response = -1;
     int uid = -1;
-    if (fscanf(participantOut[id], "%d %d", &response, &uid) != 2 || response != id + value || uid != 65000 - id) return fail_manager(26);
+    unsigned long long address_space = 0;
+    if (fscanf(participantOut[id], "%d %d %llu", &response, &uid, &address_space) != 3 ||
+        response != id + value || uid != 65000 - id || address_space != 128ULL * 1024 * 1024) return fail_manager(26);
     fclose(participantOut[id]);
   }
   free(participantOut);
