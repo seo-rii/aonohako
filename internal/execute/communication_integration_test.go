@@ -10,14 +10,28 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/security"
 )
 
 func TestCommunicationEndToEndWithDelegatedCgroup(t *testing.T) {
-	participantPath := buildCTestBinary(t, `
+	cgroupParent := strings.TrimSpace(os.Getenv("AONOHAKO_COMMUNICATION_TEST_CGROUP"))
+	testCommunicationEndToEnd(t, platform.DeploymentTargetSelfHosted, cgroupParent, true)
+}
+
+func TestCommunicationEndToEndWithoutCgroup(t *testing.T) {
+	testCommunicationEndToEnd(t, platform.DeploymentTargetCloudRun, "", false)
+}
+
+func testCommunicationEndToEnd(t *testing.T, deploymentTarget platform.DeploymentTarget, cgroupParent string, requireCgroup bool) {
+	t.Helper()
+	participantBinary := buildCTestBinary(t, `
 #include <fcntl.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 int main(int argc, char **argv) {
@@ -35,18 +49,27 @@ int main(int argc, char **argv) {
   if (fread(marker, 1, 9, shared) != 9) return 15;
   fclose(shared);
   if (marker[0] != 'i' || marker[8] != 'e') return 16;
+  errno = 0;
+  if (fork() >= 0 || errno != EPERM) return 17;
+  errno = 0;
+  if (socket(AF_UNIX, SOCK_STREAM, 0) >= 0 || errno != EPERM) return 18;
+#ifdef SYS_memfd_create
+  errno = 0;
+  if (syscall(SYS_memfd_create, "communication", 0) >= 0 || errno != EPERM) return 19;
+#endif
 
   int id = atoi(argv[1]);
   int value = 0;
   if (scanf("%d", &value) != 1) return 11;
-  printf("%d\n", id + value);
+  printf("%d %d\n", id + value, (int)getuid());
   fflush(stdout);
   return 0;
 }
 `)
-	managerPath := buildCTestBinary(t, `
+	managerBinary := buildCTestBinary(t, `
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 int main(int argc, char **argv) {
   if (argc < 5) return 20;
@@ -72,7 +95,8 @@ int main(int argc, char **argv) {
   }
   for (int id = 0; id < count; id++) {
     int response = -1;
-    if (fscanf(participantOut[id], "%d", &response) != 1 || response != id + value) return 26;
+    int uid = -1;
+    if (fscanf(participantOut[id], "%d %d", &response, &uid) != 2 || response != id + value || uid != 65000 - id) return 26;
     fclose(participantOut[id]);
   }
   free(participantOut);
@@ -85,27 +109,22 @@ int main(int argc, char **argv) {
   return 0;
 }
 `)
-	cgroupParent := strings.TrimSpace(os.Getenv("AONOHAKO_COMMUNICATION_TEST_CGROUP"))
-	if cgroupParent == "" {
+	if requireCgroup && cgroupParent == "" {
 		t.Skip("set AONOHAKO_COMMUNICATION_TEST_CGROUP to a writable delegated cgroup v2 parent")
 	}
 	if os.Geteuid() != 0 {
 		t.Skip("communication sandbox integration requires root")
 	}
+	if deploymentTarget == platform.DeploymentTargetCloudRun {
+		if err := security.ValidateCommunicationIdentityReservation(); err != nil {
+			t.Fatalf("Cloud Run communication identity reservation: %v", err)
+		}
+	}
 	forceDirectMode(t)
 
-	participantBinary, err := os.ReadFile(participantPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	managerBinary, err := os.ReadFile(managerPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	service := NewWithConfig(config.Config{Execution: config.ExecutionConfig{
+	service := NewWithConfig(config.Config{CommunicationEnabled: deploymentTarget == platform.DeploymentTargetCloudRun, CommunicationMemoryBudgetMB: 24576, Execution: config.ExecutionConfig{
 		Platform: platform.RuntimeOptions{
-			DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+			DeploymentTarget:   deploymentTarget,
 			ExecutionTransport: platform.ExecutionTransportEmbedded,
 			SandboxBackend:     platform.SandboxBackendHelper,
 		},
@@ -117,8 +136,8 @@ int main(int argc, char **argv) {
 				ID:   "participant",
 				Lang: "binary",
 				Binaries: []model.Binary{{
-					Name:    "participant",
-					DataB64: b64(string(participantBinary)),
+					Name:    "dotnet",
+					DataB64: participantBinary,
 					Mode:    "exec",
 				}, {
 					Name:    "shared.dat",
@@ -129,8 +148,8 @@ int main(int argc, char **argv) {
 				ID:   "manager",
 				Lang: "binary",
 				Binaries: []model.Binary{{
-					Name:    "manager",
-					DataB64: b64(string(managerBinary)),
+					Name:    "aonohako-tla-run",
+					DataB64: managerBinary,
 					Mode:    "exec",
 				}},
 			},
@@ -157,5 +176,72 @@ int main(int argc, char **argv) {
 		response.Score == nil || *response.Score != 0.725 ||
 		response.StartedParticipants != 64 {
 		t.Fatalf("unexpected communication response: %+v", response)
+	}
+}
+
+func TestCommunicationWithoutCgroupCancellationReapsParticipants(t *testing.T) {
+	participantBinary := buildCTestBinary(t, `
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void) {
+  printf("%d\n", (int)getpid());
+  fflush(stdout);
+  for (;;) pause();
+}
+`)
+	managerBinary := buildCTestBinary(t, `
+#include <string.h>
+#include <unistd.h>
+
+int main(void) {
+  const char *result = "{\"verdict\":\"accepted\",\"score\":1,\"message\":\"\"}";
+  if (write(10, result, strlen(result)) < 0) return 23;
+  return 0;
+}
+`)
+	if os.Geteuid() != 0 {
+		t.Skip("communication sandbox integration requires root")
+	}
+	if err := security.ValidateCommunicationIdentityReservationAt("/etc/passwd", "/etc/group", "/proc"); err != nil {
+		t.Fatalf("reserved communication identity before run: %v", err)
+	}
+	forceDirectMode(t)
+
+	service := NewWithConfig(config.Config{CommunicationEnabled: true, CommunicationMemoryBudgetMB: 24576, Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
+		DeploymentTarget:   platform.DeploymentTargetCloudRun,
+		ExecutionTransport: platform.ExecutionTransportEmbedded,
+		SandboxBackend:     platform.SandboxBackendHelper,
+	}}})
+	request := &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "participant", Lang: "binary", Binaries: []model.Binary{{Name: "participant", DataB64: participantBinary, Mode: "exec"}}},
+			{ID: "manager", Lang: "binary", Binaries: []model.Binary{{Name: "manager", DataB64: managerBinary, Mode: "exec"}}},
+		},
+		Communication: &model.CommunicationSpec{
+			Version:              1,
+			ParticipantProgramID: "participant",
+			ManagerProgramID:     "manager",
+			ParticipantCount:     2,
+			ResultProtocol:       "manager-result-v1",
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 64, OutputBytes: 1024, WorkspaceBytes: 8 << 20},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	response := service.Run(ctx, request, Hooks{})
+	if response.Status != model.RunStatusAccepted || response.StartedParticipants != 2 {
+		t.Fatalf("unexpected communication response: %+v", response)
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		err := security.ValidateCommunicationIdentityReservationAt("/etc/passwd", "/etc/group", "/proc")
+		if err == nil {
+			break
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("reserved communication process remained after cancellation: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

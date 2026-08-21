@@ -148,6 +148,8 @@ type Config struct {
 	MaxPrincipalRequestsPerMinute        int
 	HeartbeatInterval                    time.Duration
 	BodyReadTimeout                      time.Duration
+	CommunicationEnabled                 bool
+	CommunicationMemoryBudgetMB          int
 	AllowRequestNetwork                  bool
 	NetworkEgressIsolated                bool
 	AllowRequestRuntimeProfile           bool
@@ -238,6 +240,17 @@ func Load() (Config, error) {
 	}
 	remoteStrictProtocol, err := parseBoolEnv("AONOHAKO_REMOTE_STRICT_PROTOCOL", os.Getenv("AONOHAKO_REMOTE_STRICT_PROTOCOL"), defaultRemoteStrictProtocol(runtimePlatform))
 	if err != nil {
+		return Config{}, err
+	}
+	communicationEnabled, err := parseBoolEnv("AONOHAKO_COMMUNICATION_ENABLED", os.Getenv("AONOHAKO_COMMUNICATION_ENABLED"), false)
+	if err != nil {
+		return Config{}, err
+	}
+	communicationMemoryBudgetMB, err := parseNonNegativeIntEnv("AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB", os.Getenv("AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB"), 0)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateCommunicationMemoryBudget(runtimePlatform, communicationEnabled, communicationMemoryBudgetMB); err != nil {
 		return Config{}, err
 	}
 	allowRequestNetwork, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_NETWORK", os.Getenv("AONOHAKO_ALLOW_REQUEST_NETWORK"), defaultAllowRequestNetwork(runtimePlatform))
@@ -654,10 +667,8 @@ func Load() (Config, error) {
 			}
 		}
 	}
-	if selfHostedHelper && execution.Cgroup.ParentDir != "" {
-		if err := security.ValidateCommunicationIdentityReservation(); err != nil {
-			return Config{}, fmt.Errorf("communication sandbox identity reservation validation failed: %w", err)
-		}
+	if err := validateCommunicationIdentityPolicy(runtimePlatform, execution.Cgroup.ParentDir, communicationEnabled, security.ValidateCommunicationIdentityReservation); err != nil {
+		return Config{}, err
 	}
 	return Config{
 		Port:                                 port,
@@ -671,6 +682,8 @@ func Load() (Config, error) {
 		MaxPrincipalRequestsPerMinute:        maxPrincipalRequestsPerMinute,
 		HeartbeatInterval:                    time.Duration(heartbeatSec) * time.Second,
 		BodyReadTimeout:                      time.Duration(bodyReadTimeoutSec) * time.Second,
+		CommunicationEnabled:                 communicationEnabled,
+		CommunicationMemoryBudgetMB:          communicationMemoryBudgetMB,
 		AllowRequestNetwork:                  allowRequestNetwork,
 		NetworkEgressIsolated:                networkEgressIsolated,
 		AllowRequestRuntimeProfile:           allowRequestRuntimeProfile,
@@ -732,6 +745,23 @@ func validateAuthoritativeWorkRootPolicy(required, requireTmpfs bool, maxBytes, 
 func validateSelfHostedCgroupPolicy(required bool, parentDir string) error {
 	if required && strings.TrimSpace(parentDir) == "" {
 		return fmt.Errorf("selfhosted embedded helper execution requires AONOHAKO_CGROUP_PARENT")
+	}
+	return nil
+}
+
+func validateCommunicationIdentityPolicy(opts platform.RuntimeOptions, cgroupParent string, cloudRunEnabled bool, validate func() error) error {
+	if !platform.SupportsCommunicationV1(opts, cgroupParent, cloudRunEnabled) {
+		return nil
+	}
+	if err := validate(); err != nil {
+		return fmt.Errorf("communication sandbox identity reservation validation failed: %w", err)
+	}
+	return nil
+}
+
+func validateCommunicationMemoryBudget(opts platform.RuntimeOptions, cloudRunEnabled bool, budgetMB int) error {
+	if opts.DeploymentTarget == platform.DeploymentTargetCloudRun && cloudRunEnabled && budgetMB <= 0 {
+		return fmt.Errorf("Cloud Run communication requires a positive AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB")
 	}
 	return nil
 }

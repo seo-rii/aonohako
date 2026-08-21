@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -90,16 +91,34 @@ func (w *communicationOutputWriter) Write(p []byte) (int, error) {
 }
 
 func (s *Service) supportsCommunicationV1() bool {
-	return s.deploymentTarget == platform.DeploymentTargetSelfHosted && strings.TrimSpace(s.cgroupParentDir) != ""
+	return platform.SupportsCommunicationV1(platform.RuntimeOptions{
+		DeploymentTarget:   s.deploymentTarget,
+		ExecutionTransport: platform.ExecutionTransportEmbedded,
+		SandboxBackend:     platform.SandboxBackendHelper,
+	}, s.cgroupParentDir, s.communicationEnabled)
 }
 
 func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
 	startedAt := timing.MonotonicNow()
 	if !s.supportsCommunicationV1() {
-		return communicationFailure("CommunicationJudge unsupported: communication-v1 requires a self-hosted cgroup runner", "communication:capability", 0)
+		return communicationFailure("CommunicationJudge unsupported: communication-v1 requires an explicitly enabled Cloud Run embedded helper or a self-hosted cgroup runner", "communication:capability", 0)
 	}
 	if err := runvalidation.ValidateCommunication(req); err != nil {
 		return communicationFailure("invalid communication request: "+err.Error(), "communication:request", 0)
+	}
+	if s.deploymentTarget == platform.DeploymentTargetCloudRun {
+		declaredMemoryMB, admitted := communicationMemoryWithinBudget(
+			req.Communication.ParticipantCount,
+			req.Limits.MemoryMB,
+			s.communicationMemoryBudgetMB,
+		)
+		if !admitted {
+			return communicationFailure(
+				fmt.Sprintf("communication declared memory %d MiB exceeds runner budget %d MiB", declaredMemoryMB, s.communicationMemoryBudgetMB),
+				"communication:admission",
+				0,
+			)
+		}
 	}
 
 	participantProgram, managerProgram := communicationPrograms(req)
@@ -230,6 +249,12 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	}()
 
 	totalProcesses := len(participants) + 1
+	wallTimeMultiplier := communicationWallTimeMultiplier(
+		s.deploymentTarget,
+		s.cgroupParentDir,
+		req.Communication.ParticipantCount,
+		runtime.GOMAXPROCS(0),
+	)
 	readyCh := make(chan bool, totalProcesses)
 	releaseTargets := make(chan struct{})
 	processCh := make(chan communicationProcessResult, totalProcesses)
@@ -267,7 +292,8 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 					onTargetStarted: func() {
 						startedParticipants.Add(1)
 					},
-					targetRelease: releaseTargets,
+					targetRelease:           releaseTargets,
+					communicationRestricted: true,
 				},
 				Hooks{},
 				communicationDiagnosticBytes,
@@ -305,6 +331,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				closeExtraFilesAfterStart: true,
 				onTargetReady:             func() { readyCh <- true },
 				targetRelease:             releaseTargets,
+				communicationRestricted:   true,
 			},
 			Hooks{},
 			communicationDiagnosticBytes,
@@ -371,9 +398,9 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		released = true
 		for i := range participantTimers {
 			cancel := participantCancels[i]
-			participantTimers[i] = time.AfterFunc(time.Duration(max(1, req.Limits.TimeMs))*time.Millisecond, cancel)
+			participantTimers[i] = time.AfterFunc(time.Duration(max(1, req.Limits.TimeMs)*wallTimeMultiplier)*time.Millisecond, cancel)
 		}
-		managerTimer := time.AfterFunc(time.Duration(max(1, managerReq.Limits.TimeMs))*time.Millisecond, cancelManager)
+		managerTimer := time.AfterFunc(time.Duration(max(1, managerReq.Limits.TimeMs)*wallTimeMultiplier)*time.Millisecond, cancelManager)
 		defer managerTimer.Stop()
 	}
 	defer func() {
@@ -437,17 +464,22 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		timing.SinceMillis(startedAt),
 		firstParticipantFailure,
 	)
-	if stats, statErr := cgroup.ReadStats(aggregate.Path); statErr == nil {
-		if peakKB := (stats.MemoryPeakBytes + 1023) / 1024; peakKB > response.MemoryKB {
-			response.MemoryKB = peakKB
-		}
-		if response.Status == model.RunStatusAccepted || response.Status == model.RunStatusWA {
-			if stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.PidsMaxEvents() > 0 {
-				response.Status = model.RunStatusRE
-				response.Reason = "communication aggregate resource limit exceeded"
-				response.VerdictSource = "communication:aggregate"
-				zero := 0.0
-				response.Score = &zero
+	if aggregate.Path != "" {
+		stats, statErr := cgroup.ReadStats(aggregate.Path)
+		if statErr != nil {
+			slog.Warn("communication aggregate cgroup stats failed", "path", aggregate.Path, "err", statErr)
+		} else {
+			if peakKB := (stats.MemoryPeakBytes + 1023) / 1024; peakKB > response.MemoryKB {
+				response.MemoryKB = peakKB
+			}
+			if response.Status == model.RunStatusAccepted || response.Status == model.RunStatusWA {
+				if stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.PidsMaxEvents() > 0 {
+					response.Status = model.RunStatusRE
+					response.Reason = "communication aggregate resource limit exceeded"
+					response.VerdictSource = "communication:aggregate"
+					zero := 0.0
+					response.Score = &zero
+				}
 			}
 		}
 	}
@@ -462,6 +494,28 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	}
 	emitCapturedLog(hooks, "stderr", []byte(response.Stderr), responseStderrLimitBytes(req))
 	return response
+}
+
+func communicationWallTimeMultiplier(deploymentTarget platform.DeploymentTarget, cgroupParent string, participantCount, availableCPUs int) int {
+	if deploymentTarget != platform.DeploymentTargetCloudRun || strings.TrimSpace(cgroupParent) != "" {
+		return 1
+	}
+	availableCPUs = max(1, availableCPUs)
+	totalProcesses := participantCount + 1
+	return max(1, (totalProcesses+availableCPUs-1)/availableCPUs)
+}
+
+func communicationMemoryWithinBudget(participantCount, participantMemoryMB, budgetMB int) (int64, bool) {
+	if participantCount < 0 || participantMemoryMB < 0 || budgetMB <= 0 {
+		return 0, false
+	}
+	count := int64(participantCount)
+	perParticipant := int64(participantMemoryMB)
+	if count > 0 && perParticipant > (math.MaxInt64-communicationManagerMemoryMB)/count {
+		return math.MaxInt64, false
+	}
+	declared := count*perParticipant + communicationManagerMemoryMB
+	return declared, declared <= int64(budgetMB)
 }
 
 func communicationPrograms(req *model.RunRequest) (model.RunProgram, model.RunProgram) {
@@ -579,6 +633,9 @@ func writeCommunicationDataFile(ctx context.Context, dir, pattern, inline, rawUR
 }
 
 func createCommunicationCgroup(parent string, participantCount int, limits model.Limits) (cgroup.Group, error) {
+	if strings.TrimSpace(parent) == "" {
+		return cgroup.Group{}, nil
+	}
 	if err := cgroup.EnableControllers(parent, []string{"cpu", "memory", "pids"}); err != nil {
 		return cgroup.Group{}, err
 	}

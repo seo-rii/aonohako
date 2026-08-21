@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -850,6 +851,89 @@ func TestLoadRejectsSelfHostedHelperWithoutCgroupParent(t *testing.T) {
 	}
 	if err := validateSelfHostedCgroupPolicy(false, ""); err != nil {
 		t.Fatalf("non-selfhosted policy should not require cgroup parent: %v", err)
+	}
+}
+
+func TestCommunicationIdentityPolicyFailsClosedOnCapableRunners(t *testing.T) {
+	sentinel := errors.New("reserved identity conflict")
+	tests := []struct {
+		name         string
+		opts         platform.RuntimeOptions
+		cgroupParent string
+		cloudEnabled bool
+		wantCalled   bool
+	}{
+		{
+			name: "Cloud Run embedded helper",
+			opts: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetCloudRun,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+			cloudEnabled: true,
+			wantCalled:   true,
+		},
+		{
+			name: "self-hosted cgroup helper",
+			opts: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+			cgroupParent: "/sys/fs/cgroup/aonohako",
+			wantCalled:   true,
+		},
+		{
+			name: "Cloud Run remote control plane",
+			opts: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetCloudRun,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+		},
+		{
+			name: "self-hosted helper without cgroup",
+			opts: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			err := validateCommunicationIdentityPolicy(tc.opts, tc.cgroupParent, tc.cloudEnabled, func() error {
+				called = true
+				return sentinel
+			})
+			if called != tc.wantCalled {
+				t.Fatalf("identity validator called = %v, want %v", called, tc.wantCalled)
+			}
+			if tc.wantCalled {
+				if !errors.Is(err, sentinel) || !strings.Contains(err.Error(), "identity reservation validation failed") {
+					t.Fatalf("validateCommunicationIdentityPolicy() error = %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("validateCommunicationIdentityPolicy() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestCommunicationMemoryBudgetRequiredForEnabledCloudRun(t *testing.T) {
+	cloudRun := platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetCloudRun}
+	if err := validateCommunicationMemoryBudget(cloudRun, true, 0); err == nil || !strings.Contains(err.Error(), "AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB") {
+		t.Fatalf("validateCommunicationMemoryBudget() error = %v", err)
+	}
+	if err := validateCommunicationMemoryBudget(cloudRun, true, 24576); err != nil {
+		t.Fatalf("validateCommunicationMemoryBudget() error = %v", err)
+	}
+	if err := validateCommunicationMemoryBudget(cloudRun, false, 0); err != nil {
+		t.Fatalf("disabled Cloud Run communication should not require a budget: %v", err)
+	}
+	if err := validateCommunicationMemoryBudget(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetSelfHosted}, true, 0); err != nil {
+		t.Fatalf("self-hosted cgroup accounting should not require a Cloud Run budget: %v", err)
 	}
 }
 

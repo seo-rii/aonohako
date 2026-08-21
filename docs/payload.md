@@ -325,9 +325,25 @@ Participant runtime, time, and memory failures retain the ordinary RE/TLE/MLE
 statuses. This protocol does not introduce a judge-error status.
 
 Clients must first require `communication-v1` from `GET /capabilities`. The
-capability is advertised only by self-hosted, embedded helper runners with a
-configured cgroup v2 parent; Cloud Run and control-plane-only instances do not
-advertise it and must not receive communication requests.
+capability is advertised by Cloud Run embedded helpers only when the dedicated
+runner sets `AONOHAKO_COMMUNICATION_ENABLED=true`; they use process-group
+cleanup and the outer container as the aggregate resource boundary, and by
+self-hosted embedded helpers with a configured cgroup v2 parent. Remote
+control-plane-only instances and self-hosted helpers without a cgroup do not
+advertise it and must not receive communication requests. A Cloud Run runner
+must be provisioned for all participant memory limits, the 512 MiB manager,
+server overhead, and its bounded work-root volume; an outer-container OOM may
+terminate the instance before a per-participant verdict can be returned.
+Startup requires a positive `AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB` when the
+Cloud Run capability is enabled. Before starting processes, Aonohako requires
+`participant_count * limits.memory_mb + 512` to fit that budget; the planned
+32 GiB service uses `24576` MiB so the remainder stays available to the server,
+workspaces, and runtime overhead.
+To avoid counting CPU contention among the 2–64 participants as participant
+runtime, Cloud Run expands only the parent wall-cancellation budget by
+`ceil((participant_count + 1) / GOMAXPROCS)`. Each participant and manager keeps
+its original CPU watchdog and `RLIMIT_CPU`; self-hosted cgroup timing is
+unchanged.
 
 ## `POST /execute` — Response
 

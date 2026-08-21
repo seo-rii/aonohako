@@ -2,6 +2,85 @@ package platform
 
 import "testing"
 
+func TestSupportsCommunicationV1(t *testing.T) {
+	tests := []struct {
+		name         string
+		opts         RuntimeOptions
+		cgroupParent string
+		cloudEnabled bool
+		want         bool
+	}{
+		{
+			name: "Cloud Run embedded helper without cgroup",
+			opts: RuntimeOptions{
+				DeploymentTarget:   DeploymentTargetCloudRun,
+				ExecutionTransport: ExecutionTransportEmbedded,
+				SandboxBackend:     SandboxBackendHelper,
+			},
+			cloudEnabled: true,
+			want:         true,
+		},
+		{
+			name: "Cloud Run requires dedicated opt in",
+			opts: RuntimeOptions{
+				DeploymentTarget:   DeploymentTargetCloudRun,
+				ExecutionTransport: ExecutionTransportEmbedded,
+				SandboxBackend:     SandboxBackendHelper,
+			},
+		},
+		{
+			name: "self-hosted embedded helper with cgroup",
+			opts: RuntimeOptions{
+				DeploymentTarget:   DeploymentTargetSelfHosted,
+				ExecutionTransport: ExecutionTransportEmbedded,
+				SandboxBackend:     SandboxBackendHelper,
+			},
+			cgroupParent: "/sys/fs/cgroup/aonohako",
+			want:         true,
+		},
+		{
+			name: "Cloud Run cannot configure child cgroup",
+			opts: RuntimeOptions{
+				DeploymentTarget:   DeploymentTargetCloudRun,
+				ExecutionTransport: ExecutionTransportEmbedded,
+				SandboxBackend:     SandboxBackendHelper,
+			},
+			cgroupParent: "/sys/fs/cgroup/aonohako",
+		},
+		{
+			name: "self-hosted helper requires cgroup",
+			opts: RuntimeOptions{
+				DeploymentTarget:   DeploymentTargetSelfHosted,
+				ExecutionTransport: ExecutionTransportEmbedded,
+				SandboxBackend:     SandboxBackendHelper,
+			},
+		},
+		{
+			name: "Cloud Run remote control plane",
+			opts: RuntimeOptions{
+				DeploymentTarget:   DeploymentTargetCloudRun,
+				ExecutionTransport: ExecutionTransportRemote,
+				SandboxBackend:     SandboxBackendNone,
+			},
+		},
+		{
+			name: "development helper",
+			opts: RuntimeOptions{
+				DeploymentTarget:   DeploymentTargetDev,
+				ExecutionTransport: ExecutionTransportEmbedded,
+				SandboxBackend:     SandboxBackendHelper,
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := SupportsCommunicationV1(tc.opts, tc.cgroupParent, tc.cloudEnabled); got != tc.want {
+				t.Fatalf("SupportsCommunicationV1(%+v, %q) = %v, want %v", tc.opts, tc.cgroupParent, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCurrentExecutionModeDefaultsToLocalDev(t *testing.T) {
 	t.Setenv("AONOHAKO_EXECUTION_MODE", "")
 	got, err := CurrentExecutionMode()

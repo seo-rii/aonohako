@@ -102,12 +102,14 @@ func emitCapturedLog(hooks Hooks, stream string, output []byte, limit int) {
 }
 
 type Service struct {
-	deploymentTarget      platform.DeploymentTarget
-	runtimeTuning         config.RuntimeTuningConfig
-	runtimeTuningProfiles map[string]config.RuntimeTuningConfig
-	cgroupParentDir       string
-	networkEgressIsolated bool
-	stdinURLTimeout       time.Duration
+	deploymentTarget            platform.DeploymentTarget
+	runtimeTuning               config.RuntimeTuningConfig
+	runtimeTuningProfiles       map[string]config.RuntimeTuningConfig
+	cgroupParentDir             string
+	communicationEnabled        bool
+	communicationMemoryBudgetMB int
+	networkEgressIsolated       bool
+	stdinURLTimeout             time.Duration
 }
 
 type sandboxRunResult struct {
@@ -130,12 +132,14 @@ func NewWithConfig(cfg config.Config) *Service {
 		profiles[name] = tuning.WithSafeDefaults()
 	}
 	return &Service{
-		deploymentTarget:      cfg.Execution.Platform.DeploymentTarget,
-		runtimeTuning:         cfg.Execution.RuntimeTuning.WithSafeDefaults(),
-		runtimeTuningProfiles: profiles,
-		cgroupParentDir:       cfg.Execution.Cgroup.ParentDir,
-		networkEgressIsolated: cfg.NetworkEgressIsolated,
-		stdinURLTimeout:       stdinURLDownloadTimeout,
+		deploymentTarget:            cfg.Execution.Platform.DeploymentTarget,
+		runtimeTuning:               cfg.Execution.RuntimeTuning.WithSafeDefaults(),
+		runtimeTuningProfiles:       profiles,
+		cgroupParentDir:             cfg.Execution.Cgroup.ParentDir,
+		communicationEnabled:        cfg.CommunicationEnabled,
+		communicationMemoryBudgetMB: cfg.CommunicationMemoryBudgetMB,
+		networkEgressIsolated:       cfg.NetworkEgressIsolated,
+		stdinURLTimeout:             stdinURLDownloadTimeout,
 	}
 }
 

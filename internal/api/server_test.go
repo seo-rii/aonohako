@@ -1444,7 +1444,7 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-func TestCapabilitiesAdvertiseCommunicationOnlyOnSelfHostedCgroupRunner(t *testing.T) {
+func TestCapabilitiesAdvertiseCommunicationOnSupportedRunners(t *testing.T) {
 	tests := []struct {
 		name string
 		edit func(*config.Config)
@@ -1463,12 +1463,60 @@ func TestCapabilitiesAdvertiseCommunicationOnlyOnSelfHostedCgroupRunner(t *testi
 			want: true,
 		},
 		{
-			name: "Cloud Run",
+			name: "Cloud Run embedded helper",
 			edit: func(cfg *config.Config) {
-				cfg.Execution.Platform.DeploymentTarget = platform.DeploymentTargetCloudRun
+				cfg.CommunicationEnabled = true
+				cfg.Execution.Platform = platform.RuntimeOptions{
+					DeploymentTarget:   platform.DeploymentTargetCloudRun,
+					ExecutionTransport: platform.ExecutionTransportEmbedded,
+					SandboxBackend:     platform.SandboxBackendHelper,
+				}
 				cfg.Execution.Cgroup.ParentDir = ""
 			},
-			want: false,
+			want: true,
+		},
+		{
+			name: "Cloud Run embedded helper without dedicated opt in",
+			edit: func(cfg *config.Config) {
+				cfg.Execution.Platform = platform.RuntimeOptions{
+					DeploymentTarget:   platform.DeploymentTargetCloudRun,
+					ExecutionTransport: platform.ExecutionTransportEmbedded,
+					SandboxBackend:     platform.SandboxBackendHelper,
+				}
+			},
+		},
+		{
+			name: "self-hosted helper without cgroup",
+			edit: func(cfg *config.Config) {
+				cfg.Execution.Platform = platform.RuntimeOptions{
+					DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+					ExecutionTransport: platform.ExecutionTransportEmbedded,
+					SandboxBackend:     platform.SandboxBackendHelper,
+				}
+				cfg.Execution.Cgroup.ParentDir = ""
+			},
+		},
+		{
+			name: "Cloud Run remote control plane",
+			edit: func(cfg *config.Config) {
+				cfg.Execution.Platform = platform.RuntimeOptions{
+					DeploymentTarget:   platform.DeploymentTargetCloudRun,
+					ExecutionTransport: platform.ExecutionTransportRemote,
+					SandboxBackend:     platform.SandboxBackendNone,
+				}
+				cfg.Execution.Cgroup.ParentDir = ""
+			},
+		},
+		{
+			name: "development helper",
+			edit: func(cfg *config.Config) {
+				cfg.Execution.Platform = platform.RuntimeOptions{
+					DeploymentTarget:   platform.DeploymentTargetDev,
+					ExecutionTransport: platform.ExecutionTransportEmbedded,
+					SandboxBackend:     platform.SandboxBackendHelper,
+				}
+				cfg.Execution.Cgroup.ParentDir = ""
+			},
 		},
 	}
 	for _, tc := range tests {

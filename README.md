@@ -14,9 +14,9 @@ binary, configurable runtime images, and testable build metadata.
 - symlink-safe output capture for file outputs and sidecar artifacts
 - SPJ and interactive IO judging support for problems that need custom verdict
   logic or bidirectional contestant/interactor communication
-- `communication-v1` execution on dedicated self-hosted cgroup runners: one
-  private manager process coordinates 2–64 isolated launches of one shared,
-  read-only participant binary
+- `communication-v1` execution on explicitly enabled Cloud Run embedded helpers
+  and dedicated self-hosted cgroup runners: one private manager process
+  coordinates 2–64 isolated launches of one shared, read-only participant binary
 - `runtime-images.yml` as the source of truth for runtime image groups
 - Docker build tooling that can emit production multi-language images and
   single-language CI smoke images from the same YAML catalog
@@ -504,6 +504,15 @@ For Cloud Run deployments, use this baseline:
 - container memory sized above the work-root byte budget plus runtime headroom,
   because Cloud Run/no-cgroup runners rely on the outer container limit as the
   final OOM boundary
+- communication runner memory sized for every participant limit plus the
+  512 MiB manager and server/work-root headroom; without child cgroups an outer
+  container OOM terminates the instance and cannot be attributed to one
+  participant
+- `AONOHAKO_COMMUNICATION_ENABLED=true` only on a dedicated communication
+  service; ordinary Cloud Run runners do not advertise `communication-v1`
+- `AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB=24576` (for the planned 32 GiB
+  service) to reject requests whose declared participant memory plus the
+  512 MiB manager allowance exceeds the reserved 24 GiB execution budget
 - Direct VPC egress with `all-traffic` routing and firewall-denied outbound
   traffic except for explicitly allowed targets
 - a dedicated service account with no unnecessary IAM permissions and no baked

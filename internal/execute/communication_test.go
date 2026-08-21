@@ -2,7 +2,9 @@ package execute
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -176,16 +178,119 @@ func TestHardlinkReadOnlyArtifactsRejectsForeignOwner(t *testing.T) {
 	}
 }
 
-func TestCommunicationCapabilityRequiresSelfHostedCgroup(t *testing.T) {
-	service := NewWithConfig(config.Config{Execution: config.ExecutionConfig{
-		Platform: platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetSelfHosted},
-		Cgroup:   config.CgroupConfig{ParentDir: "/sys/fs/cgroup/aonohako"},
-	}})
-	if !service.supportsCommunicationV1() {
-		t.Fatal("self-hosted cgroup runner should support communication-v1")
+func TestCommunicationCapabilitySupportsCloudRunAndSelfHostedCgroup(t *testing.T) {
+	tests := []struct {
+		name             string
+		deploymentTarget platform.DeploymentTarget
+		cgroupParent     string
+		cloudEnabled     bool
+		want             bool
+	}{
+		{name: "Cloud Run without cgroup", deploymentTarget: platform.DeploymentTargetCloudRun, cloudEnabled: true, want: true},
+		{name: "Cloud Run without opt in", deploymentTarget: platform.DeploymentTargetCloudRun},
+		{name: "Cloud Run with invalid cgroup", deploymentTarget: platform.DeploymentTargetCloudRun, cgroupParent: "/sys/fs/cgroup/aonohako"},
+		{name: "self-hosted with cgroup", deploymentTarget: platform.DeploymentTargetSelfHosted, cgroupParent: "/sys/fs/cgroup/aonohako", want: true},
+		{name: "self-hosted without cgroup", deploymentTarget: platform.DeploymentTargetSelfHosted},
+		{name: "development", deploymentTarget: platform.DeploymentTargetDev},
 	}
-	service.deploymentTarget = platform.DeploymentTargetCloudRun
-	if service.supportsCommunicationV1() {
-		t.Fatal("Cloud Run must not advertise communication-v1")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			service := NewWithConfig(config.Config{CommunicationEnabled: tc.cloudEnabled, Execution: config.ExecutionConfig{
+				Platform: platform.RuntimeOptions{DeploymentTarget: tc.deploymentTarget},
+				Cgroup:   config.CgroupConfig{ParentDir: tc.cgroupParent},
+			}})
+			if got := service.supportsCommunicationV1(); got != tc.want {
+				t.Fatalf("supportsCommunicationV1() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreateCommunicationCgroupAllowsCloudRunWithoutParent(t *testing.T) {
+	group, err := createCommunicationCgroup("", 64, model.Limits{MemoryMB: 64})
+	if err != nil {
+		t.Fatalf("createCommunicationCgroup() error = %v", err)
+	}
+	if group.Path != "" {
+		t.Fatalf("createCommunicationCgroup() path = %q, want empty", group.Path)
+	}
+}
+
+func TestCommunicationCloudRunWallTimeMultiplier(t *testing.T) {
+	tests := []struct {
+		name             string
+		deploymentTarget platform.DeploymentTarget
+		cgroupParent     string
+		participantCount int
+		availableCPUs    int
+		want             int
+	}{
+		{name: "64 participants on 8 vCPUs", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 64, availableCPUs: 8, want: 9},
+		{name: "enough Cloud Run CPUs", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 64, availableCPUs: 128, want: 1},
+		{name: "unknown Cloud Run CPU count", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 2, availableCPUs: 0, want: 3},
+		{name: "self-hosted cgroup unchanged", deploymentTarget: platform.DeploymentTargetSelfHosted, cgroupParent: "/sys/fs/cgroup/aonohako", participantCount: 64, availableCPUs: 8, want: 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := communicationWallTimeMultiplier(tc.deploymentTarget, tc.cgroupParent, tc.participantCount, tc.availableCPUs)
+			if got != tc.want {
+				t.Fatalf("communicationWallTimeMultiplier() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCommunicationMemoryWithinBudget(t *testing.T) {
+	tests := []struct {
+		name                string
+		participants        int
+		participantMemoryMB int
+		budgetMB            int
+		wantDeclared        int64
+		want                bool
+	}{
+		{name: "64 participants admitted", participants: 64, participantMemoryMB: 256, budgetMB: 24576, wantDeclared: 16896, want: true},
+		{name: "manager included", participants: 64, participantMemoryMB: 384, budgetMB: 24576, wantDeclared: 25088},
+		{name: "exact boundary", participants: 2, participantMemoryMB: 256, budgetMB: 1024, wantDeclared: 1024, want: true},
+		{name: "missing budget", participants: 2, participantMemoryMB: 256, wantDeclared: 0},
+		{name: "overflow", participants: 64, participantMemoryMB: int(^uint(0) >> 1), budgetMB: int(^uint(0) >> 1), wantDeclared: math.MaxInt64},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			declared, got := communicationMemoryWithinBudget(tc.participants, tc.participantMemoryMB, tc.budgetMB)
+			if declared != tc.wantDeclared || got != tc.want {
+				t.Fatalf("communicationMemoryWithinBudget() = (%d, %v), want (%d, %v)", declared, got, tc.wantDeclared, tc.want)
+			}
+		})
+	}
+}
+
+func TestCommunicationCloudRunRejectsDeclaredMemoryBeforeExecution(t *testing.T) {
+	service := NewWithConfig(config.Config{
+		CommunicationEnabled:        true,
+		CommunicationMemoryBudgetMB: 16895,
+		Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
+			DeploymentTarget:   platform.DeploymentTargetCloudRun,
+			ExecutionTransport: platform.ExecutionTransportEmbedded,
+			SandboxBackend:     platform.SandboxBackendHelper,
+		}},
+	})
+	req := &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "participant", Lang: "binary", Binaries: []model.Binary{{Name: "participant", DataB64: "eA==", Mode: "exec"}}},
+			{ID: "manager", Lang: "binary", Binaries: []model.Binary{{Name: "manager", DataB64: "eA==", Mode: "exec"}}},
+		},
+		Communication: &model.CommunicationSpec{
+			Version:              1,
+			ParticipantProgramID: "participant",
+			ManagerProgramID:     "manager",
+			ParticipantCount:     64,
+			ResultProtocol:       "manager-result-v1",
+		},
+		Limits: model.Limits{TimeMs: 1000, MemoryMB: 256},
+	}
+	response := service.Run(context.Background(), req, Hooks{})
+	if response.Status != model.RunStatusRE || response.VerdictSource != "communication:admission" || response.StartedParticipants != 0 {
+		t.Fatalf("unexpected admission response: %+v", response)
 	}
 }

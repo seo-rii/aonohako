@@ -746,6 +746,12 @@ The following checks are enforced before the HTTP server starts:
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
   executions do not overlap under the shared sandbox UID
+- communication-capable embedded helpers reserve UID/GID `65531` for the
+  manager and `64937..65000` for participants; both Cloud Run helpers and
+  self-hosted cgroup helpers fail startup if those identities are assigned,
+  active, or own objects on the runtime image filesystem
+- Cloud Run advertises that capability only when the dedicated service sets
+  `AONOHAKO_COMMUNICATION_ENABLED=true`
 - `/compile` and `/execute` streams are capped globally, and outside `dev` they
   are also capped per principal. Bearer auth uses a token fingerprint as the
   principal key; platform auth uses the upstream principal header such as
@@ -815,6 +821,10 @@ Why the design looks this way:
 - Cloud Run is the intended security boundary, not nested container tricks
 - the Cloud Run runtime does not depend on child cgroup creation; self-hosted
   helpers may opt into it with `AONOHAKO_CGROUP_PARENT`
+- `communication-v1` therefore uses per-process helper limits and process-group
+  cleanup on Cloud Run, while the outer instance supplies aggregate memory,
+  CPU, PID, and final-kill behavior; self-hosted communication retains its
+  aggregate cgroup
 - the runtime does not depend on mount-based filesystem isolation
 - the runtime does not assume Landlock availability
 - Cloud Run marker env vars alone do not switch security policy; the deployment

@@ -59,6 +59,7 @@ type sandboxStreamConfig struct {
 	onTargetReady             func()
 	onTargetStarted           func()
 	targetRelease             <-chan struct{}
+	communicationRestricted   bool
 }
 
 type sandboxIdentity struct {
@@ -177,6 +178,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if os.Geteuid() != 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox requires root"}
 	}
+	if streams.communicationRestricted {
+		restricted := *req
+		restricted.EnableNetwork = false
+		req = &restricted
+	}
 	timeLimitMs := max(1, req.Limits.TimeMs)
 	memoryLimitKB := int64(0)
 	if req.Limits.MemoryMB > 0 {
@@ -270,6 +276,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			innerEnv = append(innerEnv, "DOTNET_GCHeapHardLimit="+heapLimit)
 		}
 	}
+	if streams.communicationRestricted {
+		allowUnixSockets = false
+		allowMemfdCreate = false
+		allowProcesses = false
+	}
 	runtimeState, err := security.AcquireRuntimeState(ws.RootDir, runtimeBase, int(identity.uid), int(identity.gid))
 	if err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "runtime state preparation failed: " + err.Error()}
@@ -317,7 +328,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		AllowProcesses:           allowProcesses,
 		AllowMemfdCreate:         allowMemfdCreate,
 		AllowNumaPolicy:          isDotnet || isTLA,
-		AllowChmod:               isTLA || runtimeBase == "aonohako-gleam-run",
+		AllowChmod:               !streams.communicationRestricted && (isTLA || runtimeBase == "aonohako-gleam-run"),
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     false,
 	}
