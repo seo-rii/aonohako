@@ -34,33 +34,38 @@ func testCommunicationEndToEnd(t *testing.T, deploymentTarget platform.Deploymen
 #include <sys/syscall.h>
 #include <unistd.h>
 
+static int fail_participant(int code) {
+  fprintf(stderr, "participant failure code=%d errno=%d\n", code, errno);
+  return code;
+}
+
 int main(int argc, char **argv) {
-  if (argc != 2) return 10;
+  if (argc != 2) return fail_participant(10);
 
   int artifact = open("shared.dat", O_WRONLY | O_TRUNC);
   if (artifact >= 0) {
     close(artifact);
-    return 12;
+    return fail_participant(12);
   }
-  if (chmod("shared.dat", 0600) == 0) return 13;
+  if (chmod("shared.dat", 0600) == 0) return fail_participant(13);
   FILE *shared = fopen("shared.dat", "r");
-  if (!shared) return 14;
+  if (!shared) return fail_participant(14);
   char marker[10] = {0};
-  if (fread(marker, 1, 9, shared) != 9) return 15;
+  if (fread(marker, 1, 9, shared) != 9) return fail_participant(15);
   fclose(shared);
-  if (marker[0] != 'i' || marker[8] != 'e') return 16;
+  if (marker[0] != 'i' || marker[8] != 'e') return fail_participant(16);
   errno = 0;
-  if (fork() >= 0 || errno != EPERM) return 17;
+  if (fork() >= 0 || errno != EPERM) return fail_participant(17);
   errno = 0;
-  if (socket(AF_UNIX, SOCK_STREAM, 0) >= 0 || errno != EPERM) return 18;
+  if (socket(AF_UNIX, SOCK_STREAM, 0) >= 0 || errno != EPERM) return fail_participant(18);
 #ifdef SYS_memfd_create
   errno = 0;
-  if (syscall(SYS_memfd_create, "communication", 0) >= 0 || errno != EPERM) return 19;
+  if (syscall(SYS_memfd_create, "communication", 0) >= 0 || errno != EPERM) return fail_participant(19);
 #endif
 
   int id = atoi(argv[1]);
   int value = 0;
-  if (scanf("%d", &value) != 1) return 11;
+  if (scanf("%d", &value) != 1) return fail_participant(11);
   printf("%d %d\n", id + value, (int)getuid());
   fflush(stdout);
   return 0;
