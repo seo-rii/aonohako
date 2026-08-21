@@ -28,8 +28,9 @@ func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 			MaxStepHandoffBytes int `json:"max_step_handoff_bytes"`
 		} `json:"execute_request_limits"`
 		AuthoritativeWorkRoot struct {
-			MaxBytes int `json:"max_bytes"`
-			MaxFiles int `json:"max_files"`
+			MaxBytes                      int `json:"max_bytes"`
+			MaxFiles                      int `json:"max_files"`
+			CloudRunCommunicationMaxFiles int `json:"cloudrun_communication_max_files"`
 		} `json:"authoritative_work_root"`
 	}
 	if err := json.Unmarshal(body, &contract); err != nil {
@@ -52,6 +53,9 @@ func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 	}
 	if contract.AuthoritativeWorkRoot.MaxFiles != maxAuthoritativeWorkRootFiles {
 		t.Fatalf("deployment max files = %d, config max = %d", contract.AuthoritativeWorkRoot.MaxFiles, maxAuthoritativeWorkRootFiles)
+	}
+	if contract.AuthoritativeWorkRoot.CloudRunCommunicationMaxFiles != maxCloudRunCommunicationWorkRootFiles {
+		t.Fatalf("deployment Cloud Run communication max files = %d, config max = %d", contract.AuthoritativeWorkRoot.CloudRunCommunicationMaxFiles, maxCloudRunCommunicationWorkRootFiles)
 	}
 }
 
@@ -796,17 +800,19 @@ func TestLoadRejectsEmbeddedHelperWithParallelActiveRuns(t *testing.T) {
 
 func TestLoadRejectsEmbeddedHelperWithoutAuthoritativeWorkRoot(t *testing.T) {
 	tests := []struct {
-		name      string
-		tmpfs     string
-		maxBytes  string
-		maxFiles  string
-		wantError string
+		name                  string
+		tmpfs                 string
+		cloudRunCommunication bool
+		maxBytes              string
+		maxFiles              string
+		wantError             string
 	}{
 		{name: "tmpfs required", wantError: "AONOHAKO_REQUIRE_WORK_ROOT_TMPFS=true"},
 		{name: "byte bound required", tmpfs: "true", wantError: "AONOHAKO_WORK_ROOT_MAX_BYTES"},
 		{name: "inode bound required", tmpfs: "true", maxBytes: "1073741824", wantError: "AONOHAKO_WORK_ROOT_MAX_FILES"},
 		{name: "byte bound capped", tmpfs: "true", maxBytes: "1073741825", maxFiles: "1048576", wantError: "AONOHAKO_WORK_ROOT_MAX_BYTES"},
 		{name: "inode bound capped", tmpfs: "true", maxBytes: "1073741824", maxFiles: "1048577", wantError: "AONOHAKO_WORK_ROOT_MAX_FILES"},
+		{name: "Cloud Run communication inode bound capped", tmpfs: "true", cloudRunCommunication: true, maxBytes: "1073741824", maxFiles: "4194305", wantError: "AONOHAKO_WORK_ROOT_MAX_FILES"},
 	}
 
 	for _, tc := range tests {
@@ -814,16 +820,19 @@ func TestLoadRejectsEmbeddedHelperWithoutAuthoritativeWorkRoot(t *testing.T) {
 			tmpfs, _ := strconv.ParseBool(tc.tmpfs)
 			maxBytes, _ := strconv.Atoi(tc.maxBytes)
 			maxFiles, _ := strconv.Atoi(tc.maxFiles)
-			err := validateAuthoritativeWorkRootPolicy(true, tmpfs, maxBytes, maxFiles)
+			err := validateAuthoritativeWorkRootPolicy(true, tmpfs, tc.cloudRunCommunication, maxBytes, maxFiles)
 			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
 				t.Fatalf("validateAuthoritativeWorkRootPolicy() error = %v, want %q", err, tc.wantError)
 			}
 		})
 	}
-	if err := validateAuthoritativeWorkRootPolicy(true, true, 1<<30, 1<<20); err != nil {
+	if err := validateAuthoritativeWorkRootPolicy(true, true, false, 1<<30, 1<<20); err != nil {
 		t.Fatalf("Cloud Run bounded tmpfs policy should be accepted: %v", err)
 	}
-	if err := validateAuthoritativeWorkRootPolicy(false, false, 0, 0); err != nil {
+	if err := validateAuthoritativeWorkRootPolicy(true, true, true, 1<<30, 1<<22); err != nil {
+		t.Fatalf("dedicated Cloud Run communication tmpfs policy should be accepted: %v", err)
+	}
+	if err := validateAuthoritativeWorkRootPolicy(false, false, false, 0, 0); err != nil {
 		t.Fatalf("non-helper policy should not require bounded tmpfs: %v", err)
 	}
 }

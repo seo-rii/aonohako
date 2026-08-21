@@ -743,6 +743,11 @@ The following checks are enforced before the HTTP server starts:
 - production `embedded + helper` requires
   `AONOHAKO_WORK_ROOT_MAX_FILES` between 1 and 1048576 and verifies through
   `statfs` that the entire work-root filesystem fits the inode ceiling
+- the dedicated Cloud Run communication runner permits
+  `AONOHAKO_WORK_ROOT_MAX_FILES` up to 4194304 because its 32 GiB instance
+  advertises about 4.1 million tmpfs inodes; ordinary runners retain the
+  1048576 ceiling, while the single communication session still enforces the
+  8192-entry scan limit independently on each of its 65 workspaces
 - `embedded + helper` requires the process to be running as root
 - `embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1` so helper
   executions do not overlap under the shared sandbox UID

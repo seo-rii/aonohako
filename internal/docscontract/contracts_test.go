@@ -177,7 +177,7 @@ func TestProtocolAndArchitectureDocsMatchQueueLoggingAndFDSemantics(t *testing.T
 	if !strings.Contains(architecture, "`embedded + helper` also requires `AONOHAKO_MAX_ACTIVE_RUNS=1`") {
 		t.Fatalf("architecture.md must describe serialized helper execution")
 	}
-	if !strings.Contains(architecture, "exact tmpfs mount\n  point") || !strings.Contains(architecture, "`AONOHAKO_WORK_ROOT_MAX_BYTES` between 1 and 1 GiB") || !strings.Contains(architecture, "`AONOHAKO_WORK_ROOT_MAX_FILES` between 1 and 1048576") {
+	if !strings.Contains(architecture, "exact tmpfs mount\n  point") || !strings.Contains(architecture, "`AONOHAKO_WORK_ROOT_MAX_BYTES` between 1 and 1 GiB") || !strings.Contains(architecture, "`AONOHAKO_WORK_ROOT_MAX_FILES` between 1 and 1048576") || !strings.Contains(architecture, "Cloud Run communication runner permits\n  `AONOHAKO_WORK_ROOT_MAX_FILES` up to 4194304") {
 		t.Fatalf("architecture.md must describe the authoritative bounded work-root contract")
 	}
 	if !strings.Contains(architecture, "`container` is recognized only as a reserved future backend value") {

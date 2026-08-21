@@ -136,6 +136,8 @@ const (
 	maxAuthoritativeWorkRootFiles     = 1 << 20
 )
 
+const maxCloudRunCommunicationWorkRootFiles = 1 << 22
+
 type Config struct {
 	Port                                 string
 	MaxActiveRuns                        int
@@ -621,7 +623,9 @@ func Load() (Config, error) {
 	}
 
 	requiresAuthoritativeWorkRoot := contract.RequiresRootParent && runtimePlatform.DeploymentTarget != platform.DeploymentTargetDev
-	if err := validateAuthoritativeWorkRootPolicy(requiresAuthoritativeWorkRoot, requireWorkRootTmpfs, workRootMaxBytes, workRootMaxFiles); err != nil {
+	cloudRunCommunication := runtimePlatform.DeploymentTarget == platform.DeploymentTargetCloudRun &&
+		platform.SupportsCommunicationV1(runtimePlatform, execution.Cgroup.ParentDir, communicationEnabled)
+	if err := validateAuthoritativeWorkRootPolicy(requiresAuthoritativeWorkRoot, requireWorkRootTmpfs, cloudRunCommunication, workRootMaxBytes, workRootMaxFiles); err != nil {
 		return Config{}, err
 	}
 
@@ -744,7 +748,7 @@ func defaultMaxActiveRuns(opts platform.RuntimeOptions) int {
 	return v
 }
 
-func validateAuthoritativeWorkRootPolicy(required, requireTmpfs bool, maxBytes, maxFiles int) error {
+func validateAuthoritativeWorkRootPolicy(required, requireTmpfs, cloudRunCommunication bool, maxBytes, maxFiles int) error {
 	if !required {
 		return nil
 	}
@@ -754,8 +758,12 @@ func validateAuthoritativeWorkRootPolicy(required, requireTmpfs bool, maxBytes, 
 	if maxBytes <= 0 || maxBytes > maxAuthoritativeWorkRootBytes {
 		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_BYTES between 1 and %d", maxAuthoritativeWorkRootBytes)
 	}
-	if maxFiles <= 0 || maxFiles > maxAuthoritativeWorkRootFiles {
-		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_FILES between 1 and %d", maxAuthoritativeWorkRootFiles)
+	maxAllowedFiles := maxAuthoritativeWorkRootFiles
+	if cloudRunCommunication {
+		maxAllowedFiles = maxCloudRunCommunicationWorkRootFiles
+	}
+	if maxFiles <= 0 || maxFiles > maxAllowedFiles {
+		return fmt.Errorf("embedded helper execution outside dev requires AONOHAKO_WORK_ROOT_MAX_FILES between 1 and %d", maxAllowedFiles)
 	}
 	return nil
 }

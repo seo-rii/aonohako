@@ -340,8 +340,11 @@ aonohako-selftest cgroup-preflight
 - `AONOHAKO_WORK_ROOT_MAX_FILES`, when nonzero, verifies through `statfs` that
   the required work-root filesystem exposes no more than that many inodes.
   Production helper runners require a positive value no greater than 1048576.
-  The Cloud Run in-memory volume advertises that bounded inode ceiling even
-  when its byte size is configured substantially lower.
+  The only exception is the dedicated Cloud Run communication runner, which
+  permits up to 4194304 advertised inodes because its 32 GiB instance exposes
+  about 4.1 million inodes even on the bounded 1 GiB volume. This does not
+  raise the ordinary runner ceiling; communication still allows only one
+  session and scans each of its 65 workspaces with the 8192-entry limit.
 - `AONOHAKO_CGROUP_PARENT` is required for
   `selfhosted + embedded + helper` and rejected for other deployment shapes.
   Startup validates that the parent directory is under a cgroup v2 mount and
