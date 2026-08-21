@@ -83,6 +83,20 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 			return fmt.Errorf("expected_stdout_url: %w", err)
 		}
 	}
+	if req.Communication != nil {
+		if req.Communication.Input != "" && strings.TrimSpace(req.Communication.InputURL) != "" {
+			return fmt.Errorf("communication.input cannot combine inline content with url")
+		}
+		if err := validateOptionalPayloadURL(req.Communication.InputURL); err != nil {
+			return fmt.Errorf("communication.input_url: %w", err)
+		}
+		if req.Communication.Answer != "" && strings.TrimSpace(req.Communication.AnswerURL) != "" {
+			return fmt.Errorf("communication.answer cannot combine inline content with url")
+		}
+		if err := validateOptionalPayloadURL(req.Communication.AnswerURL); err != nil {
+			return fmt.Errorf("communication.answer_url: %w", err)
+		}
+	}
 	type binaryGroup struct {
 		label      string
 		binaries   []model.Binary

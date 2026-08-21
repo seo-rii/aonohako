@@ -46,14 +46,19 @@ type execResult struct {
 }
 
 type sandboxStreamConfig struct {
-	stdin         io.Reader
-	stdinMaxBytes int64
-	liveStdin     bool
-	stdout        io.Writer
-	onStdoutDone  func()
-	stderr        io.Writer
-	onStderrDone  func()
-	identity      sandboxIdentity
+	stdin                     io.Reader
+	stdinMaxBytes             int64
+	liveStdin                 bool
+	stdout                    io.Writer
+	onStdoutDone              func()
+	stderr                    io.Writer
+	onStderrDone              func()
+	identity                  sandboxIdentity
+	extraFiles                []*os.File
+	closeExtraFilesAfterStart bool
+	onTargetReady             func()
+	onTargetStarted           func()
+	targetRelease             <-chan struct{}
 }
 
 type sandboxIdentity struct {
@@ -73,8 +78,8 @@ func sandboxSupplementaryGroups(identity sandboxIdentity, runLang string, mode p
 const (
 	defaultSandboxUID          uint32 = 65532
 	defaultSandboxGID          uint32 = 65532
-	interactiveJudgeSandboxUID uint32 = 65531
-	interactiveJudgeSandboxGID uint32 = 65531
+	interactiveJudgeSandboxUID uint32 = security.CommunicationManagerUID
+	interactiveJudgeSandboxGID uint32 = security.CommunicationManagerGID
 )
 
 type sandboxPreparedStdin struct {
@@ -283,6 +288,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
 	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)
+	// A communication manager may open every /proc/self/fd/<n> argument as its
+	// own stream while the inherited descriptors remain open. Leave additional
+	// room for test data, the result stream, and runtime-library files.
+	if required := 6 + len(streams.extraFiles)*2 + 32; openFileLimit < required {
+		openFileLimit = required
+	}
 
 	if os.Geteuid() == 0 {
 		if err := hardenWorkspaceForIdentity(ws, runtimeBase, identity); err != nil {
@@ -309,6 +320,9 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		AllowChmod:               isTLA || runtimeBase == "aonohako-gleam-run",
 		DisableAddressSpaceLimit: disableAddressSpaceLimit,
 		DisableFileSizeLimit:     false,
+	}
+	for i := range streams.extraFiles {
+		helperReq.PreserveFDs = append(helperReq.PreserveFDs, 6+i)
 	}
 	rawReq, err := json.Marshal(helperReq)
 	if err != nil {
@@ -423,7 +437,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			Groups: sandboxSupplementaryGroups(identity, runLang, req.PythonLibraryMode),
 		}
 	}
-	cmd.ExtraFiles = []*os.File{requestRead, targetReadyWrite, targetReleaseRead}
+	cmd.ExtraFiles = append([]*os.File{requestRead, targetReadyWrite, targetReleaseRead}, streams.extraFiles...)
 	cmd.Env = append(
 		append(baseEnv[:0:0], baseEnv...),
 		sandbox.HelperModeEnv+"="+sandbox.HelperModeExec,
@@ -447,6 +461,13 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	sandbox.TrimParentMemoryBeforeSandbox()
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
+	}
+	if streams.closeExtraFilesAfterStart {
+		for _, file := range streams.extraFiles {
+			if file != nil {
+				_ = file.Close()
+			}
+		}
 	}
 	_ = targetReadyWrite.Close()
 	_ = targetReleaseRead.Close()
@@ -565,6 +586,22 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			cgroupCPUBaselineMicros = stats.CPUUsageMicros
 		}
 	}
+	if streams.onTargetReady != nil {
+		streams.onTargetReady()
+	}
+	if streams.targetRelease != nil {
+		select {
+		case <-streams.targetRelease:
+		case <-ctx.Done():
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			<-waitCh
+			return execResult{
+				Status: model.RunStatusInitFail,
+				Reason: "sandbox target release canceled",
+				Stderr: stderrBuf.Bytes(),
+			}
+		}
+	}
 	targetExecCh := make(chan error, 1)
 	go func() {
 		var unexpected [1]byte
@@ -615,6 +652,9 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	_ = targetReadyRead.Close()
 	targetStarted := true
+	if streams.onTargetStarted != nil {
+		streams.onTargetStarted()
+	}
 
 	imageDone := make(chan struct{})
 	stopImageStream := func() {}

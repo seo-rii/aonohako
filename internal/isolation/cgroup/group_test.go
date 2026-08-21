@@ -396,6 +396,38 @@ func TestGroupKillFallsBackToCgroupProcsUntilEmpty(t *testing.T) {
 	}
 }
 
+func TestGroupKillFallbackRecursivelyKillsChildCgroups(t *testing.T) {
+	parent := t.TempDir()
+	group := Group{Path: filepath.Join(parent, "aggregate")}
+	child := filepath.Join(group.Path, "participant-0")
+	grandchild := filepath.Join(child, "nested")
+	if err := os.MkdirAll(grandchild, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	writeFile(t, filepath.Join(group.Path, "cgroup.procs"), "")
+	writeFile(t, filepath.Join(child, "cgroup.procs"), "123\n")
+	writeFile(t, filepath.Join(grandchild, "cgroup.procs"), "456\n")
+
+	var killed []int
+	err := group.killWithTimeout(100*time.Millisecond, func(pid int) error {
+		killed = append(killed, pid)
+		switch pid {
+		case 123:
+			writeFile(t, filepath.Join(child, "cgroup.procs"), "")
+		case 456:
+			writeFile(t, filepath.Join(grandchild, "cgroup.procs"), "")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Kill() recursive fallback error = %v", err)
+	}
+	slices.Sort(killed)
+	if !slices.Equal(killed, []int{123, 456}) {
+		t.Fatalf("recursive fallback killed PIDs %v, want [123 456]", killed)
+	}
+}
+
 func TestGroupKillFallbackReportsErrorsAfterSignalingEveryProcess(t *testing.T) {
 	parent := t.TempDir()
 	group := Group{Path: filepath.Join(parent, "run-no-kill")}

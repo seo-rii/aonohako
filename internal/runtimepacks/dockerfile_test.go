@@ -178,8 +178,8 @@ func TestRuntimeDockerfileUsesPatchedGoBuilderImage(t *testing.T) {
 	if len(m) != 2 {
 		t.Fatalf("runtime.Dockerfile is missing a parseable digest-pinned GO_IMAGE default")
 	}
-	if m[1] != "1.26.5" {
-		t.Fatalf("GO_IMAGE default = %s, want 1.26.5 to satisfy go.mod and CI image builds", m[1])
+	if m[1] != "1.26.6" {
+		t.Fatalf("GO_IMAGE default = %s, want 1.26.6 to satisfy go.mod and CI image builds", m[1])
 	}
 }
 

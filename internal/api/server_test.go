@@ -1444,6 +1444,53 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestCapabilitiesAdvertiseCommunicationOnlyOnSelfHostedCgroupRunner(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*config.Config)
+		want bool
+	}{
+		{
+			name: "self-hosted cgroup helper",
+			edit: func(cfg *config.Config) {
+				cfg.Execution.Platform = platform.RuntimeOptions{
+					DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+					ExecutionTransport: platform.ExecutionTransportEmbedded,
+					SandboxBackend:     platform.SandboxBackendHelper,
+				}
+				cfg.Execution.Cgroup.ParentDir = "/sys/fs/cgroup/aonohako"
+			},
+			want: true,
+		},
+		{
+			name: "Cloud Run",
+			edit: func(cfg *config.Config) {
+				cfg.Execution.Platform.DeploymentTarget = platform.DeploymentTargetCloudRun
+				cfg.Execution.Cgroup.ParentDir = ""
+			},
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := configForTest(t)
+			tc.edit(&cfg)
+			s := NewWithServices(cfg, compile.New(), execute.New())
+			s.readinessCheck = nil
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/capabilities", nil)
+			s.Handler().ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d", recorder.Code)
+			}
+			hasCapability := strings.Contains(recorder.Body.String(), "communication-v1")
+			if hasCapability != tc.want {
+				t.Fatalf("capabilities = %s, want communication-v1=%v", recorder.Body.String(), tc.want)
+			}
+		})
+	}
+}
+
 func TestLivenessRemainsHealthyWhenReadinessFails(t *testing.T) {
 	s := newServerForTest(t)
 	s.readinessCheck = func() error { return errors.New("sandbox dependency unavailable") }

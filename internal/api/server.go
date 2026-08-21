@@ -162,9 +162,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/livez", s.livez)
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/healthz", s.readyz)
+	mux.HandleFunc("/capabilities", s.capabilities)
 	mux.Handle("/compile", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler))))
 	mux.Handle("/execute", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler))))
 	return mux
+}
+
+func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSONErrorMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET only")
+		return
+	}
+	capabilities := make([]string, 0, 1)
+	platformConfig := s.cfg.Execution.Platform
+	if platformConfig.DeploymentTarget == platform.DeploymentTargetSelfHosted &&
+		platformConfig.ExecutionTransport == platform.ExecutionTransportEmbedded &&
+		platformConfig.SandboxBackend == platform.SandboxBackendHelper &&
+		strings.TrimSpace(s.cfg.Execution.Cgroup.ParentDir) != "" {
+		capabilities = append(capabilities, "communication-v1")
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": capabilities})
 }
 
 func (s *Server) nextID(prefix string) string {

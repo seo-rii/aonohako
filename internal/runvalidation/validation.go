@@ -15,20 +15,22 @@ import (
 )
 
 const (
-	MaxTextFieldBytes   = 64 << 20
-	MaxTimeMs           = 600_000
-	MaxMemoryMB         = 4096
-	MaxOutputBytes      = 64 << 20
-	MaxCaptureBytes     = 8 << 20
-	MaxWorkspaceBytes   = 1 << 30
-	MaxBinaryFiles      = 512
-	MaxPrograms         = 8
-	MaxSteps            = 2
-	MaxStdinParts       = 32
-	MaxSidecarOutputs   = 64
-	MaxStepHandoffBytes = MaxOutputBytes
-	MaxBinaryFileBytes  = 16 << 20
-	MaxBinaryTotalBytes = 48 << 20
+	MaxTextFieldBytes            = 64 << 20
+	MaxTimeMs                    = 600_000
+	MaxMemoryMB                  = 4096
+	MaxOutputBytes               = 64 << 20
+	MaxCaptureBytes              = 8 << 20
+	MaxWorkspaceBytes            = 1 << 30
+	MaxBinaryFiles               = 512
+	MaxPrograms                  = 8
+	MaxSteps                     = 2
+	MaxStdinParts                = 32
+	MaxSidecarOutputs            = 64
+	MaxStepHandoffBytes          = MaxOutputBytes
+	MaxBinaryFileBytes           = 16 << 20
+	MaxBinaryTotalBytes          = 48 << 20
+	MinCommunicationParticipants = 2
+	MaxCommunicationParticipants = 64
 )
 
 var supportedRunLangs = func() map[string]struct{} {
@@ -51,6 +53,14 @@ func Validate(req *model.RunRequest) error {
 	if len(req.ExpectedStdout) > MaxTextFieldBytes {
 		return fmt.Errorf("expected_stdout too large: max %d bytes", MaxTextFieldBytes)
 	}
+	if req.Communication != nil {
+		if len(req.Communication.Input) > MaxTextFieldBytes {
+			return fmt.Errorf("communication.input too large: max %d bytes", MaxTextFieldBytes)
+		}
+		if len(req.Communication.Answer) > MaxTextFieldBytes {
+			return fmt.Errorf("communication.answer too large: max %d bytes", MaxTextFieldBytes)
+		}
+	}
 	if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
 		return fmt.Errorf("invalid runtime_profile: %w", err)
 	}
@@ -66,7 +76,11 @@ func Validate(req *model.RunRequest) error {
 	if err := ValidateCaptureLimits(req.CaptureLimits); err != nil {
 		return err
 	}
-	if UsesSteps(req) {
+	if req.Communication != nil {
+		if err := ValidateCommunication(req); err != nil {
+			return err
+		}
+	} else if UsesSteps(req) {
 		if err := ValidateStepPipeline(req); err != nil {
 			return err
 		}
@@ -102,6 +116,91 @@ func Validate(req *model.RunRequest) error {
 	}
 	if _, err := ValidateBinaryBudget(req); err != nil {
 		return err
+	}
+	return nil
+}
+
+func ValidateCommunication(req *model.RunRequest) error {
+	spec := req.Communication
+	if spec == nil {
+		return nil
+	}
+	if spec.Version != 1 {
+		return fmt.Errorf("communication.version must be 1")
+	}
+	if spec.ResultProtocol != "manager-result-v1" {
+		return fmt.Errorf("communication.result_protocol must be manager-result-v1")
+	}
+	if spec.ParticipantCount < MinCommunicationParticipants || spec.ParticipantCount > MaxCommunicationParticipants {
+		return fmt.Errorf("communication.participant_count must be between %d and %d", MinCommunicationParticipants, MaxCommunicationParticipants)
+	}
+	participantID := strings.TrimSpace(spec.ParticipantProgramID)
+	managerID := strings.TrimSpace(spec.ManagerProgramID)
+	if participantID == "" || managerID == "" {
+		return fmt.Errorf("communication participant_program_id and manager_program_id are required")
+	}
+	if participantID != spec.ParticipantProgramID || managerID != spec.ManagerProgramID {
+		return fmt.Errorf("communication program ids must not contain surrounding whitespace")
+	}
+	if participantID == managerID {
+		return fmt.Errorf("communication participant and manager program ids must differ")
+	}
+	if len(req.Programs) != 2 || len(req.Steps) != 0 {
+		return fmt.Errorf("communication requires exactly two programs and no steps")
+	}
+	if req.Lang != "" || len(req.Binaries) > 0 || req.Stdin != "" || req.StdinURL != "" || req.ExpectedStdout != "" || req.ExpectedStdoutURL != "" || req.EntryPoint != "" || req.EnableNetwork {
+		return fmt.Errorf("communication cannot be combined with legacy execute fields")
+	}
+	if req.Interactor != nil || req.SPJ != nil || len(req.FileOutputs) > 0 || len(req.SidecarOutputs) > 0 || req.IgnoreTLE {
+		return fmt.Errorf("communication cannot be combined with interactor, spj, outputs, or ignore_tle")
+	}
+	if spec.Input != "" && strings.TrimSpace(spec.InputURL) != "" {
+		return fmt.Errorf("communication.input cannot combine inline content with url")
+	}
+	if spec.Answer != "" && strings.TrimSpace(spec.AnswerURL) != "" {
+		return fmt.Errorf("communication.answer cannot combine inline content with url")
+	}
+	if err := ValidateRequiredLimits("limits", req.Limits); err != nil {
+		return err
+	}
+
+	seen := make(map[string]struct{}, len(req.Programs))
+	for i, program := range req.Programs {
+		id := strings.TrimSpace(program.ID)
+		if id == "" {
+			return fmt.Errorf("programs[%d].id is required", i)
+		}
+		if id != program.ID {
+			return fmt.Errorf("programs[%d].id must not contain surrounding whitespace", i)
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return fmt.Errorf("duplicate program id: %s", id)
+		}
+		seen[id] = struct{}{}
+		if id != participantID && id != managerID {
+			return fmt.Errorf("communication contains unreferenced program: %s", id)
+		}
+		if program.EnableNetwork {
+			return fmt.Errorf("communication programs cannot enable network")
+		}
+		if err := ValidateRunLang("program "+id+" lang", program.Lang); err != nil {
+			return err
+		}
+		if profiles.NormalizeRunLang(program.Lang) != "binary" {
+			return fmt.Errorf("communication-v1 supports native binary programs only: %s", id)
+		}
+		if len(program.Binaries) == 0 {
+			return fmt.Errorf("program %s has no binaries", id)
+		}
+		if err := ValidateBinaries("program "+id+" binaries", program.Binaries); err != nil {
+			return err
+		}
+	}
+	if _, ok := seen[participantID]; !ok {
+		return fmt.Errorf("communication references unknown participant program: %s", participantID)
+	}
+	if _, ok := seen[managerID]; !ok {
+		return fmt.Errorf("communication references unknown manager program: %s", managerID)
 	}
 	return nil
 }
@@ -511,7 +610,7 @@ func ValidateCaptureLimits(limits *model.CaptureLimits) error {
 }
 
 func UsesSteps(req *model.RunRequest) bool {
-	return len(req.Programs) > 0 || len(req.Steps) > 0
+	return req.Communication == nil && (len(req.Programs) > 0 || len(req.Steps) > 0)
 }
 
 func ProgramsEnableNetwork(req *model.RunRequest) bool {

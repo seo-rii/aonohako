@@ -122,7 +122,8 @@ not duplicate stdout/stderr before `result`.
   "stderr_truncated": false,            // true when stderr exceeded the capture cap
   "reason": "",                         // failure reason
   "verdict_source": "stdout",           // diagnostic source that selected the final verdict, when known
-  "score": null,                        // nullable float; SPJ or interactive score (0.0–1.0)
+  "score": null,                        // nullable float; SPJ, interactive, or communication score (0.0–1.0)
+  "started_participants": 64,           // communication-v1 only; participant targets whose exec was confirmed
   "steps": [                            // present for two-step or interactive `/execute` requests
     {
       "id": "encode",
@@ -192,6 +193,12 @@ only when the parent recorded a wall/CPU kill reason or the request deadline is
 confirmed. A host/container OOM kill, operator kill, or other unexplained
 `SIGKILL` is reported as `Runtime Error` with
 `verdict_source=signal_unattributed`.
+
+For `communication-v1`, a successful response has
+`started_participants == communication.participant_count` and
+`verdict_source=manager`. Manager setup, runtime, and result-protocol failures
+are `Runtime Error` with a `manager:*` source. Participant failures use a
+`participant:<id>:*` source and retain ordinary RE/TLE/MLE status codes.
 
 ---
 

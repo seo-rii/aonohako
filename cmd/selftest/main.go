@@ -32,6 +32,7 @@ import (
 	"aonohako/internal/profiles"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/sandbox"
+	"aonohako/internal/security"
 
 	"golang.org/x/sys/unix"
 )
@@ -4266,6 +4267,15 @@ func runDirectImagePermissionChecks() error {
 		return fmt.Errorf("sandbox-owned-image-paths: %w", err)
 	} else if len(owned) != 0 {
 		return fmt.Errorf("sandbox-owned-image-paths: unexpected uid/gid 65532 paths: %s", strings.Join(owned, ", "))
+	}
+	if owned, err := security.CommunicationIdentityOwnedImagePaths("/"); err != nil {
+		return fmt.Errorf("communication-sandbox-owned-image-paths: %w", err)
+	} else if len(owned) != 0 {
+		paths := make([]string, 0, len(owned))
+		for _, item := range owned {
+			paths = append(paths, fmt.Sprintf("%s(uid=%d,gid=%d)", item.Path, item.UID, item.GID))
+		}
+		return fmt.Errorf("communication-sandbox-owned-image-paths: unexpected reserved identity paths: %s", strings.Join(paths, ", "))
 	}
 
 	protectedOut, protectedErr, err := runAsSandboxUser(

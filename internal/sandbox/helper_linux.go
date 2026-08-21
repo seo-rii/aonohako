@@ -583,9 +583,24 @@ func MaybeRunFromEnv() bool {
 	if err := unix.Chdir(req.Dir); err != nil {
 		fail("chdir %s: %v", req.Dir, err)
 	}
+	preservedFDs := make(map[int]struct{}, len(req.PreserveFDs))
+	for _, fd := range req.PreserveFDs {
+		if fd < 6 || fd >= openFileLimit {
+			fail("invalid preserved fd: %d", fd)
+		}
+		if _, duplicate := preservedFDs[fd]; duplicate {
+			fail("duplicate preserved fd: %d", fd)
+		}
+		preservedFDs[fd] = struct{}{}
+	}
 	if err := unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil && err != unix.ENOSYS && err != unix.EINVAL {
 		for fd := 3; fd < 1024; fd++ {
 			unix.CloseOnExec(fd)
+		}
+	}
+	for fd := range preservedFDs {
+		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, 0); err != nil {
+			fail("preserve fd %d: %v", fd, err)
 		}
 	}
 	if targetReadyFile != nil {
