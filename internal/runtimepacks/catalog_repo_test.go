@@ -337,7 +337,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},
 		"tla":           {"TLA_VERSION=1.7.4", "install -d -m 0755 /usr/local/lib/aonohako", "curl --retry 6", "wget --tries=6", "aonohako-tla-run Main.tla"},
-		"uiua":          {"UIUA_VERSION=0.18.1", "uiua run Main.ua --no-format"},
+		"uiua":          {"UIUA_VERSION=0.18.1", "UIUA_SHA256=83ce782e1c843937fee1aae1dc7db0480bed425a88fe0c18109df7a0d1970470", "sha256sum -c -", "uiua run Main.ua --no-format"},
 		"vala":          {"valac --define=ONLINE_JUDGE -o Main Main.vala", "Broken.vala"},
 		"vb6":           {"aonohako-vb6-run Main.bas", "Sub Main()"},
 		"vbnet":         {"App.vbproj", "dotnet publish App.vbproj"},
@@ -413,6 +413,24 @@ func TestRepositoryCatalogUsesOfficialMojoRelease(t *testing.T) {
 	}
 	if strings.Contains(mojoScript, "modular.gateway.scarf.sh") || strings.Contains(mojoScript, "--extra-index-url") {
 		t.Fatalf("mojo install script must not use the obsolete extra index:\n%s", mojoScript)
+	}
+}
+
+func TestRepositoryCatalogVerifiesUiuaArchive(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	uiuaScript := strings.Join(catalog.Languages["uiua"].Install.Script, "\n")
+	for _, marker := range []string{
+		"UIUA_VERSION=0.18.1",
+		"UIUA_SHA256=83ce782e1c843937fee1aae1dc7db0480bed425a88fe0c18109df7a0d1970470",
+		"sha256sum -c -",
+	} {
+		if !strings.Contains(uiuaScript, marker) {
+			t.Fatalf("uiua install script must contain %q:\n%s", marker, uiuaScript)
+		}
 	}
 }
 

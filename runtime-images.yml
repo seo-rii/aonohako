@@ -2726,7 +2726,9 @@ languages:
         - unzip
       script:
         - export UIUA_VERSION=0.18.1
+        - export UIUA_SHA256=83ce782e1c843937fee1aae1dc7db0480bed425a88fe0c18109df7a0d1970470
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/uiua-lang/uiua/releases/download/${UIUA_VERSION}/uiua-bin-x86_64-unknown-linux-gnu-no-audio.zip" -o /tmp/uiua.zip
+        - echo "${UIUA_SHA256}  /tmp/uiua.zip" | sha256sum -c -
         - unzip -q /tmp/uiua.zip -d /usr/local/bin
         - chmod 0755 /usr/local/bin/uiua
         - rm -f /tmp/uiua.zip
