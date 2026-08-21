@@ -318,7 +318,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
 		"lolcode":       {"LCI_VERSION=0.11.2", "cb1065936d3a7463928dcddfc345a8d7d8602678394efc0e54981f9dd98c27d2", "lci Main.lol", `VISIBLE "ok"`},
 		"mercury":       {"dl.mercurylang.org/deb/ trixie main", "mercury-recommended", "mmc --make --grade hlc.gc main"},
-		"mojo":          {"mojo==0.26.2.0", "mojo build Main.mojo"},
+		"mojo":          {"mojo==1.0.0", "mojo build Main.mojo"},
 		"nim":           {"nim c", "Broken.nim"},
 		"objective-c":   {"clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objective-cpp": {"clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
@@ -398,6 +398,21 @@ func TestRepositoryCatalogIncludesAheuiRuntime(t *testing.T) {
 	}
 	if !slices.Contains(spec.Install.Pip, "aheui==1.2.5") {
 		t.Fatalf("aheui pip packages = %v, want aheui==1.2.5", spec.Install.Pip)
+	}
+}
+
+func TestRepositoryCatalogUsesOfficialMojoRelease(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+
+	mojoScript := strings.Join(catalog.Languages["mojo"].Install.Script, "\n")
+	if !strings.Contains(mojoScript, "pip install --no-cache-dir mojo==1.0.0") {
+		t.Fatalf("mojo install script must use official PyPI 1.0.0 release:\n%s", mojoScript)
+	}
+	if strings.Contains(mojoScript, "modular.gateway.scarf.sh") || strings.Contains(mojoScript, "--extra-index-url") {
+		t.Fatalf("mojo install script must not use the obsolete extra index:\n%s", mojoScript)
 	}
 }
 

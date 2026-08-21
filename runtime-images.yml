@@ -2579,7 +2579,7 @@ languages:
         - python3-venv
       script:
         - python3 -m venv /opt/mojo-venv
-        - /opt/mojo-venv/bin/pip install --no-cache-dir --extra-index-url https://modular.gateway.scarf.sh/simple/ mojo==0.26.2.0
+        - /opt/mojo-venv/bin/pip install --no-cache-dir mojo==1.0.0
         - ln -sfn /opt/mojo-venv/bin/mojo /usr/local/bin/mojo
     smoke:
       command:

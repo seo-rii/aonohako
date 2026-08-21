@@ -4008,7 +4008,7 @@ values := stdin nextLine subStrings collect: [ :value | value asInteger ].
 			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1536},
 			sources: []model.Source{
 				source("Main.mojo", `def main() raises:
-    nums = input().split()
+    var nums = input().split()
     print(Int(nums[0]) + Int(nums[1]))`),
 			},
 		},
