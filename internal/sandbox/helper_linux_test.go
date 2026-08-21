@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestHelperAppliesAddressSpaceLimitAfterGoSetupBeforeSeccomp(t *testing.T) {
+func TestHelperAppliesAddressSpaceLimitAfterBarrierImmediatelyBeforeExec(t *testing.T) {
 	raw, err := os.ReadFile("helper_linux.go")
 	if err != nil {
 		t.Fatalf("read helper_linux.go: %v", err)
@@ -19,14 +19,21 @@ func TestHelperAppliesAddressSpaceLimitAfterGoSetupBeforeSeccomp(t *testing.T) {
 		t.Fatalf("RLIMIT_AS must not be part of the early helper rlimit batch")
 	}
 
-	programBuilt := strings.Index(source, "prog := unix.SockFprog")
-	addressSpaceLimit := strings.Index(source, "unix.Setrlimit(unix.RLIMIT_AS")
 	seccompInstall := strings.Index(source, "unix.Prctl(unix.PR_SET_SECCOMP")
-	if programBuilt < 0 || addressSpaceLimit < 0 || seccompInstall < 0 {
+	waitRelease := strings.Index(source, "io.ReadFull(targetReleaseFile")
+	addressSpaceLimit := strings.Index(source, "unix.Setrlimit(unix.RLIMIT_AS")
+	targetExec := strings.Index(source, "unix.RawSyscall(unix.SYS_EXECVE")
+	if seccompInstall < 0 || waitRelease < 0 || addressSpaceLimit < 0 || targetExec < 0 {
 		t.Fatalf("helper_linux.go is missing expected sandbox setup anchors")
 	}
-	if !(programBuilt < addressSpaceLimit && addressSpaceLimit < seccompInstall) {
-		t.Fatalf("RLIMIT_AS must be applied after Go setup and before seccomp install")
+	if !(waitRelease < addressSpaceLimit && addressSpaceLimit < seccompInstall && seccompInstall < targetExec) {
+		t.Fatalf("RLIMIT_AS must be applied after the start barrier and immediately before seccomp plus target exec")
+	}
+	betweenLimitAndExec := source[addressSpaceLimit:targetExec]
+	for _, allocationMarker := range []string{"make(", "fmt.", "os.", "io."} {
+		if strings.Contains(betweenLimitAndExec, allocationMarker) {
+			t.Fatalf("RLIMIT_AS-to-exec window contains allocation-capable operation %q", allocationMarker)
+		}
 	}
 }
 
