@@ -969,6 +969,20 @@ languages:
           printf '%s' '>"ko",,91+,@' > Main.bef
           python3 /usr/local/lib/aonohako/befunge.py Main.bef | grep '^ok$'
 
+  malbolge:
+    install:
+      apt:
+        - python3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.mal <<'MALBOLGE'
+          ('&%:9]!~}|z2Vxwv-,POqponl$Hjig%eB@@>}=<M:9wv6WsU2T|nm-,jcL(I&%$#"`CB]V?Tx<uVtT`Rpo3NlF.Jh++FdbCBA@?]!~|4XzyTT43Qsqq(Lnmkj"Fhg${z@>
+          MALBOLGE
+          [ "$(python3 /usr/local/lib/aonohako/malbolge.py Main.mal)" = 'Hello World!' ]
+
   lolcode:
     install:
       apt:
@@ -2868,6 +2882,7 @@ profiles:
       - lisp
       - lolcode
       - lua
+      - malbolge
       - mercury
       - ocaml
       - perl

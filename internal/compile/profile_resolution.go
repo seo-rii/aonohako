@@ -228,6 +228,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "BEFUNGE"
 	case "bf", "brainfuck":
 		l = "BF"
+	case "malbolge":
+		l = "MALBOLGE"
 	case "lolcode", "lol":
 		l = "LOLCODE"
 	case "wasm", "webassembly":

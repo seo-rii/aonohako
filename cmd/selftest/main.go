@@ -3199,6 +3199,15 @@ main(!IO) :-
 `),
 			},
 		},
+		"malbolge": {
+			compileLang:    "MALBOLGE",
+			expectedStdout: "Hello World!",
+			nonABReason:    "the canonical reference conformance vector is used to exercise Malbolge self-modification",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.mal", "('&%:9]!~}|z2Vxwv-,POqponl$Hjig%eB@@>}=<M:9wv6WsU2T|nm-,jcL(I&%$#\"`CB]V?Tx<uVtT`Rpo3NlF.Jh++FdbCBA@?]!~|4XzyTT43Qsqq(Lnmkj\"Fhg${z@>"),
+			},
+		},
 		"fortran": {
 			compileLang: "FORTRAN",
 			compileVariants: []string{

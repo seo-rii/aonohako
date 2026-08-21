@@ -394,6 +394,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"python3", "/usr/local/lib/aonohako/whitespace.py", primaryPath}
 	case "brainfuck":
 		return []string{"python3", "/usr/local/lib/aonohako/brainfuck.py", primaryPath}
+	case "malbolge":
+		return []string{"python3", "/usr/local/lib/aonohako/malbolge.py", primaryPath}
 	case "wasm":
 		limitMB := max(16, req.Limits.MemoryMB)
 		guestMemoryMB := max(1, limitMB-64)
