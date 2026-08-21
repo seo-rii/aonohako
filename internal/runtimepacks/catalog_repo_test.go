@@ -28,7 +28,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
@@ -208,6 +208,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-wasm",
 		"ci-whitespace",
 		"ci-why3",
+		"ci-zerolang",
 		"ci-zig",
 	}) {
 		t.Fatalf("ci image names = %v", names)
@@ -346,6 +347,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"vlang":         {"V_VERSION=0.5.2", "86caf9e70c3342d48ef19eb4f6c47b709f18c90ae86255520d5c29df6b482e23", "v_linux.zip", "sha256sum -c -", "v -o Main Main.v"},
 		"why3":          {"aonohako-why3-prove Main.mlw", "goal G: true"},
 		"zig":           {"Broken.zig", "zig build-exe"},
+		"zerolang":      {"ZERO_VERSION=0.3.4", "ZERO_LINUX_X64_SHA256=84a3c79d482260ee15660a49fc6b904afc927a230d05a4263039dd4dd1360e87", "zero-linux-x64", "sha256sum -c -", "ZERO_CACHE_DIR=/tmp/zerolang-cache", "zero import --out Main.graph Main.0", "zero check Main.graph", "zero build --release release-fast --out Main Main.graph", "Broken.0"},
 		"r":             {"Broken.R", "parse(file=commandArgs(TRUE)[1])"},
 		"rescript":      {"rescript@12.3.0", "rescript build", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 lib/js/Main.js"},
 		"fortran":       {"Broken.f90", "gfortran"},

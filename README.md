@@ -63,13 +63,18 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
+  Mojo, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
   Lisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
   submitters compile into binaries and should target the `plain` runtime image
   rather than dedicated native runtime images. Add new languages by extending
   the YAML file instead of editing shell loops or workflow matrices.
+- Zerolang is pinned to the official v0.3.4 Linux x64 release. Compilation
+  imports canonical `.0` text into a graph and then builds a native executable
+  with the `release-fast` profile. Its stable source projection does not yet
+  expose a stdin contract, so runtime smoke coverage currently uses fixed
+  output while still exercising import, validation, compilation, and execution.
 - Compile and execute environments set `ONLINE_JUDGE=1`. Languages with
   compiler-supported defines or build tags also receive an `ONLINE_JUDGE`
   compile flag where appropriate, such as C/C++/Objective-C, NASM, Rust, Go,

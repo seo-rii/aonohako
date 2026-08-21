@@ -261,3 +261,44 @@ func compileMojo(ctx context.Context, workDir, target string, sources []model.So
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
+
+type zerolangCompiler struct{}
+
+func (zerolangCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	rootSource := selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".0"}, "Main.0", "main.0")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no zerolang sources"}
+	}
+
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	graphPath := filepath.Join(job.WorkDir, ".cache", "zerolang-"+job.Target+".graph")
+	cacheEnv := []string{"ZERO_CACHE_DIR=" + filepath.Join(job.WorkDir, ".cache", "zerolang-native")}
+	fullOut := newCompileOutputBuffer()
+	fullErr := newCompileOutputBuffer()
+
+	result := runner.Run(ctx, job.WorkDir, "zero", []string{"import", "--out", graphPath, rootSource}, cacheEnv)
+	fullOut.Append(result.Stdout)
+	fullErr.Append(result.Stderr)
+	if result.Status != model.CompileStatusOK {
+		return compileResponseWithCapturedOutput(result.Status, nil, result.Reason, fullOut, fullErr)
+	}
+
+	result = runner.Run(ctx, job.WorkDir, "zero", []string{"build", "--release", "release-fast", "--out", outputPath(job), graphPath}, cacheEnv)
+	fullOut.Append(result.Stdout)
+	fullErr.Append(result.Stderr)
+	if result.Status != model.CompileStatusOK {
+		return compileResponseWithCapturedOutput(result.Status, nil, result.Reason, fullOut, fullErr)
+	}
+
+	artifacts, err := readSingleArtifact(job.WorkDir, job.Target, job.Target, "exec")
+	if err != nil {
+		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
+	}
+	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
+}

@@ -331,6 +331,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"smalltalk":     {compileKind: "smalltalk", runLang: "smalltalk"},
 		"golfscript":    {compileKind: "golfscript", runLang: "golfscript"},
 		"mojo":          {compileKind: "mojo", runLang: "mojo-binary"},
+		"zerolang":      {compileKind: "zerolang", runLang: "binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
 		"elm":           {compileKind: "elm", runLang: "javascript"},
 		"kotlin-jvm":    {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},
@@ -401,6 +402,7 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"ada22":           "ada",
 		"kotlin_java":     "kotlin-jvm",
 		"standard-ml":     "sml",
+		"zero":            "zerolang",
 	}
 
 	for input, wantCompileKind := range tests {

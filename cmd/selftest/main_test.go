@@ -149,6 +149,7 @@ func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
 		"tla":        {},
 		"vb6":        {},
 		"why3":       {},
+		"zerolang":   {},
 	}
 
 	for language, tc := range compileExecuteCases() {

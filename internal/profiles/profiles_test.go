@@ -73,6 +73,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"RUST2018",
 		"RUST2021",
 		"RUST2024",
+		"ZEROLANG",
 		"KOTLIN",
 		"ADA",
 		"ADA2012",
@@ -180,6 +181,9 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"MOJO":         "mojo-binary",
 		"mojo":         "mojo-binary",
 		"mojo-binary":  "mojo-binary",
+		"ZEROLANG":     "binary",
+		"zerolang":     "binary",
+		"zero":         "binary",
 		"ADA":          "binary",
 		"ADA2012":      "binary",
 		"ADA2022":      "binary",
@@ -281,5 +285,18 @@ func TestGoProfilePreservesRuntimeIdentityAndMemoryReserve(t *testing.T) {
 	}
 	if profile.RunLang != "go-binary" || profile.MemoryOffsetMB != 1088 {
 		t.Fatalf("GO profile = %+v, want go-binary with 1088 MiB reserve", profile)
+	}
+}
+
+func TestZerolangProfileBuildsNativeExecutableFromDotZeroSource(t *testing.T) {
+	profile, ok := Resolve("ZEROLANG")
+	if !ok {
+		t.Fatal("Resolve(ZEROLANG) reported unsupported language")
+	}
+	if profile.Extension != "0" || profile.DefaultTarget != "Main" || profile.CompileKind != "zerolang" || profile.RunLang != "binary" {
+		t.Fatalf("ZEROLANG profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 0 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 16 {
+		t.Fatalf("ZEROLANG resource profile = %+v, want native defaults with 16 MiB reserve", profile)
 	}
 }
