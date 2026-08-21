@@ -285,3 +285,158 @@ int main(void) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+func TestCommunicationWithoutCgroupImmediateManagerStartsEveryParticipant(t *testing.T) {
+	participantBinary := buildCTestBinary(t, `
+#include <stdio.h>
+
+int main(void) {
+  int value = 0;
+  if (scanf("%d", &value) != 1) return 16;
+  return value;
+}
+`)
+	managerBinary := buildCTestBinary(t, `
+#include <stdio.h>
+
+int main(int argc, char **argv) {
+  if (argc < 5) return 20;
+  FILE *result = fopen(argv[3], "w");
+  if (!result) return 21;
+  fputs("{\"verdict\":\"accepted\",\"score\":1,\"message\":\"\"}", result);
+  fclose(result);
+  return 0;
+}
+`)
+	if os.Geteuid() != 0 {
+		t.Skip("communication sandbox integration requires root")
+	}
+	if err := security.ValidateCommunicationIdentityReservationAt("/etc/passwd", "/etc/group", "/proc"); err != nil {
+		t.Fatalf("reserved communication identity before run: %v", err)
+	}
+	forceDirectMode(t)
+
+	service := NewWithConfig(config.Config{
+		CommunicationEnabled:        true,
+		CommunicationMemoryBudgetMB: 24576,
+		CommunicationCPUCount:       8,
+		CommunicationWallBudgetMs:   600000,
+		WorkRootMaxBytes:            1 << 30,
+		Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
+			DeploymentTarget:   platform.DeploymentTargetCloudRun,
+			ExecutionTransport: platform.ExecutionTransportEmbedded,
+			SandboxBackend:     platform.SandboxBackendHelper,
+		}},
+	})
+	request := &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "participant", Lang: "binary", Binaries: []model.Binary{{Name: "participant", DataB64: participantBinary, Mode: "exec"}}},
+			{ID: "manager", Lang: "binary", Binaries: []model.Binary{{Name: "manager", DataB64: managerBinary, Mode: "exec"}}},
+		},
+		Communication: &model.CommunicationSpec{
+			Version:              1,
+			ParticipantProgramID: "participant",
+			ManagerProgramID:     "manager",
+			ParticipantCount:     64,
+			ResultProtocol:       "manager-result-v1",
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 64, OutputBytes: 1024, WorkspaceBytes: 8 << 20},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	response := service.Run(ctx, request, Hooks{})
+	if response.Status != model.RunStatusAccepted || response.StartedParticipants != 64 {
+		t.Fatalf("immediate manager ran before all participants started: %+v", response)
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		err := security.ValidateCommunicationIdentityReservationAt("/etc/passwd", "/etc/group", "/proc")
+		if err == nil {
+			break
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("reserved communication process remained after immediate manager result: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestCommunicationManagerPipeCloseSignalsParticipantEOF(t *testing.T) {
+	participantBinary := buildCTestBinary(t, `
+#include <stdio.h>
+
+int main(void) {
+  int value = 0;
+  int sum = 0;
+  while (scanf("%d", &value) == 1) sum += value;
+  printf("%d\n", sum + 100);
+  fflush(stdout);
+  return 0;
+}
+`)
+	managerBinary := buildCTestBinary(t, `
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char **argv) {
+  if (argc < 5) return 20;
+  int count = atoi(argv[4]);
+  if (argc != 5 + count * 2) return 21;
+  for (int id = 0; id < count; id++) {
+    FILE *participantOut = fdopen(6 + id * 2, "r");
+    FILE *participantIn = fdopen(7 + id * 2, "w");
+    if (!participantOut || !participantIn) return 22;
+    fprintf(participantIn, "%d\n", id + 7);
+    fclose(participantIn);
+    int response = -1;
+    if (fscanf(participantOut, "%d", &response) != 1 || response != id + 107) return 23;
+    fclose(participantOut);
+  }
+  FILE *result = fopen(argv[3], "w");
+  if (!result) return 24;
+  fputs("{\"verdict\":\"accepted\",\"score\":1,\"message\":\"\"}", result);
+  fclose(result);
+  return 0;
+}
+`)
+	if os.Geteuid() != 0 {
+		t.Skip("communication sandbox integration requires root")
+	}
+	if err := security.ValidateCommunicationIdentityReservationAt("/etc/passwd", "/etc/group", "/proc"); err != nil {
+		t.Fatalf("reserved communication identity before run: %v", err)
+	}
+	forceDirectMode(t)
+
+	service := NewWithConfig(config.Config{
+		CommunicationEnabled:        true,
+		CommunicationMemoryBudgetMB: 24576,
+		CommunicationCPUCount:       8,
+		CommunicationWallBudgetMs:   600000,
+		WorkRootMaxBytes:            1 << 30,
+		Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
+			DeploymentTarget:   platform.DeploymentTargetCloudRun,
+			ExecutionTransport: platform.ExecutionTransportEmbedded,
+			SandboxBackend:     platform.SandboxBackendHelper,
+		}},
+	})
+	request := &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "participant", Lang: "binary", Binaries: []model.Binary{{Name: "participant", DataB64: participantBinary, Mode: "exec"}}},
+			{ID: "manager", Lang: "binary", Binaries: []model.Binary{{Name: "manager", DataB64: managerBinary, Mode: "exec"}}},
+		},
+		Communication: &model.CommunicationSpec{
+			Version:              1,
+			ParticipantProgramID: "participant",
+			ManagerProgramID:     "manager",
+			ParticipantCount:     2,
+			ResultProtocol:       "manager-result-v1",
+		},
+		Limits: model.Limits{TimeMs: 3000, MemoryMB: 64, OutputBytes: 1024, WorkspaceBytes: 8 << 20},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	response := service.Run(ctx, request, Hooks{})
+	if response.Status != model.RunStatusAccepted || response.StartedParticipants != 2 {
+		t.Fatalf("manager pipe EOF protocol failed: %+v", response)
+	}
+}

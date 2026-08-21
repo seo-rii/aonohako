@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -114,7 +115,7 @@ func TestCommunicationResponseTrustsManagerAfterParticipantsAreStopped(t *testin
 	}
 }
 
-func TestCommunicationHelperStartupFailureOverridesEarlyManagerResult(t *testing.T) {
+func TestCommunicationParticipantFailureUsesManagerCompletionBoundary(t *testing.T) {
 	managerCompletedAt := time.Now()
 	for _, source := range []string{"sandbox_helper_oom", "sandbox_init"} {
 		process := communicationProcessResult{
@@ -132,6 +133,69 @@ func TestCommunicationHelperStartupFailureOverridesEarlyManagerResult(t *testing
 	if communicationParticipantFailureOverridesManager(shutdownArtifact, managerCompletedAt) {
 		t.Fatal("post-manager stream shutdown must remain a masked cancellation artifact")
 	}
+	if !communicationParticipantFailureOverridesManager(shutdownArtifact, time.Time{}) {
+		t.Fatal("participant failure without a valid manager protocol must remain visible")
+	}
+}
+
+func TestCancelCommunicationWaitsForDelayedParticipantStart(t *testing.T) {
+	allParticipantsStarted := make(chan struct{})
+	startupTimeout := make(chan time.Time)
+	communicationDone := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	go cancelCommunicationAfterStartupBoundary(cancel, allParticipantsStarted, startupTimeout, communicationDone)
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("communication canceled before all participants started")
+	default:
+	}
+	close(allParticipantsStarted)
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("communication was not canceled after all participants started")
+	}
+}
+
+func TestPublishCommunicationManagerProcessPrecedesPipeEOF(t *testing.T) {
+	readEnd, writeEnd, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readEnd.Close()
+	processCh := make(chan communicationProcessResult)
+	published := make(chan struct{})
+	go func() {
+		publishCommunicationManagerProcess(processCh, communicationProcessResult{manager: true}, func() { _ = writeEnd.Close() })
+		close(published)
+	}()
+
+	if err := readEnd.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	var one [1]byte
+	if _, err := readEnd.Read(one[:]); err == nil || !os.IsTimeout(err) {
+		t.Fatalf("manager pipe closed before process publication: %v", err)
+	}
+	process := <-processCh
+	if process.completedAt.IsZero() {
+		t.Fatal("manager process publication is missing its completion timestamp")
+	}
+	if err := readEnd.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readEnd.Read(one[:]); !errors.Is(err, io.EOF) {
+		t.Fatalf("manager pipe remained open after process publication: %v", err)
+	}
+	participantShutdown := communicationProcessResult{
+		result:      execResult{Status: model.RunStatusRE, VerdictSource: "exit_code"},
+		completedAt: time.Now(),
+	}
+	if communicationParticipantFailureOverridesManager(participantShutdown, process.completedAt) {
+		t.Fatal("participant exit caused by manager pipe EOF was classified before manager completion")
+	}
+	<-published
 }
 
 func TestCommunicationOutputWriterCapsForwardedBytes(t *testing.T) {

@@ -263,19 +263,27 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	}
 	pipes := make([]participantPipe, len(participants))
 	managerFiles := make([]*os.File, 0, len(participants)*2+1)
+	managerFilesClosed := make(chan struct{})
+	var managerFilesCloseOnce sync.Once
+	closeManagerFiles := func() {
+		managerFilesCloseOnce.Do(func() {
+			for _, file := range managerFiles {
+				if file != nil {
+					_ = file.Close()
+				}
+			}
+			close(managerFilesClosed)
+		})
+	}
 	closePipes := func() {
 		for _, pipe := range pipes {
-			for _, file := range []*os.File{pipe.stdinRead, pipe.managerWrite, pipe.managerRead, pipe.stdoutWrite} {
+			for _, file := range []*os.File{pipe.stdinRead, pipe.stdoutWrite} {
 				if file != nil {
 					_ = file.Close()
 				}
 			}
 		}
-		for _, file := range managerFiles {
-			if file != nil {
-				_ = file.Close()
-			}
-		}
+		closeManagerFiles()
 	}
 	defer closePipes()
 
@@ -338,6 +346,21 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	readyCh := make(chan bool, totalProcesses)
 	releaseTargets := make(chan struct{})
 	processCh := make(chan communicationProcessResult, totalProcesses)
+	allParticipantsStarted := make(chan struct{})
+	managerFilesMonitorDone := make(chan struct{})
+	go func() {
+		defer close(managerFilesMonitorDone)
+		select {
+		case <-allParticipantsStarted:
+		case <-communicationCtx.Done():
+		case <-managerFilesClosed:
+		}
+		closeManagerFiles()
+	}()
+	defer func() {
+		cancelCommunication()
+		<-managerFilesMonitorDone
+	}()
 	participantCancels := make([]context.CancelFunc, len(participants))
 	participantTimers := make([]*time.Timer, len(participants))
 	var startedParticipants atomic.Int32
@@ -370,7 +393,9 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 					identity:      communicationParticipantIdentity(index),
 					onTargetReady: func() { readyCh <- false },
 					onTargetStarted: func() {
-						startedParticipants.Add(1)
+						if startedParticipants.Add(1) == int32(len(participants)) {
+							close(allParticipantsStarted)
+						}
 					},
 					targetRelease:           releaseTargets,
 					communicationRestricted: true,
@@ -407,29 +432,22 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 					uid: security.CommunicationManagerUID,
 					gid: security.CommunicationManagerGID,
 				},
-				extraFiles:                managerFiles,
-				closeExtraFilesAfterStart: true,
-				onTargetReady:             func() { readyCh <- true },
-				targetRelease:             releaseTargets,
-				communicationRestricted:   true,
+				extraFiles:              managerFiles,
+				onTargetReady:           func() { readyCh <- true },
+				targetRelease:           releaseTargets,
+				communicationRestricted: true,
 			},
 			Hooks{},
 			communicationDiagnosticBytes,
 			tuning,
 			aggregate.Path,
 		)
-		for _, file := range managerFiles {
-			if file != nil {
-				_ = file.Close()
-			}
-		}
-		processCh <- communicationProcessResult{
+		publishCommunicationManagerProcess(processCh, communicationProcessResult{
 			manager:     true,
 			participant: -1,
 			request:     manager.request,
 			result:      res,
-			completedAt: time.Now(),
-		}
+		}, closeManagerFiles)
 	}()
 
 	readyProcesses := 0
@@ -502,6 +520,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	}
 	managerProtocolReceived := false
 	var managerExitTimer *time.Timer
+	var managerExitWaitDone chan struct{}
 	for len(results) < totalProcesses {
 		process := <-processCh
 		results = append(results, process)
@@ -513,7 +532,16 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				cancellationTriggered = true
 				cancelCommunication()
 			} else {
-				managerExitTimer = time.AfterFunc(communicationExitGrace, cancelCommunication)
+				managerExitWaitDone = make(chan struct{})
+				managerExitTimer = time.AfterFunc(communicationExitGrace, func() {
+					defer close(managerExitWaitDone)
+					cancelCommunicationAfterStartupBoundary(
+						cancelCommunication,
+						allParticipantsStarted,
+						startupTimer.C,
+						communicationCtx.Done(),
+					)
+				})
 			}
 			continue
 		}
@@ -528,10 +556,12 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			cancelCommunication()
 		}
 	}
-	if managerExitTimer != nil {
-		managerExitTimer.Stop()
-	}
 	cancelCommunication()
+	if managerExitTimer != nil {
+		if !managerExitTimer.Stop() {
+			<-managerExitWaitDone
+		}
+	}
 	if !managerProtocolReceived {
 		managerProtocol = <-managerResultCh
 	}
@@ -941,6 +971,21 @@ func communicationProcessFailed(process communicationProcessResult) bool {
 		return true
 	}
 	return process.result.ExitCode == nil || *process.result.ExitCode != 0
+}
+
+func publishCommunicationManagerProcess(processCh chan<- communicationProcessResult, process communicationProcessResult, closeManagerFiles func()) {
+	process.completedAt = time.Now()
+	processCh <- process
+	closeManagerFiles()
+}
+
+func cancelCommunicationAfterStartupBoundary(cancel context.CancelFunc, allParticipantsStarted <-chan struct{}, startupTimeout <-chan time.Time, communicationDone <-chan struct{}) {
+	select {
+	case <-allParticipantsStarted:
+	case <-startupTimeout:
+	case <-communicationDone:
+	}
+	cancel()
 }
 
 func communicationParticipantFailureOverridesManager(process communicationProcessResult, managerCompletedAt time.Time) bool {
