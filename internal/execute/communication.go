@@ -290,12 +290,26 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			_ = managerWrite.Close()
 			return communicationFailure("communication pipe setup failed", "communication:pipe", 0)
 		}
+		for _, file := range []*os.File{stdinRead, managerWrite, managerRead, stdoutWrite} {
+			if pipeErr = file.Chown(int(security.CommunicationManagerUID), int(security.CommunicationManagerGID)); pipeErr != nil {
+				_ = stdinRead.Close()
+				_ = managerWrite.Close()
+				_ = managerRead.Close()
+				_ = stdoutWrite.Close()
+				return communicationFailure("communication pipe ownership setup failed", "communication:pipe", 0)
+			}
+		}
 		pipes[i] = participantPipe{stdinRead: stdinRead, managerWrite: managerWrite, managerRead: managerRead, stdoutWrite: stdoutWrite}
 		managerFiles = append(managerFiles, managerRead, managerWrite)
 	}
 	resultRead, resultWrite, err := os.Pipe()
 	if err != nil {
 		return communicationFailure("manager result pipe setup failed", "communication:result_protocol", 0)
+	}
+	if err := resultRead.Chown(int(security.CommunicationManagerUID), int(security.CommunicationManagerGID)); err != nil {
+		_ = resultRead.Close()
+		_ = resultWrite.Close()
+		return communicationFailure("manager result pipe ownership setup failed", "communication:result_protocol", 0)
 	}
 	defer resultRead.Close()
 	managerFiles = append(managerFiles, resultWrite)
@@ -981,11 +995,23 @@ func buildCommunicationResponse(processes []communicationProcessResult, managerR
 	}
 	managerStatus, managerReason, managerSource := classifyRunStatusWithoutOutput(manager.request, manager.result)
 	if managerStatus != "OK" || manager.result.ExitCode == nil || *manager.result.ExitCode != 0 {
+		exitCode := -1
+		if manager.result.ExitCode != nil {
+			exitCode = *manager.result.ExitCode
+		}
+		slog.Warn(
+			"communication manager process failed",
+			"status", managerStatus,
+			"source", managerSource,
+			"exit_code", exitCode,
+			"stderr", string(manager.result.Stderr),
+		)
 		response.Reason = firstNonEmptyString(managerReason, manager.result.Reason, "communication manager failed")
 		response.VerdictSource = "manager:" + firstNonEmptyString(managerSource, "runtime")
 		return response
 	}
 	if managerResultErr != nil {
+		slog.Warn("communication manager result protocol failed", "err", managerResultErr)
 		response.Reason = "communication manager did not produce a valid manager-result-v1 result"
 		response.VerdictSource = "manager:result_protocol"
 		return response

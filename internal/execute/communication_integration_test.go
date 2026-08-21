@@ -80,27 +80,36 @@ int main(int argc, char **argv) {
 }
 `, "-pthread")
 	managerBinary := buildCTestBinary(t, `
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+static int fail_manager(int code) {
+  fprintf(stderr, "manager failure code=%d\n", code);
+  return code;
+}
+
 int main(int argc, char **argv) {
-  if (argc < 5) return 20;
+  if (argc < 5) return fail_manager(20);
   FILE *input = fopen(argv[1], "r");
-  if (!input) return 21;
+  if (!input) return fail_manager(21);
   int value = 0;
-  if (fscanf(input, "%d", &value) != 1) return 22;
+  if (fscanf(input, "%d", &value) != 1) return fail_manager(22);
   fclose(input);
 
   int count = atoi(argv[4]);
-  if (argc != 5 + count * 2) return 23;
+  if (argc != 5 + count * 2) return fail_manager(23);
   FILE **participantOut = calloc((size_t)count, sizeof(FILE *));
   FILE **participantIn = calloc((size_t)count, sizeof(FILE *));
-  if (!participantOut || !participantIn) return 24;
+  if (!participantOut || !participantIn) return fail_manager(24);
   for (int id = 0; id < count; id++) {
     participantOut[id] = fopen(argv[5 + id * 2], "r");
     participantIn[id] = fopen(argv[6 + id * 2], "w");
-    if (!participantOut[id] || !participantIn[id]) return 25;
+    if (!participantOut[id] || !participantIn[id]) {
+      fprintf(stderr, "manager pipe id=%d read=%s write=%s errno=%d\n", id, argv[5 + id * 2], argv[6 + id * 2], errno);
+      return fail_manager(25);
+    }
   }
   for (int id = 0; id < count; id++) {
     fprintf(participantIn[id], "%d\n", value);
@@ -109,14 +118,14 @@ int main(int argc, char **argv) {
   for (int id = 0; id < count; id++) {
     int response = -1;
     int uid = -1;
-    if (fscanf(participantOut[id], "%d %d", &response, &uid) != 2 || response != id + value || uid != 65000 - id) return 26;
+    if (fscanf(participantOut[id], "%d %d", &response, &uid) != 2 || response != id + value || uid != 65000 - id) return fail_manager(26);
     fclose(participantOut[id]);
   }
   free(participantOut);
   free(participantIn);
 
   FILE *result = fopen(argv[3], "w");
-  if (!result) return 27;
+  if (!result) return fail_manager(27);
   fputs("{\"verdict\":\"accepted\",\"score\":0.725,\"message\":\"\"}", result);
   fclose(result);
   return 0;
