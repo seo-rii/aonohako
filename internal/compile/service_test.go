@@ -316,6 +316,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"graphql":       {compileKind: "graphql", runLang: "graphql"},
 		"zig":           {compileKind: "zig", runLang: "binary"},
 		"lisp":          {compileKind: "lisp", runLang: "lisp"},
+		"picolisp":      {compileKind: "picolisp", runLang: "picolisp"},
 		"scala":         {compileKind: "scala", runLang: "scala"},
 		"fsharp":        {compileKind: "fsharp", runLang: "fsharp"},
 		"whitespace":    {compileKind: "whitespace", runLang: "whitespace"},

@@ -179,6 +179,10 @@ if has_language "pypy"; then
     report_once "PyPy" pypy3 --version
 fi
 
+if has_language "picolisp"; then
+    report_once "PicoLisp" pil -version -bye
+fi
+
 if has_language "javascript" || has_language "typescript" || has_language "coffeescript" || has_language "elm" || has_language "rescript" || has_language "purescript"; then
     report_once "Node.js" node --version
     report_once "npm" npm --version
@@ -648,6 +652,7 @@ report_compile_option "classic-basic" "fbc -lang qb -d ONLINE_JUDGE -x <target>"
 report_compile_option "qbasic" "fbc -lang qb -d ONLINE_JUDGE -x <target>"
 report_compile_option "smalltalk" "pass-through .st artifacts"
 report_compile_option "lisp" "sbcl --noinform --non-interactive --eval compile-file"
+report_compile_option "picolisp" "pass-through .l artifacts"
 report_compile_option "golfscript" "pass-through .gs artifacts"
 report_compile_option "duckdb" "pass-through .sql artifacts"
 report_compile_option "bqn" "pass-through .bqn artifacts"

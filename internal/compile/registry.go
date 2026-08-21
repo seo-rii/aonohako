@@ -99,6 +99,7 @@ var compileRegistry = map[string]Compiler{
 	"mercury":       mercuryCompiler{},
 	"prolog":        prologCompiler{},
 	"lisp":          lispCompiler{},
+	"picolisp":      passThroughCompiler{exts: []string{".l"}, noSourceReason: "no picolisp sources"},
 	"nasm":          nasmCompiler{},
 	"erlang":        erlangCompiler{},
 	"vb6":           passThroughCompiler{exts: []string{".bas", ".frm", ".cls"}, noSourceReason: "no vb6 sources"},

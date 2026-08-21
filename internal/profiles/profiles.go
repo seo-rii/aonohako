@@ -115,6 +115,7 @@ var profiles = map[string]Profile{
 	"SML":           {SourceLang: "SML", Extension: "sml", DefaultTarget: "Main", CompileKind: "sml", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"HAXE":          {SourceLang: "HAXE", Extension: "hx", DefaultTarget: "Main.n", CompileKind: "haxe", RunLang: "haxe", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LISP":          {SourceLang: "LISP", Extension: "lisp", CompileKind: "lisp", RunLang: "lisp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"PICOLISP":      {SourceLang: "PICOLISP", Extension: "l", CompileKind: "picolisp", RunLang: "picolisp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"SWIFT":         {SourceLang: "SWIFT", Extension: "swift", DefaultTarget: "Main", CompileKind: "swift", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"SQLITE":        {SourceLang: "SQLITE", Extension: "sql", CompileKind: "sqlite", RunLang: "sqlite", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"JULIA":         {SourceLang: "JULIA", Extension: "jl", CompileKind: "julia", RunLang: "julia", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
@@ -205,7 +206,7 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
-	case "binary", "go-binary", "mojo-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm", "lisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth":
+	case "binary", "go-binary", "mojo-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "lolcode", "apecode", "wasm", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth":
 		return key
 	case "coffeescript":
 		// The CoffeeScript compiler emits JavaScript artifacts, so execute uses

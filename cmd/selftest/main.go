@@ -3462,6 +3462,16 @@ println(read("same-folder.txt", String))`),
   (format t "~a~%" (read-line in nil "")))`),
 			},
 		},
+		"picolisp": {
+			compileLang: "PICOLISP",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.l", `(in NIL
+  (let (A (read) B (read))
+    (prinl (+ A B))))`),
+			},
+		},
 		"lua": {
 			compileLang: "LUA",
 			judgeIO:     standardABJudgeIO,

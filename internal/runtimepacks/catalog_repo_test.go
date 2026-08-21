@@ -22,7 +22,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 21 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "mercury", "ocaml", "perl", "php", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -173,6 +173,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-pascal",
 		"ci-perl",
 		"ci-php",
+		"ci-picolisp",
 		"ci-plain",
 		"ci-prolog",
 		"ci-purescript",
@@ -326,6 +327,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"octave":        {"octave-cli --quiet", "Main.m"},
 		"odin":          {"ODIN_VERSION=dev-2026-04", "odin build . -out:Main"},
 		"pascal":        {"fpc", "Broken.pas"},
+		"picolisp":      {"picolisp", "pil -version -bye", "Main.l", "printf '1 2\\n'", "pil Main.l -bye", "grep '^3$'", "Broken.l"},
 		"qbasic":        {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
 		"raku":          {"raku -c Main.raku", "raku Main.raku"},
 		"racket":        {"raco make", "Broken.rkt"},

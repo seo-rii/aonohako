@@ -54,6 +54,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var rocqPath string
 	var racketPath string
 	var schemePath string
+	var picoLispPath string
 	var awkPath string
 	var tclPath string
 	var gdlPath string
@@ -168,6 +169,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(lowerClean, ".scm") && schemePath == "" {
 			schemePath = dest
 		}
+		if strings.HasSuffix(lowerClean, ".l") && picoLispPath == "" {
+			picoLispPath = dest
+		}
 		if strings.HasSuffix(lowerClean, ".awk") && awkPath == "" {
 			awkPath = dest
 		}
@@ -227,6 +231,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			schemePath = primaryPath
 		}
 		return schemePath, lang, nil
+	case "picolisp":
+		if picoLispPath == "" {
+			picoLispPath = primaryPath
+		}
+		return picoLispPath, lang, nil
 	case "awk":
 		if awkPath == "" {
 			awkPath = primaryPath

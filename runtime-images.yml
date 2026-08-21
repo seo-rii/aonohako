@@ -785,6 +785,25 @@ languages:
           LISP
           if sbcl --noinform --script Broken.lisp >/dev/null 2>&1; then exit 1; fi
 
+  picolisp:
+    install:
+      apt:
+        - picolisp
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          pil -version -bye >/dev/null
+          cat > Main.l <<'PICOLISP'
+          (in NIL
+             (let (A (read) B (read))
+                (prinl (+ A B)) ) )
+          PICOLISP
+          printf '1 2\n' | pil Main.l -bye | grep '^3$'
+          printf '%s\n' '(prinl "broken"' > Broken.l
+          if pil Broken.l -bye >/dev/null 2>&1; then exit 1; fi
+
   swift:
     smoke:
       command:
@@ -2870,6 +2889,7 @@ profiles:
       - ocaml
       - perl
       - php
+      - picolisp
       - plain
       - prolog
       - pypy

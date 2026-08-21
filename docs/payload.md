@@ -487,6 +487,7 @@ The interactor is invoked as:
 | MERCURY | `mercury` | `mmc --make --grade hlc.gc -o <target>` |
 | PROLOG | `prolog` | `swipl -q -f none -g halt -t halt` |
 | LISP | `lisp` | `sbcl --load ... --eval '(quit)'` |
+| PICOLISP | `picolisp` | Pass-through artifacts (requires at least one `.l`) |
 | COQ, ROCQ | `rocq` | `coqc -q` / Rocq-compatible proof check |
 | LEAN, LEAN4 | `lean4` | `lean` check |
 | AGDA | `agda` | `agda` check |
@@ -564,6 +565,7 @@ The interactor is invoked as:
 | `erlang` | `env ERL_AFLAGS=... erlexec/erl +S ... +A ... -noshell -pa <dir> -s <module> <function> -s init stop` |
 | `prolog` | `swipl -q -f <file> -g main -t halt` |
 | `lisp` | `sbcl --script <file>` |
+| `picolisp` | `pil <file> -bye` |
 | `rocq` | `true` (verification is completed during compile) |
 | `lean4` | `true` (verification is completed during compile) |
 | `agda` | `true` (verification is completed during compile) |

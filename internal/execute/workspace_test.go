@@ -173,6 +173,28 @@ func TestMaterializeFilesUsesExplicitPythonEntrypoint(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesSelectsPicoLispSource(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang: "PICOLISP",
+		Binaries: []model.Binary{
+			{Name: "notes.txt", DataB64: b64("ignored")},
+			{Name: "Main.l", DataB64: b64("(prinl \"ok\")\n")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "picolisp" || filepath.Base(primary) != "Main.l" {
+		t.Fatalf("materializeFiles = (%q, %q), want Main.l/picolisp", primary, lang)
+	}
+}
+
 func TestMaterializeFilesRejectsMissingEntrypoint(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)
