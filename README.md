@@ -513,6 +513,13 @@ For Cloud Run deployments, use this baseline:
 - `AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB=24576` (for the planned 32 GiB
   service) to reject requests whose declared participant memory plus the
   512 MiB manager allowance exceeds the reserved 24 GiB execution budget
+- `AONOHAKO_COMMUNICATION_CPU_COUNT=8`, `GOMAXPROCS=8`, and
+  `AONOHAKO_COMMUNICATION_WALL_BUDGET_MS=600000` on the dedicated eight-vCPU
+  service; startup rejects a CPU-count mismatch and requests whose
+  contention-adjusted wall allowance cannot finish inside that session budget
+- a 1 GiB communication work root. Communication participants use a fixed
+  8 MiB per-process workspace cap, the manager uses 128 MiB, and admission
+  reserves 20% of the work root before any process starts
 - Direct VPC egress with `all-traffic` routing and firewall-denied outbound
   traffic except for explicitly allowed targets
 - a dedicated service account with no unnecessary IAM permissions and no baked

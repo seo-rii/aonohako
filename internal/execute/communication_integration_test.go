@@ -27,6 +27,7 @@ func testCommunicationEndToEnd(t *testing.T, deploymentTarget platform.Deploymen
 	participantBinary := buildCTestBinary(t, `
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -37,6 +38,11 @@ func testCommunicationEndToEnd(t *testing.T, deploymentTarget platform.Deploymen
 static int fail_participant(int code) {
   fprintf(stderr, "participant failure code=%d errno=%d\n", code, errno);
   return code;
+}
+
+static void *thread_main(void *unused) {
+  (void)unused;
+  return NULL;
 }
 
 int main(int argc, char **argv) {
@@ -62,6 +68,8 @@ int main(int argc, char **argv) {
   errno = 0;
   if (syscall(SYS_memfd_create, "communication", 0) >= 0 || errno != EPERM) return fail_participant(19);
 #endif
+	pthread_t thread;
+	if (pthread_create(&thread, NULL, thread_main, NULL) == 0) return fail_participant(29);
 
   int id = atoi(argv[1]);
   int value = 0;
@@ -70,7 +78,7 @@ int main(int argc, char **argv) {
   fflush(stdout);
   return 0;
 }
-`)
+`, "-pthread")
 	managerBinary := buildCTestBinary(t, `
 #include <stdio.h>
 #include <stdlib.h>
@@ -127,21 +135,27 @@ int main(int argc, char **argv) {
 	}
 	forceDirectMode(t)
 
-	service := NewWithConfig(config.Config{CommunicationEnabled: deploymentTarget == platform.DeploymentTargetCloudRun, CommunicationMemoryBudgetMB: 24576, Execution: config.ExecutionConfig{
-		Platform: platform.RuntimeOptions{
-			DeploymentTarget:   deploymentTarget,
-			ExecutionTransport: platform.ExecutionTransportEmbedded,
-			SandboxBackend:     platform.SandboxBackendHelper,
-		},
-		Cgroup: config.CgroupConfig{ParentDir: cgroupParent},
-	}})
+	service := NewWithConfig(config.Config{
+		CommunicationEnabled:        deploymentTarget == platform.DeploymentTargetCloudRun,
+		CommunicationMemoryBudgetMB: 24576,
+		CommunicationCPUCount:       8,
+		CommunicationWallBudgetMs:   600000,
+		WorkRootMaxBytes:            1 << 30,
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   deploymentTarget,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+			Cgroup: config.CgroupConfig{ParentDir: cgroupParent},
+		}})
 	request := &model.RunRequest{
 		Programs: []model.RunProgram{
 			{
 				ID:   "participant",
 				Lang: "binary",
 				Binaries: []model.Binary{{
-					Name:    "dotnet",
+					Name:    "aonohako-gleam-run",
 					DataB64: participantBinary,
 					Mode:    "exec",
 				}, {
@@ -213,11 +227,18 @@ int main(void) {
 	}
 	forceDirectMode(t)
 
-	service := NewWithConfig(config.Config{CommunicationEnabled: true, CommunicationMemoryBudgetMB: 24576, Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
-		DeploymentTarget:   platform.DeploymentTargetCloudRun,
-		ExecutionTransport: platform.ExecutionTransportEmbedded,
-		SandboxBackend:     platform.SandboxBackendHelper,
-	}}})
+	service := NewWithConfig(config.Config{
+		CommunicationEnabled:        true,
+		CommunicationMemoryBudgetMB: 24576,
+		CommunicationCPUCount:       8,
+		CommunicationWallBudgetMs:   600000,
+		WorkRootMaxBytes:            1 << 30,
+		Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
+			DeploymentTarget:   platform.DeploymentTargetCloudRun,
+			ExecutionTransport: platform.ExecutionTransportEmbedded,
+			SandboxBackend:     platform.SandboxBackendHelper,
+		}},
+	})
 	request := &model.RunRequest{
 		Programs: []model.RunProgram{
 			{ID: "participant", Lang: "binary", Binaries: []model.Binary{{Name: "participant", DataB64: participantBinary, Mode: "exec"}}},

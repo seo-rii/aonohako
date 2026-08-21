@@ -937,6 +937,32 @@ func TestCommunicationMemoryBudgetRequiredForEnabledCloudRun(t *testing.T) {
 	}
 }
 
+func TestCommunicationCPUCountRequiredAndMatchesGOMAXPROCS(t *testing.T) {
+	cloudRun := platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetCloudRun}
+	if err := validateCommunicationCPUCount(cloudRun, true, 0, 8); err == nil || !strings.Contains(err.Error(), "AONOHAKO_COMMUNICATION_CPU_COUNT") {
+		t.Fatalf("validateCommunicationCPUCount() error = %v", err)
+	}
+	if err := validateCommunicationCPUCount(cloudRun, true, 8, 16); err == nil || !strings.Contains(err.Error(), "GOMAXPROCS=8") {
+		t.Fatalf("validateCommunicationCPUCount() mismatch error = %v", err)
+	}
+	if err := validateCommunicationCPUCount(cloudRun, true, 8, 8); err != nil {
+		t.Fatalf("validateCommunicationCPUCount() error = %v", err)
+	}
+	if err := validateCommunicationCPUCount(cloudRun, false, 0, 8); err != nil {
+		t.Fatalf("disabled Cloud Run communication CPU validation error = %v", err)
+	}
+}
+
+func TestCommunicationWallBudgetRequiredForEnabledCloudRun(t *testing.T) {
+	cloudRun := platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetCloudRun}
+	if err := validateCommunicationWallBudget(cloudRun, true, 0); err == nil || !strings.Contains(err.Error(), "AONOHAKO_COMMUNICATION_WALL_BUDGET_MS") {
+		t.Fatalf("validateCommunicationWallBudget() error = %v", err)
+	}
+	if err := validateCommunicationWallBudget(cloudRun, true, 600000); err != nil {
+		t.Fatalf("validateCommunicationWallBudget() error = %v", err)
+	}
+}
+
 func TestLoadRejectsInvalidCgroupParent(t *testing.T) {
 	parent := t.TempDir()
 	os.WriteFile(filepath.Join(parent, "cgroup.controllers"), []byte("cpu memory\n"), 0o644)

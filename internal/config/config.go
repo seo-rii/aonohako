@@ -150,6 +150,8 @@ type Config struct {
 	BodyReadTimeout                      time.Duration
 	CommunicationEnabled                 bool
 	CommunicationMemoryBudgetMB          int
+	CommunicationCPUCount                int
+	CommunicationWallBudgetMs            int
 	AllowRequestNetwork                  bool
 	NetworkEgressIsolated                bool
 	AllowRequestRuntimeProfile           bool
@@ -251,6 +253,20 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := validateCommunicationMemoryBudget(runtimePlatform, communicationEnabled, communicationMemoryBudgetMB); err != nil {
+		return Config{}, err
+	}
+	communicationCPUCount, err := parseNonNegativeIntEnv("AONOHAKO_COMMUNICATION_CPU_COUNT", os.Getenv("AONOHAKO_COMMUNICATION_CPU_COUNT"), 0)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateCommunicationCPUCount(runtimePlatform, communicationEnabled, communicationCPUCount, runtime.GOMAXPROCS(0)); err != nil {
+		return Config{}, err
+	}
+	communicationWallBudgetMs, err := parseNonNegativeIntEnv("AONOHAKO_COMMUNICATION_WALL_BUDGET_MS", os.Getenv("AONOHAKO_COMMUNICATION_WALL_BUDGET_MS"), 0)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateCommunicationWallBudget(runtimePlatform, communicationEnabled, communicationWallBudgetMs); err != nil {
 		return Config{}, err
 	}
 	allowRequestNetwork, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_NETWORK", os.Getenv("AONOHAKO_ALLOW_REQUEST_NETWORK"), defaultAllowRequestNetwork(runtimePlatform))
@@ -684,6 +700,8 @@ func Load() (Config, error) {
 		BodyReadTimeout:                      time.Duration(bodyReadTimeoutSec) * time.Second,
 		CommunicationEnabled:                 communicationEnabled,
 		CommunicationMemoryBudgetMB:          communicationMemoryBudgetMB,
+		CommunicationCPUCount:                communicationCPUCount,
+		CommunicationWallBudgetMs:            communicationWallBudgetMs,
 		AllowRequestNetwork:                  allowRequestNetwork,
 		NetworkEgressIsolated:                networkEgressIsolated,
 		AllowRequestRuntimeProfile:           allowRequestRuntimeProfile,
@@ -762,6 +780,26 @@ func validateCommunicationIdentityPolicy(opts platform.RuntimeOptions, cgroupPar
 func validateCommunicationMemoryBudget(opts platform.RuntimeOptions, cloudRunEnabled bool, budgetMB int) error {
 	if opts.DeploymentTarget == platform.DeploymentTargetCloudRun && cloudRunEnabled && budgetMB <= 0 {
 		return fmt.Errorf("Cloud Run communication requires a positive AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB")
+	}
+	return nil
+}
+
+func validateCommunicationCPUCount(opts platform.RuntimeOptions, cloudRunEnabled bool, configured, observed int) error {
+	if opts.DeploymentTarget != platform.DeploymentTargetCloudRun || !cloudRunEnabled {
+		return nil
+	}
+	if configured <= 0 {
+		return fmt.Errorf("Cloud Run communication requires a positive AONOHAKO_COMMUNICATION_CPU_COUNT")
+	}
+	if observed != configured {
+		return fmt.Errorf("Cloud Run communication requires GOMAXPROCS=%d to match AONOHAKO_COMMUNICATION_CPU_COUNT; observed %d", configured, observed)
+	}
+	return nil
+}
+
+func validateCommunicationWallBudget(opts platform.RuntimeOptions, cloudRunEnabled bool, budgetMs int) error {
+	if opts.DeploymentTarget == platform.DeploymentTargetCloudRun && cloudRunEnabled && budgetMs <= 0 {
+		return fmt.Errorf("Cloud Run communication requires a positive AONOHAKO_COMMUNICATION_WALL_BUDGET_MS")
 	}
 	return nil
 }

@@ -263,8 +263,10 @@ completed downloads does not consume that budget.
 
 `communication-v1` runs one private manager and 2–64 independent participant
 processes. The request contains each compiled artifact only once; the runner
-materializes the participant program once and hard-links its immutable files
-into separate workspaces before launching the requested number of processes.
+materializes the participant program once and copies its immutable bytes to
+distinct inodes in separate workspaces before launching the requested number
+of processes. The executable basename and sandbox profile are selected by the
+server, not by submitted artifact names.
 
 ```jsonc
 {
@@ -339,11 +341,17 @@ Cloud Run capability is enabled. Before starting processes, Aonohako requires
 `participant_count * limits.memory_mb + 512` to fit that budget; the planned
 32 GiB service uses `24576` MiB so the remainder stays available to the server,
 workspaces, and runtime overhead.
-To avoid counting CPU contention among the 2–64 participants as participant
-runtime, Cloud Run expands only the parent wall-cancellation budget by
-`ceil((participant_count + 1) / GOMAXPROCS)`. Each participant and manager keeps
-its original CPU watchdog and `RLIMIT_CPU`; self-hosted cgroup timing is
-unchanged.
+Cloud Run also requires `AONOHAKO_COMMUNICATION_CPU_COUNT` to match the process
+`GOMAXPROCS` value and a positive `AONOHAKO_COMMUNICATION_WALL_BUDGET_MS`.
+The wall allowance reserves one configured CPU for supervision, rounds the
+remaining targets into scheduling waves, and adds 15% or at least one second
+of slack. Each participant and manager keeps its original CPU watchdog and
+`RLIMIT_CPU`; a request whose adjusted allowance exceeds the session budget is
+rejected before launch. Communication targets use a fixed native-binary
+profile, cannot create threads or processes, and receive distinct artifact
+inodes. On Cloud Run, participants are capped at 8 MiB of total workspace,
+the manager at 128 MiB, and admission reserves 20% of the authoritative work
+root. Self-hosted cgroup timing is unchanged.
 
 ## `POST /execute` — Response
 

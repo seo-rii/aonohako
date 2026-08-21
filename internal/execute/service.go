@@ -108,6 +108,9 @@ type Service struct {
 	cgroupParentDir             string
 	communicationEnabled        bool
 	communicationMemoryBudgetMB int
+	communicationCPUCount       int
+	communicationWallBudgetMs   int
+	workRootMaxBytes            int
 	networkEgressIsolated       bool
 	stdinURLTimeout             time.Duration
 }
@@ -138,6 +141,9 @@ func NewWithConfig(cfg config.Config) *Service {
 		cgroupParentDir:             cfg.Execution.Cgroup.ParentDir,
 		communicationEnabled:        cfg.CommunicationEnabled,
 		communicationMemoryBudgetMB: cfg.CommunicationMemoryBudgetMB,
+		communicationCPUCount:       cfg.CommunicationCPUCount,
+		communicationWallBudgetMs:   cfg.CommunicationWallBudgetMs,
+		workRootMaxBytes:            cfg.WorkRootMaxBytes,
 		networkEgressIsolated:       cfg.NetworkEgressIsolated,
 		stdinURLTimeout:             stdinURLDownloadTimeout,
 	}

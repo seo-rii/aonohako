@@ -257,6 +257,15 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	runtimeBase := sandboxCommandBase(finalCommand, ws.RootDir)
+	if streams.communicationRestricted {
+		// Communication-v1 accepts native binaries only. Never let a submitted
+		// basename select a managed-runtime exception or shared runtime state.
+		runLang = "binary"
+		isC3 = false
+		isGoBinary = false
+		isMojoBinary = false
+		runtimeBase = communicationSandboxRuntimeBase
+	}
 	if isJVMRunLang(runLang) && !isTrustedJVMRuntime(runLang, runtimeBase) {
 		return execResult{
 			Status: model.RunStatusInitFail,
@@ -297,6 +306,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// CoreCLR also needs a high finite RLIMIT_FSIZE floor to start reliably.
 	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || isMojoBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
+	if streams.communicationRestricted {
+		// Native C++ communication targets do not need the broad managed-runtime
+		// virtual-address allowance. Keep burst allocation close to the declared
+		// RSS limit while leaving room for the loader and shared libraries.
+		addressSpaceLimit = uint64(max(64, req.Limits.MemoryMB+64)) * 1024 * 1024
+	}
 	addressSpaceLimitKB := int64(addressSpaceLimit / 1024)
 	openFileLimit := security.OpenFileLimitForCommand(runtimeBase)
 	// A communication manager may open every /proc/self/fd/<n> argument as its
@@ -326,6 +341,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  false,
 		AllowProcesses:           allowProcesses,
+		DenyThreads:              streams.communicationRestricted,
 		AllowMemfdCreate:         allowMemfdCreate,
 		AllowNumaPolicy:          isDotnet || isTLA,
 		AllowChmod:               !streams.communicationRestricted && (isTLA || runtimeBase == "aonohako-gleam-run"),

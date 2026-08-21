@@ -136,20 +136,21 @@ func TestCommunicationOutputWriterCapsForwardedBytes(t *testing.T) {
 	}
 }
 
-func TestHardlinkReadOnlyArtifactsSharesInode(t *testing.T) {
+func TestCopyReadOnlyArtifactsUsesDistinctInodesAndLocks(t *testing.T) {
 	source := t.TempDir()
 	destination := t.TempDir()
 	artifact := filepath.Join(source, "Main")
 	if err := os.WriteFile(artifact, []byte("binary"), 0o555); err != nil {
 		t.Fatal(err)
 	}
-	if err := hardlinkReadOnlyArtifacts(source, destination); err != nil {
-		t.Fatalf("hardlinkReadOnlyArtifacts() error = %v", err)
+	if err := copyReadOnlyArtifacts(source, destination); err != nil {
+		t.Fatalf("copyReadOnlyArtifacts() error = %v", err)
 	}
 	sourceInfo, _ := os.Stat(artifact)
-	destinationInfo, _ := os.Stat(filepath.Join(destination, "Main"))
-	if sourceInfo.Sys().(*syscall.Stat_t).Ino != destinationInfo.Sys().(*syscall.Stat_t).Ino {
-		t.Fatal("participant artifact was copied instead of hard-linked")
+	destinationPath := filepath.Join(destination, "Main")
+	destinationInfo, _ := os.Stat(destinationPath)
+	if sourceInfo.Sys().(*syscall.Stat_t).Ino == destinationInfo.Sys().(*syscall.Stat_t).Ino {
+		t.Fatal("participant artifacts share an inode")
 	}
 	if destinationInfo.Mode().Perm()&0o222 != 0 {
 		t.Fatalf("participant artifact mode = %o, want no write bits", destinationInfo.Mode().Perm())
@@ -157,9 +158,26 @@ func TestHardlinkReadOnlyArtifactsSharesInode(t *testing.T) {
 	if got := destinationInfo.Sys().(*syscall.Stat_t).Uid; got != uint32(os.Geteuid()) {
 		t.Fatalf("participant artifact uid = %d, want executor uid %d", got, os.Geteuid())
 	}
+	sourceFile, err := os.Open(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sourceFile.Close()
+	destinationFile, err := os.Open(destinationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destinationFile.Close()
+	if err := syscall.Flock(int(sourceFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Flock(int(sourceFile.Fd()), syscall.LOCK_UN)
+	if err := syscall.Flock(int(destinationFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatalf("participant artifact lock leaked across copies: %v", err)
+	}
 }
 
-func TestHardlinkReadOnlyArtifactsRejectsForeignOwner(t *testing.T) {
+func TestCopyReadOnlyArtifactsRejectsForeignOwner(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("changing artifact ownership requires root")
 	}
@@ -172,9 +190,31 @@ func TestHardlinkReadOnlyArtifactsRejectsForeignOwner(t *testing.T) {
 	if err := os.Chown(artifact, 1, -1); err != nil {
 		t.Fatal(err)
 	}
-	err := hardlinkReadOnlyArtifacts(source, destination)
+	err := copyReadOnlyArtifacts(source, destination)
 	if err == nil || !strings.Contains(err.Error(), "not owned by executor uid") {
-		t.Fatalf("hardlinkReadOnlyArtifacts() error = %v, want ownership rejection", err)
+		t.Fatalf("copyReadOnlyArtifacts() error = %v, want ownership rejection", err)
+	}
+}
+
+func TestCanonicalizeCommunicationExecutableIgnoresSubmittedRuntimeName(t *testing.T) {
+	ws := Workspace{RootDir: t.TempDir()}
+	ws.BoxDir = filepath.Join(ws.RootDir, "box")
+	if err := os.MkdirAll(ws.BoxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	submitted := filepath.Join(ws.BoxDir, "aonohako-gleam-run")
+	if err := os.WriteFile(submitted, []byte("binary"), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	args, err := canonicalizeCommunicationExecutable(ws, []string{submitted, "arg"}, "participant")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := filepath.Base(args[0]); got != ".aonohako-communication-participant" {
+		t.Fatalf("canonical executable basename = %q", got)
+	}
+	if _, err := os.Stat(submitted); !os.IsNotExist(err) {
+		t.Fatalf("submitted runtime name remains addressable: %v", err)
 	}
 }
 
@@ -216,25 +256,28 @@ func TestCreateCommunicationCgroupAllowsCloudRunWithoutParent(t *testing.T) {
 	}
 }
 
-func TestCommunicationCloudRunWallTimeMultiplier(t *testing.T) {
+func TestCommunicationCloudRunWallAllowance(t *testing.T) {
 	tests := []struct {
 		name             string
 		deploymentTarget platform.DeploymentTarget
 		cgroupParent     string
 		participantCount int
 		availableCPUs    int
-		want             int
+		timeLimitMs      int
+		want             int64
+		wantAllowed      bool
 	}{
-		{name: "64 participants on 8 vCPUs", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 64, availableCPUs: 8, want: 9},
-		{name: "enough Cloud Run CPUs", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 64, availableCPUs: 128, want: 1},
-		{name: "unknown Cloud Run CPU count", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 2, availableCPUs: 0, want: 3},
-		{name: "self-hosted cgroup unchanged", deploymentTarget: platform.DeploymentTargetSelfHosted, cgroupParent: "/sys/fs/cgroup/aonohako", participantCount: 64, availableCPUs: 8, want: 1},
+		{name: "64 participants reserve a supervisor CPU and slack", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 64, availableCPUs: 8, timeLimitMs: 1000, want: 11500, wantAllowed: true},
+		{name: "63 participants have no zero-margin wave", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 63, availableCPUs: 8, timeLimitMs: 1000, want: 11500, wantAllowed: true},
+		{name: "enough Cloud Run CPUs retain minimum slack", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 64, availableCPUs: 128, timeLimitMs: 1000, want: 2000, wantAllowed: true},
+		{name: "unknown Cloud Run CPU count fails closed", deploymentTarget: platform.DeploymentTargetCloudRun, participantCount: 2, timeLimitMs: 1000},
+		{name: "self-hosted cgroup unchanged", deploymentTarget: platform.DeploymentTargetSelfHosted, cgroupParent: "/sys/fs/cgroup/aonohako", participantCount: 64, availableCPUs: 8, timeLimitMs: 1000, want: 1000, wantAllowed: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := communicationWallTimeMultiplier(tc.deploymentTarget, tc.cgroupParent, tc.participantCount, tc.availableCPUs)
-			if got != tc.want {
-				t.Fatalf("communicationWallTimeMultiplier() = %d, want %d", got, tc.want)
+			got, allowed := communicationWallAllowanceMs(tc.deploymentTarget, tc.cgroupParent, tc.participantCount, tc.availableCPUs, tc.timeLimitMs)
+			if got != tc.want || allowed != tc.wantAllowed {
+				t.Fatalf("communicationWallAllowanceMs() = (%d, %v), want (%d, %v)", got, allowed, tc.want, tc.wantAllowed)
 			}
 		})
 	}
@@ -253,6 +296,7 @@ func TestCommunicationMemoryWithinBudget(t *testing.T) {
 		{name: "manager included", participants: 64, participantMemoryMB: 384, budgetMB: 24576, wantDeclared: 25088},
 		{name: "exact boundary", participants: 2, participantMemoryMB: 256, budgetMB: 1024, wantDeclared: 1024, want: true},
 		{name: "missing budget", participants: 2, participantMemoryMB: 256, wantDeclared: 0},
+		{name: "zero participant memory", participants: 2, budgetMB: 1024, wantDeclared: 0},
 		{name: "overflow", participants: 64, participantMemoryMB: int(^uint(0) >> 1), budgetMB: int(^uint(0) >> 1), wantDeclared: math.MaxInt64},
 	}
 	for _, tc := range tests {
@@ -265,10 +309,23 @@ func TestCommunicationMemoryWithinBudget(t *testing.T) {
 	}
 }
 
+func TestCommunicationWorkspaceWithinBudget(t *testing.T) {
+	declared, admitted := communicationWorkspaceWithinBudget(64, 8<<20, 128<<20, 1<<30)
+	if !admitted || declared != 885837004 {
+		t.Fatalf("communicationWorkspaceWithinBudget() = (%d, %v)", declared, admitted)
+	}
+	if _, admitted := communicationWorkspaceWithinBudget(64, 16<<20, 128<<20, 1<<30); admitted {
+		t.Fatal("aggregate workspace overcommit was admitted")
+	}
+}
+
 func TestCommunicationCloudRunRejectsDeclaredMemoryBeforeExecution(t *testing.T) {
 	service := NewWithConfig(config.Config{
 		CommunicationEnabled:        true,
 		CommunicationMemoryBudgetMB: 16895,
+		CommunicationCPUCount:       8,
+		CommunicationWallBudgetMs:   600000,
+		WorkRootMaxBytes:            1 << 30,
 		Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
 			DeploymentTarget:   platform.DeploymentTargetCloudRun,
 			ExecutionTransport: platform.ExecutionTransportEmbedded,
@@ -292,5 +349,51 @@ func TestCommunicationCloudRunRejectsDeclaredMemoryBeforeExecution(t *testing.T)
 	response := service.Run(context.Background(), req, Hooks{})
 	if response.Status != model.RunStatusRE || response.VerdictSource != "communication:admission" || response.StartedParticipants != 0 {
 		t.Fatalf("unexpected admission response: %+v", response)
+	}
+}
+
+func TestCommunicationCloudRunRejectsAggregateBudgetsBeforeExecution(t *testing.T) {
+	request := &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "participant", Lang: "binary", Binaries: []model.Binary{{Name: "participant", DataB64: "eA==", Mode: "exec"}}},
+			{ID: "manager", Lang: "binary", Binaries: []model.Binary{{Name: "manager", DataB64: "eA==", Mode: "exec"}}},
+		},
+		Communication: &model.CommunicationSpec{
+			Version:              1,
+			ParticipantProgramID: "participant",
+			ManagerProgramID:     "manager",
+			ParticipantCount:     64,
+			ResultProtocol:       "manager-result-v1",
+		},
+		Limits: model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}
+	tests := []struct {
+		name               string
+		workRootMaxBytes   int
+		wallBudgetMs       int
+		wantReasonContains string
+	}{
+		{name: "workspace", workRootMaxBytes: 512 << 20, wallBudgetMs: 600000, wantReasonContains: "workspace"},
+		{name: "wall", workRootMaxBytes: 1 << 30, wallBudgetMs: 10000, wantReasonContains: "wall allowance"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			service := NewWithConfig(config.Config{
+				CommunicationEnabled:        true,
+				CommunicationMemoryBudgetMB: 24576,
+				CommunicationCPUCount:       8,
+				CommunicationWallBudgetMs:   tc.wallBudgetMs,
+				WorkRootMaxBytes:            tc.workRootMaxBytes,
+				Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
+					DeploymentTarget:   platform.DeploymentTargetCloudRun,
+					ExecutionTransport: platform.ExecutionTransportEmbedded,
+					SandboxBackend:     platform.SandboxBackendHelper,
+				}},
+			})
+			response := service.Run(context.Background(), request, Hooks{})
+			if response.Status != model.RunStatusRE || response.VerdictSource != "communication:admission" || response.StartedParticipants != 0 || !strings.Contains(response.Reason, tc.wantReasonContains) {
+				t.Fatalf("unexpected admission response: %+v", response)
+			}
+		})
 	}
 }

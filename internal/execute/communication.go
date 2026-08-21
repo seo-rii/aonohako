@@ -2,6 +2,7 @@ package execute
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,15 +25,22 @@ import (
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
+	"aonohako/internal/workspacequota"
 )
 
 const (
-	communicationManagerMemoryMB = 512
-	communicationResultMaxBytes  = 64 << 10
-	communicationMessageMaxBytes = 8 << 10
-	communicationDiagnosticBytes = 8 << 10
-	communicationStartupTimeout  = 10 * time.Second
-	communicationExitGrace       = 100 * time.Millisecond
+	communicationManagerMemoryMB                 = 512
+	communicationResultMaxBytes                  = 64 << 10
+	communicationMessageMaxBytes                 = 8 << 10
+	communicationDiagnosticBytes                 = 8 << 10
+	communicationStartupTimeout                  = 10 * time.Second
+	communicationExitGrace                       = 100 * time.Millisecond
+	communicationParticipantWorkspaceBytes int64 = 8 << 20
+	communicationManagerWorkspaceBytes     int64 = 128 << 20
+	communicationWorkspaceReserveDivisor         = 5
+	communicationWallSlackPercent                = 15
+	communicationWallMinimumSlackMs        int64 = 1000
+	communicationSandboxRuntimeBase              = "aonohako-communication-native"
 )
 
 type communicationManagerResult struct {
@@ -106,6 +113,16 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	if err := runvalidation.ValidateCommunication(req); err != nil {
 		return communicationFailure("invalid communication request: "+err.Error(), "communication:request", 0)
 	}
+	participantProgram, managerProgram := communicationPrograms(req)
+	participantLimits := req.Limits
+	if participantLimits.WorkspaceBytes <= 0 || participantLimits.WorkspaceBytes > communicationParticipantWorkspaceBytes {
+		participantLimits.WorkspaceBytes = communicationParticipantWorkspaceBytes
+	}
+	managerLimits := communicationManagerLimits(req.Limits)
+	participantReq := communicationProgramRequest(req, participantProgram, participantLimits)
+	managerReq := communicationProgramRequest(req, managerProgram, managerLimits)
+	participantWallMs := int64(participantReq.Limits.TimeMs)
+	managerWallMs := int64(managerReq.Limits.TimeMs)
 	if s.deploymentTarget == platform.DeploymentTargetCloudRun {
 		declaredMemoryMB, admitted := communicationMemoryWithinBudget(
 			req.Communication.ParticipantCount,
@@ -119,11 +136,48 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				0,
 			)
 		}
+		declaredWorkspaceBytes, admitted := communicationWorkspaceWithinBudget(
+			req.Communication.ParticipantCount,
+			participantReq.Limits.WorkspaceBytes,
+			managerReq.Limits.WorkspaceBytes,
+			int64(s.workRootMaxBytes),
+		)
+		if !admitted {
+			return communicationFailure(
+				fmt.Sprintf("communication declared workspace %d bytes exceeds runner budget %d bytes", declaredWorkspaceBytes, s.workRootMaxBytes),
+				"communication:admission",
+				0,
+			)
+		}
+		participantArtifactBytes, err := communicationProgramDecodedBytes(participantProgram)
+		if err != nil || participantArtifactBytes > participantReq.Limits.WorkspaceBytes {
+			return communicationFailure("communication participant artifacts exceed workspace policy", "communication:admission", 0)
+		}
+		managerArtifactBytes, err := communicationProgramDecodedBytes(managerProgram)
+		if err != nil || managerArtifactBytes > managerReq.Limits.WorkspaceBytes {
+			return communicationFailure("communication manager artifacts exceed workspace policy", "communication:admission", 0)
+		}
+		participantWallMs, admitted = communicationWallAllowanceMs(
+			s.deploymentTarget,
+			s.cgroupParentDir,
+			req.Communication.ParticipantCount,
+			s.communicationCPUCount,
+			participantReq.Limits.TimeMs,
+		)
+		if !admitted || participantWallMs > int64(s.communicationWallBudgetMs) {
+			return communicationFailure("communication participant wall allowance exceeds runner budget", "communication:admission", 0)
+		}
+		managerWallMs, admitted = communicationWallAllowanceMs(
+			s.deploymentTarget,
+			s.cgroupParentDir,
+			req.Communication.ParticipantCount,
+			s.communicationCPUCount,
+			managerReq.Limits.TimeMs,
+		)
+		if !admitted || managerWallMs > int64(s.communicationWallBudgetMs) {
+			return communicationFailure("communication manager wall allowance exceeds runner budget", "communication:admission", 0)
+		}
 	}
-
-	participantProgram, managerProgram := communicationPrograms(req)
-	participantReq := communicationProgramRequest(req, participantProgram, req.Limits)
-	managerReq := communicationProgramRequest(req, managerProgram, communicationManagerLimits(req.Limits))
 
 	participantTemplate, initFailure := prepareCommunicationProcess(participantReq, tuning, "participant")
 	if initFailure != nil {
@@ -153,13 +207,31 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	}
 	prepared = append(prepared, manager)
 
-	inputPath, err := writeCommunicationDataFile(ctx, filepath.Join(manager.ws.RootDir, ".tmp"), "communication-input-*", req.Communication.Input, req.Communication.InputURL, req.Limits)
+	managerRemaining, err := communicationWorkspaceRemaining(manager.ws.RootDir, managerReq.Limits.WorkspaceBytes)
+	if err != nil {
+		return communicationFailure("communication manager workspace admission failed", "communication:admission", 0)
+	}
+	inputPath, err := writeCommunicationDataFile(ctx, filepath.Join(manager.ws.RootDir, ".tmp"), "communication-input-*", req.Communication.Input, req.Communication.InputURL, managerRemaining)
 	if err != nil {
 		return communicationFailure("communication input materialization failed", "communication:input", 0)
 	}
-	answerPath, err := writeCommunicationDataFile(ctx, filepath.Join(manager.ws.RootDir, ".tmp"), "communication-answer-*", req.Communication.Answer, req.Communication.AnswerURL, req.Limits)
+	managerRemaining, err = communicationWorkspaceRemaining(manager.ws.RootDir, managerReq.Limits.WorkspaceBytes)
+	if err != nil {
+		return communicationFailure("communication manager workspace admission failed", "communication:admission", 0)
+	}
+	answerPath, err := writeCommunicationDataFile(ctx, filepath.Join(manager.ws.RootDir, ".tmp"), "communication-answer-*", req.Communication.Answer, req.Communication.AnswerURL, managerRemaining)
 	if err != nil {
 		return communicationFailure("communication answer materialization failed", "communication:answer", 0)
+	}
+	if s.deploymentTarget == platform.DeploymentTargetCloudRun {
+		reserveBytes := int64(s.workRootMaxBytes) / communicationWorkspaceReserveDivisor
+		if ok, freeBytes := communicationWorkRootHasReserve(participantTemplate.workDir, reserveBytes); !ok {
+			return communicationFailure(
+				fmt.Sprintf("communication work root has %d bytes free; %d bytes reserved", freeBytes, reserveBytes),
+				"communication:admission",
+				0,
+			)
+		}
 	}
 
 	aggregate, err := createCommunicationCgroup(s.cgroupParentDir, req.Communication.ParticipantCount, req.Limits)
@@ -249,12 +321,6 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	}()
 
 	totalProcesses := len(participants) + 1
-	wallTimeMultiplier := communicationWallTimeMultiplier(
-		s.deploymentTarget,
-		s.cgroupParentDir,
-		req.Communication.ParticipantCount,
-		runtime.GOMAXPROCS(0),
-	)
 	readyCh := make(chan bool, totalProcesses)
 	releaseTargets := make(chan struct{})
 	processCh := make(chan communicationProcessResult, totalProcesses)
@@ -398,9 +464,9 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		released = true
 		for i := range participantTimers {
 			cancel := participantCancels[i]
-			participantTimers[i] = time.AfterFunc(time.Duration(max(1, req.Limits.TimeMs)*wallTimeMultiplier)*time.Millisecond, cancel)
+			participantTimers[i] = time.AfterFunc(time.Duration(participantWallMs)*time.Millisecond, cancel)
 		}
-		managerTimer := time.AfterFunc(time.Duration(max(1, managerReq.Limits.TimeMs)*wallTimeMultiplier)*time.Millisecond, cancelManager)
+		managerTimer := time.AfterFunc(time.Duration(managerWallMs)*time.Millisecond, cancelManager)
 		defer managerTimer.Stop()
 	}
 	defer func() {
@@ -496,17 +562,35 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	return response
 }
 
-func communicationWallTimeMultiplier(deploymentTarget platform.DeploymentTarget, cgroupParent string, participantCount, availableCPUs int) int {
-	if deploymentTarget != platform.DeploymentTargetCloudRun || strings.TrimSpace(cgroupParent) != "" {
-		return 1
+func communicationWallAllowanceMs(deploymentTarget platform.DeploymentTarget, cgroupParent string, participantCount, availableCPUs, timeLimitMs int) (int64, bool) {
+	if timeLimitMs <= 0 {
+		return 0, false
 	}
-	availableCPUs = max(1, availableCPUs)
-	totalProcesses := participantCount + 1
-	return max(1, (totalProcesses+availableCPUs-1)/availableCPUs)
+	if deploymentTarget != platform.DeploymentTargetCloudRun || strings.TrimSpace(cgroupParent) != "" {
+		return int64(timeLimitMs), true
+	}
+	if participantCount < runvalidation.MinCommunicationParticipants || availableCPUs <= 0 {
+		return 0, false
+	}
+	effectiveTargetCPUs := max(1, availableCPUs-1)
+	totalTargets := participantCount + 1
+	waves := int64((totalTargets + effectiveTargetCPUs - 1) / effectiveTargetCPUs)
+	if int64(timeLimitMs) > math.MaxInt64/waves {
+		return math.MaxInt64, false
+	}
+	base := int64(timeLimitMs) * waves
+	if base > (math.MaxInt64-99)/communicationWallSlackPercent {
+		return math.MaxInt64, false
+	}
+	slack := max(communicationWallMinimumSlackMs, (base*communicationWallSlackPercent+99)/100)
+	if base > math.MaxInt64-slack {
+		return math.MaxInt64, false
+	}
+	return base + slack, true
 }
 
 func communicationMemoryWithinBudget(participantCount, participantMemoryMB, budgetMB int) (int64, bool) {
-	if participantCount < 0 || participantMemoryMB < 0 || budgetMB <= 0 {
+	if participantCount < runvalidation.MinCommunicationParticipants || participantMemoryMB <= 0 || budgetMB <= 0 {
 		return 0, false
 	}
 	count := int64(participantCount)
@@ -516,6 +600,37 @@ func communicationMemoryWithinBudget(participantCount, participantMemoryMB, budg
 	}
 	declared := count*perParticipant + communicationManagerMemoryMB
 	return declared, declared <= int64(budgetMB)
+}
+
+func communicationWorkspaceWithinBudget(participantCount int, participantWorkspaceBytes, managerWorkspaceBytes, workRootBytes int64) (int64, bool) {
+	if participantCount < runvalidation.MinCommunicationParticipants || participantWorkspaceBytes <= 0 || managerWorkspaceBytes <= 0 || workRootBytes <= 0 {
+		return 0, false
+	}
+	count := int64(participantCount)
+	reserve := workRootBytes / communicationWorkspaceReserveDivisor
+	if managerWorkspaceBytes > math.MaxInt64-reserve {
+		return math.MaxInt64, false
+	}
+	if participantWorkspaceBytes > (math.MaxInt64-managerWorkspaceBytes-reserve)/count {
+		return math.MaxInt64, false
+	}
+	declared := count*participantWorkspaceBytes + managerWorkspaceBytes + reserve
+	return declared, declared <= workRootBytes
+}
+
+func communicationProgramDecodedBytes(program model.RunProgram) (int64, error) {
+	var total int64
+	for _, binary := range program.Binaries {
+		decoded, err := io.Copy(io.Discard, base64.NewDecoder(base64.StdEncoding, strings.NewReader(binary.DataB64)))
+		if err != nil {
+			return 0, err
+		}
+		if decoded > math.MaxInt64-total {
+			return math.MaxInt64, fmt.Errorf("communication artifact size overflow")
+		}
+		total += decoded
+	}
+	return total, nil
 }
 
 func communicationPrograms(req *model.RunRequest) (model.RunProgram, model.RunProgram) {
@@ -556,7 +671,7 @@ func communicationManagerLimits(participant model.Limits) model.Limits {
 		TimeMs:         managerTime,
 		MemoryMB:       communicationManagerMemoryMB,
 		OutputBytes:    participant.OutputBytes,
-		WorkspaceBytes: defaultWorkspaceBytes,
+		WorkspaceBytes: communicationManagerWorkspaceBytes,
 	}
 }
 
@@ -565,7 +680,50 @@ func prepareCommunicationProcess(req *model.RunRequest, tuning config.RuntimeTun
 	if failure != nil {
 		return communicationPreparedProcess{}, failure
 	}
+	args, err := canonicalizeCommunicationExecutable(ws, args, label)
+	if err != nil {
+		_ = os.RemoveAll(workDir)
+		return communicationPreparedProcess{}, &model.RunResponse{Status: model.RunStatusInitFail, Reason: label + " executable canonicalization failed"}
+	}
 	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req}, nil
+}
+
+func canonicalizeCommunicationExecutable(ws Workspace, args []string, label string) ([]string, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("communication command is empty")
+	}
+	source, err := filepath.Abs(args[0])
+	if err != nil {
+		return nil, err
+	}
+	boxRoot, err := filepath.Abs(ws.BoxDir)
+	if err != nil {
+		return nil, err
+	}
+	if source != boxRoot && !strings.HasPrefix(source, boxRoot+string(os.PathSeparator)) {
+		return nil, fmt.Errorf("communication executable is outside workspace")
+	}
+	info, err := os.Lstat(source)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return nil, fmt.Errorf("communication executable is not a regular executable")
+	}
+	destination := filepath.Join(filepath.Dir(source), ".aonohako-communication-"+label)
+	if destination != source {
+		if _, err := os.Lstat(destination); err == nil {
+			return nil, fmt.Errorf("reserved communication executable path already exists")
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+		if err := os.Rename(source, destination); err != nil {
+			return nil, err
+		}
+	}
+	canonical := append([]string(nil), args...)
+	canonical[0] = destination
+	return canonical, nil
 }
 
 func cloneCommunicationProcess(template communicationPreparedProcess, req *model.RunRequest) (communicationPreparedProcess, error) {
@@ -578,7 +736,7 @@ func cloneCommunicationProcess(template communicationPreparedProcess, req *model
 		_ = os.RemoveAll(workDir)
 		return communicationPreparedProcess{}, err
 	}
-	if err := hardlinkReadOnlyArtifacts(template.ws.BoxDir, ws.BoxDir); err != nil {
+	if err := copyReadOnlyArtifacts(template.ws.BoxDir, ws.BoxDir); err != nil {
 		_ = os.RemoveAll(workDir)
 		return communicationPreparedProcess{}, err
 	}
@@ -589,7 +747,7 @@ func cloneCommunicationProcess(template communicationPreparedProcess, req *model
 	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req}, nil
 }
 
-func hardlinkReadOnlyArtifacts(sourceRoot, destinationRoot string) error {
+func copyReadOnlyArtifacts(sourceRoot, destinationRoot string) error {
 	return filepath.WalkDir(sourceRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -616,20 +774,88 @@ func hardlinkReadOnlyArtifacts(sourceRoot, destinationRoot string) error {
 		if !ok || stat.Uid != uint32(os.Geteuid()) {
 			return fmt.Errorf("participant artifact is not owned by executor uid %d: %s", os.Geteuid(), relative)
 		}
-		return os.Link(path, destination)
+		source, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		destinationFile, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			_ = source.Close()
+			return err
+		}
+		_, copyErr := io.Copy(destinationFile, source)
+		closeDestinationErr := destinationFile.Close()
+		closeSourceErr := source.Close()
+		if copyErr != nil {
+			_ = os.Remove(destination)
+			return copyErr
+		}
+		if closeDestinationErr != nil {
+			_ = os.Remove(destination)
+			return closeDestinationErr
+		}
+		if closeSourceErr != nil {
+			_ = os.Remove(destination)
+			return closeSourceErr
+		}
+		if err := os.Chmod(destination, info.Mode().Perm()); err != nil {
+			_ = os.Remove(destination)
+			return err
+		}
+		copiedInfo, err := os.Stat(destination)
+		if err != nil {
+			return err
+		}
+		copiedStat, ok := copiedInfo.Sys().(*syscall.Stat_t)
+		if !ok || copiedStat.Uid != uint32(os.Geteuid()) || copiedInfo.Mode().Perm()&0o222 != 0 {
+			return fmt.Errorf("copied participant artifact failed ownership or mode validation: %s", relative)
+		}
+		return nil
 	})
 }
 
-func writeCommunicationDataFile(ctx context.Context, dir, pattern, inline, rawURL string, limits model.Limits) (string, error) {
+func writeCommunicationDataFile(ctx context.Context, dir, pattern, inline, rawURL string, maxBytes int64) (string, error) {
 	if strings.TrimSpace(rawURL) == "" {
+		if int64(len(inline)) > maxBytes {
+			return "", fmt.Errorf("communication data exceeds remaining manager workspace")
+		}
 		return writeTempFile(dir, pattern, inline)
 	}
-	reader, err := openStdinURL(ctx, rawURL, stdinURLMaxBytes(limits), nil)
+	if maxBytes <= 0 {
+		return "", fmt.Errorf("communication manager workspace is full")
+	}
+	reader, err := openStdinURL(ctx, rawURL, maxBytes, nil)
 	if err != nil {
 		return "", err
 	}
 	defer reader.Close()
-	return writeTempFileFromReader(dir, pattern, reader, stdinURLMaxBytes(limits))
+	return writeTempFileFromReader(dir, pattern, reader, maxBytes)
+}
+
+func communicationWorkspaceRemaining(root string, limit int64) (int64, error) {
+	usage, err := workspacequota.Scan(root)
+	if err != nil {
+		return 0, err
+	}
+	if usage.Bytes > limit {
+		return 0, fmt.Errorf("communication workspace exceeds %d bytes", limit)
+	}
+	return limit - usage.Bytes, nil
+}
+
+func communicationWorkRootHasReserve(path string, reserveBytes int64) (bool, int64) {
+	if reserveBytes < 0 {
+		return false, 0
+	}
+	var stats syscall.Statfs_t
+	if err := syscall.Statfs(path, &stats); err != nil || stats.Bsize <= 0 {
+		return false, 0
+	}
+	if uint64(stats.Bavail) > uint64(math.MaxInt64)/uint64(stats.Bsize) {
+		return true, math.MaxInt64
+	}
+	freeBytes := int64(stats.Bavail) * int64(stats.Bsize)
+	return freeBytes >= reserveBytes, freeBytes
 }
 
 func createCommunicationCgroup(parent string, participantCount int, limits model.Limits) (cgroup.Group, error) {
