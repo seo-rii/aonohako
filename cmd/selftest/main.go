@@ -4241,6 +4241,17 @@ buf swap evaluate + 0 .r cr`),
 				source("Main.ws", whitespaceABProgram()),
 			},
 		},
+		"zerolang": {
+			compileLang:    "ZEROLANG",
+			expectedStdout: "ok\n",
+			nonABReason:    "Zerolang v0.3.4 does not expose a stable stdin capability in its canonical source projection",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.0", `pub fn main(world: World) -> Void raises {
+  check world.out.write("ok\n")
+}`),
+			},
+		},
 		"zig": {
 			compileLang: "ZIG",
 			judgeIO:     standardABJudgeIO,

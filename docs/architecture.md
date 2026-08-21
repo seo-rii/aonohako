@@ -881,7 +881,7 @@ Production profiles currently group languages like this:
 | --- | --- |
 | `type-a` | `aheui`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
 | `type-b` | `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
-| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zig` |
+| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `vbnet` |
 | `type-f` | `uhmlang` |

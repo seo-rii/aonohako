@@ -304,6 +304,10 @@ if has_language "mojo"; then
     report_once "Mojo" mojo --version
 fi
 
+if has_language "zerolang"; then
+    report_once "Zerolang" zero --version
+fi
+
 if has_language "swift"; then
     report_once "Swift" swift --version
 fi
@@ -637,6 +641,7 @@ report_compile_option "odin" "odin build . -define:ONLINE_JUDGE=true -out:<targe
 report_compile_option "c3" "c3c compile -D ONLINE_JUDGE -O2"
 report_compile_option "hare" "hare build -o <target>"
 report_compile_option "mojo" "mojo build -o <target>"
+report_compile_option "zerolang" "zero import --out <graph> <source.0>; zero build --release release-fast --out <target> <graph>"
 report_compile_option "kotlin" "kotlinc-native -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -J-XX:ReservedCodeCacheSize=32m -J-XX:MaxMetaspaceSize=192m -J-XX:CompressedClassSpaceSize=64m -opt -o <target>"
 report_compile_option "kotlin-jvm" "kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"
 report_compile_option "swift" "swiftc -O -D ONLINE_JUDGE -module-cache-path <workdir>/.cache/swift-module-cache"

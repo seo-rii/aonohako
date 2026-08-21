@@ -332,6 +332,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"smalltalk":     {compileKind: "smalltalk", runLang: "smalltalk"},
 		"golfscript":    {compileKind: "golfscript", runLang: "golfscript"},
 		"mojo":          {compileKind: "mojo", runLang: "mojo-binary"},
+		"zerolang":      {compileKind: "zerolang", runLang: "binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
 		"elm":           {compileKind: "elm", runLang: "javascript"},
 		"kotlin-jvm":    {compileKind: "kotlin-jvm", runLang: "kotlin-jvm"},
@@ -402,6 +403,7 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"ada22":           "ada",
 		"kotlin_java":     "kotlin-jvm",
 		"standard-ml":     "sml",
+		"zero":            "zerolang",
 	}
 
 	for input, wantCompileKind := range tests {
@@ -1426,33 +1428,37 @@ func TestRunCommandRejectsFilesystemPrivilegeSyscalls(t *testing.T) {
 	}
 }
 
-func TestRunCommandAllowsChmodForAPECodeCompiler(t *testing.T) {
-	workDir := sandboxWritableTempDir(t)
-	binDir := filepath.Join(workDir, "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatalf("mkdir bin dir: %v", err)
-	}
-	apecc := filepath.Join(binDir, "apecc")
-	if err := os.WriteFile(apecc, []byte("#!/bin/sh\nset -eu\n: > Main\n/bin/chmod 755 Main\n"), 0o755); err != nil {
-		t.Fatalf("write fake apecc: %v", err)
-	}
+func TestRunCommandAllowsChmodForExecutableCompilers(t *testing.T) {
+	for _, commandName := range []string{"apecc", "zero"} {
+		t.Run(commandName, func(t *testing.T) {
+			workDir := sandboxWritableTempDir(t)
+			binDir := filepath.Join(workDir, "bin")
+			if err := os.MkdirAll(binDir, 0o755); err != nil {
+				t.Fatalf("mkdir bin dir: %v", err)
+			}
+			compiler := filepath.Join(binDir, commandName)
+			if err := os.WriteFile(compiler, []byte("#!/bin/sh\nset -eu\n: > Main\n/bin/chmod 755 Main\n"), 0o755); err != nil {
+				t.Fatalf("write fake %s: %v", commandName, err)
+			}
 
-	stdout, stderr, status, reason := runCommand(
-		context.Background(),
-		workDir,
-		"apecc",
-		nil,
-		[]string{"PATH=" + binDir},
-	)
-	if status != model.CompileStatusOK {
-		t.Fatalf("expected apecc chmod to succeed, got status=%q reason=%q stdout=%q stderr=%q", status, reason, stdout, stderr)
-	}
-	info, err := os.Stat(filepath.Join(workDir, "Main"))
-	if err != nil {
-		t.Fatalf("stat compiled output: %v", err)
-	}
-	if info.Mode().Perm()&0o111 == 0 {
-		t.Fatalf("compiled output mode = %v, want executable bit", info.Mode().Perm())
+			stdout, stderr, status, reason := runCommand(
+				context.Background(),
+				workDir,
+				commandName,
+				nil,
+				[]string{"PATH=" + binDir},
+			)
+			if status != model.CompileStatusOK {
+				t.Fatalf("expected %s chmod to succeed, got status=%q reason=%q stdout=%q stderr=%q", commandName, status, reason, stdout, stderr)
+			}
+			info, err := os.Stat(filepath.Join(workDir, "Main"))
+			if err != nil {
+				t.Fatalf("stat compiled output: %v", err)
+			}
+			if info.Mode().Perm()&0o111 == 0 {
+				t.Fatalf("compiled output mode = %v, want executable bit", info.Mode().Perm())
+			}
+		})
 	}
 }
 

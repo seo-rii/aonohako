@@ -2846,6 +2846,36 @@ languages:
           printf '%s\n' '어떻게' '' '엄식?' '어엄식?' '' '동탄어?준... ....' '' '엄어,' '어엄어어.' '' '준.. ...' '식어어!' '' '이 사람이름이냐ㅋㅋ' > Main.uhm
           printf '5 1\n' | /usr/bin/umjunsik-lang-go Main.uhm | grep '^6$'
 
+  zerolang:
+    install:
+      apt:
+        - curl
+      script:
+        - export ZERO_VERSION=0.3.4
+        - export ZERO_LINUX_X64_SHA256=84a3c79d482260ee15660a49fc6b904afc927a230d05a4263039dd4dd1360e87
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/vercel-labs/zerolang/releases/download/v${ZERO_VERSION}/zero-linux-x64" -o /tmp/zero
+        - printf '%s  %s\n' "${ZERO_LINUX_X64_SHA256}" /tmp/zero | sha256sum -c -
+        - install -m 0755 /tmp/zero /usr/local/bin/zero
+        - rm -f /tmp/zero
+        - zero --version
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.0 <<'ZERO'
+          pub fn main(world: World) -> Void raises {
+            check world.out.write("ok\n")
+          }
+          ZERO
+          export ZERO_CACHE_DIR=/tmp/zerolang-cache
+          zero import --out Main.graph Main.0
+          zero check Main.graph
+          zero build --release release-fast --out Main Main.graph
+          ./Main | grep '^ok$'
+          printf '%s\n' 'pub fn main(' > Broken.0
+          if zero import --out Broken.graph Broken.0 >/dev/null 2>&1; then exit 1; fi
+
 profiles:
   type-a:
     base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
@@ -2950,6 +2980,7 @@ profiles:
       - rust
       - vala
       - vlang
+      - zerolang
       - zig
   type-d:
     base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
