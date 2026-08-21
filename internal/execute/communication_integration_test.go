@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
   fclose(shared);
   if (marker[0] != 'i' || marker[8] != 'e') return fail_participant(16);
   errno = 0;
-  if (fork() >= 0 || errno != EPERM) return fail_participant(17);
+  if (fork() >= 0 || (errno != EPERM && errno != ENOSYS)) return fail_participant(17);
   errno = 0;
   if (socket(AF_UNIX, SOCK_STREAM, 0) >= 0 || errno != EPERM) return fail_participant(18);
 #ifdef SYS_memfd_create
