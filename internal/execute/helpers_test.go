@@ -334,6 +334,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"prolog", "/tmp/sol.pl", "swipl", true},
 		{"groovy", "/tmp/classes", "java", false},
 		{"lisp", "/tmp/sol.lisp", "sbcl", true},
+		{"picolisp", "/tmp/Main.l", "pil", true},
 		{"scala", "/tmp/classes", "java", false},
 		{"fsharp", "/tmp/App.dll", "dotnet", true},
 		{"javascript", "/tmp/sol.js", "node", true},
@@ -576,6 +577,11 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 	lispArgs := buildCommand("/tmp/Main.lisp", "lisp", req)
 	if !reflect.DeepEqual(lispArgs, []string{"sbcl", "--noinform", "--dynamic-space-size", "64", "--script", "/tmp/Main.lisp"}) {
 		t.Fatalf("lisp command = %v", lispArgs)
+	}
+
+	picoLispArgs := buildCommand("/tmp/Main.l", "picolisp", req)
+	if !reflect.DeepEqual(picoLispArgs, []string{"pil", "/tmp/Main.l", "-bye"}) {
+		t.Fatalf("picolisp command = %v", picoLispArgs)
 	}
 
 	jsArgs := buildCommand("/tmp/Main.js", "javascript", req)

@@ -134,6 +134,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "KFRAMEWORK"
 	case "lisp":
 		l = "LISP"
+	case "picolisp":
+		l = "PICOLISP"
 	case "idris2", "idris":
 		l = "IDRIS2"
 	case "sml", "standardml", "standard-ml":

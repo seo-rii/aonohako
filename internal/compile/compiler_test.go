@@ -49,7 +49,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
-		"raku", "r", "mercury", "prolog", "lisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
+		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
 		"freebasic", "classic-basic", "mojo", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
@@ -851,5 +851,32 @@ func TestPassThroughCompilerRequiresMatchingSource(t *testing.T) {
 	})
 	if resp.Status != model.CompileStatusInvalid || resp.Reason != "no scheme sources" {
 		t.Fatalf("missing source response = %+v", resp)
+	}
+}
+
+func TestPicoLispCompilerPassesThroughDotLSource(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.l"), []byte("(prinl \"ok\")\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	compiler, ok := compileRegistry["picolisp"]
+	if !ok {
+		t.Fatal("picolisp compiler missing from registry")
+	}
+
+	resp := compiler.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.l"}}},
+	})
+	if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.l" {
+		t.Fatalf("picolisp compile response = %+v, want preserved Main.l artifact", resp)
+	}
+
+	resp = compiler.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.lisp"}}},
+	})
+	if resp.Status != model.CompileStatusInvalid || resp.Reason != "no picolisp sources" {
+		t.Fatalf("picolisp wrong-extension response = %+v", resp)
 	}
 }

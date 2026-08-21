@@ -97,6 +97,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"SML",
 		"HAXE",
 		"LISP",
+		"PICOLISP",
 		"ASM",
 		"AHEUI",
 		"NASM",
@@ -206,6 +207,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"IDRIS2":       "binary",
 		"SML":          "binary",
 		"LISP":         "lisp",
+		"PICOLISP":     "picolisp",
+		"picolisp":     "picolisp",
 		"ASM":          "binary",
 		"AHEUI":        "aheui",
 		"NASM":         "binary",
@@ -287,6 +290,19 @@ func TestGoProfilePreservesRuntimeIdentityAndMemoryReserve(t *testing.T) {
 	}
 	if profile.RunLang != "go-binary" || profile.MemoryOffsetMB != 1088 {
 		t.Fatalf("GO profile = %+v, want go-binary with 1088 MiB reserve", profile)
+	}
+}
+
+func TestPicoLispProfileUsesDotLSourceAndInterpreterRuntime(t *testing.T) {
+	profile, ok := Resolve("PICOLISP")
+	if !ok {
+		t.Fatal("Resolve(PICOLISP) reported unsupported language")
+	}
+	if profile.Extension != "l" || profile.CompileKind != "picolisp" || profile.RunLang != "picolisp" {
+		t.Fatalf("PICOLISP profile = %+v, want .l pass-through with PicoLisp runtime", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("PICOLISP resource profile = %+v, want 2x+1000ms and 1x+256MiB", profile)
 	}
 }
 
