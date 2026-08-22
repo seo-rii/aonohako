@@ -38,7 +38,7 @@ var compileRegistry = map[string]Compiler{
 	"tcl":     passThroughCompiler{exts: []string{".tcl"}, noSourceReason: "no tcl sources"},
 	"gdl":     passThroughCompiler{exts: []string{".pro"}, noSourceReason: "no gdl sources"},
 	"octave":  passThroughCompiler{exts: []string{".m"}, noSourceReason: "no octave sources"},
-	"carbon":  carbonCompiler{coreObjectDir: defaultCarbonCoreObjectDir},
+	"carbon":  carbonCompiler{coreObjectDir: defaultCarbonCoreObjectDir, prebuiltRuntimeDir: defaultCarbonPrebuiltRuntimeDir},
 	"graphql": passThroughCompiler{exts: []string{".graphql"}, noSourceReason: "no graphql sources"},
 	"lean4":   checkedSourcesCompiler{exts: []string{".lean"}, noSourceReason: "no lean sources", bin: "lean"},
 	"agda":    checkedSourcesCompiler{exts: []string{".agda"}, noSourceReason: "no agda sources", bin: "agda"},

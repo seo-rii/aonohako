@@ -540,7 +540,7 @@ The interactor is invoked as:
 | MOJO | `mojo` | `mojo build -o <target>` |
 | GLEAM | `gleam` | `gleam build` |
 | CUDA_OCELOT | `cuda-ocelot` | `aonohako-cuda-ocelot-build` |
-| CARBON | `carbon` | `carbon compile --optimize=speed --no-debug-info` followed by `carbon link` with the image's prebuilt Core objects |
+| CARBON | `carbon` | `carbon compile --optimize=speed --no-debug-info` followed by `carbon --prebuilt-runtimes=<image runtime tree> link` with the image's prebuilt Core objects |
 | GRAPHQL | `graphql` | Pass-through `.graphql` artifacts |
 | GDL | `gdl` | Pass-through `.pro` artifacts |
 | OCTAVE | `octave` | Pass-through `.m` artifacts |

@@ -137,7 +137,7 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	allowExecveat := commandName == "hare"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
-	if commandName == "carbon" || commandName == "kotlinc-native" {
+	if commandName == "kotlinc-native" {
 		memoryLimitMB = 4096
 	}
 	if commandName == "aonohako-acl2-check" || commandName == "aonohako-alloy-check" || commandName == "aonohako-kframework-check" || commandName == "kotlinc" || commandName == "kompile" || commandName == "dafny" || commandName == "isabelle" || commandName == "deno" || commandName == "spago" {

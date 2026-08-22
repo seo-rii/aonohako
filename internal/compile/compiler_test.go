@@ -126,16 +126,23 @@ func TestCarbonCompilerCompilesAndLinksExecutableWithPrebuiltCoreObjects(t *test
 			t.Fatal(err)
 		}
 	}
+	runtimeDir := filepath.Join(t.TempDir(), "runtimes")
+	if err := os.MkdirAll(filepath.Join(runtimeDir, "libcxx", "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "libcxx", "lib", "libc++.a"), []byte("runtime"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	runner := &recordingCommandRunner{
 		result: CommandResult{Status: model.CompileStatusOK},
 		hook: func(workDir, _ string, args, _ []string) {
-			switch args[0] {
-			case "compile":
+			switch {
+			case args[0] == "compile":
 				if err := os.WriteFile(filepath.Join(workDir, "Main.o"), []byte("object"), 0o644); err != nil {
 					t.Fatal(err)
 				}
-			case "link":
+			case len(args) > 1 && args[1] == "link":
 				if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("executable"), 0o755); err != nil {
 					t.Fatal(err)
 				}
@@ -143,7 +150,7 @@ func TestCarbonCompilerCompilesAndLinksExecutableWithPrebuiltCoreObjects(t *test
 		},
 	}
 
-	resp := carbonCompiler{coreObjectDir: coreDir}.Compile(context.Background(), CompileJob{
+	resp := carbonCompiler{coreObjectDir: coreDir, prebuiltRuntimeDir: runtimeDir}.Compile(context.Background(), CompileJob{
 		WorkDir: workDir,
 		Target:  "Main",
 		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Helper.carbon"}, {Name: "Main.carbon"}}},
@@ -168,6 +175,7 @@ func TestCarbonCompilerCompilesAndLinksExecutableWithPrebuiltCoreObjects(t *test
 		t.Fatalf("compile command = %+v, want carbon %#v", got, wantCompile)
 	}
 	wantLink := []string{
+		"--prebuilt-runtimes=" + runtimeDir,
 		"link",
 		"--output=" + filepath.Join(workDir, "Main"),
 		filepath.Join(workDir, "Main.o"),
@@ -197,6 +205,32 @@ func TestCarbonCompilerRequiresPrebuiltCoreObjects(t *testing.T) {
 	})
 
 	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "Core objects") {
+		t.Fatalf("response = %+v", resp)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatalf("runner commands = %+v, want none", runner.commands)
+	}
+}
+
+func TestCarbonCompilerRequiresPrebuiltRuntimes(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.carbon"), []byte("fn Run() -> i32 { return 0; }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	coreDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(coreDir, "core.o"), []byte("core"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
+
+	resp := carbonCompiler{coreObjectDir: coreDir, prebuiltRuntimeDir: filepath.Join(t.TempDir(), "missing")}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.carbon"}}},
+		Runner:  runner,
+	})
+
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "prebuilt runtimes") {
 		t.Fatalf("response = %+v", resp)
 	}
 	if len(runner.commands) != 0 {

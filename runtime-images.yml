@@ -2219,6 +2219,8 @@ languages:
         - (cd /tmp && carbon compile --optimize=speed --no-debug-info aonohako-carbon-warmup.carbon)
         - test -s /opt/carbon/lib/carbon/core/io.o
         - rm -f /tmp/aonohako-carbon-warmup.carbon /tmp/aonohako-carbon-warmup.o
+        - carbon build-runtimes --output-directory=/opt/carbon/lib/carbon/aonohako-runtimes
+        - test -s /opt/carbon/lib/carbon/aonohako-runtimes/libcxx/lib/libc++.a
     smoke:
       command:
         - bash
@@ -2233,7 +2235,7 @@ languages:
           }
           CARBON
           carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=Main.o Main.carbon
-          carbon link --output=Main Main.o $(find /opt/carbon/lib/carbon/core -type f -name '*.o' -print | sort)
+          carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o $(find /opt/carbon/lib/carbon/core -type f -name '*.o' -print | sort)
           ./Main | grep '^Hello World!$'
           printf '%s\n' 'fn Run(' > Broken.carbon
           if carbon compile --output-last-input-only --output=Broken.o Broken.carbon >/dev/null 2>&1; then exit 1; fi

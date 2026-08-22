@@ -514,7 +514,7 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`echo "## Runtime Compile Options"`,
 		`report_compile_option "malbolge" "validate reference opcodes, then pass-through .mal/.mb artifacts"`,
 		`report_compile_option "picolisp" "pass-through .l artifacts"`,
-		`report_compile_option "carbon" "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=<target>.o <source>; carbon link --output=<target> <target>.o <prebuilt Core objects>"`,
+		`report_compile_option "carbon" "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=<target>.o <source>; carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=<target> <target>.o <prebuilt Core objects>"`,
 		`report_compile_option "java" "javac --release 11 -encoding UTF-8"`,
 		`report_compile_option "kotlin-jvm" "kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"`,
 		`report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"`,

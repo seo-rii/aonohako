@@ -650,7 +650,7 @@ report_compile_option "kotlin" "kotlinc-native -J-Xms64m -J-Xmx<compiler cap> -J
 report_compile_option "kotlin-jvm" "kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"
 report_compile_option "swift" "swiftc -O -D ONLINE_JUDGE -module-cache-path <workdir>/.cache/swift-module-cache"
 report_compile_option "cuda-ocelot" "aonohako-cuda-ocelot-build"
-report_compile_option "carbon" "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=<target>.o <source>; carbon link --output=<target> <target>.o <prebuilt Core objects>"
+report_compile_option "carbon" "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=<target>.o <source>; carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=<target> <target>.o <prebuilt Core objects>"
 report_compile_option "gleam" "gleam build"
 report_compile_option "vbnet" "dotnet publish --configuration Release -p:UseAppHost=false -p:DefineConstants=ONLINE_JUDGE"
 report_compile_option "csharp" "dotnet publish --configuration Release -p:UseAppHost=false -p:DefineConstants=ONLINE_JUDGE"

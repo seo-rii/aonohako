@@ -263,10 +263,14 @@ func compileMojo(ctx context.Context, workDir, target string, sources []model.So
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
-const defaultCarbonCoreObjectDir = "/opt/carbon/lib/carbon/core"
+const (
+	defaultCarbonCoreObjectDir      = "/opt/carbon/lib/carbon/core"
+	defaultCarbonPrebuiltRuntimeDir = "/opt/carbon/lib/carbon/aonohako-runtimes"
+)
 
 type carbonCompiler struct {
-	coreObjectDir string
+	coreObjectDir      string
+	prebuiltRuntimeDir string
 }
 
 func (c carbonCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
@@ -288,6 +292,18 @@ func (c carbonCompiler) Compile(ctx context.Context, job CompileJob) model.Compi
 	}
 	if len(coreObjects) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "Carbon Core objects are not installed"}
+	}
+	prebuiltRuntimeDir := c.prebuiltRuntimeDir
+	if prebuiltRuntimeDir == "" {
+		prebuiltRuntimeDir = defaultCarbonPrebuiltRuntimeDir
+	}
+	runtimeLibrary := filepath.Join(prebuiltRuntimeDir, "libcxx", "lib", "libc++.a")
+	runtimeInfo, err := os.Stat(runtimeLibrary)
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "locate Carbon prebuilt runtimes: " + err.Error()}
+	}
+	if !runtimeInfo.Mode().IsRegular() || runtimeInfo.Size() == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "Carbon prebuilt runtimes are not installed"}
 	}
 
 	runner := job.Runner
@@ -312,7 +328,7 @@ func (c carbonCompiler) Compile(ctx context.Context, job CompileJob) model.Compi
 		return compileResponseWithCapturedOutput(result.Status, nil, result.Reason, fullOut, fullErr)
 	}
 
-	linkArgs := []string{"link", "--output=" + outputPath(job), objectPath}
+	linkArgs := []string{"--prebuilt-runtimes=" + prebuiltRuntimeDir, "link", "--output=" + outputPath(job), objectPath}
 	linkArgs = append(linkArgs, coreObjects...)
 	result = runner.Run(ctx, job.WorkDir, "carbon", linkArgs, nil)
 	fullOut.Append(result.Stdout)
