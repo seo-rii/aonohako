@@ -899,6 +899,11 @@ Production profiles currently group languages like this:
 | `type-r` | `isabelle` |
 | `type-s` | `lean4` |
 
+The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
+inside the runtime image. Submission compilation emits an optimized object and
+links it with that trusted Core set into a native executable; execution then
+uses the ordinary `binary` sandbox contract rather than rerunning the compiler.
+
 The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
 `.mb` for compatibility. Compile strips ASCII whitespace, validates every
 remaining byte against the position-dependent reference opcode translation,

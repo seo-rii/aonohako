@@ -357,7 +357,6 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"vb6", "/tmp/Main.bas", "aonohako-vb6-run", true},
 		{"gleam", "/tmp/gleam-project", "aonohako-gleam-run", true},
 		{"cuda-ocelot", "/tmp/Main", "aonohako-cuda-ocelot-run", true},
-		{"carbon", "/tmp/Main.carbon", "aonohako-carbon-run", true},
 		{"graphql", "/tmp/Main.graphql", "aonohako-graphql-run", true},
 		{"rocq", "/tmp/Main.v", "true", false},
 		{"lean4", "/tmp/Main.lean", "true", false},

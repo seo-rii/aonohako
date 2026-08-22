@@ -176,8 +176,6 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"aonohako-gleam-run", primaryPath}
 	case "cuda-ocelot":
 		return []string{"aonohako-cuda-ocelot-run", primaryPath}
-	case "carbon":
-		return []string{"aonohako-carbon-run", primaryPath}
 	case "graphql":
 		return []string{"aonohako-graphql-run", primaryPath}
 	case "tla":
