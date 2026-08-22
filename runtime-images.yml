@@ -2221,6 +2221,7 @@ languages:
         - rm -f /tmp/aonohako-carbon-warmup.carbon /tmp/aonohako-carbon-warmup.o
         - carbon build-runtimes --output-directory=/opt/carbon/lib/carbon/aonohako-runtimes
         - test -s /opt/carbon/lib/carbon/aonohako-runtimes/libcxx/lib/libc++.a
+        - chmod -R a+rX /opt/carbon/lib/carbon/aonohako-runtimes
     smoke:
       command:
         - bash
