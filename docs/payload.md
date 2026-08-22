@@ -540,7 +540,7 @@ The interactor is invoked as:
 | MOJO | `mojo` | `mojo build -o <target>` |
 | GLEAM | `gleam` | `gleam build` |
 | CUDA_OCELOT | `cuda-ocelot` | `aonohako-cuda-ocelot-build` |
-| CARBON | `carbon` | `carbon compile --phase=check` |
+| CARBON | `carbon` | `carbon compile --optimize=speed --no-debug-info` followed by `carbon --prebuilt-runtimes=<image runtime tree> link` with the image's prebuilt Core objects |
 | GRAPHQL | `graphql` | Pass-through `.graphql` artifacts |
 | GDL | `gdl` | Pass-through `.pro` artifacts |
 | OCTAVE | `octave` | Pass-through `.m` artifacts |
@@ -573,7 +573,7 @@ The interactor is invoked as:
 
 | Runtime lang | Executor |
 |---|---|
-| `binary` | Direct execution |
+| `binary` | Direct native execution, including linked Carbon submissions |
 | `go-binary` | Direct execution for compiled Go artifacts, with Go-compatible virtual-memory policy |
 | `clojure` | `java <JVM memory flags> -cp /usr/share/java/clojure-1.12.jar clojure.main <file>` |
 | `racket` | `racket <file>` |
@@ -628,7 +628,6 @@ The interactor is invoked as:
 | `verilog` | `vvp <file>` |
 | `c3` | direct compiled binary execution with C3 runtime allowances |
 | `cuda-ocelot` | CUDA Ocelot emulator wrapper |
-| `carbon` | Carbon phase-check artifact runner |
 | `graphql` | GraphQL validation wrapper |
 | `smalltalk` | `gst <file>` |
 | `golfscript` | GolfScript runner wrapper |

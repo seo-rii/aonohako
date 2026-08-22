@@ -183,6 +183,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"MOJO":         "mojo-binary",
 		"mojo":         "mojo-binary",
 		"mojo-binary":  "mojo-binary",
+		"CARBON":       "binary",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",

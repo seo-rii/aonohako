@@ -2210,17 +2210,36 @@ languages:
       script:
         - export CARBON_VERSION=0.0.0-0.nightly.2026.05.02
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/carbon-language/carbon-lang/releases/download/v${CARBON_VERSION}/carbon_toolchain-${CARBON_VERSION}.tar.gz" -o /tmp/carbon.tar.gz
+        - echo '16719a509201acd2a7d82c260fba073c14ce7eb53c44c6ae7dda1fa083b6fa2a  /tmp/carbon.tar.gz' | sha256sum -c -
         - mkdir -p /opt/carbon
         - tar -xzf /tmp/carbon.tar.gz -C /opt/carbon --strip-components=1
         - ln -sfn /opt/carbon/bin/carbon /usr/local/bin/carbon
         - rm -f /tmp/carbon.tar.gz
+        - printf '%s\n' 'import Core library "io";' 'fn Run() -> i32 { return 0; }' > /tmp/aonohako-carbon-warmup.carbon
+        - (cd /tmp && carbon compile --optimize=speed --no-debug-info aonohako-carbon-warmup.carbon)
+        - test -s /opt/carbon/lib/carbon/core/io.o
+        - rm -f /tmp/aonohako-carbon-warmup.carbon /tmp/aonohako-carbon-warmup.o
+        - carbon build-runtimes --output-directory=/opt/carbon/lib/carbon/aonohako-runtimes
+        - test -s /opt/carbon/lib/carbon/aonohako-runtimes/libcxx/lib/libc++.a
+        - chmod -R a+rX /opt/carbon/lib/carbon/aonohako-runtimes
     smoke:
       command:
         - bash
         - -lc
         - |
-          printf '%s\n' 'fn Run() {}' > Main.carbon
-          carbon compile --phase=check Main.carbon >/dev/null
+          cat > Main.carbon <<'CARBON'
+          import Core library "io";
+
+          fn Run() -> i32 {
+            Core.PrintStr("Hello World!\n");
+            return 0;
+          }
+          CARBON
+          carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=Main.o Main.carbon
+          carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o $(find /opt/carbon/lib/carbon/core -type f -name '*.o' -print | sort)
+          ./Main | grep '^Hello World!$'
+          printf '%s\n' 'fn Run(' > Broken.carbon
+          if carbon compile --output-last-input-only --output=Broken.o Broken.carbon >/dev/null 2>&1; then exit 1; fi
 
   graphql:
     install:

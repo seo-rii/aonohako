@@ -312,7 +312,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"vbnet":         {compileKind: "vbnet", runLang: "vbnet"},
 		"gleam":         {compileKind: "gleam", runLang: "gleam"},
 		"cuda-ocelot":   {compileKind: "cuda-ocelot", runLang: "cuda-ocelot"},
-		"carbon":        {compileKind: "carbon", runLang: "carbon"},
+		"carbon":        {compileKind: "carbon", runLang: "binary"},
 		"graphql":       {compileKind: "graphql", runLang: "graphql"},
 		"zig":           {compileKind: "zig", runLang: "binary"},
 		"lisp":          {compileKind: "lisp", runLang: "lisp"},

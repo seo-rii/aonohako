@@ -89,7 +89,6 @@ COPY --chmod=0755 scripts/acl2_check.sh /usr/local/bin/aonohako-acl2-check
 COPY --chmod=0755 scripts/alloy_check.py /usr/local/bin/aonohako-alloy-check
 COPY --chmod=0755 scripts/why3_prove_z3.sh /usr/local/bin/aonohako-why3-prove
 COPY --chmod=0755 scripts/gdl_run.sh /usr/local/bin/aonohako-gdl-run
-COPY --chmod=0755 scripts/carbon_run.sh /usr/local/bin/aonohako-carbon-run
 COPY --chmod=0755 scripts/cuda_ocelot_build.sh /usr/local/bin/aonohako-cuda-ocelot-build
 COPY --chmod=0755 scripts/cuda_ocelot_run.sh /usr/local/bin/aonohako-cuda-ocelot-run
 COPY --chmod=0755 scripts/duckdb_run.sh /usr/local/bin/aonohako-duckdb-run

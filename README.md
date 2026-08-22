@@ -75,6 +75,12 @@ language-specific commands keep their declared order.
   with the `release-fast` profile. Its stable source projection does not yet
   expose a stdin contract, so runtime smoke coverage currently uses fixed
   output while still exercising import, validation, compilation, and execution.
+- Carbon is pinned to an official experimental nightly. The image precompiles
+  that toolchain's Core objects and native runtimes, then submission compilation
+  emits an object, links a native executable against those trusted inputs, and
+  runs it through the standard binary sandbox. With the pinned nightly, `Run`
+  should return `i32` and explicitly return zero; a void `Run` can leave the
+  last output byte count as the process exit status.
 - Compile and execute environments set `ONLINE_JUDGE=1`. Languages with
   compiler-supported defines or build tags also receive an `ONLINE_JUDGE`
   compile flag where appropriate, such as C/C++/Objective-C, NASM, Rust, Go,

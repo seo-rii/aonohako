@@ -304,7 +304,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// likewise make large, ASLR-sensitive virtual reservations before main.
 	// Physical memory remains bounded by cgroup memory.max and the RSS watchdog.
 	// CoreCLR also needs a high finite RLIMIT_FSIZE floor to start reliably.
-	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || isMojoBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "aonohako-carbon-run" || runtimeBase == "carbon" || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
+	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || isMojoBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	if streams.communicationRestricted {
 		// Native C++ communication targets do not need the broad managed-runtime

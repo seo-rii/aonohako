@@ -3986,10 +3986,30 @@ int main() {
 		},
 		"carbon": {
 			compileLang: "CARBON",
-			nonABReason: "the runtime performs Carbon phase checking and does not execute a program",
+			judgeIO:     standardABJudgeIO,
 			limits:      model.Limits{TimeMs: 15000, MemoryMB: 1024},
 			sources: []model.Source{
-				source("Main.carbon", `fn Run() {}`),
+				source("Main.carbon", `import Core library "io";
+
+fn ReadInt() -> i32 {
+  var value: i32 = 0;
+  var c: i32 = Core.ReadChar();
+  while (c == 32 or c == 10 or c == 13 or c == 9) {
+    c = Core.ReadChar();
+  }
+  while (c >= 48 and c <= 57) {
+    value = value * 10 + c - 48;
+    c = Core.ReadChar();
+  }
+  return value;
+}
+
+fn Run() -> i32 {
+  let a: i32 = ReadInt();
+  let b: i32 = ReadInt();
+  Core.Print(a + b);
+  return 0;
+}`),
 			},
 		},
 		"graphql": {

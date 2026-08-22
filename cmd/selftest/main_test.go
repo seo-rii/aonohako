@@ -135,7 +135,6 @@ func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
 		"alloy":      {},
 		"apecode":    {},
 		"apl":        {},
-		"carbon":     {},
 		"coq":        {},
 		"dafny":      {},
 		"fstar":      {},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"aonohako/internal/config"
@@ -260,6 +261,105 @@ func compileMojo(ctx context.Context, workDir, target string, sources []model.So
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: stdout, Stderr: stderr}
 	}
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
+}
+
+const (
+	defaultCarbonCoreObjectDir      = "/opt/carbon/lib/carbon/core"
+	defaultCarbonPrebuiltRuntimeDir = "/opt/carbon/lib/carbon/aonohako-runtimes"
+)
+
+type carbonCompiler struct {
+	coreObjectDir      string
+	prebuiltRuntimeDir string
+}
+
+func (c carbonCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	rootSource := selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".carbon"}, "Main.carbon", "main.carbon")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no carbon sources"}
+	}
+
+	coreObjectDir := c.coreObjectDir
+	if coreObjectDir == "" {
+		coreObjectDir = defaultCarbonCoreObjectDir
+	}
+	coreObjects, err := carbonCoreObjectPaths(coreObjectDir)
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "locate Carbon Core objects: " + err.Error()}
+	}
+	if len(coreObjects) == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "Carbon Core objects are not installed"}
+	}
+	prebuiltRuntimeDir := c.prebuiltRuntimeDir
+	if prebuiltRuntimeDir == "" {
+		prebuiltRuntimeDir = defaultCarbonPrebuiltRuntimeDir
+	}
+	runtimeLibrary := filepath.Join(prebuiltRuntimeDir, "libcxx", "lib", "libc++.a")
+	runtimeInfo, err := os.Stat(runtimeLibrary)
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "locate Carbon prebuilt runtimes: " + err.Error()}
+	}
+	if !runtimeInfo.Mode().IsRegular() || runtimeInfo.Size() == 0 {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "Carbon prebuilt runtimes are not installed"}
+	}
+
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	objectPath := outputPath(job) + ".o"
+	fullOut := newCompileOutputBuffer()
+	fullErr := newCompileOutputBuffer()
+
+	result := runner.Run(ctx, job.WorkDir, "carbon", []string{
+		"compile",
+		"--optimize=speed",
+		"--no-debug-info",
+		"--output-last-input-only",
+		"--output=" + objectPath,
+		rootSource,
+	}, nil)
+	fullOut.Append(result.Stdout)
+	fullErr.Append(result.Stderr)
+	if result.Status != model.CompileStatusOK {
+		return compileResponseWithCapturedOutput(result.Status, nil, result.Reason, fullOut, fullErr)
+	}
+
+	linkArgs := []string{"--prebuilt-runtimes=" + prebuiltRuntimeDir, "link", "--output=" + outputPath(job), objectPath}
+	linkArgs = append(linkArgs, coreObjects...)
+	result = runner.Run(ctx, job.WorkDir, "carbon", linkArgs, nil)
+	fullOut.Append(result.Stdout)
+	fullErr.Append(result.Stderr)
+	if result.Status != model.CompileStatusOK {
+		return compileResponseWithCapturedOutput(result.Status, nil, result.Reason, fullOut, fullErr)
+	}
+
+	artifacts, err := readSingleArtifact(job.WorkDir, job.Target, job.Target, "exec")
+	if err != nil {
+		return compileResponseWithCapturedOutput(model.CompileStatusInternal, nil, err.Error(), fullOut, fullErr)
+	}
+	return compileResponseWithCapturedOutput(model.CompileStatusOK, artifacts, "", fullOut, fullErr)
+}
+
+func carbonCoreObjectPaths(root string) ([]string, error) {
+	objects := make([]string, 0, 32)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && strings.EqualFold(filepath.Ext(entry.Name()), ".o") {
+			objects = append(objects, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(objects)
+	return objects, nil
 }
 
 type zerolangCompiler struct{}
