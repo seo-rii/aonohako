@@ -340,7 +340,10 @@ Startup requires a positive `AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB` when the
 Cloud Run capability is enabled. Before starting processes, Aonohako requires
 `participant_count * limits.memory_mb + 512` to fit that budget; the planned
 32 GiB service uses `24576` MiB so the remainder stays available to the server,
-workspaces, and runtime overhead.
+workspaces, and runtime overhead. `AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS`
+defaults to the protocol maximum of 64 and may be lowered for a smaller
+dedicated runner tier; requests above the configured limit fail admission
+before any process starts.
 Cloud Run also requires `AONOHAKO_COMMUNICATION_CPU_COUNT` to match the process
 `GOMAXPROCS` value and a positive `AONOHAKO_COMMUNICATION_WALL_BUDGET_MS`.
 The wall allowance reserves one configured CPU for supervision, rounds the

@@ -113,6 +113,17 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	if err := runvalidation.ValidateCommunication(req); err != nil {
 		return communicationFailure("invalid communication request: "+err.Error(), "communication:request", 0)
 	}
+	if req.Communication.ParticipantCount > s.communicationMaxParticipants {
+		return communicationFailure(
+			fmt.Sprintf(
+				"communication participant count %d exceeds runner limit %d",
+				req.Communication.ParticipantCount,
+				s.communicationMaxParticipants,
+			),
+			"communication:admission",
+			0,
+		)
+	}
 	participantProgram, managerProgram := communicationPrograms(req)
 	participantLimits := req.Limits
 	if participantLimits.WorkspaceBytes <= 0 || participantLimits.WorkspaceBytes > communicationParticipantWorkspaceBytes {

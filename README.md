@@ -524,6 +524,8 @@ For Cloud Run deployments, use this baseline:
   participant
 - `AONOHAKO_COMMUNICATION_ENABLED=true` only on a dedicated communication
   service; ordinary Cloud Run runners do not advertise `communication-v1`
+- `AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS=64` (or a smaller dedicated tier
+  limit) to reject oversized communication requests before starting processes
 - `AONOHAKO_COMMUNICATION_MEMORY_BUDGET_MB=24576` (for the planned 32 GiB
   service) to reject requests whose declared participant memory plus the
   512 MiB manager allowance exceeds the reserved 24 GiB execution budget

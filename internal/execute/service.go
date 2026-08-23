@@ -102,17 +102,18 @@ func emitCapturedLog(hooks Hooks, stream string, output []byte, limit int) {
 }
 
 type Service struct {
-	deploymentTarget            platform.DeploymentTarget
-	runtimeTuning               config.RuntimeTuningConfig
-	runtimeTuningProfiles       map[string]config.RuntimeTuningConfig
-	cgroupParentDir             string
-	communicationEnabled        bool
-	communicationMemoryBudgetMB int
-	communicationCPUCount       int
-	communicationWallBudgetMs   int
-	workRootMaxBytes            int
-	networkEgressIsolated       bool
-	stdinURLTimeout             time.Duration
+	deploymentTarget             platform.DeploymentTarget
+	runtimeTuning                config.RuntimeTuningConfig
+	runtimeTuningProfiles        map[string]config.RuntimeTuningConfig
+	cgroupParentDir              string
+	communicationEnabled         bool
+	communicationMaxParticipants int
+	communicationMemoryBudgetMB  int
+	communicationCPUCount        int
+	communicationWallBudgetMs    int
+	workRootMaxBytes             int
+	networkEgressIsolated        bool
+	stdinURLTimeout              time.Duration
 }
 
 type sandboxRunResult struct {
@@ -134,18 +135,23 @@ func NewWithConfig(cfg config.Config) *Service {
 	for name, tuning := range cfg.Execution.RuntimeTuningProfiles {
 		profiles[name] = tuning.WithSafeDefaults()
 	}
+	communicationMaxParticipants := cfg.CommunicationMaxParticipants
+	if communicationMaxParticipants <= 0 {
+		communicationMaxParticipants = runvalidation.MaxCommunicationParticipants
+	}
 	return &Service{
-		deploymentTarget:            cfg.Execution.Platform.DeploymentTarget,
-		runtimeTuning:               cfg.Execution.RuntimeTuning.WithSafeDefaults(),
-		runtimeTuningProfiles:       profiles,
-		cgroupParentDir:             cfg.Execution.Cgroup.ParentDir,
-		communicationEnabled:        cfg.CommunicationEnabled,
-		communicationMemoryBudgetMB: cfg.CommunicationMemoryBudgetMB,
-		communicationCPUCount:       cfg.CommunicationCPUCount,
-		communicationWallBudgetMs:   cfg.CommunicationWallBudgetMs,
-		workRootMaxBytes:            cfg.WorkRootMaxBytes,
-		networkEgressIsolated:       cfg.NetworkEgressIsolated,
-		stdinURLTimeout:             stdinURLDownloadTimeout,
+		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
+		runtimeTuning:                cfg.Execution.RuntimeTuning.WithSafeDefaults(),
+		runtimeTuningProfiles:        profiles,
+		cgroupParentDir:              cfg.Execution.Cgroup.ParentDir,
+		communicationEnabled:         cfg.CommunicationEnabled,
+		communicationMaxParticipants: communicationMaxParticipants,
+		communicationMemoryBudgetMB:  cfg.CommunicationMemoryBudgetMB,
+		communicationCPUCount:        cfg.CommunicationCPUCount,
+		communicationWallBudgetMs:    cfg.CommunicationWallBudgetMs,
+		workRootMaxBytes:             cfg.WorkRootMaxBytes,
+		networkEgressIsolated:        cfg.NetworkEgressIsolated,
+		stdinURLTimeout:              stdinURLDownloadTimeout,
 	}
 }
 
