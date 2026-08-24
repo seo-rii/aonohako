@@ -35,7 +35,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
 		t.Fatalf("type-d production image = %+v", production[3])
 	}
-	if production[4].Name != "type-e" || !reflect.DeepEqual(production[4].Languages, []string{"csharp", "fsharp", "vbnet"}) {
+	if production[4].Name != "type-e" || !reflect.DeepEqual(production[4].Languages, []string{"csharp", "fsharp", "powershell", "vbnet"}) {
 		t.Fatalf("type-e production image = %+v", production[4])
 	}
 	if production[5].Name != "type-f" || !reflect.DeepEqual(production[5].Languages, []string{"uhmlang"}) {
@@ -194,6 +194,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-plain",
 		"ci-pony",
 		"ci-posix-sh",
+		"ci-powershell",
 		"ci-prolog",
 		"ci-purescript",
 		"ci-pypy",
@@ -357,6 +358,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"picolisp":      {"picolisp", "pil -version -bye", "Main.l", "printf '1 2\\n'", "pil Main.l -bye", "grep '^3$'", "Broken.l"},
 		"pony":          {"PONY_VERSION=0.69.1", "PONY_ARCHIVE_ROOT=0.69.1-38f9f11", "PONY_SHA256=8e1955ed1a63444ae13666031d5d3909cacfb475ca96643e878f36cf4edff9ab", "sha256sum -c -", "--cpu=generic", "--ponymaxthreads=1", "objdump -d Main", "test ! -e /opt/pony/bin/pony-doc", "test ! -e Broken"},
 		"posix-sh":      {"0.5.12-12", "/bin/dash -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-posix-shell-syntax-leak", "Broken.sh"},
+		"powershell":    {"POWERSHELL_VERSION=7.6.5", "POWERSHELL_SHA256=b34ab3b19acac1d3d4d0d3cfdb02acf62f457b0b6a962ff008132033f7566844", "sha256sum -c -", "Parser]::ParseFile", "ForEach-Object -Parallel", "test ! -e /opt/microsoft/powershell/7/createdump", "Broken.ps1"},
 		"qbasic":        {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
 		"raku":          {"raku -c Main.raku", "raku Main.raku"},
 		"racket":        {"raco make", "Broken.rkt"},
@@ -884,6 +886,61 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 		if !strings.Contains(dockerBody, marker) {
 			t.Fatalf("runtime Dockerfile must contain %q", marker)
 		}
+	}
+}
+
+func TestRepositoryCatalogPinsAndHardensPowerShellInDotnetProfile(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["powershell"]
+	if !ok {
+		t.Fatal("powershell language missing from catalog")
+	}
+	if !slices.Contains(spec.Install.Apt, "libicu76") || !slices.Contains(spec.Install.SandboxTools, "pwsh") {
+		t.Fatalf("PowerShell install = %+v", spec.Install)
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"POWERSHELL_VERSION=7.6.5",
+		"POWERSHELL_SHA256=b34ab3b19acac1d3d4d0d3cfdb02acf62f457b0b6a962ff008132033f7566844",
+		"sha256sum -c -",
+		"rm -f /opt/microsoft/powershell/7/createdump",
+		"chown -R root:root /opt/microsoft/powershell/7",
+		"find /opt/microsoft/powershell/7 -type f -exec chmod 0644",
+		"chmod 0755 /opt/microsoft/powershell/7/pwsh",
+	} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("PowerShell install must contain %q:\n%s", marker, install)
+		}
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, marker := range []string{
+		"set -euo pipefail",
+		"HOME=/var/empty",
+		"XDG_CONFIG_HOME=/var/empty/.config",
+		"XDG_DATA_HOME=/var/empty/.local/share",
+		"PSModulePath=/opt/microsoft/powershell/7/Modules",
+		"POWERSHELL_TELEMETRY_OPTOUT=1",
+		"POWERSHELL_UPDATECHECK=Off",
+		"Parser]::ParseFile",
+		"ForEach-Object -Parallel",
+		"test ! -e /tmp/aonohako-powershell-syntax-leak",
+		"test ! -e /opt/microsoft/powershell/7/createdump",
+		"stat -c '%u:%g:%a' /etc/passwd",
+		"test ! -s /etc/passwd",
+		"stat -c '%u:%g:%a' /etc/group",
+		"/var/empty/.local/share/powershell/Modules:/usr/local/share/powershell/Modules:/opt/microsoft/powershell/7/Modules",
+		"find /opt/microsoft/powershell/7 -type f -perm /0022",
+		"Broken.ps1",
+	} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("PowerShell smoke must contain %q:\n%s", marker, smoke)
+		}
+	}
+	if profile := catalog.Profiles["type-e"]; !reflect.DeepEqual(profile.Languages, []string{"csharp", "fsharp", "powershell", "vbnet"}) {
+		t.Fatalf("type-e languages = %v", profile.Languages)
 	}
 }
 

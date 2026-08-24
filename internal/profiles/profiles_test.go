@@ -213,6 +213,9 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"posix_sh":     "posix-sh",
 		"posix-sh":     "posix-sh",
 		"sh":           "posix-sh",
+		"POWERSHELL":   "powershell",
+		"powershell":   "powershell",
+		"pwsh":         "powershell",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",
@@ -399,6 +402,19 @@ func TestShellProfilesShareCompilerAndExposeRuntimeVariants(t *testing.T) {
 		if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 0 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 64 {
 			t.Fatalf("%s resource profile = %+v", language, profile)
 		}
+	}
+}
+
+func TestPowerShellProfileUsesScriptRuntimeAndManagedHeadroom(t *testing.T) {
+	profile, ok := Resolve("POWERSHELL")
+	if !ok {
+		t.Fatal("Resolve(POWERSHELL) reported unsupported language")
+	}
+	if profile.Extension != "ps1" || profile.DefaultTarget != "Main.ps1" || profile.CompileKind != "powershell" || profile.RunLang != "powershell" {
+		t.Fatalf("POWERSHELL profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 2 || profile.MemoryOffsetMB != 1024 {
+		t.Fatalf("POWERSHELL resource profile = %+v", profile)
 	}
 }
 

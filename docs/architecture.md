@@ -530,9 +530,10 @@ sandbox process exits and before signal fallback classification, so a kernel
 misclassified as a generic `SIGKILL` timeout or runtime error.
 
 .NET is the main compatibility exception for address-space limits, and compiled
-Go binaries require the same treatment. `dotnet` invocations disable `RLIMIT_AS`
-because CoreCLR reserves a very
-large memfd-backed double-mapped region before user code starts. Go runtime
+Go binaries require the same treatment. `dotnet` and `pwsh` invocations disable
+`RLIMIT_AS`: the shared `dotnet` host reserves a very large
+memfd-backed double-mapped region, while the self-contained PowerShell CoreCLR host also
+makes startup virtual reservations far beyond its resident set. Go runtime
 startup likewise makes large, ASLR-sensitive virtual reservations before
 `main`, so `go-binary` execution disables `RLIMIT_AS`. Their physical memory is
 still enforced through RSS/smaps sampling, mandatory self-hosted cgroup
@@ -545,7 +546,11 @@ bounded `AONOHAKO_WORK_ROOT` storage, mandatory self-hosted cgroups, and the
 outer container or filesystem limit. The helper still applies a request-memory-derived
 `DOTNET_GCHeapHardLimit`, RSS watchdogs, workspace byte accounting, output caps,
 open-file limits, thread limits, OOM-victim preference, and single-slot
-execution. The image keeps `/tmp/.dotnet` root-owned and non-traversable. For
+execution. PowerShell receives a 512-descriptor ceiling and the same GC heap
+formula, but it keeps the ordinary finite file-size limit and does not opt into
+the dotnet shared-state lease, memfd/NUMA/thread-signal/Unix-socket allowances,
+or process creation. The image keeps `/tmp/.dotnet` root-owned and
+non-traversable. For
 each sandboxed `dotnet` invocation, the runner temporarily replaces that name
 with a root-created symlink to a `0700`, sandbox-owned directory inside the
 active workspace, then restores a root-owned sealed directory after the whole
@@ -883,7 +888,7 @@ Production profiles currently group languages like this:
 | `type-b` | `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
-| `type-e` | `csharp`, `fsharp`, `vbnet` |
+| `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
 | `type-f` | `uhmlang` |
 | `type-g` | `julia` |
 | `type-h` | `swift` |
@@ -983,6 +988,25 @@ helper binaries, and an explicit POSIX-oriented utility allowlist. Hidden Go,
 package, network, namespace, and diagnostic tools therefore cannot be copied
 or invoked through the dynamic loader by a submission.
 
+The `POWERSHELL` source profile checks `.ps1`, `.psm1`, and `.psd1` artifacts
+through PowerShell's `Parser.ParseFile` API and runs `Main.ps1` with
+`-NoLogo -NoProfile -NonInteractive -File`. The checksum-pinned official 7.6.5
+Linux x64 bundle shares type-e with the compiled .NET languages, but the
+`powershell` runtime identity remains separate from `dotnet`. The environment
+disables telemetry and update checks, points `HOME`, `XDG_CONFIG_HOME`, and
+`XDG_DATA_HOME` at a root-owned `/var/empty` tree, and limits `PSModulePath` to
+three immutable roots: its empty user/system compatibility directories and the
+bundled module tree. No workspace path enters the module search path.
+In-process pipelines and runspaces remain available; native commands,
+`Start-Job`, and network sockets remain denied by the ordinary
+no-process/no-network sandbox.
+The image removes `createdump`, leaves only `pwsh` executable inside the install
+tree, and makes every installed file root-owned and non-writable. Because pwsh
+cannot initialize when `/etc/passwd` is unreadable, PowerShell packs replace it
+with a readable, root-owned 0444 empty NSS compatibility stub. It contains no
+identity records; `/etc/group` and the remaining account metadata stay
+root-only.
+
 The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
 `.mb` for compatibility. Compile strips ASCII whitespace, validates every
 remaining byte against the position-dependent reference opcode translation,
@@ -1055,10 +1079,12 @@ builder refuses any catalog `base_image` that is not pinned by SHA256 digest.
 
 The runtime Docker image is also hardened to reduce the readable surface for the
 sandbox UID. Non-essential metadata and package-manager paths are made
-root-only, including identity metadata such as `/etc/passwd`, `/etc/group`, and
+root-only, including identity metadata such as `/etc/passwd` and `/etc/group`,
 package database paths, and package-manager module entrypoint directories such
 as Python `pip` and Node `npm`, while shared libraries and language runtimes
-remain readable so the interpreter or binary can still start normally.
+remain readable so the interpreter or binary can still start normally. The
+PowerShell pack has the narrow empty `/etc/passwd` compatibility stub described
+above; it exposes no identity records and `/etc/group` remains root-only.
 Runtime-mounted host files such as `/etc/hostname` and `/etc/hosts` are not
 image-hardened and remain part of the mount isolation backlog.
 

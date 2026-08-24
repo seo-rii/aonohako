@@ -60,7 +60,7 @@ language-specific commands keep their declared order.
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
-  Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages, Ruby, PHP, Lua, Perl,
+  Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, MoonBit, Fennel, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
@@ -112,6 +112,18 @@ language-specific commands keep their declared order.
   80-task per-run cgroup ceiling, but keeps networking disabled. The
   final image exposes only an explicit utility allowlist and makes hidden
   compilers, package/network tools, and their loader inputs unreadable.
+- PowerShell is pinned to the checksum-verified official 7.6.5 Linux x64
+  bundle in the shared type-e pack. Syntax checking uses the parser API without
+  executing the submission, while execution disables profiles, telemetry, and
+  update checks. Its home/config/data roots point at root-owned `/var/empty`,
+  and its module path contains only immutable empty compatibility roots plus
+  the bundled modules, never the writable workspace. Its CoreCLR startup
+  receives a 512-file-descriptor ceiling and no `RLIMIT_AS`, plus the normal
+  request-derived GC heap cap; process creation, networking, memfd/NUMA
+  exceptions, shared dotnet state, and the dotnet file-size override stay off.
+  Its pack replaces `/etc/passwd` with a root-owned 0444 empty NSS compatibility
+  stub required by pwsh, exposing no identity records; `/etc/group` and other
+  account metadata stay root-only.
 - Carbon is pinned to an official experimental nightly. The image precompiles
   that toolchain's Core objects and native runtimes, then submission compilation
   emits an object, links a native executable against those trusted inputs, and
@@ -608,9 +620,10 @@ flags through requests:
   Allowed range: `1..4`, default `1`.
 - `AONOHAKO_ERLANG_ASYNC_THREADS` controls BEAM async thread count for
   Erlang/Elixir. Allowed range: `0..4`, default `1`.
-- `AONOHAKO_DOTNET_GC_HEAP_PERCENT` controls the .NET GC heap hard-limit share
-  of request memory; the runner converts it to `DOTNET_GCHeapHardLimit`.
-  Allowed range: `25..80`, default `60`. .NET/Dafny use a high finite 2 TiB
+- `AONOHAKO_DOTNET_GC_HEAP_PERCENT` controls the .NET and PowerShell GC heap
+  hard-limit share of request memory; the runner converts it to
+  `DOTNET_GCHeapHardLimit`.
+  Allowed range: `25..80`, default `60`. `dotnet`/Dafny use a high finite 2 TiB
   `RLIMIT_FSIZE` floor for CoreCLR/F# compatibility, so their practical
   disk-burst guard is workspace scanning plus bounded work-root/container
   storage rather than a tight file-size rlimit.

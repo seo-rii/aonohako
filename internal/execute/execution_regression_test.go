@@ -294,6 +294,46 @@ func TestShellProcessOptInIsBoundToDedicatedImageAndRuntime(t *testing.T) {
 	}
 }
 
+func TestPowerShellCoreCLRExceptionStaysNarrow(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatalf("read sandbox_exec.go: %v", err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`isPowerShell := runLang == "powershell" && runtimeBase == "pwsh"`,
+		`if isDotnet || isPowerShell {`,
+		`disableAddressSpaceLimit := isDotnet || isPowerShell`,
+		`allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"`,
+		`AllowUnixSockets:         allowUnixSockets`,
+		`AllowProcesses:           allowProcesses`,
+		`AllowNumaPolicy:          isDotnet || isTLA`,
+		`if strings.HasPrefix(innerEnv[i], "HOME=")`,
+		`innerEnv[i] = "HOME=/var/empty"`,
+		`"XDG_CONFIG_HOME=/var/empty/.config"`,
+		`"XDG_DATA_HOME=/var/empty/.local/share"`,
+		`"PSModulePath=/opt/microsoft/powershell/7/Modules"`,
+		`"POWERSHELL_TELEMETRY_OPTOUT=1"`,
+		`"POWERSHELL_UPDATECHECK=Off"`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("PowerShell sandbox policy must contain %q", marker)
+		}
+	}
+	for _, forbidden := range []string{
+		`allowMemfdCreate := isDotnet || isPowerShell`,
+		`AllowNumaPolicy:          isDotnet || isPowerShell`,
+		`AllowThreadSignals:       isPowerShell`,
+		`allowUnixSockets = isPowerShell`,
+		`allowProcesses = isPowerShell`,
+		`case "pwsh":`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("PowerShell sandbox policy unexpectedly contains %q", forbidden)
+		}
+	}
+}
+
 func TestFastWorkspaceScriptDoesNotInheritSandboxHelperVMSize(t *testing.T) {
 	requireSandboxSupport(t)
 

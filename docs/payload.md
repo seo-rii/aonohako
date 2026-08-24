@@ -475,6 +475,7 @@ The interactor is invoked as:
 | PONY | `pony` | `ponyc --cpu=generic --output=. --bin-name=Main .` |
 | SHELL, BASH | `shell` | `bash --noprofile --norc -n <source>`; execute with `/bin/bash --noprofile --norc <source>` |
 | POSIX_SH | `shell` | `/bin/dash -n <source>`; execute with `/bin/dash <source>` |
+| POWERSHELL | `powershell` | `pwsh -NoLogo -NoProfile -NonInteractive -Command '& { param($path) ... [System.Management.Automation.Language.Parser]::ParseFile($path, ...) ... }' <source>`; execute with `pwsh -NoLogo -NoProfile -NonInteractive -File <source>` |
 | GO | `go` | `go build -tags=online_judge,ONLINE_JUDGE` |
 | ZIG | `zig` | `zig build-exe -O ReleaseSafe -femit-bin=<target>` |
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |
@@ -665,11 +666,11 @@ for the compile phase and toolchain smoke tests.
 | Mechanism | What it limits |
 |---|---|
 | `RLIMIT_CPU` | CPU seconds (`time_ms / 1000 + 1`) as a helper-side hard stop |
-| `RLIMIT_AS` | Virtual address space using language-specific headroom; compiled Go, Java, and .NET runtimes are compatibility exceptions because they reserve large virtual regions before user code |
+| `RLIMIT_AS` | Virtual address space using language-specific headroom; compiled Go, Java, `dotnet`, and PowerShell runtimes are compatibility exceptions because they reserve large virtual regions before user code |
 | `RLIMIT_STACK` | Native stack and argument/environment footprint. The default uses the inherited hard stack limit, usually unlimited. |
 | `RLIMIT_NOFILE` | Max open file descriptors (64 by default, raised only for known runtime needs) |
 | `RLIMIT_NPROC` | Sandbox UID task count sized from the configured thread limit |
-| `RLIMIT_FSIZE` | Per-file growth tied to workspace policy; .NET/Dafny get a high finite 2 TiB floor for CoreCLR/F# compatibility, so their practical disk-burst guard is workspace scanning plus bounded work-root/container storage |
+| `RLIMIT_FSIZE` | Per-file growth tied to workspace policy; `dotnet`/Dafny get a high finite 2 TiB floor for CoreCLR/F# compatibility, while PowerShell keeps the ordinary workspace-derived cap |
 | procfs RSS watchdog | Live RSS sampling through `statm`, refined with `smaps_rollup` near limits |
 | optional cgroup v2 | `memory.max`, `pids.max`, `memory.swap.max=0` when available, `memory.oom.group=1`, and `cpu.max=100000 100000` |
 | workspace scanner | Total file bytes plus entry count/depth caps |

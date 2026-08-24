@@ -6,7 +6,7 @@ const DotnetFileSizeLimitBytes uint64 = 2 << 40
 
 func OpenFileLimitForCommand(command string) int {
 	switch filepath.Base(command) {
-	case "aonohako-acl2-check", "aonohako-alloy-check", "aonohako-kframework-check", "aonohako-tla-run", "dafny", "dotnet", "fstar.exe", "isabelle", "kompile":
+	case "aonohako-acl2-check", "aonohako-alloy-check", "aonohako-kframework-check", "aonohako-tla-run", "dafny", "dotnet", "fstar.exe", "isabelle", "kompile", "pwsh":
 		return 512
 	case "R", "Rscript":
 		return 256

@@ -60,6 +60,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "BASH"
 	case "posix-sh", "posix_sh", "posixsh", "sh":
 		l = "POSIX_SH"
+	case "powershell", "pwsh":
+		l = "POWERSHELL"
 	case "ada":
 		l = "ADA"
 	case "ada2012", "ada12":

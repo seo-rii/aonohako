@@ -155,6 +155,12 @@ RUN if [[ "${IMAGE_NAME}" == "type-x" || "${IMAGE_NAME}" == "ci-bash" || "${IMAG
     else \
       rm -f /usr/local/lib/aonohako/shell_runtime_allowlist.txt; \
     fi && \
+    if [[ ",${LANGUAGES}," == *",powershell,"* ]]; then \
+      for path in /var/empty /var/empty/.config /var/empty/.local /var/empty/.local/share /var/empty/.local/share/powershell /var/empty/.local/share/powershell/Modules /usr/local/share/powershell /usr/local/share/powershell/Modules; do \
+        install -d -o 0 -g 0 -m 0555 "${path}"; \
+      done; \
+      : > /etc/passwd && chown 0:0 /etc/passwd && chmod 0444 /etc/passwd; \
+    fi && \
     rm -f /usr/local/lib/aonohako/harden_shell_runtime.sh
 
 ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \

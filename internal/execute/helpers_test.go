@@ -346,6 +346,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"pony-binary", "/tmp/Main", "/tmp/Main", true},
 		{"bash", "/tmp/Main.sh", "/bin/bash", true},
 		{"posix-sh", "/tmp/Main.sh", "/bin/dash", true},
+		{"powershell", "/tmp/Main.ps1", "pwsh", true},
 		{"chapel-binary", "/tmp/Main", "env", true},
 		{"algol68", "/tmp/Main.a68", "a68g", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
@@ -539,6 +540,14 @@ func TestBuildCommandDisablesShellStartupFiles(t *testing.T) {
 		if got := buildCommand("/tmp/Main.sh", runLang, &model.RunRequest{}); !reflect.DeepEqual(got, want) {
 			t.Fatalf("%s command = %v, want %v", runLang, got, want)
 		}
+	}
+}
+
+func TestBuildCommandUsesNonInteractivePowerShell(t *testing.T) {
+	got := buildCommand("/tmp/Main.ps1", "powershell", &model.RunRequest{})
+	want := []string{"pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", "/tmp/Main.ps1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("PowerShell command = %v, want %v", got, want)
 	}
 }
 
