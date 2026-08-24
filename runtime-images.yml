@@ -2642,6 +2642,47 @@ languages:
           mojo build Main.mojo -o Main
           ./Main | grep '^ok$'
 
+  moonbit:
+    install:
+      apt:
+        - curl
+        - libc6-dev
+      sandbox_tools:
+        - ar
+        - moon
+        - moonc
+      script:
+        - export MOONBIT_VERSION=0.10.9+6e6c44045
+        - export MOONBIT_URL_VERSION="${MOONBIT_VERSION/+/%2B}"
+        - export MOONBIT_ARCHIVE_SHA256=0e81deb35eca29e892415cf954ea42b48a43bcf277ad36a3ae1e97d2d1dfe732
+        - export MOONBIT_CORE_SHA256=d92b84ea0bc11ec9a9fe57d313416a6694a5826f4307e8e65d5075079ee913ca
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://cli.moonbitlang.com/binaries/${MOONBIT_URL_VERSION}/moonbit-linux-x86_64.tar.gz" -o /tmp/moonbit.tar.gz
+        - echo "${MOONBIT_ARCHIVE_SHA256}  /tmp/moonbit.tar.gz" | sha256sum -c -
+        - install -d -m 0755 /opt/moonbit /opt/moonbit/lib
+        - tar -xzf /tmp/moonbit.tar.gz -C /opt/moonbit
+        - chmod 0755 /opt/moonbit/bin/* /opt/moonbit/bin/internal/tcc
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://cli.moonbitlang.com/cores/core-${MOONBIT_URL_VERSION}.tar.gz" -o /tmp/moonbit-core.tar.gz
+        - echo "${MOONBIT_CORE_SHA256}  /tmp/moonbit-core.tar.gz" | sha256sum -c -
+        - tar -xzf /tmp/moonbit-core.tar.gz -C /opt/moonbit/lib
+        - MOON_HOME=/opt/moonbit PATH="/opt/moonbit/bin:${PATH}" /opt/moonbit/bin/moon -C /opt/moonbit/lib/core bundle --warn-list -a --all --target native
+        - ln -sfn /opt/moonbit/bin/moon /usr/local/bin/moon
+        - ln -sfn /opt/moonbit/bin/moonc /usr/local/bin/moonc
+        - ln -sfn /usr/bin/ar /usr/local/bin/ar
+        - rm -f /tmp/moonbit.tar.gz /tmp/moonbit-core.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          export MOON_HOME=/opt/moonbit
+          printf '%s\n' 'name = "aonohako/Main"' 'version = "0.0.0"' 'preferred_target = "native"' > moon.mod
+          printf '%s\n' 'pkgtype(kind: "executable")' > moon.pkg
+          printf '%s\n' 'fn main {' '  println("ok")' '}' > Main.mbt
+          moon build --target-dir .aonohako-moonbit-build --target native --release --strip --frozen --jobs 1
+          ./.aonohako-moonbit-build/native/release/build/Main.exe | grep '^ok$'
+          printf '%s\n' 'fn broken {' '  let value :' '}' > Broken.mbt
+          if moon build --target-dir .aonohako-moonbit-broken --target native --release --strip --frozen --jobs 1 >/dev/null 2>&1; then exit 1; fi
+
   deno:
     install:
       apt:
@@ -3008,6 +3049,7 @@ profiles:
       - gnucobol
       - hare
       - mojo
+      - moonbit
       - nasm
       - nim
       - objective-c

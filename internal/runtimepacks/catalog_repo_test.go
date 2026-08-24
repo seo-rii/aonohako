@@ -28,7 +28,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "moonbit", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
@@ -163,6 +163,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-malbolge",
 		"ci-mercury",
 		"ci-mojo",
+		"ci-moonbit",
 		"ci-nasm",
 		"ci-nim",
 		"ci-objective-c",
@@ -323,6 +324,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"malbolge":      {"python3 /usr/local/lib/aonohako/malbolge.py Main.mal", "Hello World!"},
 		"mercury":       {"dl.mercurylang.org/deb/ trixie main", "mercury-recommended", "mmc --make --grade hlc.gc main"},
 		"mojo":          {"mojo==1.0.0", "mojo build Main.mojo"},
+		"moonbit":       {"MOONBIT_VERSION=0.10.9+6e6c44045", "MOONBIT_ARCHIVE_SHA256=0e81deb35eca29e892415cf954ea42b48a43bcf277ad36a3ae1e97d2d1dfe732", "MOONBIT_CORE_SHA256=d92b84ea0bc11ec9a9fe57d313416a6694a5826f4307e8e65d5075079ee913ca", "sha256sum -c -", "bundle --warn-list -a --all --target native", "moon build --target-dir .aonohako-moonbit-build --target native --release --strip --frozen --jobs 1", "Broken"},
 		"nim":           {"nim c", "Broken.nim"},
 		"objective-c":   {"clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objective-cpp": {"clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
@@ -457,6 +459,41 @@ func TestRepositoryCatalogVerifiesUiuaArchive(t *testing.T) {
 	} {
 		if !strings.Contains(uiuaScript, marker) {
 			t.Fatalf("uiua install script must contain %q:\n%s", marker, uiuaScript)
+		}
+	}
+}
+
+func TestRepositoryCatalogPinsMoonBitToolchainAndOfflineBuild(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["moonbit"]
+	if !ok {
+		t.Fatal("moonbit language missing from catalog")
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"MOONBIT_VERSION=0.10.9+6e6c44045",
+		"MOONBIT_ARCHIVE_SHA256=0e81deb35eca29e892415cf954ea42b48a43bcf277ad36a3ae1e97d2d1dfe732",
+		"MOONBIT_CORE_SHA256=d92b84ea0bc11ec9a9fe57d313416a6694a5826f4307e8e65d5075079ee913ca",
+		"sha256sum -c -",
+		"bundle --warn-list -a --all --target native",
+	} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("MoonBit install must contain %q:\n%s", marker, install)
+		}
+	}
+	if strings.Contains(install, "/latest/") || strings.Contains(install, "install/unix.sh") {
+		t.Fatalf("MoonBit install must not use a drifting installer:\n%s", install)
+	}
+	if !slices.Contains(spec.Install.SandboxTools, "ar") || !strings.Contains(install, "ln -sfn /usr/bin/ar /usr/local/bin/ar") {
+		t.Fatalf("MoonBit must expose its pinned native archiver path: tools=%v\n%s", spec.Install.SandboxTools, install)
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, marker := range []string{"--target native", "--frozen", "--jobs 1"} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("MoonBit smoke must contain %q: %s", marker, smoke)
 		}
 	}
 }

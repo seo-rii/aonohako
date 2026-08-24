@@ -73,6 +73,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"RUST2018",
 		"RUST2021",
 		"RUST2024",
+		"MOONBIT",
 		"ZEROLANG",
 		"KOTLIN",
 		"ADA",
@@ -184,6 +185,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"mojo":         "mojo-binary",
 		"mojo-binary":  "mojo-binary",
 		"CARBON":       "binary",
+		"MOONBIT":      "binary",
+		"moonbit":      "binary",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",
@@ -269,6 +272,19 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		if got := NormalizeRunLang(input); got != want {
 			t.Fatalf("NormalizeRunLang(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestMoonBitProfileCompilesPinnedNativeArtifact(t *testing.T) {
+	profile, ok := Resolve("MOONBIT")
+	if !ok {
+		t.Fatal("Resolve(MOONBIT) reported unsupported language")
+	}
+	if profile.Extension != "mbt" || profile.DefaultTarget != "Main" || profile.CompileKind != "moonbit" || profile.RunLang != "binary" {
+		t.Fatalf("MOONBIT profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("MOONBIT resource profile = %+v", profile)
 	}
 }
 

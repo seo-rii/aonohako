@@ -129,6 +129,7 @@ var compileRegistry = map[string]Compiler{
 	"freebasic":     freeBasicCompiler{noSourceReason: "no freebasic sources"},
 	"classic-basic": freeBasicCompiler{dialectArgs: []string{"-lang", "qb"}, noSourceReason: "no classic-basic sources"},
 	"mojo":          mojoCompiler{},
+	"moonbit":       moonBitCompiler{},
 	"zerolang":      zerolangCompiler{},
 	"deno":          denoCompiler{},
 	"kotlin-jvm":    kotlinJVMCompiler{},
