@@ -199,6 +199,9 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"algol68":      "algol68",
 		"KOKA":         "binary",
 		"koka":         "binary",
+		"PONY":         "pony-binary",
+		"pony":         "pony-binary",
+		"pony-binary":  "pony-binary",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",
@@ -352,6 +355,19 @@ func TestKokaProfileUsesPortableNativeCompiler(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("KOKA resource profile = %+v", profile)
+	}
+}
+
+func TestPonyProfileUsesBoundedRuntimeIdentity(t *testing.T) {
+	profile, ok := Resolve("PONY")
+	if !ok {
+		t.Fatal("Resolve(PONY) reported unsupported language")
+	}
+	if profile.Extension != "pony" || profile.DefaultTarget != "Main" || profile.CompileKind != "pony" || profile.RunLang != "pony-binary" {
+		t.Fatalf("PONY profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("PONY resource profile = %+v", profile)
 	}
 }
 

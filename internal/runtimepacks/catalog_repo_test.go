@@ -19,8 +19,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 22 {
-		t.Fatalf("expected 22 production images, got %d", len(production))
+	if len(production) != 23 {
+		t.Fatalf("expected 23 production images, got %d", len(production))
 	}
 
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
@@ -88,6 +88,9 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	}
 	if production[21].Name != "type-v" || !reflect.DeepEqual(production[21].Languages, []string{"chapel"}) {
 		t.Fatalf("type-v production image = %+v", production[21])
+	}
+	if production[22].Name != "type-w" || !reflect.DeepEqual(production[22].Languages, []string{"pony"}) {
+		t.Fatalf("type-w production image = %+v", production[22])
 	}
 
 	ci, err := catalog.CILanguageImages()
@@ -185,6 +188,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-php",
 		"ci-picolisp",
 		"ci-plain",
+		"ci-pony",
 		"ci-prolog",
 		"ci-purescript",
 		"ci-pypy",
@@ -345,6 +349,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"odin":          {"ODIN_VERSION=dev-2026-04", "odin build . -out:Main"},
 		"pascal":        {"fpc", "Broken.pas"},
 		"picolisp":      {"picolisp", "pil -version -bye", "Main.l", "printf '1 2\\n'", "pil Main.l -bye", "grep '^3$'", "Broken.l"},
+		"pony":          {"PONY_VERSION=0.69.1", "PONY_ARCHIVE_ROOT=0.69.1-38f9f11", "PONY_SHA256=8e1955ed1a63444ae13666031d5d3909cacfb475ca96643e878f36cf4edff9ab", "sha256sum -c -", "--cpu=generic", "--ponymaxthreads=1", "objdump -d Main", "test ! -e /opt/pony/bin/pony-doc", "test ! -e Broken"},
 		"qbasic":        {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
 		"raku":          {"raku -c Main.raku", "raku Main.raku"},
 		"racket":        {"raco make", "Broken.rkt"},
@@ -739,6 +744,54 @@ func TestRepositoryCatalogPinsAndHardensKokaRuntime(t *testing.T) {
 	} {
 		if !strings.Contains(smoke, marker) {
 			t.Fatalf("Koka smoke must contain %q:\n%s", marker, smoke)
+		}
+	}
+}
+
+func TestRepositoryCatalogPinsAndHardensPonyRuntime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["pony"]
+	if !ok {
+		t.Fatal("pony language missing from catalog")
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"PONY_VERSION=0.69.1",
+		"PONY_ARCHIVE_ROOT=0.69.1-38f9f11",
+		"PONY_SHA256=8e1955ed1a63444ae13666031d5d3909cacfb475ca96643e878f36cf4edff9ab",
+		"sha256sum -c -",
+		"libponyrt-pic.a",
+		"crtbeginS.o",
+		"crtendS.o",
+		"chmod 0755 /opt/pony/bin/ponyc",
+		"chmod 0750",
+	} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("Pony install must contain %q:\n%s", marker, install)
+		}
+	}
+	if !slices.Contains(spec.Install.SandboxTools, "ponyc") {
+		t.Fatalf("Pony sandbox tools = %v", spec.Install.SandboxTools)
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, marker := range []string{
+		"set -euo pipefail",
+		"test \"$(find /opt/pony -type f -perm /0111 | wc -l)\" -eq 1",
+		"test ! -e /opt/pony/bin/pony-doc",
+		"-perm /0001",
+		"--cpu=generic",
+		"--ponymaxthreads=1",
+		"%(ymm|zmm)",
+		"[[:space:]]v[a-z0-9]+[[:space:]]",
+		"GNU_STACK",
+		"GNU_RELRO",
+		"test ! -e Broken",
+	} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("Pony smoke must contain %q:\n%s", marker, smoke)
 		}
 	}
 }

@@ -51,7 +51,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -302,6 +302,61 @@ func TestKokaCompilerRejectsNonELFOutput(t *testing.T) {
 		Runner:  runner,
 	})
 	if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, "artifact ELF") {
+		t.Fatalf("response = %+v", resp)
+	}
+}
+
+func TestPonyCompilerUsesPortablePackageBuild(t *testing.T) {
+	workDir := t.TempDir()
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(_ string, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("pony executable"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	resp := ponyCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{
+			{Name: "main.pony"},
+			{Name: "helper.pony"},
+		}},
+		Runner: runner,
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("status = %s reason=%q", resp.Status, resp.Reason)
+	}
+	wantArgs := []string{"--cpu=generic", "--output=.", "--bin-name=Main", "."}
+	if len(runner.commands) != 1 || runner.commands[0].bin != "ponyc" || !reflect.DeepEqual(runner.commands[0].args, wantArgs) || len(runner.commands[0].env) != 0 {
+		t.Fatalf("commands = %+v, want ponyc %#v", runner.commands, wantArgs)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+}
+
+func TestPonyCompilerRequiresPonySource(t *testing.T) {
+	resp := ponyCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: t.TempDir(),
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.txt"}}},
+		Runner:  &recordingCommandRunner{},
+	})
+	if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, "no Pony sources") {
+		t.Fatalf("response = %+v", resp)
+	}
+}
+
+func TestPonyCompilerRejectsMissingArtifactAfterSuccessfulCommand(t *testing.T) {
+	resp := ponyCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: t.TempDir(),
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "main.pony"}}},
+		Runner:  &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}},
+	})
+	if resp.Status != model.CompileStatusInternal || !strings.Contains(resp.Reason, "artifact") {
 		t.Fatalf("response = %+v", resp)
 	}
 }

@@ -225,6 +225,35 @@ func buildCTestBinary(t *testing.T, source string, args ...string) string {
 	return base64.StdEncoding.EncodeToString(data)
 }
 
+func TestPonyBinaryAllowsLargeVirtualReservationUnderSmallRSSLimit(t *testing.T) {
+	forceDirectMode(t)
+	binary := buildCTestBinary(t, `#define _GNU_SOURCE
+#include <stdio.h>
+#include <sys/mman.h>
+
+int main(void) {
+  void *arena = mmap(NULL, 1024ULL * 1024 * 1024, PROT_NONE,
+    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+  if (arena == MAP_FAILED) return 2;
+  puts("ok");
+  return 0;
+}
+`)
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang: "pony-binary",
+		Binaries: []model.Binary{{
+			Name:    "Main",
+			DataB64: binary,
+			Mode:    "exec",
+		}},
+		ExpectedStdout: "ok\n",
+		Limits:         model.Limits{TimeMs: 2000, MemoryMB: 64, OutputBytes: 1024},
+	}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("Pony virtual reservation failed: %+v", resp)
+	}
+}
+
 // --------------- #8: buildCommand Java -Xmx dynamic ---------------
 
 func TestBuildCommandJavaXmxDynamic(t *testing.T) {
@@ -314,6 +343,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"binary", "/tmp/a.out", "/tmp/a.out", true},
 		{"go-binary", "/tmp/Main", "/tmp/Main", true},
 		{"mojo-binary", "/tmp/Main", "/tmp/Main", true},
+		{"pony-binary", "/tmp/Main", "/tmp/Main", true},
 		{"chapel-binary", "/tmp/Main", "env", true},
 		{"algol68", "/tmp/Main.a68", "a68g", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
@@ -487,6 +517,14 @@ func TestBuildCommandBoundsChapelLocalesAndThreads(t *testing.T) {
 	want := []string{"env", "CHPL_RT_NUM_THREADS_PER_LOCALE=1", "/tmp/Main", "-nl", "1"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("chapel command = %v, want %v", got, want)
+	}
+}
+
+func TestBuildCommandBoundsPonySchedulers(t *testing.T) {
+	got := buildCommand("/tmp/Main", "pony-binary", &model.RunRequest{})
+	want := []string{"/tmp/Main", "--ponymaxthreads=1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("pony command = %v, want %v", got, want)
 	}
 }
 

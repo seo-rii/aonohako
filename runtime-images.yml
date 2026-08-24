@@ -3118,6 +3118,70 @@ languages:
           if koka --compile -O2 --no-debug -j1 -v0 --console=raw --no-autoinstall --cc=/usr/bin/gcc-16 '--ccopts=-march=x86-64 -mtune=generic' '--cclinkopts=-march=x86-64 -mtune=generic' --builddir=.aonohako-koka-broken --output=Broken main.kk >/dev/null 2>&1; then exit 1; fi
           test ! -e Broken
 
+  pony:
+    install:
+      apt:
+        - curl
+        - libc6-dev
+        - libgcc-14-dev
+        - zlib1g
+      sandbox_tools:
+        - ponyc
+      script:
+        - export PONY_VERSION=0.69.1
+        - export PONY_ARCHIVE_ROOT=0.69.1-38f9f11
+        - export PONY_SHA256=8e1955ed1a63444ae13666031d5d3909cacfb475ca96643e878f36cf4edff9ab
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/ponylang/ponyc/releases/download/${PONY_VERSION}/ponyc-x86-64-unknown-linux-ubuntu24.04.tar.gz" -o /tmp/ponyc.tar.gz
+        - echo "${PONY_SHA256}  /tmp/ponyc.tar.gz" | sha256sum -c -
+        - rm -rf /opt/pony
+        - install -d -m 0755 /opt/pony
+        - tar -xzf /tmp/ponyc.tar.gz -C /opt/pony --strip-components=1 "${PONY_ARCHIVE_ROOT}/bin/ponyc" "${PONY_ARCHIVE_ROOT}/packages" "${PONY_ARCHIVE_ROOT}/lib/x86-64/libponyrt-pic.a" "${PONY_ARCHIVE_ROOT}/lib/x86-64/crtbeginS.o" "${PONY_ARCHIVE_ROOT}/lib/x86-64/crtendS.o"
+        - chown -R root:root /opt/pony
+        - find /opt/pony -type d -exec chmod 0755 {} +
+        - find /opt/pony -type f -exec chmod 0644 {} +
+        - chmod 0755 /opt/pony/bin/ponyc
+        - ln -sfn /opt/pony/bin/ponyc /usr/local/bin/ponyc
+        - for tool in /usr/bin/gencat /usr/bin/rpcgen; do if [[ -e "${tool}" ]]; then chmod 0750 "${tool}"; fi; done
+        - rm -f /tmp/ponyc.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          ponyc --version 2>&1 | grep -F '0.69.1'
+          test "$(stat -c '%u:%g:%a' /opt/pony/bin/ponyc)" = '0:0:755'
+          test "$(find /opt/pony -type f -perm /0111 | wc -l)" -eq 1
+          test ! -e /opt/pony/bin/pony-doc
+          test ! -e /opt/pony/bin/pony-lint
+          test ! -e /opt/pony/bin/pony-lsp
+          if [[ -e /usr/bin/gencat ]] && find /usr/bin/gencat -perm /0001 -print -quit | grep -q .; then exit 1; fi
+          if [[ -e /usr/bin/rpcgen ]] && find /usr/bin/rpcgen -perm /0001 -print -quit | grep -q .; then exit 1; fi
+          if ldd /opt/pony/bin/ponyc | grep -F 'not found'; then exit 1; fi
+
+          (
+          install -d -m 0755 /tmp/aonohako-pony-smoke
+          cd /tmp/aonohako-pony-smoke
+          cat > main.pony <<'PONY'
+          actor Main
+            new create(env: Env) =>
+              env.out.print("Hello, World!")
+          PONY
+          ponyc --cpu=generic --output=. --bin-name=Main .
+          test -x Main
+          readelf -h Main | grep -F 'Type:' | grep -F 'DYN'
+          if objdump -d Main | grep -E '(%(ymm|zmm)[0-9]+|[[:space:]]v[a-z0-9]+[[:space:]])'; then exit 1; fi
+          readelf -W -l Main | grep -F 'GNU_STACK' | grep -F 'RW '
+          if readelf -W -l Main | grep -F 'GNU_STACK' | grep -F 'RWE'; then exit 1; fi
+          readelf -W -l Main | grep -F 'GNU_RELRO'
+          ./Main --ponymaxthreads=1 | grep -Fx 'Hello, World!'
+
+          printf '%s\n' 'actor Main' '  new create(env: Env) =>' '    env.out.print(' > broken.pony
+          rm -f Broken
+          if ponyc --cpu=generic --output=. --bin-name=Broken . >/dev/null 2>&1; then exit 1; fi
+          test ! -e Broken
+          )
+
   deno:
     install:
       apt:
@@ -3607,3 +3671,8 @@ profiles:
     base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     languages:
       - chapel
+  type-w:
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
+    install: *gcc16_profile
+    languages:
+      - pony

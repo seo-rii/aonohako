@@ -338,6 +338,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"chapel":        {compileKind: "chapel", runLang: "chapel-binary"},
 		"algol68":       {compileKind: "algol68", runLang: "algol68"},
 		"koka":          {compileKind: "koka", runLang: "binary"},
+		"pony":          {compileKind: "pony", runLang: "pony-binary"},
 		"zerolang":      {compileKind: "zerolang", runLang: "binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
 		"elm":           {compileKind: "elm", runLang: "javascript"},
