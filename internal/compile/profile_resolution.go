@@ -50,6 +50,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "GDL"
 	case "octave":
 		l = "OCTAVE"
+	case "algol68", "algol-68", "algol", "a68":
+		l = "ALGOL68"
 	case "ada":
 		l = "ADA"
 	case "ada2012", "ada12":

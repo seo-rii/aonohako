@@ -74,6 +74,13 @@ var compileRegistry = map[string]Compiler{
 	"chapel": singleSourceExecutableCompiler{exts: []string{".chpl"}, preferredBases: []string{"Main.chpl", "main.chpl"}, noSourceReason: "no chapel sources", bin: "chpl", env: []string{"CHPL_COMM=none", "CHPL_TASKS=qthreads", "CHPL_TARGET_CPU=none"}, args: func(job CompileJob, sourcePath string) []string {
 		return []string{"--local", "--fast", "-o", outputPath(job), sourcePath}
 	}},
+	"algol68": checkedSourcesCompiler{
+		exts:           []string{".a68"},
+		noSourceReason: "no algol 68 sources",
+		bin:            "a68g",
+		prefix:         []string{"--quiet", "--no-compile", "-O0", "--check", "--file"},
+		suffix:         []string{"--no-pragmats"},
+	},
 	"perl": scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
 	"fortran": nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(job CompileJob) []string {
 		args := []string{"-O2", "-pipe"}

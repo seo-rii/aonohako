@@ -195,7 +195,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		} else if strings.HasSuffix(lowerClean, ".mb") && malbolgePath == "" {
 			malbolgePath = dest
 		}
-		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".ape", ".fs", ".fth", ".4th"} {
+		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".ape", ".fs", ".fth", ".4th", ".a68"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -314,7 +314,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		return rocqPath, lang, nil
 	case "haxe":
 		return primaryPath, lang, nil
-	case "vb6", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "forth", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet":
+	case "vb6", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "forth", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "algol68":
 		if sourcePath == "" {
 			sourcePath = primaryPath
 		}

@@ -51,7 +51,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -149,6 +149,17 @@ func TestChapelCompilerUsesLocalPortableConfiguration(t *testing.T) {
 	wantEnv := []string{"CHPL_COMM=none", "CHPL_TASKS=qthreads", "CHPL_TARGET_CPU=none"}
 	if compiler.bin != "chpl" || !reflect.DeepEqual(compiler.env, wantEnv) {
 		t.Fatalf("chapel compiler = bin %q env %v, want chpl %v", compiler.bin, compiler.env, wantEnv)
+	}
+}
+
+func TestAlgol68CompilerIgnoresAmbientOptionsAndDisablesCodeGeneration(t *testing.T) {
+	compiler, ok := compileRegistry["algol68"].(checkedSourcesCompiler)
+	if !ok {
+		t.Fatalf("algol68 compiler = %T, want checkedSourcesCompiler", compileRegistry["algol68"])
+	}
+	wantPrefix := []string{"--quiet", "--no-compile", "-O0", "--check", "--file"}
+	if compiler.bin != "a68g" || !reflect.DeepEqual(compiler.prefix, wantPrefix) || !reflect.DeepEqual(compiler.suffix, []string{"--no-pragmats"}) {
+		t.Fatalf("algol68 compiler = bin %q prefix %v suffix %v", compiler.bin, compiler.prefix, compiler.suffix)
 	}
 }
 
