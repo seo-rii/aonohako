@@ -900,6 +900,7 @@ Production profiles currently group languages like this:
 | `type-s` | `lean4` |
 | `type-v` | `chapel` |
 | `type-w` | `pony` |
+| `type-x` | `bash`, `posix-sh` |
 
 The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
@@ -958,6 +959,29 @@ Execution uses the dedicated `pony-binary` identity and appends
 `--ponymaxthreads=1`. Pony's runtime reserves a large `MAP_NORESERVE` arena, so
 that identity disables `RLIMIT_AS`; cgroup `memory.max`, the RSS watchdog, and
 the normal thread/process/network sandbox policies remain enforced.
+
+The `SHELL`, `BASH`, and `POSIX_SH` source profiles share one `.sh`
+pass-through compiler family and use `Main.sh` as Aonohako's canonical target;
+the target is the submitted script itself rather than a generated executable.
+`SHELL` defaults to the Bash runtime, while `POSIX_SH` selects dash. Syntax
+checks use `bash --noprofile --norc -n` or `/bin/dash -n`, and execution fixes
+`BASH_ENV` and `ENV` to `/dev/null` so submission-controlled startup files are
+never loaded. Only the dedicated type-x image may opt Bash or dash into process
+creation, enabling pipelines, subshells, command/process substitution, and
+background jobs. The shell helper budget is fixed at 64 processes/threads and a
+delegated per-run cgroup uses `pids.max=80`; the helper's `RLIMIT_NPROC` includes
+only the existing sandbox-UID tasks plus eight setup slots, and isolated image
+self-tests require both reported `Max processes` limits to remain at or below
+80. Descendants are killed when the parent exits. Network syscalls remain
+denied, including Bash `/dev/tcp`.
+
+Because post-start `execve` is part of normal shell semantics, type-x does not
+inherit a compiler profile. Its final image step removes every setuid/setgid
+bit, makes non-allowlisted executables in system and toolchain roots unreadable
+and unexecutable to the sandbox UID, and reopens only Bash, dash, the sandbox
+helper binaries, and an explicit POSIX-oriented utility allowlist. Hidden Go,
+package, network, namespace, and diagnostic tools therefore cannot be copied
+or invoked through the dynamic loader by a submission.
 
 The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
 `.mb` for compatibility. Compile strips ASCII whitespace, validates every

@@ -344,6 +344,8 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"go-binary", "/tmp/Main", "/tmp/Main", true},
 		{"mojo-binary", "/tmp/Main", "/tmp/Main", true},
 		{"pony-binary", "/tmp/Main", "/tmp/Main", true},
+		{"bash", "/tmp/Main.sh", "/bin/bash", true},
+		{"posix-sh", "/tmp/Main.sh", "/bin/dash", true},
 		{"chapel-binary", "/tmp/Main", "env", true},
 		{"algol68", "/tmp/Main.a68", "a68g", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
@@ -525,6 +527,18 @@ func TestBuildCommandBoundsPonySchedulers(t *testing.T) {
 	want := []string{"/tmp/Main", "--ponymaxthreads=1"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("pony command = %v, want %v", got, want)
+	}
+}
+
+func TestBuildCommandDisablesShellStartupFiles(t *testing.T) {
+	tests := map[string][]string{
+		"bash":     {"/bin/bash", "--noprofile", "--norc", "/tmp/Main.sh"},
+		"posix-sh": {"/bin/dash", "/tmp/Main.sh"},
+	}
+	for runLang, want := range tests {
+		if got := buildCommand("/tmp/Main.sh", runLang, &model.RunRequest{}); !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s command = %v, want %v", runLang, got, want)
+		}
 	}
 }
 

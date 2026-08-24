@@ -81,9 +81,10 @@ var compileRegistry = map[string]Compiler{
 		prefix:         []string{"--quiet", "--no-compile", "-O0", "--check", "--file"},
 		suffix:         []string{"--no-pragmats"},
 	},
-	"koka": kokaCompiler{},
-	"pony": ponyCompiler{},
-	"perl": scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
+	"koka":  kokaCompiler{},
+	"pony":  ponyCompiler{},
+	"shell": shellCompiler{},
+	"perl":  scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
 	"fortran": nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(job CompileJob) []string {
 		args := []string{"-O2", "-pipe"}
 		if job.Profile.CompileStd != "" {

@@ -473,6 +473,8 @@ The interactor is invoked as:
 | ALGOL68 | `algol68` | `a68g --quiet --no-compile -O0 --check --file <source> --no-pragmats` |
 | KOKA | `koka` | `koka --compile -O2 --no-debug -j1 -v0 --console=raw --no-autoinstall --cc=/usr/bin/gcc-16 "--ccopts=-march=x86-64 -mtune=generic" "--cclinkopts=-march=x86-64 -mtune=generic" --builddir=.aonohako-koka-build --output=Main main.kk` |
 | PONY | `pony` | `ponyc --cpu=generic --output=. --bin-name=Main .` |
+| SHELL, BASH | `shell` | `bash --noprofile --norc -n <source>`; execute with `/bin/bash --noprofile --norc <source>` |
+| POSIX_SH | `shell` | `/bin/dash -n <source>`; execute with `/bin/dash <source>` |
 | GO | `go` | `go build -tags=online_judge,ONLINE_JUDGE` |
 | ZIG | `zig` | `zig build-exe -O ReleaseSafe -femit-bin=<target>` |
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |

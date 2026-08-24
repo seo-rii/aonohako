@@ -267,6 +267,33 @@ func TestJVMRunLanguagesDoNotUseAddressSpaceProximityMLE(t *testing.T) {
 	}
 }
 
+func TestShellProcessOptInIsBoundToDedicatedImageAndRuntime(t *testing.T) {
+	if shellSandboxThreadLimit != 64 {
+		t.Fatalf("shellSandboxThreadLimit = %d, want 64", shellSandboxThreadLimit)
+	}
+	raw, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatalf("read sandbox_exec.go: %v", err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`case "type-x", "ci-bash", "ci-posix-sh":`,
+		`runLang == "bash" && runtimeBase == "bash"`,
+		`runLang == "posix-sh" && runtimeBase == "dash"`,
+		`Reason: "shell runtime is outside the dedicated trusted image"`,
+		`innerEnv = append(innerEnv, "BASH_ENV=/dev/null", "ENV=/dev/null")`,
+		`if trustedShellRuntime {`,
+		`threadLimit = shellSandboxThreadLimit`,
+		`pidsMax := threadLimit + 16`,
+		`case "bash", "dash":`,
+		`allowProcesses = trustedShellRuntime`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("shell sandbox policy must contain %q", marker)
+		}
+	}
+}
+
 func TestFastWorkspaceScriptDoesNotInheritSandboxHelperVMSize(t *testing.T) {
 	requireSandboxSupport(t)
 

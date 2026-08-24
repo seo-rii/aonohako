@@ -332,6 +332,14 @@ if has_language "pony"; then
     report_once "Pony" ponyc --version
 fi
 
+if has_language "bash"; then
+    report_once "Bash package" dpkg-query -W '-f=${Version}' bash
+fi
+
+if has_language "posix-sh"; then
+    report_once "dash package" dpkg-query -W '-f=${Version}' dash
+fi
+
 if has_language "zerolang"; then
     report_once "Zerolang" zero --version
 fi
@@ -675,6 +683,8 @@ report_compile_option "chapel" "CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_C
 report_compile_option "algol68" "a68g --quiet --no-compile -O0 --check --file <source> --no-pragmats; run with --run instead of --check"
 report_compile_option "koka" 'koka --compile -O2 --no-debug -j1 -v0 --console=raw --no-autoinstall --cc=/usr/bin/gcc-16 "--ccopts=-march=x86-64 -mtune=generic" "--cclinkopts=-march=x86-64 -mtune=generic" --builddir=.aonohako-koka-build --output=Main main.kk (after normalizing the source filename to main.kk)'
 report_compile_option "pony" "ponyc --cpu=generic --output=. --bin-name=Main .; run with ./Main --ponymaxthreads=1"
+report_compile_option "bash" "bash --noprofile --norc -n Main.sh; run with /bin/bash --noprofile --norc Main.sh"
+report_compile_option "posix-sh" "/bin/dash -n Main.sh; run with /bin/dash Main.sh"
 report_compile_option "zerolang" "zero import --out <graph> <source.0>; zero build --release release-fast --out <target> <graph>"
 report_compile_option "kotlin" "kotlinc-native -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -J-XX:ReservedCodeCacheSize=32m -J-XX:MaxMetaspaceSize=192m -J-XX:CompressedClassSpaceSize=64m -opt -o <target>"
 report_compile_option "kotlin-jvm" "kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"

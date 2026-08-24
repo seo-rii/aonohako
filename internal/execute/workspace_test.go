@@ -147,6 +147,28 @@ func TestMaterializeFilesRequiresExecutablePonyBinary(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesSelectsShellSourceArtifact(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang: "posix-sh",
+		Binaries: []model.Binary{
+			{Name: "README.txt", DataB64: b64("ignored")},
+			{Name: "Main.sh", DataB64: b64("printf 'ok\\n'\n")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "posix-sh" || filepath.Base(primary) != "Main.sh" {
+		t.Fatalf("materializeFiles = (%q, %q), want Main.sh/posix-sh", primary, lang)
+	}
+}
+
 func TestMaterializeFilesRejectsDuplicatePaths(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

@@ -36,6 +36,7 @@ const (
 	maxSidecarOutputSpecs        = 64
 	addressSpaceSlackKB          = 8 << 10
 	sandboxThreadLimit           = 128
+	shellSandboxThreadLimit      = 64
 	maxBinaryFileBytes           = runvalidation.MaxBinaryFileBytes
 	maxBinaryTotalBytes          = runvalidation.MaxBinaryTotalBytes
 	maxCapturedFileBytes         = MaxCapturedFileBytes

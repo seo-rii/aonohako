@@ -19,8 +19,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 23 {
-		t.Fatalf("expected 23 production images, got %d", len(production))
+	if len(production) != 24 {
+		t.Fatalf("expected 24 production images, got %d", len(production))
 	}
 
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
@@ -92,6 +92,9 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[22].Name != "type-w" || !reflect.DeepEqual(production[22].Languages, []string{"pony"}) {
 		t.Fatalf("type-w production image = %+v", production[22])
 	}
+	if production[23].Name != "type-x" || !reflect.DeepEqual(production[23].Languages, []string{"bash", "posix-sh"}) {
+		t.Fatalf("type-x production image = %+v", production[23])
+	}
 
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
@@ -112,6 +115,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-apl",
 		"ci-asm",
 		"ci-awk",
+		"ci-bash",
 		"ci-bc",
 		"ci-befunge",
 		"ci-bf",
@@ -189,6 +193,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-picolisp",
 		"ci-plain",
 		"ci-pony",
+		"ci-posix-sh",
 		"ci-prolog",
 		"ci-purescript",
 		"ci-pypy",
@@ -293,6 +298,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"apl":           {"kanapl@0.0.0", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl"},
 		"asm":           {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
 		"awk":           {"gawk --sandbox", "Main.awk"},
+		"bash":          {"5.2.37-2+b9", "bash --noprofile --norc -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-shell-syntax-leak", "Broken.sh"},
 		"bc":            {"bc -q Main.bc", "1 + 1"},
 		"befunge":       {"python3 /usr/local/lib/aonohako/befunge.py Main.bef", `>"ko",,91+,@`},
 		"bqn":           {"CBQN_COMMIT=d56147be877693eaed351745782c258bd7424de7", "bqn Main.bqn"},
@@ -350,6 +356,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"pascal":        {"fpc", "Broken.pas"},
 		"picolisp":      {"picolisp", "pil -version -bye", "Main.l", "printf '1 2\\n'", "pil Main.l -bye", "grep '^3$'", "Broken.l"},
 		"pony":          {"PONY_VERSION=0.69.1", "PONY_ARCHIVE_ROOT=0.69.1-38f9f11", "PONY_SHA256=8e1955ed1a63444ae13666031d5d3909cacfb475ca96643e878f36cf4edff9ab", "sha256sum -c -", "--cpu=generic", "--ponymaxthreads=1", "objdump -d Main", "test ! -e /opt/pony/bin/pony-doc", "test ! -e Broken"},
+		"posix-sh":      {"0.5.12-12", "/bin/dash -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-posix-shell-syntax-leak", "Broken.sh"},
 		"qbasic":        {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
 		"raku":          {"raku -c Main.raku", "raku Main.raku"},
 		"racket":        {"raco make", "Broken.rkt"},
@@ -796,6 +803,90 @@ func TestRepositoryCatalogPinsAndHardensPonyRuntime(t *testing.T) {
 	}
 }
 
+func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	shared, ok := catalog.SharedInstalls["shell_runtime"]
+	if !ok {
+		t.Fatal("shell_runtime shared install missing from catalog")
+	}
+	for _, pkg := range []string{"bash=5.2.37-2+b9", "dash=0.5.12-12", "diffutils", "findutils", "grep", "mawk", "sed"} {
+		if !slices.Contains(shared.Apt, pkg) {
+			t.Fatalf("shell runtime apt packages = %v, want %q", shared.Apt, pkg)
+		}
+	}
+	for _, tool := range []string{"bash", "dash"} {
+		if !slices.Contains(shared.SandboxTools, tool) {
+			t.Fatalf("shell runtime sandbox tools = %v, want %q", shared.SandboxTools, tool)
+		}
+	}
+	for _, language := range []string{"bash", "posix-sh"} {
+		spec, ok := catalog.Languages[language]
+		if !ok || !slices.Contains(spec.Install.Shared, "shell_runtime") {
+			t.Fatalf("%s runtime spec = %+v", language, spec)
+		}
+		smoke := strings.Join(spec.Smoke.Command, "\n")
+		for _, marker := range []string{"SyntaxOnly.sh", "test ! -e", "Broken.sh"} {
+			if !strings.Contains(smoke, marker) {
+				t.Fatalf("%s smoke must contain %q:\n%s", language, marker, smoke)
+			}
+		}
+	}
+	typeX := catalog.Profiles["type-x"]
+	if !reflect.DeepEqual(typeX.Languages, []string{"bash", "posix-sh"}) || len(typeX.Install.Script) != 0 {
+		t.Fatalf("type-x profile = %+v", typeX)
+	}
+
+	hardener, err := os.ReadFile(filepath.Join("..", "..", "scripts", "harden_shell_runtime.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hardenerBody := string(hardener)
+	for _, marker := range []string{
+		"set -euo pipefail",
+		"/usr/local/go/pkg/tool",
+		"chmod 0750",
+		"chmod -R go-rwx",
+		"-perm /6000",
+		"chmod ug-s",
+		"ld-linux*.so*",
+		"shell_runtime_allowlist.txt",
+	} {
+		if !strings.Contains(hardenerBody, marker) {
+			t.Fatalf("shell hardener must contain %q:\n%s", marker, hardenerBody)
+		}
+	}
+
+	allowlist, err := os.ReadFile(filepath.Join("..", "..", "scripts", "shell_runtime_allowlist.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := string(allowlist)
+	for _, path := range []string{"/usr/local/bin/aonohako\n", "/usr/local/bin/aonohako-selftest\n", "/usr/bin/bash\n", "/usr/bin/dash\n", "/usr/bin/grep\n", "/usr/bin/cp\n", "/usr/bin/sleep\n"} {
+		if !strings.Contains(allowed, path) {
+			t.Fatalf("shell allowlist must contain %q:\n%s", path, allowed)
+		}
+	}
+	for _, path := range []string{"/usr/local/go/bin/go", "/usr/bin/apt", "/usr/bin/dpkg", "/usr/bin/curl", "/usr/bin/setpriv", "/usr/bin/unshare"} {
+		if strings.Contains(allowed, path) {
+			t.Fatalf("shell allowlist unexpectedly exposes %q", path)
+		}
+	}
+
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "docker", "runtime.Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dockerBody := string(dockerfile)
+	for _, marker := range []string{"scripts/harden_shell_runtime.sh", `"${IMAGE_NAME}" == "type-x"`, `"${IMAGE_NAME}" == "ci-bash"`, `"${IMAGE_NAME}" == "ci-posix-sh"`} {
+		if !strings.Contains(dockerBody, marker) {
+			t.Fatalf("runtime Dockerfile must contain %q", marker)
+		}
+	}
+}
+
 func TestRepositoryCatalogPinsRustToolchain(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
 	if err != nil {
@@ -1007,7 +1098,7 @@ func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
 	}
 
 	for _, profileName := range sortedKeys(catalog.Profiles) {
-		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" || profileName == "type-t" || profileName == "type-u" || profileName == "type-v" {
+		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" || profileName == "type-t" || profileName == "type-u" || profileName == "type-v" || profileName == "type-x" {
 			continue
 		}
 		profile := catalog.Profiles[profileName]
