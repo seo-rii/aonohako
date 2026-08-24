@@ -188,6 +188,25 @@ while (1) {
 }
 `)},
 		},
+		"pony": {
+			compileLang: "PONY",
+			memoryMB:    64,
+			sources: []model.Source{source("main.pony", `use @malloc[Pointer[U8]](size: USize)
+use @memset[Pointer[U8]](ptr: Pointer[U8], value: I32, size: USize)
+
+actor Main
+  new create(env: Env) =>
+    let chunks = Array[Pointer[U8]]
+    let size: USize = 8 * 1024 * 1024
+    while true do
+      let chunk = @malloc(size)
+      if not chunk.is_null() then
+        @memset(chunk, 1, size)
+        chunks.push(chunk)
+      end
+    end
+`)},
+		},
 	}
 }
 
@@ -195,6 +214,7 @@ func runtimeStartupMemoryMB() map[string]int {
 	return map[string]int{
 		"go":         1120,
 		"rust":       64,
+		"pony":       64,
 		"zig":        160,
 		"java":       64,
 		"kotlin-jvm": 1536,
@@ -2390,6 +2410,25 @@ fun main()
 				},
 			},
 		},
+		"pony": {
+			{
+				name:           "process-and-network-denied",
+				compileLang:    "PONY",
+				expectedStdout: "process:blocked\nnetwork:blocked\n",
+				limits:         limits,
+				sources: []model.Source{
+					source("main.pony", `use @fork[I32]()
+use @socket[I32](domain: I32, kind: I32, protocol: I32)
+
+actor Main
+  new create(env: Env) =>
+    let process_result = @fork()
+    env.out.print(if process_result == -1 then "process:blocked" else "process:leaked" end)
+    let socket_result = @socket(2, 1, 0)
+    env.out.print(if socket_result == -1 then "network:blocked" else "network:leaked" end)`),
+				},
+			},
+		},
 		"pypy": {
 			{
 				name:           "process-and-network-denies",
@@ -4213,6 +4252,35 @@ fun main()
   val a = values.head("").parse-int.default(0)
   val b = values.drop(1).head("").parse-int.default(0)
   println(a + b)`),
+			},
+		},
+		"pony": {
+			compileLang: "PONY",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("main.pony", `use @getchar[I32]()
+
+actor Main
+  new create(env: Env) =>
+    var c = @getchar()
+    while (c == 32) or (c == 9) or (c == 10) or (c == 13) do
+      c = @getchar()
+    end
+    var a: I32 = 0
+    while (c >= 48) and (c <= 57) do
+      a = (a * 10) + (c - 48)
+      c = @getchar()
+    end
+    while (c == 32) or (c == 9) or (c == 10) or (c == 13) do
+      c = @getchar()
+    end
+    var b: I32 = 0
+    while (c >= 48) and (c <= 57) do
+      b = (b * 10) + (c - 48)
+      c = @getchar()
+    end
+    env.out.print((a + b).string())`),
 			},
 		},
 		"deno": {

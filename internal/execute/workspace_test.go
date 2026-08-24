@@ -127,6 +127,26 @@ func TestMaterializeFilesTreatsGoBinaryAsNativeExecutable(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesRequiresExecutablePonyBinary(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	_, _, err = materializeFiles(ws, &model.RunRequest{
+		Lang:       "pony-binary",
+		EntryPoint: "artifact.dat",
+		Binaries: []model.Binary{{
+			Name:    "artifact.dat",
+			DataB64: b64("pony-binary-placeholder"),
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "entry_point is not executable") {
+		t.Fatalf("materializeFiles error = %v, want executable rejection", err)
+	}
+}
+
 func TestMaterializeFilesRejectsDuplicatePaths(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

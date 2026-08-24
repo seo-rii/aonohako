@@ -899,6 +899,7 @@ Production profiles currently group languages like this:
 | `type-r` | `isabelle` |
 | `type-s` | `lean4` |
 | `type-v` | `chapel` |
+| `type-w` | `pony` |
 
 The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
@@ -947,6 +948,16 @@ without permitting case-fold collisions, then publishes the resulting ELF as
 an executable artifact. It rejects RPATH/RUNPATH and any `DT_NEEDED` entry that
 contains a path separator, closing Koka's unvalidated `syslib` path-injection
 surface before the binary reaches the execute sandbox.
+
+The `PONY` profile uses a checksum-pinned minimal extraction of the official
+0.69.1 Ubuntu 24.04 x86-64 bundle in the dedicated type-w pack. Only `ponyc`, the
+standard packages, and the runtime/link objects needed for compilation are
+installed; auxiliary Pony tools remain absent and libc development helpers are
+root-only. Compilation fixes `--cpu=generic` for cross-node portability.
+Execution uses the dedicated `pony-binary` identity and appends
+`--ponymaxthreads=1`. Pony's runtime reserves a large `MAP_NORESERVE` arena, so
+that identity disables `RLIMIT_AS`; cgroup `memory.max`, the RSS watchdog, and
+the normal thread/process/network sandbox policies remain enforced.
 
 The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
 `.mb` for compatibility. Compile strips ASCII whitespace, validates every

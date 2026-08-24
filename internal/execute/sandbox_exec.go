@@ -217,6 +217,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	isC3 := runLang == "c3"
 	isGoBinary := runLang == "go-binary"
 	isMojoBinary := runLang == "mojo-binary"
+	isPonyBinary := runLang == "pony-binary"
 	allowUnixSockets := false
 	switch runLang {
 	case "ocaml":
@@ -264,6 +265,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		isC3 = false
 		isGoBinary = false
 		isMojoBinary = false
+		isPonyBinary = false
 		runtimeBase = communicationSandboxRuntimeBase
 	}
 	if isJVMRunLang(runLang) && !isTrustedJVMRuntime(runLang, runtimeBase) {
@@ -302,9 +304,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// CoreCLR reserves a very large memfd-backed double-mapped region during
 	// startup, so finite RLIMIT_AS values can fail before user code. Go binaries
 	// likewise make large, ASLR-sensitive virtual reservations before main.
+	// Pony binaries reserve a large MAP_NORESERVE arena before user code, so they
+	// need the same virtual-address treatment without weakening physical limits.
 	// Physical memory remains bounded by cgroup memory.max and the RSS watchdog.
 	// CoreCLR also needs a high finite RLIMIT_FSIZE floor to start reliably.
-	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || isMojoBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
+	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || isMojoBinary || isPonyBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	if streams.communicationRestricted {
 		// Native C++ communication targets do not need the broad managed-runtime
