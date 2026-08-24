@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Chapel, ALGOL 68, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
+  Mojo, MoonBit, Fennel, Chapel, ALGOL 68, Koka, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -95,6 +95,11 @@ language-specific commands keep their declared order.
   process-related prelude names, monitor command execution, and underlying
   `system`/`fork`/`execve` calls are all disabled. Both syntax checking and
   execution force interpreted `-O0` mode and ignore source pragmats.
+- Koka is pinned to the checksum-verified official 3.2.3 Linux x64 bundle.
+  Submission compilation disables automatic dependency installation, fixes
+  GCC 16 to the portable x86-64 baseline, and normalizes a lone `Main.kk` to
+  canonical `main.kk`. Generated ELF files with RPATH/RUNPATH or path-bearing
+  dynamic dependencies are rejected before publication.
 - Carbon is pinned to an official experimental nightly. The image precompiles
   that toolchain's Core objects and native runtimes, then submission compilation
   emits an object, links a native executable against those trusted inputs, and

@@ -52,6 +52,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "OCTAVE"
 	case "algol68", "algol-68", "algol", "a68":
 		l = "ALGOL68"
+	case "koka":
+		l = "KOKA"
 	case "ada":
 		l = "ADA"
 	case "ada2012", "ada12":

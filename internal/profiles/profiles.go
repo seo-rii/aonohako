@@ -43,6 +43,7 @@ var profiles = map[string]Profile{
 	"FENNEL":        {SourceLang: "FENNEL", Extension: "fnl", DefaultTarget: "Main.lua", CompileKind: "fennel", RunLang: "lua", TimeMultiplier: 1, TimeOffsetMs: 500, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"CHAPEL":        {SourceLang: "CHAPEL", Extension: "chpl", DefaultTarget: "Main", CompileKind: "chapel", RunLang: "chapel-binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"ALGOL68":       {SourceLang: "ALGOL68", Extension: "a68", CompileKind: "algol68", RunLang: "algol68", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
+	"KOKA":          {SourceLang: "KOKA", Extension: "kk", DefaultTarget: "Main", CompileKind: "koka", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"ZEROLANG":      {SourceLang: "ZEROLANG", Extension: "0", DefaultTarget: "Main", CompileKind: "zerolang", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"GO":            {SourceLang: "GO", Extension: "go", DefaultTarget: "Main", CompileKind: "go", RunLang: "go-binary", TimeMultiplier: 1, TimeOffsetMs: 2000, MemoryMultiplier: 1, MemoryOffsetMB: 1088},
 	"ZIG":           {SourceLang: "ZIG", Extension: "zig", DefaultTarget: "Main", CompileKind: "zig", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
@@ -262,7 +263,7 @@ func NormalizeRunLang(language string) string {
 		return "binary"
 	case "fortran2008", "fortran08", "f2008", "f08", "fortran2018", "fortran18", "f2018", "f18":
 		return "binary"
-	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic", "vala", "mercury", "idris2", "delphi", "object-pascal", "object_pascal", "objpascal", "objfpc", "moonbit":
+	case "objective-c", "objective-cpp", "objc", "objcpp", "freebasic", "classic-basic", "qbasic", "vala", "mercury", "idris2", "delphi", "object-pascal", "object_pascal", "objpascal", "objfpc", "moonbit", "koka":
 		return "binary"
 	case "mojo":
 		return "mojo-binary"

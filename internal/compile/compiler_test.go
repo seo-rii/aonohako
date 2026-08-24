@@ -51,7 +51,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -160,6 +160,149 @@ func TestAlgol68CompilerIgnoresAmbientOptionsAndDisablesCodeGeneration(t *testin
 	wantPrefix := []string{"--quiet", "--no-compile", "-O0", "--check", "--file"}
 	if compiler.bin != "a68g" || !reflect.DeepEqual(compiler.prefix, wantPrefix) || !reflect.DeepEqual(compiler.suffix, []string{"--no-pragmats"}) {
 		t.Fatalf("algol68 compiler = bin %q prefix %v suffix %v", compiler.bin, compiler.prefix, compiler.suffix)
+	}
+}
+
+func TestKokaCompilerNormalizesCanonicalSourceAndValidatesExecutable(t *testing.T) {
+	workDir := t.TempDir()
+	sourceBody := []byte("fun main() println(\"ok\")\n")
+	if err := os.WriteFile(filepath.Join(workDir, "Main.kk"), sourceBody, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	testExecutable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	executableBody, err := os.ReadFile(testExecutable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(_ string, _ string, args []string, _ []string) {
+			normalized, readErr := os.ReadFile(args[len(args)-1])
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if !reflect.DeepEqual(normalized, sourceBody) {
+				t.Fatalf("normalized source = %q, want %q", normalized, sourceBody)
+			}
+			if writeErr := os.WriteFile(filepath.Join(workDir, "Main"), executableBody, 0o644); writeErr != nil {
+				t.Fatal(writeErr)
+			}
+		},
+	}
+	resp := kokaCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.kk"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("response = %+v", resp)
+	}
+	wantArgs := []string{
+		"--compile",
+		"-O2",
+		"--no-debug",
+		"-j1",
+		"-v0",
+		"--console=raw",
+		"--no-autoinstall",
+		"--cc=/usr/bin/gcc-16",
+		"--ccopts=-march=x86-64 -mtune=generic",
+		"--cclinkopts=-march=x86-64 -mtune=generic",
+		"--builddir=.aonohako-koka-build",
+		"--output=" + filepath.Join(workDir, "Main"),
+		filepath.Join(workDir, "main.kk"),
+	}
+	if len(runner.commands) != 1 || runner.commands[0].bin != "koka" || !reflect.DeepEqual(runner.commands[0].args, wantArgs) || len(runner.commands[0].env) != 0 {
+		t.Fatalf("commands = %+v, want koka %#v", runner.commands, wantArgs)
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "main.kk")); !os.IsNotExist(err) {
+		t.Fatalf("private normalized source remains after compile: %v", err)
+	}
+}
+
+func TestValidateKokaSourcesRejectsAmbiguousOrInvalidPaths(t *testing.T) {
+	tests := []struct {
+		name          string
+		sources       []model.Source
+		wantRoot      string
+		wantNormalize bool
+		wantError     string
+	}{
+		{name: "lowercase root", sources: []model.Source{{Name: "main.kk"}}, wantRoot: "main.kk"},
+		{name: "canonical frontend root", sources: []model.Source{{Name: "Main.kk"}}, wantRoot: "Main.kk", wantNormalize: true},
+		{name: "case-fold root collision", sources: []model.Source{{Name: "Main.kk"}, {Name: "main.kk"}}, wantError: "case-fold source path collision"},
+		{name: "case-fold ancillary collision", sources: []model.Source{{Name: "main.kk"}, {Name: "Data.txt"}, {Name: "data.txt"}}, wantError: "case-fold source path collision"},
+		{name: "uppercase module path", sources: []model.Source{{Name: "main.kk"}, {Name: "Lib/helper.kk"}}, wantError: "Koka source paths must be lowercase"},
+		{name: "reserved build path", sources: []model.Source{{Name: "main.kk"}, {Name: ".aonohako-koka-build/injected.kk"}}, wantError: "reserved build directory"},
+		{name: "nested root only", sources: []model.Source{{Name: "src/main.kk"}}, wantError: "no root main.kk source"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root, normalize, err := validateKokaSources(tc.sources)
+			if tc.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("validateKokaSources() error = %v, want %q", err, tc.wantError)
+				}
+				return
+			}
+			if err != nil || root != tc.wantRoot || normalize != tc.wantNormalize {
+				t.Fatalf("validateKokaSources() = (%q, %t, %v), want (%q, %t, nil)", root, normalize, err, tc.wantRoot, tc.wantNormalize)
+			}
+		})
+	}
+}
+
+func TestValidateKokaDynamicEntriesRejectsLoaderPathInjection(t *testing.T) {
+	if err := validateKokaDynamicEntries(nil, nil, []string{"libm.so.6", "libc.so.6"}); err != nil {
+		t.Fatalf("safe dependencies rejected: %v", err)
+	}
+	for _, tc := range []struct {
+		name     string
+		rpaths   []string
+		runpaths []string
+		needed   []string
+	}{
+		{name: "rpath", rpaths: []string{"$ORIGIN"}},
+		{name: "runpath", runpaths: []string{"/tmp"}},
+		{name: "relative needed", needed: []string{"../../tmp/libevil.so"}},
+		{name: "absolute needed", needed: []string{"/tmp/libevil.so"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateKokaDynamicEntries(tc.rpaths, tc.runpaths, tc.needed); err == nil {
+				t.Fatal("loader path injection was accepted")
+			}
+		})
+	}
+}
+
+func TestKokaCompilerRejectsNonELFOutput(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "main.kk"), []byte("fun main() println(\"ok\")\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(_ string, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("not an ELF"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	resp := kokaCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "main.kk"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, "artifact ELF") {
+		t.Fatalf("response = %+v", resp)
 	}
 }
 

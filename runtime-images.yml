@@ -3039,6 +3039,85 @@ languages:
           printf '%s\n' 'BEGIN print ((' > Broken.a68
           if A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --check --file Broken.a68 --no-pragmats >/dev/null 2>&1; then exit 1; fi
 
+  koka:
+    install:
+      apt:
+        - binutils
+        - curl
+        - libgmp10
+        - zlib1g
+      sandbox_tools:
+        - koka
+      script:
+        - export KOKA_VERSION=3.2.3
+        - export KOKA_SHA256=e82a4b497f1f8791ee171d06c45293ba16432e485d645ddd9688bafa6ccde5a5
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/koka-lang/koka/releases/download/v${KOKA_VERSION}/koka-v${KOKA_VERSION}-linux-x64.tar.gz" -o /tmp/koka.tar.gz
+        - echo "${KOKA_SHA256}  /tmp/koka.tar.gz" | sha256sum -c -
+        - rm -rf /opt/koka
+        - install -d -m 0755 /opt/koka
+        - tar -xzf /tmp/koka.tar.gz -C /opt/koka
+        - test "$(cat /opt/koka/meta/version)" = "v${KOKA_VERSION}"
+        - test -x /opt/koka/bin/koka
+        - chown -R root:root /opt/koka
+        - find /opt/koka -type d -exec chmod 0755 {} +
+        - find /opt/koka -type f -exec chmod 0644 {} +
+        - chmod 0755 /opt/koka/bin/koka
+        - ln -sfn /opt/koka/bin/koka /usr/local/bin/koka
+        - rm -f /tmp/koka.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          koka --version 2>&1 | grep -F 'version: 3.2.3'
+          test "$(cat /opt/koka/meta/version)" = v3.2.3
+          test "$(stat -c '%u:%g:%a' /opt/koka/bin/koka)" = '0:0:755'
+          if find /opt/koka -type d -perm /0022 -print -quit | grep -q .; then exit 1; fi
+          if find /opt/koka -type f -perm /0022 -print -quit | grep -q .; then exit 1; fi
+          test "$(find /opt/koka -type f -perm /0111 | wc -l)" -eq 1
+          ! command -v conan >/dev/null 2>&1
+          ! command -v vcpkg >/dev/null 2>&1
+
+          cat > main.kk <<'KOKA'
+          fun main()
+            println("Hello, World!")
+          KOKA
+          koka --compile -O2 --no-debug -j1 -v0 --console=raw --no-autoinstall --cc=/usr/bin/gcc-16 '--ccopts=-march=x86-64 -mtune=generic' '--cclinkopts=-march=x86-64 -mtune=generic' --builddir=.aonohako-koka-build --output=Main main.kk
+          test "$(stat -c %a Main)" = 644
+          chmod 0755 Main
+          test -x Main
+          readelf -n Main | grep -F 'x86 ISA needed: x86-64-baseline'
+          if readelf -d Main | grep -Eq '\((RPATH|RUNPATH)\)'; then exit 1; fi
+          if readelf -d Main | grep -E 'Shared library: \[[^]]*[/\\]' >/dev/null; then exit 1; fi
+          readelf -d Main | grep -F 'Shared library: [libm.so.6]'
+          readelf -d Main | grep -F 'Shared library: [libc.so.6]'
+          ./Main | grep -Fx 'Hello, World!'
+
+          install -d -m 0755 /tmp/aonohako-koka-evil
+          printf '%s\n' 'void marker(void) {}' > /tmp/aonohako-koka-evil/evil.c
+          /usr/bin/gcc-16 -shared -fPIC -Wl,-soname,evil/libevil.so -o /tmp/aonohako-koka-evil/libevil.so /tmp/aonohako-koka-evil/evil.c
+          cat > injected.kk <<'KOKA'
+          extern import {
+            c {
+              header-include-inline="void marker(void);"
+              syslib=":../../tmp/aonohako-koka-evil/libevil.so"
+            }
+          }
+          extern marker() : io () {
+            c "marker"
+          }
+          fun main()
+            marker()
+          KOKA
+          koka --compile -O2 --no-debug -j1 -v0 --console=raw --no-autoinstall --cc=/usr/bin/gcc-16 '--ccopts=-march=x86-64 -mtune=generic' '--cclinkopts=-march=x86-64 -mtune=generic' --builddir=.aonohako-koka-injected --output=Injected injected.kk
+          readelf -d Injected | grep -F 'Shared library: [evil/libevil.so]'
+
+          printf '%s\n' 'fun main(' > main.kk
+          rm -f Broken
+          if koka --compile -O2 --no-debug -j1 -v0 --console=raw --no-autoinstall --cc=/usr/bin/gcc-16 '--ccopts=-march=x86-64 -mtune=generic' '--cclinkopts=-march=x86-64 -mtune=generic' --builddir=.aonohako-koka-broken --output=Broken main.kk >/dev/null 2>&1; then exit 1; fi
+          test ! -e Broken
+
   deno:
     install:
       apt:
@@ -3406,6 +3485,7 @@ profiles:
       - go
       - gnucobol
       - hare
+      - koka
       - mojo
       - moonbit
       - nasm

@@ -881,7 +881,7 @@ Production profiles currently group languages like this:
 | --- | --- |
 | `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
 | `type-b` | `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
-| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
+| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `vbnet` |
 | `type-f` | `uhmlang` |
@@ -937,6 +937,16 @@ from the final undefined-symbol table. Compile and execute both set
 `--no-compile` and `-O0`, and place `--no-pragmats` after the source path so user
 configuration and source pragmats cannot reactivate native compilation or
 monitoring.
+
+The `KOKA` profile uses the checksum-pinned official 3.2.3 Linux x64 bundle in
+the shared type-c pack. Submission compilation is offline and single-job:
+automatic library installation is disabled, GCC 16 is selected explicitly,
+and trailing x86-64/generic flags override Koka's host-specific `-O2` defaults.
+The compiler normalizes a lone root `Main.kk` to Koka's canonical `main.kk`
+without permitting case-fold collisions, then publishes the resulting ELF as
+an executable artifact. It rejects RPATH/RUNPATH and any `DT_NEEDED` entry that
+contains a path separator, closing Koka's unvalidated `syslib` path-injection
+surface before the binary reaches the execute sandbox.
 
 The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
 `.mb` for compatibility. Compile strips ASCII whitespace, validates every
