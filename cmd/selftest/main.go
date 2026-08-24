@@ -2301,6 +2301,19 @@ fn main() {
 				sources:        []model.Source{source("Main.py", pythonProcessNetwork)},
 			},
 		},
+		"fennel": {
+			{
+				name:           "aot-artifact-removes-process-spawn-and-debug",
+				compileLang:    "FENNEL",
+				expectedStdout: "process:blocked\ndebug:blocked\n",
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.fnl", `(print (if os.execute "process:leaked" "process:blocked"))
+(local (debug-ok _) (pcall require :debug))
+(print (if debug-ok "debug:leaked" "debug:blocked"))`),
+				},
+			},
+		},
 		"pypy": {
 			{
 				name:           "process-and-network-denies",
@@ -4076,6 +4089,17 @@ fn main {
   let b = read_int()
   println(a + b)
 }`),
+			},
+		},
+		"fennel": {
+			compileLang: "FENNEL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.fnl", `(when os.execute (os.execute "touch /tmp/fennel-exec-leak"))
+(local line (io.read))
+(local (a b) (line:match "(%-?%d+)%s+(%-?%d+)"))
+(print (+ (tonumber a) (tonumber b)))`),
 			},
 		},
 		"deno": {

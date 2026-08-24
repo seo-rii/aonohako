@@ -74,6 +74,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"RUST2021",
 		"RUST2024",
 		"MOONBIT",
+		"FENNEL",
 		"ZEROLANG",
 		"KOTLIN",
 		"ADA",
@@ -187,6 +188,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"CARBON":       "binary",
 		"MOONBIT":      "binary",
 		"moonbit":      "binary",
+		"FENNEL":       "lua",
+		"fennel":       "lua",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",
@@ -285,6 +288,19 @@ func TestMoonBitProfileCompilesPinnedNativeArtifact(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("MOONBIT resource profile = %+v", profile)
+	}
+}
+
+func TestFennelProfileCompilesHardenedLuaArtifact(t *testing.T) {
+	profile, ok := Resolve("FENNEL")
+	if !ok {
+		t.Fatal("Resolve(FENNEL) reported unsupported language")
+	}
+	if profile.Extension != "fnl" || profile.DefaultTarget != "Main.lua" || profile.CompileKind != "fennel" || profile.RunLang != "lua" {
+		t.Fatalf("FENNEL profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 500 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 512 {
+		t.Fatalf("FENNEL resource profile = %+v", profile)
 	}
 }
 

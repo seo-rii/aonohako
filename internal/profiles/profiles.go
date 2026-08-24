@@ -40,6 +40,7 @@ var profiles = map[string]Profile{
 	"RUST2021":      {SourceLang: "RUST2021", Extension: "rs", DefaultTarget: "Main", CompileKind: "rust", RustEdition: "2021", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"RUST2024":      {SourceLang: "RUST2024", Extension: "rs", DefaultTarget: "Main", CompileKind: "rust", RustEdition: "2024", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"MOONBIT":       {SourceLang: "MOONBIT", Extension: "mbt", DefaultTarget: "Main", CompileKind: "moonbit", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
+	"FENNEL":        {SourceLang: "FENNEL", Extension: "fnl", DefaultTarget: "Main.lua", CompileKind: "fennel", RunLang: "lua", TimeMultiplier: 1, TimeOffsetMs: 500, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"ZEROLANG":      {SourceLang: "ZEROLANG", Extension: "0", DefaultTarget: "Main", CompileKind: "zerolang", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"GO":            {SourceLang: "GO", Extension: "go", DefaultTarget: "Main", CompileKind: "go", RunLang: "go-binary", TimeMultiplier: 1, TimeOffsetMs: 2000, MemoryMultiplier: 1, MemoryOffsetMB: 1088},
 	"ZIG":           {SourceLang: "ZIG", Extension: "zig", DefaultTarget: "Main", CompileKind: "zig", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},

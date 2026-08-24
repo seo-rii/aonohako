@@ -70,6 +70,7 @@ var compileRegistry = map[string]Compiler{
 	"ruby":        scriptCheckCompiler{exts: []string{".rb"}, noSourceReason: "no ruby sources", bin: "ruby", prefix: []string{"-c"}},
 	"php":         scriptCheckCompiler{exts: []string{".php"}, noSourceReason: "no php sources", bin: "php", prefix: []string{"-l"}},
 	"lua":         scriptCheckCompiler{exts: []string{".lua"}, noSourceReason: "no lua sources", bin: "luac5.4", prefix: []string{"-p"}},
+	"fennel":      fennelCompiler{},
 	"perl":        scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
 	"fortran": nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(job CompileJob) []string {
 		args := []string{"-O2", "-pipe"}
