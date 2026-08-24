@@ -75,6 +75,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"RUST2024",
 		"MOONBIT",
 		"FENNEL",
+		"CHAPEL",
 		"ZEROLANG",
 		"KOTLIN",
 		"ADA",
@@ -190,6 +191,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"moonbit":      "binary",
 		"FENNEL":       "lua",
 		"fennel":       "lua",
+		"CHAPEL":       "chapel-binary",
+		"chapel":       "chapel-binary",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",
@@ -276,6 +279,9 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 			t.Fatalf("NormalizeRunLang(%q) = %q, want %q", input, got, want)
 		}
 	}
+	if got := NormalizeRunLang("chapel-binary"); got != "chapel-binary" {
+		t.Fatalf("NormalizeRunLang(chapel-binary) = %q, want chapel-binary", got)
+	}
 }
 
 func TestMoonBitProfileCompilesPinnedNativeArtifact(t *testing.T) {
@@ -301,6 +307,19 @@ func TestFennelProfileCompilesHardenedLuaArtifact(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 500 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 512 {
 		t.Fatalf("FENNEL resource profile = %+v", profile)
+	}
+}
+
+func TestChapelProfileRunsBoundedNativeArtifact(t *testing.T) {
+	profile, ok := Resolve("CHAPEL")
+	if !ok {
+		t.Fatal("Resolve(CHAPEL) reported unsupported language")
+	}
+	if profile.Extension != "chpl" || profile.DefaultTarget != "Main" || profile.CompileKind != "chapel" || profile.RunLang != "chapel-binary" {
+		t.Fatalf("CHAPEL profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("CHAPEL resource profile = %+v", profile)
 	}
 }
 

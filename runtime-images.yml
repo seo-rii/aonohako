@@ -2816,6 +2816,70 @@ languages:
           printf '%s\n' '(local broken' > Broken.fnl
           if aonohako-fennel-compile Broken.fnl Broken.lua >/dev/null 2>&1; then exit 1; fi
 
+  chapel:
+    install:
+      apt:
+        - clang
+        - curl
+        - gcc
+        - git
+        - libclang-cpp-dev
+        - libclang-dev
+        - libgmp-dev
+        - libhwloc-dev
+        - libunwind-dev
+        - llvm
+        - llvm-dev
+        - make
+        - pkgconf
+        - python3
+        - python3-dev
+        - python3-venv
+      sandbox_tools:
+        - chpl
+      script:
+        - export CHAPEL_VERSION=2.9.0
+        - export CHAPEL_DEB_SHA256=11f93de9e725a7c74608b4afcc7c8fc8bec380f27b09883cd6f69d6fbe66e13d
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/chapel-lang/chapel/releases/download/${CHAPEL_VERSION}/chapel-${CHAPEL_VERSION}-1.debian13.amd64.deb" -o /tmp/chapel.deb
+        - echo "${CHAPEL_DEB_SHA256}  /tmp/chapel.deb" | sha256sum -c -
+        - dpkg -i /tmp/chapel.deb
+        - rm -f /tmp/chapel.deb
+        - for tool in c2chapel chpl-language-server chpl-shim chplcheck chpldoc mason; do if command -v "${tool}" >/dev/null 2>&1; then chmod 0750 "$(command -v "${tool}")"; fi; done
+        - chmod 0750 /usr/share/chapel/2.9/tools/c2chapel/c2chapel.py /usr/share/chapel/2.9/tools/c2chapel/c2chapel /usr/share/chapel/2.9/tools/chpl-language-server/chpl-language-server /usr/share/chapel/2.9/tools/chpl-language-server/src/chpl-shim.py /usr/share/chapel/2.9/tools/chpl-language-server/chpl-shim /usr/share/chapel/2.9/tools/chplcheck/chplcheck
+        - test "$(find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 | wc -l)" -eq 37
+        - find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 -exec chmod 0750 {} +
+        - chmod 0750 /usr/share/chapel/2.9/modules/dists/fixDistDocs.perl /usr/share/chapel/2.9/modules/internal/fixInternalDocs.sh
+        - test -d /usr/lib/chapel/2.9/third-party
+        - find /usr/lib/chapel/2.9/third-party -path '*/bin/*' -type f -perm /0111 -exec chmod 0750 {} +
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.chpl <<'CHAPEL'
+          use IO;
+          var a, b: int;
+          read(a, b);
+          writeln(a + b);
+          writeln(numLocales, " ", here.maxTaskPar);
+          CHAPEL
+          for path in /usr/share/chapel/2.9/tools/c2chapel/c2chapel.py /usr/share/chapel/2.9/tools/c2chapel/c2chapel /usr/share/chapel/2.9/tools/chpl-language-server/chpl-language-server /usr/share/chapel/2.9/tools/chpl-language-server/src/chpl-shim.py /usr/share/chapel/2.9/tools/chpl-language-server/chpl-shim /usr/share/chapel/2.9/tools/chplcheck/chplcheck /usr/share/chapel/2.9/modules/dists/fixDistDocs.perl /usr/share/chapel/2.9/modules/internal/fixInternalDocs.sh; do test "$(stat -c %a "${path}")" = 750; done
+          test "$(find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 | wc -l)" -eq 37
+          if find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 -perm /0005 -print -quit | grep -q .; then exit 1; fi
+          test -d /usr/lib/chapel/2.9/third-party
+          if find /usr/lib/chapel/2.9/third-party -path '*/bin/*' -type l -print -quit | grep -q .; then exit 1; fi
+          if find /usr/lib/chapel/2.9/third-party -path '*/bin/*' -type f -perm /0001 -print -quit | grep -q .; then exit 1; fi
+          CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast -o Main Main.chpl
+          test -x Main
+          output="$(printf '2 3\n' | CHPL_RT_NUM_THREADS_PER_LOCALE=1 ./Main -nl 1)"
+          test "${output}" = "$(printf '5\n1 1')"
+          if CHPL_RT_NUM_THREADS_PER_LOCALE=1 ./Main -nl 2 >/dev/null 2>&1; then exit 1; fi
+          printf '%s\n' 'proc main( {' > Broken.chpl
+          rm -f Broken
+          if CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast -o Broken Broken.chpl >/dev/null 2>&1; then exit 1; fi
+          test ! -e Broken
+
   deno:
     install:
       apt:
@@ -3299,3 +3363,7 @@ profiles:
     base_image: ubuntu:noble@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54
     languages:
       - kframework
+  type-v:
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
+    languages:
+      - chapel

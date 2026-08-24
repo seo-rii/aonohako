@@ -71,7 +71,10 @@ var compileRegistry = map[string]Compiler{
 	"php":         scriptCheckCompiler{exts: []string{".php"}, noSourceReason: "no php sources", bin: "php", prefix: []string{"-l"}},
 	"lua":         scriptCheckCompiler{exts: []string{".lua"}, noSourceReason: "no lua sources", bin: "luac5.4", prefix: []string{"-p"}},
 	"fennel":      fennelCompiler{},
-	"perl":        scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
+	"chapel": singleSourceExecutableCompiler{exts: []string{".chpl"}, preferredBases: []string{"Main.chpl", "main.chpl"}, noSourceReason: "no chapel sources", bin: "chpl", env: []string{"CHPL_COMM=none", "CHPL_TASKS=qthreads", "CHPL_TARGET_CPU=none"}, args: func(job CompileJob, sourcePath string) []string {
+		return []string{"--local", "--fast", "-o", outputPath(job), sourcePath}
+	}},
+	"perl": scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
 	"fortran": nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(job CompileJob) []string {
 		args := []string{"-O2", "-pipe"}
 		if job.Profile.CompileStd != "" {

@@ -51,7 +51,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -133,6 +133,22 @@ func TestFennelCompilerUsesHardenedArtifactWriter(t *testing.T) {
 	wantArgs := []string{filepath.Join(workDir, "Main.fnl"), filepath.Join(workDir, "Main.lua")}
 	if len(runner.commands) != 1 || runner.commands[0].bin != "aonohako-fennel-compile" || !reflect.DeepEqual(runner.commands[0].args, wantArgs) || !reflect.DeepEqual(runner.commands[0].env, []string{"NO_COLOR=1"}) {
 		t.Fatalf("commands = %+v", runner.commands)
+	}
+}
+
+func TestChapelCompilerUsesLocalPortableConfiguration(t *testing.T) {
+	compiler, ok := compileRegistry["chapel"].(singleSourceExecutableCompiler)
+	if !ok {
+		t.Fatalf("chapel compiler = %T, want singleSourceExecutableCompiler", compileRegistry["chapel"])
+	}
+	job := CompileJob{WorkDir: "/work", Target: "Main"}
+	wantArgs := []string{"--local", "--fast", "-o", "/work/Main", "/work/Main.chpl"}
+	if got := compiler.args(job, "/work/Main.chpl"); !reflect.DeepEqual(got, wantArgs) {
+		t.Fatalf("chapel args = %v, want %v", got, wantArgs)
+	}
+	wantEnv := []string{"CHPL_COMM=none", "CHPL_TASKS=qthreads", "CHPL_TARGET_CPU=none"}
+	if compiler.bin != "chpl" || !reflect.DeepEqual(compiler.env, wantEnv) {
+		t.Fatalf("chapel compiler = bin %q env %v, want chpl %v", compiler.bin, compiler.env, wantEnv)
 	}
 }
 

@@ -314,6 +314,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"binary", "/tmp/a.out", "/tmp/a.out", true},
 		{"go-binary", "/tmp/Main", "/tmp/Main", true},
 		{"mojo-binary", "/tmp/Main", "/tmp/Main", true},
+		{"chapel-binary", "/tmp/Main", "env", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
 		{"apecode", "/tmp/Main.ape", "apecc", true},
 		{"clojure", "/tmp/sol.clj", "java", true},
@@ -477,6 +478,14 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 				t.Errorf("buildCommand(%s) missing bundled interpreter path in %v", tc.lang, args)
 			}
 		})
+	}
+}
+
+func TestBuildCommandBoundsChapelLocalesAndThreads(t *testing.T) {
+	got := buildCommand("/tmp/Main", "chapel-binary", &model.RunRequest{})
+	want := []string{"env", "CHPL_RT_NUM_THREADS_PER_LOCALE=1", "/tmp/Main", "-nl", "1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("chapel command = %v, want %v", got, want)
 	}
 }
 
