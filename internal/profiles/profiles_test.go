@@ -76,6 +76,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"MOONBIT",
 		"FENNEL",
 		"CHAPEL",
+		"ALGOL68",
 		"ZEROLANG",
 		"KOTLIN",
 		"ADA",
@@ -193,6 +194,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"fennel":       "lua",
 		"CHAPEL":       "chapel-binary",
 		"chapel":       "chapel-binary",
+		"ALGOL68":      "algol68",
+		"algol68":      "algol68",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",
@@ -320,6 +323,19 @@ func TestChapelProfileRunsBoundedNativeArtifact(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("CHAPEL resource profile = %+v", profile)
+	}
+}
+
+func TestAlgol68ProfileUsesHardenedInterpreter(t *testing.T) {
+	profile, ok := Resolve("ALGOL68")
+	if !ok {
+		t.Fatal("Resolve(ALGOL68) reported unsupported language")
+	}
+	if profile.Extension != "a68" || profile.DefaultTarget != "" || profile.CompileKind != "algol68" || profile.RunLang != "algol68" {
+		t.Fatalf("ALGOL68 profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("ALGOL68 resource profile = %+v", profile)
 	}
 }
 

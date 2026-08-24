@@ -35,6 +35,7 @@ type checkedSourcesCompiler struct {
 	noSourceReason string
 	bin            string
 	prefix         []string
+	suffix         []string
 	env            []string
 }
 
@@ -62,7 +63,7 @@ func (c checkedSourcesCompiler) Compile(ctx context.Context, job CompileJob) mod
 	fullOut := newCompileOutputBuffer()
 	fullErr := newCompileOutputBuffer()
 	for _, path := range paths {
-		args := append(append([]string{}, c.prefix...), path)
+		args := append(append(append([]string{}, c.prefix...), path), c.suffix...)
 		result := runner.Run(ctx, job.WorkDir, c.bin, args, c.env)
 		fullOut.Append(result.Stdout)
 		fullErr.Append(result.Stderr)

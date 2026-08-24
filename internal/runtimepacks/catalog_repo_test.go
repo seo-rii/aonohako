@@ -23,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 22 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -103,6 +103,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-ada",
 		"ci-agda",
 		"ci-aheui",
+		"ci-algol68",
 		"ci-alloy",
 		"ci-apecode",
 		"ci-apl",
@@ -278,6 +279,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 
 	tests := map[string][]string{
 		"aheui":         {"Hello, World!", "Main.aheui"},
+		"algol68":       {"A68G_VERSION=3.13.3", "A68G_SHA256=78dc53f4a712a9c8ee159b1eb7045fe4ea060c4eb2a49efb9634f83c2cb13995", "--enable-core", "AONOHAKO_SAFE_RUNTIME", "aonohako_disabled_system", "aonohako_disabled_fork", "aonohako_disabled_execve", "read_rc_options", "read_env_options", "process execution is disabled", "nm -D --undefined-only", "system|fork|execve|dlopen|dlsym", "--no-compile -O0 --check --file Main.a68 --no-pragmats", "--no-compile -O0 --run --file Main.a68 --no-pragmats", "A68G_OPTIONS='-O1 --compile --debug'", "Process.a68", "ProcessFork.a68", "ProcessExec.a68", "Monitor.a68", "Broken.a68"},
 		"acl2":          {"acl2", "aonohako-acl2-check Main.lisp", "plus-zero-right", "Broken.lisp"},
 		"apecode":       {"APECODE_COMMIT=c7ae98d3dfc1713ecc800422a4c815628776e1e2", "python3 -m pip install --break-system-packages --no-cache-dir /tmp/apecode.tar.gz", "apecc --check Main.ape", "apecc -o Main Main.ape", "./Main", "state main", "3 1 2"},
 		"ada":           {"gnatmake", "Broken.adb"},
@@ -632,6 +634,60 @@ func TestRepositoryCatalogPinsAndBoundsChapelRuntime(t *testing.T) {
 	for _, marker := range []string{"set -euo pipefail", "chpl-language-server/src/chpl-shim.py", "chpl-venv", "fixDistDocs.perl", "fixInternalDocs.sh", "third-party", "-type l", "-perm /0001", "CHPL_COMM=none", "CHPL_TASKS=qthreads", "CHPL_TARGET_CPU=none", "CHPL_RT_NUM_THREADS_PER_LOCALE=1", "--local", "here.maxTaskPar", "./Main -nl 1", "./Main -nl 2", "test -x Main", "test ! -e Broken"} {
 		if !strings.Contains(smoke, marker) {
 			t.Fatalf("Chapel smoke must contain %q:\n%s", marker, smoke)
+		}
+	}
+}
+
+func TestRepositoryCatalogPinsAndHardensAlgol68Runtime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["algol68"]
+	if !ok {
+		t.Fatal("algol68 language missing from catalog")
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"A68G_VERSION=3.13.3",
+		"A68G_SHA256=78dc53f4a712a9c8ee159b1eb7045fe4ea060c4eb2a49efb9634f83c2cb13995",
+		"sha256sum -c -",
+		"CPPFLAGS=-DAONOHAKO_SAFE_RUNTIME=1 ./configure --enable-core",
+		"aonohako_disabled_system",
+		"aonohako_disabled_fork",
+		"aonohako_disabled_execve",
+		"read_rc_options ();",
+		"read_env_options ();",
+		"process execution is disabled",
+		"system|fork|execve|dlopen|dlsym",
+	} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("Algol 68 install must contain %q:\n%s", marker, install)
+		}
+	}
+	if !slices.Contains(spec.Install.SandboxTools, "a68g") {
+		t.Fatalf("Algol 68 sandbox tools = %v", spec.Install.SandboxTools)
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, marker := range []string{
+		"set -euo pipefail",
+		"A68G_OPTIONS='-O1 --compile --debug'",
+		"printf '%s\\n' '-O1 --compile --debug' > .a68grc",
+		"-name 'Main.c' -o -name 'Main.so' -o -name 'Main.o' -o -name 'Main.sh' -o -name 'Main.lst'",
+		"a68g --quiet --no-compile -O0 --check --file Main.a68 --no-pragmats",
+		"a68g --quiet --no-compile -O0 --run --file Main.a68 --no-pragmats",
+		"PR COMPILE PR",
+		"system (\"touch /tmp/a68g-system-leak\")",
+		"test ! -e /tmp/a68g-system-leak",
+		"tag \"fork\" has not been declared properly",
+		"tag \"exec\" has not been declared properly",
+		"DO touch /tmp/a68g-monitor-leak",
+		"process execution is disabled",
+		"test ! -e /tmp/a68g-monitor-leak",
+		"Broken.a68",
+	} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("Algol 68 smoke must contain %q:\n%s", marker, smoke)
 		}
 	}
 }

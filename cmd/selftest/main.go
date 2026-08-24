@@ -4113,6 +4113,18 @@ read(a, b);
 writeln(a + b);`),
 			},
 		},
+		"algol68": {
+			compileLang: "ALGOL68",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.a68", `BEGIN
+  INT a, b;
+  read ((a, b));
+  printf (($g(0)l$, a + b))
+END`),
+			},
+		},
 		"deno": {
 			compileLang: "DENO",
 			judgeIO:     standardABJudgeIO,

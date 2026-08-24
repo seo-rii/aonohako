@@ -38,6 +38,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{primaryPath}
 	case "chapel-binary":
 		return []string{"env", "CHPL_RT_NUM_THREADS_PER_LOCALE=1", primaryPath, "-nl", "1"}
+	case "algol68":
+		return []string{"a68g", "--quiet", "--no-compile", "-O0", "--run", "--file", primaryPath, "--no-pragmats"}
 	case "aheui":
 		return []string{
 			"python3",

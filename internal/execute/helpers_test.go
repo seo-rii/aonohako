@@ -315,6 +315,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"go-binary", "/tmp/Main", "/tmp/Main", true},
 		{"mojo-binary", "/tmp/Main", "/tmp/Main", true},
 		{"chapel-binary", "/tmp/Main", "env", true},
+		{"algol68", "/tmp/Main.a68", "a68g", true},
 		{"aheui", "/tmp/sol.aheui", "python3", true},
 		{"apecode", "/tmp/Main.ape", "apecc", true},
 		{"clojure", "/tmp/sol.clj", "java", true},
@@ -486,6 +487,14 @@ func TestBuildCommandBoundsChapelLocalesAndThreads(t *testing.T) {
 	want := []string{"env", "CHPL_RT_NUM_THREADS_PER_LOCALE=1", "/tmp/Main", "-nl", "1"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("chapel command = %v, want %v", got, want)
+	}
+}
+
+func TestBuildCommandHardensAlgol68Options(t *testing.T) {
+	got := buildCommand("/tmp/Main.a68", "algol68", &model.RunRequest{})
+	want := []string{"a68g", "--quiet", "--no-compile", "-O0", "--run", "--file", "/tmp/Main.a68", "--no-pragmats"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("algol68 command = %v, want %v", got, want)
 	}
 }
 

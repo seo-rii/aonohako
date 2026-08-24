@@ -2880,6 +2880,165 @@ languages:
           if CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast -o Broken Broken.chpl >/dev/null 2>&1; then exit 1; fi
           test ! -e Broken
 
+  algol68:
+    install:
+      apt:
+        - curl
+        - gcc
+        - libc6-dev
+        - make
+      sandbox_tools:
+        - a68g
+      script:
+        - export A68G_VERSION=3.13.3
+        - export A68G_SHA256=78dc53f4a712a9c8ee159b1eb7045fe4ea060c4eb2a49efb9634f83c2cb13995
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://algol68genie.nl/algol68g-${A68G_VERSION}.tar.gz" -o /tmp/algol68g.tar.gz
+        - echo "${A68G_SHA256}  /tmp/algol68g.tar.gz" | sha256sum -c -
+        - rm -rf /tmp/algol68g-src
+        - mkdir -p /tmp/algol68g-src
+        - tar -xzf /tmp/algol68g.tar.gz -C /tmp/algol68g-src --strip-components=1
+        - |
+          source_root=/tmp/algol68g-src
+          header="${source_root}/src/include/a68g.h"
+          driver="${source_root}/src/a68g/a68g.c"
+          prelude="${source_root}/src/a68g/prelude.c"
+          monitor="${source_root}/src/a68g/genie-monitor.c"
+
+          test "$(grep -Fxc '#include "a68g-includes.h"' "${header}")" -eq 1
+          sed -i '/^#include "a68g-includes.h"$/a\
+          \
+          #if defined (AONOHAKO_SAFE_RUNTIME)\
+            static inline int aonohako_disabled_system (const char *command) {\
+              (void) command;\
+              errno = EPERM;\
+              return -1;\
+            }\
+            static inline pid_t aonohako_disabled_fork (void) {\
+              errno = EPERM;\
+              return (pid_t) -1;\
+            }\
+            static inline int aonohako_disabled_execve (const char *path, char *const argv[], char *const envp[]) {\
+              (void) path;\
+              (void) argv;\
+              (void) envp;\
+              errno = EPERM;\
+              return -1;\
+            }\
+            #define system(command) aonohako_disabled_system (command)\
+            #define fork() aonohako_disabled_fork ()\
+            #define execve(path, argv, envp) aonohako_disabled_execve (path, argv, envp)\
+          #endif' "${header}"
+          test "$(grep -Fxc '  static inline int aonohako_disabled_system (const char *command) {' "${header}")" -eq 1
+          test "$(grep -Fxc '  static inline pid_t aonohako_disabled_fork (void) {' "${header}")" -eq 1
+          test "$(grep -Fxc '  static inline int aonohako_disabled_execve (const char *path, char *const argv[], char *const envp[]) {' "${header}")" -eq 1
+          test "$(grep -Fxc '  #define system(command) aonohako_disabled_system (command)' "${header}")" -eq 1
+          test "$(grep -Fxc '  #define fork() aonohako_disabled_fork ()' "${header}")" -eq 1
+          test "$(grep -Fxc '  #define execve(path, argv, envp) aonohako_disabled_execve (path, argv, envp)' "${header}")" -eq 1
+
+          test "$(grep -Fxc '    read_rc_options ();' "${driver}")" -eq 1
+          rc_line="$(grep -Fn '    read_rc_options ();' "${driver}")"
+          sed -i "${rc_line%%:*}c\\    (void) 0; // Aonohako ignores untrusted cwd options." "${driver}"
+          test "$(grep -Fxc '    (void) 0; // Aonohako ignores untrusted cwd options.' "${driver}")" -eq 1
+
+          test "$(grep -Fxc '    read_env_options ();' "${driver}")" -eq 1
+          env_line="$(grep -Fn '    read_env_options ();' "${driver}")"
+          sed -i "${env_line%%:*}c\\    (void) 0; // Aonohako ignores ambient process options." "${driver}"
+          test "$(grep -Fxc '    (void) 0; // Aonohako ignores ambient process options.' "${driver}")" -eq 1
+
+          remove_registration() {
+            local registration="$1"
+            local match
+            test "$(grep -Fxc "${registration}" "${prelude}")" -eq 1
+            match="$(grep -Fn "${registration}" "${prelude}")"
+            sed -i "${match%%:*}d" "${prelude}"
+          }
+          remove_registration '  a68g_idf (A68G_EXT, "break", A68G_MCACHE (proc_void), genie_break);'
+          remove_registration '  a68g_idf (A68G_EXT, "debug", A68G_MCACHE (proc_void), genie_debug);'
+          remove_registration '  a68g_idf (A68G_EXT, "monitor", A68G_MCACHE (proc_void), genie_debug);'
+          remove_registration '  a68g_idf (A68G_EXT, "system", m, genie_system);'
+          remove_registration '  a68g_idf (A68G_EXT, "fork", m, genie_fork);'
+          remove_registration '  a68g_idf (A68G_EXT, "exec", m, genie_exec);'
+          remove_registration '  a68g_idf (A68G_EXT, "execve", m, genie_exec);'
+          remove_registration '  a68g_idf (A68G_EXT, "execsub", m, genie_exec_sub);'
+          remove_registration '  a68g_idf (A68G_EXT, "execvechild", m, genie_exec_sub);'
+          remove_registration '  a68g_idf (A68G_EXT, "execsubpipeline", m, genie_exec_sub_pipeline);'
+          remove_registration '  a68g_idf (A68G_EXT, "execvechildpipe", m, genie_exec_sub_pipeline);'
+          remove_registration '  a68g_idf (A68G_EXT, "execsuboutput", m, genie_exec_sub_output);'
+          remove_registration '  a68g_idf (A68G_EXT, "execveoutput", m, genie_exec_sub_output);'
+
+          monitor_call='      ASSERT (a68g_bufprt (A68G (output_line), SNPRINTF_SIZE, "return code %d", system (sym)) >= 0);'
+          test "$(grep -Fxc "${monitor_call}" "${monitor}")" -eq 1
+          monitor_line="$(grep -Fn "${monitor_call}" "${monitor}")"
+          sed -i "${monitor_line%%:*}c\\      monitor_error (\"process execution is disabled\", NO_TEXT);" "${monitor}"
+          test "$(grep -Fxc '      monitor_error ("process execution is disabled", NO_TEXT);' "${monitor}")" -eq 1
+        - (cd /tmp/algol68g-src && CPPFLAGS=-DAONOHAKO_SAFE_RUNTIME=1 ./configure --enable-core --prefix=/usr/local)
+        - make -C /tmp/algol68g-src -j1
+        - make -C /tmp/algol68g-src install
+        - test "$(nm -D --undefined-only /usr/local/bin/a68g | grep -Ec '[[:space:]](system|fork|execve|dlopen|dlsym)(@|$)' || true)" -eq 0
+        - strip /usr/local/bin/a68g
+        - rm -rf /tmp/algol68g-src /tmp/algol68g.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          a68g --version | grep '3.13.3'
+          test "$(nm -D --undefined-only "$(command -v a68g)" | grep -Ec '[[:space:]](system|fork|execve|dlopen|dlsym)(@|$)' || true)" -eq 0
+
+          cat > Main.a68 <<'ALGOL68'
+          BEGIN
+            INT a, b;
+            read ((a, b));
+            printf (($g(0)l$, a + b))
+          END
+          ALGOL68
+          printf '%s\n' '-O1 --compile --debug' > .a68grc
+          A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --check --file Main.a68 --no-pragmats
+          output="$(printf '2 3\n' | A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --run --file Main.a68 --no-pragmats)"
+          test "${output}" = 5
+          test -z "$(find . -maxdepth 1 -type f \( -name 'Main.c' -o -name 'Main.so' -o -name 'Main.o' -o -name 'Main.sh' -o -name 'Main.lst' \) -print -quit)"
+
+          cat > Pragmat.a68 <<'ALGOL68'
+          PR COMPILE PR
+          BEGIN print (("pragmat ignored", new line)) END
+          ALGOL68
+          if A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --run --file Pragmat.a68 --no-pragmats >/dev/null 2>&1; then exit 1; fi
+          test -z "$(find . -maxdepth 1 -type f -name 'Pragmat.*' ! -name 'Pragmat.a68' -print -quit)"
+
+          cat > Process.a68 <<'ALGOL68'
+          BEGIN print ((system ("touch /tmp/a68g-system-leak"), new line)) END
+          ALGOL68
+          rm -f /tmp/a68g-system-leak
+          if A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --run --file Process.a68 --no-pragmats >/dev/null 2>&1; then exit 1; fi
+          test ! -e /tmp/a68g-system-leak
+
+          cat > ProcessFork.a68 <<'ALGOL68'
+          BEGIN print ((fork, new line)) END
+          ALGOL68
+          if a68g --quiet --no-compile -O0 --run --file ProcessFork.a68 --no-pragmats >fork.out 2>&1; then exit 1; fi
+          grep -F 'tag "fork" has not been declared properly' fork.out
+
+          cat > ProcessExec.a68 <<'ALGOL68'
+          BEGIN print ((exec ("/usr/bin/touch", "/tmp/a68g-exec-leak"), new line)) END
+          ALGOL68
+          rm -f /tmp/a68g-exec-leak
+          if a68g --quiet --no-compile -O0 --run --file ProcessExec.a68 --no-pragmats >exec.out 2>&1; then exit 1; fi
+          grep -F 'tag "exec" has not been declared properly' exec.out
+          test ! -e /tmp/a68g-exec-leak
+
+          cat > Monitor.a68 <<'ALGOL68'
+          BEGIN INT zero = 0; print ((1 OVER zero, new line)) END
+          ALGOL68
+          rm -f /tmp/a68g-monitor-leak
+          printf '%s\n' 'DO touch /tmp/a68g-monitor-leak' 'QUIT' 'Y' |
+            timeout 3 a68g --debug --no-compile -O0 --run --file Monitor.a68 --no-pragmats >monitor.out 2>&1
+          grep -F 'process execution is disabled' monitor.out
+          test ! -e /tmp/a68g-monitor-leak
+
+          printf '%s\n' 'BEGIN print ((' > Broken.a68
+          if A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --check --file Broken.a68 --no-pragmats >/dev/null 2>&1; then exit 1; fi
+
   deno:
     install:
       apt:
@@ -3168,6 +3327,7 @@ profiles:
         - ln -sfn /usr/bin/g++-16 /usr/local/bin/c++
     languages:
       - aheui
+      - algol68
       - apecode
       - apl
       - awk

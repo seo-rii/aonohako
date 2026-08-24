@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Chapel, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
+  Mojo, MoonBit, Fennel, Chapel, ALGOL 68, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -90,6 +90,11 @@ language-specific commands keep their declared order.
   pack. Submissions compile for one local locale with the packaged qthreads
   tasking runtime, and execution always fixes both locale and worker-thread
   counts to one.
+- ALGOL 68 uses checksum-pinned Algol 68 Genie 3.13.3 source. Its core build is
+  additionally patched for judge use: cwd and environment option readers,
+  process-related prelude names, monitor command execution, and underlying
+  `system`/`fork`/`execve` calls are all disabled. Both syntax checking and
+  execution force interpreted `-O0` mode and ignore source pragmats.
 - Carbon is pinned to an official experimental nightly. The image precompiles
   that toolchain's Core objects and native runtimes, then submission compilation
   emits an object, links a native executable against those trusted inputs, and

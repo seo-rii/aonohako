@@ -336,6 +336,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"moonbit":       {compileKind: "moonbit", runLang: "binary"},
 		"fennel":        {compileKind: "fennel", runLang: "lua"},
 		"chapel":        {compileKind: "chapel", runLang: "chapel-binary"},
+		"algol68":       {compileKind: "algol68", runLang: "algol68"},
 		"zerolang":      {compileKind: "zerolang", runLang: "binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
 		"elm":           {compileKind: "elm", runLang: "javascript"},
@@ -408,6 +409,7 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"kotlin_java":     "kotlin-jvm",
 		"standard-ml":     "sml",
 		"zero":            "zerolang",
+		"a68":             "algol68",
 	}
 
 	for input, wantCompileKind := range tests {
