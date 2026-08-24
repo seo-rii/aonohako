@@ -4051,6 +4051,33 @@ values := stdin nextLine subStrings collect: [ :value | value asInteger ].
     print(Int(nums[0]) + Int(nums[1]))`),
 			},
 		},
+		"moonbit": {
+			compileLang: "MOONBIT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.mbt", `extern "C" fn getchar() -> Int = "getchar"
+
+fn read_int() -> Int {
+  let mut c = getchar()
+  while c == 32 || c == 10 || c == 13 || c == 9 {
+    c = getchar()
+  }
+  let mut value = 0
+  while c >= 48 && c <= 57 {
+    value = value * 10 + c - 48
+    c = getchar()
+  }
+  value
+}
+
+fn main {
+  let a = read_int()
+  let b = read_int()
+  println(a + b)
+}`),
+			},
+		},
 		"deno": {
 			compileLang: "DENO",
 			judgeIO:     standardABJudgeIO,

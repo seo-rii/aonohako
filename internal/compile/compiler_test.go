@@ -51,12 +51,60 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "moonbit", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestMoonBitCompilerUsesFrozenSingleJobNativeBuild(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.mbt"), []byte("fn main { println(\"ok\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			outDir := filepath.Join(workDir, ".aonohako-moonbit-build", "native", "release", "build")
+			if err := os.MkdirAll(outDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(outDir, "Main.exe"), []byte("native"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := moonBitCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.mbt"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("response = %+v", resp)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("commands = %+v", runner.commands)
+	}
+	wantArgs := []string{"build", "--target-dir", ".aonohako-moonbit-build", "--target", "native", "--release", "--strip", "--frozen", "--jobs", "1"}
+	if got := runner.commands[0]; got.bin != "moon" || !reflect.DeepEqual(got.args, wantArgs) || !reflect.DeepEqual(got.env, []string{"MOON_HOME=/opt/moonbit"}) {
+		t.Fatalf("command = %+v, want moon %#v with pinned MOON_HOME", got, wantArgs)
+	}
+	for _, manifest := range []string{"moon.mod", "moon.pkg"} {
+		body, err := os.ReadFile(filepath.Join(workDir, manifest))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(body), "import") {
+			t.Fatalf("%s unexpectedly permits dependencies: %q", manifest, body)
+		}
+	}
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" || resp.Artifacts[0].Mode != "exec" {
+		t.Fatalf("artifacts = %+v", resp.Artifacts)
 	}
 }
 

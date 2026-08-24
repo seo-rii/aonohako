@@ -881,7 +881,7 @@ Production profiles currently group languages like this:
 | --- | --- |
 | `type-a` | `aheui`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
 | `type-b` | `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
-| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
+| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `vbnet` |
 | `type-f` | `uhmlang` |
@@ -903,6 +903,12 @@ The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
 links it with that trusted Core set into a native executable; execution then
 uses the ordinary `binary` sandbox contract rather than rerunning the compiler.
+
+The `MOONBIT` profile uses the checksum-pinned native toolchain and matching
+core snapshot. The compiler replaces submission manifests with a fixed,
+dependency-free executable package, then invokes a frozen single-job native
+release build. This prevents package-registry synchronization during untrusted
+compilation and emits one ordinary `binary` artifact.
 
 The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
 `.mb` for compatibility. Compile strips ASCII whitespace, validates every

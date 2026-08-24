@@ -263,6 +263,51 @@ func compileMojo(ctx context.Context, workDir, target string, sources []model.So
 	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: stdout, Stderr: stderr}
 }
 
+type moonBitCompiler struct{}
+
+func (moonBitCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	if selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".mbt"}, "Main.mbt", "main.mbt") == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no moonbit sources"}
+	}
+
+	// A fixed, dependency-free module keeps submission builds offline. User
+	// manifests are intentionally ignored: the frozen build may only use the
+	// core library bundled into the runtime image.
+	if err := os.WriteFile(filepath.Join(job.WorkDir, "moon.mod"), []byte("name = \"aonohako/Main\"\nversion = \"0.0.0\"\npreferred_target = \"native\"\n"), 0o644); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	if err := os.WriteFile(filepath.Join(job.WorkDir, "moon.pkg"), []byte("pkgtype(kind: \"executable\")\n"), 0o644); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	const targetDir = ".aonohako-moonbit-build"
+	result := runner.Run(ctx, job.WorkDir, "moon", []string{
+		"build",
+		"--target-dir", targetDir,
+		"--target", "native",
+		"--release",
+		"--strip",
+		"--frozen",
+		"--jobs", "1",
+	}, []string{"MOON_HOME=/opt/moonbit"})
+	if result.Status != model.CompileStatusOK {
+		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
+	}
+	builtRel := filepath.Join(targetDir, "native", "release", "build", "Main.exe")
+	artifacts, err := readSingleArtifact(job.WorkDir, builtRel, job.Target, "exec")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
+}
+
 const (
 	defaultCarbonCoreObjectDir      = "/opt/carbon/lib/carbon/core"
 	defaultCarbonPrebuiltRuntimeDir = "/opt/carbon/lib/carbon/aonohako-runtimes"
