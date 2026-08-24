@@ -335,6 +335,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"mojo":          {compileKind: "mojo", runLang: "mojo-binary"},
 		"moonbit":       {compileKind: "moonbit", runLang: "binary"},
 		"fennel":        {compileKind: "fennel", runLang: "lua"},
+		"chapel":        {compileKind: "chapel", runLang: "chapel-binary"},
 		"zerolang":      {compileKind: "zerolang", runLang: "binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
 		"elm":           {compileKind: "elm", runLang: "javascript"},

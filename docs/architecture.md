@@ -898,6 +898,7 @@ Production profiles currently group languages like this:
 | `type-q` | `dafny` |
 | `type-r` | `isabelle` |
 | `type-s` | `lean4` |
+| `type-v` | `chapel` |
 
 The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
@@ -919,6 +920,11 @@ same-filesystem atomic rename publishes the target. The fixed guard removes
 Lua 5.4 and compatibility native-module searchers before submission code runs
 in the shared type-a pack. Resetting `package.cpath` cannot restore those
 removed C loader functions.
+
+The dedicated `CHAPEL` profile uses a single-local-locale build and the only
+tasking runtime shipped by the official Debian package (`qthreads`). Execution
+uses the distinct `chapel-binary` identity to inject
+`CHPL_RT_NUM_THREADS_PER_LOCALE=1` and append `-nl 1` on every run.
 
 The `MALBOLGE` profile uses `.mal` as its canonical extension and accepts
 `.mb` for compatibility. Compile strips ASCII whitespace, validates every

@@ -4102,6 +4102,17 @@ fn main {
 (print (+ (tonumber a) (tonumber b)))`),
 			},
 		},
+		"chapel": {
+			compileLang: "CHAPEL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.chpl", `use IO;
+var a, b: int;
+read(a, b);
+writeln(a + b);`),
+			},
+		},
 		"deno": {
 			compileLang: "DENO",
 			judgeIO:     standardABJudgeIO,

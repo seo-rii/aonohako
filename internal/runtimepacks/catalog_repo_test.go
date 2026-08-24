@@ -19,8 +19,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 21 {
-		t.Fatalf("expected 21 production images, got %d", len(production))
+	if len(production) != 22 {
+		t.Fatalf("expected 22 production images, got %d", len(production))
 	}
 
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
@@ -86,6 +86,9 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[20].Name != "type-u" || !reflect.DeepEqual(production[20].Languages, []string{"kframework"}) {
 		t.Fatalf("type-u production image = %+v", production[20])
 	}
+	if production[21].Name != "type-v" || !reflect.DeepEqual(production[21].Languages, []string{"chapel"}) {
+		t.Fatalf("type-v production image = %+v", production[21])
+	}
 
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
@@ -112,6 +115,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-c",
 		"ci-c3",
 		"ci-carbon",
+		"ci-chapel",
 		"ci-classic-basic",
 		"ci-clojure",
 		"ci-cobol",
@@ -287,6 +291,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"bqn":           {"CBQN_COMMIT=d56147be877693eaed351745782c258bd7424de7", "bqn Main.bqn"},
 		"c3":            {"C3_VERSION=0.7.11", "c3c compile Main.c3"},
 		"carbon":        {"CARBON_VERSION=0.0.0-0.nightly.2026.05.02", "16719a509201acd2a7d82c260fba073c14ce7eb53c44c6ae7dda1fa083b6fa2a", "aonohako-carbon-warmup.carbon", "carbon build-runtimes --output-directory=/opt/carbon/lib/carbon/aonohako-runtimes", "aonohako-runtimes/libcxx/lib/libc++.a", "chmod -R a+rX /opt/carbon/lib/carbon/aonohako-runtimes", "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=Main.o Main.carbon", "carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o", "./Main | grep '^Hello World!$'", "Broken.carbon"},
+		"chapel":        {"CHAPEL_VERSION=2.9.0", "CHAPEL_DEB_SHA256=11f93de9e725a7c74608b4afcc7c8fc8bec380f27b09883cd6f69d6fbe66e13d", "sha256sum -c -", "set -euo pipefail", "chpl-language-server/src/chpl-shim.py", "chpl-venv", "fixDistDocs.perl", "fixInternalDocs.sh", "third-party", "-type l", "-perm /0001", "CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast", "here.maxTaskPar", "CHPL_RT_NUM_THREADS_PER_LOCALE=1 ./Main -nl 1", "./Main -nl 2", "test ! -e Broken"},
 		"classic-basic": {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
 		"clojure":       {"PushbackReader", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp /usr/share/java/clojure-1.12.jar clojure.main Main.clj"},
 		"cobol":         {"gnucobol", "cobc -x -free -O2 -o Main Main.cob"},
@@ -589,6 +594,48 @@ func TestRepositoryCatalogPinsAndHardensFennelAOT(t *testing.T) {
 	}
 }
 
+func TestRepositoryCatalogPinsAndBoundsChapelRuntime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["chapel"]
+	if !ok {
+		t.Fatal("chapel language missing from catalog")
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"CHAPEL_VERSION=2.9.0",
+		"CHAPEL_DEB_SHA256=11f93de9e725a7c74608b4afcc7c8fc8bec380f27b09883cd6f69d6fbe66e13d",
+		"chapel-${CHAPEL_VERSION}-1.debian13.amd64.deb",
+		"sha256sum -c -",
+		"chmod 0750",
+		"mason",
+		"/usr/share/chapel/2.9/tools/c2chapel/c2chapel.py",
+		"/usr/share/chapel/2.9/tools/chpl-language-server/src/chpl-shim.py",
+		"/usr/share/chapel/2.9/tools/chplcheck/chplcheck",
+		"find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 -exec chmod 0750 {} +",
+		`test "$(find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 | wc -l)" -eq 37`,
+		"/usr/share/chapel/2.9/modules/dists/fixDistDocs.perl",
+		"/usr/share/chapel/2.9/modules/internal/fixInternalDocs.sh",
+		"test -d /usr/lib/chapel/2.9/third-party",
+		"find /usr/lib/chapel/2.9/third-party -path '*/bin/*' -type f -perm /0111 -exec chmod 0750 {} +",
+	} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("Chapel install must contain %q:\n%s", marker, install)
+		}
+	}
+	if !slices.Contains(spec.Install.SandboxTools, "chpl") {
+		t.Fatalf("Chapel sandbox tools = %v", spec.Install.SandboxTools)
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, marker := range []string{"set -euo pipefail", "chpl-language-server/src/chpl-shim.py", "chpl-venv", "fixDistDocs.perl", "fixInternalDocs.sh", "third-party", "-type l", "-perm /0001", "CHPL_COMM=none", "CHPL_TASKS=qthreads", "CHPL_TARGET_CPU=none", "CHPL_RT_NUM_THREADS_PER_LOCALE=1", "--local", "here.maxTaskPar", "./Main -nl 1", "./Main -nl 2", "test -x Main", "test ! -e Broken"} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("Chapel smoke must contain %q:\n%s", marker, smoke)
+		}
+	}
+}
+
 func TestRepositoryCatalogPinsRustToolchain(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
 	if err != nil {
@@ -800,7 +847,7 @@ func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
 	}
 
 	for _, profileName := range sortedKeys(catalog.Profiles) {
-		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" || profileName == "type-t" || profileName == "type-u" {
+		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" || profileName == "type-t" || profileName == "type-u" || profileName == "type-v" {
 			continue
 		}
 		profile := catalog.Profiles[profileName]

@@ -316,6 +316,10 @@ if has_language "fennel"; then
     report_once "Fennel" fennel --version
 fi
 
+if has_language "chapel"; then
+    report_once "Chapel" chpl --version
+fi
+
 if has_language "zerolang"; then
     report_once "Zerolang" zero --version
 fi
@@ -655,6 +659,7 @@ report_compile_option "hare" "hare build -o <target>"
 report_compile_option "mojo" "mojo build -o <target>"
 report_compile_option "moonbit" "moon build --target native --release --strip --frozen --jobs 1"
 report_compile_option "fennel" "aonohako-fennel-compile <source> <target>.lua (embedded compile-string API, requireAsInclude, luac5.4 validation, atomic publish)"
+report_compile_option "chapel" "CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast -o <target> <source>; run with CHPL_RT_NUM_THREADS_PER_LOCALE=1 <target> -nl 1"
 report_compile_option "zerolang" "zero import --out <graph> <source.0>; zero build --release release-fast --out <target> <graph>"
 report_compile_option "kotlin" "kotlinc-native -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -J-XX:ReservedCodeCacheSize=32m -J-XX:MaxMetaspaceSize=192m -J-XX:CompressedClassSpaceSize=64m -opt -o <target>"
 report_compile_option "kotlin-jvm" "kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target 1.8 -include-runtime -d <target>.jar; optional javac --release 8 plus jar uf"
