@@ -78,6 +78,9 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"CHAPEL",
 		"ALGOL68",
 		"KOKA",
+		"SHELL",
+		"BASH",
+		"POSIX_SH",
 		"ZEROLANG",
 		"KOTLIN",
 		"ADA",
@@ -202,6 +205,14 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"PONY":         "pony-binary",
 		"pony":         "pony-binary",
 		"pony-binary":  "pony-binary",
+		"SHELL":        "bash",
+		"shell":        "bash",
+		"BASH":         "bash",
+		"bash":         "bash",
+		"POSIX_SH":     "posix-sh",
+		"posix_sh":     "posix-sh",
+		"posix-sh":     "posix-sh",
+		"sh":           "posix-sh",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",
@@ -368,6 +379,26 @@ func TestPonyProfileUsesBoundedRuntimeIdentity(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("PONY resource profile = %+v", profile)
+	}
+}
+
+func TestShellProfilesShareCompilerAndExposeRuntimeVariants(t *testing.T) {
+	tests := map[string]string{
+		"SHELL":    "bash",
+		"BASH":     "bash",
+		"POSIX_SH": "posix-sh",
+	}
+	for language, runLang := range tests {
+		profile, ok := Resolve(language)
+		if !ok {
+			t.Fatalf("Resolve(%s) reported unsupported language", language)
+		}
+		if profile.Extension != "sh" || profile.DefaultTarget != "Main.sh" || profile.CompileKind != "shell" || profile.RunLang != runLang {
+			t.Fatalf("%s profile = %+v", language, profile)
+		}
+		if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 0 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 64 {
+			t.Fatalf("%s resource profile = %+v", language, profile)
+		}
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"debug/elf"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -103,6 +104,7 @@ type languageSecurityCase struct {
 	entryPoint            string
 	expectedStdout        string
 	expectedCompileReason string
+	forbiddenPathAfterRun string
 	limits                model.Limits
 	sources               []model.Source
 }
@@ -1257,6 +1259,18 @@ func runLanguageSecuritySuite() error {
 		break
 	}
 
+	const shellChildProbeDir = "/tmp/aonohako-shell-child-probes"
+	if err := os.RemoveAll(shellChildProbeDir); err != nil {
+		return fmt.Errorf("remove stale shell child probe directory: %w", err)
+	}
+	if err := os.Mkdir(shellChildProbeDir, 0o777); err != nil {
+		return fmt.Errorf("create shell child probe directory: %w", err)
+	}
+	if err := os.Chmod(shellChildProbeDir, 0o777); err != nil {
+		return fmt.Errorf("expose shell child probe directory: %w", err)
+	}
+	defer os.RemoveAll(shellChildProbeDir)
+
 	cases := languageSecurityCases(tcpAddr.Port, kokaSyslib)
 	seen := map[string]struct{}{}
 	covered := 0
@@ -1322,6 +1336,11 @@ func runLanguageSecuritySuite() error {
 				})
 			}
 
+			if tc.forbiddenPathAfterRun != "" {
+				if err := os.Remove(tc.forbiddenPathAfterRun); err != nil && !os.IsNotExist(err) {
+					return fmt.Errorf("%s %s remove stale post-run marker: %w", language, tc.name, err)
+				}
+			}
 			runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
 				Lang:           profile.RunLang,
 				Binaries:       binaries,
@@ -1334,6 +1353,15 @@ func runLanguageSecuritySuite() error {
 			}
 			if runResp.Status != model.RunStatusAccepted {
 				return fmt.Errorf("%s %s security execute failed: status=%s reason=%s stdout=%q stderr=%q", language, tc.name, runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
+			}
+			if tc.forbiddenPathAfterRun != "" {
+				time.Sleep(1500 * time.Millisecond)
+				if _, err := os.Stat(tc.forbiddenPathAfterRun); err == nil {
+					_ = os.Remove(tc.forbiddenPathAfterRun)
+					return fmt.Errorf("%s %s background child survived sandbox cleanup", language, tc.name)
+				} else if !os.IsNotExist(err) {
+					return fmt.Errorf("%s %s inspect post-run marker: %w", language, tc.name, err)
+				}
 			}
 			covered++
 		}
@@ -2149,6 +2177,8 @@ func languageSecurityCases(tcpPort int, kokaSyslib string) map[string][]language
 	expectedNative := "network:blocked\nfork:blocked\nunshare:blocked\n"
 	expectedCNative := "network:blocked\nfork:blocked\nunshare:blocked\nx32:blocked\n"
 	expectedNativeProcess := "network:blocked\nprocess:blocked\nunshare:blocked\n"
+	const bashChildMarker = "/tmp/aonohako-shell-child-probes/bash-leak"
+	const posixChildMarker = "/tmp/aonohako-shell-child-probes/posix-leak"
 	pythonProcessNetwork := fmt.Sprintf(`import socket
 import subprocess
 
@@ -2426,6 +2456,71 @@ actor Main
     env.out.print(if process_result == -1 then "process:blocked" else "process:leaked" end)
     let socket_result = @socket(2, 1, 0)
     env.out.print(if socket_result == -1 then "network:blocked" else "network:leaked" end)`),
+				},
+			},
+		},
+		"bash": {
+			{
+				name:                  "network-tools-loader-process-limit-and-child-cleanup",
+				compileLang:           "BASH",
+				expectedStdout:        "network:blocked\ntools:blocked\nloader:blocked\nprocess-limit:bounded\nchild:started\n",
+				forbiddenPathAfterRun: bashChildMarker,
+				limits:                limits,
+				sources: []model.Source{
+					source("Main.sh", fmt.Sprintf(`set -u
+if (: > /dev/tcp/127.0.0.1/%d) 2>/dev/null; then
+  printf 'network:leaked\n'
+else
+  printf 'network:blocked\n'
+fi
+if cp /usr/local/go/bin/go ./go-copy 2>/dev/null; then
+  printf 'tools:leaked\n'
+else
+  printf 'tools:blocked\n'
+fi
+if /lib64/ld-linux-x86-64.so.2 /usr/bin/apt-get --version >/dev/null 2>&1; then
+  printf 'loader:leaked\n'
+else
+  printf 'loader:blocked\n'
+fi
+if awk '$1 == "Max" && $2 == "processes" { found = 1; bounded = $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $3 <= 80 && $4 <= 80 } END { exit !(found && bounded) }' /proc/self/limits; then
+  printf 'process-limit:bounded\n'
+else
+  printf 'process-limit:leaked\n'
+fi
+(sleep 1; printf survived > %q) >/dev/null 2>&1 &
+printf 'child:started\n'
+`, tcpPort, bashChildMarker)),
+				},
+			},
+		},
+		"posix-sh": {
+			{
+				name:                  "tools-loader-process-limit-and-child-cleanup",
+				compileLang:           "POSIX_SH",
+				expectedStdout:        "tools:blocked\nloader:blocked\nprocess-limit:bounded\nchild:started\n",
+				forbiddenPathAfterRun: posixChildMarker,
+				limits:                limits,
+				sources: []model.Source{
+					source("Main.sh", fmt.Sprintf(`set -u
+if cp /usr/local/go/bin/go ./go-copy 2>/dev/null; then
+  printf 'tools:leaked\n'
+else
+  printf 'tools:blocked\n'
+fi
+if /lib64/ld-linux-x86-64.so.2 /usr/bin/apt-get --version >/dev/null 2>&1; then
+  printf 'loader:leaked\n'
+else
+  printf 'loader:blocked\n'
+fi
+if awk '$1 == "Max" && $2 == "processes" { found = 1; bounded = $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $3 <= 80 && $4 <= 80 } END { exit !(found && bounded) }' /proc/self/limits; then
+  printf 'process-limit:bounded\n'
+else
+  printf 'process-limit:leaked\n'
+fi
+(sleep 1; printf survived > %q) >/dev/null 2>&1 &
+printf 'child:started\n'
+`, posixChildMarker)),
 				},
 			},
 		},
@@ -4283,6 +4378,45 @@ actor Main
     env.out.print((a + b).string())`),
 			},
 		},
+		"bash": {
+			compileLang:     "SHELL",
+			compileVariants: []string{"BASH"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 4000, MemoryMB: 256},
+			sources: []model.Source{
+				source("Main.sh", `set -eu
+test "${BASH_ENV-}" = /dev/null
+test "${ENV-}" = /dev/null
+if env | grep -Eq '^(BASHOPTS|SHELLOPTS)='; then exit 20; fi
+test "$(printf 'pipeline' | tr a-z A-Z)" = PIPELINE
+test "$( (printf 'subshell') )" = subshell
+read -r process_value < <(printf 'process-substitution\n')
+test "${process_value}" = process-substitution
+(sleep 0.01; printf 'child\n' > child.txt) &
+child_pid=$!
+wait "${child_pid}"
+test "$(cat child.txt)" = child
+read -r a b
+printf '%s\n' "$((a + b))"`),
+			},
+		},
+		"posix-sh": {
+			compileLang: "POSIX_SH",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 4000, MemoryMB: 256},
+			sources: []model.Source{
+				source("Main.sh", `set -eu
+test "${ENV-}" = /dev/null
+test "$(printf 'pipeline' | tr a-z A-Z)" = PIPELINE
+test "$( (printf 'subshell') )" = subshell
+(sleep 0.01; printf 'child\n' > child.txt) &
+child_pid=$!
+wait "${child_pid}"
+test "$(cat child.txt)" = child
+read -r a b
+printf '%s\n' "$((a + b))"`),
+			},
+		},
 		"deno": {
 			compileLang: "DENO",
 			judgeIO:     standardABJudgeIO,
@@ -4543,6 +4677,113 @@ func runDirectImagePermissionChecks() error {
 	allowedExecutableTools := map[string]struct{}{}
 	for _, tool := range strings.Fields(os.Getenv("AONOHAKO_SANDBOX_TOOLS")) {
 		allowedExecutableTools[tool] = struct{}{}
+	}
+
+	imageName := strings.TrimSpace(os.Getenv("AONOHAKO_IMAGE_NAME"))
+	if imageName == "type-x" || imageName == "ci-bash" || imageName == "ci-posix-sh" {
+		suidOutput, err := exec.Command("find", "/", "-xdev", "-type", "f", "-perm", "/6000", "-print").CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("shell-image-suid-inventory: %w: %s", err, suidOutput)
+		}
+		if strings.TrimSpace(string(suidOutput)) != "" {
+			return fmt.Errorf("shell-image-suid-inventory: unexpected privileged files: %s", suidOutput)
+		}
+
+		allowlistPath := "/usr/local/lib/aonohako/shell_runtime_allowlist.txt"
+		allowlistData, err := os.ReadFile(allowlistPath)
+		if err != nil {
+			return fmt.Errorf("shell-image-allowlist: %w", err)
+		}
+		allowedTargets := make(map[string]struct{})
+		for _, rawPath := range strings.Split(string(allowlistData), "\n") {
+			path := strings.TrimSpace(rawPath)
+			if path == "" || strings.HasPrefix(path, "#") {
+				continue
+			}
+			target, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return fmt.Errorf("shell-image-allowlist target %s: %w", path, err)
+			}
+			allowedTargets[target] = struct{}{}
+		}
+		for _, root := range []string{"/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin", "/usr/local/go/bin", "/usr/local/go/pkg/tool", "/usr/local/lib/aonohako", "/usr/libexec"} {
+			if _, err := os.Stat(root); os.IsNotExist(err) {
+				continue
+			}
+			if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if !entry.Type().IsRegular() {
+					return nil
+				}
+				info, err := entry.Info()
+				if err != nil || info.Mode().Perm()&0o001 == 0 {
+					return err
+				}
+				if _, ok := allowedTargets[path]; !ok {
+					return fmt.Errorf("unexpected world-executable path %s", path)
+				}
+				return nil
+			}); err != nil {
+				return fmt.Errorf("shell-image-executable-inventory: %w", err)
+			}
+		}
+		for _, root := range []string{"/usr/lib", "/usr/local/lib"} {
+			if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					if errors.Is(walkErr, os.ErrPermission) {
+						return filepath.SkipDir
+					}
+					return walkErr
+				}
+				if !entry.Type().IsRegular() {
+					return nil
+				}
+				info, err := entry.Info()
+				if err != nil || info.Mode().Perm()&0o001 == 0 {
+					return err
+				}
+				binary, err := elf.Open(path)
+				if err != nil {
+					return fmt.Errorf("world-executable non-ELF library path %s", path)
+				}
+				if binary.Type != elf.ET_DYN {
+					_ = binary.Close()
+					return fmt.Errorf("world-executable non-library ELF path %s", path)
+				}
+				for _, program := range binary.Progs {
+					if program.Type == elf.PT_INTERP {
+						_ = binary.Close()
+						return fmt.Errorf("world-executable PIE tool under library root %s", path)
+					}
+				}
+				return binary.Close()
+			}); err != nil {
+				return fmt.Errorf("shell-image-library-executable-inventory: %w", err)
+			}
+		}
+
+		hiddenWorkDir, err := os.MkdirTemp("", "aonohako-shell-hidden-tools-*")
+		if err != nil {
+			return fmt.Errorf("shell-image-hidden-tools workdir: %w", err)
+		}
+		defer os.RemoveAll(hiddenWorkDir)
+		if err := os.Chmod(hiddenWorkDir, 0o777); err != nil {
+			return fmt.Errorf("shell-image-hidden-tools chmod: %w", err)
+		}
+		hiddenOut, hiddenErr, err := runAsSandboxUser(
+			"for p in /usr/local/go/bin/go /usr/bin/apt-get /usr/bin/dpkg; do if [ -r \"$p\" ] || [ -x \"$p\" ]; then echo leaked; else echo blocked; fi; done; "+
+				"if cp /usr/local/go/bin/go ./go-copy 2>/dev/null; then echo copy-leaked; else echo copy-blocked; fi; "+
+				"if /lib64/ld-linux-x86-64.so.2 /usr/bin/apt-get --version >/dev/null 2>&1; then echo loader-leaked; else echo loader-blocked; fi",
+			hiddenWorkDir,
+		)
+		if err != nil {
+			return fmt.Errorf("shell-image-hidden-tools: %w: %s", err, hiddenErr)
+		}
+		if hiddenOut != "blocked\nblocked\nblocked\ncopy-blocked\nloader-blocked\n" {
+			return fmt.Errorf("shell-image-hidden-tools: stdout %q stderr %q", hiddenOut, hiddenErr)
+		}
 	}
 
 	if owned, err := sandboxIdentityOwnedImagePaths("/"); err != nil {

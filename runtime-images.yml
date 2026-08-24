@@ -48,6 +48,22 @@ shared_installs:
       - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid gforth
       - find /var/lib/apt/lists -mindepth 1 -delete
 
+  shell_runtime:
+    apt:
+      - bash=5.2.37-2+b9
+      - dash=0.5.12-12
+      - diffutils
+      - findutils
+      - grep
+      - mawk
+      - sed
+    sandbox_tools:
+      - bash
+      - dash
+    script:
+      - test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b9
+      - test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
+
 languages:
   plain:
     install:
@@ -3182,6 +3198,46 @@ languages:
           test ! -e Broken
           )
 
+  bash:
+    install:
+      shared:
+        - shell_runtime
+    smoke:
+      command:
+        - /bin/bash
+        - --noprofile
+        - --norc
+        - -c
+        - |
+          set -euo pipefail
+          test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b9
+          test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
+          rm -f /tmp/aonohako-shell-syntax-leak
+          printf '%s\n' 'value=$(touch /tmp/aonohako-shell-syntax-leak)' > SyntaxOnly.sh
+          bash --noprofile --norc -n SyntaxOnly.sh
+          test ! -e /tmp/aonohako-shell-syntax-leak
+          printf '%s\n' 'if then' > Broken.sh
+          if bash --noprofile --norc -n Broken.sh >/dev/null 2>&1; then exit 1; fi
+
+  posix-sh:
+    install:
+      shared:
+        - shell_runtime
+    smoke:
+      command:
+        - /bin/dash
+        - -c
+        - |
+          set -eu
+          test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b9
+          test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
+          rm -f /tmp/aonohako-posix-shell-syntax-leak
+          printf '%s\n' 'value=$(touch /tmp/aonohako-posix-shell-syntax-leak)' > SyntaxOnly.sh
+          /bin/dash -n SyntaxOnly.sh
+          test ! -e /tmp/aonohako-posix-shell-syntax-leak
+          printf '%s\n' 'if then' > Broken.sh
+          if /bin/dash -n Broken.sh >/dev/null 2>&1; then exit 1; fi
+
   deno:
     install:
       apt:
@@ -3676,3 +3732,8 @@ profiles:
     install: *gcc16_profile
     languages:
       - pony
+  type-x:
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
+    languages:
+      - bash
+      - posix-sh

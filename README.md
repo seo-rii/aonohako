@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Chapel, ALGOL 68, Koka, Pony, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
+  Mojo, MoonBit, Fennel, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -105,6 +105,13 @@ language-specific commands keep their declared order.
   payload. Compilation targets the generic CPU, execution fixes the scheduler
   ceiling with `--ponymaxthreads=1`, and physical memory remains cgroup/RSS
   bounded while Pony's reserved virtual arena is exempted from `RLIMIT_AS`.
+- Shell submissions use Debian Bash 5.2.37-2+b9 or dash 0.5.12-12 as runtime
+  variants of one `.sh` language family. Syntax checks and execution disable
+  startup files, while the dedicated type-x pack permits bounded child
+  processes for normal shell composition with a 64-task helper budget and an
+  80-task per-run cgroup ceiling, but keeps networking disabled. The
+  final image exposes only an explicit utility allowlist and makes hidden
+  compilers, package/network tools, and their loader inputs unreadable.
 - Carbon is pinned to an official experimental nightly. The image precompiles
   that toolchain's Core objects and native runtimes, then submission compilation
   emits an object, links a native executable against those trusted inputs, and

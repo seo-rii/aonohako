@@ -101,6 +101,8 @@ COPY --chmod=0755 scripts/vb6_run.rb /usr/local/bin/aonohako-vb6-run
 COPY --chmod=0755 scripts/golfscript_sandboxed.rb /usr/local/lib/aonohako/golfscript_sandboxed.rb
 COPY --chmod=0755 scripts/fennel_compile.sh /usr/local/bin/aonohako-fennel-compile
 COPY --chmod=0644 scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_writer.fnl
+COPY --chmod=0700 scripts/harden_shell_runtime.sh /usr/local/lib/aonohako/harden_shell_runtime.sh
+COPY --chmod=0644 scripts/shell_runtime_allowlist.txt /usr/local/lib/aonohako/shell_runtime_allowlist.txt
 COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
@@ -147,6 +149,13 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
     for path in /usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip /usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip /usr/local/lib/node_modules/npm /opt/node-*/lib/node_modules/npm; do \
       if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
     done
+
+RUN if [[ "${IMAGE_NAME}" == "type-x" || "${IMAGE_NAME}" == "ci-bash" || "${IMAGE_NAME}" == "ci-posix-sh" ]]; then \
+      /usr/local/lib/aonohako/harden_shell_runtime.sh; \
+    else \
+      rm -f /usr/local/lib/aonohako/shell_runtime_allowlist.txt; \
+    fi && \
+    rm -f /usr/local/lib/aonohako/harden_shell_runtime.sh
 
 ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
     LANG=C.UTF-8 \

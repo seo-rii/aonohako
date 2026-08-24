@@ -218,8 +218,13 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	isGoBinary := runLang == "go-binary"
 	isMojoBinary := runLang == "mojo-binary"
 	isPonyBinary := runLang == "pony-binary"
+	isShellRunLang := runLang == "bash" || runLang == "posix-sh"
 	allowUnixSockets := false
 	switch runLang {
+	case "bash":
+		innerEnv = append(innerEnv, "BASH_ENV=/dev/null", "ENV=/dev/null")
+	case "posix-sh":
+		innerEnv = append(innerEnv, "ENV=/dev/null")
 	case "ocaml":
 		innerEnv = append(innerEnv, "OCAMLRUNPARAM="+ocamlRunParam)
 	case "elixir":
@@ -266,6 +271,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		isGoBinary = false
 		isMojoBinary = false
 		isPonyBinary = false
+		isShellRunLang = false
 		runtimeBase = communicationSandboxRuntimeBase
 	}
 	if isJVMRunLang(runLang) && !isTrustedJVMRuntime(runLang, runtimeBase) {
@@ -277,10 +283,28 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	isDotnet := runtimeBase == "dotnet"
 	isTLA := runtimeBase == "aonohako-tla-run"
 	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
+	trustedShellRuntime := false
+	switch os.Getenv("AONOHAKO_IMAGE_NAME") {
+	case "type-x", "ci-bash", "ci-posix-sh":
+		trustedShellRuntime = runLang == "bash" && runtimeBase == "bash" ||
+			runLang == "posix-sh" && runtimeBase == "dash"
+	}
+	if isShellRunLang && !trustedShellRuntime {
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "shell runtime is outside the dedicated trusted image",
+		}
+	}
+	threadLimit := sandboxThreadLimit
+	if trustedShellRuntime {
+		threadLimit = shellSandboxThreadLimit
+	}
 	allowProcesses := false
 	switch runtimeBase {
 	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-vhdl-run", "aonohako-why3-prove", "ghdl", "vvp":
 		allowProcesses = true
+	case "bash", "dash":
+		allowProcesses = trustedShellRuntime
 	}
 	if isDotnet {
 		if heapLimit := dotnetGCHeapHardLimitHex(req.Limits.MemoryMB, tuning); heapLimit != "" {
@@ -336,7 +360,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		Dir:                      ws.BoxDir,
 		Env:                      innerEnv,
 		Limits:                   req.Limits,
-		ThreadLimit:              sandboxThreadLimit,
+		ThreadLimit:              threadLimit,
 		OpenFileLimit:            openFileLimit,
 		StackLimitBytes:          security.StackLimitForCommand(runtimeBase),
 		AddressSpaceLimitBytes:   addressSpaceLimit,
@@ -524,7 +548,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			_ = cmd.Wait()
 			return execResult{Status: model.RunStatusInitFail, Reason: "cgroup controller setup failed: " + err.Error()}
 		}
-		pidsMax := sandboxThreadLimit + 16
+		pidsMax := threadLimit + 16
 		group, err := cgroup.CreateRunGroup(cgroupParentDir, cgroup.RunName("execute"), cgroup.Limits{
 			MemoryMaxBytes:  memoryLimitKB * 1024,
 			PidsMax:         pidsMax,
