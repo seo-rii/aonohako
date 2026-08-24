@@ -209,6 +209,20 @@ actor Main
     end
 `)},
 		},
+		"powershell": {
+			compileLang: "POWERSHELL",
+			memoryMB:    192,
+			sources: []model.Source{source("Main.ps1", `$pointers = [System.Collections.Generic.List[System.IntPtr]]::new()
+$chunkSize = 8 * 1024 * 1024
+while ($true) {
+  $pointer = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($chunkSize)
+  for ($offset = 0; $offset -lt $chunkSize; $offset += 4096) {
+    [System.Runtime.InteropServices.Marshal]::WriteByte($pointer, $offset, 1)
+  }
+  $pointers.Add($pointer)
+}
+`)},
+		},
 	}
 }
 
@@ -217,6 +231,7 @@ func runtimeStartupMemoryMB() map[string]int {
 		"go":         1120,
 		"rust":       64,
 		"pony":       64,
+		"powershell": 192,
 		"zig":        160,
 		"java":       64,
 		"kotlin-jvm": 1536,
@@ -2524,6 +2539,48 @@ printf 'child:started\n'
 				},
 			},
 		},
+		"powershell": {
+			{
+				name:           "process-jobs-and-network-denied",
+				compileLang:    "POWERSHELL",
+				expectedStdout: "native:blocked\njob:blocked\nnetwork:blocked\n",
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.ps1", fmt.Sprintf(`$ErrorActionPreference = 'Stop'
+try {
+  & /bin/true
+  if ($LASTEXITCODE -eq 0) { 'native:leaked' } else { 'native:blocked' }
+} catch {
+  'native:blocked'
+}
+try {
+  $job = Start-Job -ScriptBlock { 1 }
+  Wait-Job -Job $job | Out-Null
+  if ($job.State -eq 'Completed') {
+    $jobResult = @(Receive-Job -Job $job -ErrorAction Stop)
+    if ($jobResult.Count -eq 1 -and $jobResult[0] -eq 1) { 'job:leaked' } else { 'job:blocked' }
+  } else {
+    'job:blocked'
+  }
+} catch {
+  'job:blocked'
+} finally {
+  if ($null -ne $job) { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue }
+}
+$client = $null
+try {
+  $client = [System.Net.Sockets.TcpClient]::new()
+  $client.Connect('127.0.0.1', %d)
+  'network:leaked'
+} catch {
+  'network:blocked'
+} finally {
+  if ($null -ne $client) { $client.Dispose() }
+}
+`, tcpPort)),
+				},
+			},
+		},
 		"pypy": {
 			{
 				name:           "process-and-network-denies",
@@ -4417,6 +4474,31 @@ read -r a b
 printf '%s\n' "$((a + b))"`),
 			},
 		},
+		"powershell": {
+			compileLang: "POWERSHELL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.ps1", `$ErrorActionPreference = 'Stop'
+if ($env:HOME -ne '/var/empty') { exit 20 }
+if ($env:XDG_CONFIG_HOME -ne '/var/empty/.config') { exit 21 }
+if ($env:XDG_DATA_HOME -ne '/var/empty/.local/share') { exit 22 }
+$modulePaths = @($env:PSModulePath -split ':')
+$expectedModulePaths = @('/var/empty/.local/share/powershell/Modules', '/usr/local/share/powershell/Modules', '/opt/microsoft/powershell/7/Modules')
+if (@(Compare-Object $modulePaths $expectedModulePaths).Count -ne 0) { exit 23 }
+if ($env:PSModulePath -like '*/tmp/aonohako-run-*') { exit 24 }
+if ($env:POWERSHELL_TELEMETRY_OPTOUT -ne '1') { exit 21 }
+if ($env:POWERSHELL_UPDATECHECK -ne 'Off') { exit 22 }
+$values = [Console]::In.ReadToEnd().Trim() -split '\s+' | ForEach-Object { [int]$_ }
+$pipeline = 1..2 | ForEach-Object { $_ * 2 }
+if (($pipeline -join ',') -ne '2,4') { exit 25 }
+$parallel = 1..2 | ForEach-Object -Parallel { $_ } -ThrottleLimit 1
+if (($parallel -join ',') -ne '1,2') { exit 26 }
+Set-Content -LiteralPath same-folder.txt -Value ($values[0] + $values[1])
+Get-Content -LiteralPath same-folder.txt
+`),
+			},
+		},
 		"deno": {
 			compileLang: "DENO",
 			judgeIO:     standardABJudgeIO,
@@ -4814,6 +4896,54 @@ func runDirectImagePermissionChecks() error {
 		return fmt.Errorf("protected-paths-are-not-readable: unexpected stdout %q stderr %q", protectedOut, protectedErr)
 	}
 
+	powerShellImage := strings.Contains(","+os.Getenv("AONOHAKO_LANGUAGES")+",", ",powershell,")
+	if powerShellImage {
+		passwdInfo, err := os.Stat("/etc/passwd")
+		if err != nil {
+			return fmt.Errorf("powershell-passwd-metadata: %w", err)
+		}
+		passwdStat, ok := passwdInfo.Sys().(*syscall.Stat_t)
+		if !ok {
+			return errors.New("powershell-passwd-metadata: unsupported stat metadata")
+		}
+		if passwdStat.Uid != 0 || passwdStat.Gid != 0 || passwdInfo.Mode().Perm() != 0o444 || passwdInfo.Size() != 0 {
+			return fmt.Errorf("powershell-passwd-metadata: uid=%d gid=%d mode=%#o size=%d", passwdStat.Uid, passwdStat.Gid, passwdInfo.Mode().Perm(), passwdInfo.Size())
+		}
+		for _, path := range []string{
+			"/var/empty",
+			"/var/empty/.config",
+			"/var/empty/.local/share",
+			"/var/empty/.local/share/powershell/Modules",
+			"/usr/local/share/powershell/Modules",
+			"/opt/microsoft/powershell/7/Modules",
+		} {
+			info, err := os.Stat(path)
+			if err != nil {
+				return fmt.Errorf("powershell-module-root %s: %w", path, err)
+			}
+			stat, ok := info.Sys().(*syscall.Stat_t)
+			if !ok {
+				return fmt.Errorf("powershell-module-root %s: unsupported stat metadata", path)
+			}
+			if !info.IsDir() || stat.Uid != 0 || stat.Gid != 0 || info.Mode().Perm()&0o022 != 0 {
+				return fmt.Errorf("powershell-module-root %s: uid=%d gid=%d mode=%#o", path, stat.Uid, stat.Gid, info.Mode().Perm())
+			}
+		}
+		moduleOut, moduleErr, err := runAsSandboxUser(
+			"for d in /var/empty/.config /var/empty/.local/share/powershell/Modules /usr/local/share/powershell/Modules /opt/microsoft/powershell/7/Modules; do "+
+				"if [ -r \"$d\" ] && [ -x \"$d\" ]; then "+
+				"if /bin/sh -c 'printf x > \"$1/submission-write\"' _ \"$d\" 2>/dev/null; then echo leaked; else echo immutable; fi; "+
+				"else echo leaked; fi; done",
+			"",
+		)
+		if err != nil {
+			return fmt.Errorf("powershell-module-roots-are-immutable: %w: %s", err, moduleErr)
+		}
+		if moduleOut != strings.Repeat("immutable\n", 4) {
+			return fmt.Errorf("powershell-module-roots-are-immutable: stdout %q stderr %q", moduleOut, moduleErr)
+		}
+	}
+
 	imageOut, imageErr, err := runAsSandboxUser(
 		"for p in /etc/debian_version /etc/os-release /etc/passwd /etc/group /etc/shells /etc/login.defs /var/lib/dpkg/status; do if [ -r \"$p\" ]; then echo leaked; else echo blocked; fi; done; "+
 			"for d in /usr/share/doc /usr/share/common-licenses /usr/share/bash-completion /var/cache/debconf /etc/apt; do "+
@@ -4824,7 +4954,11 @@ func runDirectImagePermissionChecks() error {
 	if err != nil {
 		return fmt.Errorf("image-metadata-paths-are-not-readable: %w\n%s", err, imageErr)
 	}
-	if imageOut != strings.Repeat("blocked\n", 12) {
+	imageMetadataExpected := strings.Repeat("blocked\n", 12)
+	if powerShellImage {
+		imageMetadataExpected = "blocked\nblocked\nleaked\n" + strings.Repeat("blocked\n", 9)
+	}
+	if imageOut != imageMetadataExpected {
 		return fmt.Errorf("image-metadata-paths-are-not-readable: unexpected stdout %q stderr %q", imageOut, imageErr)
 	}
 

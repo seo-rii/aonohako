@@ -51,7 +51,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -391,6 +391,51 @@ func TestShellCompilerChecksEachRuntimeDialectWithoutExecutingSource(t *testing.
 				t.Fatalf("commands = %+v, want %s %v", runner.commands, tc.bin, wantArgs)
 			}
 		})
+	}
+}
+
+func TestPowerShellCompilerUsesParserAPIWithLockedRuntimeEnvironment(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.ps1"), []byte("Write-Output 'ok'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
+	compiler, ok := compileRegistry["powershell"].(checkedSourcesCompiler)
+	if !ok {
+		t.Fatalf("powershell compiler = %T, want checkedSourcesCompiler", compileRegistry["powershell"])
+	}
+	resp := compiler.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.ps1"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.ps1" {
+		t.Fatalf("response = %+v", resp)
+	}
+	if len(runner.commands) != 1 || runner.commands[0].bin != "pwsh" {
+		t.Fatalf("commands = %+v", runner.commands)
+	}
+	command := runner.commands[0]
+	if len(command.args) < 3 || command.args[len(command.args)-1] != filepath.Join(workDir, "Main.ps1") || !slices.Contains(command.args, "-Command") {
+		t.Fatalf("PowerShell parser args = %v", command.args)
+	}
+	parserIndex := slices.Index(command.args, "-Command") + 1
+	if parserIndex <= 0 || parserIndex >= len(command.args) || !strings.Contains(command.args[parserIndex], "Parser]::ParseFile") {
+		t.Fatalf("PowerShell parser command = %v", command.args)
+	}
+	for _, want := range []string{
+		"HOME=/var/empty",
+		"XDG_CONFIG_HOME=/var/empty/.config",
+		"XDG_DATA_HOME=/var/empty/.local/share",
+		"PSModulePath=/opt/microsoft/powershell/7/Modules",
+		"POWERSHELL_TELEMETRY_OPTOUT=1",
+		"POWERSHELL_UPDATECHECK=Off",
+		"TERM=dumb",
+		"NO_COLOR=1",
+	} {
+		if !slices.Contains(command.env, want) {
+			t.Fatalf("PowerShell compiler env missing %q in %v", want, command.env)
+		}
 	}
 }
 

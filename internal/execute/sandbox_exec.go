@@ -225,6 +225,22 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		innerEnv = append(innerEnv, "BASH_ENV=/dev/null", "ENV=/dev/null")
 	case "posix-sh":
 		innerEnv = append(innerEnv, "ENV=/dev/null")
+	case "powershell":
+		for i := range innerEnv {
+			if strings.HasPrefix(innerEnv[i], "HOME=") {
+				innerEnv[i] = "HOME=/var/empty"
+				break
+			}
+		}
+		innerEnv = append(innerEnv,
+			"XDG_CONFIG_HOME=/var/empty/.config",
+			"XDG_DATA_HOME=/var/empty/.local/share",
+			"PSModulePath=/opt/microsoft/powershell/7/Modules",
+			"POWERSHELL_TELEMETRY_OPTOUT=1",
+			"POWERSHELL_UPDATECHECK=Off",
+			"TERM=dumb",
+			"NO_COLOR=1",
+		)
 	case "ocaml":
 		innerEnv = append(innerEnv, "OCAMLRUNPARAM="+ocamlRunParam)
 	case "elixir":
@@ -281,6 +297,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	isDotnet := runtimeBase == "dotnet"
+	isPowerShell := runLang == "powershell" && runtimeBase == "pwsh"
 	isTLA := runtimeBase == "aonohako-tla-run"
 	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
 	trustedShellRuntime := false
@@ -306,7 +323,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	case "bash", "dash":
 		allowProcesses = trustedShellRuntime
 	}
-	if isDotnet {
+	if isDotnet || isPowerShell {
 		if heapLimit := dotnetGCHeapHardLimitHex(req.Limits.MemoryMB, tuning); heapLimit != "" {
 			innerEnv = append(innerEnv, "DOTNET_GCHeapHardLimit="+heapLimit)
 		}
@@ -331,8 +348,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// Pony binaries reserve a large MAP_NORESERVE arena before user code, so they
 	// need the same virtual-address treatment without weakening physical limits.
 	// Physical memory remains bounded by cgroup memory.max and the RSS watchdog.
-	// CoreCLR also needs a high finite RLIMIT_FSIZE floor to start reliably.
-	disableAddressSpaceLimit := isDotnet || isC3 || isGoBinary || isMojoBinary || isPonyBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
+	// The shared dotnet host also needs a high finite RLIMIT_FSIZE floor to start reliably.
+	disableAddressSpaceLimit := isDotnet || isPowerShell || isC3 || isGoBinary || isMojoBinary || isPonyBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
 	if streams.communicationRestricted {
 		// Native C++ communication targets do not need the broad managed-runtime

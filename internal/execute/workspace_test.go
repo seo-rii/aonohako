@@ -169,6 +169,28 @@ func TestMaterializeFilesSelectsShellSourceArtifact(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesSelectsPowerShellScriptArtifact(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang: "powershell",
+		Binaries: []model.Binary{
+			{Name: "README.txt", DataB64: b64("ignored")},
+			{Name: "Main.ps1", DataB64: b64("Write-Output 'ok'\n")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "powershell" || filepath.Base(primary) != "Main.ps1" {
+		t.Fatalf("materializeFiles = (%q, %q), want Main.ps1/powershell", primary, lang)
+	}
+}
+
 func TestMaterializeFilesRejectsDuplicatePaths(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

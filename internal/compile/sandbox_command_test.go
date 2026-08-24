@@ -1,12 +1,32 @@
 package compile
 
 import (
+	"os"
 	"strings"
 	"syscall"
 	"testing"
 
 	"aonohako/internal/model"
 )
+
+func TestPowerShellParserGetsOnlyAddressSpaceCompatibilityException(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_command.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`isPowerShell := commandName == "pwsh"`,
+		`disableAddressSpaceLimit := isDotnetLike || isPowerShell`,
+		`AllowThreadSignals:       isDotnetLike`,
+		`AllowMemfdCreate:         isDotnetLike || isIsabelle`,
+		`AllowNumaPolicy:          isDotnetLike || isIsabelle`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("PowerShell compile sandbox contract must contain %q", marker)
+		}
+	}
+}
 
 func TestClassifyCompileWaitStatusTreatsCompilerSignalAsInternal(t *testing.T) {
 	for _, signal := range []syscall.Signal{

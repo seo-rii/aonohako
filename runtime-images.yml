@@ -3238,6 +3238,76 @@ languages:
           printf '%s\n' 'if then' > Broken.sh
           if /bin/dash -n Broken.sh >/dev/null 2>&1; then exit 1; fi
 
+  powershell:
+    install:
+      apt:
+        - curl
+        - libicu76
+      sandbox_tools:
+        - pwsh
+      script:
+        - export POWERSHELL_VERSION=7.6.5
+        - export POWERSHELL_SHA256=b34ab3b19acac1d3d4d0d3cfdb02acf62f457b0b6a962ff008132033f7566844
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/PowerShell/PowerShell/releases/download/v${POWERSHELL_VERSION}/powershell-${POWERSHELL_VERSION}-linux-x64.tar.gz" -o /tmp/powershell.tar.gz
+        - echo "${POWERSHELL_SHA256}  /tmp/powershell.tar.gz" | sha256sum -c -
+        - rm -rf /opt/microsoft/powershell/7
+        - install -d -m 0755 /opt/microsoft/powershell/7
+        - tar -xzf /tmp/powershell.tar.gz -C /opt/microsoft/powershell/7
+        - rm -f /opt/microsoft/powershell/7/createdump
+        - chown -R root:root /opt/microsoft/powershell/7
+        - find /opt/microsoft/powershell/7 -type d -exec chmod 0755 {} +
+        - find /opt/microsoft/powershell/7 -type f -exec chmod 0644 {} +
+        - chmod 0755 /opt/microsoft/powershell/7/pwsh
+        - ln -sfn /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh
+        - rm -f /tmp/powershell.tar.gz
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          export HOME=/var/empty
+          export XDG_CONFIG_HOME=/var/empty/.config
+          export XDG_DATA_HOME=/var/empty/.local/share
+          export PSModulePath=/opt/microsoft/powershell/7/Modules
+          export POWERSHELL_TELEMETRY_OPTOUT=1
+          export POWERSHELL_UPDATECHECK=Off
+          export TERM=dumb
+          export NO_COLOR=1
+
+          test "$(pwsh -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()')" = 7.6.5
+          test "$(pwsh -NoLogo -NoProfile -NonInteractive -Command '$env:PSModulePath')" = /var/empty/.local/share/powershell/Modules:/usr/local/share/powershell/Modules:/opt/microsoft/powershell/7/Modules
+          test ! -e /opt/microsoft/powershell/7/createdump
+          test "$(stat -c '%u:%g:%a' /opt/microsoft/powershell/7/pwsh)" = '0:0:755'
+          test "$(stat -c '%u:%g:%a' /etc/passwd)" = '0:0:444'
+          test ! -s /etc/passwd
+          test "$(stat -c '%u:%g:%a' /etc/group)" = '0:0:600'
+          for path in /var/empty /var/empty/.config /var/empty/.local/share /var/empty/.local/share/powershell/Modules /usr/local/share/powershell/Modules; do
+            test "$(stat -c '%u:%g' "${path}")" = '0:0'
+            if find "${path}" -maxdepth 0 -perm /022 -print -quit | grep -q .; then exit 1; fi
+          done
+          test "$(find /opt/microsoft/powershell/7 -type f -perm /0111 | wc -l)" -eq 1
+          if find /opt/microsoft/powershell/7 -type d -perm /0022 -print -quit | grep -q .; then exit 1; fi
+          if find /opt/microsoft/powershell/7 -type f -perm /0022 -print -quit | grep -q .; then exit 1; fi
+
+          cat > Main.ps1 <<'POWERSHELL'
+          $values = [Console]::In.ReadToEnd().Trim() -split '\s+' | ForEach-Object { [int]$_ }
+          $parallel = 1..2 | ForEach-Object -Parallel { $_ } -ThrottleLimit 1
+          if (($parallel -join ',') -ne '1,2') { exit 20 }
+          Set-Content -LiteralPath same-folder.txt -Value ($values[0] + $values[1])
+          Get-Content -LiteralPath same-folder.txt
+          POWERSHELL
+          pwsh -NoLogo -NoProfile -NonInteractive -Command '& { param($path) $tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors) > $null; if ($errors.Count) { $errors | ForEach-Object { [Console]::Error.WriteLine($_) }; exit 1 } }' Main.ps1
+          printf '1 2\n' | pwsh -NoLogo -NoProfile -NonInteractive -File Main.ps1 | grep -Fx 3
+
+          rm -f /tmp/aonohako-powershell-syntax-leak
+          printf '%s\n' '$(Set-Content -LiteralPath /tmp/aonohako-powershell-syntax-leak -Value leaked)' > SyntaxOnly.ps1
+          pwsh -NoLogo -NoProfile -NonInteractive -Command '& { param($path) $tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors) > $null; if ($errors.Count) { $errors | ForEach-Object { [Console]::Error.WriteLine($_) }; exit 1 } }' SyntaxOnly.ps1
+          test ! -e /tmp/aonohako-powershell-syntax-leak
+
+          printf '%s\n' 'if (' > Broken.ps1
+          if pwsh -NoLogo -NoProfile -NonInteractive -Command '& { param($path) $tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors) > $null; if ($errors.Count) { $errors | ForEach-Object { [Console]::Error.WriteLine($_) }; exit 1 } }' Broken.ps1 >/dev/null 2>&1; then exit 1; fi
+
   deno:
     install:
       apt:
@@ -3633,6 +3703,7 @@ profiles:
     languages:
       - csharp
       - fsharp
+      - powershell
       - vbnet
   type-f:
     base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2

@@ -30,6 +30,18 @@ func TestOpenFileLimitForCommandKeepsDotnetCompatible(t *testing.T) {
 	}
 }
 
+func TestOpenFileLimitForCommandKeepsPowerShellCoreCLRCompatible(t *testing.T) {
+	if got := OpenFileLimitForCommand("/usr/local/bin/pwsh"); got != 512 {
+		t.Fatalf("PowerShell open-file limit = %d, want 512", got)
+	}
+}
+
+func TestPowerShellKeepsOrdinaryWorkspaceFileSizeLimit(t *testing.T) {
+	if got := FileSizeLimitForCommand("pwsh", 512<<20); got != 0 {
+		t.Fatalf("PowerShell file-size override = %d, want ordinary workspace limit", got)
+	}
+}
+
 func TestFileSizeLimitForCommandKeepsDotnetFinite(t *testing.T) {
 	if got := FileSizeLimitForCommand("/opt/dotnet/dotnet", 0); got != DotnetFileSizeLimitBytes {
 		t.Fatalf("dotnet file size override = %d, want %d", got, DotnetFileSizeLimitBytes)

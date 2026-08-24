@@ -84,7 +84,14 @@ var compileRegistry = map[string]Compiler{
 	"koka":  kokaCompiler{},
 	"pony":  ponyCompiler{},
 	"shell": shellCompiler{},
-	"perl":  scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
+	"powershell": checkedSourcesCompiler{
+		exts:           []string{".ps1", ".psm1", ".psd1"},
+		noSourceReason: "no PowerShell sources",
+		bin:            "pwsh",
+		prefix:         []string{"-NoLogo", "-NoProfile", "-NonInteractive", "-Command", powerShellSyntaxCheckCommand},
+		env:            powerShellEnvironment,
+	},
+	"perl": scriptCheckCompiler{exts: []string{".pl"}, noSourceReason: "no perl sources", bin: "perl", prefix: []string{"-c"}},
 	"fortran": nativeCompiler{exts: []string{".f", ".for", ".f90", ".f95", ".f03", ".f08"}, bin: "gfortran", flags: func(job CompileJob) []string {
 		args := []string{"-O2", "-pipe"}
 		if job.Profile.CompileStd != "" {

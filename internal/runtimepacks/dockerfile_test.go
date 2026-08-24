@@ -485,6 +485,27 @@ func TestRuntimeDockerfileHardensImageMetadataAndPackageManagerPaths(t *testing.
 	}
 }
 
+func TestRuntimeDockerfileAllowsOnlyPowerShellToReadPasswdMetadata(t *testing.T) {
+	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+
+	body := string(data)
+	for _, marker := range []string{
+		`if [[ ",${LANGUAGES}," == *",powershell,"* ]]`,
+		`install -d -o 0 -g 0 -m 0555 "${path}"`,
+		`: > /etc/passwd && chown 0:0 /etc/passwd && chmod 0444 /etc/passwd`,
+		`/var/empty/.local/share/powershell/Modules`,
+		`/usr/local/share/powershell/Modules`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("runtime.Dockerfile must harden the PowerShell compatibility roots with %q", marker)
+		}
+	}
+}
+
 func TestRuntimeDockerfileHardensSharedScratchPathsAtBuildTime(t *testing.T) {
 	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
 	data, err := os.ReadFile(path)

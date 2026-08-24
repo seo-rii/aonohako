@@ -105,3 +105,22 @@ func TestOrdinaryRuntimeStateLeasesCanOverlap(t *testing.T) {
 		t.Fatalf("second Release(): %v", err)
 	}
 }
+
+func TestPowerShellDoesNotAcquireDotnetSharedRuntimeState(t *testing.T) {
+	dotnetPath := filepath.Join(t.TempDir(), ".dotnet")
+	first, err := acquireRuntimeStateAt(t.TempDir(), "python3", os.Geteuid(), os.Getegid(), true, dotnetPath, "")
+	if err != nil {
+		t.Fatalf("ordinary lease: %v", err)
+	}
+	defer first.Release()
+	powershell, err := acquireRuntimeStateAt(t.TempDir(), "pwsh", os.Geteuid(), os.Getegid(), true, dotnetPath, "")
+	if err != nil {
+		t.Fatalf("PowerShell ordinary lease: %v", err)
+	}
+	if err := powershell.Release(); err != nil {
+		t.Fatalf("PowerShell Release(): %v", err)
+	}
+	if _, err := os.Lstat(dotnetPath); !os.IsNotExist(err) {
+		t.Fatalf("PowerShell touched dotnet shared state: %v", err)
+	}
+}

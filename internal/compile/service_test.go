@@ -343,6 +343,8 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"bash":          {compileKind: "shell", runLang: "bash"},
 		"posix-sh":      {compileKind: "shell", runLang: "posix-sh"},
 		"posix_sh":      {compileKind: "shell", runLang: "posix-sh"},
+		"powershell":    {compileKind: "powershell", runLang: "powershell"},
+		"pwsh":          {compileKind: "powershell", runLang: "powershell"},
 		"zerolang":      {compileKind: "zerolang", runLang: "binary"},
 		"deno":          {compileKind: "deno", runLang: "deno"},
 		"elm":           {compileKind: "elm", runLang: "javascript"},
