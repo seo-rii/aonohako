@@ -29,7 +29,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "mojo", "moonbit", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
@@ -161,6 +161,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-javascript",
 		"ci-julia",
 		"ci-kframework",
+		"ci-koka",
 		"ci-kotlin",
 		"ci-kotlin-jvm",
 		"ci-lean4",
@@ -328,6 +329,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"groovy":        {"Broken.groovy", "groovyc", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp \"${groovy_cp}\" Main"},
 		"java":          {"javac --release 11 -encoding UTF-8 Main.java", "jar cfm Main.jar MANIFEST.MF Main.class", "java -XX:ReservedCodeCacheSize=64m -XX:-UseCompressedClassPointers -Xmx128m -Xss1m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -XX:+UseSerialGC -DONLINE_JUDGE=1 -jar Main.jar"},
 		"kframework":    {"KFRAMEWORK_VERSION=7.1.337", "kframework_${KFRAMEWORK_VERSION}_amd64_ubuntu_noble.deb", "aonohako-kframework-check Main.k", "imports INT"},
+		"koka":          {"KOKA_VERSION=3.2.3", "KOKA_SHA256=e82a4b497f1f8791ee171d06c45293ba16432e485d645ddd9688bafa6ccde5a5", "sha256sum -c -", "--no-autoinstall", "--cc=/usr/bin/gcc-16", "--ccopts=-march=x86-64 -mtune=generic", "--cclinkopts=-march=x86-64 -mtune=generic", "x86 ISA needed: x86-64-baseline", "evil/libevil.so", "test ! -e Broken"},
 		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "default-jdk-headless", "kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar", "javac --release 8 -cp Main.jar Helper.java", "jar uf Main.jar Helper.class", "java -Xms64m -Xmx128m -Xss1m -XX:+UseSerialGC -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -DONLINE_JUDGE=1 -jar Main.jar"},
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
 		"lolcode":       {"LCI_VERSION=0.11.2", "cb1065936d3a7463928dcddfc345a8d7d8602678394efc0e54981f9dd98c27d2", "lci Main.lol", `VISIBLE "ok"`},
@@ -688,6 +690,55 @@ func TestRepositoryCatalogPinsAndHardensAlgol68Runtime(t *testing.T) {
 	} {
 		if !strings.Contains(smoke, marker) {
 			t.Fatalf("Algol 68 smoke must contain %q:\n%s", marker, smoke)
+		}
+	}
+}
+
+func TestRepositoryCatalogPinsAndHardensKokaRuntime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["koka"]
+	if !ok {
+		t.Fatal("koka language missing from catalog")
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"KOKA_VERSION=3.2.3",
+		"KOKA_SHA256=e82a4b497f1f8791ee171d06c45293ba16432e485d645ddd9688bafa6ccde5a5",
+		"sha256sum -c -",
+		"chown -R root:root /opt/koka",
+		"find /opt/koka -type f -exec chmod 0644",
+		"chmod 0755 /opt/koka/bin/koka",
+	} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("Koka install must contain %q:\n%s", marker, install)
+		}
+	}
+	if !slices.Contains(spec.Install.SandboxTools, "koka") {
+		t.Fatalf("Koka sandbox tools = %v", spec.Install.SandboxTools)
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, marker := range []string{
+		"set -euo pipefail",
+		"test \"$(find /opt/koka -type f -perm /0111 | wc -l)\" -eq 1",
+		"! command -v conan",
+		"! command -v vcpkg",
+		"--no-autoinstall",
+		"--cc=/usr/bin/gcc-16",
+		"--ccopts=-march=x86-64 -mtune=generic",
+		"--cclinkopts=-march=x86-64 -mtune=generic",
+		"--builddir=.aonohako-koka-build",
+		"--output=Main main.kk",
+		"test \"$(stat -c %a Main)\" = 644",
+		"x86 ISA needed: x86-64-baseline",
+		"(RPATH|RUNPATH)",
+		"evil/libevil.so",
+		"test ! -e Broken",
+	} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("Koka smoke must contain %q:\n%s", marker, smoke)
 		}
 	}
 }

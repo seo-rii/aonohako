@@ -471,6 +471,7 @@ The interactor is invoked as:
 | FENNEL | `fennel` | `fennel --no-fennelrc --require-as-include --compile <source>` via the hardened artifact writer |
 | CHAPEL | `chapel` | `CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast -o <target> <source>` |
 | ALGOL68 | `algol68` | `a68g --quiet --no-compile -O0 --check --file <source> --no-pragmats` |
+| KOKA | `koka` | `koka --compile -O2 --no-debug -j1 -v0 --console=raw --no-autoinstall --cc=/usr/bin/gcc-16 "--ccopts=-march=x86-64 -mtune=generic" "--cclinkopts=-march=x86-64 -mtune=generic" --builddir=.aonohako-koka-build --output=Main main.kk` |
 | GO | `go` | `go build -tags=online_judge,ONLINE_JUDGE` |
 | ZIG | `zig` | `zig build-exe -O ReleaseSafe -femit-bin=<target>` |
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |

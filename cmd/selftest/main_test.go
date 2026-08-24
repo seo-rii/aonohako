@@ -229,12 +229,13 @@ func TestStrictRuntimeMemoryCasesCoverNativeAndScriptRuntimes(t *testing.T) {
 }
 
 func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
-	cases := languageSecurityCases(1)
+	cases := languageSecurityCases(1, "")
 	for _, language := range []string{
 		"plain",
 		"go",
 		"rust",
 		"python",
+		"koka",
 		"pypy",
 		"javascript",
 		"typescript",
@@ -253,7 +254,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 }
 
 func TestLanguageSecurityCasesResolveProfilesAndSources(t *testing.T) {
-	cases := languageSecurityCases(1)
+	cases := languageSecurityCases(1, "")
 	for language, languageCases := range cases {
 		for _, tc := range languageCases {
 			profile, ok := profiles.Resolve(tc.compileLang)
@@ -266,8 +267,8 @@ func TestLanguageSecurityCasesResolveProfilesAndSources(t *testing.T) {
 			if strings.TrimSpace(tc.name) == "" {
 				t.Fatalf("language %q has a security case without a name", language)
 			}
-			if strings.TrimSpace(tc.expectedStdout) == "" {
-				t.Fatalf("language %q security case %q has no expected stdout", language, tc.name)
+			if strings.TrimSpace(tc.expectedStdout) == "" && strings.TrimSpace(tc.expectedCompileReason) == "" {
+				t.Fatalf("language %q security case %q has neither expected stdout nor expected compile rejection", language, tc.name)
 			}
 			if len(tc.sources) == 0 {
 				t.Fatalf("language %q security case %q has no sources", language, tc.name)

@@ -77,6 +77,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"FENNEL",
 		"CHAPEL",
 		"ALGOL68",
+		"KOKA",
 		"ZEROLANG",
 		"KOTLIN",
 		"ADA",
@@ -196,6 +197,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"chapel":       "chapel-binary",
 		"ALGOL68":      "algol68",
 		"algol68":      "algol68",
+		"KOKA":         "binary",
+		"koka":         "binary",
 		"ZEROLANG":     "binary",
 		"zerolang":     "binary",
 		"zero":         "binary",
@@ -336,6 +339,19 @@ func TestAlgol68ProfileUsesHardenedInterpreter(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("ALGOL68 resource profile = %+v", profile)
+	}
+}
+
+func TestKokaProfileUsesPortableNativeCompiler(t *testing.T) {
+	profile, ok := Resolve("KOKA")
+	if !ok {
+		t.Fatal("Resolve(KOKA) reported unsupported language")
+	}
+	if profile.Extension != "kk" || profile.DefaultTarget != "Main" || profile.CompileKind != "koka" || profile.RunLang != "binary" {
+		t.Fatalf("KOKA profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("KOKA resource profile = %+v", profile)
 	}
 }
 

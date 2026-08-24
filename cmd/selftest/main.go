@@ -98,12 +98,13 @@ type compileExecuteCase struct {
 }
 
 type languageSecurityCase struct {
-	name           string
-	compileLang    string
-	entryPoint     string
-	expectedStdout string
-	limits         model.Limits
-	sources        []model.Source
+	name                  string
+	compileLang           string
+	entryPoint            string
+	expectedStdout        string
+	expectedCompileReason string
+	limits                model.Limits
+	sources               []model.Source
 }
 
 type runtimeMemoryCase struct {
@@ -1207,7 +1208,36 @@ func runLanguageSecuritySuite() error {
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
-	cases := languageSecurityCases(tcpAddr.Port)
+	kokaSyslib := ""
+	for _, rawLanguage := range strings.Split(rawLanguages, ",") {
+		if strings.TrimSpace(rawLanguage) != "koka" {
+			continue
+		}
+		fixtureDir, err := os.MkdirTemp("", "aonohako-koka-link-")
+		if err != nil {
+			return fmt.Errorf("create Koka link injection fixture: %w", err)
+		}
+		defer os.RemoveAll(fixtureDir)
+		if err := os.Chmod(fixtureDir, 0o755); err != nil {
+			return fmt.Errorf("expose Koka link injection fixture directory: %w", err)
+		}
+		fixtureSource := filepath.Join(fixtureDir, "evil.c")
+		if err := os.WriteFile(fixtureSource, []byte("void marker(void) {}\n"), 0o600); err != nil {
+			return fmt.Errorf("write Koka link injection fixture: %w", err)
+		}
+		fixtureLibrary := filepath.Join(fixtureDir, "libevil.so")
+		command := exec.Command("/usr/bin/gcc-16", "-shared", "-fPIC", "-Wl,-soname,evil/libevil.so", "-o", fixtureLibrary, fixtureSource)
+		if output, err := command.CombinedOutput(); err != nil {
+			return fmt.Errorf("build Koka link injection fixture: %w: %s", err, output)
+		}
+		if err := os.Chmod(fixtureLibrary, 0o644); err != nil {
+			return fmt.Errorf("make Koka link injection fixture readable: %w", err)
+		}
+		kokaSyslib = ":" + filepath.ToSlash(filepath.Join("..", "..", strings.TrimPrefix(fixtureLibrary, string(filepath.Separator))))
+		break
+	}
+
+	cases := languageSecurityCases(tcpAddr.Port, kokaSyslib)
 	seen := map[string]struct{}{}
 	covered := 0
 	for _, rawLanguage := range strings.Split(rawLanguages, ",") {
@@ -1234,6 +1264,19 @@ func runLanguageSecuritySuite() error {
 			})
 			if err != nil {
 				return fmt.Errorf("%s %s security compile request failed: %w", language, tc.name, err)
+			}
+			if tc.expectedCompileReason != "" {
+				if compileResp.Status == model.CompileStatusOK {
+					return fmt.Errorf("%s %s security compile unexpectedly succeeded", language, tc.name)
+				}
+				if !strings.Contains(compileResp.Reason, tc.expectedCompileReason) {
+					return fmt.Errorf("%s %s security compile reason=%q, want substring %q (status=%s stdout=%q stderr=%q)", language, tc.name, compileResp.Reason, tc.expectedCompileReason, compileResp.Status, compileResp.Stdout, compileResp.Stderr)
+				}
+				if len(compileResp.Artifacts) != 0 {
+					return fmt.Errorf("%s %s security compile returned %d artifacts after rejection", language, tc.name, len(compileResp.Artifacts))
+				}
+				covered++
+				continue
 			}
 			if compileResp.Status != model.CompileStatusOK {
 				return fmt.Errorf("%s %s security compile failed: status=%s reason=%s stdout=%q stderr=%q", language, tc.name, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
@@ -2076,7 +2119,7 @@ func postSSEJSON[T any](url string, payload any) (T, error) {
 	return zero, fmt.Errorf("stream ended without result")
 }
 
-func languageSecurityCases(tcpPort int) map[string][]languageSecurityCase {
+func languageSecurityCases(tcpPort int, kokaSyslib string) map[string][]languageSecurityCase {
 	source := func(name, body string) model.Source {
 		return model.Source{Name: name, DataB64: encodeScript(body)}
 	}
@@ -2311,6 +2354,39 @@ fn main() {
 					source("Main.fnl", `(print (if os.execute "process:leaked" "process:blocked"))
 (local (debug-ok _) (pcall require :debug))
 (print (if debug-ok "debug:leaked" "debug:blocked"))`),
+				},
+			},
+		},
+		"koka": {
+			{
+				name:           "process-spawn-denied",
+				compileLang:    "KOKA",
+				expectedStdout: "process:blocked\n",
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.kk", `import std/os/process
+
+fun main()
+  val result = run-system("/bin/true")
+  println(if result == 0 then "process:leaked" else "process:blocked")`),
+				},
+			},
+			{
+				name:                  "slash-needed-artifact-rejected",
+				compileLang:           "KOKA",
+				expectedCompileReason: "Koka artifact dependency must be a library basename",
+				sources: []model.Source{
+					source("main.kk", fmt.Sprintf(`extern import {
+  c {
+    header-include-inline="void marker(void);"
+    syslib=%q
+  }
+}
+extern marker() : io () {
+  c "marker"
+}
+fun main()
+  marker()`, kokaSyslib)),
 				},
 			},
 		},
@@ -4123,6 +4199,20 @@ writeln(a + b);`),
   read ((a, b));
   printf (($g(0)l$, a + b))
 END`),
+			},
+		},
+		"koka": {
+			compileLang: "KOKA",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 10000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.kk", `import std/os/readline
+
+fun main()
+  val values = readline().split(" ")
+  val a = values.head("").parse-int.default(0)
+  val b = values.drop(1).head("").parse-int.default(0)
+  println(a + b)`),
 			},
 		},
 		"deno": {
