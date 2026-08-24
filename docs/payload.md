@@ -468,6 +468,7 @@ The interactor is invoked as:
 | CPP, CPP03–CPP26 | `cpp` | `g++ -O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=<std>` |
 | RUST, RUST2015–2024 | `rust` | `rustc --edition <ed> -O --cfg ONLINE_JUDGE` |
 | MOONBIT | `moonbit` | `moon build --target native --release --strip --frozen --jobs 1` in a fixed dependency-free module |
+| FENNEL | `fennel` | `fennel --no-fennelrc --require-as-include --compile <source>` via the hardened artifact writer |
 | GO | `go` | `go build -tags=online_judge,ONLINE_JUDGE` |
 | ZIG | `zig` | `zig build-exe -O ReleaseSafe -femit-bin=<target>` |
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |

@@ -1,6 +1,7 @@
 package runtimepacks
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -22,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 21 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -130,6 +131,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-elixir",
 		"ci-elm",
 		"ci-erlang",
+		"ci-fennel",
 		"ci-forth",
 		"ci-fortran",
 		"ci-freebasic",
@@ -299,6 +301,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"duckdb":        {"DUCKDB_VERSION=1.5.2", "aonohako-duckdb-run Main.sql"},
 		"elm":           {"elm-compiler", `"elm/json": "1.1.3"`, "HOME=/usr/local/lib/aonohako/elm-home", "elm make Main.elm --output=aonohako-elm-compiled.js", "port stdin : (String -> msg) -> Sub msg"},
 		"erlang":        {"Broken.erl", "erlc"},
+		"fennel":        {"FENNEL_VERSION=1.6.1", "FENNEL_SHA256=3abde50a0e25270cbb8f9d183a0a42221875b3390ba4bf11ef8697eaa53b2787", "sha256sum -c -", "aonohako-fennel-compile Main.fnl Main.lua", "luac5.4 -p --", "compiler-diagnostic", "InvalidLua.fnl", "mathmod.fnl", "nativeleak.so", "loaders:blocked", "exact:blocked", "dotted:blocked", "test ! -e /tmp/fennel-native-leak", "fennel-signal-ready", "signal_status", "test ! -e Signal.lua", "Broken.fnl"},
 		"forth":         {"gforth Main.fs -e bye", ".\" ok\" cr"},
 		"freebasic":     {"FREEBASIC_VERSION=1.10.1", "libtinfo5", "fbc -x Main Main.bas"},
 		"gdl":           {"aonohako-gdl-run", "Main.pro"},
@@ -494,6 +497,94 @@ func TestRepositoryCatalogPinsMoonBitToolchainAndOfflineBuild(t *testing.T) {
 	for _, marker := range []string{"--target native", "--frozen", "--jobs 1"} {
 		if !strings.Contains(smoke, marker) {
 			t.Fatalf("MoonBit smoke must contain %q: %s", marker, smoke)
+		}
+	}
+}
+
+func TestRepositoryCatalogPinsAndHardensFennelAOT(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["fennel"]
+	if !ok {
+		t.Fatal("fennel language missing from catalog")
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"FENNEL_VERSION=1.6.1",
+		"FENNEL_SHA256=3abde50a0e25270cbb8f9d183a0a42221875b3390ba4bf11ef8697eaa53b2787",
+		"sha256sum -c -",
+	} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("Fennel install must contain %q:\n%s", marker, install)
+		}
+	}
+	if !slices.Contains(spec.Install.SandboxTools, "fennel") || !slices.Contains(spec.Install.SandboxTools, "lua") || !slices.Contains(spec.Install.SandboxTools, "luac5.4") {
+		t.Fatalf("Fennel compiler/runtime tools = %v", spec.Install.SandboxTools)
+	}
+	helper, err := os.ReadFile(filepath.Join("..", "..", "scripts", "fennel_compile.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	helperBody := string(helper)
+	for _, marker := range []string{
+		"--no-fennelrc /usr/local/lib/aonohako/fennel_writer.fnl",
+		"on_signal()",
+		"trap - 0 1 2 3 15",
+		"exit $((128 + signal_number))",
+		"trap cleanup 0",
+		"trap 'on_signal 15' 15",
+		"mktemp -d \"${target_dir}/.aonohako-fennel.XXXXXX\"",
+		">\"${compiler_stdout_path}\"",
+		"fennel compiler emitted unexpected stdout",
+		"luac5.4 -p -- \"${compiled_path}\"",
+		"luac5.4 -p -- \"${guarded_path}\"",
+		"mv -f -- \"${guarded_path}\" \"${target_path}\"",
+		"os.execute = nil",
+		"io.popen = nil",
+		"package.loaded.debug = nil",
+		"for name in pairs(package.preload) do package.preload[name] = nil end",
+		"package.loadlib = nil",
+		"package.cpath = ''",
+		"package.searchers[4] = nil",
+		"package.searchers[3] = nil",
+		"package.loaders[4] = nil",
+		"package.loaders[3] = nil",
+		"debug = nil",
+	} {
+		if !strings.Contains(helperBody, marker) {
+			t.Fatalf("Fennel helper must contain %q:\n%s", marker, helperBody)
+		}
+	}
+	if strings.Contains(helperBody, "--compile") || strings.Contains(helperBody, `> "${target_path}"`) {
+		t.Fatalf("Fennel helper must not derive the final artifact from CLI stdout:\n%s", helperBody)
+	}
+	trapIndex := strings.Index(helperBody, "trap cleanup 0")
+	tempDirIndex := strings.Index(helperBody, "temp_dir=$(mktemp -d")
+	if trapIndex < 0 || tempDirIndex < 0 || trapIndex >= tempDirIndex {
+		t.Fatalf("Fennel helper must install cleanup before creating its temp directory:\n%s", helperBody)
+	}
+	writer, err := os.ReadFile(filepath.Join("..", "..", "scripts", "fennel_writer.fnl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writerBody := string(writer)
+	for _, marker := range []string{"(require :fennel)", "fennel.compile-string", ":requireAsInclude true", ":useMetadata false", ":extra-compiler-env {:print compiler-print}", "(io.stderr:write", "  nil)"} {
+		if !strings.Contains(writerBody, marker) {
+			t.Fatalf("Fennel writer must contain %q:\n%s", marker, writerBody)
+		}
+	}
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "docker", "runtime.Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{
+		"scripts/fennel_compile.sh /usr/local/bin/aonohako-fennel-compile",
+		"scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_writer.fnl",
+	} {
+		if !strings.Contains(string(dockerfile), marker) {
+			t.Fatalf("runtime Dockerfile must contain %q", marker)
 		}
 	}
 }

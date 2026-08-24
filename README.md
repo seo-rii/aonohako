@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
+  Mojo, MoonBit, Fennel, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -79,6 +79,13 @@ language-specific commands keep their declared order.
   toolchain and its matching core snapshot. Both archives are checksum-verified;
   submission builds synthesize a dependency-free module and use a single-job,
   frozen native release build so they never update or contact the package registry.
+- Fennel is pinned to the checksum-verified official 1.6.1 standalone Linux
+  x64 compiler. A trusted writer uses its embedded `compile-string` API with
+  the compiler sandbox and no user rc file, keeps compiler diagnostics out of
+  the artifact, validates both generated and guarded Lua with `luac5.4`, and
+  atomically publishes the result. The generated guard removes process
+  spawning, the debug library, preloaded modules, and native-module loaders
+  before submission code runs in the shared Lua runtime pack.
 - Carbon is pinned to an official experimental nightly. The image precompiles
   that toolchain's Core objects and native runtimes, then submission compilation
   emits an object, links a native executable against those trusted inputs, and

@@ -49,6 +49,37 @@ func (coffeeScriptCompiler) Compile(ctx context.Context, job CompileJob) model.C
 	return compileCoffeeScript(ctx, job.WorkDir, job.Target, job.Request.Sources)
 }
 
+type fennelCompiler struct{}
+
+func (fennelCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	rootSource := selectPrimarySource(job.WorkDir, job.Request.Sources, []string{".fnl"}, "Main.fnl", "main.fnl")
+	if rootSource == "" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no fennel sources"}
+	}
+	if !strings.HasSuffix(strings.ToLower(job.Target), ".lua") {
+		job.Target += ".lua"
+	}
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	result := runner.Run(ctx, job.WorkDir, "aonohako-fennel-compile", []string{
+		rootSource,
+		filepath.Join(job.WorkDir, job.Target),
+	}, []string{"NO_COLOR=1"})
+	if result.Status != model.CompileStatusOK {
+		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
+	}
+	artifacts, err := readSingleArtifact(job.WorkDir, job.Target, job.Target, "")
+	if err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error(), Stdout: result.Stdout, Stderr: result.Stderr}
+	}
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: artifacts, Stdout: result.Stdout, Stderr: result.Stderr}
+}
+
 func compileCoffeeScript(ctx context.Context, workDir, target string, sources []model.Source) model.CompileResponse {
 	rootSource := selectPrimarySource(workDir, sources, []string{".coffee"}, "Main.coffee")
 	if rootSource == "" {

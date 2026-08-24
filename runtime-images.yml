@@ -2683,6 +2683,139 @@ languages:
           printf '%s\n' 'fn broken {' '  let value :' '}' > Broken.mbt
           if moon build --target-dir .aonohako-moonbit-broken --target native --release --strip --frozen --jobs 1 >/dev/null 2>&1; then exit 1; fi
 
+  fennel:
+    install:
+      apt:
+        - curl
+        - lua5.4
+      sandbox_tools:
+        - fennel
+        - lua
+        - lua5.4
+        - luac5.4
+      script:
+        - export FENNEL_VERSION=1.6.1
+        - export FENNEL_SHA256=3abde50a0e25270cbb8f9d183a0a42221875b3390ba4bf11ef8697eaa53b2787
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://fennel-lang.org/downloads/fennel-${FENNEL_VERSION}-x86_64" -o /usr/local/bin/fennel
+        - echo "${FENNEL_SHA256}  /usr/local/bin/fennel" | sha256sum -c -
+        - chmod 0755 /usr/local/bin/fennel
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.fnl <<'FENNEL'
+          (when os.execute (os.execute "touch /tmp/fennel-exec-leak"))
+          (local (debug-ok _) (pcall require :debug))
+          (local line (io.read))
+          (local (a b) (line:match "(%-?%d+)%s+(%-?%d+)"))
+          (print (if debug-ok "debug:leaked" "debug:blocked"))
+          (print (+ (tonumber a) (tonumber b)))
+          FENNEL
+          aonohako-fennel-compile Main.fnl Main.lua
+          luac5.4 -p -- Main.lua
+          printf '2 3\n' | lua5.4 Main.lua | grep -Fx 'debug:blocked'
+          printf '2 3\n' | lua5.4 Main.lua | grep -Fx '5'
+          test ! -e /tmp/fennel-exec-leak
+
+          cat > CompilerPrint.fnl <<'FENNEL'
+          (eval-compiler (print :compiler-diagnostic))
+          (print :runtime-ok)
+          FENNEL
+          aonohako-fennel-compile CompilerPrint.fnl CompilerPrint.lua > CompilerPrint.stdout 2> CompilerPrint.stderr
+          test ! -s CompilerPrint.stdout
+          grep -Fx 'compiler-diagnostic' CompilerPrint.stderr
+          lua5.4 CompilerPrint.lua | grep -Fx 'runtime-ok'
+
+          cat > InvalidLua.fnl <<'FENNEL'
+          (lua "this is not valid Lua!")
+          FENNEL
+          if aonohako-fennel-compile InvalidLua.fnl InvalidLua.lua >/dev/null 2>&1; then exit 1; fi
+          test ! -e InvalidLua.lua
+
+          cat > mathmod.fnl <<'FENNEL'
+          {:sum (fn [a b] (+ a b))}
+          FENNEL
+          cat > Include.fnl <<'FENNEL'
+          (local mathmod (require :mathmod))
+          (print (mathmod.sum 2 3))
+          FENNEL
+          aonohako-fennel-compile Include.fnl Include.lua
+          lua5.4 Include.lua | grep -Fx '5'
+
+          mkdir -p native
+          cat > NativeLeak.c <<'C'
+          #include <stdio.h>
+          typedef struct lua_State lua_State;
+          __attribute__((constructor)) static void leak(void) {
+            FILE *file = fopen("/tmp/fennel-native-leak", "w");
+            if (file != NULL) {
+              fputs("leaked", file);
+              fclose(file);
+            }
+          }
+          int luaopen_nativeleak(lua_State *state) { (void)state; return 0; }
+          int luaopen_native_leak(lua_State *state) { (void)state; return 0; }
+          C
+          cc -shared -fPIC -o nativeleak.so NativeLeak.c
+          cp nativeleak.so native/leak.so
+          cat > NativeRequire.fnl <<'FENNEL'
+          (local searchers-blocked
+            (and (= nil (. package.searchers 3))
+                 (= nil (. package.searchers 4))))
+          (local loaders-blocked
+            (or (= nil package.loaders)
+                (and (= nil (. package.loaders 3))
+                     (= nil (. package.loaders 4)))))
+          (local entry-points-blocked
+            (and (= nil package.loadlib)
+                 (= "" package.cpath)
+                 (= nil (next package.preload))))
+          (print (if (and searchers-blocked loaders-blocked entry-points-blocked)
+                   "loaders:blocked"
+                   "loaders:leaked"))
+          (set package.cpath "./?.so;./?/?.so")
+          (local (exact-ok _) (pcall require :nativeleak))
+          (local (dotted-ok _) (pcall require :native.leak))
+          (print (if exact-ok "exact:leaked" "exact:blocked"))
+          (print (if dotted-ok "dotted:leaked" "dotted:blocked"))
+          FENNEL
+          aonohako-fennel-compile NativeRequire.fnl NativeRequire.lua
+          lua5.4 NativeRequire.lua | grep -Fx 'loaders:blocked'
+          lua5.4 NativeRequire.lua | grep -Fx 'exact:blocked'
+          lua5.4 NativeRequire.lua | grep -Fx 'dotted:blocked'
+          test ! -e /tmp/fennel-native-leak
+
+          mkdir -p signal-bin
+          cat > signal-bin/fennel <<'SH'
+          #!/bin/sh
+          : > /tmp/fennel-signal-ready
+          while :; do sleep 1; done
+          SH
+          chmod 0755 signal-bin/fennel
+          printf '%s\n' '(print :unreachable)' > Signal.fnl
+          rm -f /tmp/fennel-signal-ready
+          set +e
+          setsid env PATH="${PWD}/signal-bin:${PATH}" aonohako-fennel-compile Signal.fnl Signal.lua &
+          signal_pid=$!
+          attempt=0
+          while [ ! -e /tmp/fennel-signal-ready ]; do
+            attempt=$((attempt + 1))
+            if [ "${attempt}" -ge 100 ]; then kill -KILL -- "-${signal_pid}"; exit 1; fi
+            sleep 0.01
+          done
+          kill -TERM -- "-${signal_pid}"
+          wait "${signal_pid}"
+          signal_status=$?
+          set -e
+          test "${signal_status}" -eq 143
+          test ! -e Signal.lua
+          test -z "$(find . -maxdepth 1 -type d -name '.aonohako-fennel.*' -print -quit)"
+
+          printf '%s\n' '(local broken' > Broken.fnl
+          if aonohako-fennel-compile Broken.fnl Broken.lua >/dev/null 2>&1; then exit 1; fi
+
   deno:
     install:
       apt:
@@ -2980,6 +3113,7 @@ profiles:
       - bqn
       - elixir
       - erlang
+      - fennel
       - forth
       - gforth
       - gleam

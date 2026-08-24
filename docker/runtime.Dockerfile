@@ -99,6 +99,8 @@ COPY --chmod=0755 scripts/tla_run.sh /usr/local/bin/aonohako-tla-run
 COPY --chmod=0755 scripts/vhdl_run.sh /usr/local/bin/aonohako-vhdl-run
 COPY --chmod=0755 scripts/vb6_run.rb /usr/local/bin/aonohako-vb6-run
 COPY --chmod=0755 scripts/golfscript_sandboxed.rb /usr/local/lib/aonohako/golfscript_sandboxed.rb
+COPY --chmod=0755 scripts/fennel_compile.sh /usr/local/bin/aonohako-fennel-compile
+COPY --chmod=0644 scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_writer.fnl
 COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
