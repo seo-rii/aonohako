@@ -1173,6 +1173,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_HEARTBEAT_INTERVAL_SEC", "2")
 	t.Setenv("AONOHAKO_BODY_READ_TIMEOUT_SEC", "9")
 	t.Setenv("AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", "4")
+	t.Setenv("AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS", "16")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_NETWORK", "true")
 	t.Setenv("AONOHAKO_NETWORK_EGRESS_ISOLATED", "true")
 	t.Setenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", "true")
@@ -1225,6 +1226,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	}
 	if cfg.Execution.Remote.SSEIdleTimeout != 4*time.Second {
 		t.Fatalf("remote SSE idle timeout mismatch: %v", cfg.Execution.Remote.SSEIdleTimeout)
+	}
+	if cfg.CommunicationMaxParticipants != 16 {
+		t.Fatalf("communication max participants = %d, want 16", cfg.CommunicationMaxParticipants)
 	}
 	if !cfg.AllowRequestNetwork {
 		t.Fatalf("allow request network should be parsed from env")
@@ -1291,6 +1295,9 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "remote sse idle negative", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "-1"},
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
 		{name: "remote sse idle overflow", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: maxInt64Text},
+		{name: "communication participants below minimum", key: "AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS", value: "1"},
+		{name: "communication participants above maximum", key: "AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS", value: "65"},
+		{name: "communication participants malformed", key: "AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS", value: "many"},
 		{name: "allow network malformed", key: "AONOHAKO_ALLOW_REQUEST_NETWORK", value: "sometimes"},
 		{name: "network egress isolated malformed", key: "AONOHAKO_NETWORK_EGRESS_ISOLATED", value: "sometimes"},
 		{name: "allow runtime profile malformed", key: "AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", value: "sometimes"},

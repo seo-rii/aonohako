@@ -19,6 +19,7 @@ import (
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimepolicy"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/security"
 )
 
@@ -151,6 +152,7 @@ type Config struct {
 	HeartbeatInterval                    time.Duration
 	BodyReadTimeout                      time.Duration
 	CommunicationEnabled                 bool
+	CommunicationMaxParticipants         int
 	CommunicationMemoryBudgetMB          int
 	CommunicationCPUCount                int
 	CommunicationWallBudgetMs            int
@@ -247,6 +249,16 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	communicationEnabled, err := parseBoolEnv("AONOHAKO_COMMUNICATION_ENABLED", os.Getenv("AONOHAKO_COMMUNICATION_ENABLED"), false)
+	if err != nil {
+		return Config{}, err
+	}
+	communicationMaxParticipants, err := parseBoundedIntEnv(
+		"AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS",
+		os.Getenv("AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS"),
+		runvalidation.MaxCommunicationParticipants,
+		runvalidation.MinCommunicationParticipants,
+		runvalidation.MaxCommunicationParticipants,
+	)
 	if err != nil {
 		return Config{}, err
 	}
@@ -703,6 +715,7 @@ func Load() (Config, error) {
 		HeartbeatInterval:                    time.Duration(heartbeatSec) * time.Second,
 		BodyReadTimeout:                      time.Duration(bodyReadTimeoutSec) * time.Second,
 		CommunicationEnabled:                 communicationEnabled,
+		CommunicationMaxParticipants:         communicationMaxParticipants,
 		CommunicationMemoryBudgetMB:          communicationMemoryBudgetMB,
 		CommunicationCPUCount:                communicationCPUCount,
 		CommunicationWallBudgetMs:            communicationWallBudgetMs,

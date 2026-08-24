@@ -436,6 +436,40 @@ func TestCommunicationCloudRunRejectsDeclaredMemoryBeforeExecution(t *testing.T)
 	}
 }
 
+func TestCommunicationRejectsParticipantCountAboveRunnerLimitBeforeExecution(t *testing.T) {
+	service := NewWithConfig(config.Config{
+		CommunicationEnabled:         true,
+		CommunicationMaxParticipants: 16,
+		CommunicationMemoryBudgetMB:  24576,
+		CommunicationCPUCount:        2,
+		CommunicationWallBudgetMs:    600000,
+		WorkRootMaxBytes:             1 << 30,
+		Execution: config.ExecutionConfig{Platform: platform.RuntimeOptions{
+			DeploymentTarget:   platform.DeploymentTargetCloudRun,
+			ExecutionTransport: platform.ExecutionTransportEmbedded,
+			SandboxBackend:     platform.SandboxBackendHelper,
+		}},
+	})
+	req := &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "participant", Lang: "binary", Binaries: []model.Binary{{Name: "participant", DataB64: "eA==", Mode: "exec"}}},
+			{ID: "manager", Lang: "binary", Binaries: []model.Binary{{Name: "manager", DataB64: "eA==", Mode: "exec"}}},
+		},
+		Communication: &model.CommunicationSpec{
+			Version:              1,
+			ParticipantProgramID: "participant",
+			ManagerProgramID:     "manager",
+			ParticipantCount:     17,
+			ResultProtocol:       "manager-result-v1",
+		},
+		Limits: model.Limits{TimeMs: 1000, MemoryMB: 64},
+	}
+	response := service.Run(context.Background(), req, Hooks{})
+	if response.Status != model.RunStatusRE || response.VerdictSource != "communication:admission" || response.StartedParticipants != 0 || !strings.Contains(response.Reason, "exceeds runner limit 16") {
+		t.Fatalf("unexpected admission response: %+v", response)
+	}
+}
+
 func TestCommunicationCloudRunRejectsAggregateBudgetsBeforeExecution(t *testing.T) {
 	request := &model.RunRequest{
 		Programs: []model.RunProgram{
