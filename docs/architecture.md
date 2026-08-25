@@ -165,6 +165,18 @@ verify that imports fail without the group and succeed with it. This is a
 package-visibility boundary; enabled package code still runs under the target's
 existing syscall, network, and resource limits.
 
+Rust installed-crate visibility is enforced at the compile process boundary.
+Rust runtime images turn the exact graph locked by `rust-crates/Cargo.toml` and
+`rust-crates/Cargo.lock` into a vendored source directory whose directories are
+`0750` and files are `0640` under supplementary GID `65529`. `stdlib` compile
+helpers receive only the sandbox GID and continue to invoke `rustc` directly.
+`installed` helpers additionally receive GID `65529`, but Cargo uses
+request-local home and target directories with network access disabled and
+`--offline --frozen --locked`. Build scripts and procedural macros therefore
+run inside the existing compiler sandbox. Runtime-image selftests verify that
+unrelated groups cannot read the vendor and that a locked submission can use a
+pinned crate offline.
+
 ## Sandbox Process Model
 
 The runtime uses a parent/helper/target split:

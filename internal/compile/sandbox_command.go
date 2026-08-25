@@ -26,13 +26,17 @@ import (
 )
 
 func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
-	stdout, stderr, status, reason = runSandboxedCommand(ctx, workDir, bin, args, env)
+	stdout, stderr, status, reason = runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, nil)
 	stdout, _ = capCompileOutputValue(stdout)
 	stderr, _ = capCompileOutputValue(stderr)
 	return stdout, stderr, status, reason
 }
 
 func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
+	return runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, nil)
+}
+
+func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, args, env []string, supplementaryGroups []uint32) (stdout, stderr, status, reason string) {
 	for _, dir := range security.WorkspaceScopedDirs(workDir) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			slog.Warn("compile sandbox workspace preparation failed", "err", err)
@@ -206,7 +210,11 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 	cmd.ExtraFiles = []*os.File{requestRead}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	if os.Geteuid() == 0 {
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 65532, Gid: 65532}
+		cmd.SysProcAttr.Credential = &syscall.Credential{
+			Uid:    65532,
+			Gid:    65532,
+			Groups: compileHelperCredentialGroups(supplementaryGroups),
+		}
 	}
 	stdoutFile, err := os.CreateTemp(filepath.Join(workDir, ".tmp"), "compile-stdout-*")
 	if err != nil {
@@ -481,6 +489,19 @@ func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []s
 			return readCaptured(stdoutFile), readCaptured(stderrFile), model.CompileStatusOK, ""
 		}
 	}
+}
+
+func compileHelperCredentialGroups(supplementaryGroups []uint32) []uint32 {
+	groups := []uint32{65532}
+	seen := map[uint32]struct{}{65532: {}}
+	for _, gid := range supplementaryGroups {
+		if _, exists := seen[gid]; exists {
+			continue
+		}
+		seen[gid] = struct{}{}
+		groups = append(groups, gid)
+	}
+	return groups
 }
 
 func classifyCompileWaitStatus(status syscall.WaitStatus) (string, string) {

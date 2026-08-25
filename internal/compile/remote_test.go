@@ -15,6 +15,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/rustpolicy"
 )
 
 type compileRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -32,15 +33,18 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req.EntryPoint != "src/Main.py" {
+		if req.EntryPoint != "src/main.rs" {
 			t.Fatalf("unexpected entry_point: %+v", req)
 		}
 		if req.RuntimeProfile != "low-memory" {
 			t.Fatalf("runtime_profile = %q, want low-memory", req.RuntimeProfile)
 		}
+		if req.RustCrateMode != rustpolicy.CrateModeInstalled {
+			t.Fatalf("rust_crate_mode = %q, want installed", req.RustCrateMode)
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: result\n"))
-		_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"from-remote\\n\",\"artifacts\":[{\"name\":\"Main.pyc\",\"data_b64\":\"Ynl0ZWNvZGU=\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"from-remote\\n\",\"artifacts\":[{\"name\":\"Main\",\"data_b64\":\"Ynl0ZWNvZGU=\"}]}\n\n"))
 	}))
 	defer remote.Close()
 
@@ -61,11 +65,12 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 	}
 
 	resp := runner.Run(context.Background(), &model.CompileRequest{
-		Lang:           "PYTHON3",
-		EntryPoint:     "src/Main.py",
+		Lang:           "RUST2021",
+		EntryPoint:     "src/main.rs",
 		RuntimeProfile: "low-memory",
+		RustCrateMode:  rustpolicy.CrateModeInstalled,
 		Sources: []model.Source{{
-			Name:    "src/Main.py",
+			Name:    "src/main.rs",
 			DataB64: "cHJpbnQoJ29rJykK",
 		}},
 	})
@@ -75,7 +80,7 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 	if resp.Stdout != "from-remote\n" {
 		t.Fatalf("stdout mismatch: %+v", resp)
 	}
-	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.pyc" {
+	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" {
 		t.Fatalf("unexpected artifacts: %+v", resp.Artifacts)
 	}
 }

@@ -32,6 +32,7 @@ import (
 	"aonohako/internal/processhardening"
 	"aonohako/internal/profiles"
 	"aonohako/internal/pythonpolicy"
+	"aonohako/internal/rustpolicy"
 	"aonohako/internal/sandbox"
 	"aonohako/internal/security"
 
@@ -902,6 +903,7 @@ func runCompileExecuteSuite() error {
 			MaxActiveRuns:                        1,
 			MaxPendingQueue:                      1,
 			HeartbeatInterval:                    time.Second,
+			AllowRequestRustInstalledCrates:      true,
 			AllowRequestPythonInstalledLibraries: true,
 		},
 		compile.New(),
@@ -1048,6 +1050,81 @@ printfn"%A"(getans(fac(a))0I)
 						return fmt.Errorf("%s/%s constrained startup attempt %d failed: memory_mb=%d status=%s reason=%s stdout=%q stderr=%q", language, compileLanguage, attempt, memoryMB, startupResp.Status, startupResp.Reason, startupResp.Stdout, startupResp.Stderr)
 					}
 				}
+			}
+		}
+		if language == "rust" {
+			installedSources := []model.Source{
+				{Name: "Cargo.toml", DataB64: encodeScript(`[package]
+name = "submission"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+itertools = "=0.14.0"
+`)},
+				{Name: "Cargo.lock", DataB64: encodeScript(`version = 4
+
+[[package]]
+name = "either"
+version = "1.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = ["either"]
+
+[[package]]
+name = "submission"
+version = "0.1.0"
+dependencies = ["itertools"]
+`)},
+				{Name: "src/main.rs", DataB64: encodeScript(`use itertools::Itertools;
+use std::io::{self, Read};
+
+fn main() {
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input).unwrap();
+    let (a, b): (i32, i32) = input
+        .split_whitespace()
+        .map(|value| value.parse::<i32>().unwrap())
+        .collect_tuple()
+        .unwrap();
+    println!("{}", a + b);
+}
+`)},
+			}
+			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				Lang:          "RUST2024",
+				Sources:       installedSources,
+				EntryPoint:    "src/main.rs",
+				RustCrateMode: rustpolicy.CrateModeInstalled,
+			})
+			if err != nil {
+				return fmt.Errorf("rust installed-crate compile request failed: %w", err)
+			}
+			if compileResp.Status != model.CompileStatusOK {
+				return fmt.Errorf("rust installed-crate compile failed: status=%s reason=%s stdout=%q stderr=%q", compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+			}
+			binaries := make([]model.Binary, 0, len(compileResp.Artifacts))
+			for _, artifact := range compileResp.Artifacts {
+				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
+			}
+			runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				Lang:           "binary",
+				Binaries:       binaries,
+				Stdin:          "20 22\n",
+				ExpectedStdout: "42\n",
+				Limits:         model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			})
+			if err != nil {
+				return fmt.Errorf("rust installed-crate execute request failed: %w", err)
+			}
+			if runResp.Status != model.RunStatusAccepted {
+				return fmt.Errorf("rust installed-crate execute failed: status=%s reason=%s stdout=%q stderr=%q", runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
 			}
 		}
 	}
@@ -5069,6 +5146,27 @@ func runDirectImagePermissionChecks() error {
 		)
 		if err != nil || importOut != "allowed\n" {
 			return fmt.Errorf("python-library-import-with-group: stdout %q stderr %q err %v", importOut, importErr, err)
+		}
+	}
+
+	if os.Getenv("AONOHAKO_RUST_CRATE_ISOLATION") == "true" {
+		if got := strings.TrimSpace(os.Getenv("AONOHAKO_RUST_EXTERNAL_CRATE_GID")); got != strconv.FormatUint(uint64(rustpolicy.ExternalCrateGID), 10) {
+			return fmt.Errorf("rust-crate-gid: got %q, want %d", got, rustpolicy.ExternalCrateGID)
+		}
+		vendorScript := "if [ -r " + rustpolicy.InstalledVendorDir + " ] || [ -x " + rustpolicy.InstalledVendorDir + " ]; then echo allowed; else echo blocked; fi"
+		vendorOut, vendorErr, err := runAsSandboxUser(vendorScript, "")
+		if err != nil || vendorOut != "blocked\n" {
+			return fmt.Errorf("rust-crate-vendor-without-group: stdout %q stderr %q err %v", vendorOut, vendorErr, err)
+		}
+		for _, unrelatedGID := range []uint32{pythonpolicy.ExternalLibraryGID, 65528} {
+			vendorOut, vendorErr, err = runAsSandboxUserWithGroups(vendorScript, "", []uint32{unrelatedGID})
+			if err != nil || vendorOut != "blocked\n" {
+				return fmt.Errorf("rust-crate-vendor-with-unrelated-group-%d: stdout %q stderr %q err %v", unrelatedGID, vendorOut, vendorErr, err)
+			}
+		}
+		vendorOut, vendorErr, err = runAsSandboxUserWithGroups(vendorScript, "", []uint32{rustpolicy.ExternalCrateGID})
+		if err != nil || vendorOut != "allowed\n" {
+			return fmt.Errorf("rust-crate-vendor-with-group: stdout %q stderr %q err %v", vendorOut, vendorErr, err)
 		}
 	}
 

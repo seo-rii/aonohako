@@ -6,6 +6,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/rustpolicy"
 )
 
 type Compiler interface {
@@ -32,9 +33,19 @@ type CommandResult struct {
 	Reason string
 }
 
-type sandboxCommandRunner struct{}
+type sandboxCommandRunner struct {
+	supplementaryGroups []uint32
+}
 
-func (sandboxCommandRunner) Run(ctx context.Context, workDir, bin string, args, env []string) CommandResult {
-	stdout, stderr, status, reason := runCommand(ctx, workDir, bin, args, env)
+func (r sandboxCommandRunner) Run(ctx context.Context, workDir, bin string, args, env []string) CommandResult {
+	stdout, stderr, status, reason := runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, r.supplementaryGroups)
 	return CommandResult{Stdout: stdout, Stderr: stderr, Status: status, Reason: reason}
+}
+
+func sandboxCommandRunnerForRustMode(mode rustpolicy.CrateMode) sandboxCommandRunner {
+	runner := sandboxCommandRunner{}
+	if rustpolicy.EffectiveCrateMode(mode) == rustpolicy.CrateModeInstalled {
+		runner.supplementaryGroups = []uint32{rustpolicy.ExternalCrateGID}
+	}
+	return runner
 }

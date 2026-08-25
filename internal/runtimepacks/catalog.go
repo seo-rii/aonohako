@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"aonohako/internal/pythonpolicy"
+	"aonohako/internal/rustpolicy"
 
 	"gopkg.in/yaml.v3"
 )
@@ -280,6 +281,8 @@ func (s ImageSpec) DockerBuild(contextDir, tagPrefix string) DockerBuildSpec {
 			"INSTALL_SCRIPT":              strings.Join(s.InstallScript, "\n"),
 			"SANDBOX_TOOLS":               strings.Join(s.SandboxTools, " "),
 			"SMOKE_COMMAND":               strings.Join(s.SmokeCommand, "\t"),
+			"RUST_CRATE_ISOLATION":        strconv.FormatBool(slices.Contains(s.Languages, "rust")),
+			"RUST_EXTERNAL_CRATE_GID":     strconv.FormatUint(uint64(rustpolicy.ExternalCrateGID), 10),
 			"PYTHON_LIBRARY_ISOLATION":    strconv.FormatBool(slices.Contains(s.Languages, "python")),
 			"PYTHON_EXTERNAL_LIBRARY_GID": strconv.FormatUint(uint64(pythonpolicy.ExternalLibraryGID), 10),
 		},
