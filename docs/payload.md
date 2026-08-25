@@ -19,6 +19,7 @@ The canonical numeric request and capture limits are generated from code in
   "entry_point": "src/main.c",               // optional submitted source path to validate as the intended entry file
   "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
+  "go_module_mode": "stdlib",                // optional Go imports: "stdlib" | "installed"
   "emit_logs": true                          // optional compiler stdout/stderr log SSE events; defaults to true
 }
 ```
@@ -33,6 +34,15 @@ metadata rather than an argument that drops helper sources.
 diagnostics remain in the final `result`; a failed compile still emits a
 structural `error` event before that result without duplicating the diagnostic
 output.
+
+`go_module_mode` is accepted only for Go compile requests. `stdlib` uses an
+empty request-local module cache, while `installed` exposes the version-locked
+modules listed in `go-modules/go.mod` through a read-only image cache. Installed
+mode requires exactly one co-located `go.mod` and `go.sum`, rejects `replace`
+and `toolchain` directives, and runs `go build -mod=readonly` with module
+proxies, checksum-database access, workspaces, VCS access, and toolchain
+downloads disabled. The server defaults to `stdlib`; a problem mapping or the
+operator's explicit request policy must authorize `installed`.
 
 `version` is optional and currently applies to C, C++, Java, Kotlin/JVM, and
 Rust compile profiles. C/C++ values select the language standard (`"c99"`,

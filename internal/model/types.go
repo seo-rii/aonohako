@@ -1,6 +1,9 @@
 package model
 
-import "aonohako/internal/pythonpolicy"
+import (
+	"aonohako/internal/gomodulepolicy"
+	"aonohako/internal/pythonpolicy"
+)
 
 type Source struct {
 	Name    string `json:"name"`
@@ -15,14 +18,15 @@ type Artifact struct {
 }
 
 type CompileRequest struct {
-	Lang           string   `json:"lang"`
-	Version        string   `json:"version,omitempty"`
-	Sources        []Source `json:"sources"`
-	Target         string   `json:"target,omitempty"`
-	EntryPoint     string   `json:"entry_point,omitempty"`
-	ProblemID      string   `json:"problem_id,omitempty"`
-	RuntimeProfile string   `json:"runtime_profile,omitempty"`
-	EmitLogs       *bool    `json:"emit_logs,omitempty"`
+	Lang           string              `json:"lang"`
+	Version        string              `json:"version,omitempty"`
+	Sources        []Source            `json:"sources"`
+	Target         string              `json:"target,omitempty"`
+	EntryPoint     string              `json:"entry_point,omitempty"`
+	ProblemID      string              `json:"problem_id,omitempty"`
+	RuntimeProfile string              `json:"runtime_profile,omitempty"`
+	GoModuleMode   gomodulepolicy.Mode `json:"go_module_mode,omitempty"`
+	EmitLogs       *bool               `json:"emit_logs,omitempty"`
 }
 
 type CompileResponse struct {

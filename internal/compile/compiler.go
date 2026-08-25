@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"aonohako/internal/config"
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 )
@@ -32,9 +33,19 @@ type CommandResult struct {
 	Reason string
 }
 
-type sandboxCommandRunner struct{}
+type sandboxCommandRunner struct {
+	supplementaryGroups []uint32
+}
 
-func (sandboxCommandRunner) Run(ctx context.Context, workDir, bin string, args, env []string) CommandResult {
-	stdout, stderr, status, reason := runCommand(ctx, workDir, bin, args, env)
+func (r sandboxCommandRunner) Run(ctx context.Context, workDir, bin string, args, env []string) CommandResult {
+	stdout, stderr, status, reason := runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, r.supplementaryGroups)
 	return CommandResult{Stdout: stdout, Stderr: stderr, Status: status, Reason: reason}
+}
+
+func sandboxCommandRunnerForGoMode(mode gomodulepolicy.Mode) sandboxCommandRunner {
+	runner := sandboxCommandRunner{}
+	if gomodulepolicy.EffectiveMode(mode) == gomodulepolicy.ModeInstalled {
+		runner.supplementaryGroups = []uint32{gomodulepolicy.ExternalModuleGID}
+	}
+	return runner
 }

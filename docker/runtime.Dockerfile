@@ -44,6 +44,7 @@ ARG APT_PACKAGES=
 ARG PIP_PACKAGES=
 ARG NPM_PACKAGES=
 ARG INSTALL_SCRIPT=
+ARG GO_MODULE_ISOLATION=false
 
 RUN if [[ -n "${APT_PACKAGES}" ]]; then \
       apt-get update && \
@@ -56,6 +57,22 @@ RUN if [[ -n "${PIP_PACKAGES}" ]]; then \
     fi
 
 COPY --from=go-toolchain /usr/local/go /usr/local/go
+
+RUN --mount=type=bind,source=go-modules,target=/tmp/aonohako-go-modules,ro \
+    if [[ "${GO_MODULE_ISOLATION}" == "true" ]]; then \
+      install -d -m 0755 /usr/local/lib/aonohako/go-modcache /tmp/aonohako-go-build-cache && \
+      cd /tmp/aonohako-go-modules && \
+      env GOCACHE=/tmp/aonohako-go-build-cache \
+        GOMODCACHE=/usr/local/lib/aonohako/go-modcache \
+        GOENV=off GOTELEMETRY=off GOTOOLCHAIN=local \
+        /usr/local/go/bin/go mod download all && \
+      env GOMODCACHE=/usr/local/lib/aonohako/go-modcache GOENV=off GOTOOLCHAIN=local /usr/local/go/bin/go mod verify && \
+      env CGO_ENABLED=0 GOCACHE=/tmp/aonohako-go-build-cache \
+        GOMODCACHE=/usr/local/lib/aonohako/go-modcache \
+        GOENV=off GOTELEMETRY=off GOTOOLCHAIN=local \
+        /usr/local/go/bin/go test -mod=readonly ./... && \
+      rm -rf /tmp/aonohako-go-build-cache; \
+    fi
 
 RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
       env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
@@ -71,6 +88,8 @@ ARG IMAGE_NAME=runtime
 ARG LANGUAGES=
 ARG SANDBOX_TOOLS=
 ARG SMOKE_COMMAND=
+ARG GO_MODULE_ISOLATION=false
+ARG GO_EXTERNAL_MODULE_GID=65528
 ARG PYTHON_LIBRARY_ISOLATION=false
 ARG PYTHON_EXTERNAL_LIBRARY_GID=65530
 
@@ -137,6 +156,14 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
       if command -v "${tool}" >/dev/null 2>&1; then chmod 0755 "$(command -v "${tool}")"; fi; \
     done && \
     shopt -s nullglob && \
+    if [[ "${GO_MODULE_ISOLATION}" == "true" ]]; then \
+      test -d /usr/local/lib/aonohako/go-modcache && \
+      chown -R "0:${GO_EXTERNAL_MODULE_GID}" /usr/local/lib/aonohako/go-modcache && \
+      find /usr/local/lib/aonohako/go-modcache -type d -exec chmod 0750 {} + && \
+      find /usr/local/lib/aonohako/go-modcache -type f -exec chmod 0640 {} +; \
+    else \
+      rm -rf /usr/local/lib/aonohako/go-modcache; \
+    fi && \
     if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" ]]; then \
       for path in /usr/lib/python*/dist-packages /usr/local/lib/python*/dist-packages /usr/lib/python*/site-packages /usr/local/lib/python*/site-packages /usr/share/python-wheels /usr/local/lib/aonohako/python; do \
         if [[ ! -e "${path}" ]]; then continue; fi; \
@@ -171,6 +198,8 @@ ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/
     CARGO_HOME=/usr/local/cargo \
     AONOHAKO_IMAGE_NAME=${IMAGE_NAME} \
     AONOHAKO_LANGUAGES=${LANGUAGES} \
+    AONOHAKO_GO_MODULE_ISOLATION=${GO_MODULE_ISOLATION} \
+    AONOHAKO_GO_EXTERNAL_MODULE_GID=${GO_EXTERNAL_MODULE_GID} \
     AONOHAKO_PYTHON_LIBRARY_ISOLATION=${PYTHON_LIBRARY_ISOLATION} \
     AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID=${PYTHON_EXTERNAL_LIBRARY_GID} \
     AONOHAKO_SANDBOX_TOOLS=${SANDBOX_TOOLS} \

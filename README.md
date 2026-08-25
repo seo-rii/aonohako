@@ -331,6 +331,17 @@ aonohako-selftest cgroup-preflight
   With `remote` transport, deploy the same profile definitions and
   `problem_id` mapping to the downstream runner whenever the control plane
   forwards policy-selected `runtime_profile` values.
+- `AONOHAKO_DEFAULT_GO_MODULE_MODE` selects the default for Go compilation:
+  `stdlib` (default) or `installed`. Installed mode uses only the exact modules
+  and checksums committed under `go-modules/`; compilation remains offline.
+- `AONOHAKO_ALLOW_REQUEST_GO_INSTALLED_MODULES` controls whether a request may
+  elevate from the `stdlib` default with `go_module_mode=installed`. It defaults
+  to `true` only for `dev` and `false` for `cloudrun` or `selfhosted`.
+- `AONOHAKO_PROBLEM_GO_MODULE_MODES` may define a JSON object mapping
+  `problem_id` values to `stdlib` or `installed`. A problem mapping wins over a
+  direct request and conflicting values are rejected before stream admission.
+  Remote control planes and runners must use the same policy or explicitly
+  trust the forwarded, policy-selected mode.
 - `AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE` selects the request-wide default for
   Python imports: `stdlib` (default) or `installed`. `stdlib` keeps submitted
   sibling modules and the standard library available while hiding packages

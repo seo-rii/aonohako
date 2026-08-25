@@ -24,6 +24,7 @@ import (
 	"aonohako/internal/compile"
 	"aonohako/internal/config"
 	"aonohako/internal/execute"
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
@@ -220,6 +221,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
+		return
+	}
+	if err := s.applyGoModulePolicy(&req); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_go_module_mode", err.Error())
 		return
 	}
 	if len(req.Sources) == 0 {
@@ -1020,6 +1025,50 @@ func (s *Server) applyPythonLibraryPolicy(req *model.RunRequest) error {
 		defaultMode != pythonpolicy.LibraryModeInstalled &&
 		!s.cfg.AllowRequestPythonInstalledLibraries {
 		return fmt.Errorf("python_library_mode %q is not allowed by server policy", pythonpolicy.LibraryModeInstalled)
+	}
+	return nil
+}
+
+func (s *Server) applyGoModulePolicy(req *model.CompileRequest) error {
+	if req == nil {
+		return fmt.Errorf("request is required")
+	}
+	if err := gomodulepolicy.ValidateOptionalMode(req.GoModuleMode); err != nil {
+		return fmt.Errorf("invalid go_module_mode: %w", err)
+	}
+	if !gomodulepolicy.UsesGoCompiler(req.Lang) {
+		if req.GoModuleMode != "" {
+			return fmt.Errorf("go_module_mode requires a Go compile request")
+		}
+		return nil
+	}
+
+	if mappedMode := s.cfg.ProblemGoModuleModes[req.ProblemID]; mappedMode != "" {
+		if err := gomodulepolicy.ValidateOptionalMode(mappedMode); err != nil {
+			return fmt.Errorf("problem_id %s maps to invalid go_module_mode: %w", req.ProblemID, err)
+		}
+		if req.GoModuleMode != "" && req.GoModuleMode != mappedMode {
+			return fmt.Errorf("go_module_mode conflicts with problem policy")
+		}
+		req.GoModuleMode = mappedMode
+		return nil
+	}
+
+	defaultMode := s.cfg.DefaultGoModuleMode
+	if defaultMode == "" {
+		defaultMode = gomodulepolicy.ModeStdlib
+	}
+	if err := gomodulepolicy.ValidateOptionalMode(defaultMode); err != nil {
+		return fmt.Errorf("server default go_module_mode is invalid: %w", err)
+	}
+	if req.GoModuleMode == "" {
+		req.GoModuleMode = defaultMode
+		return nil
+	}
+	if req.GoModuleMode == gomodulepolicy.ModeInstalled &&
+		defaultMode != gomodulepolicy.ModeInstalled &&
+		!s.cfg.AllowRequestGoInstalledModules {
+		return fmt.Errorf("go_module_mode %q is not allowed by server policy", gomodulepolicy.ModeInstalled)
 	}
 	return nil
 }
