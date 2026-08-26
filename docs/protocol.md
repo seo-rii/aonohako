@@ -223,6 +223,9 @@ Both `/compile` and `/execute` share the same bounded queue:
 - `/compile` also rejects invalid or policy-disabled `go_module_mode` values,
   Go-module problem-policy conflicts, and Go module modes supplied for non-Go
   compiles before acquiring a stream or queue slot.
+- `/compile` also rejects invalid or policy-disabled `rust_crate_mode` values,
+  Rust-crate problem-policy conflicts, and Rust crate modes supplied for
+  non-Rust compiles before acquiring a stream or queue slot.
 - `/execute` rejects oversized `stdin` / `expected_stdout`, a request-wide
   decoded binary total over 48 MiB, out-of-range run limits, invalid or unknown
   `runtime_profile` values, invalid `problem_id` values, profile conflicts with
@@ -344,11 +347,11 @@ Pre-SSE failures include method mismatches (`method_not_allowed`), malformed or
 oversized JSON (`invalid_json` / `invalid_request_body`), auth failures
 (`unauthorized` / `server_auth_misconfigured`), request validation failures
 (`invalid_request`, `invalid_runtime_profile`, `network_not_allowed`,
-`invalid_go_module_mode`, `invalid_python_library_mode`), queue and stream
-admission failures, and SSE
-initialization failure (`stream_init_failed`). After the SSE stream is
-admitted, terminal failures are reported as SSE `error` events before the final
-`result` event.
+`invalid_go_module_mode`, `invalid_python_library_mode`,
+`invalid_rust_crate_mode`), queue and stream
+admission failures, and SSE initialization failure (`stream_init_failed`).
+After the SSE stream is admitted, terminal failures are reported as SSE
+`error` events before the final `result` event.
 
 Callers should implement exponential backoff on 429.
 
@@ -362,7 +365,7 @@ Callers should implement exponential backoff on 429.
 | `Cache-Control` | `no-cache` |
 | `Connection` | `keep-alive` |
 | `X-Accel-Buffering` | `no` |
-| `X-Aonohako-Protocol-Version` | `2026-08-25` |
+| `X-Aonohako-Protocol-Version` | `2026-08-26` |
 
 Remote control planes use the configured protocol policy. In the default
 non-dev strict mode, missing or mismatched `X-Aonohako-Protocol-Version`

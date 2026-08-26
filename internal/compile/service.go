@@ -14,6 +14,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/runtimepolicy"
+	"aonohako/internal/rustpolicy"
 	"aonohako/internal/security"
 	"aonohako/internal/util"
 )
@@ -87,6 +88,12 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	profile, ok := resolveProfile(req.Lang)
 	if !ok {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unsupported lang: " + req.Lang}
+	}
+	if err := rustpolicy.ValidateOptionalCrateMode(req.RustCrateMode); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid rust_crate_mode: " + err.Error()}
+	}
+	if req.RustCrateMode != "" && profile.CompileKind != "rust" {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "rust_crate_mode requires a Rust compile language"}
 	}
 	if err := gomodulepolicy.ValidateOptionalMode(req.GoModuleMode); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid go_module_mode: " + err.Error()}
@@ -170,7 +177,10 @@ func compileCgroupParentFromContext(ctx context.Context) string {
 func executeBuild(ctx context.Context, workDir string, profile profiles.Profile, target string, req *model.CompileRequest, tuning config.RuntimeTuningConfig) model.CompileResponse {
 	if compiler, ok := lookupCompiler(profile.CompileKind); ok {
 		runner := sandboxCommandRunner{}
-		if profile.CompileKind == "go" {
+		switch profile.CompileKind {
+		case "rust":
+			runner = sandboxCommandRunnerForRustMode(req.RustCrateMode)
+		case "go":
 			runner = sandboxCommandRunnerForGoMode(req.GoModuleMode)
 		}
 		return compiler.Compile(ctx, CompileJob{

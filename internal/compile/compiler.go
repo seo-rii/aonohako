@@ -7,6 +7,7 @@ import (
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/rustpolicy"
 )
 
 type Compiler interface {
@@ -35,11 +36,21 @@ type CommandResult struct {
 
 type sandboxCommandRunner struct {
 	supplementaryGroups []uint32
+	workspaceDirs       []string
 }
 
 func (r sandboxCommandRunner) Run(ctx context.Context, workDir, bin string, args, env []string) CommandResult {
-	stdout, stderr, status, reason := runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, r.supplementaryGroups)
+	stdout, stderr, status, reason := runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, r.supplementaryGroups, r.workspaceDirs)
 	return CommandResult{Stdout: stdout, Stderr: stderr, Status: status, Reason: reason}
+}
+
+func sandboxCommandRunnerForRustMode(mode rustpolicy.CrateMode) sandboxCommandRunner {
+	runner := sandboxCommandRunner{}
+	if rustpolicy.EffectiveCrateMode(mode) == rustpolicy.CrateModeInstalled {
+		runner.supplementaryGroups = []uint32{rustpolicy.ExternalCrateGID}
+		runner.workspaceDirs = []string{".cargo-home", ".cargo-target"}
+	}
+	return runner
 }
 
 func sandboxCommandRunnerForGoMode(mode gomodulepolicy.Mode) sandboxCommandRunner {

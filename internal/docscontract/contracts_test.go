@@ -13,6 +13,7 @@ import (
 	"aonohako/internal/execute"
 	"aonohako/internal/limitdoc"
 	"aonohako/internal/platform"
+	"aonohako/internal/remoteio"
 	"aonohako/internal/runvalidation"
 )
 
@@ -57,6 +58,7 @@ func TestManualLimitReferencesMatchCodeConstants(t *testing.T) {
 		{name: "protocol judging output", body: protocol, want: fmt.Sprintf("may be set up to `%s` and remains the judging", limitdoc.HumanBytes(runvalidation.MaxOutputBytes))},
 		{name: "protocol compile limits", body: protocol, want: fmt.Sprintf("more than %d sources, source files over\n  %s decoded, source totals over %s decoded", compile.MaxSourceFiles, limitdoc.HumanBytes(compile.MaxDecodedSourceBytes), limitdoc.HumanBytes(compile.MaxDecodedSourceTotalBytes))},
 		{name: "protocol binary total", body: protocol, want: fmt.Sprintf("decoded binary total over %s", limitdoc.HumanBytes(runvalidation.MaxBinaryTotalBytes))},
+		{name: "protocol version", body: protocol, want: fmt.Sprintf("| `%s` | `%s` |", remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)},
 	}
 	for _, check := range checks {
 		if !strings.Contains(check.body, check.want) {

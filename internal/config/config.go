@@ -21,6 +21,7 @@ import (
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/rustpolicy"
 	"aonohako/internal/security"
 )
 
@@ -166,6 +167,9 @@ type Config struct {
 	DefaultPythonLibraryMode             pythonpolicy.LibraryMode
 	AllowRequestPythonInstalledLibraries bool
 	ProblemPythonLibraryModes            map[string]pythonpolicy.LibraryMode
+	DefaultRustCrateMode                 rustpolicy.CrateMode
+	AllowRequestRustInstalledCrates      bool
+	ProblemRustCrateModes                map[string]rustpolicy.CrateMode
 	RequireWorkRootTmpfs                 bool
 	WorkRootMaxBytes                     int
 	WorkRootMaxFiles                     int
@@ -315,6 +319,14 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE %w", err)
 	}
 	allowRequestPythonLibraries, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_PYTHON_INSTALLED_LIBRARIES", os.Getenv("AONOHAKO_ALLOW_REQUEST_PYTHON_INSTALLED_LIBRARIES"), defaultAllowRequestPythonLibraries(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	defaultRustCrateMode, err := rustpolicy.ParseCrateMode(getenv("AONOHAKO_DEFAULT_RUST_CRATE_MODE", string(rustpolicy.CrateModeStdlib)))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DEFAULT_RUST_CRATE_MODE %w", err)
+	}
+	allowRequestRustInstalledCrates, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_RUST_INSTALLED_CRATES", os.Getenv("AONOHAKO_ALLOW_REQUEST_RUST_INSTALLED_CRATES"), defaultAllowRequestRustCrates(runtimePlatform))
 	if err != nil {
 		return Config{}, err
 	}
@@ -549,6 +561,30 @@ func Load() (Config, error) {
 			problemPythonLibraryModes[problemID] = mode
 		}
 	}
+	problemRustCrateModes := map[string]rustpolicy.CrateMode(nil)
+	if rawProblemModes := strings.TrimSpace(os.Getenv("AONOHAKO_PROBLEM_RUST_CRATE_MODES")); rawProblemModes != "" {
+		parsedProblemModes := map[string]string{}
+		if err := json.Unmarshal([]byte(rawProblemModes), &parsedProblemModes); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUST_CRATE_MODES must be a JSON object mapping problem IDs to Rust crate modes: %w", err)
+		}
+		if len(parsedProblemModes) == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUST_CRATE_MODES must define at least one problem mapping when set")
+		}
+		problemRustCrateModes = make(map[string]rustpolicy.CrateMode, len(parsedProblemModes))
+		for problemID, rawMode := range parsedProblemModes {
+			if problemID == "" {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUST_CRATE_MODES contains an empty problem_id")
+			}
+			if err := runtimepolicy.ValidateProblemID(problemID); err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUST_CRATE_MODES problem_id %q is invalid: %w", problemID, err)
+			}
+			mode, err := rustpolicy.ParseCrateMode(rawMode)
+			if err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_RUST_CRATE_MODES problem_id %q %w", problemID, err)
+			}
+			problemRustCrateModes[problemID] = mode
+		}
+	}
 	execution := ExecutionConfig{
 		Platform: runtimePlatform,
 		Remote: RemoteExecutorConfig{
@@ -764,6 +800,9 @@ func Load() (Config, error) {
 		DefaultPythonLibraryMode:             defaultPythonLibraryMode,
 		AllowRequestPythonInstalledLibraries: allowRequestPythonLibraries,
 		ProblemPythonLibraryModes:            problemPythonLibraryModes,
+		DefaultRustCrateMode:                 defaultRustCrateMode,
+		AllowRequestRustInstalledCrates:      allowRequestRustInstalledCrates,
+		ProblemRustCrateModes:                problemRustCrateModes,
 		RequireWorkRootTmpfs:                 requireWorkRootTmpfs,
 		WorkRootMaxBytes:                     workRootMaxBytes,
 		WorkRootMaxFiles:                     workRootMaxFiles,
@@ -986,6 +1025,10 @@ func defaultAllowRequestGoInstalledModules(opts platform.RuntimeOptions) bool {
 }
 
 func defaultAllowRequestPythonLibraries(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget == platform.DeploymentTargetDev
+}
+
+func defaultAllowRequestRustCrates(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetDev
 }
 

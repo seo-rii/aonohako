@@ -32,6 +32,7 @@ import (
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/rustpolicy"
 	"aonohako/internal/sse"
 	"aonohako/internal/util"
 )
@@ -225,6 +226,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.applyGoModulePolicy(&req); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_go_module_mode", err.Error())
+		return
+	}
+	if err := s.applyRustCratePolicy(&req); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_rust_crate_mode", err.Error())
 		return
 	}
 	if len(req.Sources) == 0 {
@@ -1025,6 +1030,50 @@ func (s *Server) applyPythonLibraryPolicy(req *model.RunRequest) error {
 		defaultMode != pythonpolicy.LibraryModeInstalled &&
 		!s.cfg.AllowRequestPythonInstalledLibraries {
 		return fmt.Errorf("python_library_mode %q is not allowed by server policy", pythonpolicy.LibraryModeInstalled)
+	}
+	return nil
+}
+
+func (s *Server) applyRustCratePolicy(req *model.CompileRequest) error {
+	if req == nil {
+		return fmt.Errorf("request is required")
+	}
+	if err := rustpolicy.ValidateOptionalCrateMode(req.RustCrateMode); err != nil {
+		return fmt.Errorf("invalid rust_crate_mode: %w", err)
+	}
+	if !rustpolicy.IsRustLanguage(req.Lang) {
+		if req.RustCrateMode != "" {
+			return fmt.Errorf("rust_crate_mode requires a Rust compile language")
+		}
+		return nil
+	}
+
+	if mappedMode := s.cfg.ProblemRustCrateModes[req.ProblemID]; mappedMode != "" {
+		if err := rustpolicy.ValidateOptionalCrateMode(mappedMode); err != nil {
+			return fmt.Errorf("problem_id %s maps to invalid rust_crate_mode: %w", req.ProblemID, err)
+		}
+		if req.RustCrateMode != "" && req.RustCrateMode != mappedMode {
+			return fmt.Errorf("rust_crate_mode conflicts with problem policy")
+		}
+		req.RustCrateMode = mappedMode
+		return nil
+	}
+
+	defaultMode := s.cfg.DefaultRustCrateMode
+	if defaultMode == "" {
+		defaultMode = rustpolicy.CrateModeStdlib
+	}
+	if err := rustpolicy.ValidateOptionalCrateMode(defaultMode); err != nil {
+		return fmt.Errorf("server default rust_crate_mode is invalid: %w", err)
+	}
+	if req.RustCrateMode == "" {
+		req.RustCrateMode = defaultMode
+		return nil
+	}
+	if req.RustCrateMode == rustpolicy.CrateModeInstalled &&
+		defaultMode != rustpolicy.CrateModeInstalled &&
+		!s.cfg.AllowRequestRustInstalledCrates {
+		return fmt.Errorf("rust_crate_mode %q is not allowed by server policy", rustpolicy.CrateModeInstalled)
 	}
 	return nil
 }

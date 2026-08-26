@@ -10,6 +10,7 @@ import (
 
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
+	"aonohako/internal/rustpolicy"
 	"aonohako/internal/util"
 )
 
@@ -78,6 +79,12 @@ func compileNative(ctx context.Context, workDir, target string, srcRel []string,
 type rustCompiler struct{}
 
 func (rustCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	if job.Request == nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	if rustpolicy.EffectiveCrateMode(job.Request.RustCrateMode) == rustpolicy.CrateModeInstalled {
+		return compileRustCargo(ctx, job)
+	}
 	return compileRust(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Profile.RustEdition)
 }
 

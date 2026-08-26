@@ -342,6 +342,18 @@ aonohako-selftest cgroup-preflight
   direct request and conflicting values are rejected before stream admission.
   Remote control planes and runners must use the same policy or explicitly
   trust the forwarded, policy-selected mode.
+- `AONOHAKO_DEFAULT_RUST_CRATE_MODE` selects the default for Rust compilation:
+  `stdlib` (default) or `installed`. Installed mode uses only the exact crate
+  graph and checksums committed under `rust-crates/`; compilation remains
+  offline.
+- `AONOHAKO_ALLOW_REQUEST_RUST_INSTALLED_CRATES` controls whether a request may
+  elevate from the `stdlib` default with `rust_crate_mode=installed`. It
+  defaults to `true` only for `dev` and `false` for `cloudrun` or `selfhosted`.
+- `AONOHAKO_PROBLEM_RUST_CRATE_MODES` may define a JSON object mapping
+  `problem_id` values to `stdlib` or `installed`. A problem mapping wins over a
+  direct request and conflicting values are rejected before stream admission.
+  Remote control planes and runners must use the same policy or explicitly
+  trust the forwarded, policy-selected mode.
 - `AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE` selects the request-wide default for
   Python imports: `stdlib` (default) or `installed`. `stdlib` keeps submitted
   sibling modules and the standard library available while hiding packages

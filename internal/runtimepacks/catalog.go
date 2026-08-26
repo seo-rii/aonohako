@@ -14,6 +14,7 @@ import (
 
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/pythonpolicy"
+	"aonohako/internal/rustpolicy"
 
 	"gopkg.in/yaml.v3"
 )
@@ -283,6 +284,8 @@ func (s ImageSpec) DockerBuild(contextDir, tagPrefix string) DockerBuildSpec {
 			"SMOKE_COMMAND":               strings.Join(s.SmokeCommand, "\t"),
 			"GO_MODULE_ISOLATION":         strconv.FormatBool(slices.Contains(s.Languages, "go")),
 			"GO_EXTERNAL_MODULE_GID":      strconv.FormatUint(uint64(gomodulepolicy.ExternalModuleGID), 10),
+			"RUST_CRATE_ISOLATION":        strconv.FormatBool(slices.Contains(s.Languages, "rust")),
+			"RUST_EXTERNAL_CRATE_GID":     strconv.FormatUint(uint64(rustpolicy.ExternalCrateGID), 10),
 			"PYTHON_LIBRARY_ISOLATION":    strconv.FormatBool(slices.Contains(s.Languages, "python")),
 			"PYTHON_EXTERNAL_LIBRARY_GID": strconv.FormatUint(uint64(pythonpolicy.ExternalLibraryGID), 10),
 		},

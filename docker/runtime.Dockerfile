@@ -45,6 +45,7 @@ ARG PIP_PACKAGES=
 ARG NPM_PACKAGES=
 ARG INSTALL_SCRIPT=
 ARG GO_MODULE_ISOLATION=false
+ARG RUST_CRATE_ISOLATION=false
 
 RUN if [[ -n "${APT_PACKAGES}" ]]; then \
       apt-get update && \
@@ -78,6 +79,28 @@ RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
       env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
     fi
 
+RUN --mount=type=bind,source=rust-crates,target=/tmp/aonohako-rust-crates,ro \
+    if [[ "${RUST_CRATE_ISOLATION}" == "true" ]]; then \
+      install -d -m 0755 /usr/local/lib/aonohako/rust/vendor \
+        /tmp/aonohako-cargo-home /tmp/aonohako-cargo-target && \
+      cd /tmp/aonohako-rust-crates && \
+      env CARGO_HOME=/tmp/aonohako-cargo-home \
+        CARGO_TARGET_DIR=/tmp/aonohako-cargo-target \
+        RUSTUP_HOME=/usr/local/rustup \
+        /usr/local/cargo/bin/cargo vendor --locked --versioned-dirs \
+          /usr/local/lib/aonohako/rust/vendor && \
+      env CARGO_HOME=/tmp/aonohako-cargo-home \
+        CARGO_NET_OFFLINE=true \
+        CARGO_TARGET_DIR=/tmp/aonohako-cargo-target \
+        PATH=/usr/local/cargo/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+        RUSTUP_HOME=/usr/local/rustup \
+        /usr/local/cargo/bin/cargo --offline --frozen --locked \
+          --config 'source.crates-io.replace-with="aonohako-vendored-sources"' \
+          --config 'source.aonohako-vendored-sources.directory="/usr/local/lib/aonohako/rust/vendor"' \
+          test --manifest-path Cargo.toml && \
+      rm -rf /tmp/aonohako-cargo-home /tmp/aonohako-cargo-target; \
+    fi
+
 RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
       env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}; \
     fi
@@ -90,6 +113,8 @@ ARG SANDBOX_TOOLS=
 ARG SMOKE_COMMAND=
 ARG GO_MODULE_ISOLATION=false
 ARG GO_EXTERNAL_MODULE_GID=65528
+ARG RUST_CRATE_ISOLATION=false
+ARG RUST_EXTERNAL_CRATE_GID=65529
 ARG PYTHON_LIBRARY_ISOLATION=false
 ARG PYTHON_EXTERNAL_LIBRARY_GID=65530
 
@@ -156,6 +181,14 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
       if command -v "${tool}" >/dev/null 2>&1; then chmod 0755 "$(command -v "${tool}")"; fi; \
     done && \
     shopt -s nullglob && \
+    if [[ "${RUST_CRATE_ISOLATION}" == "true" ]]; then \
+      test -d /usr/local/lib/aonohako/rust/vendor && \
+      chown -R "0:${RUST_EXTERNAL_CRATE_GID}" /usr/local/lib/aonohako/rust && \
+      find /usr/local/lib/aonohako/rust -type d -exec chmod 0750 {} + && \
+      find /usr/local/lib/aonohako/rust -type f -exec chmod 0640 {} +; \
+    else \
+      rm -rf /usr/local/lib/aonohako/rust; \
+    fi && \
     if [[ "${GO_MODULE_ISOLATION}" == "true" ]]; then \
       test -d /usr/local/lib/aonohako/go-modcache && \
       chown -R "0:${GO_EXTERNAL_MODULE_GID}" /usr/local/lib/aonohako/go-modcache && \
@@ -200,6 +233,8 @@ ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/
     AONOHAKO_LANGUAGES=${LANGUAGES} \
     AONOHAKO_GO_MODULE_ISOLATION=${GO_MODULE_ISOLATION} \
     AONOHAKO_GO_EXTERNAL_MODULE_GID=${GO_EXTERNAL_MODULE_GID} \
+    AONOHAKO_RUST_CRATE_ISOLATION=${RUST_CRATE_ISOLATION} \
+    AONOHAKO_RUST_EXTERNAL_CRATE_GID=${RUST_EXTERNAL_CRATE_GID} \
     AONOHAKO_PYTHON_LIBRARY_ISOLATION=${PYTHON_LIBRARY_ISOLATION} \
     AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID=${PYTHON_EXTERNAL_LIBRARY_GID} \
     AONOHAKO_SANDBOX_TOOLS=${SANDBOX_TOOLS} \
