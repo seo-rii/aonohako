@@ -1,11 +1,12 @@
 package compile
 
 import (
-	"bufio"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/mod/modfile"
 
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
@@ -149,37 +150,20 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 		if filepath.Dir(goModFiles[0]) != filepath.Dir(goSumFiles[0]) {
 			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "go.mod and go.sum must be in the same directory"}
 		}
-		goMod, err := os.Open(filepath.Join(workDir, goModFiles[0]))
+		goModPath := filepath.Join(workDir, goModFiles[0])
+		goModData, err := os.ReadFile(goModPath)
 		if err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "go.mod read failed"}
 		}
-		validationReason := ""
-		scanner := bufio.NewScanner(goMod)
-		scanner.Buffer(make([]byte, 4096), MaxDecodedSourceBytes)
-		for scanner.Scan() {
-			fields := strings.Fields(scanner.Text())
-			if len(fields) == 0 || strings.HasPrefix(fields[0], "//") {
-				continue
-			}
-			switch fields[0] {
-			case "replace":
-				validationReason = "installed Go modules do not allow replace directives"
-			case "toolchain":
-				validationReason = "installed Go modules do not allow toolchain directives"
-			}
-			if validationReason != "" {
-				break
-			}
+		parsedGoMod, err := modfile.Parse(goModFiles[0], goModData, nil)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid go.mod: " + err.Error()}
 		}
-		if err := scanner.Err(); err != nil {
-			validationReason = "invalid go.mod: " + err.Error()
+		if len(parsedGoMod.Replace) != 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "installed Go modules do not allow replace directives"}
 		}
-		closeErr := goMod.Close()
-		if validationReason != "" {
-			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: validationReason}
-		}
-		if closeErr != nil {
-			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "go.mod read failed"}
+		if parsedGoMod.Toolchain != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "installed Go modules do not allow toolchain directives"}
 		}
 	}
 	goCache := filepath.Join(workDir, ".gocache")

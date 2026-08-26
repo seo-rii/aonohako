@@ -834,7 +834,9 @@ func TestGoCompilerInstalledModeRequiresLockedSafeModule(t *testing.T) {
 	}{
 		{name: "missing sum", goMod: "module example.com/submission\n", sources: []model.Source{{Name: "go.mod"}, {Name: "main.go"}}, want: "exactly one go.mod and one go.sum"},
 		{name: "replace", goMod: "module example.com/submission\nreplace example.com/x => ../x\n", sources: []model.Source{{Name: "go.mod"}, {Name: "go.sum"}, {Name: "main.go"}}, want: "replace directives"},
+		{name: "replace block without whitespace", goMod: "module example.com/submission\nreplace(\nexample.com/x => ../x\n)\n", sources: []model.Source{{Name: "go.mod"}, {Name: "go.sum"}, {Name: "main.go"}}, want: "replace directives"},
 		{name: "toolchain", goMod: "module example.com/submission\ntoolchain go1.99.0\n", sources: []model.Source{{Name: "go.mod"}, {Name: "go.sum"}, {Name: "main.go"}}, want: "toolchain directives"},
+		{name: "invalid manifest", goMod: "module example.com/submission\ngo invalid\n", sources: []model.Source{{Name: "go.mod"}, {Name: "go.sum"}, {Name: "main.go"}}, want: "invalid go.mod"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
