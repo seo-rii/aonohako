@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/remoteio"
@@ -25,63 +26,97 @@ func (f compileRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
-	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/compile" {
-			t.Fatalf("unexpected remote path: %s", r.URL.Path)
-		}
-		var req model.CompileRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		if req.EntryPoint != "src/main.rs" {
-			t.Fatalf("unexpected entry_point: %+v", req)
-		}
-		if req.RuntimeProfile != "low-memory" {
-			t.Fatalf("runtime_profile = %q, want low-memory", req.RuntimeProfile)
-		}
-		if req.RustCrateMode != rustpolicy.CrateModeInstalled {
-			t.Fatalf("rust_crate_mode = %q, want installed", req.RustCrateMode)
-		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("event: result\n"))
-		_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"from-remote\\n\",\"artifacts\":[{\"name\":\"Main\",\"data_b64\":\"Ynl0ZWNvZGU=\"}]}\n\n"))
-	}))
-	defer remote.Close()
-
-	runner, err := Build(config.Config{
-		Execution: config.ExecutionConfig{
-			Platform: platform.RuntimeOptions{
-				DeploymentTarget:   platform.DeploymentTargetDev,
-				ExecutionTransport: platform.ExecutionTransportRemote,
-				SandboxBackend:     platform.SandboxBackendNone,
-			},
-			Remote: config.RemoteExecutorConfig{
-				URL: remote.URL,
+	tests := []struct {
+		name    string
+		request model.CompileRequest
+	}{
+		{
+			name: "rust-installed-crates",
+			request: model.CompileRequest{
+				Lang:           "RUST2021",
+				EntryPoint:     "src/main.rs",
+				RuntimeProfile: "low-memory",
+				RustCrateMode:  rustpolicy.CrateModeInstalled,
+				Sources: []model.Source{{
+					Name:    "src/main.rs",
+					DataB64: "cHJpbnQoJ29rJykK",
+				}},
 			},
 		},
-	})
-	if err != nil {
-		t.Fatalf("Build returned error: %v", err)
+		{
+			name: "go-installed-modules",
+			request: model.CompileRequest{
+				Lang:           "GO",
+				EntryPoint:     "src/main.go",
+				RuntimeProfile: "low-memory",
+				GoModuleMode:   gomodulepolicy.ModeInstalled,
+				Sources: []model.Source{{
+					Name:    "src/main.go",
+					DataB64: "cHJpbnQoJ29rJykK",
+				}},
+			},
+		},
 	}
 
-	resp := runner.Run(context.Background(), &model.CompileRequest{
-		Lang:           "RUST2021",
-		EntryPoint:     "src/main.rs",
-		RuntimeProfile: "low-memory",
-		RustCrateMode:  rustpolicy.CrateModeInstalled,
-		Sources: []model.Source{{
-			Name:    "src/main.rs",
-			DataB64: "cHJpbnQoJ29rJykK",
-		}},
-	})
-	if resp.Status != model.CompileStatusOK {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-	if resp.Stdout != "from-remote\n" {
-		t.Fatalf("stdout mismatch: %+v", resp)
-	}
-	if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" {
-		t.Fatalf("unexpected artifacts: %+v", resp.Artifacts)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/compile" {
+					t.Fatalf("unexpected remote path: %s", r.URL.Path)
+				}
+				var req model.CompileRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Fatalf("decode request: %v", err)
+				}
+				if req.Lang != tt.request.Lang || req.EntryPoint != tt.request.EntryPoint {
+					t.Fatalf("unexpected compile target: %+v", req)
+				}
+				if req.RuntimeProfile != tt.request.RuntimeProfile {
+					t.Fatalf("runtime_profile = %q, want %q", req.RuntimeProfile, tt.request.RuntimeProfile)
+				}
+				if req.GoModuleMode != tt.request.GoModuleMode {
+					t.Fatalf("go_module_mode = %q, want %q", req.GoModuleMode, tt.request.GoModuleMode)
+				}
+				if req.RustCrateMode != tt.request.RustCrateMode {
+					t.Fatalf("rust_crate_mode = %q, want %q", req.RustCrateMode, tt.request.RustCrateMode)
+				}
+				if len(req.Sources) != 1 || req.Sources[0].Name != tt.request.Sources[0].Name {
+					t.Fatalf("unexpected sources: %+v", req.Sources)
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("event: result\n"))
+				_, _ = w.Write([]byte("data: {\"status\":\"OK\",\"stdout\":\"from-remote\\n\",\"artifacts\":[{\"name\":\"Main\",\"data_b64\":\"Ynl0ZWNvZGU=\"}]}\n\n"))
+			}))
+			defer remote.Close()
+
+			runner, err := Build(config.Config{
+				Execution: config.ExecutionConfig{
+					Platform: platform.RuntimeOptions{
+						DeploymentTarget:   platform.DeploymentTargetDev,
+						ExecutionTransport: platform.ExecutionTransportRemote,
+						SandboxBackend:     platform.SandboxBackendNone,
+					},
+					Remote: config.RemoteExecutorConfig{
+						URL: remote.URL,
+					},
+				},
+			})
+			if err != nil {
+				t.Fatalf("Build returned error: %v", err)
+			}
+
+			request := tt.request
+			resp := runner.Run(context.Background(), &request)
+			if resp.Status != model.CompileStatusOK {
+				t.Fatalf("unexpected response: %+v", resp)
+			}
+			if resp.Stdout != "from-remote\n" {
+				t.Fatalf("stdout mismatch: %+v", resp)
+			}
+			if len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" {
+				t.Fatalf("unexpected artifacts: %+v", resp.Artifacts)
+			}
+		})
 	}
 }
 

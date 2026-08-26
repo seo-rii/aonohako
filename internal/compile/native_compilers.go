@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/mod/modfile"
+
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/rustpolicy"
 	"aonohako/internal/util"
@@ -115,19 +118,23 @@ type goCompiler struct{}
 func (goCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
 	runner := job.Runner
 	if runner == nil {
-		runner = sandboxCommandRunner{}
+		runner = sandboxCommandRunnerForGoMode(job.Request.GoModuleMode)
 	}
-	return compileGo(ctx, job.WorkDir, job.Target, job.Request.Sources, runner)
+	return compileGo(ctx, job.WorkDir, job.Target, job.Request.Sources, job.Request.GoModuleMode, runner)
 }
 
-func compileGo(ctx context.Context, workDir, target string, sources []model.Source, runner CommandRunner) model.CompileResponse {
+func compileGo(ctx context.Context, workDir, target string, sources []model.Source, mode gomodulepolicy.Mode, runner CommandRunner) model.CompileResponse {
 	var goFiles []string
 	var goModFiles []string
+	var goSumFiles []string
 	for _, src := range sources {
 		clean := filepath.Clean(src.Name)
 		name := filepath.Base(clean)
 		if name == "go.mod" {
 			goModFiles = append(goModFiles, clean)
+		}
+		if name == "go.sum" {
+			goSumFiles = append(goSumFiles, clean)
 		}
 		if strings.HasSuffix(strings.ToLower(name), ".go") {
 			goFiles = append(goFiles, filepath.Join(workDir, clean))
@@ -139,19 +146,57 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 	if len(goModFiles) > 1 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "multiple go.mod files are not supported"}
 	}
+	if len(goSumFiles) > 1 {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "multiple go.sum files are not supported"}
+	}
+	effectiveMode := gomodulepolicy.EffectiveMode(mode)
+	if effectiveMode == gomodulepolicy.ModeInstalled {
+		if len(goModFiles) != 1 || len(goSumFiles) != 1 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "installed Go modules require exactly one go.mod and one go.sum"}
+		}
+		if filepath.Dir(goModFiles[0]) != filepath.Dir(goSumFiles[0]) {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "go.mod and go.sum must be in the same directory"}
+		}
+		goModPath := filepath.Join(workDir, goModFiles[0])
+		goModData, err := os.ReadFile(goModPath)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "go.mod read failed"}
+		}
+		parsedGoMod, err := modfile.Parse(goModFiles[0], goModData, nil)
+		if err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid go.mod: " + err.Error()}
+		}
+		if len(parsedGoMod.Replace) != 0 {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "installed Go modules do not allow replace directives"}
+		}
+		if parsedGoMod.Toolchain != nil {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "installed Go modules do not allow toolchain directives"}
+		}
+	}
 	goCache := filepath.Join(workDir, ".gocache")
-	goModCache := filepath.Join(workDir, ".gomodcache")
 	goPath := filepath.Join(workDir, ".gopath")
-	for _, d := range []string{goCache, goModCache, goPath} {
+	goModCache := filepath.Join(workDir, ".gomodcache")
+	if effectiveMode == gomodulepolicy.ModeInstalled {
+		goModCache = gomodulepolicy.InstalledCache
+	}
+	dirs := []string{goCache, goPath}
+	if effectiveMode == gomodulepolicy.ModeStdlib {
+		dirs = append(dirs, goModCache)
+	}
+	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "mkdir failed: " + err.Error()}
 		}
 	}
-	args := []string{"build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-o", target}
+	buildFlags := []string{"-trimpath", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-ldflags=-buildid=", "-o", target}
+	args := append([]string{"build"}, buildFlags...)
 	if len(goModFiles) == 1 {
+		buildFlags = append([]string{"-mod=readonly"}, buildFlags...)
+		args = append([]string{"build"}, buildFlags...)
 		moduleDir := filepath.Dir(filepath.Join(workDir, goModFiles[0]))
 		if moduleDir != workDir {
-			args = []string{"-C", moduleDir, "build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-o", filepath.Join(workDir, target)}
+			buildFlags[len(buildFlags)-1] = filepath.Join(workDir, target)
+			args = append([]string{"-C", moduleDir, "build"}, buildFlags...)
 		}
 		args = append(args, ".")
 	} else {
@@ -164,6 +209,10 @@ func compileGo(ctx context.Context, workDir, target string, sources []model.Sour
 		"GOENV=off",
 		"GOTELEMETRY=off",
 		"GOTOOLCHAIN=local",
+		"GOPROXY=off",
+		"GOSUMDB=off",
+		"GOVCS=*:off",
+		"GOWORK=off",
 	)
 	result := runner.Run(ctx, workDir, "go", args, env)
 	if result.Status != model.CompileStatusOK {

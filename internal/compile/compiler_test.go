@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/util"
@@ -701,7 +702,7 @@ func TestGoCompilerBuildsSoleNestedModuleFromModuleRoot(t *testing.T) {
 	}
 	wantArgs := []string{
 		"-C", filepath.Join(workDir, "src"),
-		"build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE",
+		"build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-ldflags=-buildid=",
 		"-o", filepath.Join(workDir, "Main"), ".",
 	}
 	if !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
@@ -741,7 +742,7 @@ func TestGoCompilerKeepsRootAndNoModuleBuildModes(t *testing.T) {
 		{
 			name:    "root module",
 			sources: []model.Source{{Name: "go.mod"}, {Name: "main.go"}},
-			wantEnd: []string{"build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-o", "Main", "."},
+			wantEnd: []string{"build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-ldflags=-buildid=", "-o", "Main", "."},
 		},
 		{
 			name:    "no module",
@@ -766,10 +767,100 @@ func TestGoCompilerKeepsRootAndNoModuleBuildModes(t *testing.T) {
 			}
 			want := tc.wantEnd
 			if want == nil {
-				want = []string{"build", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-o", "Main", filepath.Join(workDir, "src/main.go")}
+				want = []string{"build", "-trimpath", "-buildvcs=false", "-tags=online_judge,ONLINE_JUDGE", "-ldflags=-buildid=", "-o", "Main", filepath.Join(workDir, "src/main.go")}
 			}
 			if !reflect.DeepEqual(runner.commands[0].args, want) {
 				t.Fatalf("args = %#v, want %#v", runner.commands[0].args, want)
+			}
+		})
+	}
+}
+
+func TestGoCompilerInstalledModeUsesReadOnlyImageCache(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workDir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "src", "go.mod"), []byte("module example.com/submission\n\ngo 1.26.0\n\nrequire github.com/emirpasic/gods v1.18.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "src", "go.sum"), []byte("locked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, _ []string, _ []string) {
+			if err := os.WriteFile(filepath.Join(workDir, "Main"), []byte("binary"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	resp := goCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{
+			GoModuleMode: gomodulepolicy.ModeInstalled,
+			Sources:      []model.Source{{Name: "src/go.mod"}, {Name: "src/go.sum"}, {Name: "src/main.go"}},
+		},
+		Runner: runner,
+	})
+	if resp.Status != model.CompileStatusOK || len(runner.commands) != 1 {
+		t.Fatalf("response=%+v commands=%+v", resp, runner.commands)
+	}
+	command := runner.commands[0]
+	for _, want := range []string{
+		"GOMODCACHE=" + gomodulepolicy.InstalledCache,
+		"GOPROXY=off",
+		"GOSUMDB=off",
+		"GOVCS=*:off",
+		"GOWORK=off",
+		"GOTOOLCHAIN=local",
+	} {
+		if !slices.Contains(command.env, want) {
+			t.Fatalf("installed Go env missing %q in %v", want, command.env)
+		}
+	}
+	if !slices.Contains(command.args, "-mod=readonly") {
+		t.Fatalf("installed Go args = %v, want -mod=readonly", command.args)
+	}
+}
+
+func TestGoCompilerInstalledModeRequiresLockedSafeModule(t *testing.T) {
+	tests := []struct {
+		name    string
+		goMod   string
+		sources []model.Source
+		want    string
+	}{
+		{name: "missing sum", goMod: "module example.com/submission\n", sources: []model.Source{{Name: "go.mod"}, {Name: "main.go"}}, want: "exactly one go.mod and one go.sum"},
+		{name: "replace", goMod: "module example.com/submission\nreplace example.com/x => ../x\n", sources: []model.Source{{Name: "go.mod"}, {Name: "go.sum"}, {Name: "main.go"}}, want: "replace directives"},
+		{name: "replace block without whitespace", goMod: "module example.com/submission\nreplace(\nexample.com/x => ../x\n)\n", sources: []model.Source{{Name: "go.mod"}, {Name: "go.sum"}, {Name: "main.go"}}, want: "replace directives"},
+		{name: "toolchain", goMod: "module example.com/submission\ntoolchain go1.99.0\n", sources: []model.Source{{Name: "go.mod"}, {Name: "go.sum"}, {Name: "main.go"}}, want: "toolchain directives"},
+		{name: "invalid manifest", goMod: "module example.com/submission\ngo invalid\n", sources: []model.Source{{Name: "go.mod"}, {Name: "go.sum"}, {Name: "main.go"}}, want: "invalid go.mod"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(workDir, "go.mod"), []byte(tc.goMod), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if slices.ContainsFunc(tc.sources, func(source model.Source) bool { return source.Name == "go.sum" }) {
+				if err := os.WriteFile(filepath.Join(workDir, "go.sum"), []byte("locked\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
+			resp := goCompiler{}.Compile(context.Background(), CompileJob{
+				WorkDir: workDir,
+				Target:  "Main",
+				Request: &model.CompileRequest{GoModuleMode: gomodulepolicy.ModeInstalled, Sources: tc.sources},
+				Runner:  runner,
+			})
+			if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, tc.want) {
+				t.Fatalf("response = %+v, want invalid containing %q", resp, tc.want)
+			}
+			if len(runner.commands) != 0 {
+				t.Fatalf("unsafe installed module invoked compiler: %+v", runner.commands)
 			}
 		})
 	}

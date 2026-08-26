@@ -165,6 +165,17 @@ verify that imports fail without the group and succeed with it. This is a
 package-visibility boundary; enabled package code still runs under the target's
 existing syscall, network, and resource limits.
 
+Go installed-module visibility is enforced at the compile process boundary.
+Go runtime images preload the exact module graph locked by
+`go-modules/go.mod` and `go-modules/go.sum` into a root-owned cache whose
+directories are `0750` and files are `0640` under supplementary GID `65528`.
+`stdlib` compile helpers receive only the sandbox GID and use an empty
+request-local module cache. `installed` helpers additionally receive GID
+`65528`, but still compile with network, proxy, checksum-database, workspace,
+VCS, and toolchain fetching disabled and with `-mod=readonly`. Runtime-image
+selftests verify that unrelated groups cannot read the cache and that a locked
+submission can import the pinned module offline.
+
 Rust installed-crate visibility is enforced at the compile process boundary.
 Rust runtime images turn the exact graph locked by `rust-crates/Cargo.toml` and
 `rust-crates/Cargo.lock` into a vendored source directory whose directories are

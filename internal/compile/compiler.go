@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"aonohako/internal/config"
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/rustpolicy"
@@ -48,6 +49,14 @@ func sandboxCommandRunnerForRustMode(mode rustpolicy.CrateMode) sandboxCommandRu
 	if rustpolicy.EffectiveCrateMode(mode) == rustpolicy.CrateModeInstalled {
 		runner.supplementaryGroups = []uint32{rustpolicy.ExternalCrateGID}
 		runner.workspaceDirs = []string{".cargo-home", ".cargo-target"}
+	}
+	return runner
+}
+
+func sandboxCommandRunnerForGoMode(mode gomodulepolicy.Mode) sandboxCommandRunner {
+	runner := sandboxCommandRunner{}
+	if gomodulepolicy.EffectiveMode(mode) == gomodulepolicy.ModeInstalled {
+		runner.supplementaryGroups = []uint32{gomodulepolicy.ExternalModuleGID}
 	}
 	return runner
 }

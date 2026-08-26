@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
@@ -160,6 +161,9 @@ type Config struct {
 	AllowRequestNetwork                  bool
 	NetworkEgressIsolated                bool
 	AllowRequestRuntimeProfile           bool
+	DefaultGoModuleMode                  gomodulepolicy.Mode
+	AllowRequestGoInstalledModules       bool
+	ProblemGoModuleModes                 map[string]gomodulepolicy.Mode
 	DefaultPythonLibraryMode             pythonpolicy.LibraryMode
 	AllowRequestPythonInstalledLibraries bool
 	ProblemPythonLibraryModes            map[string]pythonpolicy.LibraryMode
@@ -299,6 +303,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	allowRequestRuntimeProfile, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE", os.Getenv("AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE"), defaultAllowRequestRuntimeProfile(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	defaultGoModuleMode, err := gomodulepolicy.ParseMode(getenv("AONOHAKO_DEFAULT_GO_MODULE_MODE", string(gomodulepolicy.ModeStdlib)))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DEFAULT_GO_MODULE_MODE %w", err)
+	}
+	allowRequestGoInstalledModules, err := parseBoolEnv("AONOHAKO_ALLOW_REQUEST_GO_INSTALLED_MODULES", os.Getenv("AONOHAKO_ALLOW_REQUEST_GO_INSTALLED_MODULES"), defaultAllowRequestGoInstalledModules(runtimePlatform))
 	if err != nil {
 		return Config{}, err
 	}
@@ -502,6 +514,30 @@ func Load() (Config, error) {
 		}
 	}
 	problemPythonLibraryModes := map[string]pythonpolicy.LibraryMode(nil)
+	problemGoModuleModes := map[string]gomodulepolicy.Mode(nil)
+	if rawProblemModes := strings.TrimSpace(os.Getenv("AONOHAKO_PROBLEM_GO_MODULE_MODES")); rawProblemModes != "" {
+		parsedProblemModes := map[string]string{}
+		if err := json.Unmarshal([]byte(rawProblemModes), &parsedProblemModes); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_GO_MODULE_MODES must be a JSON object mapping problem IDs to Go module modes: %w", err)
+		}
+		if len(parsedProblemModes) == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_GO_MODULE_MODES must define at least one problem mapping when set")
+		}
+		problemGoModuleModes = make(map[string]gomodulepolicy.Mode, len(parsedProblemModes))
+		for problemID, rawMode := range parsedProblemModes {
+			if problemID == "" {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_GO_MODULE_MODES contains an empty problem_id")
+			}
+			if err := runtimepolicy.ValidateProblemID(problemID); err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_GO_MODULE_MODES problem_id %q is invalid: %w", problemID, err)
+			}
+			mode, err := gomodulepolicy.ParseMode(rawMode)
+			if err != nil {
+				return Config{}, fmt.Errorf("AONOHAKO_PROBLEM_GO_MODULE_MODES problem_id %q %w", problemID, err)
+			}
+			problemGoModuleModes[problemID] = mode
+		}
+	}
 	if rawProblemModes := strings.TrimSpace(os.Getenv("AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES")); rawProblemModes != "" {
 		parsedProblemModes := map[string]string{}
 		if err := json.Unmarshal([]byte(rawProblemModes), &parsedProblemModes); err != nil {
@@ -758,6 +794,9 @@ func Load() (Config, error) {
 		AllowRequestNetwork:                  allowRequestNetwork,
 		NetworkEgressIsolated:                networkEgressIsolated,
 		AllowRequestRuntimeProfile:           allowRequestRuntimeProfile,
+		DefaultGoModuleMode:                  defaultGoModuleMode,
+		AllowRequestGoInstalledModules:       allowRequestGoInstalledModules,
+		ProblemGoModuleModes:                 problemGoModuleModes,
 		DefaultPythonLibraryMode:             defaultPythonLibraryMode,
 		AllowRequestPythonInstalledLibraries: allowRequestPythonLibraries,
 		ProblemPythonLibraryModes:            problemPythonLibraryModes,
@@ -978,6 +1017,10 @@ func validateNetworkEgressPolicy(opts platform.RuntimeOptions, allowRequestNetwo
 }
 
 func defaultAllowRequestRuntimeProfile(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget == platform.DeploymentTargetDev
+}
+
+func defaultAllowRequestGoInstalledModules(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetDev
 }
 

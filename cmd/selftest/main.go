@@ -26,6 +26,7 @@ import (
 	"aonohako/internal/compile"
 	"aonohako/internal/config"
 	"aonohako/internal/execute"
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
@@ -96,6 +97,7 @@ type compileExecuteCase struct {
 	nonABReason       string
 	limits            model.Limits
 	sources           []model.Source
+	goModuleMode      gomodulepolicy.Mode
 	pythonLibraryMode pythonpolicy.LibraryMode
 }
 
@@ -903,6 +905,7 @@ func runCompileExecuteSuite() error {
 			MaxActiveRuns:                        1,
 			MaxPendingQueue:                      1,
 			HeartbeatInterval:                    time.Second,
+			AllowRequestGoInstalledModules:       true,
 			AllowRequestRustInstalledCrates:      true,
 			AllowRequestPythonInstalledLibraries: true,
 		},
@@ -942,9 +945,10 @@ func runCompileExecuteSuite() error {
 			for attempt := 1; attempt <= compileAttempts; attempt++ {
 				var err error
 				compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
-					Lang:       compileLanguage,
-					Sources:    tc.sources,
-					EntryPoint: tc.entryPoint,
+					Lang:         compileLanguage,
+					Sources:      tc.sources,
+					EntryPoint:   tc.entryPoint,
+					GoModuleMode: tc.goModuleMode,
 				})
 				if err != nil {
 					return fmt.Errorf("%s/%s compile request %d/%d failed: %w", language, compileLanguage, attempt, compileAttempts, err)
@@ -3656,18 +3660,30 @@ val _ = print (Int.toString (a + b) ^ "\n")
 			},
 		},
 		"go": {
-			compileLang: "GO",
-			judgeIO:     standardABJudgeIO,
+			compileLang:  "GO",
+			goModuleMode: gomodulepolicy.ModeInstalled,
+			judgeIO:      standardABJudgeIO,
 			// Saet's default 32 MiB problem limit becomes 1120 MiB after the
 			// Go runtime reserve. This used to produce an unsafe 1184 MiB
 			// RLIMIT_AS and fail before main.
 			limits: model.Limits{TimeMs: 8000, MemoryMB: 1120},
 			sources: []model.Source{
+				source("go.mod", `module example.com/submission
+
+go 1.26.0
+
+require github.com/emirpasic/gods v1.18.1
+`),
+				source("go.sum", `github.com/emirpasic/gods v1.18.1 h1:FXtiHYKDGKCW2KzwZKx0iC0PQmdlorYgdFG9jPXJ1Bc=
+github.com/emirpasic/gods v1.18.1/go.mod h1:8tpGGwCnJ5H4r6BWwaV6OrWmMoPhUl5jm/FMNAnJvWQ=
+`),
 				source("main.go", `package main
 
 import (
 	"fmt"
 	"os"
+
+	"github.com/emirpasic/gods/trees/redblacktree"
 )
 
 func main() {
@@ -3675,7 +3691,13 @@ func main() {
 	if _, err := fmt.Fscan(os.Stdin, &a, &b); err != nil {
 		panic(err)
 	}
-	if err := os.WriteFile("same-folder.txt", []byte(fmt.Sprintf("%d\n", a+b)), 0o644); err != nil {
+	tree := redblacktree.NewWithIntComparator()
+	tree.Put(a+b, a+b)
+	value, found := tree.Get(a + b)
+	if !found {
+		panic("sum missing")
+	}
+	if err := os.WriteFile("same-folder.txt", []byte(fmt.Sprintf("%d\n", value.(int))), 0o644); err != nil {
 		panic(err)
 	}
 	data, err := os.ReadFile("same-folder.txt")
@@ -5158,7 +5180,7 @@ func runDirectImagePermissionChecks() error {
 		if err != nil || vendorOut != "blocked\n" {
 			return fmt.Errorf("rust-crate-vendor-without-group: stdout %q stderr %q err %v", vendorOut, vendorErr, err)
 		}
-		for _, unrelatedGID := range []uint32{pythonpolicy.ExternalLibraryGID, 65528} {
+		for _, unrelatedGID := range []uint32{pythonpolicy.ExternalLibraryGID, gomodulepolicy.ExternalModuleGID} {
 			vendorOut, vendorErr, err = runAsSandboxUserWithGroups(vendorScript, "", []uint32{unrelatedGID})
 			if err != nil || vendorOut != "blocked\n" {
 				return fmt.Errorf("rust-crate-vendor-with-unrelated-group-%d: stdout %q stderr %q err %v", unrelatedGID, vendorOut, vendorErr, err)
@@ -5167,6 +5189,27 @@ func runDirectImagePermissionChecks() error {
 		vendorOut, vendorErr, err = runAsSandboxUserWithGroups(vendorScript, "", []uint32{rustpolicy.ExternalCrateGID})
 		if err != nil || vendorOut != "allowed\n" {
 			return fmt.Errorf("rust-crate-vendor-with-group: stdout %q stderr %q err %v", vendorOut, vendorErr, err)
+		}
+	}
+
+	if os.Getenv("AONOHAKO_GO_MODULE_ISOLATION") == "true" {
+		if got := strings.TrimSpace(os.Getenv("AONOHAKO_GO_EXTERNAL_MODULE_GID")); got != strconv.FormatUint(uint64(gomodulepolicy.ExternalModuleGID), 10) {
+			return fmt.Errorf("go-module-gid: got %q, want %d", got, gomodulepolicy.ExternalModuleGID)
+		}
+		cacheScript := "if [ -r " + gomodulepolicy.InstalledCache + " ] || [ -x " + gomodulepolicy.InstalledCache + " ]; then echo allowed; else echo blocked; fi"
+		cacheOut, cacheErr, err := runAsSandboxUser(cacheScript, "")
+		if err != nil || cacheOut != "blocked\n" {
+			return fmt.Errorf("go-module-cache-without-group: stdout %q stderr %q err %v", cacheOut, cacheErr, err)
+		}
+		for _, unrelatedGID := range []uint32{pythonpolicy.ExternalLibraryGID, rustpolicy.ExternalCrateGID} {
+			cacheOut, cacheErr, err = runAsSandboxUserWithGroups(cacheScript, "", []uint32{unrelatedGID})
+			if err != nil || cacheOut != "blocked\n" {
+				return fmt.Errorf("go-module-cache-with-unrelated-group-%d: stdout %q stderr %q err %v", unrelatedGID, cacheOut, cacheErr, err)
+			}
+		}
+		cacheOut, cacheErr, err = runAsSandboxUserWithGroups(cacheScript, "", []uint32{gomodulepolicy.ExternalModuleGID})
+		if err != nil || cacheOut != "allowed\n" {
+			return fmt.Errorf("go-module-cache-with-group: stdout %q stderr %q err %v", cacheOut, cacheErr, err)
 		}
 	}
 
