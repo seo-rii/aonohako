@@ -362,7 +362,7 @@ Callers should implement exponential backoff on 429.
 | `Cache-Control` | `no-cache` |
 | `Connection` | `keep-alive` |
 | `X-Accel-Buffering` | `no` |
-| `X-Aonohako-Protocol-Version` | `2026-08-25` |
+| `X-Aonohako-Protocol-Version` | `2026-08-26` |
 
 Remote control planes use the configured protocol policy. In the default
 non-dev strict mode, missing or mismatched `X-Aonohako-Protocol-Version`
