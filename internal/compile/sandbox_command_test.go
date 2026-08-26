@@ -2,12 +2,38 @@ package compile
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
 
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 )
+
+func TestCompileHelperGroupsGrantOnlyInstalledGoCache(t *testing.T) {
+	stdlibRunner := sandboxCommandRunnerForGoMode(gomodulepolicy.ModeStdlib)
+	if len(stdlibRunner.supplementaryGroups) != 0 {
+		t.Fatalf("stdlib supplementary groups = %v, want none", stdlibRunner.supplementaryGroups)
+	}
+	installedRunner := sandboxCommandRunnerForGoMode(gomodulepolicy.ModeInstalled)
+	if !reflect.DeepEqual(installedRunner.supplementaryGroups, []uint32{gomodulepolicy.ExternalModuleGID}) {
+		t.Fatalf("installed supplementary groups = %v", installedRunner.supplementaryGroups)
+	}
+	if got := compileHelperCredentialGroups(stdlibRunner.supplementaryGroups); !reflect.DeepEqual(got, []uint32{65532}) {
+		t.Fatalf("stdlib helper groups = %v, want primary sandbox group only", got)
+	}
+	if got := compileHelperCredentialGroups(installedRunner.supplementaryGroups); !reflect.DeepEqual(got, []uint32{65532, gomodulepolicy.ExternalModuleGID}) {
+		t.Fatalf("installed helper groups = %v", got)
+	}
+	for _, forbidden := range []uint32{65530, 65529} {
+		for _, gid := range compileHelperCredentialGroups(installedRunner.supplementaryGroups) {
+			if gid == forbidden {
+				t.Fatalf("installed Go helper inherited unrelated dependency GID %d", gid)
+			}
+		}
+	}
+}
 
 func TestPowerShellParserGetsOnlyAddressSpaceCompatibilityException(t *testing.T) {
 	raw, err := os.ReadFile("sandbox_command.go")

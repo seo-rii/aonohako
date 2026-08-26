@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/remoteio"
@@ -32,11 +33,14 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req.EntryPoint != "src/Main.py" {
+		if req.EntryPoint != "src/main.go" {
 			t.Fatalf("unexpected entry_point: %+v", req)
 		}
 		if req.RuntimeProfile != "low-memory" {
 			t.Fatalf("runtime_profile = %q, want low-memory", req.RuntimeProfile)
+		}
+		if req.GoModuleMode != gomodulepolicy.ModeInstalled {
+			t.Fatalf("go_module_mode = %q, want installed", req.GoModuleMode)
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: result\n"))
@@ -61,11 +65,12 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 	}
 
 	resp := runner.Run(context.Background(), &model.CompileRequest{
-		Lang:           "PYTHON3",
-		EntryPoint:     "src/Main.py",
+		Lang:           "GO",
+		EntryPoint:     "src/main.go",
 		RuntimeProfile: "low-memory",
+		GoModuleMode:   gomodulepolicy.ModeInstalled,
 		Sources: []model.Source{{
-			Name:    "src/Main.py",
+			Name:    "src/main.go",
 			DataB64: "cHJpbnQoJ29rJykK",
 		}},
 	})

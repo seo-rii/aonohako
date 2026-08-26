@@ -8,7 +8,7 @@ import (
 
 const (
 	ProtocolVersionHeader = "X-Aonohako-Protocol-Version"
-	ProtocolVersion       = "2026-07-30"
+	ProtocolVersion       = "2026-08-25"
 )
 
 func CheckProtocolVersion(headers http.Header) error {
