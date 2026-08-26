@@ -16,9 +16,15 @@ func TestCompileHelperGroupsGrantOnlyInstalledRustVendor(t *testing.T) {
 	if len(stdlibRunner.supplementaryGroups) != 0 {
 		t.Fatalf("stdlib supplementary groups = %v, want none", stdlibRunner.supplementaryGroups)
 	}
+	if len(stdlibRunner.workspaceDirs) != 0 {
+		t.Fatalf("stdlib workspace dirs = %v, want none", stdlibRunner.workspaceDirs)
+	}
 	installedRunner := sandboxCommandRunnerForRustMode(rustpolicy.CrateModeInstalled)
 	if !reflect.DeepEqual(installedRunner.supplementaryGroups, []uint32{rustpolicy.ExternalCrateGID}) {
 		t.Fatalf("installed supplementary groups = %v", installedRunner.supplementaryGroups)
+	}
+	if !reflect.DeepEqual(installedRunner.workspaceDirs, []string{".cargo-home", ".cargo-target"}) {
+		t.Fatalf("installed workspace dirs = %v", installedRunner.workspaceDirs)
 	}
 	if got := compileHelperCredentialGroups(stdlibRunner.supplementaryGroups); !reflect.DeepEqual(got, []uint32{65532}) {
 		t.Fatalf("stdlib helper groups = %v, want primary sandbox group only", got)

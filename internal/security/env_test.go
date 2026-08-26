@@ -2,6 +2,7 @@ package security
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -53,6 +54,16 @@ func TestWorkspaceScopedEnvIncludesWritableToolchainHomes(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("WorkspaceScopedEnv missing %q in %v", want, env)
+		}
+	}
+	for _, got := range env {
+		if strings.HasPrefix(got, "CARGO_HOME=") || strings.HasPrefix(got, "CARGO_TARGET_DIR=") {
+			t.Fatalf("WorkspaceScopedEnv unexpectedly applies Cargo state globally: %q", got)
+		}
+	}
+	for _, got := range WorkspaceScopedDirs(root) {
+		if got == filepath.Join(root, ".cargo-home") || got == filepath.Join(root, ".cargo-target") {
+			t.Fatalf("WorkspaceScopedDirs unexpectedly reserves Cargo state globally: %q", got)
 		}
 	}
 }

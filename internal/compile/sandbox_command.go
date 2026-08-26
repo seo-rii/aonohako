@@ -26,26 +26,43 @@ import (
 )
 
 func RunSandboxedCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
-	stdout, stderr, status, reason = runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, nil)
+	stdout, stderr, status, reason = runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, nil, nil)
 	stdout, _ = capCompileOutputValue(stdout)
 	stderr, _ = capCompileOutputValue(stderr)
 	return stdout, stderr, status, reason
 }
 
 func runSandboxedCommand(ctx context.Context, workDir, bin string, args, env []string) (stdout, stderr, status, reason string) {
-	return runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, nil)
+	return runSandboxedCommandWithGroups(ctx, workDir, bin, args, env, nil, nil)
 }
 
-func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, args, env []string, supplementaryGroups []uint32) (stdout, stderr, status, reason string) {
-	for _, dir := range security.WorkspaceScopedDirs(workDir) {
+func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, args, env []string, supplementaryGroups []uint32, additionalWorkspaceDirs []string) (stdout, stderr, status, reason string) {
+	workspaceDirs := security.WorkspaceScopedDirs(workDir)
+	seenWorkspaceDirs := make(map[string]struct{}, len(workspaceDirs)+len(additionalWorkspaceDirs))
+	for _, dir := range workspaceDirs {
+		seenWorkspaceDirs[dir] = struct{}{}
+	}
+	for _, rel := range additionalWorkspaceDirs {
+		clean, err := util.ValidateRelativePath(rel)
+		if err != nil {
+			return "", "", model.CompileStatusInternal, "invalid command workspace directory"
+		}
+		dir := filepath.Join(workDir, clean)
+		if _, exists := seenWorkspaceDirs[dir]; exists {
+			continue
+		}
+		seenWorkspaceDirs[dir] = struct{}{}
+		workspaceDirs = append(workspaceDirs, dir)
+	}
+	for _, dir := range workspaceDirs {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			slog.Warn("compile sandbox workspace preparation failed", "err", err)
 			return "", "", model.CompileStatusInternal, "workspace preparation failed"
 		}
 	}
 	if os.Geteuid() == 0 {
-		scopedDirs := make(map[string]struct{}, len(security.WorkspaceScopedDirs(workDir)))
-		for _, dir := range security.WorkspaceScopedDirs(workDir) {
+		scopedDirs := make(map[string]struct{}, len(workspaceDirs))
+		for _, dir := range workspaceDirs {
 			scopedDirs[dir] = struct{}{}
 		}
 		if err := filepath.WalkDir(workDir, func(path string, d fs.DirEntry, err error) error {
@@ -65,7 +82,7 @@ func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, arg
 			slog.Warn("compile sandbox workspace permission walk failed", "err", err)
 			return "", "", model.CompileStatusInternal, "workspace preparation failed"
 		}
-		for _, dir := range security.WorkspaceScopedDirs(workDir) {
+		for _, dir := range workspaceDirs {
 			if err := os.Chown(dir, 65532, 65532); err != nil {
 				slog.Warn("compile sandbox workspace ownership failed", "err", err)
 				return "", "", model.CompileStatusInternal, "workspace preparation failed"

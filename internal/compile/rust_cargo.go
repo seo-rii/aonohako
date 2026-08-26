@@ -57,6 +57,14 @@ func compileRustCargo(ctx context.Context, job CompileJob) model.CompileResponse
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "Cargo workspace preparation failed: " + err.Error()}
 		}
+		if os.Geteuid() == 0 {
+			if err := os.Chown(dir, 65532, 65532); err != nil {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "Cargo workspace preparation failed: " + err.Error()}
+			}
+		}
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "Cargo workspace preparation failed: " + err.Error()}
+		}
 	}
 	env := []string{
 		"CARGO_HOME=" + cargoHome,
