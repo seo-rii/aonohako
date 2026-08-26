@@ -23,6 +23,10 @@ func readSingleArtifact(root, rel, name, mode string) ([]model.Artifact, error) 
 	if err != nil {
 		return nil, fmt.Errorf("read artifact failed: %w", err)
 	}
+	return readOpenedArtifact(artifact, name, mode)
+}
+
+func readOpenedArtifact(artifact openedArtifact, name, mode string) ([]model.Artifact, error) {
 	defer artifact.cleanup()
 	if artifact.info.Size() > maxArtifactBytes {
 		return nil, fmt.Errorf("artifact too large: %s", name)

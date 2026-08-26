@@ -118,39 +118,31 @@ func compileRustCargo(ctx context.Context, job CompileJob) model.CompileResponse
 		}
 	}
 	// Cargo hard-links its public binary to the hashed artifact in release/deps.
-	// Copy it to a fresh inode so the normal artifact reader can retain its
-	// hard-link rejection for all response payloads.
+	// Snapshot the validated descriptor to a private inode before reading it.
 	cargoArtifactRel := filepath.Join(".cargo-target", "release", binName)
-	artifactRel := filepath.Join(".cargo-target", "aonohako-artifact")
-	copyResult := runner.Run(ctx, job.WorkDir, "cp", []string{
-		"--remove-destination",
-		"--reflink=never",
-		"--",
-		filepath.Join(job.WorkDir, cargoArtifactRel),
-		filepath.Join(job.WorkDir, artifactRel),
-	}, nil)
-	if copyResult.Status != model.CompileStatusOK {
+	artifact, err := snapshotCargoArtifact(job.WorkDir, cargoArtifactRel)
+	if err != nil {
 		return model.CompileResponse{
-			Status: copyResult.Status,
-			Stdout: buildResult.Stdout + copyResult.Stdout,
-			Stderr: metadataResult.Stderr + buildResult.Stderr + copyResult.Stderr,
-			Reason: copyResult.Reason,
+			Status: model.CompileStatusInternal,
+			Stdout: buildResult.Stdout,
+			Stderr: metadataResult.Stderr + buildResult.Stderr,
+			Reason: "snapshot Cargo artifact failed: " + err.Error(),
 		}
 	}
-	artifacts, err := readSingleArtifact(job.WorkDir, artifactRel, job.Target, "exec")
+	artifacts, err := readOpenedArtifact(artifact, job.Target, "exec")
 	if err != nil {
 		return model.CompileResponse{
 			Status: model.CompileStatusInternal,
 			Reason: err.Error(),
-			Stdout: buildResult.Stdout + copyResult.Stdout,
-			Stderr: metadataResult.Stderr + buildResult.Stderr + copyResult.Stderr,
+			Stdout: buildResult.Stdout,
+			Stderr: metadataResult.Stderr + buildResult.Stderr,
 		}
 	}
 	return model.CompileResponse{
 		Status:    model.CompileStatusOK,
 		Artifacts: artifacts,
-		Stdout:    buildResult.Stdout + copyResult.Stdout,
-		Stderr:    metadataResult.Stderr + buildResult.Stderr + copyResult.Stderr,
+		Stdout:    buildResult.Stdout,
+		Stderr:    metadataResult.Stderr + buildResult.Stderr,
 	}
 }
 

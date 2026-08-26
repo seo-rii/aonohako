@@ -4,6 +4,7 @@ package compile
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,4 +50,50 @@ func openArtifact(root, rel string) (openedArtifact, error) {
 			_ = file.Close()
 		},
 	}, nil
+}
+
+func snapshotCargoArtifact(root, rel string) (openedArtifact, error) {
+	source, err := openArtifact(root, rel)
+	if err != nil {
+		return openedArtifact{}, err
+	}
+	defer source.cleanup()
+	if source.info.Size() > maxArtifactBytes {
+		return openedArtifact{}, fmt.Errorf("artifact too large: %s", rel)
+	}
+
+	snapshotFile, err := os.CreateTemp(root, ".aonohako-artifact-*")
+	if err != nil {
+		return openedArtifact{}, err
+	}
+	snapshot := openedArtifact{
+		file: snapshotFile,
+		cleanup: func() {
+			_ = snapshotFile.Close()
+			_ = os.Remove(snapshotFile.Name())
+		},
+	}
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			snapshot.cleanup()
+		}
+	}()
+
+	written, err := io.Copy(snapshotFile, io.LimitReader(source.file, maxArtifactBytes+1))
+	if err != nil {
+		return openedArtifact{}, err
+	}
+	if written > maxArtifactBytes {
+		return openedArtifact{}, fmt.Errorf("artifact too large: %s", rel)
+	}
+	if _, err := snapshotFile.Seek(0, io.SeekStart); err != nil {
+		return openedArtifact{}, err
+	}
+	snapshot.info, err = snapshotFile.Stat()
+	if err != nil {
+		return openedArtifact{}, err
+	}
+	succeeded = true
+	return snapshot, nil
 }

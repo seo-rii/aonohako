@@ -140,17 +140,15 @@ func (r *rustCargoSequenceRunner) Run(_ context.Context, workDir, bin string, ar
 	if r.calls == 1 {
 		return CommandResult{Status: model.CompileStatusOK, Stdout: r.metadata}
 	}
-	if bin == "cp" {
-		if err := os.WriteFile(filepath.Join(workDir, ".cargo-target", "aonohako-artifact"), []byte("binary"), 0o755); err != nil {
-			return CommandResult{Status: model.CompileStatusInternal, Reason: err.Error()}
-		}
-		return CommandResult{Status: model.CompileStatusOK}
-	}
 	artifact := filepath.Join(workDir, ".cargo-target", "release", "submission")
-	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+	hashedArtifact := filepath.Join(workDir, ".cargo-target", "release", "deps", "submission-deadbeef")
+	if err := os.MkdirAll(filepath.Dir(hashedArtifact), 0o755); err != nil {
 		return CommandResult{Status: model.CompileStatusInternal, Reason: err.Error()}
 	}
-	if err := os.WriteFile(artifact, []byte("binary"), 0o755); err != nil {
+	if err := os.WriteFile(hashedArtifact, []byte("binary"), 0o755); err != nil {
+		return CommandResult{Status: model.CompileStatusInternal, Reason: err.Error()}
+	}
+	if err := os.Link(hashedArtifact, artifact); err != nil {
 		return CommandResult{Status: model.CompileStatusInternal, Reason: err.Error()}
 	}
 	return CommandResult{Status: model.CompileStatusOK}
@@ -183,10 +181,10 @@ func TestRustCargoCompilerUsesLockedOfflineVendor(t *testing.T) {
 	if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main" {
 		t.Fatalf("response = %+v", resp)
 	}
-	if len(runner.commands) != 3 {
+	if len(runner.commands) != 2 {
 		t.Fatalf("commands = %+v", runner.commands)
 	}
-	for _, command := range runner.commands[:2] {
+	for _, command := range runner.commands {
 		if command.bin != "cargo" {
 			t.Fatalf("command = %+v", command)
 		}
@@ -207,12 +205,6 @@ func TestRustCargoCompilerUsesLockedOfflineVendor(t *testing.T) {
 	}
 	if !slices.Contains(runner.commands[0].args, "metadata") || !slices.Contains(runner.commands[1].args, "build") {
 		t.Fatalf("unexpected Cargo commands: %+v", runner.commands)
-	}
-	copyCommand := runner.commands[2]
-	if copyCommand.bin != "cp" ||
-		!slices.Contains(copyCommand.args, "--remove-destination") ||
-		!slices.Contains(copyCommand.args, "--reflink=never") {
-		t.Fatalf("unexpected Cargo artifact copy command: %+v", copyCommand)
 	}
 }
 
