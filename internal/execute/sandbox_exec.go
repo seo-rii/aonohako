@@ -661,6 +661,14 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if baselineNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
 		cpuBaselineNs = baselineNs
 		cpuBaselineSet = true
+	} else if runGroup.Path == "" {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		<-waitCh
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "sandbox CPU baseline capture failed: " + err.Error(),
+			Stderr: stderrBuf.Bytes(),
+		}
 	}
 	if runGroup.Path != "" {
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
@@ -864,15 +872,16 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			if targetStarted {
 				if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
 					cpuTimeMs := timing.MilliFromNanoseconds(cpuNs)
+					cpuTimeAvailable := true
 					if targetCPUTimeMs, ok := cpuTimeAfterBaseline(cpuNs, cpuBaselineNs, cpuBaselineSet); ok {
 						cpuTimeMs = targetCPUTimeMs
 					} else if cpuBaselineSet {
-						continue
+						cpuTimeAvailable = false
 					}
-					if cpuTimeMs > maxCPUTimeMs {
+					if cpuTimeAvailable && cpuTimeMs > maxCPUTimeMs {
 						maxCPUTimeMs = cpuTimeMs
 					}
-					if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+					if cpuTimeAvailable && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
 						result.Status = model.RunStatusTLE
 						result.Reason = "cpu time limit exceeded"
 						result.VerdictSource = "cpu_time"

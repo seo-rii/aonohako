@@ -731,6 +731,10 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 		t.Fatalf("baselines must precede target release and accounting must wait for the exec transition")
 	}
 	baselineBlock := body[processBaseline:release]
+	if !strings.Contains(baselineBlock, `else if runGroup.Path == ""`) ||
+		!strings.Contains(baselineBlock, "sandbox CPU baseline capture failed") {
+		t.Fatalf("no-cgroup execution must fail closed when the CPU baseline cannot be captured")
+	}
 	if !strings.Contains(baselineBlock, "cgroupLimitBaseline = stats") || !strings.Contains(baselineBlock, "cgroupCPUBaselineMicros = stats.CPUUsageMicros") {
 		t.Fatalf("cgroup CPU and event baselines must be captured before target release")
 	}
@@ -762,5 +766,13 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 	if !strings.Contains(processAccounting, "cpuTimeAfterBaseline(usageCPUNs, cpuBaselineNs, cpuBaselineSet)") ||
 		!strings.Contains(processAccounting, "result.CPUTimeMs = finalCPUTimeMs") {
 		t.Fatalf("no-cgroup accounting must finalize target CPU from process wait usage minus the helper baseline")
+	}
+	watchdogStart := strings.Index(body, "if targetStarted {\n\t\t\t\tif cpuNs, err := timing.ProcessCPUTimeNs")
+	watchdogEnd := strings.Index(body, "if targetStarted && result.Status == \"OK\" && (lastWorkspaceScan.IsZero()")
+	if watchdogStart < 0 || watchdogEnd <= watchdogStart {
+		t.Fatalf("could not locate no-cgroup watchdog accounting")
+	}
+	if strings.Contains(body[watchdogStart:watchdogEnd], "continue") {
+		t.Fatalf("CPU baseline underflow must not skip unrelated watchdog checks")
 	}
 }
