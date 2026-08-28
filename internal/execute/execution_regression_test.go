@@ -17,6 +17,31 @@ import (
 	"aonohako/internal/security"
 )
 
+func TestCPUTimeAfterBaseline(t *testing.T) {
+	tests := []struct {
+		name        string
+		usageNs     uint64
+		baselineNs  uint64
+		baselineSet bool
+		wantMs      int64
+		wantOK      bool
+	}{
+		{name: "zero baseline is valid", usageNs: 3_500_000, baselineSet: true, wantMs: 3, wantOK: true},
+		{name: "subtracts helper CPU", usageNs: 8_500_000, baselineNs: 3_000_000, baselineSet: true, wantMs: 5, wantOK: true},
+		{name: "equal usage is zero target CPU", usageNs: 3_000_000, baselineNs: 3_000_000, baselineSet: true, wantOK: true},
+		{name: "missing baseline", usageNs: 3_500_000, wantOK: false},
+		{name: "rejects underflow", usageNs: 2_000_000, baselineNs: 3_000_000, baselineSet: true, wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotMs, gotOK := cpuTimeAfterBaseline(tt.usageNs, tt.baselineNs, tt.baselineSet)
+			if gotMs != tt.wantMs || gotOK != tt.wantOK {
+				t.Fatalf("cpuTimeAfterBaseline() = (%d, %v), want (%d, %v)", gotMs, gotOK, tt.wantMs, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
 	workspaceRoot := "/tmp/aonohako-work/run-1"
 	for _, name := range []string{
@@ -695,7 +720,7 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 	}
 	body := string(raw)
 	ready := strings.Index(body, "case err := <-readyCh:")
-	processBaseline := strings.Index(body, "cpuBaselineNs, _ = timing.ProcessCPUTimeNs")
+	processBaseline := strings.Index(body, "if baselineNs, err := timing.ProcessCPUTimeNs")
 	release := strings.Index(body, "targetReleaseWrite.Write")
 	execTransition := strings.Index(body, "case err := <-targetExecCh:")
 	targetAccounting := strings.Index(body, "targetStarted := true")
@@ -706,6 +731,10 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 		t.Fatalf("baselines must precede target release and accounting must wait for the exec transition")
 	}
 	baselineBlock := body[processBaseline:release]
+	if !strings.Contains(baselineBlock, `else if runGroup.Path == ""`) ||
+		!strings.Contains(baselineBlock, "sandbox CPU baseline capture failed") {
+		t.Fatalf("no-cgroup execution must fail closed when the CPU baseline cannot be captured")
+	}
 	if !strings.Contains(baselineBlock, "cgroupLimitBaseline = stats") || !strings.Contains(baselineBlock, "cgroupCPUBaselineMicros = stats.CPUUsageMicros") {
 		t.Fatalf("cgroup CPU and event baselines must be captured before target release")
 	}
@@ -733,5 +762,17 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 	processAccounting := body[finalEnd:]
 	if strings.Contains(processAccounting, "Maxrss") {
 		t.Fatalf("no-cgroup accounting must not charge pre-exec parent/helper RSS to the target")
+	}
+	if !strings.Contains(processAccounting, "cpuTimeAfterBaseline(usageCPUNs, cpuBaselineNs, cpuBaselineSet)") ||
+		!strings.Contains(processAccounting, "result.CPUTimeMs = finalCPUTimeMs") {
+		t.Fatalf("no-cgroup accounting must finalize target CPU from process wait usage minus the helper baseline")
+	}
+	watchdogStart := strings.Index(body, "if targetStarted {\n\t\t\t\tif cpuNs, err := timing.ProcessCPUTimeNs")
+	watchdogEnd := strings.Index(body, "if targetStarted && result.Status == \"OK\" && (lastWorkspaceScan.IsZero()")
+	if watchdogStart < 0 || watchdogEnd <= watchdogStart {
+		t.Fatalf("could not locate no-cgroup watchdog accounting")
+	}
+	if strings.Contains(body[watchdogStart:watchdogEnd], "continue") {
+		t.Fatalf("CPU baseline underflow must not skip unrelated watchdog checks")
 	}
 }

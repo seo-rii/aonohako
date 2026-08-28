@@ -491,7 +491,10 @@ The stable contract is:
   completed sandbox setup but before the parent releases the target `execve()`;
   because the execute sandbox denies process creation and allows only
   thread-form `clone`, this includes all target threads without charging helper
-  setup time
+  setup time; after process exit, no-cgroup runs finalize the same metric from
+  wait usage minus that helper baseline so the CPU tail after the last watchdog
+  sample is retained; `process_cpu_time_ms` remains the raw helper-plus-target
+  diagnostic and is not a contestant timing value
 - RSS and virtual size are sampled from procfs only after the ready pipe reports
   the close-on-exec target transition and are refined with `smaps_rollup` near
   the limit or when address-space limits are disabled; cgroup runs additionally

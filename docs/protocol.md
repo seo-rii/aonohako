@@ -113,7 +113,8 @@ not duplicate stdout/stderr before `result`.
   "status": "Accepted",                 // see Status Codes below
   "time_ms": 42,                        // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                   // wall-clock execution time (ms)
-  "cpu_time_ms": 17,                    // CPU time from process CPU clock (ms)
+  "cpu_time_ms": 17,                    // finalized target CPU time after helper-baseline subtraction (ms)
+  "process_cpu_time_ms": 24,            // diagnostic raw helper + target process CPU time (ms)
   "memory_kb": 8192,                    // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                       // nullable; process exit code
   "stdout": "",                         // response-clipped stdout (default max `64 KiB`; explicit max `8 MiB`)
@@ -151,6 +152,12 @@ not duplicate stdout/stderr before `result`.
   ]
 }
 ```
+
+For helper-backed runs, `cpu_time_ms` is finalized from process wait usage after
+subtracting the CPU baseline captured before target release. This retains fast
+target CPU consumed after the last watchdog sample. `process_cpu_time_ms` is raw
+helper-plus-target diagnostic usage and must not be used for contestant timing
+or verdicts.
 
 `capture_limits.stdout_bytes` and `capture_limits.stderr_bytes` optionally
 apply a separate, per-stream cap to `log` events and the top-level and step

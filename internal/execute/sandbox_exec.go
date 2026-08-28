@@ -45,6 +45,13 @@ type execResult struct {
 	VerdictSource    string
 }
 
+func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (int64, bool) {
+	if !baselineSet || usageNs < baselineNs {
+		return 0, false
+	}
+	return timing.MilliFromNanoseconds(usageNs - baselineNs), true
+}
+
 type sandboxStreamConfig struct {
 	stdin                     io.Reader
 	stdinMaxBytes             int64
@@ -559,6 +566,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	var cgroupLimitBaseline cgroup.Stats
 	cgroupLimitBaselineSet := false
 	cpuBaselineNs := uint64(0)
+	cpuBaselineSet := false
 	if cgroupParentDir != "" {
 		if err := cgroup.EnableControllers(cgroupParentDir, []string{"cpu", "memory", "pids"}); err != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -650,7 +658,18 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			Stderr: stderrBuf.Bytes(),
 		}
 	}
-	cpuBaselineNs, _ = timing.ProcessCPUTimeNs(cmd.Process.Pid)
+	if baselineNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
+		cpuBaselineNs = baselineNs
+		cpuBaselineSet = true
+	} else if runGroup.Path == "" {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		<-waitCh
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "sandbox CPU baseline capture failed: " + err.Error(),
+			Stderr: stderrBuf.Bytes(),
+		}
+	}
 	if runGroup.Path != "" {
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			cgroupLimitBaseline = stats
@@ -853,13 +872,16 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			if targetStarted {
 				if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
 					cpuTimeMs := timing.MilliFromNanoseconds(cpuNs)
-					if cpuBaselineNs > 0 && cpuNs > cpuBaselineNs {
-						cpuTimeMs = timing.MilliFromNanoseconds(cpuNs - cpuBaselineNs)
+					cpuTimeAvailable := true
+					if targetCPUTimeMs, ok := cpuTimeAfterBaseline(cpuNs, cpuBaselineNs, cpuBaselineSet); ok {
+						cpuTimeMs = targetCPUTimeMs
+					} else if cpuBaselineSet {
+						cpuTimeAvailable = false
 					}
-					if cpuTimeMs > maxCPUTimeMs {
+					if cpuTimeAvailable && cpuTimeMs > maxCPUTimeMs {
 						maxCPUTimeMs = cpuTimeMs
 					}
-					if result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+					if cpuTimeAvailable && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
 						result.Status = model.RunStatusTLE
 						result.Reason = "cpu time limit exceeded"
 						result.VerdictSource = "cpu_time"
@@ -1029,10 +1051,18 @@ done:
 				result.VerdictSource = "wait_status"
 			}
 		}
-		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > 0 {
-			result.ProcessCPUTimeMs = usageCPU
+		if processCPU := ps.UserTime() + ps.SystemTime(); processCPU > 0 {
+			result.ProcessCPUTimeMs = timing.MilliFromDuration(processCPU)
+			if targetStarted && runGroup.Path == "" {
+				usageCPUNs := uint64(processCPU.Nanoseconds())
+				if finalCPUTimeMs, ok := cpuTimeAfterBaseline(usageCPUNs, cpuBaselineNs, cpuBaselineSet); ok {
+					if finalCPUTimeMs > result.CPUTimeMs {
+						result.CPUTimeMs = finalCPUTimeMs
+					}
+				}
+			}
 			if !targetStarted && result.CPUTimeMs <= 0 {
-				result.CPUTimeMs = usageCPU
+				result.CPUTimeMs = result.ProcessCPUTimeMs
 			}
 		}
 	}
