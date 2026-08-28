@@ -734,4 +734,8 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 	if strings.Contains(processAccounting, "Maxrss") {
 		t.Fatalf("no-cgroup accounting must not charge pre-exec parent/helper RSS to the target")
 	}
+	if !strings.Contains(processAccounting, "usageCPUNs > cpuBaselineNs") ||
+		!strings.Contains(processAccounting, "result.CPUTimeMs = finalCPUTimeMs") {
+		t.Fatalf("no-cgroup accounting must finalize target CPU from process wait usage minus the helper baseline")
+	}
 }

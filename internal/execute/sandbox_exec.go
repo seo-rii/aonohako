@@ -1029,10 +1029,19 @@ done:
 				result.VerdictSource = "wait_status"
 			}
 		}
-		if usageCPU := timing.MilliFromDuration(ps.UserTime() + ps.SystemTime()); usageCPU > 0 {
-			result.ProcessCPUTimeMs = usageCPU
+		if processCPU := ps.UserTime() + ps.SystemTime(); processCPU > 0 {
+			result.ProcessCPUTimeMs = timing.MilliFromDuration(processCPU)
+			if targetStarted && runGroup.Path == "" && cpuBaselineNs > 0 {
+				usageCPUNs := uint64(processCPU.Nanoseconds())
+				if usageCPUNs > cpuBaselineNs {
+					finalCPUTimeMs := timing.MilliFromNanoseconds(usageCPUNs - cpuBaselineNs)
+					if finalCPUTimeMs > result.CPUTimeMs {
+						result.CPUTimeMs = finalCPUTimeMs
+					}
+				}
+			}
 			if !targetStarted && result.CPUTimeMs <= 0 {
-				result.CPUTimeMs = usageCPU
+				result.CPUTimeMs = result.ProcessCPUTimeMs
 			}
 		}
 	}
