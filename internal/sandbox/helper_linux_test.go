@@ -162,3 +162,31 @@ func TestHelperGuardsThreadSignalsBehindRuntimeOptIn(t *testing.T) {
 		}
 	}
 }
+
+func TestHelperAllowsOnlyPositivePIDSignalZeroBehindExplicitOptIn(t *testing.T) {
+	raw, err := os.ReadFile("helper_linux.go")
+	if err != nil {
+		t.Fatalf("read helper_linux.go: %v", err)
+	}
+	source := string(raw)
+	optIn := strings.Index(source, "if req.AllowPositiveKillProbe")
+	threadSignals := strings.Index(source, "if !req.AllowThreadSignals")
+	if optIn < 0 || threadSignals < optIn {
+		t.Fatal("kill(2) must remain behind the positive-PID signal-zero opt-in")
+	}
+	policy := source[optIn:threadSignals]
+	for _, marker := range []string{
+		"uint32(unix.SYS_KILL), 0, 10",
+		"seccompDataArg0Offset+4",
+		"unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, signedIntHighBit",
+		"seccompDataArg0Offset+8",
+		"appendStmt(unix.BPF_RET|unix.BPF_K, allow)",
+	} {
+		if !strings.Contains(policy, marker) {
+			t.Fatalf("Zsh kill policy is missing %q", marker)
+		}
+	}
+	if strings.Contains(policy, "appendAllowOnlyZeroArg") {
+		t.Fatal("Zsh kill policy must validate the positive PID argument")
+	}
+}

@@ -18,6 +18,10 @@ func (shellCompiler) Compile(ctx context.Context, job CompileJob) model.CompileR
 	if job.Profile.RunLang == "posix-sh" {
 		checker.bin = "/bin/dash"
 		checker.prefix = []string{"-n"}
+	} else if job.Profile.RunLang == "zsh" {
+		checker.exts = []string{".zsh"}
+		checker.bin = "/usr/bin/zsh"
+		checker.prefix = []string{"-d", "-f", "-n"}
 	}
 	return checker.Compile(ctx, job)
 }

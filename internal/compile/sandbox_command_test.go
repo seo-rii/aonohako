@@ -136,6 +136,17 @@ func TestFactorParserGetsOnlyThreadSignalCompatibilityException(t *testing.T) {
 	}
 }
 
+func TestZshParserGetsOnlySignalZeroCompatibilityException(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_command.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	if !strings.Contains(body, `AllowPositiveKillProbe:   commandName == "zsh"`) {
+		t.Fatal("Zsh compile sandbox must opt into signal-zero probes only")
+	}
+}
+
 func TestChezSchemeReaderGetsNoProcessOrSocketException(t *testing.T) {
 	raw, err := os.ReadFile("sandbox_command.go")
 	if err != nil {

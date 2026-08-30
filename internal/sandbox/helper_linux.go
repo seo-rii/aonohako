@@ -242,6 +242,7 @@ func MaybeRunFromEnv() bool {
 
 	archAudit := uint32(unix.AUDIT_ARCH_X86_64)
 	const x32SyscallBit = uint32(0x40000000)
+	const signedIntHighBit = uint32(1 << 31)
 	unsafeCloneFlags := uint32(
 		unix.CLONE_NEWCGROUP |
 			unix.CLONE_NEWIPC |
@@ -315,7 +316,6 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_PIDFD_OPEN),
 		uint32(unix.SYS_PIDFD_GETFD),
 		uint32(unix.SYS_PIDFD_SEND_SIGNAL),
-		uint32(unix.SYS_KILL),
 		uint32(unix.SYS_RT_SIGQUEUEINFO),
 		uint32(unix.SYS_SETPRIORITY),
 		uint32(unix.SYS_BPF),
@@ -395,6 +395,25 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_MKNODAT),
 	} {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	}
+	if req.AllowPositiveKillProbe {
+		// Zsh polls child liveness with kill(pid, 0). Keep process-group
+		// targets and every signal-delivery form denied by accepting only
+		// positive signed 32-bit PIDs paired with signal zero.
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_KILL), 0, 10)
+		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset+4)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 0, 7)
+		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 5, 0)
+		appendJump(unix.BPF_JMP|unix.BPF_JSET|unix.BPF_K, signedIntHighBit, 4, 0)
+		appendStmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, seccompDataArg0Offset+8)
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, 0, 1, 0)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+		appendStmt(unix.BPF_RET|unix.BPF_K, allow)
+		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
+	} else {
+		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, uint32(unix.SYS_KILL), 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 	}
 	if !req.AllowThreadSignals {

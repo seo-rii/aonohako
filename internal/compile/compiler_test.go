@@ -454,28 +454,30 @@ func TestShellCompilerChecksEachRuntimeDialectWithoutExecutingSource(t *testing.
 	for _, tc := range []struct {
 		name    string
 		runLang string
+		source  string
 		bin     string
 		args    []string
 	}{
-		{name: "bash", runLang: "bash", bin: "bash", args: []string{"--noprofile", "--norc", "-n"}},
-		{name: "POSIX sh", runLang: "posix-sh", bin: "/bin/dash", args: []string{"-n"}},
+		{name: "bash", runLang: "bash", source: "Main.sh", bin: "bash", args: []string{"--noprofile", "--norc", "-n"}},
+		{name: "POSIX sh", runLang: "posix-sh", source: "Main.sh", bin: "/bin/dash", args: []string{"-n"}},
+		{name: "Zsh", runLang: "zsh", source: "Main.zsh", bin: "/usr/bin/zsh", args: []string{"-d", "-f", "-n"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			workDir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(workDir, "Main.sh"), []byte("printf 'ok\\n'\n"), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(workDir, tc.source), []byte("printf 'ok\\n'\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
 			resp := shellCompiler{}.Compile(context.Background(), CompileJob{
 				WorkDir: workDir,
 				Profile: profiles.Profile{RunLang: tc.runLang},
-				Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.sh"}}},
+				Request: &model.CompileRequest{Sources: []model.Source{{Name: tc.source}}},
 				Runner:  runner,
 			})
-			if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.sh" {
+			if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != tc.source {
 				t.Fatalf("response = %+v", resp)
 			}
-			wantArgs := append(append([]string{}, tc.args...), filepath.Join(workDir, "Main.sh"))
+			wantArgs := append(append([]string{}, tc.args...), filepath.Join(workDir, tc.source))
 			if len(runner.commands) != 1 || runner.commands[0].bin != tc.bin || !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
 				t.Fatalf("commands = %+v, want %s %v", runner.commands, tc.bin, wantArgs)
 			}

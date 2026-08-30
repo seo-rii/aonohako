@@ -170,24 +170,34 @@ func TestMaterializeFilesRequiresExecutablePonyBinary(t *testing.T) {
 }
 
 func TestMaterializeFilesSelectsShellSourceArtifact(t *testing.T) {
-	workDir := t.TempDir()
-	ws, err := prepareWorkspaceDirs(workDir)
-	if err != nil {
-		t.Fatalf("prepareWorkspaceDirs: %v", err)
-	}
+	for _, tc := range []struct {
+		runLang string
+		source  string
+	}{
+		{runLang: "posix-sh", source: "Main.sh"},
+		{runLang: "zsh", source: "Main.zsh"},
+	} {
+		t.Run(tc.runLang, func(t *testing.T) {
+			workDir := t.TempDir()
+			ws, err := prepareWorkspaceDirs(workDir)
+			if err != nil {
+				t.Fatalf("prepareWorkspaceDirs: %v", err)
+			}
 
-	primary, lang, err := materializeFiles(ws, &model.RunRequest{
-		Lang: "posix-sh",
-		Binaries: []model.Binary{
-			{Name: "README.txt", DataB64: b64("ignored")},
-			{Name: "Main.sh", DataB64: b64("printf 'ok\\n'\n")},
-		},
-	})
-	if err != nil {
-		t.Fatalf("materializeFiles: %v", err)
-	}
-	if lang != "posix-sh" || filepath.Base(primary) != "Main.sh" {
-		t.Fatalf("materializeFiles = (%q, %q), want Main.sh/posix-sh", primary, lang)
+			primary, lang, err := materializeFiles(ws, &model.RunRequest{
+				Lang: tc.runLang,
+				Binaries: []model.Binary{
+					{Name: "README.txt", DataB64: b64("ignored")},
+					{Name: tc.source, DataB64: b64("printf 'ok\\n'\n")},
+				},
+			})
+			if err != nil {
+				t.Fatalf("materializeFiles: %v", err)
+			}
+			if lang != tc.runLang || filepath.Base(primary) != tc.source {
+				t.Fatalf("materializeFiles = (%q, %q), want %s/%s", primary, lang, tc.source, tc.runLang)
+			}
+		})
 	}
 }
 
