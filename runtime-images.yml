@@ -1568,6 +1568,51 @@ languages:
           printf '%s\n' '(import (chezscheme))' '(display "broken"' > Broken.scm
           if /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm Broken.scm >/dev/null 2>&1; then exit 1; fi
 
+  chicken-scheme:
+    install:
+      apt:
+        - binutils
+        - chicken-bin=5.3.0-2
+        - gcc
+        - libc6-dev
+        - libchicken-dev=5.3.0-2
+      sandbox_tools:
+        - chicken
+        - csc
+      script:
+        - test "$(dpkg-query -W -f='${Version}' chicken-bin)" = 5.3.0-2
+        - test "$(dpkg-query -W -f='${Version}' libchicken-dev)" = 5.3.0-2
+        - csc -version 2>&1 | grep '^Version 5\.3\.0 '
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.scm <<'SCM'
+          (import scheme)
+          (display (+ (read) (read)))
+          (newline)
+          SCM
+          csc -O3 -d0 -no-trace -static -o Main Main.scm
+          readelf -d Main > Main.readelf
+          if grep -Eq 'Shared library: \[libchicken(\.so[^]]*)?\]' Main.readelf; then
+            exit 1
+          else
+            grep_status=$?
+          fi
+          test "${grep_status}" -eq 1
+          test "$(printf '%s\n' '-4 17' | ./Main)" = 13
+          cat > SyntaxOnly.scm <<'SCM'
+          (import scheme (chicken process))
+          (system "touch aonohako-chicken-compile-leak")
+          SCM
+          csc -O3 -d0 -no-trace -static -o SyntaxOnly SyntaxOnly.scm
+          test ! -e aonohako-chicken-compile-leak
+          printf '%s\n' '(import scheme)' '(display "broken"' > Broken.scm
+          if csc -O3 -d0 -no-trace -static -o Broken Broken.scm >/dev/null 2>&1; then exit 1; fi
+          test ! -e Broken
+
   guile:
     install:
       apt:
@@ -3798,6 +3843,7 @@ profiles:
       - bf
       - bqn
       - chez-scheme
+      - chicken-scheme
       - elixir
       - erlang
       - fennel

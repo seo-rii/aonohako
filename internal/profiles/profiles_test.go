@@ -37,6 +37,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"SCHEME",
 		"CHEZ_SCHEME",
 		"GUILE",
+		"CHICKEN_SCHEME",
 		"AWK",
 		"TCL",
 		"GDL",
@@ -304,6 +305,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	tests["FACTOR"] = "factor"
 	tests["CHEZ_SCHEME"] = "chez-scheme"
 	tests["GUILE"] = "guile"
+	tests["CHICKEN_SCHEME"] = "chicken-scheme"
 
 	for input, want := range tests {
 		if got := NormalizeRunLang(input); got != want {
@@ -351,6 +353,19 @@ func TestGuileProfileUsesDedicatedReaderAndRuntime(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("GUILE resource profile = %+v", profile)
+	}
+}
+
+func TestChickenSchemeProfileCompilesNativeArtifactWithStaticChickenRuntime(t *testing.T) {
+	profile, ok := Resolve("CHICKEN_SCHEME")
+	if !ok {
+		t.Fatal("Resolve(CHICKEN_SCHEME) reported unsupported language")
+	}
+	if profile.Extension != "scm" || profile.DefaultTarget != "Main" || profile.CompileKind != "chicken-scheme" || profile.RunLang != "chicken-scheme" {
+		t.Fatalf("CHICKEN_SCHEME profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 128 {
+		t.Fatalf("CHICKEN_SCHEME resource profile = %+v", profile)
 	}
 }
 

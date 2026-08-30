@@ -371,6 +371,14 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"gforth":        {compileKind: "forth", runLang: "forth"},
 		"factor":        {compileKind: "factor", runLang: "factor"},
 	}
+	tests["chicken"] = struct {
+		compileKind string
+		runLang     string
+	}{compileKind: "chicken-scheme", runLang: "chicken-scheme"}
+	tests["chicken-scheme"] = struct {
+		compileKind string
+		runLang     string
+	}{compileKind: "chicken-scheme", runLang: "chicken-scheme"}
 	tests["assemblyscript"] = struct {
 		compileKind string
 		runLang     string
@@ -400,6 +408,7 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"scheme":          "scheme",
 		"chez":            "chez-scheme",
 		"guile3":          "guile",
+		"csc":             "chicken-scheme",
 		"gawk":            "awk",
 		"gnudatalanguage": "gdl",
 		"systemverilog":   "verilog",

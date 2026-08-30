@@ -2853,6 +2853,30 @@ AF_INET SOCK_STREAM 0 socket dup -1 =
 				},
 			},
 		},
+		"chicken-scheme": {
+			{
+				name:           "ffi-process-and-network-denies",
+				compileLang:    "CHICKEN_SCHEME",
+				expectedStdout: expectedProcessNetwork,
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.scm", `(import scheme (chicken foreign) (chicken process))
+(foreign-declare "#include <sys/socket.h>\n#include <unistd.h>")
+(define socket-call (foreign-lambda int "socket" int int int))
+(define close-call (foreign-lambda int "close" int))
+(define process-blocked? (not (zero? (system "/bin/true"))))
+(define descriptor (socket-call 2 1 0))
+(define network-blocked? (< descriptor 0))
+(unless network-blocked? (close-call descriptor))
+(display "process:")
+(display (if process-blocked? "blocked" "leaked"))
+(newline)
+(display "network:")
+(display (if network-blocked? "blocked" "leaked"))
+(newline)`),
+				},
+			},
+		},
 		"java": {
 			{
 				name:           "process-and-network-denies",
@@ -4309,6 +4333,16 @@ s/^7[[:space:]][[:space:]]*13$/20/`),
 			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.scm", `(display (+ (read) (read)))
+(newline)`),
+			},
+		},
+		"chicken-scheme": {
+			compileLang: "CHICKEN_SCHEME",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.scm", `(import scheme)
+(display (+ (read) (read)))
 (newline)`),
 			},
 		},

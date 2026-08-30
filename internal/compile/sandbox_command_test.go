@@ -170,6 +170,23 @@ func TestGuileReaderGetsNoProcessOrSocketException(t *testing.T) {
 	}
 }
 
+func TestChickenCompilerAllowsRequiredSubprocessesWithoutSockets(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_command.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`isChickenCompiler := commandName == "csc"`,
+		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && !isSyntaxOnlySchemeReader`,
+		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && !isSyntaxOnlySchemeReader && !isChickenCompiler`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("Chicken compiler sandbox contract must contain %q", marker)
+		}
+	}
+}
+
 func TestClassifyCompileWaitStatusTreatsCompilerSignalAsInternal(t *testing.T) {
 	for _, signal := range []syscall.Signal{
 		syscall.SIGABRT,

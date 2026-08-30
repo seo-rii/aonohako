@@ -396,6 +396,10 @@ if has_language "guile"; then
     report_once "GNU Guile" /usr/bin/guile-3.0 --version
 fi
 
+if has_language "chicken-scheme"; then
+    report_once "Chicken Scheme" csc -version
+fi
+
 if has_language "awk"; then
     report_once "GNU awk" gawk --version
 fi
@@ -664,6 +668,7 @@ report_compile_option "scala" "scalac -d <workdir>"
 report_compile_option "clojure" "clojure reader parse check"
 report_compile_option "chez-scheme" "/usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm <source.scm>; run with /usr/bin/chezscheme --quiet --script <source.scm>"
 report_compile_option "guile" "GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm <source.scm>; run with auto-compilation disabled"
+report_compile_option "chicken-scheme" "csc -O3 -d0 -no-trace -static -o <target> <source.scm>; run the native artifact with the CHICKEN runtime and extensions statically linked"
 report_compile_option "javascript" "node --check"
 report_compile_option "assemblyscript" "aonohako-assemblyscript-compile <source.ts> <target.wasm>; wasm-validate <target.wasm>; run with bounded Wasmtime and no filesystem preopens"
 report_compile_option "factor" "/opt/factor/factor -no-user-init -no-signals -q /usr/local/lib/aonohako/factor_check.factor <source.factor>; run with bounded stacks and immutable vocabulary roots"
