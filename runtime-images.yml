@@ -83,6 +83,15 @@ shared_installs:
       - test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b9
       - test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
 
+  chezscheme10:
+    apt:
+      - chezscheme=10.0.0+dfsg-5
+    sandbox_tools:
+      - chezscheme
+    script:
+      - test "$(dpkg-query -W -f='${Version}' chezscheme)" = 10.0.0+dfsg-5
+      - /usr/bin/chezscheme --version 2>&1 | grep '^10\.0\.0$'
+
 languages:
   plain:
     install:
@@ -849,11 +858,12 @@ languages:
 
   idris2:
     install:
+      shared:
+        - chezscheme10
       apt:
         - bash
         - build-essential
         - ca-certificates
-        - chezscheme
         - curl
         - libgmp-dev
         - make
@@ -1531,6 +1541,32 @@ languages:
           (newline)
           SCM
           chibi-scheme Main.scm | grep '^ok$'
+
+  chez-scheme:
+    install:
+      shared:
+        - chezscheme10
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.scm <<'SCM'
+          (import (chezscheme))
+          (display (+ (read) (read)))
+          (newline)
+          SCM
+          /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm Main.scm
+          test "$(printf '%s\n' '-4 17' | /usr/bin/chezscheme --quiet --script Main.scm)" = 13
+          cat > SyntaxOnly.scm <<'SCM'
+          (import (chezscheme))
+          (system "touch aonohako-chez-compile-leak")
+          SCM
+          /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm SyntaxOnly.scm
+          test ! -e aonohako-chez-compile-leak
+          printf '%s\n' '(import (chezscheme))' '(display "broken"' > Broken.scm
+          if /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm Broken.scm >/dev/null 2>&1; then exit 1; fi
 
   awk:
     install:
@@ -3729,6 +3765,7 @@ profiles:
       - befunge
       - bf
       - bqn
+      - chez-scheme
       - elixir
       - erlang
       - fennel

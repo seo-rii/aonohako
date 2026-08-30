@@ -46,7 +46,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
 		"pascal", "delphi", "objectpascal", "nim", "zig", "sml", "idris2", "ada", "d",
 		"rust", "go", "java", "groovy", "clojure",
-		"scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
+		"scheme", "chez-scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
@@ -58,6 +58,17 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestChezSchemeCompilerReadsSourceWithTrustedHelper(t *testing.T) {
+	compiler, ok := compileRegistry[chezSchemeCompileKind].(checkedSourcesCompiler)
+	if !ok {
+		t.Fatalf("Chez Scheme compiler = %T, want checkedSourcesCompiler", compileRegistry[chezSchemeCompileKind])
+	}
+	wantPrefix := []string{"--quiet", "--script", "/usr/local/lib/aonohako/chez_scheme_check.scm"}
+	if compiler.bin != "/usr/bin/chezscheme" || !reflect.DeepEqual(compiler.exts, []string{".scm"}) || !reflect.DeepEqual(compiler.prefix, wantPrefix) {
+		t.Fatalf("Chez Scheme compiler = %+v", compiler)
 	}
 }
 

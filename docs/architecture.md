@@ -928,7 +928,7 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
 | `type-b` | `assemblyscript`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
@@ -974,6 +974,14 @@ Factor stacks and runs with Factor's signal helper disabled; process creation,
 network sockets, memfd creation, and NUMA policy syscalls stay denied. The only
 runtime-specific seccomp exception permits the VM's internal thread-directed
 GC signals.
+
+The `CHEZ_SCHEME` profile pins Debian trixie's `chezscheme 10.0.0+dfsg-5`
+package in the shared type-a pack. Its compile phase runs the immutable
+`/usr/local/lib/aonohako/chez_scheme_check.scm` helper with a fixed absolute
+path. The helper only reads forms through EOF, so malformed reader syntax is
+rejected without evaluating top-level behavior and a submitted file cannot
+shadow the checker. The checker and runtime retain the default process and
+socket denials without any runtime-specific sandbox exception.
 
 The `MOONBIT` profile uses the checksum-pinned native toolchain and matching
 core snapshot. The compiler replaces submission manifests with a fixed,

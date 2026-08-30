@@ -516,6 +516,7 @@ The interactor is invoked as:
 | SCALA | `scala` | `scalac -d <dir>` |
 | CLOJURE | `clojure` | `clojure` reader parse loop |
 | RACKET | `racket` | `raco make` |
+| CHEZ_SCHEME | `chez-scheme` | trusted immutable Chez reader loop through EOF; no top-level evaluation |
 | TCL | `tcl` | Pass-through artifacts (requires at least one `.tcl`) |
 | PYTHON3 | `python` | `python3 -I -S -m compileall` |
 | PYPY3 | `pypy` | `pypy3 -I -S -m compileall` |
@@ -623,6 +624,7 @@ The interactor is invoked as:
 | `clojure` | `java <JVM memory flags> -cp /usr/share/java/clojure-1.12.jar clojure.main <file>` |
 | `racket` | `racket <file>` |
 | `scheme` | `chibi-scheme <file>` |
+| `chez-scheme` | `/usr/bin/chezscheme --quiet --script <file>` |
 | `assemblyscript` | bounded `wasmtime run <file>` without filesystem preopens |
 | `factor` | `/opt/factor/factor -no-user-init -no-signals -q <bounded stack flags> <file>` with immutable system vocabulary roots only |
 | `awk` | `gawk --sandbox -f <file>` |

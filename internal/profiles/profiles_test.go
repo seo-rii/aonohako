@@ -35,6 +35,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"GO",
 		"ZIG",
 		"SCHEME",
+		"CHEZ_SCHEME",
 		"AWK",
 		"TCL",
 		"GDL",
@@ -300,6 +301,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	}
 	tests["ASSEMBLYSCRIPT"] = "assemblyscript"
 	tests["FACTOR"] = "factor"
+	tests["CHEZ_SCHEME"] = "chez-scheme"
 
 	for input, want := range tests {
 		if got := NormalizeRunLang(input); got != want {
@@ -321,6 +323,19 @@ func TestAssemblyScriptProfileCompilesToIsolatedWASIArtifact(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 128 {
 		t.Fatalf("ASSEMBLYSCRIPT resource profile = %+v", profile)
+	}
+}
+
+func TestChezSchemeProfileUsesDedicatedReaderAndRuntime(t *testing.T) {
+	profile, ok := Resolve("CHEZ_SCHEME")
+	if !ok {
+		t.Fatal("Resolve(CHEZ_SCHEME) reported unsupported language")
+	}
+	if profile.Extension != "scm" || profile.CompileKind != "chez-scheme" || profile.RunLang != "chez-scheme" {
+		t.Fatalf("CHEZ_SCHEME profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("CHEZ_SCHEME resource profile = %+v", profile)
 	}
 }
 

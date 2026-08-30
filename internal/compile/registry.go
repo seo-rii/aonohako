@@ -1,6 +1,9 @@
 package compile
 
-const asCompileKind = "assemblyscript"
+const (
+	asCompileKind         = "assemblyscript"
+	chezSchemeCompileKind = "chez-scheme"
+)
 
 var compileRegistry = map[string]Compiler{
 	"c": nativeCompiler{exts: []string{".c", ".h"}, bin: "gcc", flags: func(job CompileJob) []string {
@@ -36,6 +39,12 @@ var compileRegistry = map[string]Compiler{
 	"clojure": clojureCompiler{},
 	"racket":  scriptCheckCompiler{bin: "raco", prefix: []string{"make"}},
 	"scheme":  passThroughCompiler{exts: []string{".scm"}, noSourceReason: "no scheme sources"},
+	chezSchemeCompileKind: checkedSourcesCompiler{
+		exts:           []string{".scm"},
+		noSourceReason: "no Chez Scheme sources",
+		bin:            "/usr/bin/chezscheme",
+		prefix:         []string{"--quiet", "--script", "/usr/local/lib/aonohako/chez_scheme_check.scm"},
+	},
 	"awk":     checkedSourcesCompiler{exts: []string{".awk"}, noSourceReason: "no awk sources", bin: "gawk", prefix: []string{"--sandbox", "--lint", "-f"}},
 	"tcl":     passThroughCompiler{exts: []string{".tcl"}, noSourceReason: "no tcl sources"},
 	"gdl":     passThroughCompiler{exts: []string{".pro"}, noSourceReason: "no gdl sources"},

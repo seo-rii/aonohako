@@ -23,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -128,6 +128,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-c3",
 		"ci-carbon",
 		"ci-chapel",
+		"ci-chez-scheme",
 		"ci-classic-basic",
 		"ci-clojure",
 		"ci-cobol",
@@ -311,6 +312,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"c3":            {"C3_VERSION=0.7.11", "c3c compile Main.c3"},
 		"carbon":        {"CARBON_VERSION=0.0.0-0.nightly.2026.05.02", "16719a509201acd2a7d82c260fba073c14ce7eb53c44c6ae7dda1fa083b6fa2a", "aonohako-carbon-warmup.carbon", "carbon build-runtimes --output-directory=/opt/carbon/lib/carbon/aonohako-runtimes", "aonohako-runtimes/libcxx/lib/libc++.a", "chmod -R a+rX /opt/carbon/lib/carbon/aonohako-runtimes", "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=Main.o Main.carbon", "carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o", "./Main | grep '^Hello World!$'", "Broken.carbon"},
 		"chapel":        {"CHAPEL_VERSION=2.9.0", "CHAPEL_DEB_SHA256=11f93de9e725a7c74608b4afcc7c8fc8bec380f27b09883cd6f69d6fbe66e13d", "sha256sum -c -", "set -euo pipefail", "chpl-language-server/src/chpl-shim.py", "chpl-venv", "fixDistDocs.perl", "fixInternalDocs.sh", "third-party", "-type l", "-perm /0001", "CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast", "here.maxTaskPar", "CHPL_RT_NUM_THREADS_PER_LOCALE=1 ./Main -nl 1", "./Main -nl 2", "test ! -e Broken"},
+		"chez-scheme":   {"chezscheme=10.0.0+dfsg-5", "chez_scheme_check.scm", "/usr/bin/chezscheme --quiet --script", "aonohako-chez-compile-leak", "test ! -e aonohako-chez-compile-leak", "Broken.scm"},
 		"classic-basic": {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
 		"clojure":       {"PushbackReader", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp /usr/share/java/clojure-1.12.jar clojure.main Main.clj"},
 		"cobol":         {"gnucobol", "cobc -x -free -O2 -o Main Main.cob"},
@@ -672,6 +674,54 @@ func TestFactorParserHelperNeverRunsSubmittedTopLevelForms(t *testing.T) {
 	}
 	if !strings.Contains(string(dockerfile), "scripts/factor_check.factor /usr/local/lib/aonohako/factor_check.factor") {
 		t.Fatal("runtime Dockerfile must install the trusted Factor parser helper")
+	}
+}
+
+func TestChezSchemeReaderHelperNeverRunsSubmittedTopLevelForms(t *testing.T) {
+	helper, err := os.ReadFile(filepath.Join("..", "..", "scripts", "chez_scheme_check.scm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(helper)
+	for _, marker := range []string{"call-with-input-file", "read port", "eof-object?"} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("Chez Scheme reader helper must contain %q: %s", marker, body)
+		}
+	}
+	for _, forbidden := range []string{"load", "eval", "system"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Chez Scheme reader helper must not contain %q: %s", forbidden, body)
+		}
+	}
+
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "docker", "runtime.Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "scripts/chez_scheme_check.scm /usr/local/lib/aonohako/chez_scheme_check.scm") {
+		t.Fatal("runtime Dockerfile must install the trusted Chez Scheme reader helper")
+	}
+}
+
+func TestChezSchemeInstallIsSharedWithIdris2(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, ok := catalog.SharedInstalls["chezscheme10"]
+	if !ok {
+		t.Fatal("chezscheme10 shared install missing from catalog")
+	}
+	if !slices.Contains(shared.Apt, "chezscheme=10.0.0+dfsg-5") {
+		t.Fatalf("chezscheme10 apt packages = %v", shared.Apt)
+	}
+	for _, language := range []string{"chez-scheme", "idris2"} {
+		if !slices.Contains(catalog.Languages[language].Install.Shared, "chezscheme10") {
+			t.Fatalf("%s must reuse the pinned chezscheme10 install", language)
+		}
+		if slices.Contains(catalog.Languages[language].Install.Apt, "chezscheme") {
+			t.Fatalf("%s duplicates the shared Chez Scheme package", language)
+		}
 	}
 }
 
