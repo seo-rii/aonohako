@@ -1595,7 +1595,13 @@ languages:
           (newline)
           SCM
           csc -O3 -d0 -no-trace -static -o Main Main.scm
-          if readelf -d Main 2>/dev/null | grep -q '(NEEDED)'; then exit 1; fi
+          readelf -d Main > Main.readelf
+          if grep -Eq 'Shared library: \[libchicken(\.so[^]]*)?\]' Main.readelf; then
+            exit 1
+          else
+            grep_status=$?
+          fi
+          test "${grep_status}" -eq 1
           test "$(printf '%s\n' '-4 17' | ./Main)" = 13
           cat > SyntaxOnly.scm <<'SCM'
           (import scheme (chicken process))

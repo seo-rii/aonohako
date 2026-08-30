@@ -83,7 +83,7 @@ func TestGuileCompilerReadsSourceWithTrustedHelper(t *testing.T) {
 	}
 }
 
-func TestChickenSchemeCompilerEmitsStaticNativeArtifact(t *testing.T) {
+func TestChickenSchemeCompilerLinksChickenRuntimeStatically(t *testing.T) {
 	compiler, ok := compileRegistry[chickenSchemeCompileKind].(singleSourceExecutableCompiler)
 	if !ok {
 		t.Fatalf("Chicken Scheme compiler = %T, want singleSourceExecutableCompiler", compileRegistry[chickenSchemeCompileKind])

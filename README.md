@@ -97,9 +97,10 @@ language-specific commands keep their declared order.
   code, while compile and runtime commands disable automatic compilation.
   Reader compilation receives no process or socket sandbox exception.
 - Chicken Scheme pins Debian trixie's `chicken-bin` and `libchicken-dev`
-  `5.3.0-2` packages under `CHICKEN_SCHEME`. `csc -static` compiles a single
-  `.scm` source into a direct native artifact and does not run ordinary
-  top-level behavior during compilation. The compiler retains subprocess
+  `5.3.0-2` packages under `CHICKEN_SCHEME`. `csc -static` links the CHICKEN
+  runtime and statically available extensions into a direct native artifact;
+  system libraries such as libc and libm remain normally shared. Compilation
+  does not run ordinary top-level behavior. The compiler retains subprocess
   support only because its driver invokes the translator and C linker; Unix
   sockets and all runtime process and socket operations remain denied.
 - MoonBit is pinned to the official `moonc 0.10.9+6e6c44045` Linux x64

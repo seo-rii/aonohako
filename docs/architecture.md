@@ -997,8 +997,10 @@ Debian trixie's `5.3.0-2`. Its compiler invokes
 native target artifact. Ordinary top-level actions are compiled rather than
 executed during this phase, and malformed reader syntax fails the build. The
 `csc` driver keeps process creation because it must launch CHICKEN's translator
-and the C compiler/linker, but it receives no Unix-socket exception. The static
-artifact runs under the ordinary native process and socket denials.
+and the C compiler/linker, but it receives no Unix-socket exception. Here,
+`-static` links the CHICKEN runtime and statically available extensions, not
+system libraries such as libc or libm. The resulting native artifact runs under
+the ordinary process and socket denials.
 
 The `MOONBIT` profile uses the checksum-pinned native toolchain and matching
 core snapshot. The compiler replaces submission manifests with a fixed,

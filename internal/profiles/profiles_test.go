@@ -356,7 +356,7 @@ func TestGuileProfileUsesDedicatedReaderAndRuntime(t *testing.T) {
 	}
 }
 
-func TestChickenSchemeProfileCompilesStaticNativeArtifact(t *testing.T) {
+func TestChickenSchemeProfileCompilesNativeArtifactWithStaticChickenRuntime(t *testing.T) {
 	profile, ok := Resolve("CHICKEN_SCHEME")
 	if !ok {
 		t.Fatal("Resolve(CHICKEN_SCHEME) reported unsupported language")

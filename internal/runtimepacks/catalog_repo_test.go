@@ -755,7 +755,7 @@ func TestChezSchemeInstallIsSharedWithIdris2(t *testing.T) {
 	}
 }
 
-func TestChickenSchemeCatalogPinsStaticCompilerToolchain(t *testing.T) {
+func TestChickenSchemeCatalogPinsStaticChickenRuntime(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -770,10 +770,13 @@ func TestChickenSchemeCatalogPinsStaticCompilerToolchain(t *testing.T) {
 		}
 	}
 	smoke := strings.Join(spec.Smoke.Command, "\n")
-	for _, marker := range []string{"-static -o Main", "readelf -d Main", "test ! -e aonohako-chicken-compile-leak", "Broken.scm"} {
+	for _, marker := range []string{"-static -o Main", "readelf -d Main > Main.readelf", `Shared library: \[libchicken`, `test "${grep_status}" -eq 1`, "test ! -e aonohako-chicken-compile-leak", "Broken.scm"} {
 		if !strings.Contains(smoke, marker) {
 			t.Fatalf("Chicken Scheme smoke must contain %q", marker)
 		}
+	}
+	if strings.Contains(smoke, "grep -q '(NEEDED)'") {
+		t.Fatal("Chicken Scheme -static must not be treated as fully static system linkage")
 	}
 }
 
