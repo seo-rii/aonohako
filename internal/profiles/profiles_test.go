@@ -220,6 +220,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"sh":           "posix-sh",
 		"ZSH":          "zsh",
 		"zsh":          "zsh",
+		"FISH":         "fish",
+		"fish":         "fish",
 		"POWERSHELL":   "powershell",
 		"powershell":   "powershell",
 		"pwsh":         "powershell",
@@ -468,6 +470,7 @@ func TestShellProfilesShareCompilerAndExposeRuntimeVariants(t *testing.T) {
 		"BASH":     "bash",
 		"POSIX_SH": "posix-sh",
 		"ZSH":      "zsh",
+		"FISH":     "fish",
 	}
 	for language, runLang := range tests {
 		profile, ok := Resolve(language)
@@ -479,6 +482,9 @@ func TestShellProfilesShareCompilerAndExposeRuntimeVariants(t *testing.T) {
 		if language == "ZSH" {
 			wantExtension = "zsh"
 			wantTarget = "Main.zsh"
+		} else if language == "FISH" {
+			wantExtension = "fish"
+			wantTarget = "Main.fish"
 		}
 		if profile.Extension != wantExtension || profile.DefaultTarget != wantTarget || profile.CompileKind != "shell" || profile.RunLang != runLang {
 			t.Fatalf("%s profile = %+v", language, profile)

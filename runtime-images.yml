@@ -73,6 +73,8 @@ shared_installs:
       - dash=0.5.12-12
       - zsh=5.9-8+b23
       - zsh-common=5.9-8
+      - fish=4.0.2-1
+      - fish-common=4.0.2-1
       - diffutils
       - findutils
       - grep
@@ -82,11 +84,14 @@ shared_installs:
       - bash
       - dash
       - zsh
+      - fish
     script:
       - test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b9
       - test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
       - test "$(dpkg-query -W -f='${Version}' zsh)" = 5.9-8+b23
       - test "$(dpkg-query -W -f='${Version}' zsh-common)" = 5.9-8
+      - test "$(dpkg-query -W -f='${Version}' fish)" = 4.0.2-1
+      - test "$(dpkg-query -W -f='${Version}' fish-common)" = 4.0.2-1
 
   chezscheme10:
     apt:
@@ -3511,6 +3516,37 @@ languages:
           printf '%s\n' 'if true; then' > Broken.zsh
           if /usr/bin/zsh -d -f -n Broken.zsh >/dev/null 2>&1; then exit 1; fi
 
+  fish:
+    install:
+      shared:
+        - shell_runtime
+    smoke:
+      command:
+        - /usr/bin/fish
+        - --no-config
+        - --private
+        - -c
+        - |
+          test (dpkg-query -W -f='${Version}' fish) = 4.0.2-1; or exit 1
+          test (dpkg-query -W -f='${Version}' fish-common) = 4.0.2-1; or exit 1
+          set startup_root /tmp/aonohako-fish-startup
+          set startup_leak /tmp/aonohako-fish-startup-leak
+          rm -rf "$startup_root" "$startup_leak"; or exit 1
+          mkdir -p "$startup_root/fish"; or exit 1
+          printf '%s\n' "touch $startup_leak" > "$startup_root/fish/config.fish"; or exit 1
+          env XDG_CONFIG_HOME="$startup_root" HOME="$startup_root" /usr/bin/fish --no-config --private -c ':'; or exit 1
+          test ! -e "$startup_leak"; or exit 1
+          printf '%s\n' 'read -l a b' 'math "$a + $b"' > Main.fish; or exit 1
+          test (printf '1 2\n' | /usr/bin/fish --no-config --private Main.fish) = 3; or exit 1
+          rm -f /tmp/aonohako-fish-syntax-leak; or exit 1
+          printf '%s\n' 'set value (touch /tmp/aonohako-fish-syntax-leak)' > SyntaxOnly.fish; or exit 1
+          /usr/bin/fish --no-config --private --no-execute SyntaxOnly.fish; or exit 1
+          test ! -e /tmp/aonohako-fish-syntax-leak; or exit 1
+          printf '%s\n' 'if true' > Broken.fish; or exit 1
+          if /usr/bin/fish --no-config --private --no-execute Broken.fish >/dev/null 2>&1
+              exit 1
+          end
+
   powershell:
     install:
       apt:
@@ -4084,6 +4120,7 @@ profiles:
     base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     languages:
       - bash
+      - fish
       - posix-sh
       - zsh
   type-y:

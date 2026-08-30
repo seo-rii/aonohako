@@ -461,6 +461,7 @@ func TestShellCompilerChecksEachRuntimeDialectWithoutExecutingSource(t *testing.
 		{name: "bash", runLang: "bash", source: "Main.sh", bin: "bash", args: []string{"--noprofile", "--norc", "-n"}},
 		{name: "POSIX sh", runLang: "posix-sh", source: "Main.sh", bin: "/bin/dash", args: []string{"-n"}},
 		{name: "Zsh", runLang: "zsh", source: "Main.zsh", bin: "/usr/bin/zsh", args: []string{"-d", "-f", "-n"}},
+		{name: "Fish", runLang: "fish", source: "Main.fish", bin: "/usr/bin/fish", args: []string{"--no-config", "--private", "--no-execute"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			workDir := t.TempDir()

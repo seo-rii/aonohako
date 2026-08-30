@@ -232,10 +232,15 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
       if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
     done
 
-RUN if [[ "${IMAGE_NAME}" == "type-x" || "${IMAGE_NAME}" == "ci-bash" || "${IMAGE_NAME}" == "ci-posix-sh" || "${IMAGE_NAME}" == "ci-zsh" ]]; then \
+RUN if [[ "${IMAGE_NAME}" == "type-x" || "${IMAGE_NAME}" == "ci-bash" || "${IMAGE_NAME}" == "ci-posix-sh" || "${IMAGE_NAME}" == "ci-zsh" || "${IMAGE_NAME}" == "ci-fish" ]]; then \
       /usr/local/lib/aonohako/harden_shell_runtime.sh; \
     else \
       rm -f /usr/local/lib/aonohako/shell_runtime_allowlist.txt; \
+    fi && \
+    if [[ ",${LANGUAGES}," == *",fish,"* ]]; then \
+      for path in /var/empty /var/empty/.config /var/empty/.config/fish /var/empty/.local /var/empty/.local/share; do \
+        install -d -o 0 -g 0 -m 0555 "${path}"; \
+      done; \
     fi && \
     if [[ ",${LANGUAGES}," == *",powershell,"* ]]; then \
       for path in /var/empty /var/empty/.config /var/empty/.local /var/empty/.local/share /var/empty/.local/share/powershell /var/empty/.local/share/powershell/Modules /usr/local/share/powershell /usr/local/share/powershell/Modules; do \

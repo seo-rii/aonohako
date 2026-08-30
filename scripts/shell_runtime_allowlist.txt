@@ -26,6 +26,7 @@
 /usr/bin/expr
 /usr/bin/false
 /usr/bin/find
+/usr/bin/fish
 /usr/bin/fmt
 /usr/bin/fold
 /usr/bin/grep

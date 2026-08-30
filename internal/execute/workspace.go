@@ -195,7 +195,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		} else if strings.HasSuffix(lowerClean, ".mb") && malbolgePath == "" {
 			malbolgePath = dest
 		}
-		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".ps1"} {
+		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".ts", ".js", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -219,7 +219,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	switch lang {
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "chapel-binary", "chicken-scheme", "c3", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "assemblyscript", "factor", "aheui", "apecode", "cuda-ocelot":
 		return primaryPath, lang, nil
-	case "bash", "posix-sh", "zsh", "powershell":
+	case "bash", "posix-sh", "zsh", "fish", "powershell":
 		if sourcePath == "" {
 			sourcePath = primaryPath
 		}

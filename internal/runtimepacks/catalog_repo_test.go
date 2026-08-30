@@ -92,7 +92,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[22].Name != "type-w" || !reflect.DeepEqual(production[22].Languages, []string{"pony"}) {
 		t.Fatalf("type-w production image = %+v", production[22])
 	}
-	if production[23].Name != "type-x" || !reflect.DeepEqual(production[23].Languages, []string{"bash", "posix-sh", "zsh"}) {
+	if production[23].Name != "type-x" || !reflect.DeepEqual(production[23].Languages, []string{"bash", "fish", "posix-sh", "zsh"}) {
 		t.Fatalf("type-x production image = %+v", production[23])
 	}
 	if production[24].Name != "type-y" || !reflect.DeepEqual(production[24].Languages, []string{"factor"}) {
@@ -151,6 +151,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-erlang",
 		"ci-factor",
 		"ci-fennel",
+		"ci-fish",
 		"ci-forth",
 		"ci-fortran",
 		"ci-freebasic",
@@ -371,6 +372,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"pony":          {"PONY_VERSION=0.69.1", "PONY_ARCHIVE_ROOT=0.69.1-38f9f11", "PONY_SHA256=8e1955ed1a63444ae13666031d5d3909cacfb475ca96643e878f36cf4edff9ab", "sha256sum -c -", "--cpu=generic", "--ponymaxthreads=1", "objdump -d Main", "test ! -e /opt/pony/bin/pony-doc", "test ! -e Broken"},
 		"posix-sh":      {"0.5.12-12", "/bin/dash -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-posix-shell-syntax-leak", "Broken.sh"},
 		"zsh":           {"5.9-8+b23", "/usr/bin/zsh -d -f -n SyntaxOnly.zsh", `test ! -e "${startup_leak}"`, "test ! -e /tmp/aonohako-zsh-syntax-leak", "printf '1 2\\n' | /usr/bin/zsh -d -f Main.zsh", "Broken.zsh"},
+		"fish":          {"4.0.2-1", "/usr/bin/fish --no-config --private --no-execute SyntaxOnly.fish", `test ! -e "$startup_leak"`, "test ! -e /tmp/aonohako-fish-syntax-leak", "printf '1 2\\n' | /usr/bin/fish --no-config --private Main.fish", "Broken.fish"},
 		"powershell":    {"POWERSHELL_VERSION=7.6.5", "POWERSHELL_SHA256=b34ab3b19acac1d3d4d0d3cfdb02acf62f457b0b6a962ff008132033f7566844", "sha256sum -c -", "Parser]::ParseFile", "ForEach-Object -Parallel", "test ! -e /opt/microsoft/powershell/7/createdump", "Broken.ps1"},
 		"qbasic":        {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
 		"raku":          {"raku -c Main.raku", "raku Main.raku"},
@@ -986,17 +988,17 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 	if !ok {
 		t.Fatal("shell_runtime shared install missing from catalog")
 	}
-	for _, pkg := range []string{"bash=5.2.37-2+b9", "dash=0.5.12-12", "zsh=5.9-8+b23", "zsh-common=5.9-8", "diffutils", "findutils", "grep", "mawk", "sed"} {
+	for _, pkg := range []string{"bash=5.2.37-2+b9", "dash=0.5.12-12", "zsh=5.9-8+b23", "zsh-common=5.9-8", "fish=4.0.2-1", "fish-common=4.0.2-1", "diffutils", "findutils", "grep", "mawk", "sed"} {
 		if !slices.Contains(shared.Apt, pkg) {
 			t.Fatalf("shell runtime apt packages = %v, want %q", shared.Apt, pkg)
 		}
 	}
-	for _, tool := range []string{"bash", "dash", "zsh"} {
+	for _, tool := range []string{"bash", "dash", "zsh", "fish"} {
 		if !slices.Contains(shared.SandboxTools, tool) {
 			t.Fatalf("shell runtime sandbox tools = %v, want %q", shared.SandboxTools, tool)
 		}
 	}
-	for language, source := range map[string]string{"bash": "SyntaxOnly.sh", "posix-sh": "SyntaxOnly.sh", "zsh": "SyntaxOnly.zsh"} {
+	for language, source := range map[string]string{"bash": "SyntaxOnly.sh", "posix-sh": "SyntaxOnly.sh", "zsh": "SyntaxOnly.zsh", "fish": "SyntaxOnly.fish"} {
 		spec, ok := catalog.Languages[language]
 		if !ok || !slices.Contains(spec.Install.Shared, "shell_runtime") {
 			t.Fatalf("%s runtime spec = %+v", language, spec)
@@ -1009,7 +1011,7 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 		}
 	}
 	typeX := catalog.Profiles["type-x"]
-	if !reflect.DeepEqual(typeX.Languages, []string{"bash", "posix-sh", "zsh"}) || len(typeX.Install.Script) != 0 {
+	if !reflect.DeepEqual(typeX.Languages, []string{"bash", "fish", "posix-sh", "zsh"}) || len(typeX.Install.Script) != 0 {
 		t.Fatalf("type-x profile = %+v", typeX)
 	}
 
@@ -1025,6 +1027,12 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 		"chmod -R go-rwx",
 		"-perm /6000",
 		"chmod ug-s",
+		`for root in /usr/lib /usr/local/lib`,
+		`library_inventory="$(mktemp)"`,
+		`find "${root}" -xdev -type f -perm /0001 -print0 > "${library_inventory}"`,
+		`magic="$(od -An -tx1 -N4 -- "${path}" | tr -d '[:space:]')"`,
+		`"${magic}" != "7f454c46"`,
+		`chmod go-x "${path}"`,
 		"ld-linux*.so*",
 		"shell_runtime_allowlist.txt",
 	} {
@@ -1038,7 +1046,7 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	allowed := string(allowlist)
-	for _, path := range []string{"/usr/local/bin/aonohako\n", "/usr/local/bin/aonohako-selftest\n", "/usr/bin/bash\n", "/usr/bin/dash\n", "/usr/bin/zsh\n", "/usr/bin/grep\n", "/usr/bin/cp\n", "/usr/bin/sleep\n"} {
+	for _, path := range []string{"/usr/local/bin/aonohako\n", "/usr/local/bin/aonohako-selftest\n", "/usr/bin/bash\n", "/usr/bin/dash\n", "/usr/bin/zsh\n", "/usr/bin/fish\n", "/usr/bin/grep\n", "/usr/bin/cp\n", "/usr/bin/sleep\n"} {
 		if !strings.Contains(allowed, path) {
 			t.Fatalf("shell allowlist must contain %q:\n%s", path, allowed)
 		}
@@ -1054,7 +1062,7 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	dockerBody := string(dockerfile)
-	for _, marker := range []string{"scripts/harden_shell_runtime.sh", `"${IMAGE_NAME}" == "type-x"`, `"${IMAGE_NAME}" == "ci-bash"`, `"${IMAGE_NAME}" == "ci-posix-sh"`, `"${IMAGE_NAME}" == "ci-zsh"`} {
+	for _, marker := range []string{"scripts/harden_shell_runtime.sh", `"${IMAGE_NAME}" == "type-x"`, `"${IMAGE_NAME}" == "ci-bash"`, `"${IMAGE_NAME}" == "ci-posix-sh"`, `"${IMAGE_NAME}" == "ci-zsh"`, `"${IMAGE_NAME}" == "ci-fish"`, `",fish,"`, "/var/empty/.config/fish"} {
 		if !strings.Contains(dockerBody, marker) {
 			t.Fatalf("runtime Dockerfile must contain %q", marker)
 		}

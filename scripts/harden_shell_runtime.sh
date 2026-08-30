@@ -27,6 +27,21 @@ done
 
 find / -xdev -type f -perm /6000 -exec chmod ug-s {} +
 
+library_inventory="$(mktemp)"
+for root in /usr/lib /usr/local/lib; do
+	if [[ ! -d "${root}" ]]; then
+		continue
+	fi
+	find "${root}" -xdev -type f -perm /0001 -print0 > "${library_inventory}"
+	while IFS= read -r -d '' path; do
+		magic="$(od -An -tx1 -N4 -- "${path}" | tr -d '[:space:]')"
+		if [[ "${magic}" != "7f454c46" ]]; then
+			chmod go-x "${path}"
+		fi
+	done < "${library_inventory}"
+done
+rm -f "${library_inventory}"
+
 while IFS= read -r path; do
 	if [[ -z "${path}" || "${path}" == \#* ]]; then
 		continue

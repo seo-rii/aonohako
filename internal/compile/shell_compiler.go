@@ -22,6 +22,10 @@ func (shellCompiler) Compile(ctx context.Context, job CompileJob) model.CompileR
 		checker.exts = []string{".zsh"}
 		checker.bin = "/usr/bin/zsh"
 		checker.prefix = []string{"-d", "-f", "-n"}
+	} else if job.Profile.RunLang == "fish" {
+		checker.exts = []string{".fish"}
+		checker.bin = "/usr/bin/fish"
+		checker.prefix = []string{"--no-config", "--private", "--no-execute"}
 	}
 	return checker.Compile(ctx, job)
 }
