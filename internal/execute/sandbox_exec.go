@@ -399,6 +399,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		AllowUnixSocketMessages:  false,
 		AllowProcesses:           allowProcesses,
 		DenyThreads:              streams.communicationRestricted,
+		AllowPositiveKillProbe:   trustedShellRuntime && runLang == "zsh",
 		AllowThreadSignals:       isFactor,
 		AllowMemfdCreate:         allowMemfdCreate,
 		AllowNumaPolicy:          isDotnet || isTLA,

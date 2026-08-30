@@ -314,6 +314,7 @@ func TestShellProcessOptInIsBoundToDedicatedImageAndRuntime(t *testing.T) {
 		`pidsMax := threadLimit + 16`,
 		`case "bash", "dash", "zsh":`,
 		`allowProcesses = trustedShellRuntime`,
+		`AllowPositiveKillProbe:   trustedShellRuntime && runLang == "zsh"`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("shell sandbox policy must contain %q", marker)

@@ -2625,7 +2625,7 @@ printf 'child:started\n'
 			{
 				name:                  "network-tools-loader-process-limit-and-child-cleanup",
 				compileLang:           "ZSH",
-				expectedStdout:        "network:blocked\ntools:blocked\nloader:blocked\nprocess-limit:bounded\nchild:started\n",
+				expectedStdout:        "network:blocked\ntools:blocked\nloader:blocked\nprocess-limit:bounded\ngroup-probe:blocked\nnegative-group-probe:blocked\nsignal:blocked\nchild:started\n",
 				forbiddenPathAfterRun: zshChildMarker,
 				limits:                limits,
 				sources: []model.Source{
@@ -2650,7 +2650,23 @@ if awk '$1 == "Max" && $2 == "processes" { found = 1; bounded = $3 ~ /^[0-9]+$/ 
 else
   print -r -- 'process-limit:leaked'
 fi
+if kill -0 0 2>/dev/null; then
+  print -r -- 'group-probe:leaked'
+else
+  print -r -- 'group-probe:blocked'
+fi
+if kill -0 -- -1 2>/dev/null; then
+  print -r -- 'negative-group-probe:leaked'
+else
+  print -r -- 'negative-group-probe:blocked'
+fi
 (sleep 1; print -rn -- survived > %q) >/dev/null 2>&1 &
+child_pid=$!
+if kill -TERM "${child_pid}" 2>/dev/null; then
+  print -r -- 'signal:leaked'
+else
+  print -r -- 'signal:blocked'
+fi
 print -r -- 'child:started'
 `, tcpPort, zshChildMarker)),
 				},

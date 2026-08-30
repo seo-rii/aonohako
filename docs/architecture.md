@@ -318,7 +318,8 @@ The seccomp filter denies high-risk operations, including:
   `set_mempolicy`, `migrate_pages`, and `move_pages`
 - `kcmp`, nested `seccomp`, Landlock policy syscalls, and LSM attribute/module
   syscalls
-- `kill`, `tkill`, `tgkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo`
+- `kill` (except Zsh's positive-PID, non-signaling `kill(pid, 0)` existence
+  probe), `tkill`, `tgkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo`
 - `prlimit64` except self queries with a null new-limit pointer, `setpriority`
 - `bpf`, `io_uring_*`, `userfaultfd`, `memfd_create` except for .NET and
   Wasmtime runtime compatibility, memory locking, SysV shared memory,
@@ -1061,6 +1062,10 @@ pass-through compiler family; the target is the submitted script itself rather
 than a generated executable. `SHELL` defaults to Bash, `POSIX_SH` selects dash,
 and `ZSH` uses a native `Main.zsh` artifact. Syntax checks use
 `bash --noprofile --norc -n`, `/bin/dash -n`, or `/usr/bin/zsh -d -f -n`.
+Zsh may poll child state with `kill(pid, 0)` while shutting down; only the
+positive-PID, non-signaling form is permitted for its syntax check and trusted
+type-x runtime. Process-group targets and all signal-delivery forms remain
+denied.
 Execution fixes `BASH_ENV`/`ENV` to `/dev/null` where applicable, sets Zsh's
 `ZDOTDIR` to `/var/empty`, and passes `-d -f`, so submission-controlled startup
 files are never loaded. Only the dedicated type-x image may opt these shells

@@ -197,6 +197,7 @@ func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, arg
 		AllowSocketServer:        isIsabelle,
 		AllowProcesses:           allowProcesses,
 		AllowProcessGroups:       allowProcessGroups,
+		AllowPositiveKillProbe:   commandName == "zsh",
 		AllowThreadSignals:       allowThreadSignals,
 		AllowMemfdCreate:         isDotnetLike || isIsabelle,
 		AllowNumaPolicy:          isDotnetLike || isIsabelle,

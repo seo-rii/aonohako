@@ -30,6 +30,7 @@ type ExecRequest struct {
 	AllowProcesses           bool         `json:"allow_processes,omitempty"`
 	DenyThreads              bool         `json:"deny_threads,omitempty"`
 	AllowProcessGroups       bool         `json:"allow_process_groups,omitempty"`
+	AllowPositiveKillProbe   bool         `json:"allow_positive_kill_probe,omitempty"`
 	AllowThreadSignals       bool         `json:"allow_thread_signals,omitempty"`
 	AllowMemfdCreate         bool         `json:"allow_memfd_create,omitempty"`
 	AllowNumaPolicy          bool         `json:"allow_numa_policy,omitempty"`
