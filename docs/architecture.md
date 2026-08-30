@@ -928,7 +928,7 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `golfscript`, `guile`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
 | `type-b` | `assemblyscript`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
@@ -982,6 +982,14 @@ path. The helper only reads forms through EOF, so malformed reader syntax is
 rejected without evaluating top-level behavior and a submitted file cannot
 shadow the checker. The checker and runtime retain the default process and
 socket denials without any runtime-specific sandbox exception.
+
+The `GUILE` profile pins Debian trixie's `guile-3.0` and `guile-3.0-libs`
+packages at `3.0.10+really3.0.10-4` in type-a. Compilation invokes the
+immutable `/usr/local/lib/aonohako/guile_check.scm` reader by absolute path and
+disables auto-compilation. The helper consumes forms through EOF without
+loading submitted code, so top-level side effects do not run and the
+submission cannot shadow the checker. The reader gets no process or socket
+sandbox exception; execution also keeps auto-compilation disabled.
 
 The `MOONBIT` profile uses the checksum-pinned native toolchain and matching
 core snapshot. The compiler replaces submission manifests with a fixed,

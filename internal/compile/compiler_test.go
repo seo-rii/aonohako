@@ -46,7 +46,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
 		"pascal", "delphi", "objectpascal", "nim", "zig", "sml", "idris2", "ada", "d",
 		"rust", "go", "java", "groovy", "clojure",
-		"scheme", "chez-scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
+		"scheme", "chez-scheme", "guile", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
@@ -69,6 +69,17 @@ func TestChezSchemeCompilerReadsSourceWithTrustedHelper(t *testing.T) {
 	wantPrefix := []string{"--quiet", "--script", "/usr/local/lib/aonohako/chez_scheme_check.scm"}
 	if compiler.bin != "/usr/bin/chezscheme" || !reflect.DeepEqual(compiler.exts, []string{".scm"}) || !reflect.DeepEqual(compiler.prefix, wantPrefix) {
 		t.Fatalf("Chez Scheme compiler = %+v", compiler)
+	}
+}
+
+func TestGuileCompilerReadsSourceWithTrustedHelper(t *testing.T) {
+	compiler, ok := compileRegistry[guileCompileKind].(checkedSourcesCompiler)
+	if !ok {
+		t.Fatalf("Guile compiler = %T, want checkedSourcesCompiler", compileRegistry[guileCompileKind])
+	}
+	wantPrefix := []string{"--no-auto-compile", "--no-debug", "-q", "-s", "/usr/local/lib/aonohako/guile_check.scm"}
+	if compiler.bin != "/usr/bin/guile-3.0" || !reflect.DeepEqual(compiler.exts, []string{".scm"}) || !reflect.DeepEqual(compiler.prefix, wantPrefix) || !reflect.DeepEqual(compiler.env, []string{"GUILE_AUTO_COMPILE=0"}) {
+		t.Fatalf("Guile compiler = %+v", compiler)
 	}
 }
 

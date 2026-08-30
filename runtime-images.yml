@@ -1568,6 +1568,37 @@ languages:
           printf '%s\n' '(import (chezscheme))' '(display "broken"' > Broken.scm
           if /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm Broken.scm >/dev/null 2>&1; then exit 1; fi
 
+  guile:
+    install:
+      apt:
+        - guile-3.0=3.0.10+really3.0.10-4
+        - guile-3.0-libs=3.0.10+really3.0.10-4
+      sandbox_tools:
+        - guile-3.0
+      script:
+        - test "$(dpkg-query -W -f='${Version}' guile-3.0)" = 3.0.10+really3.0.10-4
+        - test "$(dpkg-query -W -f='${Version}' guile-3.0-libs)" = 3.0.10+really3.0.10-4
+        - /usr/bin/guile-3.0 --version | grep '^guile (GNU Guile) 3\.0\.10$'
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.scm <<'SCM'
+          (display (+ (read) (read)))
+          (newline)
+          SCM
+          GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm Main.scm
+          test "$(printf '%s\n' '-4 17' | GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s Main.scm)" = 13
+          cat > SyntaxOnly.scm <<'SCM'
+          (system "touch aonohako-guile-compile-leak")
+          SCM
+          GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm SyntaxOnly.scm
+          test ! -e aonohako-guile-compile-leak
+          printf '%s\n' '(display "broken"' > Broken.scm
+          if GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm Broken.scm >/dev/null 2>&1; then exit 1; fi
+
   awk:
     install:
       apt:
@@ -3774,6 +3805,7 @@ profiles:
       - gforth
       - gleam
       - golfscript
+      - guile
       - haskell
       - idris2
       - j

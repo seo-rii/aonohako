@@ -143,12 +143,29 @@ func TestChezSchemeReaderGetsNoProcessOrSocketException(t *testing.T) {
 	}
 	body := string(raw)
 	for _, marker := range []string{
-		`isSyntaxOnlySchemeReader := commandName == "chezscheme"`,
+		`isSyntaxOnlySchemeReader := commandName == "chezscheme" || commandName == "guile-3.0"`,
 		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && !isSyntaxOnlySchemeReader`,
 		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && !isSyntaxOnlySchemeReader`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("Chez Scheme reader sandbox contract must contain %q", marker)
+		}
+	}
+}
+
+func TestGuileReaderGetsNoProcessOrSocketException(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_command.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`isSyntaxOnlySchemeReader := commandName == "chezscheme" || commandName == "guile-3.0"`,
+		`AllowProcesses:           allowProcesses`,
+		`AllowUnixSockets:         allowUnixSockets`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("Guile reader sandbox contract must contain %q", marker)
 		}
 	}
 }

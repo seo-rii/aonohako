@@ -360,6 +360,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"racket", "/tmp/sol.rkt", "racket", true},
 		{"scheme", "/tmp/sol.scm", "chibi-scheme", true},
 		{"chez-scheme", "/tmp/sol.scm", "/usr/bin/chezscheme", true},
+		{"guile", "/tmp/sol.scm", "env", true},
 		{"awk", "/tmp/sol.awk", "gawk", true},
 		{"tcl", "/tmp/sol.tcl", "tclsh", true},
 		{"gdl", "/tmp/sol.pro", "aonohako-gdl-run", true},
@@ -523,6 +524,14 @@ func TestBuildCommandRunsChezSchemeAsScript(t *testing.T) {
 	want := []string{"/usr/bin/chezscheme", "--quiet", "--script", "/tmp/Main.scm"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Chez Scheme command = %v, want %v", got, want)
+	}
+}
+
+func TestBuildCommandRunsGuileWithoutAutoCompilation(t *testing.T) {
+	got := buildCommand("/tmp/Main.scm", "guile", &model.RunRequest{})
+	want := []string{"env", "GUILE_AUTO_COMPILE=0", "/usr/bin/guile-3.0", "--no-auto-compile", "--no-debug", "-q", "-s", "/tmp/Main.scm"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Guile command = %v, want %v", got, want)
 	}
 }
 

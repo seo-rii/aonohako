@@ -2826,6 +2826,33 @@ AF_INET SOCK_STREAM 0 socket dup -1 =
 				},
 			},
 		},
+		"guile": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "GUILE",
+				expectedStdout: expectedProcessNetwork,
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.scm", `(define process-blocked?
+  (catch #t
+    (lambda () (not (zero? (system "/bin/true"))))
+    (lambda arguments #t)))
+(define network-blocked?
+  (catch #t
+    (lambda ()
+      (let ((port (socket AF_INET SOCK_STREAM 0)))
+        (close-port port)
+        #f))
+    (lambda arguments #t)))
+(display "process:")
+(display (if process-blocked? "blocked" "leaked"))
+(newline)
+(display "network:")
+(display (if network-blocked? "blocked" "leaked"))
+(newline)`),
+				},
+			},
+		},
 		"java": {
 			{
 				name:           "process-and-network-denies",
@@ -4273,6 +4300,15 @@ s/^7[[:space:]][[:space:]]*13$/20/`),
 			sources: []model.Source{
 				source("Main.scm", `(import (chezscheme))
 (display (+ (read) (read)))
+(newline)`),
+			},
+		},
+		"guile": {
+			compileLang: "GUILE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.scm", `(display (+ (read) (read)))
 (newline)`),
 			},
 		},

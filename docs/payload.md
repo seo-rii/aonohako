@@ -517,6 +517,7 @@ The interactor is invoked as:
 | CLOJURE | `clojure` | `clojure` reader parse loop |
 | RACKET | `racket` | `raco make` |
 | CHEZ_SCHEME | `chez-scheme` | trusted immutable Chez reader loop through EOF; no top-level evaluation |
+| GUILE | `guile` | trusted immutable Guile reader loop through EOF with automatic compilation disabled |
 | TCL | `tcl` | Pass-through artifacts (requires at least one `.tcl`) |
 | PYTHON3 | `python` | `python3 -I -S -m compileall` |
 | PYPY3 | `pypy` | `pypy3 -I -S -m compileall` |
@@ -625,6 +626,7 @@ The interactor is invoked as:
 | `racket` | `racket <file>` |
 | `scheme` | `chibi-scheme <file>` |
 | `chez-scheme` | `/usr/bin/chezscheme --quiet --script <file>` |
+| `guile` | `GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s <file>` |
 | `assemblyscript` | bounded `wasmtime run <file>` without filesystem preopens |
 | `factor` | `/opt/factor/factor -no-user-init -no-signals -q <bounded stack flags> <file>` with immutable system vocabulary roots only |
 | `awk` | `gawk --sandbox -f <file>` |

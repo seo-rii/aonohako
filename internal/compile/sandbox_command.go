@@ -136,7 +136,7 @@ func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, arg
 	isDotnetLike := isDotnet || commandName == "dafny"
 	isPowerShell := commandName == "pwsh"
 	isIsabelle := commandName == "isabelle"
-	isSyntaxOnlySchemeReader := commandName == "chezscheme"
+	isSyntaxOnlySchemeReader := commandName == "chezscheme" || commandName == "guile-3.0"
 	runtimeState, err := security.AcquireRuntimeState(workDir, commandName, 65532, 65532)
 	if err != nil {
 		return "", "", model.CompileStatusInternal, "runtime state preparation failed: " + err.Error()

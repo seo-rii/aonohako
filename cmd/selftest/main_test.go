@@ -246,6 +246,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"assemblyscript",
 		"factor",
 		"chez-scheme",
+		"guile",
 		"java",
 		"ruby",
 		"perl",

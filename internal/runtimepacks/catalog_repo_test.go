@@ -23,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -163,6 +163,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-golfscript",
 		"ci-graphql",
 		"ci-groovy",
+		"ci-guile",
 		"ci-hare",
 		"ci-haskell",
 		"ci-haxe",
@@ -337,6 +338,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"gnucobol":      {"gnucobol", "cobc -x -free -O2 -o Main Main.cob"},
 		"golfscript":    {"golfscript_sandboxed.rb", "Main.gs"},
 		"graphql":       {"graphql-core==3.2.6", "aonohako-graphql-run Main.graphql"},
+		"guile":         {"guile-3.0=3.0.10+really3.0.10-4", "guile-3.0-libs=3.0.10+really3.0.10-4", "guile_check.scm", "GUILE_AUTO_COMPILE=0", "--no-auto-compile --no-debug -q -s", "aonohako-guile-compile-leak", "test ! -e aonohako-guile-compile-leak", "Broken.scm"},
 		"fstar":         {"FSTAR_VERSION=2026.06.28", "fstar-v${FSTAR_VERSION}-Linux-x86_64.tar.gz", "fstar.exe Main.fst", "Lemma (1 + 1 == 2)"},
 		"hare":          {"hare build -o Main Main.ha", "fmt::println"},
 		"idris2":        {"IDRIS2_VERSION=0.8.0", "make bootstrap SCHEME=chezscheme PREFIX=/usr/local", "idris2 --cg chez -o Main Main.idr", "test -d build/exec/Main_app"},
@@ -700,6 +702,32 @@ func TestChezSchemeReaderHelperNeverRunsSubmittedTopLevelForms(t *testing.T) {
 	}
 	if !strings.Contains(string(dockerfile), "scripts/chez_scheme_check.scm /usr/local/lib/aonohako/chez_scheme_check.scm") {
 		t.Fatal("runtime Dockerfile must install the trusted Chez Scheme reader helper")
+	}
+}
+
+func TestGuileReaderHelperNeverRunsSubmittedTopLevelForms(t *testing.T) {
+	helper, err := os.ReadFile(filepath.Join("..", "..", "scripts", "guile_check.scm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(helper)
+	for _, marker := range []string{"call-with-input-file", "read port", "eof-object?"} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("Guile reader helper must contain %q: %s", marker, body)
+		}
+	}
+	for _, forbidden := range []string{"load", "eval", "system"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Guile reader helper must not contain %q: %s", forbidden, body)
+		}
+	}
+
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "docker", "runtime.Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "scripts/guile_check.scm /usr/local/lib/aonohako/guile_check.scm") {
+		t.Fatal("runtime Dockerfile must install the trusted Guile reader helper")
 	}
 }
 
