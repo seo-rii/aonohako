@@ -375,6 +375,8 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"forth":         {compileKind: "forth", runLang: "forth"},
 		"gforth":        {compileKind: "forth", runLang: "forth"},
 		"factor":        {compileKind: "factor", runLang: "factor"},
+		"lua54":         {compileKind: "lua", runLang: "lua"},
+		"lua5.4":        {compileKind: "lua", runLang: "lua"},
 	}
 	tests["chicken"] = struct {
 		compileKind string

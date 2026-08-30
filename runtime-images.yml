@@ -827,10 +827,13 @@ languages:
   lua:
     install:
       apt:
-        - lua5.4
+        - lua5.4=5.4.7-1+b2
+      script:
+        - test "$(dpkg-query -W -f='${Version}' lua5.4)" = 5.4.7-1+b2
     smoke:
       command:
         - lua5.4
+        - -E
         - -e
         - |
           local f = assert(io.open("same-folder.txt", "w"))

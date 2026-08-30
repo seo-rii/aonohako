@@ -147,6 +147,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"CSHARP",
 		"R",
 		"LUA",
+		"LUA54",
 		"PERL",
 		"VB6",
 		"ELM",
@@ -313,6 +314,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"RAKU":         "raku",
 		"PHP7":         "php",
 		"PHP8":         "php",
+		"LUA54":        "lua",
 		"SED":          "sed",
 		"BC":           "bc",
 		"FORTH":        "forth",
@@ -375,6 +377,20 @@ func TestGNUPrologProfileCompilesNativeExecutable(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 128 {
 		t.Fatalf("GNU_PROLOG resource profile = %+v", profile)
+	}
+}
+
+func TestLua54ProfileAliasesExistingLuaRuntime(t *testing.T) {
+	base, baseOK := Resolve("LUA")
+	alias, aliasOK := Resolve("LUA54")
+	if !baseOK || !aliasOK {
+		t.Fatalf("Lua profiles resolved: LUA=%t LUA54=%t", baseOK, aliasOK)
+	}
+	if alias.SourceLang != "LUA54" || alias.Extension != base.Extension || alias.CompileKind != base.CompileKind || alias.RunLang != base.RunLang {
+		t.Fatalf("LUA54 profile = %+v, base LUA = %+v", alias, base)
+	}
+	if alias.TimeMultiplier != base.TimeMultiplier || alias.TimeOffsetMs != base.TimeOffsetMs || alias.MemoryMultiplier != base.MemoryMultiplier || alias.MemoryOffsetMB != base.MemoryOffsetMB {
+		t.Fatalf("LUA54 resources = %+v, base LUA = %+v", alias, base)
 	}
 }
 
