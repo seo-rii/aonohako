@@ -155,6 +155,8 @@ func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, arg
 	// because lower file-size rlimits can break CoreCLR/F# startup before user code.
 	disableAddressSpaceLimit := isDotnetLike || isPowerShell || commandName == "aonohako-acl2-check" || commandName == "aonohako-alloy-check" || commandName == "aonohako-assemblyscript-compile" || commandName == "aonohako-kframework-check" || commandName == "c3c" || commandName == "carbon" || commandName == "fstar.exe" || commandName == "kotlinc" || commandName == "kompile" || commandName == "spago" || isIsabelle
 	allowProcessGroups := commandName == "aonohako-kframework-check" || commandName == "swiftc" || commandName == "hare" || commandName == "kompile" || isIsabelle
+	allowProcesses := commandName != "aonohako-assemblyscript-compile"
+	allowUnixSockets := commandName != "aonohako-assemblyscript-compile"
 	allowChmod := isDotnetLike || commandName == "aonohako-kframework-check" || commandName == "apecc" || commandName == "gleam" || commandName == "hare" || commandName == "idris2" || commandName == "kompile" || commandName == "rescript" || commandName == "zero" || isIsabelle
 	allowExecveat := commandName == "hare"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
@@ -186,11 +188,11 @@ func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, arg
 		AddressSpaceLimitBytes:   addressSpaceLimit,
 		FileSizeLimitBytes:       security.FileSizeLimitForCommand(command[0], compileWorkspaceBytes),
 		EnableNetwork:            false,
-		AllowUnixSockets:         true,
+		AllowUnixSockets:         allowUnixSockets,
 		AllowSocketBind:          isIsabelle,
 		AllowSocketConnect:       isIsabelle,
 		AllowSocketServer:        isIsabelle,
-		AllowProcesses:           true,
+		AllowProcesses:           allowProcesses,
 		AllowProcessGroups:       allowProcessGroups,
 		AllowThreadSignals:       isDotnetLike,
 		AllowMemfdCreate:         isDotnetLike || isIsabelle,

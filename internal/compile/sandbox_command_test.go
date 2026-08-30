@@ -93,7 +93,10 @@ func TestAssemblyScriptCompilerGetsOnlyAddressSpaceCompatibilityException(t *tes
 	body := string(raw)
 	for _, marker := range []string{
 		`commandName == "aonohako-assemblyscript-compile"`,
-		`AllowProcesses:           true`,
+		`allowProcesses := commandName != "aonohako-assemblyscript-compile"`,
+		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile"`,
+		`AllowProcesses:           allowProcesses`,
+		`AllowUnixSockets:         allowUnixSockets`,
 		`AllowThreadSignals:       isDotnetLike`,
 		`AllowMemfdCreate:         isDotnetLike || isIsabelle`,
 		`AllowNumaPolicy:          isDotnetLike || isIsabelle`,
