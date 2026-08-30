@@ -36,6 +36,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"ZIG",
 		"SCHEME",
 		"CHEZ_SCHEME",
+		"GUILE",
 		"AWK",
 		"TCL",
 		"GDL",
@@ -302,6 +303,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	tests["ASSEMBLYSCRIPT"] = "assemblyscript"
 	tests["FACTOR"] = "factor"
 	tests["CHEZ_SCHEME"] = "chez-scheme"
+	tests["GUILE"] = "guile"
 
 	for input, want := range tests {
 		if got := NormalizeRunLang(input); got != want {
@@ -336,6 +338,19 @@ func TestChezSchemeProfileUsesDedicatedReaderAndRuntime(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("CHEZ_SCHEME resource profile = %+v", profile)
+	}
+}
+
+func TestGuileProfileUsesDedicatedReaderAndRuntime(t *testing.T) {
+	profile, ok := Resolve("GUILE")
+	if !ok {
+		t.Fatal("Resolve(GUILE) reported unsupported language")
+	}
+	if profile.Extension != "scm" || profile.CompileKind != "guile" || profile.RunLang != "guile" {
+		t.Fatalf("GUILE profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("GUILE resource profile = %+v", profile)
 	}
 }
 

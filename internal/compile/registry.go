@@ -3,6 +3,7 @@ package compile
 const (
 	asCompileKind         = "assemblyscript"
 	chezSchemeCompileKind = "chez-scheme"
+	guileCompileKind      = "guile"
 )
 
 var compileRegistry = map[string]Compiler{
@@ -44,6 +45,13 @@ var compileRegistry = map[string]Compiler{
 		noSourceReason: "no Chez Scheme sources",
 		bin:            "/usr/bin/chezscheme",
 		prefix:         []string{"--quiet", "--script", "/usr/local/lib/aonohako/chez_scheme_check.scm"},
+	},
+	guileCompileKind: checkedSourcesCompiler{
+		exts:           []string{".scm"},
+		noSourceReason: "no Guile sources",
+		bin:            "/usr/bin/guile-3.0",
+		prefix:         []string{"--no-auto-compile", "--no-debug", "-q", "-s", "/usr/local/lib/aonohako/guile_check.scm"},
+		env:            []string{"GUILE_AUTO_COMPILE=0"},
 	},
 	"awk":     checkedSourcesCompiler{exts: []string{".awk"}, noSourceReason: "no awk sources", bin: "gawk", prefix: []string{"--sandbox", "--lint", "-f"}},
 	"tcl":     passThroughCompiler{exts: []string{".tcl"}, noSourceReason: "no tcl sources"},

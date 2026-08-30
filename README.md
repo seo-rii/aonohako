@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme, Mercury, Prolog,
+  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -91,6 +91,11 @@ language-specific commands keep their declared order.
   immutable reader helper that consumes every form through EOF without loading
   or evaluating submitted top-level code; execution uses Chez's script mode.
   Neither phase receives a process or socket sandbox exception.
+- GNU Guile is pinned to Debian trixie's `guile-3.0` and `guile-3.0-libs`
+  `3.0.10+really3.0.10-4` packages under the `GUILE` contract. Its immutable
+  reader helper validates every form through EOF without evaluating top-level
+  code, while compile and runtime commands disable automatic compilation.
+  Reader compilation receives no process or socket sandbox exception.
 - MoonBit is pinned to the official `moonc 0.10.9+6e6c44045` Linux x64
   toolchain and its matching core snapshot. Both archives are checksum-verified;
   submission builds synthesize a dependency-free module and use a single-job,
