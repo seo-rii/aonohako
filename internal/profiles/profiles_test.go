@@ -127,6 +127,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"LOLCODE",
 		"APECODE",
 		"WASM",
+		"ASSEMBLYSCRIPT",
 		"OCAML",
 		"ELIXIR",
 		"COFFEESCRIPT",
@@ -296,6 +297,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"FORTH":        "forth",
 		"GFORTH":       "forth",
 	}
+	tests["ASSEMBLYSCRIPT"] = "assemblyscript"
 
 	for input, want := range tests {
 		if got := NormalizeRunLang(input); got != want {
@@ -304,6 +306,19 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	}
 	if got := NormalizeRunLang("chapel-binary"); got != "chapel-binary" {
 		t.Fatalf("NormalizeRunLang(chapel-binary) = %q, want chapel-binary", got)
+	}
+}
+
+func TestAssemblyScriptProfileCompilesToIsolatedWASIArtifact(t *testing.T) {
+	profile, ok := Resolve("ASSEMBLYSCRIPT")
+	if !ok {
+		t.Fatal("Resolve(ASSEMBLYSCRIPT) reported unsupported language")
+	}
+	if profile.Extension != "ts" || profile.DefaultTarget != "Main.wasm" || profile.CompileKind != "assemblyscript" || profile.RunLang != "assemblyscript" {
+		t.Fatalf("ASSEMBLYSCRIPT profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 128 {
+		t.Fatalf("ASSEMBLYSCRIPT resource profile = %+v", profile)
 	}
 }
 

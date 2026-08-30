@@ -454,6 +454,28 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"-W", "trap-on-grow-failure=y",
 			primaryPath,
 		}
+	case "assemblyscript":
+		limitMB := max(16, req.Limits.MemoryMB)
+		guestMemoryMB := max(1, limitMB-64)
+		if limitMB <= 128 {
+			guestMemoryMB = max(1, limitMB/2)
+		}
+		guestMemoryBytes := int64(guestMemoryMB) * 1024 * 1024
+		return []string{
+			"wasmtime",
+			"run",
+			"-O", fmt.Sprintf("memory-reservation=%d", guestMemoryBytes),
+			"-O", "memory-reservation-for-growth=0",
+			"-O", fmt.Sprintf("memory-guard-size=%d", tuning.WasmtimeMemoryGuardBytes),
+			"-W", fmt.Sprintf("max-memory-size=%d", guestMemoryBytes),
+			"-W", "max-memories=1",
+			"-W", "max-instances=1",
+			"-W", "max-tables=1",
+			"-W", "max-table-elements=65536",
+			"-W", fmt.Sprintf("max-wasm-stack=%d", tuning.WasmtimeMaxWasmStackBytes),
+			"-W", "trap-on-grow-failure=y",
+			primaryPath,
+		}
 	case "text":
 		return []string{"cat", primaryPath}
 	default:

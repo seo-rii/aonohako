@@ -187,9 +187,13 @@ if has_language "picolisp"; then
     report_once "PicoLisp" pil -version -bye
 fi
 
-if has_language "javascript" || has_language "typescript" || has_language "coffeescript" || has_language "elm" || has_language "rescript" || has_language "purescript"; then
+if has_language "assemblyscript" || has_language "javascript" || has_language "typescript" || has_language "coffeescript" || has_language "elm" || has_language "rescript" || has_language "purescript"; then
     report_once "Node.js" node --version
     report_once "npm" npm --version
+fi
+
+if has_language "assemblyscript"; then
+    report_once "AssemblyScript" asc --version
 fi
 
 if has_language "typescript"; then
@@ -622,7 +626,7 @@ if has_language "janet"; then
     report_once "Janet" janet -v
 fi
 
-if has_language "wasm"; then
+if has_language "assemblyscript" || has_language "wasm"; then
     report_once "Wasmtime" wasmtime --version
 fi
 
@@ -647,6 +651,7 @@ report_compile_option "groovy" "groovyc -d <workdir>"
 report_compile_option "scala" "scalac -d <workdir>"
 report_compile_option "clojure" "clojure reader parse check"
 report_compile_option "javascript" "node --check"
+report_compile_option "assemblyscript" "aonohako-assemblyscript-compile <source.ts> <target.wasm>; wasm-validate <target.wasm>; run with bounded Wasmtime and no filesystem preopens"
 report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"
 report_compile_option "coffeescript" "coffee --compile --bare --output <workdir>"
 report_compile_option "rescript" "rescript build"

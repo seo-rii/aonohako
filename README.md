@@ -60,7 +60,7 @@ language-specific commands keep their declared order.
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
-  Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
+  Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, MoonBit, Fennel, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
@@ -75,6 +75,11 @@ language-specific commands keep their declared order.
   with the `release-fast` profile. Its stable source projection does not yet
   expose a stdin contract, so runtime smoke coverage currently uses fixed
   output while still exercising import, validation, compilation, and execution.
+- AssemblyScript is pinned to 0.28.20 with the official WASI shim 0.1.0 and
+  checksum-verified compiler, shim, Binaryen, and Long npm archives. A trusted
+  wrapper resolves the shim from its immutable installation directory, emits a
+  validated Wasm command artifact, and executes it with Wasmtime's bounded
+  memory/table/instance policy without preopening the submission directory.
 - MoonBit is pinned to the official `moonc 0.10.9+6e6c44045` Linux x64
   toolchain and its matching core snapshot. Both archives are checksum-verified;
   submission builds synthesize a dependency-free module and use a single-job,

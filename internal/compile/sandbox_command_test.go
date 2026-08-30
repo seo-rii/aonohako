@@ -85,6 +85,28 @@ func TestPowerShellParserGetsOnlyAddressSpaceCompatibilityException(t *testing.T
 	}
 }
 
+func TestAssemblyScriptCompilerGetsOnlyAddressSpaceCompatibilityException(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_command.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`commandName == "aonohako-assemblyscript-compile"`,
+		`allowProcesses := commandName != "aonohako-assemblyscript-compile"`,
+		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile"`,
+		`AllowProcesses:           allowProcesses`,
+		`AllowUnixSockets:         allowUnixSockets`,
+		`AllowThreadSignals:       isDotnetLike`,
+		`AllowMemfdCreate:         isDotnetLike || isIsabelle`,
+		`AllowNumaPolicy:          isDotnetLike || isIsabelle`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("AssemblyScript compile sandbox contract must contain %q", marker)
+		}
+	}
+}
+
 func TestClassifyCompileWaitStatusTreatsCompilerSignalAsInternal(t *testing.T) {
 	for _, signal := range []syscall.Signal{
 		syscall.SIGABRT,

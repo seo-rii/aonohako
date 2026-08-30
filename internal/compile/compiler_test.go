@@ -52,12 +52,52 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestAssemblyScriptCompilerUsesPinnedWASIWrapperAndValidatesArtifact(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.ts"), []byte("console.log('ok');\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(_ string, bin string, args, _ []string) {
+			if bin != "aonohako-assemblyscript-compile" {
+				return
+			}
+			if err := os.WriteFile(args[1], []byte("wasm"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	resp := assemblyScriptCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main.wasm",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.ts"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.wasm" || resp.Artifacts[0].Mode != "" {
+		t.Fatalf("response = %+v", resp)
+	}
+	if len(runner.commands) != 2 {
+		t.Fatalf("commands = %+v", runner.commands)
+	}
+	compileCommand := runner.commands[0]
+	wantCompileArgs := []string{filepath.Join(workDir, "Main.ts"), filepath.Join(workDir, "Main.wasm")}
+	if compileCommand.bin != "aonohako-assemblyscript-compile" || !reflect.DeepEqual(compileCommand.args, wantCompileArgs) {
+		t.Fatalf("compile command = %+v, want wrapper %#v", compileCommand, wantCompileArgs)
+	}
+	validateCommand := runner.commands[1]
+	if validateCommand.bin != "wasm-validate" || !reflect.DeepEqual(validateCommand.args, []string{filepath.Join(workDir, "Main.wasm")}) {
+		t.Fatalf("validate command = %+v", validateCommand)
 	}
 }
 

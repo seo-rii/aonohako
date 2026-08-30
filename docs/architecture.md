@@ -929,7 +929,7 @@ Production profiles currently group languages like this:
 | Profile | Languages |
 | --- | --- |
 | `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `golfscript`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
-| `type-b` | `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
+| `type-b` | `assemblyscript`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
@@ -955,6 +955,14 @@ The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
 links it with that trusted Core set into a native executable; execution then
 uses the ordinary `binary` sandbox contract rather than rerunning the compiler.
+
+The `ASSEMBLYSCRIPT` profile uses checksum-verified AssemblyScript 0.28.20,
+its official WASI shim 0.1.0, and the shared Wasmtime 44.0.0 runtime. The shim's
+relative library path is resolved by a fixed-argv trusted wrapper from the
+immutable shim directory; compilation then validates the emitted Wasm artifact.
+Execution uses the same bounded Wasmtime memory, table, instance, and stack
+limits as `WASM`, but deliberately omits `--dir=.` so submitted AssemblyScript
+cannot receive a filesystem preopen.
 
 The `MOONBIT` profile uses the checksum-pinned native toolchain and matching
 core snapshot. The compiler replaces submission manifests with a fixed,

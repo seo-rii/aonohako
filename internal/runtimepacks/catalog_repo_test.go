@@ -26,7 +26,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
 	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
@@ -114,6 +114,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-apecode",
 		"ci-apl",
 		"ci-asm",
+		"ci-assemblyscript",
 		"ci-awk",
 		"ci-bash",
 		"ci-bc",
@@ -402,6 +403,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"typescript": {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js"},
 		"wasm":       {"-W max-memory-size=33554432", "-W max-wasm-stack=1048576", "-W trap-on-grow-failure=y"},
 	}
+	tests["assemblyscript"] = []string{"ASSEMBLYSCRIPT_VERSION=0.28.20", "ASSEMBLYSCRIPT_SHA256=26696c1bbb716bd85a0fbd38c7efbda186c83bc648ba4f78369d432081b4b1cb", "ASSEMBLYSCRIPT_WASI_SHIM_SHA256=e8b4410255e6f86cb96c2ce1d191fa9a6b45d274f0f506c4132e8075634ea005", "BINARYEN_SHA256=ed375d90d259924799147788d66ed70ce6e65454b69df577e09f2c4d17c00f6c", "LONG_SHA256=68033e466773df7d52c9e59341bb729d83716cd920c56460395724456d646b26", "npm install --global --offline --ignore-scripts", "aonohako-assemblyscript-compile", "wasm-validate Main.wasm", "wasmtime run", "Broken.ts"}
 
 	for language, patterns := range tests {
 		spec, ok := ciByLanguage[language]
@@ -609,6 +611,36 @@ func TestRepositoryCatalogPinsAndHardensFennelAOT(t *testing.T) {
 		if !strings.Contains(string(dockerfile), marker) {
 			t.Fatalf("runtime Dockerfile must contain %q", marker)
 		}
+	}
+}
+
+func TestAssemblyScriptCompilerBypassesAscProcessRespawn(t *testing.T) {
+	helper, err := os.ReadFile(filepath.Join("..", "..", "scripts", "assemblyscript_compile.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(helper)
+	for _, marker := range []string{
+		"exec /usr/local/bin/node",
+		"--enable-source-maps",
+		"/usr/local/lib/node_modules/assemblyscript/bin/asc.js",
+		"cd /usr/local/lib/node_modules/@assemblyscript/wasi-shim",
+		"--outFile \"${target_path}\"",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("AssemblyScript compiler helper must contain %q:\n%s", marker, body)
+		}
+	}
+	if strings.Contains(body, "exec /usr/local/bin/asc") {
+		t.Fatalf("AssemblyScript compiler helper must bypass asc's process-spawning launcher:\n%s", body)
+	}
+
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "docker", "runtime.Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "scripts/assemblyscript_compile.sh /usr/local/bin/aonohako-assemblyscript-compile") {
+		t.Fatal("runtime Dockerfile must install the trusted AssemblyScript compiler helper")
 	}
 }
 
@@ -1093,7 +1125,9 @@ func TestRepositoryCatalogPinsOfficialNode24Toolchain(t *testing.T) {
 	installScript := strings.Join(nodeInstall.Script, "\n")
 	for _, marker := range []string{
 		"export NODE_VERSION=24.15.0",
+		"export NODE_SHA256=472655581fb851559730c48763e0c9d3bc25975c59d518003fc0849d3e4ba0f6",
 		"https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz",
+		"sha256sum -c -",
 		`ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/node" /usr/local/bin/node`,
 		`ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm`,
 	} {
@@ -1102,7 +1136,7 @@ func TestRepositoryCatalogPinsOfficialNode24Toolchain(t *testing.T) {
 		}
 	}
 
-	for _, language := range []string{"apl", "javascript", "purescript", "rescript", "typescript"} {
+	for _, language := range []string{"apl", "assemblyscript", "javascript", "purescript", "rescript", "typescript"} {
 		spec, ok := catalog.Languages[language]
 		if !ok {
 			t.Fatalf("%s language missing from catalog", language)
@@ -1246,7 +1280,7 @@ func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
 	if strings.Contains(nimScriptBody, "ln -sfn /root/.nimble/bin/") {
 		t.Fatalf("nim install script must not leave /usr/local/bin symlinked into /root/.nimble/bin")
 	}
-	wasmScriptBody := strings.Join(catalog.Languages["wasm"].Install.Script, "\n")
+	wasmScriptBody := strings.Join(catalog.SharedInstalls["wasmtime44"].Script, "\n")
 	if !strings.Contains(wasmScriptBody, "WASMTIME_VERSION=44.0.0") {
 		t.Fatalf("wasm install script must pin wasmtime version")
 	}
@@ -1258,6 +1292,14 @@ func TestRepositoryCatalogKeepsKotlinCIJavaRuntime(t *testing.T) {
 	}
 	if strings.Contains(wasmScriptBody, "ln -sfn /root/.wasmtime/bin/wasmtime") {
 		t.Fatalf("wasm install script must not leave /usr/local/bin symlinked into /root/.wasmtime/bin")
+	}
+	if !strings.Contains(wasmScriptBody, "WASMTIME_SHA256=52eba06fe9f4364aa6164a4a3eafb2ca692ba9a756cbe8137b5574871f8cbfc8") || !strings.Contains(wasmScriptBody, "sha256sum -c -") {
+		t.Fatalf("shared Wasmtime install must verify the pinned release archive")
+	}
+	for _, language := range []string{"assemblyscript", "wasm"} {
+		if !slices.Contains(catalog.Languages[language].Install.Shared, "wasmtime44") {
+			t.Fatalf("%s must reuse the shared Wasmtime install", language)
+		}
 	}
 
 	ci, err := catalog.CILanguageImages()
