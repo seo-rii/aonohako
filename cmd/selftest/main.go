@@ -2805,6 +2805,7 @@ AF_INET SOCK_STREAM 0 socket dup -1 =
 				limits:         managedLimits,
 				sources: []model.Source{
 					source("Main.scm", `(import (chezscheme))
+(load-shared-object "libc.so.6")
 (define socket-call (foreign-procedure "socket" (int int int) int))
 (define close-call (foreign-procedure "close" (int) int))
 (define process-blocked?
