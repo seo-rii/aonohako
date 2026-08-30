@@ -229,6 +229,19 @@ func TestStrictRuntimeMemoryCasesCoverNativeAndScriptRuntimes(t *testing.T) {
 	}
 }
 
+func TestMemoryLimitVerdictSourcesIncludeRuntimeReportedOOM(t *testing.T) {
+	for _, source := range []string{"memory_rss", "memory_reported", "address_space", "runtime_memory"} {
+		if !isMemoryLimitVerdictSource(source) {
+			t.Fatalf("memory verdict source %q was rejected", source)
+		}
+	}
+	for _, source := range []string{"", "cpu_time", "wall_time", "exit_code"} {
+		if isMemoryLimitVerdictSource(source) {
+			t.Fatalf("non-memory verdict source %q was accepted", source)
+		}
+	}
+}
+
 func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 	cases := languageSecurityCases(1, "")
 	for _, language := range []string{

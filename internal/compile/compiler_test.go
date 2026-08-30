@@ -338,8 +338,7 @@ func TestQuickJSCompilerEmitsOnlyDiscardedCBytecode(t *testing.T) {
 	if len(runner.commands) != 1 {
 		t.Fatalf("QuickJS commands = %+v", runner.commands)
 	}
-	checkPath := filepath.Join(workDir, ".cache", "quickjs", "check.c")
-	wantArgs := []string{"-s", "-c", "-o", checkPath, filepath.Join(workDir, "Main.js")}
+	wantArgs := []string{"-s", "-c", "-o", os.DevNull, filepath.Join(workDir, "Main.js")}
 	if got := runner.commands[0]; got.bin != "qjsc" || !reflect.DeepEqual(got.args, wantArgs) || len(got.env) != 0 {
 		t.Fatalf("QuickJS command = %+v, want qjsc %#v", got, wantArgs)
 	}

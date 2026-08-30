@@ -3881,8 +3881,12 @@ languages:
         - strip /usr/local/bin/qjs /usr/local/bin/qjsc
         - for binary in qjs qjsc; do if nm -D "/usr/local/bin/${binary}" | grep -Eq ' (dlopen|dlsym|dlclose)@'; then exit 1; fi; done
         - rm -rf /tmp/quickjs-src /tmp/quickjs.tar.xz
-        - qjs --help 2>&1 | grep 'QuickJS version 2026-06-04'
-        - qjsc --help 2>&1 | grep 'QuickJS Compiler version 2026-06-04'
+        - qjs_status=0; qjs_help="$(qjs --help 2>&1)" || qjs_status=$?
+        - test "${qjs_status}" -eq 0 || test "${qjs_status}" -eq 1
+        - grep -Fqx "QuickJS version ${QUICKJS_VERSION}" <<<"${qjs_help}"
+        - qjsc_status=0; qjsc_help="$(qjsc --help 2>&1)" || qjsc_status=$?
+        - test "${qjsc_status}" -eq 0 || test "${qjsc_status}" -eq 1
+        - grep -Fqx "QuickJS Compiler version ${QUICKJS_VERSION}" <<<"${qjsc_help}"
     smoke:
       command:
         - bash

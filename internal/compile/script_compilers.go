@@ -656,14 +656,10 @@ func (denoCompiler) Compile(ctx context.Context, job CompileJob) model.CompileRe
 type quickJSCompiler struct{}
 
 func (quickJSCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
-	checkDir := filepath.Join(job.WorkDir, ".cache", "quickjs")
-	if err := os.MkdirAll(checkDir, 0o700); err != nil {
-		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "prepare QuickJS check directory: " + err.Error()}
-	}
 	return checkedSourcesCompiler{
 		exts:           []string{".js"},
 		noSourceReason: "no QuickJS sources",
 		bin:            "qjsc",
-		prefix:         []string{"-s", "-c", "-o", filepath.Join(checkDir, "check.c")},
+		prefix:         []string{"-s", "-c", "-o", os.DevNull},
 	}.Compile(ctx, job)
 }
