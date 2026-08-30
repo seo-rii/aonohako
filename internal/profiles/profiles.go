@@ -131,6 +131,7 @@ var profiles = map[string]Profile{
 	"IDRIS2":        {SourceLang: "IDRIS2", Extension: "idr", DefaultTarget: "Main", CompileKind: "idris2", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"SML":           {SourceLang: "SML", Extension: "sml", DefaultTarget: "Main", CompileKind: "sml", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"MLTON":         {SourceLang: "MLTON", Extension: "sml", DefaultTarget: "Main", CompileKind: "sml", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
+	"SMLNJ":         {SourceLang: "SMLNJ", Extension: "sml", CompileKind: "smlnj", RunLang: "smlnj", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"HAXE":          {SourceLang: "HAXE", Extension: "hx", DefaultTarget: "Main.n", CompileKind: "haxe", RunLang: "haxe", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LISP":          {SourceLang: "LISP", Extension: "lisp", CompileKind: "lisp", RunLang: "lisp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PICOLISP":      {SourceLang: "PICOLISP", Extension: "l", CompileKind: "picolisp", RunLang: "picolisp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
@@ -229,7 +230,7 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
-	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
+	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
 		return key
 	case "chez", "chezscheme", "chez_scheme":
 		return "chez-scheme"
@@ -255,6 +256,8 @@ func NormalizeRunLang(language string) string {
 		return "binary"
 	case "mlton":
 		return "binary"
+	case "sml-nj", "sml/nj":
+		return "smlnj"
 	case "lol":
 		return "lolcode"
 	case "befunge93", "befunge-93", "bf93":

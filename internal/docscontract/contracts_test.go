@@ -33,6 +33,15 @@ func TestReadmeDocumentsExplicitMLtonSelection(t *testing.T) {
 	}
 }
 
+func TestReadmeDocumentsSMLNJRunnerContract(t *testing.T) {
+	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
+	for _, want := range []string{"`SMLNJ` selects SML/NJ 110.99.9", "three official bootstrap archives", "installed with `-nolib`", "network supplementation is", "Compile is source pass-through", "native runtime", "trusted heap", "syntax-error failure"} {
+		if !strings.Contains(readme, want) {
+			t.Fatalf("README.md missing SML/NJ contract %q", want)
+		}
+	}
+}
+
 func TestManualLimitReferencesMatchCodeConstants(t *testing.T) {
 	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
 	payload := mustRead(t, filepath.Join("..", "..", "docs", "payload.md"))

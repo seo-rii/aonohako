@@ -129,6 +129,13 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"/usr/bin/chezscheme", "--quiet", "--script", primaryPath}
 	case "guile":
 		return []string{"env", "GUILE_AUTO_COMPILE=0", "/usr/bin/guile-3.0", "--no-auto-compile", "--no-debug", "-q", "-s", primaryPath}
+	case "smlnj":
+		return []string{
+			"/opt/smlnj/bin/.run/run.amd64-linux",
+			"@SMLquiet",
+			"@SMLload=/usr/local/lib/aonohako/smlnj-run",
+			primaryPath,
+		}
 	case "awk":
 		return []string{"gawk", "--sandbox", "-f", primaryPath}
 	case "tcl":

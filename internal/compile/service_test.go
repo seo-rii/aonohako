@@ -280,6 +280,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"idris2":        {compileKind: "idris2", runLang: "binary"},
 		"sml":           {compileKind: "sml", runLang: "binary"},
 		"mlton":         {compileKind: "sml", runLang: "binary"},
+		"smlnj":         {compileKind: "smlnj", runLang: "smlnj"},
 		"haxe":          {compileKind: "haxe", runLang: "haxe"},
 		"swift":         {compileKind: "swift", runLang: "binary"},
 		"sqlite":        {compileKind: "sqlite", runLang: "sqlite"},
@@ -440,6 +441,8 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"kotlin_java":     "kotlin-jvm",
 		"standard-ml":     "sml",
 		"mlton":           "sml",
+		"sml-nj":          "smlnj",
+		"sml/nj":          "smlnj",
 		"zero":            "zerolang",
 		"a68":             "algol68",
 	}

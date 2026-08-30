@@ -61,7 +61,7 @@ language-specific commands keep their declared order.
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
-  Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML/MLton, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
+  Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
@@ -78,6 +78,11 @@ language-specific commands keep their declared order.
 - `SML` remains the compatibility selection for Standard ML and `MLTON` is the
   explicit MLton selection. Both compile with the same MLton 20241230
   toolchain and share one installation in the production runtime pack.
+- `SMLNJ` selects SML/NJ 110.99.9. Its three official bootstrap archives are
+  checksum-pinned and installed with `-nolib` while network supplementation is
+  disabled. Compile is source pass-through; execution calls the native runtime
+  directly with an image-built trusted heap that hides prompts and successful
+  top-level diagnostics while preserving user stdout and syntax-error failure.
 - AssemblyScript is pinned to 0.28.20 with the official WASI shim 0.1.0 and
   checksum-verified compiler, shim, Binaryen, and Long npm archives. A trusted
   wrapper resolves the shim from its immutable installation directory, emits a

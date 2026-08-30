@@ -33,6 +33,7 @@ var compileRegistry = map[string]Compiler{
 	"sml": singleSourceExecutableCompiler{exts: []string{".sml"}, preferredBases: []string{"Main.sml"}, noSourceReason: "no sml sources", bin: "mlton", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"-output", outputPath(job), sourcePath}
 	}},
+	"smlnj":   passThroughCompiler{exts: []string{".sml"}, noSourceReason: "no sml/nj sources"},
 	"idris2":  idris2Compiler{},
 	"rust":    rustCompiler{},
 	"go":      goCompiler{},

@@ -44,7 +44,7 @@ func (r *recordingCommandRunner) Run(_ context.Context, workDir, bin string, arg
 func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	for _, kind := range []string{
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
-		"pascal", "delphi", "objectpascal", "nim", "zig", "sml", "idris2", "ada", "d",
+		"pascal", "delphi", "objectpascal", "nim", "zig", "sml", "smlnj", "idris2", "ada", "d",
 		"rust", "go", "java", "groovy", "clojure",
 		"scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
@@ -135,6 +135,24 @@ func TestMLtonCompilerRejectsInvalidSyntaxWithFixedCommand(t *testing.T) {
 	wantArgs := []string{"-output", filepath.Join(workDir, "Main"), filepath.Join(workDir, "Main.sml")}
 	if len(runner.commands) != 1 || runner.commands[0].bin != "mlton" || !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
 		t.Fatalf("MLton command = %+v, want mlton %#v", runner.commands, wantArgs)
+	}
+}
+
+func TestSMLNJCompilerPassesInvalidSyntaxToTrustedRuntime(t *testing.T) {
+	compiler, ok := compileRegistry["smlnj"].(passThroughCompiler)
+	if !ok {
+		t.Fatalf("smlnj compiler = %T, want passThroughCompiler", compileRegistry["smlnj"])
+	}
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.sml"), []byte("val _ = print (\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resp := compiler.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.sml"}}},
+	})
+	if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.sml" || resp.Artifacts[0].Mode != "" {
+		t.Fatalf("SML/NJ pass-through response = %+v", resp)
 	}
 }
 

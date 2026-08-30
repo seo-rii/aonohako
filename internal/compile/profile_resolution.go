@@ -164,6 +164,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "SML"
 	case "mlton":
 		l = "MLTON"
+	case "smlnj", "sml-nj", "sml/nj":
+		l = "SMLNJ"
 	case "haxe":
 		l = "HAXE"
 	case "c", "c11":

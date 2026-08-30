@@ -23,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -222,6 +222,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-sed",
 		"ci-smalltalk",
 		"ci-sml",
+		"ci-smlnj",
 		"ci-sqlite",
 		"ci-swift",
 		"ci-systemverilog",
@@ -418,6 +419,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"sed":           {"sed -f Main.sed", "s/^/ok/"},
 		"sml":           {"MLTON_VERSION=20241230", "mlton -output Main Main.sml"},
 		"mlton":         {"MLTON_VERSION=20241230", "mlton -output Main Main.sml", "20 22", "7 13", "Broken.sml"},
+		"smlnj":         {"SMLNJ_VERSION=110.99.9", "SMLNJ_CONFIG_SHA256=bf479ba518652fc193ac0954e46c72c5356a33c6980f9fcb6bcf6e55c7731418", "SMLNJ_RUNTIME_SHA256=216e0193a193ae2e59296d27c42e61a3aa7a16ddda936d3a06a2b9459276b792", "SMLNJ_BOOT_SHA256=2b4c23bb4e49be040043ab70a3df8e92c26ffe1cba652ed80348cd3fe2d19c63", "smlnj.cs.uchicago.edu/dist/working", "URLGETTER=/bin/false", "-default 64 -nolib", "/opt/smlnj/bin/.run/run.amd64-linux", "@SMLload=/usr/local/lib/aonohako/smlnj-run", "20 22", "7 13", "Broken.sml", "broken.stderr"},
 		"smalltalk":     {"GST_VERSION=3.2.5", "mirrors.kernel.org/gnu/smalltalk", "sed -i 's/const char \\*inbuf;/char *inbuf;/'", "CC=/usr/bin/gcc-14 ./configure", "make -j1", "gst -q Main.st"},
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},
@@ -818,6 +820,76 @@ func TestChickenSchemeCatalogPinsStaticChickenRuntime(t *testing.T) {
 	}
 	if strings.Contains(smoke, "grep -q '(NEEDED)'") {
 		t.Fatal("Chicken Scheme -static must not be treated as fully static system linkage")
+	}
+}
+
+func TestSMLNJUsesPinnedMinimalArchivesAndTrustedRunnerHeap(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["smlnj"]
+	if !ok {
+		t.Fatal("smlnj language missing from catalog")
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{
+		"SMLNJ_VERSION=110.99.9",
+		"bf479ba518652fc193ac0954e46c72c5356a33c6980f9fcb6bcf6e55c7731418",
+		"216e0193a193ae2e59296d27c42e61a3aa7a16ddda936d3a06a2b9459276b792",
+		"2b4c23bb4e49be040043ab70a3df8e92c26ffe1cba652ed80348cd3fe2d19c63",
+		"config.tgz",
+		"runtime.tgz",
+		"boot.amd64-unix.tgz",
+		"URLGETTER=/bin/false",
+		"INSTALLDIR=/opt/smlnj",
+		"-default 64 -nolib",
+	} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("SML/NJ install must contain %q:\n%s", marker, install)
+		}
+	}
+	if got := strings.Count(install, "curl --retry"); got != 3 {
+		t.Fatalf("SML/NJ download count = %d, want exactly the three pinned archives", got)
+	}
+
+	runner, err := os.ReadFile(filepath.Join("..", "..", "scripts", "smlnj_runner.sml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runnerBody := string(runner)
+	for _, marker := range []string{
+		"diagnosticLimit = 65536",
+		"Control.Print.out := {say = capture, flush = fn () => ()}",
+		"use sourcePath",
+		"TextIO.flushOut TextIO.stdOut",
+		"SMLofNJ.exportFn",
+	} {
+		if !strings.Contains(runnerBody, marker) {
+			t.Fatalf("trusted SML/NJ runner must contain %q:\n%s", marker, runnerBody)
+		}
+	}
+	for _, forbidden := range []string{"OS.Process.system", "Unix.execute", "/bin/sh", "/bin/bash"} {
+		if strings.Contains(runnerBody, forbidden) {
+			t.Fatalf("trusted SML/NJ runner unexpectedly contains %q", forbidden)
+		}
+	}
+
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "docker", "runtime.Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dockerBody := string(dockerfile)
+	for _, marker := range []string{
+		"scripts/smlnj_runner.sml /usr/local/lib/aonohako/smlnj_runner.sml",
+		`if [[ ",${LANGUAGES}," == *",smlnj,"* ]]`,
+		"/opt/smlnj/bin/sml @SMLquiet",
+		"test -r /usr/local/lib/aonohako/smlnj-run.amd64-linux",
+		"rm -f /usr/local/lib/aonohako/smlnj_runner.sml",
+	} {
+		if !strings.Contains(dockerBody, marker) {
+			t.Fatalf("runtime Dockerfile must contain SML/NJ heap marker %q", marker)
+		}
 	}
 }
 

@@ -107,6 +107,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"IDRIS2",
 		"SML",
 		"MLTON",
+		"SMLNJ",
 		"HAXE",
 		"LISP",
 		"PICOLISP",
@@ -251,6 +252,10 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"SML":          "binary",
 		"MLTON":        "binary",
 		"mlton":        "binary",
+		"SMLNJ":        "smlnj",
+		"smlnj":        "smlnj",
+		"sml-nj":       "smlnj",
+		"sml/nj":       "smlnj",
 		"LISP":         "lisp",
 		"PICOLISP":     "picolisp",
 		"picolisp":     "picolisp",
@@ -339,6 +344,19 @@ func TestMLtonProfileIsExplicitSMLCompilerSelection(t *testing.T) {
 	mlton.SourceLang = sml.SourceLang
 	if mlton != sml {
 		t.Fatalf("MLTON profile = %+v, want SML behavior %+v", mlton, sml)
+	}
+}
+
+func TestSMLNJProfileUsesPassThroughSourceRuntime(t *testing.T) {
+	profile, ok := Resolve("SMLNJ")
+	if !ok {
+		t.Fatal("Resolve(SMLNJ) reported unsupported language")
+	}
+	if profile.Extension != "sml" || profile.DefaultTarget != "" || profile.CompileKind != "smlnj" || profile.RunLang != "smlnj" {
+		t.Fatalf("SMLNJ profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
+		t.Fatalf("SMLNJ resource profile = %+v", profile)
 	}
 }
 

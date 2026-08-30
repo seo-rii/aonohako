@@ -224,6 +224,28 @@ func TestMaterializeFilesSelectsPowerShellScriptArtifact(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesSelectsSMLNJSourceArtifact(t *testing.T) {
+	workDir := t.TempDir()
+	ws, err := prepareWorkspaceDirs(workDir)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang: "smlnj",
+		Binaries: []model.Binary{
+			{Name: "README.txt", DataB64: b64("ignored")},
+			{Name: "Main.sml", DataB64: b64("print \"ok\\n\"\n")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "smlnj" || filepath.Base(primary) != "Main.sml" {
+		t.Fatalf("materializeFiles = (%q, %q), want Main.sml/smlnj", primary, lang)
+	}
+}
+
 func TestMaterializeFilesRejectsDuplicatePaths(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)
