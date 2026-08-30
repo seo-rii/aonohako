@@ -950,7 +950,7 @@ Production profiles currently group languages like this:
 | `type-s` | `lean4` |
 | `type-v` | `chapel` |
 | `type-w` | `pony` |
-| `type-x` | `bash`, `posix-sh`, `zsh` |
+| `type-x` | `bash`, `fish`, `posix-sh`, `zsh` |
 | `type-y` | `factor` |
 
 The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
@@ -1057,33 +1057,37 @@ Execution uses the dedicated `pony-binary` identity and appends
 that identity disables `RLIMIT_AS`; cgroup `memory.max`, the RSS watchdog, and
 the normal thread/process/network sandbox policies remain enforced.
 
-The `SHELL`, `BASH`, `POSIX_SH`, and `ZSH` source profiles share one shell
-pass-through compiler family; the target is the submitted script itself rather
-than a generated executable. `SHELL` defaults to Bash, `POSIX_SH` selects dash,
-and `ZSH` uses a native `Main.zsh` artifact. Syntax checks use
-`bash --noprofile --norc -n`, `/bin/dash -n`, or `/usr/bin/zsh -d -f -n`.
+The `SHELL`, `BASH`, `POSIX_SH`, `ZSH`, and `FISH` source profiles share one
+shell pass-through compiler family; the target is the submitted script itself
+rather than a generated executable. `SHELL` defaults to Bash, `POSIX_SH`
+selects dash, and `ZSH`/`FISH` use native `Main.zsh`/`Main.fish` artifacts.
+Syntax checks use `bash --noprofile --norc -n`, `/bin/dash -n`,
+`/usr/bin/zsh -d -f -n`, or
+`/usr/bin/fish --no-config --private --no-execute`.
 Zsh may poll child state with `kill(pid, 0)` while shutting down; only the
 positive-PID, non-signaling form is permitted for its syntax check and trusted
 type-x runtime. Process-group targets and all signal-delivery forms remain
 denied.
 Execution fixes `BASH_ENV`/`ENV` to `/dev/null` where applicable, sets Zsh's
-`ZDOTDIR` to `/var/empty`, and passes `-d -f`, so submission-controlled startup
-files are never loaded. Only the dedicated type-x image may opt these shells
-into process creation, enabling pipelines, subshells, command/process substitution, and
-background jobs. The shell helper budget is fixed at 64 processes/threads and a
-delegated per-run cgroup uses `pids.max=80`; the helper's `RLIMIT_NPROC` includes
+`ZDOTDIR` to `/var/empty`, and passes `-d -f`; Fish receives immutable XDG
+config/data roots plus `--no-config --private`. Submission-controlled startup
+files and history are never loaded. Only the dedicated type-x image may opt
+these shells into process creation, enabling pipelines, subshells, command/
+process substitution, and background jobs. The shell helper budget is fixed at
+64 processes/threads, and a delegated per-run cgroup uses `pids.max=80`; the
+helper's `RLIMIT_NPROC` includes
 only the existing sandbox-UID tasks plus eight setup slots, and isolated image
 self-tests require both reported `Max processes` limits to remain at or below
 80. Descendants are killed when the parent exits. Network syscalls remain
-denied, including Bash `/dev/tcp`.
+denied, including attempts made through an allowed child shell.
 
 Because post-start `execve` is part of normal shell semantics, type-x does not
 inherit a compiler profile. Its final image step removes every setuid/setgid
 bit, makes non-allowlisted executables in system and toolchain roots unreadable
-and unexecutable to the sandbox UID, and reopens only Bash, dash, Zsh, the
-sandbox helper binaries, and an explicit POSIX-oriented utility allowlist. Hidden Go,
-package, network, namespace, and diagnostic tools therefore cannot be copied
-or invoked through the dynamic loader by a submission.
+and unexecutable to the sandbox UID, and reopens only Bash, dash, Zsh, Fish, the
+sandbox helper binaries, and an explicit POSIX-oriented utility allowlist.
+Hidden Go, package, network, namespace, and diagnostic tools therefore cannot
+be copied or invoked through the dynamic loader by a submission.
 
 The `POWERSHELL` source profile checks `.ps1`, `.psm1`, and `.psd1` artifacts
 through PowerShell's `Parser.ParseFile` API and runs `Main.ps1` with

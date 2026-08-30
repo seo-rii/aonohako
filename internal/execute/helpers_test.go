@@ -347,6 +347,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"bash", "/tmp/Main.sh", "/bin/bash", true},
 		{"posix-sh", "/tmp/Main.sh", "/bin/dash", true},
 		{"zsh", "/tmp/Main.zsh", "/usr/bin/zsh", true},
+		{"fish", "/tmp/Main.fish", "/usr/bin/fish", true},
 		{"powershell", "/tmp/Main.ps1", "pwsh", true},
 		{"chapel-binary", "/tmp/Main", "env", true},
 		{"algol68", "/tmp/Main.a68", "a68g", true},
@@ -566,11 +567,14 @@ func TestBuildCommandDisablesShellStartupFiles(t *testing.T) {
 		"bash":     {"/bin/bash", "--noprofile", "--norc", "/tmp/Main.sh"},
 		"posix-sh": {"/bin/dash", "/tmp/Main.sh"},
 		"zsh":      {"/usr/bin/zsh", "-d", "-f", "/tmp/Main.zsh"},
+		"fish":     {"/usr/bin/fish", "--no-config", "--private", "/tmp/Main.fish"},
 	}
 	for runLang, want := range tests {
 		primary := "/tmp/Main.sh"
 		if runLang == "zsh" {
 			primary = "/tmp/Main.zsh"
+		} else if runLang == "fish" {
+			primary = "/tmp/Main.fish"
 		}
 		if got := buildCommand(primary, runLang, &model.RunRequest{}); !reflect.DeepEqual(got, want) {
 			t.Fatalf("%s command = %v, want %v", runLang, got, want)

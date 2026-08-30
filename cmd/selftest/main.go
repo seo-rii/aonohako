@@ -2276,6 +2276,7 @@ func languageSecurityCases(tcpPort int, kokaSyslib string) map[string][]language
 	const bashChildMarker = "/tmp/aonohako-shell-child-probes/bash-leak"
 	const posixChildMarker = "/tmp/aonohako-shell-child-probes/posix-leak"
 	const zshChildMarker = "/tmp/aonohako-shell-child-probes/zsh-leak"
+	const fishChildMarker = "/tmp/aonohako-shell-child-probes/fish-leak"
 	pythonProcessNetwork := fmt.Sprintf(`import socket
 import subprocess
 
@@ -2669,6 +2670,43 @@ else
 fi
 print -r -- 'child:started'
 `, tcpPort, zshChildMarker)),
+				},
+			},
+		},
+		"fish": {
+			{
+				name:                  "network-tools-loader-process-limit-and-child-cleanup",
+				compileLang:           "FISH",
+				expectedStdout:        "network:blocked\ntools:blocked\nloader:blocked\nprocess-limit:bounded\nchild:started\n",
+				forbiddenPathAfterRun: fishChildMarker,
+				limits:                limits,
+				sources: []model.Source{
+					source("Main.fish", fmt.Sprintf(`if /usr/bin/bash --noprofile --norc -c '(: > /dev/tcp/127.0.0.1/%d)' 2>/dev/null
+    printf 'network:leaked\n'
+else
+    printf 'network:blocked\n'
+end
+if /usr/local/go/bin/go version >/dev/null 2>&1
+    printf 'tools:leaked\n'
+else
+    printf 'tools:blocked\n'
+end
+if /lib64/ld-linux-x86-64.so.2 /usr/bin/apt-get --version >/dev/null 2>&1
+    printf 'loader:leaked\n'
+else
+    printf 'loader:blocked\n'
+end
+if awk '$1 == "Max" && $2 == "processes" { found = 1; bounded = $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $3 <= 80 && $4 <= 80 } END { exit !(found && bounded) }' /proc/self/limits
+    printf 'process-limit:bounded\n'
+else
+    printf 'process-limit:leaked\n'
+end
+begin
+    sleep 1
+    printf survived > %q
+end >/dev/null 2>&1 &
+printf 'child:started\n'
+`, tcpPort, fishChildMarker)),
 				},
 			},
 		},
@@ -4799,6 +4837,31 @@ read -r a b
 print -r -- $((a + b))`),
 			},
 		},
+		"fish": {
+			compileLang: "FISH",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 4000, MemoryMB: 256},
+			sources: []model.Source{
+				source("Main.fish", `test "$XDG_CONFIG_HOME" = /var/empty/.config; or exit 20
+test "$XDG_DATA_HOME" = /var/empty/.local/share; or exit 21
+mkdir -p "$HOME/.config/fish"; or exit 22
+printf '%s\n' 'exit 99' > "$HOME/.config/fish/config.fish"; or exit 23
+set startup_result (env XDG_CONFIG_HOME="$HOME/.config" /usr/bin/fish --no-config --private -c 'printf startup-safe')
+test "$startup_result" = startup-safe; or exit 24
+set pipeline_result (printf pipeline | tr a-z A-Z)
+test "$pipeline_result" = PIPELINE; or exit 25
+begin
+    sleep 0.01
+    printf 'child\n' > child.txt
+end &
+set child_pid $last_pid
+wait $child_pid; or exit 26
+set child_result (cat child.txt)
+test "$child_result" = child; or exit 27
+read -l a b
+math "$a + $b"`),
+			},
+		},
 		"powershell": {
 			compileLang: "POWERSHELL",
 			judgeIO:     standardABJudgeIO,
@@ -5126,7 +5189,7 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	imageName := strings.TrimSpace(os.Getenv("AONOHAKO_IMAGE_NAME"))
-	if imageName == "type-x" || imageName == "ci-bash" || imageName == "ci-posix-sh" || imageName == "ci-zsh" {
+	if imageName == "type-x" || imageName == "ci-bash" || imageName == "ci-posix-sh" || imageName == "ci-zsh" || imageName == "ci-fish" {
 		suidOutput, err := exec.Command("find", "/", "-xdev", "-type", "f", "-perm", "/6000", "-print").CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("shell-image-suid-inventory: %w: %s", err, suidOutput)

@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, Prolog,
+  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -134,10 +134,10 @@ language-specific commands keep their declared order.
   payload. Compilation targets the generic CPU, execution fixes the scheduler
   ceiling with `--ponymaxthreads=1`, and physical memory remains cgroup/RSS
   bounded while Pony's reserved virtual arena is exempted from `RLIMIT_AS`.
-- Shell submissions use Debian Bash 5.2.37-2+b9, dash 0.5.12-12, or Zsh
-  5.9-8+b23 as runtime variants of one shell language family. Zsh keeps its
-  native `.zsh` artifact while sharing the same bounded runtime contract.
-  Syntax checks and execution disable
+- Shell submissions use Debian Bash 5.2.37-2+b9, dash 0.5.12-12, Zsh
+  5.9-8+b23, or Fish 4.0.2-1 as runtime variants of one shell language family.
+  Zsh and Fish keep native `.zsh` and `.fish` artifacts while sharing the same
+  bounded runtime contract. Syntax checks and execution disable
   startup files, while the dedicated type-x pack permits bounded child
   processes for normal shell composition with a 64-task helper budget and an
   80-task per-run cgroup ceiling, but keeps networking disabled. The

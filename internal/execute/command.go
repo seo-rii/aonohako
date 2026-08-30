@@ -65,6 +65,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"/bin/dash", primaryPath}
 	case "zsh":
 		return []string{"/usr/bin/zsh", "-d", "-f", primaryPath}
+	case "fish":
+		return []string{"/usr/bin/fish", "--no-config", "--private", primaryPath}
 	case "powershell":
 		return []string{"pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", primaryPath}
 	case "chapel-binary":

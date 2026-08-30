@@ -176,6 +176,7 @@ func TestMaterializeFilesSelectsShellSourceArtifact(t *testing.T) {
 	}{
 		{runLang: "posix-sh", source: "Main.sh"},
 		{runLang: "zsh", source: "Main.zsh"},
+		{runLang: "fish", source: "Main.fish"},
 	} {
 		t.Run(tc.runLang, func(t *testing.T) {
 			workDir := t.TempDir()

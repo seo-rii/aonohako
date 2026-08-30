@@ -238,6 +238,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"koka",
 		"pony",
 		"zsh",
+		"fish",
 		"powershell",
 		"pypy",
 		"javascript",

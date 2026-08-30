@@ -348,6 +348,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"posix-sh":      {compileKind: "shell", runLang: "posix-sh"},
 		"posix_sh":      {compileKind: "shell", runLang: "posix-sh"},
 		"zsh":           {compileKind: "shell", runLang: "zsh"},
+		"fish":          {compileKind: "shell", runLang: "fish"},
 		"powershell":    {compileKind: "powershell", runLang: "powershell"},
 		"pwsh":          {compileKind: "powershell", runLang: "powershell"},
 		"zerolang":      {compileKind: "zerolang", runLang: "binary"},

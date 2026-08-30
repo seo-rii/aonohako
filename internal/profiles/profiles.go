@@ -51,6 +51,7 @@ var profiles = map[string]Profile{
 	"BASH":          {SourceLang: "BASH", Extension: "sh", DefaultTarget: "Main.sh", CompileKind: "shell", RunLang: "bash", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"POSIX_SH":      {SourceLang: "POSIX_SH", Extension: "sh", DefaultTarget: "Main.sh", CompileKind: "shell", RunLang: "posix-sh", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"ZSH":           {SourceLang: "ZSH", Extension: "zsh", DefaultTarget: "Main.zsh", CompileKind: "shell", RunLang: "zsh", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
+	"FISH":          {SourceLang: "FISH", Extension: "fish", DefaultTarget: "Main.fish", CompileKind: "shell", RunLang: "fish", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"POWERSHELL":    {SourceLang: "POWERSHELL", Extension: "ps1", DefaultTarget: "Main.ps1", CompileKind: "powershell", RunLang: "powershell", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"ZEROLANG":      {SourceLang: "ZEROLANG", Extension: "0", DefaultTarget: "Main", CompileKind: "zerolang", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"GO":            {SourceLang: "GO", Extension: "go", DefaultTarget: "Main", CompileKind: "go", RunLang: "go-binary", TimeMultiplier: 1, TimeOffsetMs: 2000, MemoryMultiplier: 1, MemoryOffsetMB: 1088},
@@ -227,7 +228,7 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
-	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "powershell":
+	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
 		return key
 	case "chez", "chezscheme", "chez_scheme":
 		return "chez-scheme"
