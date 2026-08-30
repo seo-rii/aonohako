@@ -1027,6 +1027,12 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 		"chmod -R go-rwx",
 		"-perm /6000",
 		"chmod ug-s",
+		`for root in /usr/lib /usr/local/lib`,
+		`library_inventory="$(mktemp)"`,
+		`find "${root}" -xdev -type f -perm /0001 -print0 > "${library_inventory}"`,
+		`magic="$(od -An -tx1 -N4 -- "${path}" | tr -d '[:space:]')"`,
+		`"${magic}" != "7f454c46"`,
+		`chmod go-x "${path}"`,
 		"ld-linux*.so*",
 		"shell_runtime_allowlist.txt",
 	} {

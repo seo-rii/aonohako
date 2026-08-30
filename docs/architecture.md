@@ -1086,6 +1086,9 @@ inherit a compiler profile. Its final image step removes every setuid/setgid
 bit, makes non-allowlisted executables in system and toolchain roots unreadable
 and unexecutable to the sandbox UID, and reopens only Bash, dash, Zsh, Fish, the
 sandbox helper binaries, and an explicit POSIX-oriented utility allowlist.
+It also removes group/other execute bits from world-executable non-ELF files
+under library roots; every remaining world-executable library entry must be an
+`ET_DYN` shared object without a `PT_INTERP` program header.
 Hidden Go, package, network, namespace, and diagnostic tools therefore cannot
 be copied or invoked through the dynamic loader by a submission.
 
