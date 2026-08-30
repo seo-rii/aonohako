@@ -291,6 +291,24 @@ func TestLanguageSecurityCasesResolveProfilesAndSources(t *testing.T) {
 	}
 }
 
+func TestFishLanguageSecurityCleanupProbeBackgroundsExternalProcess(t *testing.T) {
+	cases := languageSecurityCases(1, "")
+	if len(cases["fish"]) != 1 || len(cases["fish"][0].sources) != 1 {
+		t.Fatalf("fish language-security cleanup case shape = %+v", cases["fish"])
+	}
+	sourceBytes, err := base64.StdEncoding.DecodeString(cases["fish"][0].sources[0].DataB64)
+	if err != nil {
+		t.Fatalf("decode fish language-security source: %v", err)
+	}
+	source := string(sourceBytes)
+	if strings.Contains(source, "begin\n    sleep 1") {
+		t.Fatal("fish cleanup probe must not attempt to background a compound block")
+	}
+	if !strings.Contains(source, `/usr/bin/bash --noprofile --norc -c 'sleep 1; printf survived > "$1"' aonohako-child`) {
+		t.Fatalf("fish cleanup probe does not background the expected external process:\n%s", source)
+	}
+}
+
 func TestSelftestUsageListsCgroupPreflight(t *testing.T) {
 	if !strings.Contains(selftestUsage, "cgroup-preflight") {
 		t.Fatalf("selftest usage should list cgroup-preflight: %s", selftestUsage)

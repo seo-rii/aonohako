@@ -2701,10 +2701,7 @@ if awk '$1 == "Max" && $2 == "processes" { found = 1; bounded = $3 ~ /^[0-9]+$/ 
 else
     printf 'process-limit:leaked\n'
 end
-begin
-    sleep 1
-    printf survived > %q
-end >/dev/null 2>&1 &
+/usr/bin/bash --noprofile --norc -c 'sleep 1; printf survived > "$1"' aonohako-child %q >/dev/null 2>&1 &
 printf 'child:started\n'
 `, tcpPort, fishChildMarker)),
 				},
