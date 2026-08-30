@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"aonohako/internal/platform"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runvalidation"
 )
 
@@ -62,8 +63,8 @@ func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 	if contract.AuthoritativeWorkRoot.CloudRunCommunicationMaxFiles != maxCloudRunCommunicationWorkRootFiles {
 		t.Fatalf("deployment Cloud Run communication max files = %d, config max = %d", contract.AuthoritativeWorkRoot.CloudRunCommunicationMaxFiles, maxCloudRunCommunicationWorkRootFiles)
 	}
-	if contract.PythonLibraryMode.InstalledCapability != "python-library-pypy-installed-v1" {
-		t.Fatalf("deployment installed Python library capability = %q, want %q", contract.PythonLibraryMode.InstalledCapability, "python-library-pypy-installed-v1")
+	if contract.PythonLibraryMode.InstalledCapability != pythonpolicy.InstalledCapability {
+		t.Fatalf("deployment installed Python library capability = %q, want %q", contract.PythonLibraryMode.InstalledCapability, pythonpolicy.InstalledCapability)
 	}
 	if want := []string{"python", "pypy"}; !slices.Equal(contract.PythonLibraryMode.Targets, want) {
 		t.Fatalf("deployment installed Python library targets = %q, want %q", contract.PythonLibraryMode.Targets, want)

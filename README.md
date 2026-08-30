@@ -180,6 +180,16 @@ supported interpreter targets. Downstream deployment automation should require
 that contract before enabling PyPy installed-library requests, so an older
 runner ref fails before an image or control-plane revision is deployed.
 
+An embedded helper advertises `python-library-pypy-installed-v1` from
+`GET /capabilities` only when it globally accepts explicit installed mode and
+the running image declares exact `python` and `pypy` language membership, both
+library-isolation flags, and the reserved external-library group. A
+problem-specific installed-mode mapping alone does not advertise a fleet-wide
+capability, and remote control planes do not advertise a downstream worker's
+capability. The live response attests runner policy and trusted build metadata;
+CI and startup selftests verify the actual image permissions, while image build
+smoke tests verify the package catalog separately.
+
 ## Local development
 
 For non-root local development, forward both `/compile` and `/execute` to a
