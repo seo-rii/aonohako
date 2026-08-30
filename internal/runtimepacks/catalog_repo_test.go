@@ -296,7 +296,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 
 	tests := map[string][]string{
 		"aheui":         {"Hello, World!", "Main.aheui"},
-		"algol68":       {"A68G_VERSION=3.13.3", "A68G_SHA256=78dc53f4a712a9c8ee159b1eb7045fe4ea060c4eb2a49efb9634f83c2cb13995", "--enable-core", "AONOHAKO_SAFE_RUNTIME", "aonohako_disabled_system", "aonohako_disabled_fork", "aonohako_disabled_execve", "read_rc_options", "read_env_options", "process execution is disabled", "nm -D --undefined-only", "system|fork|execve|dlopen|dlsym", "--no-compile -O0 --check --file Main.a68 --no-pragmats", "--no-compile -O0 --run --file Main.a68 --no-pragmats", "A68G_OPTIONS='-O1 --compile --debug'", "Process.a68", "ProcessFork.a68", "ProcessExec.a68", "Monitor.a68", "Broken.a68"},
+		"algol68":       {"A68G_VERSION=3.13.3", "A68G_SHA256=78dc53f4a712a9c8ee159b1eb7045fe4ea060c4eb2a49efb9634f83c2cb13995", "A68G_SHA512=90b64911ee3b4011799425cf846fea4a26570182ec1ed9f65e6f0630e02b0623ed408fb6d074dcd2795b6412e209a39f5580d32acd079a3f3d419bf2440512a6", "algol68g-${A68G_VERSION}.tar.gz/sha512/${A68G_SHA512}/algol68g-${A68G_VERSION}.tar.gz", "--enable-core", "AONOHAKO_SAFE_RUNTIME", "aonohako_disabled_system", "aonohako_disabled_fork", "aonohako_disabled_execve", "read_rc_options", "read_env_options", "process execution is disabled", "nm -D --undefined-only", "system|fork|execve|dlopen|dlsym", "--no-compile -O0 --check --file Main.a68 --no-pragmats", "--no-compile -O0 --run --file Main.a68 --no-pragmats", "A68G_OPTIONS='-O1 --compile --debug'", "Process.a68", "ProcessFork.a68", "ProcessExec.a68", "Monitor.a68", "Broken.a68"},
 		"acl2":          {"acl2", "aonohako-acl2-check Main.lisp", "plus-zero-right", "Broken.lisp"},
 		"apecode":       {"APECODE_COMMIT=c7ae98d3dfc1713ecc800422a4c815628776e1e2", "python3 -m pip install --break-system-packages --no-cache-dir /tmp/apecode.tar.gz", "apecc --check Main.ape", "apecc -o Main Main.ape", "./Main", "state main", "3 1 2"},
 		"ada":           {"gnatmake", "Broken.adb"},
@@ -780,6 +780,8 @@ func TestRepositoryCatalogPinsAndHardensAlgol68Runtime(t *testing.T) {
 	for _, marker := range []string{
 		"A68G_VERSION=3.13.3",
 		"A68G_SHA256=78dc53f4a712a9c8ee159b1eb7045fe4ea060c4eb2a49efb9634f83c2cb13995",
+		"A68G_SHA512=90b64911ee3b4011799425cf846fea4a26570182ec1ed9f65e6f0630e02b0623ed408fb6d074dcd2795b6412e209a39f5580d32acd079a3f3d419bf2440512a6",
+		"algol68g-${A68G_VERSION}.tar.gz/sha512/${A68G_SHA512}/algol68g-${A68G_VERSION}.tar.gz",
 		"sha256sum -c -",
 		"CPPFLAGS=-DAONOHAKO_SAFE_RUNTIME=1 ./configure --enable-core",
 		"aonohako_disabled_system",

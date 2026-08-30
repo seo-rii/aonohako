@@ -1004,8 +1004,9 @@ tasking runtime shipped by the official Debian package (`qthreads`). Execution
 uses the distinct `chapel-binary` identity to inject
 `CHPL_RT_NUM_THREADS_PER_LOCALE=1` and append `-nl 1` on every run.
 
-The `ALGOL68` profile runs a checksum-pinned Algol 68 Genie 3.13.3 interpreter
-in the shared type-a pack. `--enable-core` disables optional libraries and
+The `ALGOL68` profile runs an Algol 68 Genie 3.13.3 interpreter fetched through
+a SHA-512 content address and independently verified with SHA-256 in the shared
+type-a pack. `--enable-core` disables optional libraries and
 plugin loading/compilation but is not treated as a security boundary. The
 pinned source is additionally patched to ignore cwd rc and environment options,
 unregister process and monitor prelude entry points, reject monitor `DO`/`EXEC`,

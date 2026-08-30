@@ -106,7 +106,8 @@ language-specific commands keep their declared order.
   pack. Submissions compile for one local locale with the packaged qthreads
   tasking runtime, and execution always fixes both locale and worker-thread
   counts to one.
-- ALGOL 68 uses checksum-pinned Algol 68 Genie 3.13.3 source. Its core build is
+- ALGOL 68 uses Algol 68 Genie 3.13.3 from a SHA-512 content-addressed source
+  mirror and verifies the archive again with SHA-256. Its core build is
   additionally patched for judge use: cwd and environment option readers,
   process-related prelude names, monitor command execution, and underlying
   `system`/`fork`/`execve` calls are all disabled. Both syntax checking and

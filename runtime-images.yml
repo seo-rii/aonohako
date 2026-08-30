@@ -3069,7 +3069,8 @@ languages:
       script:
         - export A68G_VERSION=3.13.3
         - export A68G_SHA256=78dc53f4a712a9c8ee159b1eb7045fe4ea060c4eb2a49efb9634f83c2cb13995
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://algol68genie.nl/algol68g-${A68G_VERSION}.tar.gz" -o /tmp/algol68g.tar.gz
+        - export A68G_SHA512=90b64911ee3b4011799425cf846fea4a26570182ec1ed9f65e6f0630e02b0623ed408fb6d074dcd2795b6412e209a39f5580d32acd079a3f3d419bf2440512a6
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://src.fedoraproject.org/repo/pkgs/algol68g/algol68g-${A68G_VERSION}.tar.gz/sha512/${A68G_SHA512}/algol68g-${A68G_VERSION}.tar.gz" -o /tmp/algol68g.tar.gz
         - echo "${A68G_SHA256}  /tmp/algol68g.tar.gz" | sha256sum -c -
         - rm -rf /tmp/algol68g-src
         - mkdir -p /tmp/algol68g-src
