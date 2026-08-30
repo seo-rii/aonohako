@@ -366,6 +366,10 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"forth":         {compileKind: "forth", runLang: "forth"},
 		"gforth":        {compileKind: "forth", runLang: "forth"},
 	}
+	tests["assemblyscript"] = struct {
+		compileKind string
+		runLang     string
+	}{compileKind: "assemblyscript", runLang: "assemblyscript"}
 
 	for input, want := range tests {
 		profile, ok := resolveProfile(input)

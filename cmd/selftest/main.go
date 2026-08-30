@@ -2751,6 +2751,33 @@ console.log(`+"`network:${networkBlocked ? \"blocked\" : \"leaked\"}`"+`);
 				},
 			},
 		},
+		"assemblyscript": {
+			{
+				name:           "filesystem-preopen-denied",
+				compileLang:    "ASSEMBLYSCRIPT",
+				expectedStdout: "filesystem:blocked\n",
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.ts", `@external("wasi_snapshot_preview1", "path_open")
+declare function pathOpen(
+  directory: u32,
+  directoryFlags: u32,
+  pathPointer: usize,
+  pathLength: usize,
+  openFlags: u32,
+  rightsBase: u64,
+  rightsInheriting: u64,
+  descriptorFlags: u32,
+  openedDescriptor: usize,
+): u16;
+
+const path = String.UTF8.encode("assemblyscript-fs-leak", true);
+const descriptor = new ArrayBuffer(4);
+const result = pathOpen(3, 0, changetype<usize>(path), path.byteLength - 1, 1, 64, 0, 0, changetype<usize>(descriptor));
+console.log(result == 0 ? "filesystem:leaked" : "filesystem:blocked");`),
+				},
+			},
+		},
 		"java": {
 			{
 				name:           "process-and-network-denies",
@@ -4808,6 +4835,36 @@ buf swap evaluate + 0 .r cr`),
     i32.const 24
     call $fd_write
     drop))`),
+			},
+		},
+		"assemblyscript": {
+			compileLang: "ASSEMBLYSCRIPT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.ts", `const buffer = new ArrayBuffer(65536);
+const count = process.stdin.read(buffer);
+const bytes = Uint8Array.wrap(buffer);
+let sum: i64 = 0;
+let value: i64 = 0;
+let sign: i64 = 1;
+let active = false;
+for (let i = 0; i < count; ++i) {
+  const byte = bytes[i];
+  if (byte == 45) {
+    sign = -1;
+  } else if (byte >= 48 && byte <= 57) {
+    value = value * 10 + <i64>(byte - 48);
+    active = true;
+  } else if (active) {
+    sum += sign * value;
+    value = 0;
+    sign = 1;
+    active = false;
+  }
+}
+if (active) sum += sign * value;
+console.log(sum.toString());`),
 			},
 		},
 		"whitespace": {

@@ -517,6 +517,7 @@ The interactor is invoked as:
 | PURESCRIPT | `purescript` | `spago build` plus a Node wrapper for `Main.main` |
 | TYPESCRIPT | `typescript` | `tsc` |
 | DENO | `deno` | `deno check --v8-flags=--max-old-space-size=...` |
+| ASSEMBLYSCRIPT | `assemblyscript` | pinned `asc` plus the official WASI shim, followed by `wasm-validate` |
 | ELM | `elm` | `elm make <source> --output <target>` plus a Node wrapper for `stdin`/`stdout`/`stderr`/`exit` ports |
 | KOTLIN | `kotlin` | `kotlinc-native -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -J-XX:ReservedCodeCacheSize=32m -J-XX:MaxMetaspaceSize=192m -J-XX:CompressedClassSpaceSize=64m -opt` |
 | KOTLIN_JVM, KOTLIN_JAVA, KOTLIN_JVM8–21, KOTLIN_JAVA8–21 | `kotlin-jvm` | `kotlinc -J-Xms64m -J-Xmx<compiler cap> -J-Xss1m -J-XX:+UseSerialGC -jvm-target <v>` plus `javac --release <v>` for submitted `.java` files |
@@ -613,6 +614,7 @@ The interactor is invoked as:
 | `clojure` | `java <JVM memory flags> -cp /usr/share/java/clojure-1.12.jar clojure.main <file>` |
 | `racket` | `racket <file>` |
 | `scheme` | `chibi-scheme <file>` |
+| `assemblyscript` | bounded `wasmtime run <file>` without filesystem preopens |
 | `awk` | `gawk --sandbox -f <file>` |
 | `tcl` | `tclsh <file>` |
 | `python` | `python3 <file>` |

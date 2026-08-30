@@ -5,7 +5,9 @@ shared_installs:
       - xz-utils
     script:
       - export NODE_VERSION=24.15.0
+      - export NODE_SHA256=472655581fb851559730c48763e0c9d3bc25975c59d518003fc0849d3e4ba0f6
       - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+      - echo "${NODE_SHA256}  /tmp/node.tar.xz" | sha256sum -c -
       - rm -rf "/opt/node-v${NODE_VERSION}-linux-x64"
       - mkdir -p /opt
       - tar -xJf /tmp/node.tar.xz -C /opt
@@ -14,6 +16,23 @@ shared_installs:
       - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npm" /usr/local/bin/npm
       - ln -sfn "/opt/node-v${NODE_VERSION}-linux-x64/bin/npx" /usr/local/bin/npx
       - rm -f /tmp/node.tar.xz
+
+  wasmtime44:
+    apt:
+      - curl
+      - xz-utils
+    sandbox_tools:
+      - wasmtime
+    script:
+      - export WASMTIME_VERSION=44.0.0
+      - export WASMTIME_SHA256=52eba06fe9f4364aa6164a4a3eafb2ca692ba9a756cbe8137b5574871f8cbfc8
+      - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
+      - echo "${WASMTIME_SHA256}  /tmp/wasmtime.tar.xz" | sha256sum -c -
+      - install -d /tmp/wasmtime
+      - tar -xJf /tmp/wasmtime.tar.xz -C /tmp/wasmtime --strip-components=1
+      - install -m 0755 /tmp/wasmtime/wasmtime /usr/local/bin/wasmtime
+      - rm -rf /tmp/wasmtime /tmp/wasmtime.tar.xz
+      - test -x /usr/local/bin/wasmtime
 
   libobjc16:
     script:
@@ -371,6 +390,77 @@ languages:
           console.log(fs.readFileSync('same-folder.txt', 'utf8'));
           JS
           node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js | grep '^ok$'
+
+  assemblyscript:
+    install:
+      shared:
+        - node24
+        - wasmtime44
+      apt:
+        - curl
+        - wabt
+      sandbox_tools:
+        - aonohako-assemblyscript-compile
+        - asc
+        - node
+        - wasm-validate
+      script:
+        - export ASSEMBLYSCRIPT_VERSION=0.28.20
+        - export ASSEMBLYSCRIPT_SHA256=26696c1bbb716bd85a0fbd38c7efbda186c83bc648ba4f78369d432081b4b1cb
+        - export ASSEMBLYSCRIPT_WASI_SHIM_VERSION=0.1.0
+        - export ASSEMBLYSCRIPT_WASI_SHIM_SHA256=e8b4410255e6f86cb96c2ce1d191fa9a6b45d274f0f506c4132e8075634ea005
+        - export BINARYEN_VERSION=131.0.0-nightly.20260721
+        - export BINARYEN_SHA256=ed375d90d259924799147788d66ed70ce6e65454b69df577e09f2c4d17c00f6c
+        - export LONG_VERSION=5.3.2
+        - export LONG_SHA256=68033e466773df7d52c9e59341bb729d83716cd920c56460395724456d646b26
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://registry.npmjs.org/assemblyscript/-/assemblyscript-${ASSEMBLYSCRIPT_VERSION}.tgz" -o /tmp/assemblyscript.tgz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://registry.npmjs.org/@assemblyscript/wasi-shim/-/wasi-shim-${ASSEMBLYSCRIPT_WASI_SHIM_VERSION}.tgz" -o /tmp/assemblyscript-wasi-shim.tgz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://registry.npmjs.org/binaryen/-/binaryen-${BINARYEN_VERSION}.tgz" -o /tmp/binaryen.tgz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://registry.npmjs.org/long/-/long-${LONG_VERSION}.tgz" -o /tmp/long.tgz
+        - echo "${ASSEMBLYSCRIPT_SHA256}  /tmp/assemblyscript.tgz" | sha256sum -c -
+        - echo "${ASSEMBLYSCRIPT_WASI_SHIM_SHA256}  /tmp/assemblyscript-wasi-shim.tgz" | sha256sum -c -
+        - echo "${BINARYEN_SHA256}  /tmp/binaryen.tgz" | sha256sum -c -
+        - echo "${LONG_SHA256}  /tmp/long.tgz" | sha256sum -c -
+        - env NPM_CONFIG_PREFIX=/usr/local npm install --global --offline --ignore-scripts --no-audit --no-fund /tmp/assemblyscript.tgz /tmp/assemblyscript-wasi-shim.tgz /tmp/binaryen.tgz /tmp/long.tgz
+        - rm -f /tmp/assemblyscript.tgz /tmp/assemblyscript-wasi-shim.tgz /tmp/binaryen.tgz /tmp/long.tgz
+        - test "$(asc --version)" = "Version ${ASSEMBLYSCRIPT_VERSION}"
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.ts <<'ASSEMBLYSCRIPT'
+          const buffer = new ArrayBuffer(65536);
+          const count = process.stdin.read(buffer);
+          const bytes = Uint8Array.wrap(buffer);
+          let sum: i64 = 0;
+          let value: i64 = 0;
+          let sign: i64 = 1;
+          let active = false;
+          for (let i = 0; i < count; ++i) {
+            const byte = bytes[i];
+            if (byte == 45) {
+              sign = -1;
+            } else if (byte >= 48 && byte <= 57) {
+              value = value * 10 + <i64>(byte - 48);
+              active = true;
+            } else if (active) {
+              sum += sign * value;
+              value = 0;
+              sign = 1;
+              active = false;
+            }
+          }
+          if (active) sum += sign * value;
+          console.log(sum.toString());
+          ASSEMBLYSCRIPT
+          aonohako-assemblyscript-compile "${PWD}/Main.ts" "${PWD}/Main.wasm"
+          wasm-validate Main.wasm
+          test "$(printf '%s\n' '-4 17' | wasmtime run -O memory-reservation=33554432 -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=33554432 -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-table-elements=65536 -W max-wasm-stack=1048576 -W trap-on-grow-failure=y Main.wasm)" = 13
+          printf '%s\n' 'const broken: i32 = "nope";' > Broken.ts
+          if aonohako-assemblyscript-compile "${PWD}/Broken.ts" "${PWD}/Broken.wasm" >/dev/null 2>&1; then exit 1; fi
+          test ! -e Broken.wasm
 
   coffeescript:
     install:
@@ -1047,18 +1137,14 @@ languages:
 
   wasm:
     install:
+      shared:
+        - wasmtime44
       apt:
-        - curl
         - wabt
-        - xz-utils
-      script:
-        - export WASMTIME_VERSION=44.0.0
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
-        - install -d /tmp/wasmtime
-        - tar -xJf /tmp/wasmtime.tar.xz -C /tmp/wasmtime --strip-components=1
-        - install -m 0755 /tmp/wasmtime/wasmtime /usr/local/bin/wasmtime
-        - rm -rf /tmp/wasmtime /tmp/wasmtime.tar.xz
-        - test -x /usr/local/bin/wasmtime
+      sandbox_tools:
+        - wasm-validate
+        - wasmtime
+        - wat2wasm
     smoke:
       command:
         - bash
@@ -3644,6 +3730,7 @@ profiles:
     base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile
     languages:
+      - assemblyscript
       - clojure
       - coffeescript
       - deno

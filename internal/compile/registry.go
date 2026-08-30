@@ -1,5 +1,7 @@
 package compile
 
+const asCompileKind = "assemblyscript"
+
 var compileRegistry = map[string]Compiler{
 	"c": nativeCompiler{exts: []string{".c", ".h"}, bin: "gcc", flags: func(job CompileJob) []string {
 		return []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + job.Profile.CompileStd}
@@ -164,6 +166,7 @@ var compileRegistry = map[string]Compiler{
 	"lolcode":       passThroughCompiler{exts: []string{".lol"}, noSourceReason: "no lolcode sources"},
 	"apecode":       apeCodeCompiler{},
 	"wasm":          wasmCompiler{},
+	asCompileKind:   assemblyScriptCompiler{},
 	"ocaml":         ocamlCompiler{},
 	"elixir":        elixirCompiler{},
 	"csharp":        csharpCompiler{},

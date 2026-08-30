@@ -382,6 +382,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"malbolge", "/tmp/sol.mal", "python3", true},
 		{"lolcode", "/tmp/sol.lol", "lci", true},
 		{"wasm", "/tmp/sol.wasm", "wasmtime", true},
+		{"assemblyscript", "/tmp/sol.wasm", "wasmtime", true},
 		{"ruby", "/tmp/sol.rb", "ruby", true},
 		{"php", "/tmp/sol.php", "php", true},
 		{"lua", "/tmp/sol.lua", "lua5.4", true},
@@ -707,6 +708,34 @@ func TestBuildCommandPinsLanguageSpecificFlags(t *testing.T) {
 		"/tmp/Main.wasm",
 	}) {
 		t.Fatalf("wasm command = %v", wasmArgs)
+	}
+}
+
+func TestBuildCommandRunsAssemblyScriptWithoutFilesystemPreopens(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 128}}
+	args := buildCommand("/tmp/Main.wasm", "assemblyscript", req)
+	want := []string{
+		"wasmtime",
+		"run",
+		"-O", "memory-reservation=67108864",
+		"-O", "memory-reservation-for-growth=0",
+		"-O", "memory-guard-size=65536",
+		"-W", "max-memory-size=67108864",
+		"-W", "max-memories=1",
+		"-W", "max-instances=1",
+		"-W", "max-tables=1",
+		"-W", "max-table-elements=65536",
+		"-W", "max-wasm-stack=1048576",
+		"-W", "trap-on-grow-failure=y",
+		"/tmp/Main.wasm",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("assemblyscript command = %v, want %v", args, want)
+	}
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--dir=") {
+			t.Fatalf("assemblyscript command unexpectedly preopens a directory: %v", args)
+		}
 	}
 }
 

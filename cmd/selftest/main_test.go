@@ -243,6 +243,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"typescript",
 		"coffeescript",
 		"deno",
+		"assemblyscript",
 		"java",
 		"ruby",
 		"perl",
