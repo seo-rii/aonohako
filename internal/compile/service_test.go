@@ -388,6 +388,12 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{compileKind: "chicken-scheme", runLang: "chicken-scheme"}
+	denoProfile := struct {
+		compileKind string
+		runLang     string
+	}{compileKind: "deno", runLang: "deno"}
+	tests["javascript-deno"] = denoProfile
+	tests["typescript-deno"] = denoProfile
 	tests["assemblyscript"] = struct {
 		compileKind string
 		runLang     string

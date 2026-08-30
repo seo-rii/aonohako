@@ -216,6 +216,10 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "MOJO"
 	case "deno":
 		l = "DENO"
+	case "javascript-deno", "javascript_deno", "deno-js", "deno_javascript":
+		l = "JAVASCRIPT_DENO"
+	case "typescript-deno", "typescript_deno", "deno-ts", "deno_typescript":
+		l = "TYPESCRIPT_DENO"
 	case "elm":
 		l = "ELM"
 	case "kotlin-jvm", "kotlin_java", "kotlin-java", "kotlin/java", "kotlinjava":

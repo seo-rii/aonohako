@@ -416,7 +416,27 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "forth":
 		return []string{"gforth", primaryPath, "-e", "bye"}
 	case "deno":
-		return []string{"deno", "run", "--no-prompt", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(req.Limits.MemoryMB, tuning)), primaryPath}
+		return []string{
+			"deno",
+			"run",
+			"--cached-only",
+			"--no-prompt",
+			"--no-config",
+			"--no-lock",
+			"--no-npm",
+			"--no-remote",
+			"--node-modules-dir=none",
+			"--deny-read",
+			"--deny-write",
+			"--deny-net",
+			"--deny-env",
+			"--deny-run",
+			"--deny-ffi",
+			"--deny-sys",
+			"--deny-import",
+			fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(req.Limits.MemoryMB, tuning)),
+			primaryPath,
+		}
 	case "kotlin-jvm":
 		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
 		metaspaceMB := jvmMetaspaceMB(req.Limits.MemoryMB)
