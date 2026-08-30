@@ -5109,6 +5109,8 @@ func runDirectImagePermissionChecks() error {
 		"for p in "+
 			"/usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip "+
 			"/usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip "+
+			"/usr/lib/pypy*/dist-packages/pip /usr/local/lib/pypy*/dist-packages/pip "+
+			"/usr/lib/pypy*/site-packages/pip /usr/local/lib/pypy*/site-packages/pip "+
 			"/usr/local/lib/node_modules/npm /opt/node-*/lib/node_modules/npm; do "+
 			"if [ -e \"$p\" ]; then "+
 			"if [ -r \"$p\" ] || [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
@@ -5129,10 +5131,39 @@ func runDirectImagePermissionChecks() error {
 		}
 	}
 
-	if os.Getenv("AONOHAKO_PYTHON_LIBRARY_ISOLATION") == "true" {
+	pythonLibraryIsolation := os.Getenv("AONOHAKO_PYTHON_LIBRARY_ISOLATION") == "true"
+	pypyLibraryIsolation := os.Getenv("AONOHAKO_PYPY_LIBRARY_ISOLATION") == "true"
+	if pythonLibraryIsolation || pypyLibraryIsolation {
 		if got := strings.TrimSpace(os.Getenv("AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID")); got != strconv.FormatUint(uint64(pythonpolicy.ExternalLibraryGID), 10) {
 			return fmt.Errorf("python-library-gid: got %q, want %d", got, pythonpolicy.ExternalLibraryGID)
 		}
+		moduleOut, moduleErr, err = runAsSandboxUserWithGroups(
+			"for p in "+
+				"/usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip "+
+				"/usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip "+
+				"/usr/lib/pypy*/dist-packages/pip /usr/local/lib/pypy*/dist-packages/pip "+
+				"/usr/lib/pypy*/site-packages/pip /usr/local/lib/pypy*/site-packages/pip; do "+
+				"if [ -e \"$p\" ]; then "+
+				"if [ -r \"$p\" ] || [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; "+
+				"fi; "+
+				"done",
+			"",
+			[]uint32{pythonpolicy.ExternalLibraryGID},
+		)
+		if err != nil {
+			return fmt.Errorf("python-package-installers-with-library-group: %w\n%s", err, moduleErr)
+		}
+		moduleFields = strings.Fields(strings.TrimSpace(moduleOut))
+		if len(moduleFields)%2 != 0 {
+			return fmt.Errorf("python-package-installers-with-library-group: unexpected stdout %q stderr %q", moduleOut, moduleErr)
+		}
+		for i := 0; i+1 < len(moduleFields); i += 2 {
+			if moduleFields[i+1] != "blocked" {
+				return fmt.Errorf("python-package-installers-with-library-group: unexpected stdout %q stderr %q", moduleOut, moduleErr)
+			}
+		}
+	}
+	if pythonLibraryIsolation {
 		pythonOut, pythonErr, err := runAsSandboxUser(
 			"checked=0; "+
 				"for p in /usr/lib/python*/dist-packages /usr/local/lib/python*/dist-packages /usr/lib/python*/site-packages /usr/local/lib/python*/site-packages /usr/share/python-wheels /usr/local/lib/aonohako/python; do "+
@@ -5168,6 +5199,63 @@ func runDirectImagePermissionChecks() error {
 		)
 		if err != nil || importOut != "allowed\n" {
 			return fmt.Errorf("python-library-import-with-group: stdout %q stderr %q err %v", importOut, importErr, err)
+		}
+	}
+	if pypyLibraryIsolation {
+		pypyOut, pypyErr, err := runAsSandboxUser(
+			"checked=0; "+
+				"for p in /usr/lib/pypy*/dist-packages /usr/local/lib/pypy*/dist-packages /usr/lib/pypy*/site-packages /usr/local/lib/pypy*/site-packages /usr/local/lib/aonohako/python; do "+
+				"if [ -e \"$p\" ]; then checked=$((checked+1)); if [ -r \"$p\" ] || [ -x \"$p\" ]; then echo \"$p leaked\"; else echo \"$p blocked\"; fi; fi; "+
+				"done; "+
+				"if [ \"$checked\" -eq 0 ]; then exit 9; fi",
+			"",
+		)
+		if err != nil {
+			return fmt.Errorf("pypy-library-paths-are-not-readable: %w\n%s", err, pypyErr)
+		}
+		pypyFields := strings.Fields(strings.TrimSpace(pypyOut))
+		if len(pypyFields) == 0 || len(pypyFields)%2 != 0 {
+			return fmt.Errorf("pypy-library-paths-are-not-readable: unexpected stdout %q stderr %q", pypyOut, pypyErr)
+		}
+		for i := 0; i+1 < len(pypyFields); i += 2 {
+			if pypyFields[i+1] != "blocked" {
+				return fmt.Errorf("pypy-library-paths-are-not-readable: unexpected stdout %q stderr %q", pypyOut, pypyErr)
+			}
+		}
+		pypyImportScript := "if pypy3 -I -S -c 'import sys; sys.path.insert(0, \"/usr/local/lib/aonohako/python\"); import sitecustomize' >/dev/null 2>&1; then echo allowed; else echo blocked; fi"
+		pypyOut, pypyErr, err = runAsSandboxUser(pypyImportScript, "")
+		if err != nil || pypyOut != "blocked\n" {
+			return fmt.Errorf("pypy-trusted-package-import-without-group: stdout %q stderr %q err %v", pypyOut, pypyErr, err)
+		}
+		pypyOut, pypyErr, err = runAsSandboxUserWithGroups(
+			pypyImportScript,
+			"",
+			[]uint32{pythonpolicy.ExternalLibraryGID},
+		)
+		if err != nil || pypyOut != "allowed\n" {
+			return fmt.Errorf("pypy-trusted-package-import-with-group: stdout %q stderr %q err %v", pypyOut, pypyErr, err)
+		}
+
+		pypyOut, pypyErr, err = runAsSandboxUserWithGroups(
+			"checked=0; "+
+				"for p in /usr/lib/pypy*/dist-packages /usr/local/lib/pypy*/dist-packages /usr/lib/pypy*/site-packages /usr/local/lib/pypy*/site-packages /usr/local/lib/aonohako/python; do "+
+				"if [ -e \"$p\" ]; then checked=$((checked+1)); if [ -r \"$p\" ] && [ -x \"$p\" ]; then echo \"$p allowed\"; else echo \"$p blocked\"; fi; fi; "+
+				"done; "+
+				"if [ \"$checked\" -eq 0 ]; then exit 9; fi",
+			"",
+			[]uint32{pythonpolicy.ExternalLibraryGID},
+		)
+		if err != nil {
+			return fmt.Errorf("pypy-library-paths-with-group: %w\n%s", err, pypyErr)
+		}
+		pypyFields = strings.Fields(strings.TrimSpace(pypyOut))
+		if len(pypyFields) == 0 || len(pypyFields)%2 != 0 {
+			return fmt.Errorf("pypy-library-paths-with-group: unexpected stdout %q stderr %q", pypyOut, pypyErr)
+		}
+		for i := 0; i+1 < len(pypyFields); i += 2 {
+			if pypyFields[i+1] != "allowed" {
+				return fmt.Errorf("pypy-library-paths-with-group: unexpected stdout %q stderr %q", pypyOut, pypyErr)
+			}
 		}
 	}
 

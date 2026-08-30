@@ -6,12 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"aonohako/internal/platform"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runvalidation"
 )
 
@@ -32,6 +34,10 @@ func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 			MaxFiles                      int `json:"max_files"`
 			CloudRunCommunicationMaxFiles int `json:"cloudrun_communication_max_files"`
 		} `json:"authoritative_work_root"`
+		PythonLibraryMode struct {
+			InstalledCapability string   `json:"installed_capability"`
+			Targets             []string `json:"targets"`
+		} `json:"python_library_mode"`
 	}
 	if err := json.Unmarshal(body, &contract); err != nil {
 		t.Fatalf("parse deployment contract: %v", err)
@@ -56,6 +62,12 @@ func TestRuntimeLimitsMatchDeploymentContract(t *testing.T) {
 	}
 	if contract.AuthoritativeWorkRoot.CloudRunCommunicationMaxFiles != maxCloudRunCommunicationWorkRootFiles {
 		t.Fatalf("deployment Cloud Run communication max files = %d, config max = %d", contract.AuthoritativeWorkRoot.CloudRunCommunicationMaxFiles, maxCloudRunCommunicationWorkRootFiles)
+	}
+	if contract.PythonLibraryMode.InstalledCapability != pythonpolicy.InstalledCapability {
+		t.Fatalf("deployment installed Python library capability = %q, want %q", contract.PythonLibraryMode.InstalledCapability, pythonpolicy.InstalledCapability)
+	}
+	if want := []string{"python", "pypy"}; !slices.Equal(contract.PythonLibraryMode.Targets, want) {
+		t.Fatalf("deployment installed Python library targets = %q, want %q", contract.PythonLibraryMode.Targets, want)
 	}
 }
 

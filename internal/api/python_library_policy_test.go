@@ -17,10 +17,10 @@ import (
 	"aonohako/internal/pythonpolicy"
 )
 
-func pythonExecutePayload(t *testing.T, mode, problemID string) []byte {
+func pythonExecutePayload(t *testing.T, lang, mode, problemID string) []byte {
 	t.Helper()
 	payload := map[string]any{
-		"lang":     "python",
+		"lang":     lang,
 		"binaries": []map[string]any{{"name": "Main.py", "data_b64": base64.StdEncoding.EncodeToString([]byte("print('ok')\n"))}},
 		"limits":   map[string]any{"time_ms": 1000, "memory_mb": 64},
 	}
@@ -66,7 +66,7 @@ func TestExecuteDefaultsPythonLibraryModeToStdlib(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
-	status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "", ""))
+	status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "python", "", ""))
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", status, body)
 	}
@@ -75,8 +75,29 @@ func TestExecuteDefaultsPythonLibraryModeToStdlib(t *testing.T) {
 	}
 }
 
+func TestExecuteAllowsInstalledPyPyLibraryMode(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.DefaultPythonLibraryMode = pythonpolicy.LibraryModeStdlib
+	cfg.AllowRequestPythonInstalledLibraries = true
+	var seen pythonpolicy.LibraryMode
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(_ context.Context, req *model.RunRequest, _ execute.Hooks) model.RunResponse {
+		seen = req.PythonLibraryMode
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "PYPY3", "installed", ""))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", status, body)
+	}
+	if seen != pythonpolicy.LibraryModeInstalled {
+		t.Fatalf("runner mode = %q, want installed", seen)
+	}
+}
+
 func TestExecuteEnforcesInstalledPythonLibraryPolicy(t *testing.T) {
-	t.Run("direct request denied", func(t *testing.T) {
+	t.Run("direct requests denied", func(t *testing.T) {
 		cfg := configForTest(t)
 		cfg.DefaultPythonLibraryMode = pythonpolicy.LibraryModeStdlib
 		cfg.AllowRequestPythonInstalledLibraries = false
@@ -87,13 +108,15 @@ func TestExecuteEnforcesInstalledPythonLibraryPolicy(t *testing.T) {
 		ts := httptest.NewServer(s.Handler())
 		defer ts.Close()
 
-		status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "installed", ""))
-		if status != http.StatusBadRequest || !strings.Contains(body, "server policy") {
-			t.Fatalf("status = %d, body=%s", status, body)
-		}
-		active, pending := s.queue.Snapshot()
-		if active != 0 || pending != 0 {
-			t.Fatalf("denied request entered queue: active=%d pending=%d", active, pending)
+		for _, lang := range []string{"python", "PYPY3"} {
+			status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, lang, "installed", ""))
+			if status != http.StatusBadRequest || !strings.Contains(body, "server policy") {
+				t.Fatalf("lang %s: status = %d, body=%s", lang, status, body)
+			}
+			active, pending := s.queue.Snapshot()
+			if active != 0 || pending != 0 {
+				t.Fatalf("lang %s: denied request entered queue: active=%d pending=%d", lang, active, pending)
+			}
 		}
 	})
 
@@ -109,7 +132,7 @@ func TestExecuteEnforcesInstalledPythonLibraryPolicy(t *testing.T) {
 		ts := httptest.NewServer(s.Handler())
 		defer ts.Close()
 
-		status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "installed", ""))
+		status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "python", "installed", ""))
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, body=%s", status, body)
 		}
@@ -130,7 +153,7 @@ func TestExecuteEnforcesInstalledPythonLibraryPolicy(t *testing.T) {
 		ts := httptest.NewServer(s.Handler())
 		defer ts.Close()
 
-		status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "installed", ""))
+		status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "python", "installed", ""))
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, body=%s", status, body)
 		}
@@ -153,7 +176,7 @@ func TestExecuteAppliesProblemPythonLibraryMode(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
-	status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "", "contest-1/a"))
+	status, body := postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "python", "", "contest-1/a"))
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", status, body)
 	}
@@ -161,7 +184,7 @@ func TestExecuteAppliesProblemPythonLibraryMode(t *testing.T) {
 		t.Fatalf("runner mode = %q, want installed", seen)
 	}
 
-	status, body = postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "stdlib", "contest-1/a"))
+	status, body = postPythonPolicyRequest(t, ts.URL, pythonExecutePayload(t, "python", "stdlib", "contest-1/a"))
 	if status != http.StatusBadRequest || !strings.Contains(body, "problem policy") {
 		t.Fatalf("conflict status = %d, body=%s", status, body)
 	}

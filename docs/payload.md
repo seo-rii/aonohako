@@ -120,7 +120,7 @@ error.
   },
   "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
-  "python_library_mode": "stdlib",           // optional request-wide Python imports: "stdlib" | "installed"
+  "python_library_mode": "stdlib",           // optional request-wide CPython/PyPy imports: "stdlib" | "installed"
   "enable_network": false,                   // outbound network request flag; honored only when server policy allows request-controlled network
   "emit_logs": true,                         // optional contestant stdout/stderr log SSE events; defaults to true
   "entry_point": "src/main.py",              // optional submitted file path to run; some runtimes use a class/module/procedure/top-level name
@@ -199,18 +199,26 @@ entry points can keep profile selection behind trusted problem policy.
 `AONOHAKO_PROBLEM_RUNTIME_PROFILES`; mapped problems receive their configured
 profile before the request enters the stream or runner queue.
 
-`python_library_mode` applies to every Python target in the request, including
-two-step programs, interactors, and Python SPJs. `stdlib` runs Python with
-environment, user-site, and automatic `site` loading disabled; submitted
-sibling modules and the Python standard library remain importable. `installed`
-also exposes packages installed in the runtime image. The server defaults to
-`stdlib`, unless `AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE` says otherwise.
+`python_library_mode` applies to every CPython or PyPy target in the request,
+including two-step programs, interactors, and SPJs. `stdlib` runs the selected
+interpreter with environment, user-site, and automatic `site` loading disabled;
+submitted sibling modules and the interpreter's standard library remain
+importable. `installed` uses the same isolated startup, then adds global system
+package directories plus the trusted image package directory and explicitly
+loads the fixed image-owned `sitecustomize.py` before executing the submission.
+This exposes the selected interpreter's protected package roots and the shared
+trusted image package root to the target process tree without letting
+`PYTHONPATH`, the user site, or a submitted `sitecustomize.py` replace the
+trusted hook. Package roots belonging to other language adapters in a mixed
+image are part of those toolchains, not this request mode. The server defaults
+to `stdlib`, unless
+`AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE` says otherwise.
 When that default is `stdlib`, request-selected `installed` mode is accepted
 only when `AONOHAKO_ALLOW_REQUEST_PYTHON_INSTALLED_LIBRARIES=true` or when
 `AONOHAKO_PROBLEM_PYTHON_LIBRARY_MODES` maps the request's `problem_id` to
 `installed`. A request value that conflicts with a problem mapping is rejected
-before stream and queue admission. Supplying this field when no Python target
-exists is also invalid.
+before stream and queue admission. Supplying this field when no CPython or PyPy
+target exists is also invalid.
 
 Source, binary, expected-output, and stdin fields that support a `*_url` or
 `data_url` alternative may fetch only public HTTP(S) destinations. URL

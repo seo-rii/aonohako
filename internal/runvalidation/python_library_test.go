@@ -18,6 +18,12 @@ func TestValidatePythonLibraryMode(t *testing.T) {
 	if err := Validate(valid); err != nil {
 		t.Fatalf("stdlib Python request should validate: %v", err)
 	}
+	pypy := *valid
+	pypy.Lang = "PYPY3"
+	pypy.PythonLibraryMode = pythonpolicy.LibraryModeInstalled
+	if err := Validate(&pypy); err != nil {
+		t.Fatalf("installed PyPy request should validate: %v", err)
+	}
 
 	invalid := *valid
 	invalid.PythonLibraryMode = "all"
@@ -38,10 +44,14 @@ func TestUsesPythonFindsEveryExecutionShape(t *testing.T) {
 		name string
 		req  *model.RunRequest
 	}{
-		{name: "legacy", req: &model.RunRequest{Lang: "PYTHON3"}},
-		{name: "step", req: &model.RunRequest{Programs: []model.RunProgram{{Lang: "python"}}}},
-		{name: "interactor", req: &model.RunRequest{Interactor: &model.InteractorSpec{Lang: "python"}}},
-		{name: "spj", req: &model.RunRequest{SPJ: &model.SPJSpec{Lang: "python"}}},
+		{name: "CPython contestant", req: &model.RunRequest{Lang: "PYTHON3"}},
+		{name: "CPython step", req: &model.RunRequest{Programs: []model.RunProgram{{Lang: "python"}}}},
+		{name: "CPython interactor", req: &model.RunRequest{Interactor: &model.InteractorSpec{Lang: "python"}}},
+		{name: "CPython spj", req: &model.RunRequest{SPJ: &model.SPJSpec{Lang: "python"}}},
+		{name: "PyPy contestant", req: &model.RunRequest{Lang: "PYPY3"}},
+		{name: "PyPy step", req: &model.RunRequest{Programs: []model.RunProgram{{Lang: "pypy"}}}},
+		{name: "PyPy interactor", req: &model.RunRequest{Interactor: &model.InteractorSpec{Lang: "PYPY3"}}},
+		{name: "PyPy spj", req: &model.RunRequest{SPJ: &model.SPJSpec{Lang: "pypy"}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

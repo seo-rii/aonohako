@@ -148,20 +148,38 @@ that name only as a root-created link to the active peer's workspace and never
 allows another sandbox command to overlap it.
 
 Python package visibility uses the same process boundary rather than a separate
-container image. Python runtime images assign site/dist-packages,
-`/usr/share/python-wheels`, and `/usr/local/lib/aonohako/python` to the
-root-owned supplementary GID `65530`; directories are `0750`, ordinary files
-are `0640`, and executable files are `0750`. In `stdlib` mode the target does
-not receive that group and Python starts through an isolated `-I -S` launcher.
+container image. CPython runtime images assign their site/dist-packages and
+`/usr/share/python-wheels` to the root-owned supplementary GID `65530`; PyPy
+runtime images independently assign their PyPy site/dist-packages to that GID.
+An image containing either interpreter also assigns the shared trusted
+`/usr/local/lib/aonohako/python` package root to that GID. Keeping separate
+interpreter flags avoids restricting CPython-backed language adapters in
+PyPy-only profiles; those adapter dependencies remain part of their language
+toolchain and are outside `python_library_mode`.
+Protected directories are `0750`, ordinary files are `0640`, and executable
+files are `0750`. In `stdlib` mode the target does not receive that group and
+the selected interpreter starts through an isolated `-I -S` launcher.
 The launcher restores the normal script-level `exit`, `quit`, `help`,
 `copyright`, `credits`, and `license` helpers without running site
 initialization, then executes the submission with its entry-point directory at
-the front of `sys.path`. This blocks both normal imports and direct path reads
-while preserving standard-library and submitted sibling-module imports. In
-`installed` mode only Python targets receive GID `65530` and use normal site
-initialization. The request-wide mode is propagated to two-step programs,
-interactors, Python SPJs, and remote runners. Runtime-image permission selftests
-verify that imports fail without the group and succeed with it. This is a
+the front of `sys.path`. This preserves standard-library and submitted
+sibling-module imports while the permission boundary blocks normal imports and
+direct reads from the selected interpreter's protected package roots and the
+shared trusted package root. In
+`installed` mode CPython and PyPy process trees receive GID `65530`, but still
+start with `-I -S`. The installed launcher adds the interpreter's global system
+package directories and the trusted image package directory, explicitly loads
+the fixed image-owned `sitecustomize.py`, and then adds the submission
+directory. `PYTHONPATH`, the user site, and a submitted `sitecustomize.py`
+therefore cannot replace the trusted startup hook.
+
+The shared GID authorizes the whole installed Python-family process tree and
+all protected CPython/PyPy package roots present in its selected image; the
+per-interpreter package catalog is a compatibility guarantee, not a
+confidentiality boundary between CPython and PyPy. The request-wide mode is
+propagated to two-step programs, interactors, SPJs, and remote runners.
+Runtime-image permission selftests verify that protected paths are denied
+without the group and allowed with it. This is a
 package-visibility boundary; enabled package code still runs under the target's
 existing syscall, network, and resource limits.
 

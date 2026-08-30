@@ -71,7 +71,7 @@ func Validate(req *model.RunRequest) error {
 		return fmt.Errorf("invalid python_library_mode: %w", err)
 	}
 	if req.PythonLibraryMode != "" && !UsesPython(req) {
-		return fmt.Errorf("python_library_mode requires a Python contestant, step program, interactor, or spj")
+		return fmt.Errorf("python_library_mode requires a Python or PyPy contestant, step program, interactor, or spj")
 	}
 	if err := ValidateCaptureLimits(req.CaptureLimits); err != nil {
 		return err
@@ -626,18 +626,24 @@ func UsesPython(req *model.RunRequest) bool {
 	if req == nil {
 		return false
 	}
-	if profiles.NormalizeRunLang(req.Lang) == "python" {
-		return true
-	}
+	languages := make([]string, 0, len(req.Programs)+3)
+	languages = append(languages, req.Lang)
 	for _, program := range req.Programs {
-		if profiles.NormalizeRunLang(program.Lang) == "python" {
+		languages = append(languages, program.Lang)
+	}
+	if req.Interactor != nil {
+		languages = append(languages, req.Interactor.Lang)
+	}
+	if req.SPJ != nil {
+		languages = append(languages, req.SPJ.Lang)
+	}
+	for _, language := range languages {
+		normalizedLang := profiles.NormalizeRunLang(language)
+		if normalizedLang == "python" || normalizedLang == "pypy" {
 			return true
 		}
 	}
-	if req.Interactor != nil && profiles.NormalizeRunLang(req.Interactor.Lang) == "python" {
-		return true
-	}
-	return req.SPJ != nil && profiles.NormalizeRunLang(req.SPJ.Lang) == "python"
+	return false
 }
 
 func LimitsAreZero(l model.Limits) bool {

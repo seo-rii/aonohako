@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -175,10 +176,29 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET only")
 		return
 	}
-	capabilities := make([]string, 0, 1)
+	capabilities := make([]string, 0, 2)
 	if platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled) {
 		capabilities = append(capabilities, "communication-v1")
 	}
+	installedModeAllowed := s.cfg.AllowRequestPythonInstalledLibraries ||
+		s.cfg.DefaultPythonLibraryMode == pythonpolicy.LibraryModeInstalled
+	installedImageAttested := s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded &&
+		s.cfg.Execution.Platform.SandboxBackend == platform.SandboxBackendHelper &&
+		os.Getenv("AONOHAKO_PYTHON_LIBRARY_ISOLATION") == "true" &&
+		os.Getenv("AONOHAKO_PYPY_LIBRARY_ISOLATION") == "true" &&
+		os.Getenv("AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID") == strconv.FormatUint(uint64(pythonpolicy.ExternalLibraryGID), 10)
+	if installedModeAllowed && installedImageAttested {
+		languages := make(map[string]struct{})
+		for _, language := range strings.Split(os.Getenv("AONOHAKO_LANGUAGES"), ",") {
+			languages[language] = struct{}{}
+		}
+		_, hasPython := languages["python"]
+		_, hasPyPy := languages["pypy"]
+		if hasPython && hasPyPy {
+			capabilities = append(capabilities, pythonpolicy.InstalledCapability)
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": capabilities})
 }
@@ -999,7 +1019,7 @@ func (s *Server) applyPythonLibraryPolicy(req *model.RunRequest) error {
 	}
 	if !runvalidation.UsesPython(req) {
 		if req.PythonLibraryMode != "" {
-			return fmt.Errorf("python_library_mode requires a Python contestant, step program, interactor, or spj")
+			return fmt.Errorf("python_library_mode requires a Python or PyPy contestant, step program, interactor, or spj")
 		}
 		return nil
 	}

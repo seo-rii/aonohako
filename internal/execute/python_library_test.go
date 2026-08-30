@@ -17,35 +17,56 @@ func TestBuildCommandSelectsPythonLibraryMode(t *testing.T) {
 	path := "/work/box/Main.py"
 	tests := []struct {
 		name string
+		lang string
 		mode pythonpolicy.LibraryMode
 		want []string
 	}{
 		{
-			name: "omitted defaults to stdlib",
+			name: "CPython omitted defaults to stdlib",
+			lang: "python",
 			want: []string{"python3", "-I", "-S", "-c", pythonStdlibRunner, path},
 		},
 		{
-			name: "stdlib",
+			name: "CPython stdlib",
+			lang: "python",
 			mode: pythonpolicy.LibraryModeStdlib,
 			want: []string{"python3", "-I", "-S", "-c", pythonStdlibRunner, path},
 		},
 		{
-			name: "installed",
+			name: "CPython installed",
+			lang: "python",
 			mode: pythonpolicy.LibraryModeInstalled,
-			want: []string{"python3", path},
+			want: []string{"python3", "-I", "-S", "-c", pythonInstalledRunner, path, pythonTrustedSitecustomizePath},
+		},
+		{
+			name: "PyPy omitted defaults to stdlib",
+			lang: "pypy",
+			want: []string{"pypy3", "-I", "-S", "-c", pythonStdlibRunner, path},
+		},
+		{
+			name: "PyPy stdlib",
+			lang: "pypy",
+			mode: pythonpolicy.LibraryModeStdlib,
+			want: []string{"pypy3", "-I", "-S", "-c", pythonStdlibRunner, path},
+		},
+		{
+			name: "PyPy installed",
+			lang: "pypy",
+			mode: pythonpolicy.LibraryModeInstalled,
+			want: []string{"pypy3", "-I", "-S", "-c", pythonInstalledRunner, path, pythonTrustedSitecustomizePath},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := &model.RunRequest{PythonLibraryMode: tc.mode}
-			if got := buildCommand(path, "python", req); !reflect.DeepEqual(got, tc.want) {
+			if got := buildCommand(path, tc.lang, req); !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("buildCommand() = %v, want %v", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestSandboxSupplementaryGroupsGrantInstalledPythonOnly(t *testing.T) {
+func TestSandboxSupplementaryGroupsGrantInstalledPythonRuntimesOnly(t *testing.T) {
 	identity := sandboxIdentity{uid: 65532, gid: 65532}
 	tests := []struct {
 		name string
@@ -57,6 +78,10 @@ func TestSandboxSupplementaryGroupsGrantInstalledPythonOnly(t *testing.T) {
 		{name: "omitted", lang: "python", want: []uint32{65532}},
 		{name: "installed", lang: "python", mode: pythonpolicy.LibraryModeInstalled, want: []uint32{65532, pythonpolicy.ExternalLibraryGID}},
 		{name: "python alias", lang: "PYTHON3", mode: pythonpolicy.LibraryModeInstalled, want: []uint32{65532, pythonpolicy.ExternalLibraryGID}},
+		{name: "PyPy stdlib", lang: "pypy", mode: pythonpolicy.LibraryModeStdlib, want: []uint32{65532}},
+		{name: "PyPy omitted", lang: "pypy", want: []uint32{65532}},
+		{name: "PyPy installed", lang: "pypy", mode: pythonpolicy.LibraryModeInstalled, want: []uint32{65532, pythonpolicy.ExternalLibraryGID}},
+		{name: "PyPy alias", lang: "PYPY3", mode: pythonpolicy.LibraryModeInstalled, want: []uint32{65532, pythonpolicy.ExternalLibraryGID}},
 		{name: "non python", lang: "binary", mode: pythonpolicy.LibraryModeInstalled, want: []uint32{65532}},
 	}
 	for _, tc := range tests {
@@ -163,6 +188,106 @@ func TestStdlibPythonCommandProvidesOtherSiteBuiltins(t *testing.T) {
 	}
 }
 
+func TestInstalledPythonRunnerLoadsOnlyTrustedSitecustomize(t *testing.T) {
+	interpreters := []struct {
+		name string
+		path string
+	}{
+		{name: "CPython", path: "python3"},
+		{name: "PyPy", path: "pypy3"},
+	}
+	for _, interpreter := range interpreters {
+		t.Run(interpreter.name, func(t *testing.T) {
+			executable, err := exec.LookPath(interpreter.path)
+			if err != nil {
+				t.Skipf("%s is unavailable", interpreter.path)
+			}
+
+			workDir := t.TempDir()
+			externalDir := t.TempDir()
+			userBase := t.TempDir()
+			trustedDir := t.TempDir()
+			trustedSitecustomizePath := filepath.Join(trustedDir, "sitecustomize.py")
+			if err := os.WriteFile(trustedSitecustomizePath, []byte(
+				"import builtins\n"+
+					"SOURCE = 'trusted'\n"+
+					"builtins.AONOHAKO_SITECUSTOMIZE = SOURCE\n",
+			), 0o644); err != nil {
+				t.Fatalf("write trusted sitecustomize: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(trustedDir, "trusted_probe.py"), []byte("VALUE = 'trusted-package-ok'\n"), 0o644); err != nil {
+				t.Fatalf("write trusted package probe: %v", err)
+			}
+
+			maliciousSitecustomize := []byte(
+				"import builtins\n" +
+					"SOURCE = 'untrusted'\n" +
+					"builtins.AONOHAKO_SITECUSTOMIZE = SOURCE\n" +
+					"raise RuntimeError('untrusted sitecustomize executed')\n",
+			)
+			for _, dir := range []string{workDir, externalDir} {
+				if err := os.WriteFile(filepath.Join(dir, "sitecustomize.py"), maliciousSitecustomize, 0o644); err != nil {
+					t.Fatalf("write untrusted sitecustomize: %v", err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(externalDir, "external_probe.py"), []byte("VALUE = 'leaked'\n"), 0o644); err != nil {
+				t.Fatalf("write external probe: %v", err)
+			}
+
+			userSiteCommand := exec.Command(executable, "-S", "-c", "import site; print(site.getusersitepackages())")
+			userSiteCommand.Env = append(os.Environ(), "PYTHONUSERBASE="+userBase)
+			userSiteOutput, err := userSiteCommand.CombinedOutput()
+			if err != nil {
+				t.Fatalf("resolve user site: %v\n%s", err, userSiteOutput)
+			}
+			userSite := strings.TrimSpace(string(userSiteOutput))
+			if err := os.MkdirAll(userSite, 0o755); err != nil {
+				t.Fatalf("create user site: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(userSite, "sitecustomize.py"), maliciousSitecustomize, 0o644); err != nil {
+				t.Fatalf("write user sitecustomize: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(userSite, "user_probe.py"), []byte("VALUE = 'leaked'\n"), 0o644); err != nil {
+				t.Fatalf("write user probe: %v", err)
+			}
+
+			if err := os.WriteFile(filepath.Join(workDir, "helper.py"), []byte("VALUE = 'local-ok'\n"), 0o644); err != nil {
+				t.Fatalf("write helper: %v", err)
+			}
+			mainPath := filepath.Join(workDir, "Main.py")
+			if err := os.WriteFile(mainPath, []byte(
+				"import builtins\n"+
+					"import importlib.util\n"+
+					"import sys\n"+
+					"import helper\n"+
+					"import sitecustomize\n"+
+					"import trusted_probe\n"+
+					"assert sys.argv == [__file__]\n"+
+					"assert helper.VALUE == 'local-ok'\n"+
+					"assert builtins.AONOHAKO_SITECUSTOMIZE == 'trusted'\n"+
+					"assert sitecustomize.SOURCE == 'trusted'\n"+
+					"assert trusted_probe.VALUE == 'trusted-package-ok'\n"+
+					"assert importlib.util.find_spec('external_probe') is None\n"+
+					"assert importlib.util.find_spec('user_probe') is None\n"+
+					"print('ok')\n",
+			), 0o644); err != nil {
+				t.Fatalf("write Main.py: %v", err)
+			}
+
+			cmd := exec.Command(executable, "-I", "-S", "-c", pythonInstalledRunner, mainPath, trustedSitecustomizePath)
+			cmd.Dir = workDir
+			cmd.Env = append(os.Environ(), "PYTHONPATH="+externalDir, "PYTHONUSERBASE="+userBase)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("installed command failed: %v\n%s", err, out)
+			}
+			if string(out) != "ok\n" {
+				t.Fatalf("stdout = %q, want ok", out)
+			}
+		})
+	}
+}
+
 func TestDerivedPythonRunsPreserveLibraryMode(t *testing.T) {
 	req := &model.RunRequest{
 		PythonLibraryMode: pythonpolicy.LibraryModeInstalled,
@@ -182,7 +307,7 @@ func TestServiceRejectsPythonModeWithoutPythonTarget(t *testing.T) {
 		Lang:              "binary",
 		PythonLibraryMode: pythonpolicy.LibraryModeInstalled,
 	}, Hooks{})
-	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "Python execution target") {
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "Python or PyPy execution target") {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 }

@@ -116,6 +116,7 @@ ARG GO_EXTERNAL_MODULE_GID=65528
 ARG RUST_CRATE_ISOLATION=false
 ARG RUST_EXTERNAL_CRATE_GID=65529
 ARG PYTHON_LIBRARY_ISOLATION=false
+ARG PYPY_LIBRARY_ISOLATION=false
 ARG PYTHON_EXTERNAL_LIBRARY_GID=65530
 
 RUN install -d -m 0755 /usr/local/lib/aonohako /usr/local/lib/aonohako/python /usr/local/include
@@ -148,6 +149,7 @@ COPY --chmod=0644 scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_write
 COPY --chmod=0700 scripts/harden_shell_runtime.sh /usr/local/lib/aonohako/harden_shell_runtime.sh
 COPY --chmod=0644 scripts/shell_runtime_allowlist.txt /usr/local/lib/aonohako/shell_runtime_allowlist.txt
 COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/
+COPY --chmod=0644 python/sitecustomize.py /usr/local/lib/aonohako/python/sitecustomize.py
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
 
 RUN chmod 0755 /usr/local/lib/aonohako && \
@@ -198,7 +200,7 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
       rm -rf /usr/local/lib/aonohako/go-modcache; \
     fi && \
     if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" ]]; then \
-      for path in /usr/lib/python*/dist-packages /usr/local/lib/python*/dist-packages /usr/lib/python*/site-packages /usr/local/lib/python*/site-packages /usr/share/python-wheels /usr/local/lib/aonohako/python; do \
+      for path in /usr/lib/python*/dist-packages /usr/local/lib/python*/dist-packages /usr/lib/python*/site-packages /usr/local/lib/python*/site-packages /usr/share/python-wheels; do \
         if [[ ! -e "${path}" ]]; then continue; fi; \
         chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}" "${path}"; \
         find "${path}" -type d -exec chmod 0750 {} +; \
@@ -206,7 +208,23 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
         find "${path}" -type f ! -perm /0111 -exec chmod 0640 {} +; \
       done; \
     fi && \
-    for path in /usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip /usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip /usr/local/lib/node_modules/npm /opt/node-*/lib/node_modules/npm; do \
+    if [[ "${PYPY_LIBRARY_ISOLATION}" == "true" ]]; then \
+      for path in /usr/lib/pypy*/dist-packages /usr/local/lib/pypy*/dist-packages /usr/lib/pypy*/site-packages /usr/local/lib/pypy*/site-packages; do \
+        if [[ ! -e "${path}" ]]; then continue; fi; \
+        chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}" "${path}"; \
+        find "${path}" -type d -exec chmod 0750 {} +; \
+        find "${path}" -type f -perm /0111 -exec chmod 0750 {} +; \
+        find "${path}" -type f ! -perm /0111 -exec chmod 0640 {} +; \
+      done; \
+    fi && \
+    if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" || "${PYPY_LIBRARY_ISOLATION}" == "true" ]]; then \
+      path=/usr/local/lib/aonohako/python; \
+      chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}" "${path}"; \
+      find "${path}" -type d -exec chmod 0750 {} +; \
+      find "${path}" -type f -perm /0111 -exec chmod 0750 {} +; \
+      find "${path}" -type f ! -perm /0111 -exec chmod 0640 {} +; \
+    fi && \
+    for path in /usr/lib/python*/dist-packages/pip /usr/local/lib/python*/dist-packages/pip /usr/lib/python*/site-packages/pip /usr/local/lib/python*/site-packages/pip /usr/lib/pypy*/dist-packages/pip /usr/local/lib/pypy*/dist-packages/pip /usr/lib/pypy*/site-packages/pip /usr/local/lib/pypy*/site-packages/pip /usr/local/lib/node_modules/npm /opt/node-*/lib/node_modules/npm; do \
       if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
     done
 
@@ -236,6 +254,7 @@ ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/
     AONOHAKO_RUST_CRATE_ISOLATION=${RUST_CRATE_ISOLATION} \
     AONOHAKO_RUST_EXTERNAL_CRATE_GID=${RUST_EXTERNAL_CRATE_GID} \
     AONOHAKO_PYTHON_LIBRARY_ISOLATION=${PYTHON_LIBRARY_ISOLATION} \
+    AONOHAKO_PYPY_LIBRARY_ISOLATION=${PYPY_LIBRARY_ISOLATION} \
     AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID=${PYTHON_EXTERNAL_LIBRARY_GID} \
     AONOHAKO_SANDBOX_TOOLS=${SANDBOX_TOOLS} \
     AONOHAKO_SMOKE_COMMAND=${SMOKE_COMMAND}

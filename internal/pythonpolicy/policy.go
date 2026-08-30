@@ -10,6 +10,7 @@ type LibraryMode string
 const (
 	LibraryModeStdlib    LibraryMode = "stdlib"
 	LibraryModeInstalled LibraryMode = "installed"
+	InstalledCapability              = "python-library-pypy-installed-v1"
 
 	ExternalLibraryGID uint32 = 65530
 )

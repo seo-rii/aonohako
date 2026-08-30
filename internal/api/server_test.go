@@ -17,6 +17,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +29,7 @@ import (
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
 )
 
@@ -1534,6 +1537,126 @@ func TestCapabilitiesAdvertiseCommunicationOnSupportedRunners(t *testing.T) {
 			hasCapability := strings.Contains(recorder.Body.String(), "communication-v1")
 			if hasCapability != tc.want {
 				t.Fatalf("capabilities = %s, want communication-v1=%v", recorder.Body.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestCapabilitiesAdvertiseInstalledPythonAndPyPyLibrariesOnlyForAttestedImages(t *testing.T) {
+	tests := []struct {
+		name              string
+		edit              func(*testing.T, *config.Config)
+		want              bool
+		wantCommunication bool
+	}{
+		{name: "attested image with request opt in", want: true},
+		{
+			name: "attested image with installed default",
+			edit: func(_ *testing.T, cfg *config.Config) {
+				cfg.AllowRequestPythonInstalledLibraries = false
+				cfg.DefaultPythonLibraryMode = pythonpolicy.LibraryModeInstalled
+			},
+			want: true,
+		},
+		{
+			name: "coexists with communication capability",
+			edit: func(_ *testing.T, cfg *config.Config) {
+				cfg.CommunicationEnabled = true
+				cfg.Execution.Platform.DeploymentTarget = platform.DeploymentTargetCloudRun
+			},
+			want:              true,
+			wantCommunication: true,
+		},
+		{
+			name: "server policy blocks installed mode",
+			edit: func(_ *testing.T, cfg *config.Config) {
+				cfg.AllowRequestPythonInstalledLibraries = false
+			},
+		},
+		{
+			name: "remote control plane cannot attest workers",
+			edit: func(_ *testing.T, cfg *config.Config) {
+				cfg.Execution.Platform.ExecutionTransport = platform.ExecutionTransportRemote
+			},
+		},
+		{
+			name: "embedded execution without helper cannot attest isolation",
+			edit: func(_ *testing.T, cfg *config.Config) {
+				cfg.Execution.Platform.SandboxBackend = platform.SandboxBackendNone
+			},
+		},
+		{
+			name: "image is missing Python",
+			edit: func(t *testing.T, _ *config.Config) {
+				t.Setenv("AONOHAKO_LANGUAGES", "plain,pypy")
+			},
+		},
+		{
+			name: "image is missing PyPy",
+			edit: func(t *testing.T, _ *config.Config) {
+				t.Setenv("AONOHAKO_LANGUAGES", "plain,python")
+			},
+		},
+		{
+			name: "Python isolation is disabled",
+			edit: func(t *testing.T, _ *config.Config) {
+				t.Setenv("AONOHAKO_PYTHON_LIBRARY_ISOLATION", "false")
+			},
+		},
+		{
+			name: "PyPy isolation is disabled",
+			edit: func(t *testing.T, _ *config.Config) {
+				t.Setenv("AONOHAKO_PYPY_LIBRARY_ISOLATION", "false")
+			},
+		},
+		{
+			name: "external library group does not match",
+			edit: func(t *testing.T, _ *config.Config) {
+				t.Setenv("AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID", "65529")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AONOHAKO_LANGUAGES", "plain,pypy,python")
+			t.Setenv("AONOHAKO_PYTHON_LIBRARY_ISOLATION", "true")
+			t.Setenv("AONOHAKO_PYPY_LIBRARY_ISOLATION", "true")
+			t.Setenv("AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID", strconv.FormatUint(uint64(pythonpolicy.ExternalLibraryGID), 10))
+
+			cfg := configForTest(t)
+			cfg.DefaultPythonLibraryMode = pythonpolicy.LibraryModeStdlib
+			cfg.AllowRequestPythonInstalledLibraries = true
+			cfg.Execution.Platform.ExecutionTransport = platform.ExecutionTransportEmbedded
+			cfg.Execution.Platform.SandboxBackend = platform.SandboxBackendHelper
+			if tc.edit != nil {
+				tc.edit(t, &cfg)
+			}
+
+			s := NewWithServices(cfg, compile.New(), execute.New())
+			s.readinessCheck = nil
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/capabilities", nil)
+			s.Handler().ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d", recorder.Code)
+			}
+			if got := recorder.Header().Get("Cache-Control"); got != "no-store, max-age=0" {
+				t.Fatalf("Cache-Control = %q, want no-store", got)
+			}
+			var body struct {
+				Capabilities []string `json:"capabilities"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode capabilities: %v", err)
+			}
+			hasCapability := slices.Contains(body.Capabilities, pythonpolicy.InstalledCapability)
+			if hasCapability != tc.want {
+				t.Fatalf("capabilities = %q, want installed capability=%v", body.Capabilities, tc.want)
+			}
+			hasCommunication := slices.Contains(body.Capabilities, "communication-v1")
+			if hasCommunication != tc.wantCommunication {
+				t.Fatalf("capabilities = %q, want communication capability=%v", body.Capabilities, tc.wantCommunication)
 			}
 		})
 	}
