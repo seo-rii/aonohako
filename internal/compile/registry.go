@@ -187,6 +187,7 @@ var compileRegistry = map[string]Compiler{
 	"moonbit":       moonBitCompiler{},
 	"zerolang":      zerolangCompiler{},
 	"deno":          denoCompiler{},
+	"bun":           bunCompiler{},
 	"kotlin-jvm":    kotlinJVMCompiler{},
 	"coffeescript":  coffeeScriptCompiler{},
 	"rescript":      reScriptCompiler{},

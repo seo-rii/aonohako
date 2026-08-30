@@ -293,6 +293,34 @@ func TestJVMRunLanguagesDoNotUseAddressSpaceProximityMLE(t *testing.T) {
 	}
 }
 
+func TestBunRuntimeKeepsFixedEnvironmentAndDefaultSandboxDenies(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatalf("read sandbox_exec.go: %v", err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`case "bun":`,
+		`innerEnv = append(innerEnv, "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0", "BUN_OPTIONS=")`,
+		`allowUnixSockets := false`,
+		`allowProcesses := false`,
+		`AddressSpaceLimitBytes:   addressSpaceLimit`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("Bun runtime sandbox contract must contain %q", marker)
+		}
+	}
+	for _, forbidden := range []string{
+		`case "bun":\n\t\tallowUnixSockets = true`,
+		`case "bun":\n\t\tallowProcesses = true`,
+		`runtimeBase == "bun"`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Bun runtime unexpectedly receives sandbox privilege %q", forbidden)
+		}
+	}
+}
+
 func TestShellProcessOptInIsBoundToDedicatedImageAndRuntime(t *testing.T) {
 	if shellSandboxThreadLimit != 64 {
 		t.Fatalf("shellSandboxThreadLimit = %d, want 64", shellSandboxThreadLimit)

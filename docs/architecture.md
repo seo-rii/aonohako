@@ -475,7 +475,7 @@ Memory enforcement uses several layers:
   no-cgroup helper runs deliberately do not use process `rusage.Maxrss` because
   it includes the API server's fork-time RSS and sandbox-helper setup before the
   target `execve()`
-- `RLIMIT_AS` to constrain virtual address space growth; most native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Deno, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps; compiled Go binaries, Java, and .NET disable this limit because their startup reservations are not proportional to RSS
+- `RLIMIT_AS` to constrain virtual address space growth; most native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Deno, Bun/JSC, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps; Bun and Deno use a 64 GiB floor and are excluded from address-space-proximity MLE inference, while compiled Go binaries, Java, and .NET disable this limit because their startup reservations are not proportional to RSS
 - runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Deno receives a V8 old-space cap through `--v8-flags`; Java-family launchers receive heap, stack, direct-memory, metaspace/class-space, and code-cache caps as applicable; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
 - deployment-validated runtime tuning for selected JVM, Go, Erlang/Elixir,
   .NET GC, Kotlin/Native, Deno, Node, and Wasmtime
@@ -930,7 +930,7 @@ Production profiles currently group languages like this:
 | Profile | Languages |
 | --- | --- |
 | `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
-| `type-b` | `assemblyscript`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
+| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
@@ -965,6 +965,19 @@ immutable shim directory; compilation then validates the emitted Wasm artifact.
 Execution uses the same bounded Wasmtime memory, table, instance, and stack
 limits as `WASM`, but deliberately omits `--dir=.` so submitted AssemblyScript
 cannot receive a filesystem preopen.
+
+The `JAVASCRIPT_BUN` and `TYPESCRIPT_BUN` profiles share the checksum-verified
+Bun 1.3.14 baseline runtime. Compilation uses Bun's no-bundle transpiler with
+automatic installation, `.env`, macros, and ambient configuration disabled, so
+ordinary top-level code is parsed but not run. Bun 1.3.14 fails no-bundle
+`--outdir` builds with an empty output filename; the compiler therefore writes
+each disposable validation result to a source-independent `--outfile` in the
+reserved `.cache` directory and returns only the original submissions.
+Execution additionally disables native addons, clears `BUN_OPTIONS` and the
+runtime transpiler cache, and keeps process and socket permissions at their
+default deny values. Bun/JSC retains a finite 64 GiB `RLIMIT_AS`; physical
+memory verdicts come from cgroup/RSS signals rather than virtual-address
+proximity.
 
 The `FACTOR` profile uses the checksum-pinned official Factor 0.101 image in a
 dedicated runtime pack. Its compile phase invokes a trusted `parse-file` helper,

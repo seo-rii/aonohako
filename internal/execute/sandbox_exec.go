@@ -276,6 +276,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			"DENO_NO_UPDATE_CHECK=1",
 		)
 		allowUnixSockets = true
+	case "bun":
+		innerEnv = append(innerEnv, "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0", "BUN_OPTIONS=")
 	}
 
 	finalCommand := append([]string(nil), command...)

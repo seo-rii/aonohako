@@ -488,7 +488,7 @@ func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
 		limitMB = max(8192, memoryMB*6+2048)
 	case "node", "umjunsik-lang-go":
 		limitMB = max(1024, memoryMB*4+512)
-	case "deno":
+	case "bun", "deno":
 		limitMB = max(65536, memoryMB*4+1024)
 	case "wasmtime":
 		limitMB = max(1024, memoryMB*4+1024)
@@ -522,7 +522,7 @@ func addressSpaceProximityCanClassifyMLE(commandBase, runLang string) bool {
 		return false
 	}
 	switch commandBase {
-	case "aonohako-gleam-run", "beam.smp", "deno", "dotnet", "elixir", "erl", "erlexec", "ghdl", "java", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "vvp", "wasmtime":
+	case "aonohako-gleam-run", "beam.smp", "bun", "deno", "dotnet", "elixir", "erl", "erlexec", "ghdl", "java", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "vvp", "wasmtime":
 		return false
 	default:
 		return true

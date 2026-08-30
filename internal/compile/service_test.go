@@ -398,6 +398,12 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{compileKind: "assemblyscript", runLang: "assemblyscript"}
+	for _, alias := range []string{"bun", "javascript-bun", "typescript-bun"} {
+		tests[alias] = struct {
+			compileKind string
+			runLang     string
+		}{compileKind: "bun", runLang: "bun"}
+	}
 
 	for input, want := range tests {
 		profile, ok := resolveProfile(input)
@@ -458,6 +464,9 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"gprolog":         "gnu-prolog",
 		"zero":            "zerolang",
 		"a68":             "algol68",
+		"bun-js":          "bun",
+		"bun_ts":          "bun",
+		"bun/typescript":  "bun",
 	}
 
 	for input, wantCompileKind := range tests {
@@ -949,6 +958,14 @@ func TestCompileAddressSpaceLimitBytesUsesHighFiniteDenoCap(t *testing.T) {
 	}
 	if got := compileAddressSpaceLimitBytes("gcc", 2048); got != 0 {
 		t.Fatalf("compileAddressSpaceLimitBytes(gcc, 2048) = %d, want helper default", got)
+	}
+}
+
+func TestCompileAddressSpaceLimitBytesUsesHighFiniteBunCap(t *testing.T) {
+	got := compileAddressSpaceLimitBytes("bun", 2048)
+	want := uint64(65536) * 1024 * 1024
+	if got != want {
+		t.Fatalf("compileAddressSpaceLimitBytes(bun, 2048) = %d, want %d", got, want)
 	}
 }
 

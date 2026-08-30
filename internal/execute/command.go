@@ -437,6 +437,19 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(req.Limits.MemoryMB, tuning)),
 			primaryPath,
 		}
+	case "bun":
+		return []string{
+			"bun",
+			"--smol",
+			"--no-install",
+			"--no-env-file",
+			"--no-addons",
+			"--no-macros",
+			"--unhandled-rejections=strict",
+			"--config=/dev/null",
+			"run",
+			primaryPath,
+		}
 	case "kotlin-jvm":
 		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
 		metaspaceMB := jvmMetaspaceMB(req.Limits.MemoryMB)

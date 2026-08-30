@@ -235,6 +235,19 @@ while ($true) {
 }
 `)},
 		},
+		"bun": {
+			compileLang: "TYPESCRIPT_BUN",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.ts", `const chunks: Uint8Array[] = [];
+while (true) {
+  const chunk = new Uint8Array(8 * 1024 * 1024);
+  for (let offset = 0; offset < chunk.length; offset += 4096) {
+    chunk[offset] = 1;
+  }
+  chunks.push(chunk);
+}
+`)},
+		},
 	}
 }
 
@@ -251,6 +264,7 @@ func runtimeStartupMemoryMB() map[string]int {
 		"julia":      1088,
 		"swift":      288,
 		"dart":       288,
+		"bun":        64,
 	}
 }
 
@@ -2847,6 +2861,45 @@ console.log(`+"`network:${networkBlocked ? \"blocked\" : \"leaked\"}`"+`);
 				},
 			},
 		},
+		"bun": {
+			{
+				name:           "process-and-network-denies",
+				compileLang:    "JAVASCRIPT_BUN",
+				expectedStdout: expectedProcessNetwork,
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.js", fmt.Sprintf(`let processBlocked = false;
+try {
+  const result = Bun.spawnSync(["/bin/true"]);
+  processBlocked = result.exitCode !== 0;
+} catch (_) {
+  processBlocked = true;
+}
+console.log(`+"`process:${processBlocked ? \"blocked\" : \"leaked\"}`"+`);
+
+const net = await import("node:net");
+await new Promise((resolve) => {
+  let finished = false;
+  const finish = (label) => {
+    if (finished) return;
+    finished = true;
+    console.log(`+"`network:${label}`"+`);
+    resolve();
+  };
+  const socket = net.connect({ host: "127.0.0.1", port: %d }, () => {
+    socket.destroy();
+    finish("leaked");
+  });
+  socket.on("error", () => finish("blocked"));
+  setTimeout(() => {
+    socket.destroy();
+    finish("blocked");
+  }, 500);
+});
+`, tcpPort)),
+				},
+			},
+		},
 		"assemblyscript": {
 			{
 				name:           "filesystem-preopen-denied",
@@ -5030,6 +5083,17 @@ Get-Content -LiteralPath same-folder.txt
 			sources: []model.Source{
 				source("Main.ts", `const values = (await new Response(Deno.stdin.readable).text()).trim().split(/\s+/).map(Number);
 console.log(values[0] + values[1]);`),
+			},
+		},
+		"bun": {
+			compileLang:     "JAVASCRIPT_BUN",
+			compileVariants: []string{"TYPESCRIPT_BUN"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.ts", `const values: number[] = (await Bun.stdin.text()).trim().split(/\s+/).map(Number);
+await Bun.write("same-folder.txt", String(values[0] + values[1]));
+console.log(await Bun.file("same-folder.txt").text());`),
 			},
 		},
 		"elm": {

@@ -32,6 +32,8 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"GROOVY",
 		"JAVASCRIPT",
 		"TYPESCRIPT",
+		"JAVASCRIPT_BUN",
+		"TYPESCRIPT_BUN",
 		"GO",
 		"ZIG",
 		"SCHEME",
@@ -331,6 +333,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	tests["CHEZ_SCHEME"] = "chez-scheme"
 	tests["GUILE"] = "guile"
 	tests["CHICKEN_SCHEME"] = "chicken-scheme"
+	tests["JAVASCRIPT_BUN"] = "bun"
+	tests["TYPESCRIPT_BUN"] = "bun"
 
 	for input, want := range tests {
 		if got := NormalizeRunLang(input); got != want {
@@ -423,6 +427,30 @@ func TestDenoProfilesShareOneRuntimeWithLanguageSpecificExtensions(t *testing.T)
 		}
 		if profile.SourceLang != language || profile.Extension != extension || profile.CompileKind != "deno" || profile.RunLang != "deno" {
 			t.Fatalf("%s profile = %+v", language, profile)
+		}
+	}
+}
+
+func TestBunProfilesUseDedicatedRuntime(t *testing.T) {
+	tests := map[string]string{
+		"JAVASCRIPT_BUN": "js",
+		"TYPESCRIPT_BUN": "ts",
+	}
+	for language, extension := range tests {
+		profile, ok := Resolve(language)
+		if !ok {
+			t.Fatalf("Resolve(%s) reported unsupported language", language)
+		}
+		if profile.SourceLang != language || profile.Extension != extension || profile.CompileKind != "bun" || profile.RunLang != "bun" {
+			t.Fatalf("%s profile = %+v", language, profile)
+		}
+		if profile.TimeMultiplier != 3 || profile.TimeOffsetMs != 2000 || profile.MemoryMultiplier != 2 || profile.MemoryOffsetMB != 1024 {
+			t.Fatalf("%s resource profile = %+v", language, profile)
+		}
+	}
+	for _, alias := range []string{"bun", "javascript-bun", "javascript_bun", "bun-js", "typescript-bun", "typescript_bun", "bun-ts"} {
+		if got := NormalizeRunLang(alias); got != "bun" {
+			t.Fatalf("NormalizeRunLang(%q) = %q, want bun", alias, got)
 		}
 	}
 }

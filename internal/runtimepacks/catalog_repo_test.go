@@ -26,7 +26,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
 	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
@@ -124,6 +124,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-befunge",
 		"ci-bf",
 		"ci-bqn",
+		"ci-bun",
 		"ci-c",
 		"ci-c3",
 		"ci-carbon",
@@ -354,6 +355,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"bqn":           {"CBQN_COMMIT=d56147be877693eaed351745782c258bd7424de7", "bqn Main.bqn"},
 		"c3":            {"C3_VERSION=0.7.11", "c3c compile Main.c3"},
 		"carbon":        {"CARBON_VERSION=0.0.0-0.nightly.2026.05.02", "16719a509201acd2a7d82c260fba073c14ce7eb53c44c6ae7dda1fa083b6fa2a", "aonohako-carbon-warmup.carbon", "carbon build-runtimes --output-directory=/opt/carbon/lib/carbon/aonohako-runtimes", "aonohako-runtimes/libcxx/lib/libc++.a", "chmod -R a+rX /opt/carbon/lib/carbon/aonohako-runtimes", "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=Main.o Main.carbon", "carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o", "./Main | grep '^Hello World!$'", "Broken.carbon"},
+		"bun":           {"BUN_VERSION=1.3.14", "BUN_SHA256=a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7", "bun-linux-x64-baseline.zip", "sha256sum -c -", "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0", "BUN_OPTIONS=", "--no-install --no-env-file --no-macros --config=/dev/null build --target=bun --no-bundle --outfile=.cache/aonohako-bun-check", "--smol --no-install --no-env-file --no-addons --no-macros --unhandled-rejections=strict --config=/dev/null run Main.ts", "aonohako-bun-compile-leak", "Broken.ts"},
 		"chapel":        {"CHAPEL_VERSION=2.9.0", "CHAPEL_DEB_SHA256=11f93de9e725a7c74608b4afcc7c8fc8bec380f27b09883cd6f69d6fbe66e13d", "sha256sum -c -", "set -euo pipefail", "chpl-language-server/src/chpl-shim.py", "chpl-venv", "fixDistDocs.perl", "fixInternalDocs.sh", "third-party", "-type l", "-perm /0001", "CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast", "here.maxTaskPar", "CHPL_RT_NUM_THREADS_PER_LOCALE=1 ./Main -nl 1", "./Main -nl 2", "test ! -e Broken"},
 		"chez-scheme":   {"chezscheme=10.0.0+dfsg-5", "chez_scheme_check.scm", "/usr/bin/chezscheme --quiet --script", "aonohako-chez-compile-leak", "test ! -e aonohako-chez-compile-leak", "Broken.scm"},
 		"classic-basic": {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},

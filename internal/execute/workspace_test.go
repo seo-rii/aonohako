@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"aonohako/internal/model"
+	"aonohako/internal/util"
 )
 
 func TestPrepareWorkspaceDirsCreatesWritableBox(t *testing.T) {
@@ -28,6 +29,37 @@ func TestPrepareWorkspaceDirsCreatesWritableBox(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o777 || stat.Mode&0o1000 == 0 {
 		t.Fatalf("box dir mode = %v, want sticky writable directory", info.Mode())
+	}
+}
+
+func TestMaterializeBunSelectsJavaScriptAndTypeScriptEntryPoints(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		lang string
+	}{
+		{name: "Main.js", lang: "bun"},
+		{name: "Main.ts", lang: "TYPESCRIPT_BUN"},
+		{name: "Main.tsx", lang: "bun-ts"},
+	} {
+		t.Run(test.name+"/"+test.lang, func(t *testing.T) {
+			ws, err := prepareWorkspaceDirs(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			primary, lang, err := materializeFiles(ws, &model.RunRequest{
+				Lang: test.lang,
+				Binaries: []model.Binary{{
+					Name:    test.name,
+					DataB64: util.EncodeB64([]byte("console.log('ok');\n")),
+				}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if lang != "bun" || filepath.Base(primary) != test.name {
+				t.Fatalf("materializeFiles = (%q, %q), want %s/bun", primary, lang, test.name)
+			}
+		})
 	}
 }
 
