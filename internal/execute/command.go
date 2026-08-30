@@ -476,6 +476,22 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"-W", "trap-on-grow-failure=y",
 			primaryPath,
 		}
+	case "factor":
+		return []string{
+			"/opt/factor/factor",
+			"-no-user-init",
+			"-no-signals",
+			"-q",
+			"-datastack=256",
+			"-retainstack=256",
+			"-callstack=1024",
+			"-callbacks=256",
+			"-young=2",
+			"-aging=4",
+			"-tenured=192",
+			"-codeheap=96",
+			primaryPath,
+		}
 	case "text":
 		return []string{"cat", primaryPath}
 	default:

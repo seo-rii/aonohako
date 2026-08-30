@@ -306,6 +306,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	isDotnet := runtimeBase == "dotnet"
 	isPowerShell := runLang == "powershell" && runtimeBase == "pwsh"
+	isFactor := runLang == "factor" && runtimeBase == "factor"
 	isTLA := runtimeBase == "aonohako-tla-run"
 	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
 	trustedShellRuntime := false
@@ -395,6 +396,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		AllowUnixSocketMessages:  false,
 		AllowProcesses:           allowProcesses,
 		DenyThreads:              streams.communicationRestricted,
+		AllowThreadSignals:       isFactor,
 		AllowMemfdCreate:         allowMemfdCreate,
 		AllowNumaPolicy:          isDotnet || isTLA,
 		AllowChmod:               !streams.communicationRestricted && (isTLA || runtimeBase == "aonohako-gleam-run"),

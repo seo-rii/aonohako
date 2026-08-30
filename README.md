@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
+  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Scheme, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -80,6 +80,12 @@ language-specific commands keep their declared order.
   wrapper resolves the shim from its immutable installation directory, emits a
   validated Wasm command artifact, and executes it with Wasmtime's bounded
   memory/table/instance policy without preopening the submission directory.
+- Factor is pinned to the official 0.101 image and isolated in its own runtime
+  profile because the image includes a JIT and FFI surface. Compilation parses
+  source without running top-level forms. Both phases disable Factor's signal
+  helper thread while permitting the VM's internal thread-directed GC signals;
+  process creation, network sockets, and the remaining default seccomp
+  restrictions stay denied.
 - MoonBit is pinned to the official `moonc 0.10.9+6e6c44045` Linux x64
   toolchain and its matching core snapshot. Both archives are checksum-verified;
   submission builds synthesize a dependency-free module and use a single-job,

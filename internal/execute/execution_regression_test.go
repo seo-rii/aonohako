@@ -359,6 +359,24 @@ func TestPowerShellCoreCLRExceptionStaysNarrow(t *testing.T) {
 	}
 }
 
+func TestFactorRuntimeGetsOnlyThreadSignalCompatibilityException(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatalf("read sandbox_exec.go: %v", err)
+	}
+	body := string(raw)
+	for _, marker := range []string{`isFactor := runLang == "factor" && runtimeBase == "factor"`, `AllowProcesses:           allowProcesses`, `AllowThreadSignals:       isFactor`, `AllowMemfdCreate:         allowMemfdCreate`} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("Factor sandbox policy must contain %q", marker)
+		}
+	}
+	for _, forbidden := range []string{`allowProcesses = isFactor`, `allowUnixSockets = isFactor`, `allowMemfdCreate := isDotnet || isTLA || isFactor`, `AllowNumaPolicy:          isFactor`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Factor sandbox policy unexpectedly contains %q", forbidden)
+		}
+	}
+}
+
 func TestFastWorkspaceScriptDoesNotInheritSandboxHelperVMSize(t *testing.T) {
 	requireSandboxSupport(t)
 

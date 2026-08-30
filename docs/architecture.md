@@ -950,6 +950,7 @@ Production profiles currently group languages like this:
 | `type-v` | `chapel` |
 | `type-w` | `pony` |
 | `type-x` | `bash`, `posix-sh` |
+| `type-y` | `factor` |
 
 The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
@@ -963,6 +964,16 @@ immutable shim directory; compilation then validates the emitted Wasm artifact.
 Execution uses the same bounded Wasmtime memory, table, instance, and stack
 limits as `WASM`, but deliberately omits `--dir=.` so submitted AssemblyScript
 cannot receive a filesystem preopen.
+
+The `FACTOR` profile uses the checksum-pinned official Factor 0.101 image in a
+dedicated runtime pack. Its compile phase invokes a trusted `parse-file` helper,
+which validates submitted forms without executing their top-level behavior.
+Both phases use only the immutable bundled vocabulary roots, so a submitted
+vocabulary cannot shadow a parser dependency. The JIT runtime receives bounded
+Factor stacks and runs with Factor's signal helper disabled; process creation,
+network sockets, memfd creation, and NUMA policy syscalls stay denied. The only
+runtime-specific seccomp exception permits the VM's internal thread-directed
+GC signals.
 
 The `MOONBIT` profile uses the checksum-pinned native toolchain and matching
 core snapshot. The compiler replaces submission manifests with a fixed,

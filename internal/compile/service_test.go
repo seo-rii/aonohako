@@ -365,6 +365,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"bc":            {compileKind: "bc", runLang: "bc"},
 		"forth":         {compileKind: "forth", runLang: "forth"},
 		"gforth":        {compileKind: "forth", runLang: "forth"},
+		"factor":        {compileKind: "factor", runLang: "factor"},
 	}
 	tests["assemblyscript"] = struct {
 		compileKind string

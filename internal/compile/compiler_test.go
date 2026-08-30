@@ -52,12 +52,23 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "perl",
 		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
 			t.Fatalf("missing compiler registry entry for %s", kind)
 		}
+	}
+}
+
+func TestFactorCompilerParsesSourceWithoutExecutingIt(t *testing.T) {
+	compiler, ok := compileRegistry["factor"].(checkedSourcesCompiler)
+	if !ok {
+		t.Fatalf("factor compiler = %T, want checkedSourcesCompiler", compileRegistry["factor"])
+	}
+	wantPrefix := []string{"-no-user-init", "-no-signals", "-q", "-datastack=256", "-retainstack=256", "-callstack=1024", "-callbacks=256", "/usr/local/lib/aonohako/factor_check.factor"}
+	if compiler.bin != "/opt/factor/factor" || !reflect.DeepEqual(compiler.exts, []string{".factor"}) || !reflect.DeepEqual(compiler.prefix, wantPrefix) {
+		t.Fatalf("factor compiler = %+v", compiler)
 	}
 }
 

@@ -167,6 +167,7 @@ var compileRegistry = map[string]Compiler{
 	"apecode":       apeCodeCompiler{},
 	"wasm":          wasmCompiler{},
 	asCompileKind:   assemblyScriptCompiler{},
+	"factor":        checkedSourcesCompiler{exts: []string{".factor"}, noSourceReason: "no factor sources", bin: "/opt/factor/factor", prefix: []string{"-no-user-init", "-no-signals", "-q", "-datastack=256", "-retainstack=256", "-callstack=1024", "-callbacks=256", "/usr/local/lib/aonohako/factor_check.factor"}},
 	"ocaml":         ocamlCompiler{},
 	"elixir":        elixirCompiler{},
 	"csharp":        csharpCompiler{},

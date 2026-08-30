@@ -196,6 +196,10 @@ if has_language "assemblyscript"; then
     report_once "AssemblyScript" asc --version
 fi
 
+if has_language "factor"; then
+    report_once "Factor" /opt/factor/factor -version
+fi
+
 if has_language "typescript"; then
     report_once "TypeScript" tsc --version
 fi
@@ -652,6 +656,7 @@ report_compile_option "scala" "scalac -d <workdir>"
 report_compile_option "clojure" "clojure reader parse check"
 report_compile_option "javascript" "node --check"
 report_compile_option "assemblyscript" "aonohako-assemblyscript-compile <source.ts> <target.wasm>; wasm-validate <target.wasm>; run with bounded Wasmtime and no filesystem preopens"
+report_compile_option "factor" "/opt/factor/factor -no-user-init -no-signals -q /usr/local/lib/aonohako/factor_check.factor <source.factor>; run with bounded stacks and immutable vocabulary roots"
 report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"
 report_compile_option "coffeescript" "coffee --compile --bare --output <workdir>"
 report_compile_option "rescript" "rescript build"

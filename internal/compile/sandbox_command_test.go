@@ -75,7 +75,8 @@ func TestPowerShellParserGetsOnlyAddressSpaceCompatibilityException(t *testing.T
 	for _, marker := range []string{
 		`isPowerShell := commandName == "pwsh"`,
 		`disableAddressSpaceLimit := isDotnetLike || isPowerShell`,
-		`AllowThreadSignals:       isDotnetLike`,
+		`allowThreadSignals := isDotnetLike || commandName == "factor"`,
+		`AllowThreadSignals:       allowThreadSignals`,
 		`AllowMemfdCreate:         isDotnetLike || isIsabelle`,
 		`AllowNumaPolicy:          isDotnetLike || isIsabelle`,
 	} {
@@ -97,12 +98,40 @@ func TestAssemblyScriptCompilerGetsOnlyAddressSpaceCompatibilityException(t *tes
 		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile"`,
 		`AllowProcesses:           allowProcesses`,
 		`AllowUnixSockets:         allowUnixSockets`,
-		`AllowThreadSignals:       isDotnetLike`,
+		`allowThreadSignals := isDotnetLike || commandName == "factor"`,
+		`AllowThreadSignals:       allowThreadSignals`,
 		`AllowMemfdCreate:         isDotnetLike || isIsabelle`,
 		`AllowNumaPolicy:          isDotnetLike || isIsabelle`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("AssemblyScript compile sandbox contract must contain %q", marker)
+		}
+	}
+}
+
+func TestFactorParserGetsOnlyThreadSignalCompatibilityException(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_command.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "factor"`,
+		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor"`,
+		`AllowProcesses:           allowProcesses`,
+		`AllowUnixSockets:         allowUnixSockets`,
+		`allowThreadSignals := isDotnetLike || commandName == "factor"`,
+		`AllowThreadSignals:       allowThreadSignals`,
+		`AllowMemfdCreate:         isDotnetLike || isIsabelle`,
+		`AllowNumaPolicy:          isDotnetLike || isIsabelle`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("Factor compile sandbox contract must contain %q", marker)
+		}
+	}
+	for _, forbidden := range []string{`AllowProcesses:           commandName == "factor"`, `AllowUnixSockets:         commandName == "factor"`, `AllowMemfdCreate:         commandName == "factor"`, `AllowNumaPolicy:          commandName == "factor"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Factor parser unexpectedly receives sandbox privilege %q", forbidden)
 		}
 	}
 }
