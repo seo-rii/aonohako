@@ -46,6 +46,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "CHEZ_SCHEME"
 	case "guile", "guile3", "guile-3.0":
 		l = "GUILE"
+	case "chicken", "chicken-scheme", "chicken_scheme", "csc":
+		l = "CHICKEN_SCHEME"
 	case "awk", "gawk":
 		l = "AWK"
 	case "tcl":

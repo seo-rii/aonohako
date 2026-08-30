@@ -928,7 +928,7 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `golfscript`, `guile`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `golfscript`, `guile`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `malbolge`, `mercury`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
 | `type-b` | `assemblyscript`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
@@ -990,6 +990,15 @@ disables auto-compilation. The helper consumes forms through EOF without
 loading submitted code, so top-level side effects do not run and the
 submission cannot shadow the checker. The reader gets no process or socket
 sandbox exception; execution also keeps auto-compilation disabled.
+
+The `CHICKEN_SCHEME` profile pins `chicken-bin` and `libchicken-dev` at
+Debian trixie's `5.3.0-2`. Its compiler invokes
+`csc -O3 -d0 -no-trace -static` for one selected source and returns only the
+native target artifact. Ordinary top-level actions are compiled rather than
+executed during this phase, and malformed reader syntax fails the build. The
+`csc` driver keeps process creation because it must launch CHICKEN's translator
+and the C compiler/linker, but it receives no Unix-socket exception. The static
+artifact runs under the ordinary native process and socket denials.
 
 The `MOONBIT` profile uses the checksum-pinned native toolchain and matching
 core snapshot. The compiler replaces submission manifests with a fixed,

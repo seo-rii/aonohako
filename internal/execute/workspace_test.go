@@ -127,6 +127,28 @@ func TestMaterializeFilesTreatsGoBinaryAsNativeExecutable(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesTreatsChickenSchemeAsNativeExecutable(t *testing.T) {
+	ws, err := prepareWorkspaceDirs(t.TempDir())
+	if err != nil {
+		t.Fatalf("prepareWorkspaceDirs: %v", err)
+	}
+	primary, lang, err := materializeFiles(ws, &model.RunRequest{
+		Lang:       "CHICKEN_SCHEME",
+		EntryPoint: "Main",
+		Binaries: []model.Binary{{
+			Name:    "Main",
+			DataB64: b64("chicken-static-placeholder"),
+			Mode:    "exec",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("materializeFiles: %v", err)
+	}
+	if lang != "chicken-scheme" || filepath.Base(primary) != "Main" {
+		t.Fatalf("materializeFiles = (%q, %q), want Main/chicken-scheme", primary, lang)
+	}
+}
+
 func TestMaterializeFilesRequiresExecutablePonyBinary(t *testing.T) {
 	workDir := t.TempDir()
 	ws, err := prepareWorkspaceDirs(workDir)

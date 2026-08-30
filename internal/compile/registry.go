@@ -1,9 +1,10 @@
 package compile
 
 const (
-	asCompileKind         = "assemblyscript"
-	chezSchemeCompileKind = "chez-scheme"
-	guileCompileKind      = "guile"
+	asCompileKind            = "assemblyscript"
+	chezSchemeCompileKind    = "chez-scheme"
+	guileCompileKind         = "guile"
+	chickenSchemeCompileKind = "chicken-scheme"
 )
 
 var compileRegistry = map[string]Compiler{
@@ -52,6 +53,15 @@ var compileRegistry = map[string]Compiler{
 		bin:            "/usr/bin/guile-3.0",
 		prefix:         []string{"--no-auto-compile", "--no-debug", "-q", "-s", "/usr/local/lib/aonohako/guile_check.scm"},
 		env:            []string{"GUILE_AUTO_COMPILE=0"},
+	},
+	chickenSchemeCompileKind: singleSourceExecutableCompiler{
+		exts:           []string{".scm"},
+		preferredBases: []string{"Main.scm", "main.scm"},
+		noSourceReason: "no Chicken Scheme sources",
+		bin:            "csc",
+		args: func(job CompileJob, sourcePath string) []string {
+			return []string{"-O3", "-d0", "-no-trace", "-static", "-o", outputPath(job), sourcePath}
+		},
 	},
 	"awk":     checkedSourcesCompiler{exts: []string{".awk"}, noSourceReason: "no awk sources", bin: "gawk", prefix: []string{"--sandbox", "--lint", "-f"}},
 	"tcl":     passThroughCompiler{exts: []string{".tcl"}, noSourceReason: "no tcl sources"},

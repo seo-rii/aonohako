@@ -361,6 +361,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"scheme", "/tmp/sol.scm", "chibi-scheme", true},
 		{"chez-scheme", "/tmp/sol.scm", "/usr/bin/chezscheme", true},
 		{"guile", "/tmp/sol.scm", "env", true},
+		{"chicken-scheme", "/tmp/Main", "/tmp/Main", true},
 		{"awk", "/tmp/sol.awk", "gawk", true},
 		{"tcl", "/tmp/sol.tcl", "tclsh", true},
 		{"gdl", "/tmp/sol.pro", "aonohako-gdl-run", true},
@@ -532,6 +533,14 @@ func TestBuildCommandRunsGuileWithoutAutoCompilation(t *testing.T) {
 	want := []string{"env", "GUILE_AUTO_COMPILE=0", "/usr/bin/guile-3.0", "--no-auto-compile", "--no-debug", "-q", "-s", "/tmp/Main.scm"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Guile command = %v, want %v", got, want)
+	}
+}
+
+func TestBuildCommandRunsChickenSchemeArtifactDirectly(t *testing.T) {
+	got := buildCommand("/tmp/Main", "chicken-scheme", &model.RunRequest{})
+	want := []string{"/tmp/Main"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Chicken Scheme command = %v, want %v", got, want)
 	}
 }
 

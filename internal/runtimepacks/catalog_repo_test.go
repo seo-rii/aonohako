@@ -23,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -129,6 +129,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-carbon",
 		"ci-chapel",
 		"ci-chez-scheme",
+		"ci-chicken-scheme",
 		"ci-classic-basic",
 		"ci-clojure",
 		"ci-cobol",
@@ -412,6 +413,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"typescript": {"declare const require: any;", "const fs = require('fs');", "tsc Main.ts --module commonjs --target es2019 --outDir dist", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js"},
 		"wasm":       {"-W max-memory-size=33554432", "-W max-wasm-stack=1048576", "-W trap-on-grow-failure=y"},
 	}
+	tests["chicken-scheme"] = []string{"chicken-bin=5.3.0-2", "libchicken-dev=5.3.0-2", "csc -O3 -d0 -no-trace -static -o Main Main.scm", "readelf -d Main", "aonohako-chicken-compile-leak", "test ! -e aonohako-chicken-compile-leak", "Broken.scm", "test ! -e Broken"}
 	tests["assemblyscript"] = []string{"ASSEMBLYSCRIPT_VERSION=0.28.20", "ASSEMBLYSCRIPT_SHA256=26696c1bbb716bd85a0fbd38c7efbda186c83bc648ba4f78369d432081b4b1cb", "ASSEMBLYSCRIPT_WASI_SHIM_SHA256=e8b4410255e6f86cb96c2ce1d191fa9a6b45d274f0f506c4132e8075634ea005", "BINARYEN_SHA256=ed375d90d259924799147788d66ed70ce6e65454b69df577e09f2c4d17c00f6c", "LONG_SHA256=68033e466773df7d52c9e59341bb729d83716cd920c56460395724456d646b26", "npm install --global --offline --ignore-scripts", "aonohako-assemblyscript-compile", "wasm-validate Main.wasm", "wasmtime run", "Broken.ts"}
 
 	for language, patterns := range tests {
@@ -749,6 +751,28 @@ func TestChezSchemeInstallIsSharedWithIdris2(t *testing.T) {
 		}
 		if slices.Contains(catalog.Languages[language].Install.Apt, "chezscheme") {
 			t.Fatalf("%s duplicates the shared Chez Scheme package", language)
+		}
+	}
+}
+
+func TestChickenSchemeCatalogPinsStaticCompilerToolchain(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, ok := catalog.Languages["chicken-scheme"]
+	if !ok {
+		t.Fatal("chicken-scheme language missing from catalog")
+	}
+	for _, pkg := range []string{"chicken-bin=5.3.0-2", "libchicken-dev=5.3.0-2"} {
+		if !slices.Contains(spec.Install.Apt, pkg) {
+			t.Fatalf("Chicken Scheme apt packages = %v, missing %s", spec.Install.Apt, pkg)
+		}
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, marker := range []string{"-static -o Main", "readelf -d Main", "test ! -e aonohako-chicken-compile-leak", "Broken.scm"} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("Chicken Scheme smoke must contain %q", marker)
 		}
 	}
 }

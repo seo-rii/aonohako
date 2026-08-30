@@ -46,7 +46,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
 		"pascal", "delphi", "objectpascal", "nim", "zig", "sml", "idris2", "ada", "d",
 		"rust", "go", "java", "groovy", "clojure",
-		"scheme", "chez-scheme", "guile", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
+		"scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
@@ -80,6 +80,21 @@ func TestGuileCompilerReadsSourceWithTrustedHelper(t *testing.T) {
 	wantPrefix := []string{"--no-auto-compile", "--no-debug", "-q", "-s", "/usr/local/lib/aonohako/guile_check.scm"}
 	if compiler.bin != "/usr/bin/guile-3.0" || !reflect.DeepEqual(compiler.exts, []string{".scm"}) || !reflect.DeepEqual(compiler.prefix, wantPrefix) || !reflect.DeepEqual(compiler.env, []string{"GUILE_AUTO_COMPILE=0"}) {
 		t.Fatalf("Guile compiler = %+v", compiler)
+	}
+}
+
+func TestChickenSchemeCompilerEmitsStaticNativeArtifact(t *testing.T) {
+	compiler, ok := compileRegistry[chickenSchemeCompileKind].(singleSourceExecutableCompiler)
+	if !ok {
+		t.Fatalf("Chicken Scheme compiler = %T, want singleSourceExecutableCompiler", compileRegistry[chickenSchemeCompileKind])
+	}
+	if compiler.bin != "csc" || !reflect.DeepEqual(compiler.exts, []string{".scm"}) || !reflect.DeepEqual(compiler.preferredBases, []string{"Main.scm", "main.scm"}) {
+		t.Fatalf("Chicken Scheme compiler = %+v", compiler)
+	}
+	job := CompileJob{WorkDir: "/tmp/aonohako-chicken", Target: "Main"}
+	want := []string{"-O3", "-d0", "-no-trace", "-static", "-o", "/tmp/aonohako-chicken/Main", "/tmp/aonohako-chicken/Main.scm"}
+	if got := compiler.args(job, "/tmp/aonohako-chicken/Main.scm"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Chicken Scheme compiler args = %v, want %v", got, want)
 	}
 }
 
