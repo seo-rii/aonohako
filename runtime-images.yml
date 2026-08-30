@@ -843,6 +843,34 @@ languages:
           print(r:read("*a"))
           r:close()
 
+  luajit:
+    install:
+      apt:
+        - luajit=2.1.0+openresty20250117-2
+      script:
+        - test "$(dpkg-query -W -f='${Version}' luajit)" = 2.1.0+openresty20250117-2
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.lua <<'LUA'
+          local a, b = io.read("*n", "*n")
+          print(a + b)
+          LUA
+          env LUA_INIT= luajit -b -t raw Main.lua /dev/null
+          test "$(printf '%s\n' '-4 17' | env LUA_INIT= luajit -E Main.lua)" = 13
+          cat > SyntaxOnly.lua <<'LUA'
+          local output = assert(io.open("aonohako-luajit-compile-leak", "w"))
+          output:write("leak")
+          output:close()
+          LUA
+          env LUA_INIT= luajit -b -t raw SyntaxOnly.lua /dev/null
+          test ! -e aonohako-luajit-compile-leak
+          printf '%s\n' 'local broken =' > Broken.lua
+          if env LUA_INIT= luajit -b -t raw Broken.lua /dev/null >/dev/null 2>&1; then exit 1; fi
+
   perl:
     install:
       apt:
@@ -4061,6 +4089,7 @@ profiles:
       - lisp
       - lolcode
       - lua
+      - luajit
       - malbolge
       - mercury
       - mlton

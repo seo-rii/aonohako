@@ -581,6 +581,7 @@ The interactor is invoked as:
 | RUBY | `ruby` | `ruby -c` |
 | PHP | `php` | `php -l` |
 | LUA, LUA54 | `lua` | `luac5.4 -p` |
+| LUAJIT | `luajit` | `LUA_INIT= luajit -b -t raw <source> /dev/null` |
 | PERL | `perl` | `perl -c` |
 | VB6 | `vb6` | Pass-through VB6 source artifacts |
 | FREEBASIC | `freebasic` | `fbc -d ONLINE_JUDGE -x` |
@@ -665,6 +666,7 @@ The interactor is invoked as:
 | `ruby` | `ruby <file>` |
 | `php` | `php <file>` |
 | `lua` | `lua5.4 -E <file>` |
+| `luajit` | `luajit -E <file>` |
 | `perl` | `perl <file>` |
 | `ocaml` | `env OCAMLRUNPARAM=s=32k <file>` |
 | `elixir` | `env ERL_AFLAGS=... erlexec ... -s elixir start_cli -extra <file>` or `elixir <file>` fallback |

@@ -100,6 +100,7 @@ var compileRegistry = map[string]Compiler{
 	"ruby":        scriptCheckCompiler{exts: []string{".rb"}, noSourceReason: "no ruby sources", bin: "ruby", prefix: []string{"-c"}},
 	"php":         scriptCheckCompiler{exts: []string{".php"}, noSourceReason: "no php sources", bin: "php", prefix: []string{"-l"}},
 	"lua":         scriptCheckCompiler{exts: []string{".lua"}, noSourceReason: "no lua sources", bin: "luac5.4", prefix: []string{"-p"}},
+	"luajit":      checkedSourcesCompiler{exts: []string{".lua"}, noSourceReason: "no luajit sources", bin: "luajit", prefix: []string{"-b", "-t", "raw"}, suffix: []string{"/dev/null"}, env: []string{"LUA_INIT="}},
 	"fennel":      fennelCompiler{},
 	"chapel": singleSourceExecutableCompiler{exts: []string{".chpl"}, preferredBases: []string{"Main.chpl", "main.chpl"}, noSourceReason: "no chapel sources", bin: "chpl", env: []string{"CHPL_COMM=none", "CHPL_TASKS=qthreads", "CHPL_TARGET_CPU=none"}, args: func(job CompileJob, sourcePath string) []string {
 		return []string{"--local", "--fast", "-o", outputPath(job), sourcePath}

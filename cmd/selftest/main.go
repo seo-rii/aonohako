@@ -182,6 +182,15 @@ while true do
 end
 `)},
 		},
+		"luajit": {
+			compileLang: "LUAJIT",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.lua", `local chunks = {}
+while true do
+  chunks[#chunks + 1] = string.rep("x", 8 * 1024 * 1024)
+end
+`)},
+		},
 		"perl": {
 			compileLang: "PERL",
 			memoryMB:    64,
@@ -4178,6 +4187,21 @@ println(read("same-folder.txt", String))`),
 			compileVariants: []string{"LUA54"},
 			judgeIO:         standardABJudgeIO,
 			limits:          model.Limits{TimeMs: 6000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.lua", `local a, b = io.read("*n", "*n")
+local out = assert(io.open("same-folder.txt", "w"))
+out:write(a + b)
+out:close()
+local input = assert(io.open("same-folder.txt", "r"))
+local data = input:read("*a")
+input:close()
+print(data)`),
+			},
+		},
+		"luajit": {
+			compileLang: "LUAJIT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.lua", `local a, b = io.read("*n", "*n")
 local out = assert(io.open("same-folder.txt", "w"))

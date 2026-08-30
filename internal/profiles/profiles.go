@@ -172,6 +172,7 @@ var profiles = map[string]Profile{
 	"PHP8":          {SourceLang: "PHP8", Extension: "php", CompileKind: "php", RunLang: "php", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LUA":           {SourceLang: "LUA", Extension: "lua", CompileKind: "lua", RunLang: "lua", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LUA54":         {SourceLang: "LUA54", Extension: "lua", CompileKind: "lua", RunLang: "lua", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"LUAJIT":        {SourceLang: "LUAJIT", Extension: "lua", CompileKind: "luajit", RunLang: "luajit", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PERL":          {SourceLang: "PERL", Extension: "pl", CompileKind: "perl", RunLang: "perl", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"VB6":           {SourceLang: "VB6", Extension: "bas", CompileKind: "vb6", RunLang: "vb6", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"FREEBASIC":     {SourceLang: "FREEBASIC", Extension: "bas", DefaultTarget: "Main", CompileKind: "freebasic", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
@@ -232,7 +233,7 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
-	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
+	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
 		return key
 	case "chez", "chezscheme", "chez_scheme":
 		return "chez-scheme"
