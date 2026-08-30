@@ -302,15 +302,17 @@ func TestShellProcessOptInIsBoundToDedicatedImageAndRuntime(t *testing.T) {
 	}
 	body := string(raw)
 	for _, marker := range []string{
-		`case "type-x", "ci-bash", "ci-posix-sh":`,
+		`case "type-x", "ci-bash", "ci-posix-sh", "ci-zsh":`,
 		`runLang == "bash" && runtimeBase == "bash"`,
 		`runLang == "posix-sh" && runtimeBase == "dash"`,
+		`runLang == "zsh" && runtimeBase == "zsh"`,
 		`Reason: "shell runtime is outside the dedicated trusted image"`,
 		`innerEnv = append(innerEnv, "BASH_ENV=/dev/null", "ENV=/dev/null")`,
+		`innerEnv = append(innerEnv, "ZDOTDIR=/var/empty")`,
 		`if trustedShellRuntime {`,
 		`threadLimit = shellSandboxThreadLimit`,
 		`pidsMax := threadLimit + 16`,
-		`case "bash", "dash":`,
+		`case "bash", "dash", "zsh":`,
 		`allowProcesses = trustedShellRuntime`,
 	} {
 		if !strings.Contains(body, marker) {

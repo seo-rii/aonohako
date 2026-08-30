@@ -2275,6 +2275,7 @@ func languageSecurityCases(tcpPort int, kokaSyslib string) map[string][]language
 	expectedNativeProcess := "network:blocked\nprocess:blocked\nunshare:blocked\n"
 	const bashChildMarker = "/tmp/aonohako-shell-child-probes/bash-leak"
 	const posixChildMarker = "/tmp/aonohako-shell-child-probes/posix-leak"
+	const zshChildMarker = "/tmp/aonohako-shell-child-probes/zsh-leak"
 	pythonProcessNetwork := fmt.Sprintf(`import socket
 import subprocess
 
@@ -2617,6 +2618,41 @@ fi
 (sleep 1; printf survived > %q) >/dev/null 2>&1 &
 printf 'child:started\n'
 `, posixChildMarker)),
+				},
+			},
+		},
+		"zsh": {
+			{
+				name:                  "network-tools-loader-process-limit-and-child-cleanup",
+				compileLang:           "ZSH",
+				expectedStdout:        "network:blocked\ntools:blocked\nloader:blocked\nprocess-limit:bounded\nchild:started\n",
+				forbiddenPathAfterRun: zshChildMarker,
+				limits:                limits,
+				sources: []model.Source{
+					source("Main.zsh", fmt.Sprintf(`set -u
+if /usr/bin/bash --noprofile --norc -c '(: > /dev/tcp/127.0.0.1/%d)' 2>/dev/null; then
+  print -r -- 'network:leaked'
+else
+  print -r -- 'network:blocked'
+fi
+if cp /usr/local/go/bin/go ./go-copy 2>/dev/null; then
+  print -r -- 'tools:leaked'
+else
+  print -r -- 'tools:blocked'
+fi
+if /lib64/ld-linux-x86-64.so.2 /usr/bin/apt-get --version >/dev/null 2>&1; then
+  print -r -- 'loader:leaked'
+else
+  print -r -- 'loader:blocked'
+fi
+if awk '$1 == "Max" && $2 == "processes" { found = 1; bounded = $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $3 <= 80 && $4 <= 80 } END { exit !(found && bounded) }' /proc/self/limits; then
+  print -r -- 'process-limit:bounded'
+else
+  print -r -- 'process-limit:leaked'
+fi
+(sleep 1; print -rn -- survived > %q) >/dev/null 2>&1 &
+print -r -- 'child:started'
+`, tcpPort, zshChildMarker)),
 				},
 			},
 		},
@@ -4728,6 +4764,25 @@ read -r a b
 printf '%s\n' "$((a + b))"`),
 			},
 		},
+		"zsh": {
+			compileLang: "ZSH",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 4000, MemoryMB: 256},
+			sources: []model.Source{
+				source("Main.zsh", `set -eu
+test "${ZDOTDIR-}" = /var/empty
+printf '%s\n' 'exit 99' > "${HOME}/.zshenv"
+test "$(ZDOTDIR="${HOME}" /usr/bin/zsh -d -f -c 'print -r -- startup-safe')" = startup-safe
+test "$(print -r -- pipeline | tr a-z A-Z)" = PIPELINE
+test "$( (print -r -- subshell) )" = subshell
+(sleep 0.01; print -r -- child > child.txt) &
+child_pid=$!
+wait "${child_pid}"
+test "$(cat child.txt)" = child
+read -r a b
+print -r -- $((a + b))`),
+			},
+		},
 		"powershell": {
 			compileLang: "POWERSHELL",
 			judgeIO:     standardABJudgeIO,
@@ -5055,7 +5110,7 @@ func runDirectImagePermissionChecks() error {
 	}
 
 	imageName := strings.TrimSpace(os.Getenv("AONOHAKO_IMAGE_NAME"))
-	if imageName == "type-x" || imageName == "ci-bash" || imageName == "ci-posix-sh" {
+	if imageName == "type-x" || imageName == "ci-bash" || imageName == "ci-posix-sh" || imageName == "ci-zsh" {
 		suidOutput, err := exec.Command("find", "/", "-xdev", "-type", "f", "-perm", "/6000", "-print").CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("shell-image-suid-inventory: %w: %s", err, suidOutput)

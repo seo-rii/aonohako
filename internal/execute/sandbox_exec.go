@@ -226,13 +226,15 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	isGoBinary := runLang == "go-binary"
 	isMojoBinary := runLang == "mojo-binary"
 	isPonyBinary := runLang == "pony-binary"
-	isShellRunLang := runLang == "bash" || runLang == "posix-sh"
+	isShellRunLang := runLang == "bash" || runLang == "posix-sh" || runLang == "zsh"
 	allowUnixSockets := false
 	switch runLang {
 	case "bash":
 		innerEnv = append(innerEnv, "BASH_ENV=/dev/null", "ENV=/dev/null")
 	case "posix-sh":
 		innerEnv = append(innerEnv, "ENV=/dev/null")
+	case "zsh":
+		innerEnv = append(innerEnv, "ZDOTDIR=/var/empty")
 	case "powershell":
 		for i := range innerEnv {
 			if strings.HasPrefix(innerEnv[i], "HOME=") {
@@ -311,9 +313,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
 	trustedShellRuntime := false
 	switch os.Getenv("AONOHAKO_IMAGE_NAME") {
-	case "type-x", "ci-bash", "ci-posix-sh":
+	case "type-x", "ci-bash", "ci-posix-sh", "ci-zsh":
 		trustedShellRuntime = runLang == "bash" && runtimeBase == "bash" ||
-			runLang == "posix-sh" && runtimeBase == "dash"
+			runLang == "posix-sh" && runtimeBase == "dash" ||
+			runLang == "zsh" && runtimeBase == "zsh"
 	}
 	if isShellRunLang && !trustedShellRuntime {
 		return execResult{
@@ -329,7 +332,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	switch runtimeBase {
 	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-vhdl-run", "aonohako-why3-prove", "ghdl", "vvp":
 		allowProcesses = true
-	case "bash", "dash":
+	case "bash", "dash", "zsh":
 		allowProcesses = trustedShellRuntime
 	}
 	if isDotnet || isPowerShell {

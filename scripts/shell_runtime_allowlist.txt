@@ -79,3 +79,4 @@
 /usr/bin/whoami
 /usr/bin/xargs
 /usr/bin/yes
+/usr/bin/zsh

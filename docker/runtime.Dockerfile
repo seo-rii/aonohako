@@ -232,7 +232,7 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
       if [[ -e "${path}" ]]; then chmod -R go-rwx "${path}"; fi; \
     done
 
-RUN if [[ "${IMAGE_NAME}" == "type-x" || "${IMAGE_NAME}" == "ci-bash" || "${IMAGE_NAME}" == "ci-posix-sh" ]]; then \
+RUN if [[ "${IMAGE_NAME}" == "type-x" || "${IMAGE_NAME}" == "ci-bash" || "${IMAGE_NAME}" == "ci-posix-sh" || "${IMAGE_NAME}" == "ci-zsh" ]]; then \
       /usr/local/lib/aonohako/harden_shell_runtime.sh; \
     else \
       rm -f /usr/local/lib/aonohako/shell_runtime_allowlist.txt; \

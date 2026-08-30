@@ -506,6 +506,7 @@ The interactor is invoked as:
 | PONY | `pony` | `ponyc --cpu=generic --output=. --bin-name=Main .` |
 | SHELL, BASH | `shell` | `bash --noprofile --norc -n <source>`; execute with `/bin/bash --noprofile --norc <source>` |
 | POSIX_SH | `shell` | `/bin/dash -n <source>`; execute with `/bin/dash <source>` |
+| ZSH | `shell` | `/usr/bin/zsh -d -f -n <source>`; execute with `/usr/bin/zsh -d -f <source>` |
 | POWERSHELL | `powershell` | `pwsh -NoLogo -NoProfile -NonInteractive -Command '& { param($path) ... [System.Management.Automation.Language.Parser]::ParseFile($path, ...) ... }' <source>`; execute with `pwsh -NoLogo -NoProfile -NonInteractive -File <source>` |
 | GO | `go` | `go build -tags=online_judge,ONLINE_JUDGE` |
 | ZIG | `zig` | `zig build-exe -O ReleaseSafe -femit-bin=<target>` |
