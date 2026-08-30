@@ -24,6 +24,15 @@ func TestGeneratedLimitDocumentationIsCurrent(t *testing.T) {
 	}
 }
 
+func TestReadmeDocumentsExplicitMLtonSelection(t *testing.T) {
+	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
+	for _, want := range []string{"`SML` remains the compatibility selection", "`MLTON` is the", "MLton 20241230", "share one installation"} {
+		if !strings.Contains(readme, want) {
+			t.Fatalf("README.md missing MLton contract %q", want)
+		}
+	}
+}
+
 func TestManualLimitReferencesMatchCodeConstants(t *testing.T) {
 	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
 	payload := mustRead(t, filepath.Join("..", "..", "docs", "payload.md"))

@@ -522,7 +522,7 @@ if has_language "lisp"; then
     report_once "SBCL" sbcl --version
 fi
 
-if has_language "sml"; then
+if has_language "sml" || has_language "mlton"; then
     report_once "MLton" mlton
 fi
 
@@ -777,6 +777,7 @@ report_compile_option "mercury" "mmc --make --grade hlc.gc <module>"
 report_compile_option "prolog" "swipl syntax check"
 report_compile_option "ocaml" "ocamlopt"
 report_compile_option "sml" "mlton -output <target>"
+report_compile_option "mlton" "mlton -output <target>"
 report_compile_option "elixir" "elixirc"
 report_compile_option "ruby" "ruby -c"
 report_compile_option "php" "php -l"

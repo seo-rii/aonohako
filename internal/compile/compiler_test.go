@@ -109,6 +109,35 @@ func TestFactorCompilerParsesSourceWithoutExecutingIt(t *testing.T) {
 	}
 }
 
+func TestMLtonCompilerRejectsInvalidSyntaxWithFixedCommand(t *testing.T) {
+	compiler, ok := compileRegistry["sml"].(singleSourceExecutableCompiler)
+	if !ok {
+		t.Fatalf("sml compiler = %T, want singleSourceExecutableCompiler", compileRegistry["sml"])
+	}
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.sml"), []byte("val _ = print (\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{result: CommandResult{
+		Status: model.CompileStatusCompileError,
+		Stderr: "syntax error",
+		Reason: "compiler exited with status 1",
+	}}
+	resp := compiler.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.sml"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusCompileError || len(resp.Artifacts) != 0 || resp.Stderr != "syntax error" {
+		t.Fatalf("invalid MLton response = %+v", resp)
+	}
+	wantArgs := []string{"-output", filepath.Join(workDir, "Main"), filepath.Join(workDir, "Main.sml")}
+	if len(runner.commands) != 1 || runner.commands[0].bin != "mlton" || !reflect.DeepEqual(runner.commands[0].args, wantArgs) {
+		t.Fatalf("MLton command = %+v, want mlton %#v", runner.commands, wantArgs)
+	}
+}
+
 func TestAssemblyScriptCompilerUsesPinnedWASIWrapperAndValidatesArtifact(t *testing.T) {
 	workDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workDir, "Main.ts"), []byte("console.log('ok');\n"), 0o644); err != nil {

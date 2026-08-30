@@ -162,6 +162,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "IDRIS2"
 	case "sml", "standardml", "standard-ml":
 		l = "SML"
+	case "mlton":
+		l = "MLTON"
 	case "haxe":
 		l = "HAXE"
 	case "c", "c11":

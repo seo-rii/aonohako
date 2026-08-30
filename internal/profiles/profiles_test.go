@@ -106,6 +106,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"HASKELL",
 		"IDRIS2",
 		"SML",
+		"MLTON",
 		"HAXE",
 		"LISP",
 		"PICOLISP",
@@ -248,6 +249,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"HASKELL":      "binary",
 		"IDRIS2":       "binary",
 		"SML":          "binary",
+		"MLTON":        "binary",
+		"mlton":        "binary",
 		"LISP":         "lisp",
 		"PICOLISP":     "picolisp",
 		"picolisp":     "picolisp",
@@ -318,6 +321,24 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	}
 	if got := NormalizeRunLang("chapel-binary"); got != "chapel-binary" {
 		t.Fatalf("NormalizeRunLang(chapel-binary) = %q, want chapel-binary", got)
+	}
+}
+
+func TestMLtonProfileIsExplicitSMLCompilerSelection(t *testing.T) {
+	sml, ok := Resolve("SML")
+	if !ok {
+		t.Fatal("Resolve(SML) reported unsupported language")
+	}
+	mlton, ok := Resolve("MLTON")
+	if !ok {
+		t.Fatal("Resolve(MLTON) reported unsupported language")
+	}
+	if mlton.SourceLang != "MLTON" {
+		t.Fatalf("MLTON source language = %q", mlton.SourceLang)
+	}
+	mlton.SourceLang = sml.SourceLang
+	if mlton != sml {
+		t.Fatalf("MLTON profile = %+v, want SML behavior %+v", mlton, sml)
 	}
 }
 

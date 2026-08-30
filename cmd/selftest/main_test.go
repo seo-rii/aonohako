@@ -250,6 +250,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"chez-scheme",
 		"guile",
 		"chicken-scheme",
+		"mlton",
 		"java",
 		"ruby",
 		"perl",

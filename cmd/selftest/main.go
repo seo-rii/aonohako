@@ -2964,6 +2964,29 @@ AF_INET SOCK_STREAM 0 socket dup -1 =
 				},
 			},
 		},
+		"mlton": {
+			{
+				name:           "native-process-and-network-denies",
+				compileLang:    "MLTON",
+				expectedStdout: expectedProcessNetwork,
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.sml", `fun processBlocked () =
+  ((case Posix.Process.fork () of
+      NONE => OS.Process.exit OS.Process.success
+    | SOME pid => (ignore (Posix.Process.waitpid (Posix.Process.W_CHILD pid, [])); false))
+   handle OS.SysErr _ => true)
+
+fun networkBlocked () =
+  ((Socket.close (INetSock.TCP.socket ()); false)
+   handle OS.SysErr _ => true)
+
+val _ = print ("process:" ^ (if processBlocked () then "blocked" else "leaked") ^ "\n")
+val _ = print ("network:" ^ (if networkBlocked () then "blocked" else "leaked") ^ "\n")
+`),
+				},
+			},
+		},
 		"java": {
 			{
 				name:           "process-and-network-denies",
@@ -3862,6 +3885,18 @@ read_sum() ->
 		},
 		"sml": {
 			compileLang: "SML",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.sml", `fun scanInt () = valOf (TextIO.scanStream (Int.scan StringCvt.DEC) TextIO.stdIn)
+val a = scanInt ()
+val b = scanInt ()
+val _ = print (Int.toString (a + b) ^ "\n")
+`),
+			},
+		},
+		"mlton": {
+			compileLang: "MLTON",
 			judgeIO:     standardABJudgeIO,
 			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
 			sources: []model.Source{
