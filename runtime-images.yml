@@ -462,6 +462,45 @@ languages:
           if aonohako-assemblyscript-compile "${PWD}/Broken.ts" "${PWD}/Broken.wasm" >/dev/null 2>&1; then exit 1; fi
           test ! -e Broken.wasm
 
+  factor:
+    install:
+      apt:
+        - curl
+        - libstdc++6
+      sandbox_tools:
+        - factor
+      script:
+        - export FACTOR_VERSION=0.101
+        - export FACTOR_SHA256=9f971e935414c0d46d9090632464d66994ee797bacc91cc8b739db3b0857a25a
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://downloads.factorcode.org/releases/${FACTOR_VERSION}/factor-linux-x86-64-${FACTOR_VERSION}.tar.gz" -o /tmp/factor.tar.gz
+        - echo "${FACTOR_SHA256}  /tmp/factor.tar.gz" | sha256sum -c -
+        - install -d -m 0755 /opt/factor
+        - tar -xzf /tmp/factor.tar.gz -C /opt/factor --strip-components=1
+        - rm -f /tmp/factor.tar.gz
+        - chmod -R a+rX /opt/factor
+        - ln -sfn /opt/factor/factor /usr/local/bin/factor
+        - factor -version | grep '^Factor 0\.101 '
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.factor <<'FACTOR'
+          USING: io math math.parser prettyprint sequences splitting ;
+          readln split-words [ string>number ] map-sum .
+          FACTOR
+          /opt/factor/factor -no-user-init -no-signals -q -datastack=256 -retainstack=256 -callstack=1024 -callbacks=256 /usr/local/lib/aonohako/factor_check.factor Main.factor
+          test "$(printf '%s\n' '-4 17' | /opt/factor/factor -no-user-init -no-signals -q -datastack=256 -retainstack=256 -callstack=1024 -callbacks=256 -young=2 -aging=4 -tenured=192 -codeheap=96 Main.factor)" = 13
+          cat > SyntaxOnly.factor <<'FACTOR'
+          USING: io.encodings.utf8 io.files ;
+          "leak" "aonohako-factor-parser-leak" utf8 set-file-contents
+          FACTOR
+          /opt/factor/factor -no-user-init -no-signals -q -datastack=256 -retainstack=256 -callstack=1024 -callbacks=256 /usr/local/lib/aonohako/factor_check.factor SyntaxOnly.factor
+          test ! -e aonohako-factor-parser-leak
+          printf '%s\n' 'USING: io kernel ;' 'this-word-does-not-exist' > Broken.factor
+          if /opt/factor/factor -no-user-init -no-signals -q -datastack=256 -retainstack=256 -callstack=1024 -callbacks=256 /usr/local/lib/aonohako/factor_check.factor Broken.factor >/dev/null 2>&1; then exit 1; fi
+
   coffeescript:
     install:
       apt:
@@ -3895,3 +3934,7 @@ profiles:
     languages:
       - bash
       - posix-sh
+  type-y:
+    base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
+    languages:
+      - factor

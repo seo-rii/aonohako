@@ -252,6 +252,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "WASM"
 	case "assemblyscript":
 		l = "ASSEMBLYSCRIPT"
+	case "factor":
+		l = "FACTOR"
 	}
 	return profiles.Resolve(l)
 }

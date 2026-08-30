@@ -128,6 +128,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"APECODE",
 		"WASM",
 		"ASSEMBLYSCRIPT",
+		"FACTOR",
 		"OCAML",
 		"ELIXIR",
 		"COFFEESCRIPT",
@@ -298,6 +299,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"GFORTH":       "forth",
 	}
 	tests["ASSEMBLYSCRIPT"] = "assemblyscript"
+	tests["FACTOR"] = "factor"
 
 	for input, want := range tests {
 		if got := NormalizeRunLang(input); got != want {
@@ -319,6 +321,19 @@ func TestAssemblyScriptProfileCompilesToIsolatedWASIArtifact(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 128 {
 		t.Fatalf("ASSEMBLYSCRIPT resource profile = %+v", profile)
+	}
+}
+
+func TestFactorProfileUsesDedicatedJITRuntime(t *testing.T) {
+	profile, ok := Resolve("FACTOR")
+	if !ok {
+		t.Fatal("Resolve(FACTOR) reported unsupported language")
+	}
+	if profile.Extension != "factor" || profile.CompileKind != "factor" || profile.RunLang != "factor" {
+		t.Fatalf("FACTOR profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 512 {
+		t.Fatalf("FACTOR resource profile = %+v", profile)
 	}
 }
 

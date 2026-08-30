@@ -144,6 +144,7 @@ COPY --chmod=0755 scripts/vhdl_run.sh /usr/local/bin/aonohako-vhdl-run
 COPY --chmod=0755 scripts/vb6_run.rb /usr/local/bin/aonohako-vb6-run
 COPY --chmod=0755 scripts/golfscript_sandboxed.rb /usr/local/lib/aonohako/golfscript_sandboxed.rb
 COPY --chmod=0755 scripts/assemblyscript_compile.sh /usr/local/bin/aonohako-assemblyscript-compile
+COPY --chmod=0644 scripts/factor_check.factor /usr/local/lib/aonohako/factor_check.factor
 COPY --chmod=0755 scripts/fennel_compile.sh /usr/local/bin/aonohako-fennel-compile
 COPY --chmod=0644 scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_writer.fnl
 COPY --chmod=0700 scripts/harden_shell_runtime.sh /usr/local/lib/aonohako/harden_shell_runtime.sh

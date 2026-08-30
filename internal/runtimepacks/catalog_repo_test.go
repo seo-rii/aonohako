@@ -19,8 +19,8 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProductionImages returned error: %v", err)
 	}
-	if len(production) != 24 {
-		t.Fatalf("expected 24 production images, got %d", len(production))
+	if len(production) != 25 {
+		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
@@ -95,6 +95,9 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[23].Name != "type-x" || !reflect.DeepEqual(production[23].Languages, []string{"bash", "posix-sh"}) {
 		t.Fatalf("type-x production image = %+v", production[23])
 	}
+	if production[24].Name != "type-y" || !reflect.DeepEqual(production[24].Languages, []string{"factor"}) {
+		t.Fatalf("type-y production image = %+v", production[24])
+	}
 
 	ci, err := catalog.CILanguageImages()
 	if err != nil {
@@ -144,6 +147,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-elixir",
 		"ci-elm",
 		"ci-erlang",
+		"ci-factor",
 		"ci-fennel",
 		"ci-forth",
 		"ci-fortran",
@@ -321,6 +325,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"duckdb":        {"DUCKDB_VERSION=1.5.2", "aonohako-duckdb-run Main.sql"},
 		"elm":           {"elm-compiler", `"elm/json": "1.1.3"`, "HOME=/usr/local/lib/aonohako/elm-home", "elm make Main.elm --output=aonohako-elm-compiled.js", "port stdin : (String -> msg) -> Sub msg"},
 		"erlang":        {"Broken.erl", "erlc"},
+		"factor":        {"FACTOR_VERSION=0.101", "FACTOR_SHA256=9f971e935414c0d46d9090632464d66994ee797bacc91cc8b739db3b0857a25a", "sha256sum -c -", "libstdc++6", "factor_check.factor", "/opt/factor/factor -no-user-init -no-signals -q", "aonohako-factor-parser-leak", "Broken.factor"},
 		"fennel":        {"FENNEL_VERSION=1.6.1", "FENNEL_SHA256=3abde50a0e25270cbb8f9d183a0a42221875b3390ba4bf11ef8697eaa53b2787", "sha256sum -c -", "aonohako-fennel-compile Main.fnl Main.lua", "luac5.4 -p --", "compiler-diagnostic", "InvalidLua.fnl", "mathmod.fnl", "nativeleak.so", "loaders:blocked", "exact:blocked", "dotted:blocked", "test ! -e /tmp/fennel-native-leak", "fennel-signal-ready", "signal_status", "test ! -e Signal.lua", "Broken.fnl"},
 		"forth":         {"gforth Main.fs -e bye", ".\" ok\" cr"},
 		"freebasic":     {"FREEBASIC_VERSION=1.10.1", "libtinfo5", "fbc -x Main Main.bas"},
@@ -641,6 +646,32 @@ func TestAssemblyScriptCompilerBypassesAscProcessRespawn(t *testing.T) {
 	}
 	if !strings.Contains(string(dockerfile), "scripts/assemblyscript_compile.sh /usr/local/bin/aonohako-assemblyscript-compile") {
 		t.Fatal("runtime Dockerfile must install the trusted AssemblyScript compiler helper")
+	}
+}
+
+func TestFactorParserHelperNeverRunsSubmittedTopLevelForms(t *testing.T) {
+	helper, err := os.ReadFile(filepath.Join("..", "..", "scripts", "factor_check.factor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(helper)
+	for _, marker := range []string{"command-line get last", "parse-file", "drop"} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("Factor parser helper must contain %q: %s", marker, body)
+		}
+	}
+	for _, forbidden := range []string{"run-file", "load", "eval"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Factor parser helper must not contain %q: %s", forbidden, body)
+		}
+	}
+
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "docker", "runtime.Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "scripts/factor_check.factor /usr/local/lib/aonohako/factor_check.factor") {
+		t.Fatal("runtime Dockerfile must install the trusted Factor parser helper")
 	}
 }
 
@@ -1189,7 +1220,7 @@ func TestRepositoryCatalogPinsGCC16AcrossProfiles(t *testing.T) {
 	}
 
 	for _, profileName := range sortedKeys(catalog.Profiles) {
-		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" || profileName == "type-t" || profileName == "type-u" || profileName == "type-v" || profileName == "type-x" {
+		if profileName == "type-j" || profileName == "type-o" || profileName == "type-q" || profileName == "type-r" || profileName == "type-s" || profileName == "type-t" || profileName == "type-u" || profileName == "type-v" || profileName == "type-x" || profileName == "type-y" {
 			continue
 		}
 		profile := catalog.Profiles[profileName]

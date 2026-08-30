@@ -2778,6 +2778,25 @@ console.log(result == 0 ? "filesystem:leaked" : "filesystem:blocked");`),
 				},
 			},
 		},
+		"factor": {
+			{
+				name:           "ffi-process-and-network-denies",
+				compileLang:    "FACTOR",
+				expectedStdout: "process:blocked\nnetwork:blocked\n",
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.factor", `USING: io kernel unix.ffi unix.ffi.linux unix.process ;
+<<
+fork -1 = [ ] [ "process syscall escaped sandbox" throw ] if
+AF_INET SOCK_STREAM 0 socket dup -1 =
+[ drop ]
+[ close "network socket escaped sandbox" throw ] if
+>>
+"process:blocked" print
+"network:blocked" print`),
+				},
+			},
+		},
 		"java": {
 			{
 				name:           "process-and-network-denies",
@@ -4865,6 +4884,15 @@ for (let i = 0; i < count; ++i) {
 }
 if (active) sum += sign * value;
 console.log(sum.toString());`),
+			},
+		},
+		"factor": {
+			compileLang: "FACTOR",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.factor", `USING: io math math.parser prettyprint sequences splitting ;
+readln split-words [ string>number ] map-sum .`),
 			},
 		},
 		"whitespace": {

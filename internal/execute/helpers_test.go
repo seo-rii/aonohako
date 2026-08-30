@@ -383,6 +383,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"lolcode", "/tmp/sol.lol", "lci", true},
 		{"wasm", "/tmp/sol.wasm", "wasmtime", true},
 		{"assemblyscript", "/tmp/sol.wasm", "wasmtime", true},
+		{"factor", "/tmp/sol.factor", "/opt/factor/factor", true},
 		{"ruby", "/tmp/sol.rb", "ruby", true},
 		{"php", "/tmp/sol.php", "php", true},
 		{"lua", "/tmp/sol.lua", "lua5.4", true},
@@ -736,6 +737,29 @@ func TestBuildCommandRunsAssemblyScriptWithoutFilesystemPreopens(t *testing.T) {
 		if strings.HasPrefix(arg, "--dir=") {
 			t.Fatalf("assemblyscript command unexpectedly preopens a directory: %v", args)
 		}
+	}
+}
+
+func TestBuildCommandRunsFactorWithBoundedStacksAndNoUserInit(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 512}}
+	args := buildCommand("/tmp/Main.factor", "factor", req)
+	want := []string{
+		"/opt/factor/factor",
+		"-no-user-init",
+		"-no-signals",
+		"-q",
+		"-datastack=256",
+		"-retainstack=256",
+		"-callstack=1024",
+		"-callbacks=256",
+		"-young=2",
+		"-aging=4",
+		"-tenured=192",
+		"-codeheap=96",
+		"/tmp/Main.factor",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("factor command = %v, want %v", args, want)
 	}
 }
 
