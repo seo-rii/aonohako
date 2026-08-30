@@ -170,8 +170,15 @@ as a named build context:
 The same path can be supplied with `AONOHAKO_PYTHON_PACKAGES_CONTEXT`.
 When neither is supplied and the repository `python/` directory exists, it is
 used by default. Contents are copied to `/usr/local/lib/aonohako/python`, which
-is exported as `PYTHONPATH` in runtime images. The bundled `sitecustomize.py`
-stays inactive unless an execution requests image sidecar output.
+is exported as `PYTHONPATH` in runtime images. The fixed bundled
+`sitecustomize.py` is copied after that context, so a custom package context
+cannot replace the trusted startup hook. The hook stays inactive unless an
+execution requests image sidecar output.
+
+`deployment-contract.json` publishes the installed-library capability and its
+supported interpreter targets. Downstream deployment automation should require
+that contract before enabling PyPy installed-library requests, so an older
+runner ref fails before an image or control-plane revision is deployed.
 
 ## Local development
 
@@ -355,9 +362,12 @@ aonohako-selftest cgroup-preflight
   Remote control planes and runners must use the same policy or explicitly
   trust the forwarded, policy-selected mode.
 - `AONOHAKO_DEFAULT_PYTHON_LIBRARY_MODE` selects the request-wide default for
-  Python imports: `stdlib` (default) or `installed`. `stdlib` keeps submitted
-  sibling modules and the standard library available while hiding packages
-  installed in the runtime image.
+  CPython and PyPy imports: `stdlib` (default) or `installed`. `stdlib` keeps
+  submitted sibling modules and the standard library available while hiding
+  the selected interpreter's protected package roots and the shared trusted
+  image package root. Both modes use isolated interpreter startup; `installed`
+  explicitly adds global system packages, the trusted image package directory,
+  and the fixed image-owned startup hook.
 - `AONOHAKO_ALLOW_REQUEST_PYTHON_INSTALLED_LIBRARIES` controls whether a
   request may elevate from the `stdlib` default with
   `python_library_mode=installed`. It defaults to `true` only for `dev` and

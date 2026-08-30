@@ -76,7 +76,8 @@ type sandboxIdentity struct {
 
 func sandboxSupplementaryGroups(identity sandboxIdentity, runLang string, mode pythonpolicy.LibraryMode) []uint32 {
 	groups := []uint32{identity.gid}
-	if profiles.NormalizeRunLang(runLang) == "python" &&
+	normalizedLang := profiles.NormalizeRunLang(runLang)
+	if (normalizedLang == "python" || normalizedLang == "pypy") &&
 		pythonpolicy.EffectiveLibraryMode(mode) == pythonpolicy.LibraryModeInstalled {
 		groups = append(groups, pythonpolicy.ExternalLibraryGID)
 	}

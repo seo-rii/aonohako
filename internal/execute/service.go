@@ -167,7 +167,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid python_library_mode: " + err.Error()}
 	}
 	if req.PythonLibraryMode != "" && !runvalidation.UsesPython(req) {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "python_library_mode requires a Python execution target"}
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "python_library_mode requires a Python or PyPy execution target"}
 	}
 	if req.SPJ != nil {
 		if err := runvalidation.ValidateSPJ(req.SPJ); err != nil {

@@ -8,5 +8,12 @@
     "max_bytes": 1073741824,
     "max_files": 1048576,
     "cloudrun_communication_max_files": 4194304
+  },
+  "python_library_mode": {
+    "installed_capability": "python-library-pypy-installed-v1",
+    "targets": [
+      "python",
+      "pypy"
+    ]
   }
 }

@@ -20,6 +20,27 @@ sys.path.insert(0, os.path.dirname(path))
 runpy.run_path(path, run_name="__main__")
 `
 
+const pythonTrustedSitecustomizePath = "/usr/local/lib/aonohako/python/sitecustomize.py"
+
+const pythonInstalledRunner = `import importlib.util, os, runpy, site, sys
+path = sys.argv.pop(1)
+trusted_sitecustomize_path = sys.argv.pop(1)
+site.setquit()
+site.setcopyright()
+site.sethelper()
+for system_site in site.getsitepackages():
+    site.addsitedir(system_site)
+site.addsitedir(os.path.dirname(trusted_sitecustomize_path))
+spec = importlib.util.spec_from_file_location("sitecustomize", trusted_sitecustomize_path)
+if spec is None or spec.loader is None:
+    raise ImportError("cannot load trusted sitecustomize")
+trusted_sitecustomize = importlib.util.module_from_spec(spec)
+sys.modules["sitecustomize"] = trusted_sitecustomize
+spec.loader.exec_module(trusted_sitecustomize)
+sys.path.insert(0, os.path.dirname(path))
+runpy.run_path(path, run_name="__main__")
+`
+
 func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	return buildCommandWithRuntimeTuning(primaryPath, lang, req, config.DefaultRuntimeTuningConfig())
 }
@@ -87,13 +108,15 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"clojure.main",
 			primaryPath,
 		}
-	case "python":
-		if pythonpolicy.EffectiveLibraryMode(req.PythonLibraryMode) == pythonpolicy.LibraryModeInstalled {
-			return []string{"python3", primaryPath}
+	case "python", "pypy":
+		interpreter := "python3"
+		if lang == "pypy" {
+			interpreter = "pypy3"
 		}
-		return []string{"python3", "-I", "-S", "-c", pythonStdlibRunner, primaryPath}
-	case "pypy":
-		return []string{"pypy3", primaryPath}
+		if pythonpolicy.EffectiveLibraryMode(req.PythonLibraryMode) == pythonpolicy.LibraryModeInstalled {
+			return []string{interpreter, "-I", "-S", "-c", pythonInstalledRunner, primaryPath, pythonTrustedSitecustomizePath}
+		}
+		return []string{interpreter, "-I", "-S", "-c", pythonStdlibRunner, primaryPath}
 	case "racket":
 		return []string{"racket", primaryPath}
 	case "scheme":

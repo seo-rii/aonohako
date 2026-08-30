@@ -999,7 +999,7 @@ func (s *Server) applyPythonLibraryPolicy(req *model.RunRequest) error {
 	}
 	if !runvalidation.UsesPython(req) {
 		if req.PythonLibraryMode != "" {
-			return fmt.Errorf("python_library_mode requires a Python contestant, step program, interactor, or spj")
+			return fmt.Errorf("python_library_mode requires a Python or PyPy contestant, step program, interactor, or spj")
 		}
 		return nil
 	}

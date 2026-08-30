@@ -287,6 +287,7 @@ func (s ImageSpec) DockerBuild(contextDir, tagPrefix string) DockerBuildSpec {
 			"RUST_CRATE_ISOLATION":        strconv.FormatBool(slices.Contains(s.Languages, "rust")),
 			"RUST_EXTERNAL_CRATE_GID":     strconv.FormatUint(uint64(rustpolicy.ExternalCrateGID), 10),
 			"PYTHON_LIBRARY_ISOLATION":    strconv.FormatBool(slices.Contains(s.Languages, "python")),
+			"PYPY_LIBRARY_ISOLATION":      strconv.FormatBool(slices.Contains(s.Languages, "pypy")),
 			"PYTHON_EXTERNAL_LIBRARY_GID": strconv.FormatUint(uint64(pythonpolicy.ExternalLibraryGID), 10),
 		},
 	}
