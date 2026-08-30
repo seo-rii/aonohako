@@ -419,6 +419,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"haxe", "/tmp/Main.n", "neko", true},
 		{"deno", "/tmp/Main.ts", "deno", true},
 		{"bun", "/tmp/Main.ts", "bun", true},
+		{"quickjs", "/tmp/Main.js", "qjs", true},
 		{"kotlin-jvm", "/tmp/Main.jar", "java", true},
 		{"duckdb", "/tmp/Main.sql", "aonohako-duckdb-run", true},
 		{"bqn", "/tmp/Main.bqn", "bqn", true},
@@ -923,6 +924,17 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 		t.Fatalf("bun command = %v", bunArgs)
 	}
 
+	quickJSArgs := buildCommandWithRuntimeTuning("/tmp/Main.js", "quickjs", req, tuning)
+	if !reflect.DeepEqual(quickJSArgs, []string{
+		"qjs",
+		"--memory-limit", "268435456",
+		"--stack-size", "1048576",
+		"--std",
+		"/tmp/Main.js",
+	}) {
+		t.Fatalf("QuickJS command with tuning = %v", quickJSArgs)
+	}
+
 	uhmArgs := buildCommandWithRuntimeTuning("/tmp/Main.umm", "uhmlang", req, tuning)
 	if !reflect.DeepEqual(uhmArgs, []string{
 		"env",
@@ -1165,7 +1177,7 @@ func TestAddressSpaceLimitBytesAlwaysAtLeast512MB(t *testing.T) {
 }
 
 func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) {
-	for _, commandBase := range []string{"bun", "deno", "dotnet", "elixir", "java", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "wasmtime"} {
+	for _, commandBase := range []string{"bun", "deno", "dotnet", "elixir", "java", "node", "pypy3", "python3", "qjs", "sbcl", "umjunsik-lang-go", "wasmtime"} {
 		if addressSpaceProximityCanClassifyMLE(commandBase, "") {
 			t.Fatalf("%s should not use address-space proximity for MLE classification", commandBase)
 		}

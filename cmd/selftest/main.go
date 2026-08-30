@@ -191,6 +191,15 @@ while true do
 end
 `)},
 		},
+		"quickjs": {
+			compileLang: "JAVASCRIPT_QUICKJS",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.js", `const chunks = [];
+while (true) {
+  chunks.push(new Uint8Array(8 * 1024 * 1024));
+}
+`)},
+		},
 		"perl": {
 			compileLang: "PERL",
 			memoryMB:    64,
@@ -2900,6 +2909,23 @@ await new Promise((resolve) => {
 				},
 			},
 		},
+		"quickjs": {
+			{
+				name:           "process-deny",
+				compileLang:    "JAVASCRIPT_QUICKJS",
+				expectedStdout: "process:blocked\n",
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.js", `let blocked = false;
+try {
+  blocked = os.exec(["/bin/true"], { block: true }) < 0;
+} catch (_) {
+  blocked = true;
+}
+console.log(`+"`process:${blocked ? \"blocked\" : \"leaked\"}`"+`);`),
+				},
+			},
+		},
 		"assemblyscript": {
 			{
 				name:           "filesystem-preopen-denied",
@@ -5094,6 +5120,15 @@ console.log(values[0] + values[1]);`),
 				source("Main.ts", `const values: number[] = (await Bun.stdin.text()).trim().split(/\s+/).map(Number);
 await Bun.write("same-folder.txt", String(values[0] + values[1]));
 console.log(await Bun.file("same-folder.txt").text());`),
+			},
+		},
+		"quickjs": {
+			compileLang: "JAVASCRIPT_QUICKJS",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 256},
+			sources: []model.Source{
+				source("Main.js", `const values = std.in.getline().trim().split(/\s+/).map(Number);
+console.log(values[0] + values[1]);`),
 			},
 		},
 		"elm": {

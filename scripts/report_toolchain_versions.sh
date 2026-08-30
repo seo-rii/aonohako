@@ -212,6 +212,10 @@ if has_language "bun"; then
     report_once "Bun" bun --version
 fi
 
+if has_language "quickjs"; then
+    report_once "QuickJS" qjs --help
+fi
+
 if has_language "elm"; then
     report_once "Elm" elm --version
 fi
@@ -702,6 +706,7 @@ report_compile_option "rescript" "rescript build"
 report_compile_option "purescript" "spago build"
 report_compile_option "deno" "deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=<compile cap>"
 report_compile_option "bun" "bun --no-install --no-env-file --no-macros --config=/dev/null build --target=bun --no-bundle --outfile=.cache/aonohako-bun-check-<n>.js <source>; validation output excluded from artifacts"
+report_compile_option "quickjs" "qjsc -s -c -o <discarded-check.c> <source.js>; run with qjs --memory-limit <bytes> --stack-size 1048576 --std"
 report_compile_option "elm" "elm make <source> --output <target>"
 report_compile_option "idris2" "idris2 --cg chez -o <target>"
 report_compile_option "haxe" "haxe -D ONLINE_JUDGE -main Main -neko <target>.n"

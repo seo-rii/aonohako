@@ -531,6 +531,7 @@ The interactor is invoked as:
 | TYPESCRIPT | `typescript` | `tsc` |
 | DENO, JAVASCRIPT_DENO, TYPESCRIPT_DENO | `deno` | offline `deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=...` (`DENO` remains a TypeScript-compatible alias) |
 | JAVASCRIPT_BUN, TYPESCRIPT_BUN | `bun` | `bun --no-install --no-env-file --no-macros --config=/dev/null build --target=bun --no-bundle --outfile=.cache/aonohako-bun-check-<n>.js <source>`; generated validation files are excluded from artifacts |
+| JAVASCRIPT_QUICKJS | `quickjs` | `qjsc -s -c -o <discarded-check.c> <source.js>` without evaluating top-level code |
 | ASSEMBLYSCRIPT | `assemblyscript` | pinned `asc` plus the official WASI shim, followed by `wasm-validate` |
 | FACTOR | `factor` | trusted `parse-file` validation without executing top-level forms |
 | ELM | `elm` | `elm make <source> --output <target>` plus a Node wrapper for `stdin`/`stdout`/`stderr`/`exit` ports |
@@ -661,6 +662,7 @@ The interactor is invoked as:
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
 | `deno` | offline `deno run --cached-only --no-prompt --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --deny-read --deny-write --deny-net --deny-env --deny-run --deny-ffi --deny-sys --deny-import --v8-flags=--max-old-space-size=... <file>` |
 | `bun` | `env BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 BUN_OPTIONS= bun --smol --no-install --no-env-file --no-addons --no-macros --unhandled-rejections=strict --config=/dev/null run <file>` |
+| `quickjs` | `qjs --memory-limit <bytes> --stack-size 1048576 --std <file>`; process creation and sockets remain sandbox-denied |
 | `gdl` | `aonohako-gdl-run <file> <entry>` |
 | `octave` | `octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path <file>` |
 | `r` | `Rscript --vanilla <file>` |

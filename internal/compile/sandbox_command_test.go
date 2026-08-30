@@ -116,8 +116,8 @@ func TestFactorParserGetsOnlyThreadSignalCompatibilityException(t *testing.T) {
 	}
 	body := string(raw)
 	for _, marker := range []string{
-		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && !isSyntaxOnlySchemeReader && !isBun`,
-		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun`,
+		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isBun`,
+		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun`,
 		`AllowProcesses:           allowProcesses`,
 		`AllowUnixSockets:         allowUnixSockets`,
 		`allowThreadSignals := isDotnetLike || commandName == "factor"`,
@@ -155,8 +155,8 @@ func TestChezSchemeReaderGetsNoProcessOrSocketException(t *testing.T) {
 	body := string(raw)
 	for _, marker := range []string{
 		`isSyntaxOnlySchemeReader := commandName == "chezscheme" || commandName == "guile-3.0"`,
-		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && !isSyntaxOnlySchemeReader && !isBun`,
-		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun`,
+		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isBun`,
+		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("Chez Scheme reader sandbox contract must contain %q", marker)
@@ -189,8 +189,8 @@ func TestChickenCompilerAllowsRequiredSubprocessesWithoutSockets(t *testing.T) {
 	body := string(raw)
 	for _, marker := range []string{
 		`isChickenCompiler := commandName == "csc"`,
-		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && !isSyntaxOnlySchemeReader && !isBun`,
-		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun`,
+		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isBun`,
+		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("Chicken compiler sandbox contract must contain %q", marker)
@@ -254,8 +254,8 @@ func TestBunSyntaxCheckGetsNoProcessOrSocketException(t *testing.T) {
 	body := string(raw)
 	for _, marker := range []string{
 		`isBun := commandName == "bun"`,
-		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && !isSyntaxOnlySchemeReader && !isBun`,
-		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun`,
+		`allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isBun`,
+		`allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun`,
 		`AllowProcesses:           allowProcesses`,
 		`AllowUnixSockets:         allowUnixSockets`,
 	} {
@@ -272,6 +272,23 @@ func TestBunSyntaxCheckGetsNoProcessOrSocketException(t *testing.T) {
 	} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("Bun syntax check unexpectedly receives sandbox privilege %q", forbidden)
+		}
+	}
+}
+
+func TestQuickJSBytecodeCheckCannotSpawnProcessesOrOpenSockets(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_command.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`commandName != "luajit" && commandName != "qjsc"`,
+		`AllowProcesses:           allowProcesses`,
+		`AllowUnixSockets:         allowUnixSockets`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("QuickJS compile sandbox contract must contain %q", marker)
 		}
 	}
 }

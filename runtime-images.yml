@@ -3855,6 +3855,69 @@ languages:
           printf '%s\n' 'import "npm:left-pad";' > Npm.ts
           if deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=512 Npm.ts >/dev/null 2>&1; then exit 1; fi
 
+  quickjs:
+    install:
+      apt:
+        - curl
+        - libc6-dev
+        - make
+        - xz-utils
+      sandbox_tools:
+        - qjs
+        - qjsc
+      script:
+        - export QUICKJS_VERSION=2026-06-04
+        - export QUICKJS_SHA256=b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://bellard.org/quickjs/quickjs-${QUICKJS_VERSION}.tar.xz" -o /tmp/quickjs.tar.xz
+        - echo "${QUICKJS_SHA256}  /tmp/quickjs.tar.xz" | sha256sum -c -
+        - install -d -m 0755 /tmp/quickjs-src
+        - tar -xJf /tmp/quickjs.tar.xz -C /tmp/quickjs-src --strip-components=1
+        - test "$(grep -Fc 'if (has_suffix(module_name, ".so")) {' /tmp/quickjs-src/quickjs-libc.c)" = 1
+        - sed -i 's/if (has_suffix(module_name, ".so")) {/if (0 \&\& has_suffix(module_name, ".so")) {/' /tmp/quickjs-src/quickjs-libc.c
+        - test "$(grep -Fc 'if (0 && has_suffix(module_name, ".so")) {' /tmp/quickjs-src/quickjs-libc.c)" = 1
+        - make -C /tmp/quickjs-src -j2 qjs qjsc examples/fib.so
+        - if /tmp/quickjs-src/qjs --memory-limit 134217728 --stack-size 1048576 --std /tmp/quickjs-src/examples/test_fib.js >/dev/null 2>&1; then exit 1; fi
+        - install -m 0755 /tmp/quickjs-src/qjs /tmp/quickjs-src/qjsc /usr/local/bin/
+        - strip /usr/local/bin/qjs /usr/local/bin/qjsc
+        - for binary in qjs qjsc; do if nm -D "/usr/local/bin/${binary}" | grep -Eq ' (dlopen|dlsym|dlclose)@'; then exit 1; fi; done
+        - rm -rf /tmp/quickjs-src /tmp/quickjs.tar.xz
+        - qjs --help 2>&1 | grep 'QuickJS version 2026-06-04'
+        - qjsc --help 2>&1 | grep 'QuickJS Compiler version 2026-06-04'
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.js <<'QUICKJS'
+          const values = std.in.getline().trim().split(/\s+/).map(Number);
+          console.log(values[0] + values[1]);
+          QUICKJS
+          install -d -m 0700 .cache/quickjs
+          qjsc -s -c -o .cache/quickjs/check.c Main.js
+          test -s .cache/quickjs/check.c
+          test "$(printf '%s\n' '-4 17' | qjs --memory-limit 134217728 --stack-size 1048576 --std Main.js)" = 13
+
+          rm -f aonohako-quickjs-compile-leak
+          cat > SyntaxOnly.js <<'QUICKJS'
+          const output = std.open("aonohako-quickjs-compile-leak", "w");
+          if (output) {
+            output.puts("leaked");
+            output.close();
+          }
+          QUICKJS
+          qjsc -s -c -o .cache/quickjs/check.c SyntaxOnly.js
+          test ! -e aonohako-quickjs-compile-leak
+
+          printf '%s\n' 'const broken = ;' > Broken.js
+          if qjsc -s -c -o .cache/quickjs/check.c Broken.js >/dev/null 2>&1; then exit 1; fi
+
+          printf '%s\n' 'Promise.reject(new Error("boom"));' > Reject.js
+          if qjs --memory-limit 134217728 --stack-size 1048576 --std Reject.js >/dev/null 2>&1; then exit 1; fi
+
+          printf '%s\n' 'const chunks = []; while (true) chunks.push(new Uint8Array(8 * 1024 * 1024));' > Memory.js
+          if qjs --memory-limit 67108864 --stack-size 1048576 --std Memory.js >/dev/null 2>Memory.err; then exit 1; fi
+          grep -F 'InternalError: out of memory' Memory.err
+
   kotlin-jvm:
     install:
       apt:
@@ -4190,6 +4253,7 @@ profiles:
       - java
       - javascript
       - purescript
+      - quickjs
       - rescript
       - scala
       - typescript

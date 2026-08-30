@@ -53,7 +53,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "luajit", "perl",
 		"raku", "r", "mercury", "prolog", "gnu-prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "bun", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "bun", "deno", "quickjs", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -308,6 +308,40 @@ func TestDenoCompilerDisablesConfigurationAndRemoteResolution(t *testing.T) {
 		"DENO_NO_UPDATE_CHECK=1",
 	}) {
 		t.Fatalf("Deno check env = %v", command.env)
+	}
+}
+
+func TestQuickJSCompilerEmitsOnlyDiscardedCBytecode(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.js"), []byte("console.log('ok');\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(_ string, bin string, args, _ []string) {
+			if bin != "qjsc" || len(args) != 5 {
+				return
+			}
+			if err := os.WriteFile(args[3], []byte("quickjs bytecode C output"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	resp := quickJSCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.js"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.js" {
+		t.Fatalf("QuickJS response = %+v", resp)
+	}
+	if len(runner.commands) != 1 {
+		t.Fatalf("QuickJS commands = %+v", runner.commands)
+	}
+	checkPath := filepath.Join(workDir, ".cache", "quickjs", "check.c")
+	wantArgs := []string{"-s", "-c", "-o", checkPath, filepath.Join(workDir, "Main.js")}
+	if got := runner.commands[0]; got.bin != "qjsc" || !reflect.DeepEqual(got.args, wantArgs) || len(got.env) != 0 {
+		t.Fatalf("QuickJS command = %+v, want qjsc %#v", got, wantArgs)
 	}
 }
 

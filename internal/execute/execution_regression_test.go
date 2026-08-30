@@ -427,6 +427,25 @@ func TestMLtonSelectionUsesDefaultNativeBinarySandbox(t *testing.T) {
 	}
 }
 
+func TestQuickJSRuntimeKeepsProcessAndSocketDeniesAndClassifiesEngineOOM(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatalf("read sandbox_exec.go: %v", err)
+	}
+	body := string(raw)
+	for _, marker := range []string{
+		`allowProcesses := false`,
+		`allowUnixSockets := false`,
+		`targetStarted && runtimeBase == "qjs"`,
+		`bytes.Contains(result.Stderr, []byte("InternalError: out of memory"))`,
+		`result.VerdictSource = "runtime_memory"`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("QuickJS sandbox policy must contain %q", marker)
+		}
+	}
+}
+
 func TestGNUPrologSelectionUsesDefaultNativeBinarySandbox(t *testing.T) {
 	profile, ok := profiles.Resolve("GNU_PROLOG")
 	if !ok || profile.RunLang != "binary" {

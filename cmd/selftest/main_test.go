@@ -214,7 +214,7 @@ func TestTwoStepSuiteStressesFastTargetTransitions(t *testing.T) {
 
 func TestStrictRuntimeMemoryCasesCoverNativeAndScriptRuntimes(t *testing.T) {
 	cases := strictRuntimeMemoryCases()
-	for _, language := range []string{"go", "rust", "pony", "powershell", "ruby", "php", "lua", "luajit", "perl", "bun"} {
+	for _, language := range []string{"go", "rust", "pony", "powershell", "ruby", "php", "lua", "luajit", "quickjs", "perl", "bun"} {
 		tc, ok := cases[language]
 		if !ok {
 			t.Fatalf("strict runtime-memory cases are missing language %q", language)
@@ -247,6 +247,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"coffeescript",
 		"deno",
 		"bun",
+		"quickjs",
 		"assemblyscript",
 		"factor",
 		"chez-scheme",
