@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, Prolog,
+  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -83,6 +83,12 @@ language-specific commands keep their declared order.
   disabled. Compile is source pass-through; execution calls the native runtime
   directly with an image-built trusted heap that hides prompts and successful
   top-level diagnostics while preserving user stdout and syntax-error failure.
+- `PROLOG` remains the interpreted SWI-Prolog selection. `GNU_PROLOG` selects
+  GNU Prolog 1.4.5 from the pinned Debian `gprolog=1.4.5.0-3` package and emits
+  a native executable with a fixed `gplc --no-top-level --no-debugger` command.
+  The image-owned trusted initialization wrapper invokes `main` and maps its
+  success or failure to exit status 0 or 1. Smoke coverage proves submission
+  initialization is not executed during compile and that invalid syntax fails.
 - AssemblyScript is pinned to 0.28.20 with the official WASI shim 0.1.0 and
   checksum-verified compiler, shim, Binaryen, and Long npm archives. A trusted
   wrapper resolves the shim from its immutable installation directory, emits a

@@ -399,6 +399,22 @@ func TestMLtonSelectionUsesDefaultNativeBinarySandbox(t *testing.T) {
 	}
 }
 
+func TestGNUPrologSelectionUsesDefaultNativeBinarySandbox(t *testing.T) {
+	profile, ok := profiles.Resolve("GNU_PROLOG")
+	if !ok || profile.RunLang != "binary" {
+		t.Fatalf("GNU_PROLOG profile = %+v, found=%v", profile, ok)
+	}
+	raw, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatalf("read sandbox_exec.go: %v", err)
+	}
+	for _, forbidden := range []string{"isGNUProlog", `runLang == "gnu-prolog"`, `runtimeBase == "gplc"`, `runtimeBase == "gprolog"`, `case "gplc":`, `case "gprolog":`} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("GNU Prolog unexpectedly receives a dedicated runtime sandbox exception %q", forbidden)
+		}
+	}
+}
+
 func TestSMLNJRunnerNeedsNoSandboxPrivilegeException(t *testing.T) {
 	profile, ok := profiles.Resolve("SMLNJ")
 	if !ok || profile.RunLang != "smlnj" {

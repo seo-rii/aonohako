@@ -194,6 +194,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "MERCURY"
 	case "prolog":
 		l = "PROLOG"
+	case "gnu-prolog", "gnu_prolog", "gprolog":
+		l = "GNU_PROLOG"
 	case "scala":
 		l = "SCALA"
 	case "f#", "fsharp":

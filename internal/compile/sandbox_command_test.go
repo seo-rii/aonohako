@@ -198,6 +198,19 @@ func TestChickenCompilerAllowsRequiredSubprocessesWithoutSockets(t *testing.T) {
 	}
 }
 
+func TestGNUPrologCompilerNeedsNoDedicatedSandboxException(t *testing.T) {
+	raw, err := os.ReadFile("sandbox_command.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, forbidden := range []string{"isGNUProlog", `commandName == "gplc"`, `commandName == "gprolog"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("GNU Prolog compiler unexpectedly receives a dedicated sandbox exception %q", forbidden)
+		}
+	}
+}
+
 func TestClassifyCompileWaitStatusTreatsCompilerSignalAsInternal(t *testing.T) {
 	for _, signal := range []syscall.Signal{
 		syscall.SIGABRT,

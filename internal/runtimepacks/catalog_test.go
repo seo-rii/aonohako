@@ -503,8 +503,11 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "Raku" raku --version`,
 		`report_once "MLton" mlton`,
 		`report_once "SML/NJ" smlnj`,
+		`if has_language "gnu-prolog"; then`,
+		`report_once "GNU Prolog" gplc --version`,
 		`report_compile_option "mlton" "mlton -output <target>"`,
 		`report_compile_option "smlnj" "pass-through .sml artifacts; execute with the trusted SML/NJ runner heap"`,
+		`report_compile_option "gnu-prolog" "gplc --no-top-level --no-debugger -o <target> <source> /usr/local/lib/aonohako/gnu_prolog_entry.pl"`,
 		`report_once "Clang" clang --version`,
 		`report_once "Clang++" clang++ --version`,
 		`report_once "FreeBASIC" fbc -version`,
@@ -636,10 +639,20 @@ printf '%s\n' 'Standard ML of New Jersey v110.99.9'
 		t.Fatalf("WriteFile fake smlnj: %v", err)
 	}
 
+	gprologScript := `#!/usr/bin/env bash
+set -eu
+[ "$#" -eq 1 ]
+[ "$1" = --version ]
+printf '%s\n' 'Prolog compiler (GNU Prolog) 1.4.5'
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gplc"), []byte(gprologScript), 0o755); err != nil {
+		t.Fatalf("WriteFile fake gplc: %v", err)
+	}
+
 	cmd := exec.Command("bash", path, "test:image")
 	cmd.Env = append(os.Environ(),
 		"PATH="+binDir+":"+os.Getenv("PATH"),
-		"AONOHAKO_LANGUAGES=erlang,sml,smlnj,dafny,tla",
+		"AONOHAKO_LANGUAGES=erlang,gnu-prolog,sml,smlnj,dafny,tla",
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -648,8 +661,9 @@ printf '%s\n' 'Standard ML of New Jersey v110.99.9'
 
 	body := string(out)
 	for _, want := range []string{
-		"- Languages: `erlang,sml,smlnj,dafny,tla`",
+		"- Languages: `erlang,gnu-prolog,sml,smlnj,dafny,tla`",
 		"| Erlang | `27` |",
+		"| GNU Prolog | `Prolog compiler (GNU Prolog) 1.4.5` |",
 		"| MLton | `MLton 20241230` |",
 		"| SML/NJ | `Standard ML of New Jersey v110.99.9` |",
 		"| Java runtime | `openjdk version \"21-test\"` |",
@@ -657,6 +671,7 @@ printf '%s\n' 'Standard ML of New Jersey v110.99.9'
 		"| TLA+ TLC | `TLC2 Version 2.19 of 08 August 2024 (rev: test)` |",
 		"## Runtime Compile Options",
 		"| `erlang` | `erlc` |",
+		"| `gnu-prolog` | `gplc --no-top-level --no-debugger -o <target> <source> /usr/local/lib/aonohako/gnu_prolog_entry.pl` |",
 		"| `sml` | `mlton -output <target>` |",
 		"| `smlnj` | `pass-through .sml artifacts; execute with the trusted SML/NJ runner heap` |",
 		"| `dafny` | `dafny verify --cores 1` |",
@@ -666,7 +681,7 @@ printf '%s\n' 'Standard ML of New Jersey v110.99.9'
 			t.Fatalf("toolchain report missing %q in:\n%s", want, body)
 		}
 	}
-	for _, unwanted := range []string{"| Java compiler |", "| GNU sed |", "<command failed>"} {
+	for _, unwanted := range []string{"| Java compiler |", "| GNU sed |", "| Prolog |", "<command failed>"} {
 		if strings.Contains(body, unwanted) {
 			t.Fatalf("toolchain report unexpectedly contains %q in:\n%s", unwanted, body)
 		}

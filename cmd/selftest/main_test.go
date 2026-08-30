@@ -252,6 +252,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"chicken-scheme",
 		"mlton",
 		"smlnj",
+		"gnu-prolog",
 		"java",
 		"ruby",
 		"perl",

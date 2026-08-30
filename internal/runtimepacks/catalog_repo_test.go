@@ -23,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -160,6 +160,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-gdl",
 		"ci-gforth",
 		"ci-gleam",
+		"ci-gnu-prolog",
 		"ci-gnucobol",
 		"ci-go",
 		"ci-golfscript",
@@ -439,6 +440,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"fortran":       {"Broken.f90", "gfortran"},
 		"d":             {"Broken.d", "ldc2"},
 		"prolog":        {"Broken.pl", "swipl"},
+		"gnu-prolog":    {"gprolog=1.4.5.0-3", "GNU Prolog.*1\\.4\\.5", "gplc --no-top-level --no-debugger -o Main Main.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl", "20 22", "7 13", "CompileOnly.pl", "aonohako-gnu-prolog-compile-leak", "Broken.pl", "Failure.pl", "if ./Failure"},
 		"scala":         {"scalac Main.scala", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp \"${scala_cp}\" Main"},
 		"lisp":          {"Broken.lisp", "sbcl"},
 		"nasm":          {"Main.asm", "Broken.asm", "nasm -felf64"},
@@ -890,6 +892,63 @@ func TestSMLNJUsesPinnedMinimalArchivesAndTrustedRunnerHeap(t *testing.T) {
 		if !strings.Contains(dockerBody, marker) {
 			t.Fatalf("runtime Dockerfile must contain SML/NJ heap marker %q", marker)
 		}
+	}
+}
+
+func TestGNUPrologUsesPinnedCompilerAndTrustedEntryWrapper(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	spec, ok := catalog.Languages["gnu-prolog"]
+	if !ok {
+		t.Fatal("gnu-prolog language missing from catalog")
+	}
+	if !reflect.DeepEqual(spec.Install.Apt, []string{"gprolog=1.4.5.0-3"}) {
+		t.Fatalf("GNU Prolog apt packages = %v", spec.Install.Apt)
+	}
+	install := strings.Join(spec.Install.Script, "\n")
+	for _, marker := range []string{"dpkg-query -W", "1.4.5.0-3", "gplc --version", "GNU Prolog.*1\\.4\\.5"} {
+		if !strings.Contains(install, marker) {
+			t.Fatalf("GNU Prolog install must contain %q:\n%s", marker, install)
+		}
+	}
+
+	wrapper, err := os.ReadFile(filepath.Join("..", "..", "scripts", "gnu_prolog_entry.pl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(wrapper), ":- initialization((main -> halt(0); halt(1))).\n"; got != want {
+		t.Fatalf("trusted GNU Prolog wrapper = %q, want %q", got, want)
+	}
+
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	fixedCommand := "gplc --no-top-level --no-debugger -o"
+	if got := strings.Count(smoke, fixedCommand); got != 4 {
+		t.Fatalf("GNU Prolog fixed compiler command count = %d, want 4:\n%s", got, smoke)
+	}
+	for _, marker := range []string{
+		"Main.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl",
+		"CompileOnly.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl",
+		"test ! -e aonohako-gnu-prolog-compile-leak",
+		"Broken.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl",
+		"Failure.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl",
+		"if ./Failure >/dev/null 2>&1; then exit 1; fi",
+	} {
+		if !strings.Contains(smoke, marker) {
+			t.Fatalf("GNU Prolog smoke must contain %q:\n%s", marker, smoke)
+		}
+	}
+	if strings.Contains(smoke, "swipl") {
+		t.Fatalf("GNU Prolog smoke must not delegate to SWI-Prolog:\n%s", smoke)
+	}
+
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "docker", "runtime.Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "COPY --chmod=0444 scripts/gnu_prolog_entry.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl") {
+		t.Fatal("runtime Dockerfile must install the immutable trusted GNU Prolog wrapper")
 	}
 }
 

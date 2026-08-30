@@ -3010,6 +3010,36 @@ val _ = print ("network:" ^ (if networkBlocked () then "blocked" else "leaked") 
 				},
 			},
 		},
+		"gnu-prolog": {
+			{
+				name:           "native-process-and-network-denies",
+				compileLang:    "GNU_PROLOG",
+				expectedStdout: expectedProcessNetwork,
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.pl", `process_probe :-
+    (catch(shell('/bin/true', Status), _, fail), Status =:= 0 ->
+        write('process:leaked')
+    ;
+        write('process:blocked')
+    ),
+    nl.
+
+network_probe :-
+    (catch(socket('AF_INET', Socket), _, fail) ->
+        catch(socket_close(Socket), _, true),
+        write('network:leaked')
+    ;
+        write('network:blocked')
+    ),
+    nl.
+
+main :-
+    process_probe,
+    network_probe.`),
+				},
+			},
+		},
 		"java": {
 			{
 				name:           "process-and-network-denies",
@@ -4325,6 +4355,19 @@ main :-
     maplist(number_string, Numbers, Strings),
     sum_list(Numbers, Sum),
     writeln(Sum).`),
+			},
+		},
+		"gnu-prolog": {
+			compileLang: "GNU_PROLOG",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.pl", `main :-
+    read_integer(A),
+    read_integer(B),
+    Sum is A + B,
+    write(Sum),
+    nl.`),
 			},
 		},
 		"pypy": {

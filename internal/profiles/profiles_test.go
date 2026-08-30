@@ -123,6 +123,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"ERLANG",
 		"MERCURY",
 		"PROLOG",
+		"GNU_PROLOG",
 		"SCALA",
 		"FSHARP",
 		"WHITESPACE",
@@ -271,6 +272,10 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"ERLANG":       "erlang",
 		"MERCURY":      "binary",
 		"PROLOG":       "prolog",
+		"GNU_PROLOG":   "binary",
+		"gnu-prolog":   "binary",
+		"gnu_prolog":   "binary",
+		"gprolog":      "binary",
 		"R":            "r",
 		"GROOVY":       "groovy",
 		"SCALA":        "scala",
@@ -357,6 +362,19 @@ func TestSMLNJProfileUsesPassThroughSourceRuntime(t *testing.T) {
 	}
 	if profile.TimeMultiplier != 2 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 256 {
 		t.Fatalf("SMLNJ resource profile = %+v", profile)
+	}
+}
+
+func TestGNUPrologProfileCompilesNativeExecutable(t *testing.T) {
+	profile, ok := Resolve("GNU_PROLOG")
+	if !ok {
+		t.Fatal("Resolve(GNU_PROLOG) reported unsupported language")
+	}
+	if profile.Extension != "pl" || profile.DefaultTarget != "Main" || profile.CompileKind != "gnu-prolog" || profile.RunLang != "binary" {
+		t.Fatalf("GNU_PROLOG profile = %+v", profile)
+	}
+	if profile.TimeMultiplier != 1 || profile.TimeOffsetMs != 1000 || profile.MemoryMultiplier != 1 || profile.MemoryOffsetMB != 128 {
+		t.Fatalf("GNU_PROLOG resource profile = %+v", profile)
 	}
 }
 

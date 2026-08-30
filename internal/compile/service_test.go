@@ -289,6 +289,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"erlang":        {compileKind: "erlang", runLang: "erlang"},
 		"mercury":       {compileKind: "mercury", runLang: "binary"},
 		"prolog":        {compileKind: "prolog", runLang: "prolog"},
+		"gnu-prolog":    {compileKind: "gnu-prolog", runLang: "binary"},
 		"r":             {compileKind: "r", runLang: "r"},
 		"groovy":        {compileKind: "groovy", runLang: "groovy"},
 		"fortan":        {compileKind: "fortran", runLang: "binary"},
@@ -443,6 +444,8 @@ func TestResolveProfileAcceptsLanguageAliases(t *testing.T) {
 		"mlton":           "sml",
 		"sml-nj":          "smlnj",
 		"sml/nj":          "smlnj",
+		"gnu_prolog":      "gnu-prolog",
+		"gprolog":         "gnu-prolog",
 		"zero":            "zerolang",
 		"a68":             "algol68",
 	}

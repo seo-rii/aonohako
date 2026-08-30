@@ -145,10 +145,13 @@ var compileRegistry = map[string]Compiler{
 	"objective-cpp": nativeCompiler{exts: []string{".mm"}, bin: "clang++", flags: func(CompileJob) []string {
 		return []string{"-O2", "-pipe", "-DONLINE_JUDGE=1", "-L/usr/lib/gcc/x86_64-linux-gnu/16", "-lobjc"}
 	}},
-	"raku":          checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
-	"r":             rCompiler{},
-	"mercury":       mercuryCompiler{},
-	"prolog":        prologCompiler{},
+	"raku":    checkedSourcesCompiler{exts: []string{".raku", ".rakumod", ".p6", ".pl6"}, noSourceReason: "no raku sources", bin: "raku", prefix: []string{"-c"}},
+	"r":       rCompiler{},
+	"mercury": mercuryCompiler{},
+	"prolog":  prologCompiler{},
+	"gnu-prolog": singleSourceExecutableCompiler{exts: []string{".pl"}, preferredBases: []string{"Main.pl", "main.pl"}, noSourceReason: "no gnu prolog sources", bin: "gplc", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"--no-top-level", "--no-debugger", "-o", outputPath(job), sourcePath, "/usr/local/lib/aonohako/gnu_prolog_entry.pl"}
+	}},
 	"lisp":          lispCompiler{},
 	"picolisp":      passThroughCompiler{exts: []string{".l"}, noSourceReason: "no picolisp sources"},
 	"nasm":          nasmCompiler{},
