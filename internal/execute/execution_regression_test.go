@@ -14,6 +14,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
 	"aonohako/internal/security"
 )
 
@@ -378,6 +379,22 @@ func TestFactorRuntimeGetsOnlyThreadSignalCompatibilityException(t *testing.T) {
 	for _, forbidden := range []string{`allowProcesses = isFactor`, `allowUnixSockets = isFactor`, `allowMemfdCreate := isDotnet || isTLA || isFactor`, `AllowNumaPolicy:          isFactor`} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("Factor sandbox policy unexpectedly contains %q", forbidden)
+		}
+	}
+}
+
+func TestMLtonSelectionUsesDefaultNativeBinarySandbox(t *testing.T) {
+	profile, ok := profiles.Resolve("MLTON")
+	if !ok || profile.RunLang != "binary" {
+		t.Fatalf("MLTON profile = %+v, found=%v", profile, ok)
+	}
+	raw, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatalf("read sandbox_exec.go: %v", err)
+	}
+	for _, forbidden := range []string{"isMLton", `runLang == "mlton"`, `runtimeBase == "mlton"`} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("MLton unexpectedly receives a dedicated sandbox exception %q", forbidden)
 		}
 	}
 }

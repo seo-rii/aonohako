@@ -61,7 +61,7 @@ language-specific commands keep their declared order.
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
   Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua, Perl,
-  Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
+  Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML/MLton, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
@@ -75,6 +75,9 @@ language-specific commands keep their declared order.
   with the `release-fast` profile. Its stable source projection does not yet
   expose a stdin contract, so runtime smoke coverage currently uses fixed
   output while still exercising import, validation, compilation, and execution.
+- `SML` remains the compatibility selection for Standard ML and `MLTON` is the
+  explicit MLton selection. Both compile with the same MLton 20241230
+  toolchain and share one installation in the production runtime pack.
 - AssemblyScript is pinned to 0.28.20 with the official WASI shim 0.1.0 and
   checksum-verified compiler, shim, Binaryen, and Long npm archives. A trusted
   wrapper resolves the shim from its immutable installation directory, emits a

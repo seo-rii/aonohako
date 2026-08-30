@@ -23,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "rescript", "scala", "typescript"}) {
@@ -186,6 +186,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-lua",
 		"ci-malbolge",
 		"ci-mercury",
+		"ci-mlton",
 		"ci-mojo",
 		"ci-moonbit",
 		"ci-nasm",
@@ -281,6 +282,41 @@ func TestRepositoryCatalogRefreshesMercuryRepoBeforeInstall(t *testing.T) {
 	installIndex := repoIndex + installRelIndex
 	if !(repoIndex < updateIndex && updateIndex < installIndex) {
 		t.Fatalf("Mercury repo must be refreshed after source addition and before install: repo=%d update=%d install=%d", repoIndex, updateIndex, installIndex)
+	}
+}
+
+func TestMLtonSelectionsExpandOneSharedInstallInProduction(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatalf("LoadCatalog returned error: %v", err)
+	}
+	production, err := catalog.ProductionImages()
+	if err != nil {
+		t.Fatalf("ProductionImages returned error: %v", err)
+	}
+	var typeA ImageSpec
+	for _, image := range production {
+		if image.Name == "type-a" {
+			typeA = image
+			break
+		}
+	}
+	install := strings.Join(typeA.InstallScript, "\n")
+	if got := strings.Count(install, "export MLTON_VERSION=20241230"); got != 1 {
+		t.Fatalf("type-a MLton install count = %d, want 1", got)
+	}
+
+	ci, err := catalog.CILanguageImages()
+	if err != nil {
+		t.Fatalf("CILanguageImages returned error: %v", err)
+	}
+	byName := make(map[string]ImageSpec, len(ci))
+	for _, image := range ci {
+		byName[image.Name] = image
+	}
+	if !reflect.DeepEqual(byName["ci-sml"].AptPackages, byName["ci-mlton"].AptPackages) ||
+		!reflect.DeepEqual(byName["ci-sml"].InstallScript, byName["ci-mlton"].InstallScript) {
+		t.Fatalf("SML and MLTON selections do not share one install definition")
 	}
 }
 
@@ -381,6 +417,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"scheme":        {"chibi-scheme Main.scm", "(scheme base)"},
 		"sed":           {"sed -f Main.sed", "s/^/ok/"},
 		"sml":           {"MLTON_VERSION=20241230", "mlton -output Main Main.sml"},
+		"mlton":         {"MLTON_VERSION=20241230", "mlton -output Main Main.sml", "20 22", "7 13", "Broken.sml"},
 		"smalltalk":     {"GST_VERSION=3.2.5", "mirrors.kernel.org/gnu/smalltalk", "sed -i 's/const char \\*inbuf;/char *inbuf;/'", "CC=/usr/bin/gcc-14 ./configure", "make -j1", "gst -q Main.st"},
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},

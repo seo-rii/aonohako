@@ -502,6 +502,7 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "CoffeeScript" coffee --version`,
 		`report_once "Raku" raku --version`,
 		`report_once "MLton" mlton`,
+		`report_compile_option "mlton" "mlton -output <target>"`,
 		`report_once "Clang" clang --version`,
 		`report_once "Clang++" clang++ --version`,
 		`report_once "FreeBASIC" fbc -version`,
@@ -654,6 +655,26 @@ printf '%s\n' 'MLton 20241230'
 	for _, unwanted := range []string{"| Java compiler |", "| GNU sed |", "<command failed>"} {
 		if strings.Contains(body, unwanted) {
 			t.Fatalf("toolchain report unexpectedly contains %q in:\n%s", unwanted, body)
+		}
+	}
+
+	cmd = exec.Command("bash", path, "test:image")
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"AONOHAKO_LANGUAGES=mlton",
+	)
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("report_toolchain_versions.sh MLton selection: %v\n%s", err, string(out))
+	}
+	body = string(out)
+	for _, want := range []string{
+		"- Languages: `mlton`",
+		"| MLton | `MLton 20241230` |",
+		"| `mlton` | `mlton -output <target>` |",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("MLton toolchain report missing %q in:\n%s", want, body)
 		}
 	}
 

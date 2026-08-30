@@ -130,6 +130,7 @@ var profiles = map[string]Profile{
 	"HASKELL":       {SourceLang: "HASKELL", Extension: "hs", DefaultTarget: "Main", CompileKind: "haskell", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"IDRIS2":        {SourceLang: "IDRIS2", Extension: "idr", DefaultTarget: "Main", CompileKind: "idris2", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"SML":           {SourceLang: "SML", Extension: "sml", DefaultTarget: "Main", CompileKind: "sml", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
+	"MLTON":         {SourceLang: "MLTON", Extension: "sml", DefaultTarget: "Main", CompileKind: "sml", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
 	"HAXE":          {SourceLang: "HAXE", Extension: "hx", DefaultTarget: "Main.n", CompileKind: "haxe", RunLang: "haxe", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LISP":          {SourceLang: "LISP", Extension: "lisp", CompileKind: "lisp", RunLang: "lisp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PICOLISP":      {SourceLang: "PICOLISP", Extension: "l", CompileKind: "picolisp", RunLang: "picolisp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
@@ -251,6 +252,8 @@ func NormalizeRunLang(language string) string {
 	case "bf":
 		return "brainfuck"
 	case "zero", "zerolang":
+		return "binary"
+	case "mlton":
 		return "binary"
 	case "lol":
 		return "lolcode"
