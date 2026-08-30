@@ -388,6 +388,10 @@ if has_language "scheme"; then
     report_once "Chibi Scheme" chibi-scheme -V
 fi
 
+if has_language "chez-scheme"; then
+    report_once "Chez Scheme" /usr/bin/chezscheme --version
+fi
+
 if has_language "awk"; then
     report_once "GNU awk" gawk --version
 fi
@@ -654,6 +658,7 @@ report_compile_option "java" "javac --release 11 -encoding UTF-8"
 report_compile_option "groovy" "groovyc -d <workdir>"
 report_compile_option "scala" "scalac -d <workdir>"
 report_compile_option "clojure" "clojure reader parse check"
+report_compile_option "chez-scheme" "/usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm <source.scm>; run with /usr/bin/chezscheme --quiet --script <source.scm>"
 report_compile_option "javascript" "node --check"
 report_compile_option "assemblyscript" "aonohako-assemblyscript-compile <source.ts> <target.wasm>; wasm-validate <target.wasm>; run with bounded Wasmtime and no filesystem preopens"
 report_compile_option "factor" "/opt/factor/factor -no-user-init -no-signals -q /usr/local/lib/aonohako/factor_check.factor <source.factor>; run with bounded stacks and immutable vocabulary roots"

@@ -244,7 +244,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			racketPath = primaryPath
 		}
 		return racketPath, lang, nil
-	case "scheme":
+	case "scheme", "chez-scheme":
 		if schemePath == "" {
 			schemePath = primaryPath
 		}

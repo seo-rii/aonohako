@@ -359,6 +359,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"pypy", "/tmp/sol.py", "pypy3", true},
 		{"racket", "/tmp/sol.rkt", "racket", true},
 		{"scheme", "/tmp/sol.scm", "chibi-scheme", true},
+		{"chez-scheme", "/tmp/sol.scm", "/usr/bin/chezscheme", true},
 		{"awk", "/tmp/sol.awk", "gawk", true},
 		{"tcl", "/tmp/sol.tcl", "tclsh", true},
 		{"gdl", "/tmp/sol.pro", "aonohako-gdl-run", true},
@@ -514,6 +515,14 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 				t.Errorf("buildCommand(%s) missing bundled interpreter path in %v", tc.lang, args)
 			}
 		})
+	}
+}
+
+func TestBuildCommandRunsChezSchemeAsScript(t *testing.T) {
+	got := buildCommand("/tmp/Main.scm", "chez-scheme", &model.RunRequest{})
+	want := []string{"/usr/bin/chezscheme", "--quiet", "--script", "/tmp/Main.scm"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Chez Scheme command = %v, want %v", got, want)
 	}
 }
 

@@ -83,6 +83,15 @@ shared_installs:
       - test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b9
       - test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
 
+  chezscheme10:
+    apt:
+      - chezscheme=10.0.0+dfsg-5
+    sandbox_tools:
+      - chezscheme
+    script:
+      - test "$(dpkg-query -W -f='${Version}' chezscheme)" = 10.0.0+dfsg-5
+      - /usr/bin/chezscheme --version 2>&1 | grep '^10\.0\.0$'
+
 languages:
   plain:
     install:
@@ -849,11 +858,12 @@ languages:
 
   idris2:
     install:
+      shared:
+        - chezscheme10
       apt:
         - bash
         - build-essential
         - ca-certificates
-        - chezscheme
         - curl
         - libgmp-dev
         - make
@@ -1531,6 +1541,32 @@ languages:
           (newline)
           SCM
           chibi-scheme Main.scm | grep '^ok$'
+
+  chez-scheme:
+    install:
+      shared:
+        - chezscheme10
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.scm <<'SCM'
+          (import (chezscheme))
+          (display (+ (read) (read)))
+          (newline)
+          SCM
+          /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm Main.scm
+          test "$(printf '%s\n' '-4 17' | /usr/bin/chezscheme --quiet --script Main.scm)" = 13
+          cat > SyntaxOnly.scm <<'SCM'
+          (import (chezscheme))
+          (system "touch aonohako-chez-compile-leak")
+          SCM
+          /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm SyntaxOnly.scm
+          test ! -e aonohako-chez-compile-leak
+          printf '%s\n' '(import (chezscheme))' '(display "broken"' > Broken.scm
+          if /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm Broken.scm >/dev/null 2>&1; then exit 1; fi
 
   awk:
     install:
@@ -3033,7 +3069,8 @@ languages:
       script:
         - export A68G_VERSION=3.13.3
         - export A68G_SHA256=78dc53f4a712a9c8ee159b1eb7045fe4ea060c4eb2a49efb9634f83c2cb13995
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://algol68genie.nl/algol68g-${A68G_VERSION}.tar.gz" -o /tmp/algol68g.tar.gz
+        - export A68G_SHA512=90b64911ee3b4011799425cf846fea4a26570182ec1ed9f65e6f0630e02b0623ed408fb6d074dcd2795b6412e209a39f5580d32acd079a3f3d419bf2440512a6
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://src.fedoraproject.org/repo/pkgs/algol68g/algol68g-${A68G_VERSION}.tar.gz/sha512/${A68G_SHA512}/algol68g-${A68G_VERSION}.tar.gz" -o /tmp/algol68g.tar.gz
         - echo "${A68G_SHA256}  /tmp/algol68g.tar.gz" | sha256sum -c -
         - rm -rf /tmp/algol68g-src
         - mkdir -p /tmp/algol68g-src
@@ -3729,6 +3766,7 @@ profiles:
       - befunge
       - bf
       - bqn
+      - chez-scheme
       - elixir
       - erlang
       - fennel

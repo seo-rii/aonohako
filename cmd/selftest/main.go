@@ -2797,6 +2797,35 @@ AF_INET SOCK_STREAM 0 socket dup -1 =
 				},
 			},
 		},
+		"chez-scheme": {
+			{
+				name:           "ffi-process-and-network-denies",
+				compileLang:    "CHEZ_SCHEME",
+				expectedStdout: expectedProcessNetwork,
+				limits:         managedLimits,
+				sources: []model.Source{
+					source("Main.scm", `(import (chezscheme))
+(load-shared-object "libc.so.6")
+(define socket-call (foreign-procedure "socket" (int int int) int))
+(define close-call (foreign-procedure "close" (int) int))
+(define process-blocked?
+  (guard (condition [else #t])
+    (not (zero? (system "/bin/true")))))
+(define network-blocked?
+  (guard (condition [else #t])
+    (let ([descriptor (socket-call 2 1 0)])
+      (if (< descriptor 0)
+          #t
+          (begin (close-call descriptor) #f)))))
+(display "process:")
+(display (if process-blocked? "blocked" "leaked"))
+(newline)
+(display "network:")
+(display (if network-blocked? "blocked" "leaked"))
+(newline)`),
+				},
+			},
+		},
 		"java": {
 			{
 				name:           "process-and-network-denies",
@@ -4233,6 +4262,16 @@ s/^7[[:space:]][[:space:]]*13$/20/`),
 			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.scm", `(import (scheme base) (scheme read) (scheme write))
+(display (+ (read) (read)))
+(newline)`),
+			},
+		},
+		"chez-scheme": {
+			compileLang: "CHEZ_SCHEME",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.scm", `(import (chezscheme))
 (display (+ (read) (read)))
 (newline)`),
 			},

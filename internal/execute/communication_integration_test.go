@@ -287,13 +287,22 @@ int main(void) {
 }
 
 func TestCommunicationWithoutCgroupImmediateManagerStartsEveryParticipant(t *testing.T) {
+	// Wait for the manager side to close each input pipe, then exit successfully.
+	// The manager process is published before those files are closed, so a
+	// participant completion cannot race ahead of the manager completion event.
+	// EOF behavior and payload exchange remain covered by the dedicated tests.
 	participantBinary := buildCTestBinary(t, `
-#include <stdio.h>
+#include <errno.h>
+#include <unistd.h>
 
 int main(void) {
-  int value = 0;
-  if (scanf("%d", &value) != 1) return 16;
-  return value;
+	char buffer[64];
+	for (;;) {
+		ssize_t count = read(STDIN_FILENO, buffer, sizeof(buffer));
+		if (count > 0) continue;
+		if (count == 0) return 0;
+		if (errno != EINTR) return 16;
+	}
 }
 `)
 	managerBinary := buildCTestBinary(t, `
