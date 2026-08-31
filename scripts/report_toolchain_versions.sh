@@ -527,7 +527,7 @@ if has_language "sml" || has_language "mlton"; then
 fi
 
 if has_language "smlnj"; then
-    report_once "SML/NJ" smlnj
+    report_once "SML/NJ" smlnj @SMLversion
 fi
 
 if has_language "elixir"; then

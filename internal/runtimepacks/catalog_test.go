@@ -628,7 +628,8 @@ printf '%s\n' 'MLton 20241230'
 
 	smlnjScript := `#!/usr/bin/env bash
 set -eu
-[ "$#" -eq 0 ]
+[ "$#" -eq 1 ]
+[ "$1" = '@SMLversion' ]
 printf '%s\n' 'Standard ML of New Jersey v110.99.9'
 `
 	if err := os.WriteFile(filepath.Join(binDir, "smlnj"), []byte(smlnjScript), 0o755); err != nil {
