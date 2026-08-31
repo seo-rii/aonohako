@@ -529,7 +529,7 @@ The interactor is invoked as:
 | RESCRIPT | `rescript` | `rescript build` |
 | PURESCRIPT | `purescript` | `spago build` plus a Node wrapper for `Main.main` |
 | TYPESCRIPT | `typescript` | `tsc` |
-| DENO | `deno` | `deno check --v8-flags=--max-old-space-size=...` |
+| DENO, JAVASCRIPT_DENO, TYPESCRIPT_DENO | `deno` | offline `deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=...` (`DENO` remains a TypeScript-compatible alias) |
 | ASSEMBLYSCRIPT | `assemblyscript` | pinned `asc` plus the official WASI shim, followed by `wasm-validate` |
 | FACTOR | `factor` | trusted `parse-file` validation without executing top-level forms |
 | ELM | `elm` | `elm make <source> --output <target>` plus a Node wrapper for `stdin`/`stdout`/`stderr`/`exit` ports |
@@ -658,7 +658,7 @@ The interactor is invoked as:
 | `acl2` | `true` (verification is completed during compile) |
 | `kframework` | `true` (verification is completed during compile) |
 | `javascript` | `node --disable-wasm-trap-handler --max-old-space-size=... --max-semi-space-size=... --stack-size=2048 <file>` |
-| `deno` | `deno run --no-prompt --v8-flags=--max-old-space-size=... <file>` |
+| `deno` | offline `deno run --cached-only --no-prompt --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --deny-read --deny-write --deny-net --deny-env --deny-run --deny-ffi --deny-sys --deny-import --v8-flags=--max-old-space-size=... <file>` |
 | `gdl` | `aonohako-gdl-run <file> <entry>` |
 | `octave` | `octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path <file>` |
 | `r` | `Rscript --vanilla <file>` |

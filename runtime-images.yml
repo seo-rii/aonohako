@@ -3782,7 +3782,9 @@ languages:
         - unzip
       script:
         - export DENO_VERSION=2.7.14
+        - export DENO_SHA256=3287efef53606966469cb6a02781327be22b908959397f976e2996dc1b64ae0f
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+        - echo "${DENO_SHA256}  /tmp/deno.zip" | sha256sum -c -
         - unzip -q /tmp/deno.zip -d /usr/local/bin
         - chmod 0755 /usr/local/bin/deno
         - rm -f /tmp/deno.zip
@@ -3791,9 +3793,27 @@ languages:
         - bash
         - -lc
         - |
+          export DENO_DIR="$PWD/.cache/deno"
+          export DENO_NO_PROMPT=1
+          export DENO_NO_UPDATE_CHECK=1
+
           printf '%s\n' 'console.log("ok");' > Main.ts
-          deno check --v8-flags=--max-old-space-size=512 Main.ts
-          deno run --no-prompt --v8-flags=--max-old-space-size=128 Main.ts | grep '^ok$'
+          deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=512 Main.ts
+          deno run --cached-only --no-prompt --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --deny-read --deny-write --deny-net --deny-env --deny-run --deny-ffi --deny-sys --deny-import --v8-flags=--max-old-space-size=128 Main.ts | grep '^ok$'
+
+          rm -f /tmp/aonohako-deno-check-leak
+          printf '%s\n' 'Deno.writeTextFileSync("/tmp/aonohako-deno-check-leak", "leaked");' > SyntaxOnly.ts
+          deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=512 SyntaxOnly.ts
+          test ! -e /tmp/aonohako-deno-check-leak
+
+          printf '%s\n' 'const broken: = 1;' > Broken.ts
+          if deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=512 Broken.ts >/dev/null 2>&1; then exit 1; fi
+
+          printf '%s\n' 'import "https://example.com/remote.ts";' > Remote.ts
+          if deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=512 Remote.ts >/dev/null 2>&1; then exit 1; fi
+
+          printf '%s\n' 'import "npm:left-pad";' > Npm.ts
+          if deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=512 Npm.ts >/dev/null 2>&1; then exit 1; fi
 
   kotlin-jvm:
     install:

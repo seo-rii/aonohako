@@ -725,7 +725,10 @@ flags through requests:
   JVM heap. Allowed range: `256..1536`, default `1024`.
 - `AONOHAKO_DENO_OLD_SPACE_PERCENT` controls the Deno/V8 old-space share used
   for `--v8-flags=--max-old-space-size=...`. Allowed range: `30..75`, default
-  `60`.
+  `60`. The pinned Deno archive is checksum-verified, and the explicit
+  `JAVASCRIPT_DENO` and `TYPESCRIPT_DENO` profiles share the same offline,
+  permission-denied runtime; the legacy `DENO` profile remains a TypeScript
+  alias.
 - `AONOHAKO_NODE_OLD_SPACE_PERCENT` controls the Node/V8 old-space share of
   the request memory limit. Allowed range: `30..75`, default `60`.
 - `AONOHAKO_NODE_MAX_SEMI_SPACE_MB` caps Node/V8 semi-space. Allowed range:

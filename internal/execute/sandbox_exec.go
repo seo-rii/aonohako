@@ -263,6 +263,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	case "uhmlang":
 		innerEnv = append(innerEnv, fmt.Sprintf("GOMEMLIMIT=%dMiB", goMemoryLimitMB(req.Limits.MemoryMB, tuning)), fmt.Sprintf("GOGC=%d", tuning.GoGOGC))
 	case "deno":
+		innerEnv = append(innerEnv,
+			"DENO_DIR="+filepath.Join(ws.RootDir, ".cache", "deno"),
+			"DENO_NO_PROMPT=1",
+			"DENO_NO_UPDATE_CHECK=1",
+		)
 		allowUnixSockets = true
 	}
 

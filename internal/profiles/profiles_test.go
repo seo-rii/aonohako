@@ -160,6 +160,8 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"GOLFSCRIPT",
 		"MOJO",
 		"DENO",
+		"JAVASCRIPT_DENO",
+		"TYPESCRIPT_DENO",
 		"KOTLIN_JVM",
 		"KOTLIN_JVM8",
 		"KOTLIN_JVM11",
@@ -322,6 +324,8 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"FORTH":        "forth",
 		"GFORTH":       "forth",
 	}
+	tests[denoJSKey] = "deno"
+	tests[denoTSKey] = "deno"
 	tests["ASSEMBLYSCRIPT"] = "assemblyscript"
 	tests["FACTOR"] = "factor"
 	tests["CHEZ_SCHEME"] = "chez-scheme"
@@ -403,6 +407,23 @@ func TestLuaJITProfileUsesDedicatedRuntime(t *testing.T) {
 	}
 	if profile.Extension != "lua" || profile.CompileKind != "luajit" || profile.RunLang != "luajit" {
 		t.Fatalf("LUAJIT profile = %+v", profile)
+	}
+}
+
+func TestDenoProfilesShareOneRuntimeWithLanguageSpecificExtensions(t *testing.T) {
+	tests := map[string]string{
+		"DENO":            "ts",
+		"JAVASCRIPT_DENO": "js",
+		"TYPESCRIPT_DENO": "ts",
+	}
+	for language, extension := range tests {
+		profile, ok := Resolve(language)
+		if !ok {
+			t.Fatalf("Resolve(%s) reported unsupported language", language)
+		}
+		if profile.SourceLang != language || profile.Extension != extension || profile.CompileKind != "deno" || profile.RunLang != "deno" {
+			t.Fatalf("%s profile = %+v", language, profile)
+		}
 	}
 }
 

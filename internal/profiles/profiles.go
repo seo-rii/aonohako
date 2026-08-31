@@ -2,7 +2,11 @@ package profiles
 
 import "strings"
 
-const asProfileKey = "ASSEMBLYSCRIPT"
+const (
+	asProfileKey = "ASSEMBLYSCRIPT"
+	denoJSKey    = "JAVASCRIPT_DENO"
+	denoTSKey    = "TYPESCRIPT_DENO"
+)
 
 type Profile struct {
 	SourceLang       string
@@ -183,6 +187,8 @@ var profiles = map[string]Profile{
 	"GOLFSCRIPT":    {SourceLang: "GOLFSCRIPT", Extension: "gs", CompileKind: "golfscript", RunLang: "golfscript", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"MOJO":          {SourceLang: "MOJO", Extension: "mojo", DefaultTarget: "Main", CompileKind: "mojo", RunLang: "mojo-binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"DENO":          {SourceLang: "DENO", Extension: "ts", CompileKind: "deno", RunLang: "deno", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	denoJSKey:       {SourceLang: denoJSKey, Extension: "js", CompileKind: "deno", RunLang: "deno", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
+	denoTSKey:       {SourceLang: denoTSKey, Extension: "ts", CompileKind: "deno", RunLang: "deno", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"KOTLIN_JVM":    {SourceLang: "KOTLIN_JVM", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "8", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"KOTLIN_JVM8":   {SourceLang: "KOTLIN_JVM8", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "8", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"KOTLIN_JVM11":  {SourceLang: "KOTLIN_JVM11", Extension: "kt", DefaultTarget: "Main.jar", CompileKind: "kotlin-jvm", JavaRelease: "11", RunLang: "kotlin-jvm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},

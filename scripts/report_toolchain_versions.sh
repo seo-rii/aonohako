@@ -696,7 +696,7 @@ report_compile_option "typescript" "tsc --module commonjs --target es2019 --sour
 report_compile_option "coffeescript" "coffee --compile --bare --output <workdir>"
 report_compile_option "rescript" "rescript build"
 report_compile_option "purescript" "spago build"
-report_compile_option "deno" "deno check --v8-flags=--max-old-space-size=<compile cap>"
+report_compile_option "deno" "deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=<compile cap>"
 report_compile_option "elm" "elm make <source> --output <target>"
 report_compile_option "idris2" "idris2 --cg chez -o <target>"
 report_compile_option "haxe" "haxe -D ONLINE_JUDGE -main Main -neko <target>.n"

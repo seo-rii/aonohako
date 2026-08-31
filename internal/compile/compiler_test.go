@@ -198,6 +198,38 @@ func TestLuaJITCompilerOnlyEmitsDiscardedRawBytecode(t *testing.T) {
 	}
 }
 
+func TestDenoCompilerDisablesConfigurationAndRemoteResolution(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.ts"), []byte("console.log('ok');\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}}
+	resp := denoCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.ts"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusOK || len(runner.commands) != 1 {
+		t.Fatalf("Deno compile response = %+v, commands = %+v", resp, runner.commands)
+	}
+	command := runner.commands[0]
+	if command.bin != "deno" || len(command.args) < 8 || command.args[0] != "check" || command.args[len(command.args)-1] != filepath.Join(workDir, "Main.ts") {
+		t.Fatalf("Deno command = %+v", command)
+	}
+	for _, flag := range []string{"--no-config", "--no-lock", "--no-npm", "--no-remote", "--node-modules-dir=none"} {
+		if !slices.Contains(command.args, flag) {
+			t.Fatalf("Deno check args missing %q: %v", flag, command.args)
+		}
+	}
+	if !reflect.DeepEqual(command.env, []string{
+		"DENO_DIR=" + filepath.Join(workDir, ".cache", "deno"),
+		"DENO_NO_PROMPT=1",
+		"DENO_NO_UPDATE_CHECK=1",
+	}) {
+		t.Fatalf("Deno check env = %v", command.env)
+	}
+}
+
 func TestAssemblyScriptCompilerUsesPinnedWASIWrapperAndValidatesArtifact(t *testing.T) {
 	workDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workDir, "Main.ts"), []byte("console.log('ok');\n"), 0o644); err != nil {

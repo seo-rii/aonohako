@@ -5023,9 +5023,10 @@ Get-Content -LiteralPath same-folder.txt
 			},
 		},
 		"deno": {
-			compileLang: "DENO",
-			judgeIO:     standardABJudgeIO,
-			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			compileLang:     "DENO",
+			compileVariants: []string{"TYPESCRIPT_DENO", "JAVASCRIPT_DENO"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 12000, MemoryMB: 1024},
 			sources: []model.Source{
 				source("Main.ts", `const values = (await new Response(Deno.stdin.readable).text()).trim().split(/\s+/).map(Number);
 console.log(values[0] + values[1]);`),

@@ -632,14 +632,23 @@ func compileWasm(ctx context.Context, workDir, target string, sources []model.So
 type denoCompiler struct{}
 
 func (denoCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
-	return compileCheckedSources(
-		ctx,
-		job.WorkDir,
-		job.Request.Sources,
-		[]string{".ts", ".js"},
-		"no deno sources",
-		"deno",
-		[]string{"check", fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(compileSandboxMemoryMB, job.Tuning))},
-		nil,
-	)
+	return checkedSourcesCompiler{
+		exts:           []string{".ts", ".js"},
+		noSourceReason: "no deno sources",
+		bin:            "deno",
+		prefix: []string{
+			"check",
+			"--no-config",
+			"--no-lock",
+			"--no-npm",
+			"--no-remote",
+			"--node-modules-dir=none",
+			fmt.Sprintf("--v8-flags=--max-old-space-size=%d", config.DenoOldSpaceMB(compileSandboxMemoryMB, job.Tuning)),
+		},
+		env: []string{
+			"DENO_DIR=" + filepath.Join(job.WorkDir, ".cache", "deno"),
+			"DENO_NO_PROMPT=1",
+			"DENO_NO_UPDATE_CHECK=1",
+		},
+	}.Compile(ctx, job)
 }

@@ -366,7 +366,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"dafny":         {"DAFNY_VERSION=4.11.0", "curl --retry 6", "wget --tries=6", "dafny verify --cores 1 Main.dfy"},
 		"dart":          {"dart compile exe", "Broken.dart"},
 		"delphi":        {"fpc -Mdelphi -O2 -Xs -oMain Main.dpr", "AssignFile", "Broken.dpr"},
-		"deno":          {"DENO_VERSION=2.7.14", "deno check --v8-flags=--max-old-space-size=512 Main.ts", "deno run --no-prompt --v8-flags=--max-old-space-size=128 Main.ts"},
+		"deno":          {"DENO_VERSION=2.7.14", "DENO_SHA256=3287efef53606966469cb6a02781327be22b908959397f976e2996dc1b64ae0f", "sha256sum -c -", "DENO_NO_PROMPT=1", "deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none", "deno run --cached-only --no-prompt --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --deny-read --deny-write --deny-net --deny-env --deny-run --deny-ffi --deny-sys --deny-import", "test ! -e /tmp/aonohako-deno-check-leak", "Broken.ts", "Remote.ts", "Npm.ts"},
 		"duckdb":        {"DUCKDB_VERSION=1.5.2", "aonohako-duckdb-run Main.sql"},
 		"elm":           {"elm-compiler", `"elm/json": "1.1.3"`, "HOME=/usr/local/lib/aonohako/elm-home", "elm make Main.elm --output=aonohako-elm-compiled.js", "port stdin : (String -> msg) -> Sub msg"},
 		"erlang":        {"Broken.erl", "erlc"},
