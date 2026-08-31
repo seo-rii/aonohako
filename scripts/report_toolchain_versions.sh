@@ -559,7 +559,7 @@ if has_language "php"; then
 fi
 
 if has_language "lua"; then
-    report_once "Lua" lua5.4 -v
+    report_once "Lua 5.4" lua5.4 -v
 fi
 
 if has_language "perl"; then
@@ -791,7 +791,7 @@ report_compile_option "smlnj" "pass-through .sml artifacts; execute with the tru
 report_compile_option "elixir" "elixirc"
 report_compile_option "ruby" "ruby -c"
 report_compile_option "php" "php -l"
-report_compile_option "lua" "luac5.4 -p"
+report_compile_option "lua" "luac5.4 -p; run with lua5.4 -E"
 report_compile_option "perl" "perl -c"
 report_compile_option "sqlite" "pass-through .sql artifacts"
 report_compile_option "julia" "pass-through .jl artifacts"

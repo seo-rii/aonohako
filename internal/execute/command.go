@@ -348,7 +348,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "php":
 		return []string{"php", "-d", "display_errors=stderr", primaryPath}
 	case "lua":
-		return []string{"lua5.4", primaryPath}
+		return []string{"lua5.4", "-E", primaryPath}
 	case "perl":
 		return []string{"perl", primaryPath}
 	case "ocaml":

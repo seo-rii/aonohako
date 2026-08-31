@@ -117,6 +117,9 @@ language-specific commands keep their declared order.
   does not run ordinary top-level behavior. The compiler retains subprocess
   support only because its driver invokes the translator and C linker; Unix
   sockets and all runtime process and socket operations remain denied.
+- `LUA54` is an explicit profile alias for the existing Lua runtime, so it
+  reuses one pinned Lua 5.4.7 installation. Execution uses `-E` to ignore
+  environment startup hooks.
 - MoonBit is pinned to the official `moonc 0.10.9+6e6c44045` Linux x64
   toolchain and its matching core snapshot. Both archives are checksum-verified;
   submission builds synthesize a dependency-free module and use a single-job,

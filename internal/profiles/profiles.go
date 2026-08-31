@@ -171,6 +171,7 @@ var profiles = map[string]Profile{
 	"PHP7":          {SourceLang: "PHP7", Extension: "php", CompileKind: "php", RunLang: "php", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PHP8":          {SourceLang: "PHP8", Extension: "php", CompileKind: "php", RunLang: "php", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"LUA":           {SourceLang: "LUA", Extension: "lua", CompileKind: "lua", RunLang: "lua", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"LUA54":         {SourceLang: "LUA54", Extension: "lua", CompileKind: "lua", RunLang: "lua", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"PERL":          {SourceLang: "PERL", Extension: "pl", CompileKind: "perl", RunLang: "perl", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"VB6":           {SourceLang: "VB6", Extension: "bas", CompileKind: "vb6", RunLang: "vb6", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"FREEBASIC":     {SourceLang: "FREEBASIC", Extension: "bas", DefaultTarget: "Main", CompileKind: "freebasic", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},

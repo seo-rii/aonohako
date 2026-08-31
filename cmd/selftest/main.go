@@ -4174,9 +4174,10 @@ println(read("same-folder.txt", String))`),
 			},
 		},
 		"lua": {
-			compileLang: "LUA",
-			judgeIO:     standardABJudgeIO,
-			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
+			compileLang:     "LUA",
+			compileVariants: []string{"LUA54"},
+			judgeIO:         standardABJudgeIO,
+			limits:          model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
 				source("Main.lua", `local a, b = io.read("*n", "*n")
 local out = assert(io.open("same-folder.txt", "w"))

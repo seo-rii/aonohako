@@ -821,6 +821,13 @@ func TestBuildCommandRunsSMLNJHeapDirectlyWithoutShellDriver(t *testing.T) {
 	}
 }
 
+func TestBuildCommandRunsLuaWithoutEnvironmentInitialization(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 512}}
+	if got, want := buildCommand("/tmp/Main.lua", "lua", req), []string{"lua5.4", "-E", "/tmp/Main.lua"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("lua command = %v, want %v", got, want)
+	}
+}
+
 func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 256}}
 	tuning := config.RuntimeTuningConfig{
