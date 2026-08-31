@@ -142,6 +142,7 @@ var profiles = map[string]Profile{
 	"ERLANG":        {SourceLang: "ERLANG", Extension: "erl", CompileKind: "erlang", RunLang: "erlang", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"MERCURY":       {SourceLang: "MERCURY", Extension: "m", DefaultTarget: "Main", CompileKind: "mercury", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"PROLOG":        {SourceLang: "PROLOG", Extension: "pl", CompileKind: "prolog", RunLang: "prolog", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"GNU_PROLOG":    {SourceLang: "GNU_PROLOG", Extension: "pl", DefaultTarget: "Main", CompileKind: "gnu-prolog", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"SCALA":         {SourceLang: "SCALA", Extension: "scala", CompileKind: "scala", RunLang: "scala", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"FSHARP":        {SourceLang: "FSHARP", Extension: "fs", CompileKind: "fsharp", RunLang: "fsharp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"WHITESPACE":    {SourceLang: "WHITESPACE", Extension: "ws", CompileKind: "whitespace", RunLang: "whitespace", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
@@ -255,6 +256,8 @@ func NormalizeRunLang(language string) string {
 	case "zero", "zerolang":
 		return "binary"
 	case "mlton":
+		return "binary"
+	case "gnu-prolog", "gnu_prolog", "gprolog":
 		return "binary"
 	case "sml-nj", "sml/nj":
 		return "smlnj"

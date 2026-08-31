@@ -1117,6 +1117,54 @@ languages:
           PROLOG
           if swipl -q -f Broken.pl -g main -t halt >/dev/null 2>&1; then exit 1; fi
 
+  gnu-prolog:
+    install:
+      apt:
+        - gprolog=1.4.5.0-3
+      script:
+        - test "$(dpkg-query -W -f='${Version}' gprolog)" = 1.4.5.0-3
+        - gplc --version 2>&1 | grep 'GNU Prolog.*1\.4\.5'
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.pl <<'PROLOG'
+          main :-
+              read_integer(A),
+              read_integer(B),
+              Sum is A + B,
+              write(Sum),
+              nl.
+          PROLOG
+          gplc --no-top-level --no-debugger -o Main Main.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl
+          test "$(printf '20 22\n' | ./Main)" = 42
+          test "$(printf '7 13\n' | ./Main)" = 20
+
+          cat > CompileOnly.pl <<'PROLOG'
+          :- initialization(compile_only_init).
+          compile_only_init :-
+              open('aonohako-gnu-prolog-compile-leak', write, Out),
+              write(Out, leaked),
+              close(Out).
+          main.
+          PROLOG
+          rm -f aonohako-gnu-prolog-compile-leak
+          gplc --no-top-level --no-debugger -o CompileOnly CompileOnly.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl
+          test ! -e aonohako-gnu-prolog-compile-leak
+
+          cat > Broken.pl <<'PROLOG'
+          main :-
+              write(ok
+          PROLOG
+          if gplc --no-top-level --no-debugger -o Broken Broken.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl >/dev/null 2>&1; then exit 1; fi
+
+          cat > Failure.pl <<'PROLOG'
+          main :- fail.
+          PROLOG
+          gplc --no-top-level --no-debugger -o Failure Failure.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl
+          if ./Failure >/dev/null 2>&1; then exit 1; fi
+
   whitespace:
     install:
       apt:
@@ -4000,6 +4048,7 @@ profiles:
       - forth
       - gforth
       - gleam
+      - gnu-prolog
       - golfscript
       - guile
       - haskell

@@ -149,6 +149,7 @@ COPY --chmod=0644 scripts/factor_check.factor /usr/local/lib/aonohako/factor_che
 COPY --chmod=0644 scripts/chez_scheme_check.scm /usr/local/lib/aonohako/chez_scheme_check.scm
 COPY --chmod=0644 scripts/guile_check.scm /usr/local/lib/aonohako/guile_check.scm
 COPY --chmod=0644 scripts/smlnj_runner.sml /usr/local/lib/aonohako/smlnj_runner.sml
+COPY --chmod=0444 scripts/gnu_prolog_entry.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl
 COPY --chmod=0755 scripts/fennel_compile.sh /usr/local/bin/aonohako-fennel-compile
 COPY --chmod=0644 scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_writer.fnl
 COPY --chmod=0700 scripts/harden_shell_runtime.sh /usr/local/lib/aonohako/harden_shell_runtime.sh

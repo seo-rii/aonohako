@@ -50,7 +50,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "perl",
-		"raku", "r", "mercury", "prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
+		"raku", "r", "mercury", "prolog", "gnu-prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
 		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor",
 		"ocaml", "elixir", "csharp", "dart", "none",
@@ -153,6 +153,38 @@ func TestSMLNJCompilerPassesInvalidSyntaxToTrustedRuntime(t *testing.T) {
 	})
 	if resp.Status != model.CompileStatusOK || len(resp.Artifacts) != 1 || resp.Artifacts[0].Name != "Main.sml" || resp.Artifacts[0].Mode != "" {
 		t.Fatalf("SML/NJ pass-through response = %+v", resp)
+	}
+}
+
+func TestGNUPrologCompilerRejectsInvalidSyntaxWithTrustedEntryWrapper(t *testing.T) {
+	compiler, ok := compileRegistry["gnu-prolog"].(singleSourceExecutableCompiler)
+	if !ok {
+		t.Fatalf("gnu-prolog compiler = %T, want singleSourceExecutableCompiler", compileRegistry["gnu-prolog"])
+	}
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "Main.pl"), []byte("main :- write(ok\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingCommandRunner{result: CommandResult{
+		Status: model.CompileStatusCompileError,
+		Stderr: "syntax error",
+		Reason: "compiler exited with status 1",
+	}}
+	resp := compiler.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Target:  "Main",
+		Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.pl"}}},
+		Runner:  runner,
+	})
+	if resp.Status != model.CompileStatusCompileError || len(resp.Artifacts) != 0 || resp.Stderr != "syntax error" {
+		t.Fatalf("invalid GNU Prolog response = %+v", resp)
+	}
+	wantArgs := []string{
+		"--no-top-level", "--no-debugger", "-o", filepath.Join(workDir, "Main"),
+		filepath.Join(workDir, "Main.pl"), "/usr/local/lib/aonohako/gnu_prolog_entry.pl",
+	}
+	if len(runner.commands) != 1 || runner.commands[0].bin != "gplc" || !reflect.DeepEqual(runner.commands[0].args, wantArgs) || len(runner.commands[0].env) != 0 {
+		t.Fatalf("GNU Prolog command = %+v, want gplc %#v", runner.commands, wantArgs)
 	}
 }
 

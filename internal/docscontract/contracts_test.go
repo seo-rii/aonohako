@@ -42,6 +42,15 @@ func TestReadmeDocumentsSMLNJRunnerContract(t *testing.T) {
 	}
 }
 
+func TestReadmeDocumentsGNUPrologNativeContract(t *testing.T) {
+	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
+	for _, want := range []string{"`PROLOG` remains", "`GNU_PROLOG` selects", "GNU Prolog 1.4.5", "`gprolog=1.4.5.0-3`", "fixed `gplc --no-top-level --no-debugger` command", "trusted initialization wrapper", "exit status 0 or 1", "not executed during compile", "invalid syntax fails"} {
+		if !strings.Contains(readme, want) {
+			t.Fatalf("README.md missing GNU Prolog contract %q", want)
+		}
+	}
+}
+
 func TestManualLimitReferencesMatchCodeConstants(t *testing.T) {
 	readme := mustRead(t, filepath.Join("..", "..", "README.md"))
 	payload := mustRead(t, filepath.Join("..", "..", "docs", "payload.md"))

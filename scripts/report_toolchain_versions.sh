@@ -514,6 +514,10 @@ if has_language "prolog"; then
     report_once "Prolog" swipl --version
 fi
 
+if has_language "gnu-prolog"; then
+    report_once "GNU Prolog" gplc --version
+fi
+
 if has_language "ocaml"; then
     report_once "OCaml" ocamlopt -version
 fi
@@ -779,6 +783,7 @@ report_compile_option "raku" "raku -c"
 report_compile_option "erlang" "erlc"
 report_compile_option "mercury" "mmc --make --grade hlc.gc <module>"
 report_compile_option "prolog" "swipl syntax check"
+report_compile_option "gnu-prolog" "gplc --no-top-level --no-debugger -o <target> <source> /usr/local/lib/aonohako/gnu_prolog_entry.pl"
 report_compile_option "ocaml" "ocamlopt"
 report_compile_option "sml" "mlton -output <target>"
 report_compile_option "mlton" "mlton -output <target>"
