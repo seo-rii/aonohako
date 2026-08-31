@@ -148,6 +148,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"R",
 		"LUA",
 		"LUA54",
+		"LUAJIT",
 		"PERL",
 		"VB6",
 		"ELM",
@@ -315,6 +316,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 		"PHP7":         "php",
 		"PHP8":         "php",
 		"LUA54":        "lua",
+		"LUAJIT":       "luajit",
 		"SED":          "sed",
 		"BC":           "bc",
 		"FORTH":        "forth",
@@ -391,6 +393,16 @@ func TestLua54ProfileAliasesExistingLuaRuntime(t *testing.T) {
 	}
 	if alias.TimeMultiplier != base.TimeMultiplier || alias.TimeOffsetMs != base.TimeOffsetMs || alias.MemoryMultiplier != base.MemoryMultiplier || alias.MemoryOffsetMB != base.MemoryOffsetMB {
 		t.Fatalf("LUA54 resources = %+v, base LUA = %+v", alias, base)
+	}
+}
+
+func TestLuaJITProfileUsesDedicatedRuntime(t *testing.T) {
+	profile, ok := Resolve("LUAJIT")
+	if !ok {
+		t.Fatal("Resolve(LUAJIT) reported unsupported language")
+	}
+	if profile.Extension != "lua" || profile.CompileKind != "luajit" || profile.RunLang != "luajit" {
+		t.Fatalf("LUAJIT profile = %+v", profile)
 	}
 }
 

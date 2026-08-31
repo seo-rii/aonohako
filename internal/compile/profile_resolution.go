@@ -272,6 +272,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "FACTOR"
 	case "lua54", "lua5.4", "lua-5.4":
 		l = "LUA54"
+	case "luajit", "lua-jit":
+		l = "LUAJIT"
 	}
 	return profiles.Resolve(l)
 }

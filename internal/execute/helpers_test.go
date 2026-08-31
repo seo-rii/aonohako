@@ -394,6 +394,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"ruby", "/tmp/sol.rb", "ruby", true},
 		{"php", "/tmp/sol.php", "php", true},
 		{"lua", "/tmp/sol.lua", "lua5.4", true},
+		{"luajit", "/tmp/sol.lua", "luajit", true},
 		{"perl", "/tmp/sol.pl", "perl", true},
 		{"sqlite", "/tmp/sol.sql", "sh", true},
 		{"uhmlang", "/tmp/sol.umm", "env", true},
@@ -825,6 +826,13 @@ func TestBuildCommandRunsLuaWithoutEnvironmentInitialization(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 512}}
 	if got, want := buildCommand("/tmp/Main.lua", "lua", req), []string{"lua5.4", "-E", "/tmp/Main.lua"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("lua command = %v, want %v", got, want)
+	}
+}
+
+func TestBuildCommandRunsLuaJITWithoutEnvironmentInitialization(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 512}}
+	if got, want := buildCommand("/tmp/Main.lua", "luajit", req), []string{"luajit", "-E", "/tmp/Main.lua"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("luajit command = %v, want %v", got, want)
 	}
 }
 

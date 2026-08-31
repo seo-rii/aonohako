@@ -562,6 +562,10 @@ if has_language "lua"; then
     report_once "Lua 5.4" lua5.4 -v
 fi
 
+if has_language "luajit"; then
+    report_once "LuaJIT" luajit -v
+fi
+
 if has_language "perl"; then
     report_once "Perl" perl -e "printf \"v%vd\\n\", \$^V"
 fi
@@ -792,6 +796,7 @@ report_compile_option "elixir" "elixirc"
 report_compile_option "ruby" "ruby -c"
 report_compile_option "php" "php -l"
 report_compile_option "lua" "luac5.4 -p; run with lua5.4 -E"
+report_compile_option "luajit" "LUA_INIT= luajit -b -t raw <source> /dev/null; run with luajit -E"
 report_compile_option "perl" "perl -c"
 report_compile_option "sqlite" "pass-through .sql artifacts"
 report_compile_option "julia" "pass-through .jl artifacts"

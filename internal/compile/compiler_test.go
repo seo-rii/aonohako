@@ -49,7 +49,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "carbon", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework",
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
-		"racket", "javascript", "ruby", "php", "lua", "perl",
+		"racket", "javascript", "ruby", "php", "lua", "luajit", "perl",
 		"raku", "r", "mercury", "prolog", "gnu-prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
 		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor",
@@ -185,6 +185,16 @@ func TestGNUPrologCompilerRejectsInvalidSyntaxWithTrustedEntryWrapper(t *testing
 	}
 	if len(runner.commands) != 1 || runner.commands[0].bin != "gplc" || !reflect.DeepEqual(runner.commands[0].args, wantArgs) || len(runner.commands[0].env) != 0 {
 		t.Fatalf("GNU Prolog command = %+v, want gplc %#v", runner.commands, wantArgs)
+	}
+}
+
+func TestLuaJITCompilerOnlyEmitsDiscardedRawBytecode(t *testing.T) {
+	compiler, ok := compileRegistry["luajit"].(checkedSourcesCompiler)
+	if !ok {
+		t.Fatalf("luajit compiler = %T, want checkedSourcesCompiler", compileRegistry["luajit"])
+	}
+	if compiler.bin != "luajit" || !reflect.DeepEqual(compiler.exts, []string{".lua"}) || !reflect.DeepEqual(compiler.prefix, []string{"-b", "-t", "raw"}) || !reflect.DeepEqual(compiler.suffix, []string{"/dev/null"}) || !reflect.DeepEqual(compiler.env, []string{"LUA_INIT="}) {
+		t.Fatalf("luajit compiler = %+v", compiler)
 	}
 }
 
