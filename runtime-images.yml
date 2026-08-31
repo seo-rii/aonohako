@@ -1297,6 +1297,58 @@ languages:
           SML
           if mlton -output Broken Broken.sml >/dev/null 2>&1; then exit 1; fi
 
+  smlnj:
+    install:
+      apt:
+        - curl
+        - gcc
+        - libc6-dev
+        - make
+      script:
+        - export SMLNJ_VERSION=110.99.9
+        - export SMLNJ_CONFIG_SHA256=bf479ba518652fc193ac0954e46c72c5356a33c6980f9fcb6bcf6e55c7731418
+        - export SMLNJ_RUNTIME_SHA256=216e0193a193ae2e59296d27c42e61a3aa7a16ddda936d3a06a2b9459276b792
+        - export SMLNJ_BOOT_SHA256=2b4c23bb4e49be040043ab70a3df8e92c26ffe1cba652ed80348cd3fe2d19c63
+        - export SMLNJ_BUILD_ROOT=/tmp/smlnj-build
+        - install -d -m 0755 "${SMLNJ_BUILD_ROOT}" /opt/smlnj
+        - cd "${SMLNJ_BUILD_ROOT}"
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://smlnj.cs.uchicago.edu/dist/working/${SMLNJ_VERSION}/config.tgz" -o config.tgz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://smlnj.cs.uchicago.edu/dist/working/${SMLNJ_VERSION}/runtime.tgz" -o runtime.tgz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://smlnj.cs.uchicago.edu/dist/working/${SMLNJ_VERSION}/boot.amd64-unix.tgz" -o boot.amd64-unix.tgz
+        - echo "${SMLNJ_CONFIG_SHA256}  config.tgz" | sha256sum -c -
+        - echo "${SMLNJ_RUNTIME_SHA256}  runtime.tgz" | sha256sum -c -
+        - echo "${SMLNJ_BOOT_SHA256}  boot.amd64-unix.tgz" | sha256sum -c -
+        - tar -xzf config.tgz
+        - env INSTALLDIR=/opt/smlnj INSTALL_QUIETLY=true URLGETTER=/bin/false config/install.sh -default 64 -nolib
+        - test -x /opt/smlnj/bin/.run/run.amd64-linux
+        - test -x /opt/smlnj/bin/sml
+        - chmod -R a+rX /opt/smlnj
+        - ln -sfn /opt/smlnj/bin/sml /usr/local/bin/smlnj
+        - find "${SMLNJ_BUILD_ROOT}" -depth -delete
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.sml <<'SML'
+          fun scanInt () = valOf (TextIO.scanStream (Int.scan StringCvt.DEC) TextIO.stdIn)
+          val a = scanInt ()
+          val b = scanInt ()
+          val _ = print (Int.toString (a + b) ^ "\n")
+          SML
+          output="$(printf '%s\n' '20 22' | /opt/smlnj/bin/.run/run.amd64-linux @SMLquiet @SMLload=/usr/local/lib/aonohako/smlnj-run Main.sml 2>smlnj.stderr)"
+          test "${output}" = 42
+          test ! -s smlnj.stderr
+          output="$(printf '%s\n' '7 13' | /opt/smlnj/bin/.run/run.amd64-linux @SMLquiet @SMLload=/usr/local/lib/aonohako/smlnj-run Main.sml 2>smlnj.stderr)"
+          test "${output}" = 20
+          test ! -s smlnj.stderr
+          cat > Broken.sml <<'SML'
+          val _ = print (
+          SML
+          if /opt/smlnj/bin/.run/run.amd64-linux @SMLquiet @SMLload=/usr/local/lib/aonohako/smlnj-run Broken.sml >broken.stdout 2>broken.stderr; then exit 1; fi
+          test ! -s broken.stdout
+          grep -Eiq 'syntax|error' broken.stderr
+
   mlton:
     install:
       shared:
@@ -3974,6 +4026,7 @@ profiles:
       - scheme
       - sed
       - sml
+      - smlnj
       - smalltalk
       - sqlite
       - tcl

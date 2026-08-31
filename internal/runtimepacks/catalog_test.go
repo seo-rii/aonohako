@@ -502,7 +502,9 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "CoffeeScript" coffee --version`,
 		`report_once "Raku" raku --version`,
 		`report_once "MLton" mlton`,
+		`report_once "SML/NJ" smlnj`,
 		`report_compile_option "mlton" "mlton -output <target>"`,
+		`report_compile_option "smlnj" "pass-through .sml artifacts; execute with the trusted SML/NJ runner heap"`,
 		`report_once "Clang" clang --version`,
 		`report_once "Clang++" clang++ --version`,
 		`report_once "FreeBASIC" fbc -version`,
@@ -624,10 +626,20 @@ printf '%s\n' 'MLton 20241230'
 		t.Fatalf("WriteFile fake mlton: %v", err)
 	}
 
+	smlnjScript := `#!/usr/bin/env bash
+set -eu
+[ "$#" -eq 1 ]
+[ "$1" = '@SMLversion' ]
+printf '%s\n' 'Standard ML of New Jersey v110.99.9'
+`
+	if err := os.WriteFile(filepath.Join(binDir, "smlnj"), []byte(smlnjScript), 0o755); err != nil {
+		t.Fatalf("WriteFile fake smlnj: %v", err)
+	}
+
 	cmd := exec.Command("bash", path, "test:image")
 	cmd.Env = append(os.Environ(),
 		"PATH="+binDir+":"+os.Getenv("PATH"),
-		"AONOHAKO_LANGUAGES=erlang,sml,dafny,tla",
+		"AONOHAKO_LANGUAGES=erlang,sml,smlnj,dafny,tla",
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -636,15 +648,17 @@ printf '%s\n' 'MLton 20241230'
 
 	body := string(out)
 	for _, want := range []string{
-		"- Languages: `erlang,sml,dafny,tla`",
+		"- Languages: `erlang,sml,smlnj,dafny,tla`",
 		"| Erlang | `27` |",
 		"| MLton | `MLton 20241230` |",
+		"| SML/NJ | `Standard ML of New Jersey v110.99.9` |",
 		"| Java runtime | `openjdk version \"21-test\"` |",
 		"| Dafny | `4.11.0+test` |",
 		"| TLA+ TLC | `TLC2 Version 2.19 of 08 August 2024 (rev: test)` |",
 		"## Runtime Compile Options",
 		"| `erlang` | `erlc` |",
 		"| `sml` | `mlton -output <target>` |",
+		"| `smlnj` | `pass-through .sml artifacts; execute with the trusted SML/NJ runner heap` |",
 		"| `dafny` | `dafny verify --cores 1` |",
 		"| `tla` | `pass-through .tla/.cfg artifacts` |",
 	} {

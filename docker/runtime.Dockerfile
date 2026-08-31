@@ -148,6 +148,7 @@ COPY --chmod=0755 scripts/assemblyscript_compile.sh /usr/local/bin/aonohako-asse
 COPY --chmod=0644 scripts/factor_check.factor /usr/local/lib/aonohako/factor_check.factor
 COPY --chmod=0644 scripts/chez_scheme_check.scm /usr/local/lib/aonohako/chez_scheme_check.scm
 COPY --chmod=0644 scripts/guile_check.scm /usr/local/lib/aonohako/guile_check.scm
+COPY --chmod=0644 scripts/smlnj_runner.sml /usr/local/lib/aonohako/smlnj_runner.sml
 COPY --chmod=0755 scripts/fennel_compile.sh /usr/local/bin/aonohako-fennel-compile
 COPY --chmod=0644 scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_writer.fnl
 COPY --chmod=0700 scripts/harden_shell_runtime.sh /usr/local/lib/aonohako/harden_shell_runtime.sh
@@ -155,6 +156,18 @@ COPY --chmod=0644 scripts/shell_runtime_allowlist.txt /usr/local/lib/aonohako/sh
 COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/
 COPY --chmod=0644 python/sitecustomize.py /usr/local/lib/aonohako/python/sitecustomize.py
 COPY --chmod=0755 scripts/runtime_entrypoint.sh /usr/local/bin/aonohako-entrypoint
+
+RUN if [[ ",${LANGUAGES}," == *",smlnj,"* ]]; then \
+      env SMLNJ_HOME=/opt/smlnj CM_PATHCONFIG=/opt/smlnj/lib/pathconfig \
+        /opt/smlnj/bin/sml @SMLquiet \
+        </usr/local/lib/aonohako/smlnj_runner.sml \
+        >/tmp/aonohako-smlnj-export.stdout \
+        2>/tmp/aonohako-smlnj-export.stderr && \
+      test -r /usr/local/lib/aonohako/smlnj-run.amd64-linux && \
+      chmod 0444 /usr/local/lib/aonohako/smlnj-run.amd64-linux; \
+    fi && \
+    rm -f /usr/local/lib/aonohako/smlnj_runner.sml \
+      /tmp/aonohako-smlnj-export.stdout /tmp/aonohako-smlnj-export.stderr
 
 RUN chmod 0755 /usr/local/lib/aonohako && \
     rm -f /usr/local/lib/aonohako/python/.empty && \

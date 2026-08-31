@@ -399,6 +399,25 @@ func TestMLtonSelectionUsesDefaultNativeBinarySandbox(t *testing.T) {
 	}
 }
 
+func TestSMLNJRunnerNeedsNoSandboxPrivilegeException(t *testing.T) {
+	profile, ok := profiles.Resolve("SMLNJ")
+	if !ok || profile.RunLang != "smlnj" {
+		t.Fatalf("SMLNJ profile = %+v, found=%v", profile, ok)
+	}
+	raw, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatalf("read sandbox_exec.go: %v", err)
+	}
+	for _, forbidden := range []string{"isSMLNJ", `runLang == "smlnj"`, `runtimeBase == "run.amd64-linux"`, `case "run.amd64-linux":`} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("SML/NJ unexpectedly receives a dedicated sandbox exception %q", forbidden)
+		}
+	}
+	if !isPathWithinTrustedRoots("/opt/smlnj/bin/.run/run.amd64-linux", sandboxTrustedExecutableRoots()) {
+		t.Fatal("direct SML/NJ runtime is outside the trusted executable roots")
+	}
+}
+
 func TestFastWorkspaceScriptDoesNotInheritSandboxHelperVMSize(t *testing.T) {
 	requireSandboxSupport(t)
 

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -364,6 +365,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"chez-scheme", "/tmp/sol.scm", "/usr/bin/chezscheme", true},
 		{"guile", "/tmp/sol.scm", "env", true},
 		{"chicken-scheme", "/tmp/Main", "/tmp/Main", true},
+		{"smlnj", "/tmp/Main.sml", "/opt/smlnj/bin/.run/run.amd64-linux", true},
 		{"awk", "/tmp/sol.awk", "gawk", true},
 		{"tcl", "/tmp/sol.tcl", "tclsh", true},
 		{"gdl", "/tmp/sol.pro", "aonohako-gdl-run", true},
@@ -797,6 +799,25 @@ func TestBuildCommandRunsFactorWithBoundedStacksAndNoUserInit(t *testing.T) {
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("factor command = %v, want %v", args, want)
+	}
+}
+
+func TestBuildCommandRunsSMLNJHeapDirectlyWithoutShellDriver(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 256}}
+	args := buildCommand("/tmp/Main.sml", "smlnj", req)
+	want := []string{
+		"/opt/smlnj/bin/.run/run.amd64-linux",
+		"@SMLquiet",
+		"@SMLload=/usr/local/lib/aonohako/smlnj-run",
+		"/tmp/Main.sml",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("SML/NJ command = %v, want %v", args, want)
+	}
+	for _, forbidden := range []string{"/opt/smlnj/bin/sml", "sh", "bash", "env"} {
+		if slices.Contains(args, forbidden) {
+			t.Fatalf("SML/NJ command unexpectedly contains %q: %v", forbidden, args)
+		}
 	}
 }
 

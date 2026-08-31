@@ -526,6 +526,10 @@ if has_language "sml" || has_language "mlton"; then
     report_once "MLton" mlton
 fi
 
+if has_language "smlnj"; then
+    report_once "SML/NJ" smlnj @SMLversion
+fi
+
 if has_language "elixir"; then
     report_once "Elixir" elixir -e "IO.puts(System.version())"
 fi
@@ -778,6 +782,7 @@ report_compile_option "prolog" "swipl syntax check"
 report_compile_option "ocaml" "ocamlopt"
 report_compile_option "sml" "mlton -output <target>"
 report_compile_option "mlton" "mlton -output <target>"
+report_compile_option "smlnj" "pass-through .sml artifacts; execute with the trusted SML/NJ runner heap"
 report_compile_option "elixir" "elixirc"
 report_compile_option "ruby" "ruby -c"
 report_compile_option "php" "php -l"
