@@ -60,6 +60,16 @@ func newRemoteRunner(cfg config.Config) Runner {
 }
 
 func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
+	if req != nil && req.Pipeline != nil {
+		// Pipeline logs and diagnostics may contain private resources or artifacts.
+		// Enforce the secrecy boundary again at the control plane even when the
+		// downstream runner is expected to implement the same contract.
+		return RedactPipelineResponse(r.run(ctx, req, Hooks{}))
+	}
+	return r.run(ctx, req, hooks)
+}
+
+func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
@@ -72,7 +82,16 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
 		var requestedTimeMs int64
-		if runvalidation.UsesSteps(req) {
+		if req.Pipeline != nil {
+			for _, step := range req.Pipeline.Steps {
+				stepTimeMs := min(max(step.Limits.TimeMs, 0), runvalidation.MaxTimeMs)
+				if step.Executor.InteractorLimits != nil {
+					interactorTimeMs := min(max(step.Executor.InteractorLimits.TimeMs, 0), runvalidation.MaxTimeMs)
+					stepTimeMs = max(stepTimeMs, interactorTimeMs)
+				}
+				requestedTimeMs += int64(stepTimeMs)
+			}
+		} else if runvalidation.UsesSteps(req) {
 			for _, step := range req.Steps {
 				stepTimeMs := step.Limits.TimeMs
 				if stepTimeMs < 0 {
@@ -105,10 +124,14 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				}
 			}
 		}
-		if req.SPJ != nil {
+		spj := req.SPJ
+		if req.Pipeline != nil {
+			spj = req.Pipeline.FinalJudge.SPJ
+		}
+		if spj != nil {
 			spjTimeMs := defaultSPJTimeMs
-			if req.SPJ.Limits != nil && req.SPJ.Limits.TimeMs > 0 {
-				spjTimeMs = min(req.SPJ.Limits.TimeMs, runvalidation.MaxTimeMs)
+			if spj.Limits != nil && spj.Limits.TimeMs > 0 {
+				spjTimeMs = min(spj.Limits.TimeMs, runvalidation.MaxTimeMs)
 			}
 			requestedTimeMs += int64(spjTimeMs)
 		}
@@ -305,8 +328,12 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if remoteResult.Score != nil && (math.IsNaN(*remoteResult.Score) || math.IsInf(*remoteResult.Score, 0) || *remoteResult.Score < 0 || *remoteResult.Score > 1) {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: score out of range"}
 			}
-			if len(remoteResult.Steps) > runvalidation.MaxSteps {
-				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote result: too many steps: max %d", runvalidation.MaxSteps)}
+			maxResultSteps := runvalidation.MaxSteps
+			if req.Pipeline != nil {
+				maxResultSteps = runvalidation.MaxPipelineSteps
+			}
+			if len(remoteResult.Steps) > maxResultSteps {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("invalid remote result: too many steps: max %d", maxResultSteps)}
 			}
 			stdoutResponseLimit := responseStdoutLimitBytes(req)
 			stderrResponseLimit := responseStderrLimitBytes(req)

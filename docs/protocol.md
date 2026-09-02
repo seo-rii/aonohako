@@ -6,7 +6,15 @@ The canonical numeric request and capture limits are generated from code in
 Both `/compile` and `/execute` open SSE streams and terminate with exactly
 one `result` event.
 
-When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. `/compile` returns the remote compile result with the same buffered `log` and `result` shape, also honoring `emit_logs=false`.
+`GET /capabilities` is a non-SSE discovery endpoint. It advertises protocol
+features independently from platform isolation capabilities. An embedded
+Pipeline V1 runner returns `pipeline-v1` plus its versions, deployment
+`max_steps`, executors, artifact sources and limits, and final judges. Remote
+control planes fail closed because the current remote protocol does not
+negotiate downstream capabilities. See
+[Pipeline V1](pipeline-v1.md) for the request contract and security invariants.
+
+When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner for legacy modes, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. Pipeline V1 is rejected before forwarding until downstream capability negotiation is available; the remote runner client still defensively redacts Pipeline responses. `/compile` returns the remote compile result with the same buffered `log` and `result` shape, also honoring `emit_logs=false`.
 
 ## Event Types
 

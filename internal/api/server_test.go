@@ -31,6 +31,7 @@ import (
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runvalidation"
 )
 
 type executeRunnerStub struct {
@@ -1659,6 +1660,198 @@ func TestCapabilitiesAdvertiseInstalledPythonAndPyPyLibrariesOnlyForAttestedImag
 				t.Fatalf("capabilities = %q, want communication capability=%v", body.Capabilities, tc.wantCommunication)
 			}
 		})
+	}
+}
+
+func TestCapabilitiesAdvertisesPipelineV1Contract(t *testing.T) {
+	s := newServerForTest(t)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/capabilities")
+	if err != nil {
+		t.Fatalf("capabilities request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("capabilities status = %d", resp.StatusCode)
+	}
+	var contract struct {
+		Capabilities []string `json:"capabilities"`
+		Pipeline     struct {
+			Versions               []int            `json:"versions"`
+			MaxSteps               int              `json:"max_steps"`
+			Executors              []string         `json:"executors"`
+			ArtifactSources        []string         `json:"artifact_sources"`
+			ArtifactSourceMaxBytes map[string]int64 `json:"artifact_source_max_bytes"`
+			FinalJudges            []string         `json:"final_judges"`
+		} `json:"pipeline"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&contract); err != nil {
+		t.Fatalf("decode capabilities: %v", err)
+	}
+	if !slices.Contains(contract.Capabilities, "pipeline-v1") ||
+		len(contract.Pipeline.Versions) != 1 || contract.Pipeline.Versions[0] != 1 ||
+		contract.Pipeline.MaxSteps != 2 {
+		t.Fatalf("unexpected pipeline capability contract: %+v", contract)
+	}
+	if len(contract.Pipeline.Executors) != 2 || len(contract.Pipeline.ArtifactSources) != 3 || len(contract.Pipeline.FinalJudges) != 2 {
+		t.Fatalf("incomplete pipeline capability metadata: %+v", contract.Pipeline)
+	}
+	if contract.Pipeline.ArtifactSourceMaxBytes["participant_file"] != runvalidation.MaxPipelineParticipantFileBytes ||
+		contract.Pipeline.ArtifactSourceMaxBytes["participant_stdout"] != runvalidation.MaxStepHandoffBytes ||
+		contract.Pipeline.ArtifactSourceMaxBytes["interactor_output"] != runvalidation.MaxStepHandoffBytes {
+		t.Fatalf("pipeline artifact source limits = %+v", contract.Pipeline.ArtifactSourceMaxBytes)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/capabilities", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	methodResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("capabilities POST failed: %v", err)
+	}
+	defer methodResp.Body.Close()
+	if methodResp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("capabilities POST status = %d, want 405", methodResp.StatusCode)
+	}
+}
+
+func TestPipelineCapabilityAndExecutionFailClosedOnRemoteControlPlane(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.Execution.Platform.ExecutionTransport = platform.ExecutionTransportRemote
+	cfg.Execution.Platform.SandboxBackend = platform.SandboxBackendNone
+	called := false
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(context.Context, *model.RunRequest, execute.Hooks) model.RunResponse {
+		called = true
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	s.readinessCheck = nil
+
+	capabilities := httptest.NewRecorder()
+	s.Handler().ServeHTTP(capabilities, httptest.NewRequest(http.MethodGet, "/capabilities", nil))
+	if capabilities.Code != http.StatusOK {
+		t.Fatalf("capabilities status = %d", capabilities.Code)
+	}
+	var contract struct {
+		Capabilities []string        `json:"capabilities"`
+		Pipeline     json.RawMessage `json:"pipeline"`
+	}
+	if err := json.Unmarshal(capabilities.Body.Bytes(), &contract); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(contract.Capabilities, "pipeline-v1") || len(contract.Pipeline) != 0 {
+		t.Fatalf("remote control plane advertised unverified pipeline support: %s", capabilities.Body.String())
+	}
+
+	executeRecorder := httptest.NewRecorder()
+	executeRequest := httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader(`{"pipeline":{"version":1}}`))
+	executeRequest.Header.Set("Content-Type", "application/json")
+	s.Handler().ServeHTTP(executeRecorder, executeRequest)
+	if executeRecorder.Code != http.StatusBadRequest || !strings.Contains(executeRecorder.Body.String(), "unsupported_capability") {
+		t.Fatalf("remote pipeline response = %d %s", executeRecorder.Code, executeRecorder.Body.String())
+	}
+	if called {
+		t.Fatal("remote pipeline request reached an unverified downstream runner")
+	}
+}
+
+func TestPipelineSSEBoundarySuppressesHooksAndPrivateDiagnostics(t *testing.T) {
+	const secret = "PRIVATE-PIPELINE-SSE-DIAGNOSTIC"
+	s := newServerForTest(t)
+	s.execute = executeRunnerStub{run: func(_ context.Context, _ *model.RunRequest, hooks execute.Hooks) model.RunResponse {
+		if hooks.OnLog != nil || hooks.OnImage != nil {
+			t.Fatalf("pipeline runner received public streaming hooks: %+v", hooks)
+		}
+		return model.RunResponse{
+			Status:          model.RunStatusInitFail,
+			Stdout:          secret,
+			Stderr:          secret,
+			Reason:          secret,
+			VerdictSource:   "step:phase1:exit_code",
+			StdoutTruncated: true,
+			Steps: []model.StepResult{{
+				ID:            "phase1",
+				Status:        model.RunStatusRE,
+				Stdout:        secret,
+				Stderr:        secret,
+				Reason:        secret,
+				VerdictSource: "exit_code",
+				HandoffBytes:  17,
+			}},
+			SidecarOutputs: []model.SidecarOutput{{Path: "private", DataB64: base64.StdEncoding.EncodeToString([]byte(secret))}},
+			SidecarErrors:  []model.SidecarError{{Path: "private", Reason: secret}},
+		}
+	}}
+
+	request := model.RunRequest{Pipeline: &model.PipelineV1{
+		Version: 1,
+		Resources: map[string]model.PipelineResource{
+			"testcase": {DataB64: base64.StdEncoding.EncodeToString([]byte("input\n"))},
+			"answer":   {DataB64: base64.StdEncoding.EncodeToString([]byte("answer\n"))},
+		},
+		Programs: []model.RunProgram{{
+			ID: "participant", Lang: "binary",
+			Binaries: []model.Binary{{Name: "run.sh", DataB64: base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\nexit 1\n")), Mode: "exec"}},
+		}},
+		Steps: []model.PipelineStep{{
+			ID:       "phase1",
+			Executor: model.PipelineExecutor{Kind: "batch", ProgramID: "participant"},
+			Stdin:    []model.PipelineRef{{Type: "resource", ID: "testcase"}},
+			Limits:   model.Limits{TimeMs: 1000, MemoryMB: 64},
+		}},
+		FinalJudge: model.PipelineFinalJudge{
+			Kind:     "diff",
+			Input:    model.PipelineRef{Type: "resource", ID: "testcase"},
+			Expected: model.PipelineRef{Type: "resource", ID: "answer"},
+			Actual:   model.PipelineRef{Type: "step_stdout", StepID: "phase1"},
+		},
+	}}
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	httpRequest, err := http.NewRequest(http.MethodPost, ts.URL+"/execute", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("pipeline execute status = %d: %s", response.StatusCode, responseBody)
+	}
+	if strings.Contains(string(responseBody), secret) {
+		t.Fatalf("private pipeline diagnostic crossed SSE boundary: %s", responseBody)
+	}
+	events := readSSEEvents(bytes.NewReader(responseBody), t)
+	for _, event := range events {
+		if event.Name == "log" || event.Name == "image" {
+			t.Fatalf("pipeline emitted private streaming event: %#v", event)
+		}
+	}
+	if len(events) < 2 || events[len(events)-2].Name != "error" || events[len(events)-2].JSON["message"] != "pipeline initialization failed" {
+		t.Fatalf("pipeline public error event is not generic: %#v", events)
+	}
+	result := events[len(events)-1]
+	if result.Name != "result" || result.JSON["reason"] != "pipeline initialization failed" || result.JSON["stdout_truncated"] != true {
+		t.Fatalf("pipeline result lost safe diagnostic metadata: %#v", result)
+	}
+	if _, ok := result.JSON["stdout"]; ok {
+		t.Fatalf("pipeline result exposed stdout: %#v", result)
+	}
+	if _, ok := result.JSON["stderr"]; ok {
+		t.Fatalf("pipeline result exposed stderr: %#v", result)
 	}
 }
 

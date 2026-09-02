@@ -15,22 +15,28 @@ import (
 )
 
 const (
-	MaxTextFieldBytes            = 64 << 20
-	MaxTimeMs                    = 600_000
-	MaxMemoryMB                  = 4096
-	MaxOutputBytes               = 64 << 20
-	MaxCaptureBytes              = 8 << 20
-	MaxWorkspaceBytes            = 1 << 30
-	MaxBinaryFiles               = 512
-	MaxPrograms                  = 8
-	MaxSteps                     = 2
-	MaxStdinParts                = 32
-	MaxSidecarOutputs            = 64
-	MaxStepHandoffBytes          = MaxOutputBytes
-	MaxBinaryFileBytes           = 16 << 20
-	MaxBinaryTotalBytes          = 48 << 20
-	MinCommunicationParticipants = 2
-	MaxCommunicationParticipants = 64
+	MaxTextFieldBytes               = 64 << 20
+	MaxTimeMs                       = 600_000
+	MaxMemoryMB                     = 4096
+	MaxOutputBytes                  = 64 << 20
+	MaxCaptureBytes                 = 8 << 20
+	MaxWorkspaceBytes               = 1 << 30
+	MaxBinaryFiles                  = 512
+	MaxPrograms                     = 8
+	MaxSteps                        = 2 // Legacy two-step request contract.
+	MaxPipelineSteps                = 2 // Pipeline V1 deployment policy, not a schema invariant.
+	MaxStdinParts                   = 32
+	MaxSidecarOutputs               = 64
+	MaxStepHandoffBytes             = MaxOutputBytes
+	MaxBinaryFileBytes              = 16 << 20
+	MaxBinaryTotalBytes             = 48 << 20
+	MaxPipelineResources            = 16
+	MaxPipelineOutputs              = 16
+	MaxPipelineResourceTotalBytes   = 128 << 20
+	MaxPipelineArtifactTotalBytes   = 128 << 20
+	MaxPipelineParticipantFileBytes = 8 << 20
+	MinCommunicationParticipants    = 2
+	MaxCommunicationParticipants    = 64
 )
 
 var supportedRunLangs = func() map[string]struct{} {
@@ -80,6 +86,10 @@ func Validate(req *model.RunRequest) error {
 		if err := ValidateCommunication(req); err != nil {
 			return err
 		}
+	} else if req.Pipeline != nil {
+		if err := ValidatePipelineV1(req); err != nil {
+			return err
+		}
 	} else if UsesSteps(req) {
 		if err := ValidateStepPipeline(req); err != nil {
 			return err
@@ -127,6 +137,9 @@ func ValidateCommunication(req *model.RunRequest) error {
 	}
 	if spec.Version != 1 {
 		return fmt.Errorf("communication.version must be 1")
+	}
+	if req.Pipeline != nil {
+		return fmt.Errorf("communication cannot be combined with pipeline")
 	}
 	if spec.ResultProtocol != "manager-result-v1" {
 		return fmt.Errorf("communication.result_protocol must be manager-result-v1")
@@ -218,6 +231,14 @@ func ValidateBinaryBudget(req *model.RunRequest) (int, error) {
 	for i := range req.Programs {
 		binaryGroups = append(binaryGroups, binaryGroup{label: fmt.Sprintf("programs[%d].binaries", i), binaries: req.Programs[i].Binaries})
 	}
+	if req.Pipeline != nil {
+		for i := range req.Pipeline.Programs {
+			binaryGroups = append(binaryGroups, binaryGroup{label: fmt.Sprintf("pipeline.programs[%d].binaries", i), binaries: req.Pipeline.Programs[i].Binaries})
+		}
+		if req.Pipeline.FinalJudge.SPJ != nil && req.Pipeline.FinalJudge.SPJ.Binary != nil {
+			binaryGroups = append(binaryGroups, binaryGroup{label: "pipeline.final_judge.spj.binary", binaries: []model.Binary{*req.Pipeline.FinalJudge.SPJ.Binary}, singleItem: true})
+		}
+	}
 	if req.SPJ != nil && req.SPJ.Binary != nil {
 		binaryGroups = append(binaryGroups, binaryGroup{label: "spj.binary", binaries: []model.Binary{*req.SPJ.Binary}, singleItem: true})
 	}
@@ -248,6 +269,309 @@ func ValidateBinaryBudget(req *model.RunRequest) (int, error) {
 		}
 	}
 	return int(decodedBytes), nil
+}
+
+func ValidatePipelineV1(req *model.RunRequest) error {
+	if req == nil || req.Pipeline == nil {
+		return fmt.Errorf("pipeline is required")
+	}
+	pipeline := req.Pipeline
+	if pipeline.Version != 1 {
+		return fmt.Errorf("unsupported pipeline version: %d", pipeline.Version)
+	}
+	if req.Lang != "" || len(req.Binaries) > 0 || len(req.Programs) > 0 || len(req.Steps) > 0 || req.Stdin != "" || strings.TrimSpace(req.StdinURL) != "" || req.ExpectedStdout != "" || strings.TrimSpace(req.ExpectedStdoutURL) != "" || req.EntryPoint != "" || req.EnableNetwork || req.Interactor != nil || req.SPJ != nil || req.Communication != nil || len(req.FileOutputs) > 0 || !LimitsAreZero(req.Limits) {
+		return fmt.Errorf("legacy execute fields cannot be combined with pipeline")
+	}
+	if len(req.SidecarOutputs) > 0 {
+		return fmt.Errorf("sidecar_outputs are not supported with pipeline v1")
+	}
+	if req.IgnoreTLE {
+		return fmt.Errorf("ignore_tle is not supported with pipeline v1")
+	}
+	if len(pipeline.Resources) == 0 {
+		return fmt.Errorf("pipeline.resources is required")
+	}
+	if len(pipeline.Resources) > MaxPipelineResources {
+		return fmt.Errorf("too many pipeline resources: max %d", MaxPipelineResources)
+	}
+	resources := make(map[string]struct{}, len(pipeline.Resources))
+	resourceBytes := 0
+	for rawID, resource := range pipeline.Resources {
+		id := strings.TrimSpace(rawID)
+		if id == "" || id != rawID {
+			return fmt.Errorf("pipeline resource id must be non-empty and canonical: %q", rawID)
+		}
+		if resource.DataB64 != "" && strings.TrimSpace(resource.DataURL) != "" {
+			return fmt.Errorf("pipeline resource %s cannot combine data_b64 with data_url", id)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(resource.DataB64)
+		if err != nil {
+			return fmt.Errorf("pipeline resource %s data_b64 invalid base64: %w", id, err)
+		}
+		if len(decoded) > MaxTextFieldBytes {
+			return fmt.Errorf("pipeline resource %s too large: max %d bytes", id, MaxTextFieldBytes)
+		}
+		resourceBytes += len(decoded)
+		if resourceBytes > MaxPipelineResourceTotalBytes {
+			return fmt.Errorf("pipeline resources total size exceeded: max %d bytes", MaxPipelineResourceTotalBytes)
+		}
+		resources[id] = struct{}{}
+	}
+	if len(pipeline.Programs) == 0 {
+		return fmt.Errorf("pipeline.programs is required")
+	}
+	if len(pipeline.Programs) > MaxPrograms {
+		return fmt.Errorf("too many pipeline programs: max %d", MaxPrograms)
+	}
+	programs := make(map[string]model.RunProgram, len(pipeline.Programs))
+	for i, program := range pipeline.Programs {
+		id := strings.TrimSpace(program.ID)
+		if id == "" || id != program.ID {
+			return fmt.Errorf("pipeline.programs[%d].id must be non-empty and canonical", i)
+		}
+		if _, exists := programs[id]; exists {
+			return fmt.Errorf("duplicate pipeline program id: %s", id)
+		}
+		if err := ValidateRunLang("pipeline program "+id+" lang", program.Lang); err != nil {
+			return err
+		}
+		if len(program.Binaries) == 0 {
+			return fmt.Errorf("pipeline program %s has no binaries", id)
+		}
+		if err := ValidateBinaries("pipeline program "+id+" binaries", program.Binaries); err != nil {
+			return err
+		}
+		programs[id] = program
+	}
+	if len(pipeline.Steps) == 0 {
+		return fmt.Errorf("pipeline.steps is required")
+	}
+	if len(pipeline.Steps) > MaxPipelineSteps {
+		return fmt.Errorf("too many pipeline steps: deployment max is %d", MaxPipelineSteps)
+	}
+	artifacts := map[string]int{}
+	var artifactMaxBytes int64
+	steps := map[string]int{}
+	usedPrograms := map[string]struct{}{}
+	for i, step := range pipeline.Steps {
+		stepID := strings.TrimSpace(step.ID)
+		if stepID == "" || stepID != step.ID {
+			return fmt.Errorf("pipeline.steps[%d].id must be non-empty and canonical", i)
+		}
+		if _, exists := steps[stepID]; exists {
+			return fmt.Errorf("duplicate pipeline step id: %s", stepID)
+		}
+		steps[stepID] = i
+		if err := ValidateRequiredLimits("pipeline step "+stepID+" limits", step.Limits); err != nil {
+			return err
+		}
+		kind := strings.ToLower(strings.TrimSpace(step.Executor.Kind))
+		switch kind {
+		case "batch":
+			programID, err := canonicalPipelineRefID("pipeline step "+stepID+" program_id", step.Executor.ProgramID)
+			if err != nil {
+				return err
+			}
+			if _, ok := programs[programID]; !ok {
+				return fmt.Errorf("pipeline step %s references unknown program_id: %s", stepID, step.Executor.ProgramID)
+			}
+			if step.Executor.ParticipantProgramID != "" || step.Executor.InteractorProgramID != "" {
+				return fmt.Errorf("pipeline batch step %s cannot set interactive program ids", stepID)
+			}
+			if step.Executor.InteractorLimits != nil {
+				return fmt.Errorf("pipeline batch step %s cannot set interactor_limits", stepID)
+			}
+			if step.Executor.InteractorAnswer != nil {
+				return fmt.Errorf("pipeline batch step %s cannot set interactor_answer", stepID)
+			}
+			usedPrograms[programID] = struct{}{}
+		case "interactive":
+			participantID, err := canonicalPipelineRefID("pipeline interactive step "+stepID+" participant_program_id", step.Executor.ParticipantProgramID)
+			if err != nil {
+				return err
+			}
+			interactorID, err := canonicalPipelineRefID("pipeline interactive step "+stepID+" interactor_program_id", step.Executor.InteractorProgramID)
+			if err != nil {
+				return err
+			}
+			if _, ok := programs[participantID]; !ok {
+				return fmt.Errorf("pipeline interactive step %s references unknown participant_program_id: %s", stepID, step.Executor.ParticipantProgramID)
+			}
+			if _, ok := programs[interactorID]; !ok {
+				return fmt.Errorf("pipeline interactive step %s references unknown interactor_program_id: %s", stepID, step.Executor.InteractorProgramID)
+			}
+			if programs[interactorID].EnableNetwork {
+				return fmt.Errorf("pipeline interactive step %s interactor cannot enable_network", stepID)
+			}
+			if step.Executor.ProgramID != "" {
+				return fmt.Errorf("pipeline interactive step %s cannot set program_id", stepID)
+			}
+			if step.Executor.InteractorLimits != nil {
+				if err := ValidateRequiredLimits("pipeline step "+stepID+" executor.interactor_limits", *step.Executor.InteractorLimits); err != nil {
+					return err
+				}
+			}
+			if answer := step.Executor.InteractorAnswer; answer != nil {
+				if strings.ToLower(strings.TrimSpace(answer.Type)) != "resource" || answer.StepID != "" {
+					return fmt.Errorf("pipeline interactive step %s interactor_answer must reference a resource", stepID)
+				}
+				answerID, err := canonicalPipelineRefID("pipeline interactive step "+stepID+" interactor_answer.id", answer.ID)
+				if err != nil {
+					return err
+				}
+				if _, ok := resources[answerID]; !ok {
+					return fmt.Errorf("pipeline interactive step %s interactor_answer references unknown resource: %s", stepID, answer.ID)
+				}
+			}
+			usedPrograms[participantID] = struct{}{}
+			usedPrograms[interactorID] = struct{}{}
+		default:
+			return fmt.Errorf("pipeline step %s executor.kind must be batch or interactive", stepID)
+		}
+		if len(step.Stdin) > MaxStdinParts {
+			return fmt.Errorf("pipeline step %s has too many stdin refs: max %d", stepID, MaxStdinParts)
+		}
+		for j, ref := range step.Stdin {
+			typ := strings.ToLower(strings.TrimSpace(ref.Type))
+			id, err := canonicalPipelineRefID(fmt.Sprintf("pipeline step %s stdin[%d].id", stepID, j), ref.ID)
+			if err != nil {
+				return err
+			}
+			if ref.StepID != "" {
+				return fmt.Errorf("pipeline step %s stdin[%d] cannot set step_id", stepID, j)
+			}
+			switch typ {
+			case "resource":
+				if _, ok := resources[id]; !ok {
+					return fmt.Errorf("pipeline step %s stdin[%d] references unknown resource: %s", stepID, j, ref.ID)
+				}
+			case "artifact":
+				producer, ok := artifacts[id]
+				if !ok || producer >= i {
+					return fmt.Errorf("pipeline step %s stdin[%d] must reference an artifact from an earlier step: %s", stepID, j, ref.ID)
+				}
+			default:
+				return fmt.Errorf("pipeline step %s stdin[%d].type must be resource or artifact", stepID, j)
+			}
+		}
+		if len(step.Outputs) > MaxPipelineOutputs {
+			return fmt.Errorf("pipeline step %s has too many outputs: max %d", stepID, MaxPipelineOutputs)
+		}
+		participantFiles := 0
+		for j, output := range step.Outputs {
+			id := strings.TrimSpace(output.ID)
+			if id == "" || id != output.ID {
+				return fmt.Errorf("pipeline step %s outputs[%d].id must be non-empty and canonical", stepID, j)
+			}
+			if _, exists := artifacts[id]; exists {
+				return fmt.Errorf("duplicate pipeline artifact id: %s", id)
+			}
+			if output.MaxBytes <= 0 || output.MaxBytes > MaxStepHandoffBytes {
+				return fmt.Errorf("pipeline step %s output %s max_bytes must be between 1 and %d", stepID, id, MaxStepHandoffBytes)
+			}
+			artifactMaxBytes += output.MaxBytes
+			if artifactMaxBytes > MaxPipelineArtifactTotalBytes {
+				return fmt.Errorf("pipeline artifact max_bytes total exceeds %d bytes", MaxPipelineArtifactTotalBytes)
+			}
+			sourceKind := strings.ToLower(strings.TrimSpace(output.Source.Kind))
+			switch sourceKind {
+			case "participant_stdout":
+				if strings.TrimSpace(output.Source.Path) != "" {
+					return fmt.Errorf("pipeline output %s participant_stdout cannot set path", id)
+				}
+			case "participant_file":
+				participantFiles++
+				if output.MaxBytes > MaxPipelineParticipantFileBytes {
+					return fmt.Errorf("pipeline output %s participant_file max_bytes must be at most %d", id, MaxPipelineParticipantFileBytes)
+				}
+				if _, err := util.ValidateRelativePath(output.Source.Path); err != nil {
+					return fmt.Errorf("pipeline output %s participant_file path: %w", id, err)
+				}
+			case "interactor_output":
+				if kind != "interactive" {
+					return fmt.Errorf("pipeline output %s interactor_output requires an interactive step", id)
+				}
+				if strings.TrimSpace(output.Source.Path) != "" {
+					return fmt.Errorf("pipeline output %s interactor_output cannot set path", id)
+				}
+			default:
+				return fmt.Errorf("pipeline output %s source.kind is unsupported: %s", id, output.Source.Kind)
+			}
+			artifacts[id] = i
+		}
+		if participantFiles > 1 {
+			return fmt.Errorf("pipeline step %s supports at most one participant_file output", stepID)
+		}
+	}
+	for _, program := range pipeline.Programs {
+		if _, ok := usedPrograms[program.ID]; !ok {
+			return fmt.Errorf("unused pipeline program: %s", program.ID)
+		}
+	}
+	judge := pipeline.FinalJudge
+	judgeKind := strings.ToLower(strings.TrimSpace(judge.Kind))
+	if judgeKind != "diff" && judgeKind != "spj" {
+		return fmt.Errorf("pipeline final_judge.kind must be diff or spj")
+	}
+	if strings.ToLower(strings.TrimSpace(judge.Input.Type)) != "resource" {
+		return fmt.Errorf("pipeline final_judge.input must reference a resource")
+	}
+	judgeInputID, err := canonicalPipelineRefID("pipeline final_judge.input.id", judge.Input.ID)
+	if err != nil {
+		return err
+	}
+	if _, ok := resources[judgeInputID]; !ok {
+		return fmt.Errorf("pipeline final_judge.input references unknown resource: %s", judge.Input.ID)
+	}
+	if strings.ToLower(strings.TrimSpace(judge.Expected.Type)) != "resource" {
+		return fmt.Errorf("pipeline final_judge.expected must reference a resource")
+	}
+	judgeExpectedID, err := canonicalPipelineRefID("pipeline final_judge.expected.id", judge.Expected.ID)
+	if err != nil {
+		return err
+	}
+	if _, ok := resources[judgeExpectedID]; !ok {
+		return fmt.Errorf("pipeline final_judge.expected references unknown resource: %s", judge.Expected.ID)
+	}
+	if strings.ToLower(strings.TrimSpace(judge.Actual.Type)) != "step_stdout" {
+		return fmt.Errorf("pipeline final_judge.actual must be step_stdout")
+	}
+	actualStepID, err := canonicalPipelineRefID("pipeline final_judge.actual.step_id", judge.Actual.StepID)
+	if err != nil {
+		return err
+	}
+	actualStep, ok := steps[actualStepID]
+	if !ok {
+		return fmt.Errorf("pipeline final_judge.actual references unknown step: %s", judge.Actual.StepID)
+	}
+	if actualStep != len(pipeline.Steps)-1 {
+		return fmt.Errorf("pipeline final_judge.actual must reference the final step")
+	}
+	if judge.Actual.ID != "" || judge.Input.StepID != "" || judge.Expected.StepID != "" {
+		return fmt.Errorf("pipeline final_judge references contain fields invalid for their types")
+	}
+	if judgeKind == "spj" {
+		if judge.SPJ == nil {
+			return fmt.Errorf("pipeline final_judge.spj is required for spj")
+		}
+		if len(judge.SPJ.SidecarOutputs) > 0 {
+			return fmt.Errorf("pipeline final_judge.spj.sidecar_outputs are not supported with pipeline v1")
+		}
+		if err := ValidateSPJ(judge.SPJ); err != nil {
+			return fmt.Errorf("pipeline final_judge.spj: %w", err)
+		}
+	} else if judge.SPJ != nil {
+		return fmt.Errorf("pipeline final_judge.spj is only valid for spj")
+	}
+	return nil
+}
+
+func canonicalPipelineRefID(label, raw string) (string, error) {
+	id := strings.TrimSpace(raw)
+	if id == "" || id != raw {
+		return "", fmt.Errorf("%s must be non-empty and canonical", label)
+	}
+	return id, nil
 }
 
 func ValidateStepPipeline(req *model.RunRequest) error {
@@ -610,13 +934,20 @@ func ValidateCaptureLimits(limits *model.CaptureLimits) error {
 }
 
 func UsesSteps(req *model.RunRequest) bool {
-	return req.Communication == nil && (len(req.Programs) > 0 || len(req.Steps) > 0)
+	return req.Communication == nil && req.Pipeline == nil && (len(req.Programs) > 0 || len(req.Steps) > 0)
 }
 
 func ProgramsEnableNetwork(req *model.RunRequest) bool {
 	for _, program := range req.Programs {
 		if program.EnableNetwork {
 			return true
+		}
+	}
+	if req.Pipeline != nil {
+		for _, program := range req.Pipeline.Programs {
+			if program.EnableNetwork {
+				return true
+			}
 		}
 	}
 	return false
@@ -636,6 +967,14 @@ func UsesPython(req *model.RunRequest) bool {
 	}
 	if req.SPJ != nil {
 		languages = append(languages, req.SPJ.Lang)
+	}
+	if req.Pipeline != nil {
+		for _, program := range req.Pipeline.Programs {
+			languages = append(languages, program.Lang)
+		}
+		if req.Pipeline.FinalJudge.SPJ != nil {
+			languages = append(languages, req.Pipeline.FinalJudge.SPJ.Lang)
+		}
 	}
 	for _, language := range languages {
 		normalizedLang := profiles.NormalizeRunLang(language)

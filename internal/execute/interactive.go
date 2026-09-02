@@ -10,15 +10,26 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/timing"
 )
 
 const interactiveAcceptedGrace = 100 * time.Millisecond
+
+type interactiveRunResult struct {
+	response              model.RunResponse
+	participantStdout     []byte
+	participantFileOutput []byte
+	participantFileErr    error
+	interactorOutputBytes int64
+	interactorOutputErr   error
+}
 
 type interactivePipeWriter struct {
 	w      *io.PipeWriter
@@ -69,49 +80,62 @@ func (w *interactivePipeWriter) Err() error {
 }
 
 func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
+	return s.runInteractiveExecution(ctx, req, nil, 0, nil, 0, false, hooks, tuning).response
+}
+
+func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, interactorOutputDest io.Writer, interactorOutputMaxBytes int64, captureParticipantStdout bool, hooks Hooks, tuning config.RuntimeTuningConfig) interactiveRunResult {
 	startWall := timing.MonotonicNow()
 	if req.Interactor == nil {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor is required"}
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor is required"}}
 	}
 	if reason := s.networkRequestRejection(req.EnableNetwork); reason != "" {
-		return model.RunResponse{
+		return interactiveRunResult{response: model.RunResponse{
 			Status: model.RunStatusInitFail,
 			Reason: reason,
-		}
+		}}
 	}
 	if len(req.SidecarOutputs) > maxSidecarOutputSpecs {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("too many sidecar outputs: max %d", maxSidecarOutputSpecs)}
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("too many sidecar outputs: max %d", maxSidecarOutputSpecs)}}
 	}
 	if len(req.Binaries) > maxBinaryFiles {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("too many binaries: max %d", maxBinaryFiles)}
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("too many binaries: max %d", maxBinaryFiles)}}
 	}
 	if len(req.Binaries) == 0 {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "no binaries"}
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "no binaries"}}
 	}
 
 	contestantWorkDir, contestantWS, contestantArgs, contestantInit := prepareInteractiveCommand(req, tuning, "contestant")
 	if contestantInit != nil {
-		return *contestantInit
+		return interactiveRunResult{response: *contestantInit}
 	}
 	defer os.RemoveAll(contestantWorkDir)
 
 	interactorReq := interactorRunRequest(req)
 	interactorWorkDir, interactorWS, interactorArgs, interactorInit := prepareInteractiveCommand(interactorReq, tuning, "interactor")
 	if interactorInit != nil {
-		return *interactorInit
+		return interactiveRunResult{response: *interactorInit}
 	}
 	defer os.RemoveAll(interactorWorkDir)
 	if err := validateInteractivePeerRuntimeIsolation(req.Lang, interactorReq.Lang); err != nil {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}}
 	}
 
-	inputPath, err := writeStdinTempFile(ctx, filepath.Join(interactorWS.RootDir, ".tmp"), "interactive-input-*", req, "")
+	var inputPath string
+	var err error
+	if stdin != nil {
+		if stdinMaxBytes <= 0 {
+			stdinMaxBytes = runvalidation.MaxTextFieldBytes
+		}
+		inputPath, err = writeTempFileFromReader(filepath.Join(interactorWS.RootDir, ".tmp"), "interactive-input-*", stdin, stdinMaxBytes)
+	} else {
+		inputPath, err = writeStdinTempFile(ctx, filepath.Join(interactorWS.RootDir, ".tmp"), "interactive-input-*", req, "")
+	}
 	if err != nil {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactive input materialization failed: " + err.Error()}
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactive input materialization failed: " + err.Error()}}
 	}
 	answerPath, err := writeTempFile(filepath.Join(interactorWS.RootDir, ".tmp"), "interactive-answer-*", req.ExpectedStdout)
 	if err != nil {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactive answer materialization failed: " + err.Error()}
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactive answer materialization failed: " + err.Error()}}
 	}
 	outputPath := filepath.Join(interactorWS.RootDir, ".tmp", "interactive-output")
 	interactorArgs = append(interactorArgs, inputPath, outputPath, answerPath)
@@ -267,6 +291,16 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 	)
 	resp.SidecarOutputs = sidecarOutputs
 	resp.SidecarErrors = sidecarErrors
+	var participantFileOutput []byte
+	var participantFileErr error
+	if len(req.FileOutputs) > 0 {
+		participantFileOutput, participantFileErr = captureFileOutput(contestantWS, req.FileOutputs[0])
+	}
+	var interactorOutputBytes int64
+	var interactorOutputErr error
+	if interactorOutputMaxBytes > 0 {
+		interactorOutputBytes, interactorOutputErr = captureInteractorOutput(outputPath, interactorOutputDest, interactorOutputMaxBytes)
+	}
 
 	emitCapturedLog(hooks, "stdout", contestantRes.Stdout, responseStdoutLimitBytes(req))
 	emitCapturedLog(
@@ -276,7 +310,54 @@ func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hoo
 		responseStderrLimitBytes(req),
 	)
 
-	return resp
+	var participantStdout []byte
+	if captureParticipantStdout {
+		participantStdout = append([]byte(nil), contestantRes.Stdout...)
+	}
+	return interactiveRunResult{
+		response:              resp,
+		participantStdout:     participantStdout,
+		participantFileOutput: participantFileOutput,
+		participantFileErr:    participantFileErr,
+		interactorOutputBytes: interactorOutputBytes,
+		interactorOutputErr:   interactorOutputErr,
+	}
+}
+
+func captureInteractorOutput(path string, dest io.Writer, maxBytes int64) (int64, error) {
+	if dest == nil {
+		return 0, fmt.Errorf("interactor_output destination is unavailable")
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return 0, fmt.Errorf("required interactor_output was not produced")
+	}
+	if !info.Mode().IsRegular() {
+		return 0, fmt.Errorf("interactor_output is not a regular file")
+	}
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Nlink != 1 {
+		return 0, fmt.Errorf("interactor_output must not be a hard link")
+	}
+	if info.Size() > maxBytes {
+		return 0, fmt.Errorf("interactor_output exceeded max_bytes")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, fmt.Errorf("interactor_output open failed")
+	}
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil || !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+		return 0, fmt.Errorf("interactor_output changed during capture")
+	}
+	written, err := io.Copy(dest, io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return 0, fmt.Errorf("interactor_output copy failed")
+	}
+	if written > maxBytes {
+		return 0, fmt.Errorf("interactor_output exceeded max_bytes")
+	}
+	return written, nil
 }
 
 func validateInteractivePeerRuntimeIsolation(contestantLang, interactorLang string) error {

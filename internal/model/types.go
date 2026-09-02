@@ -126,6 +126,64 @@ type RunStep struct {
 	Handoff    *StepHandoff `json:"handoff,omitempty"`
 }
 
+// PipelineResource is immutable request-owned data. The API resolves DataURL
+// once before execution and the runner keeps the resulting Data private for
+// the lifetime of the pipeline.
+type PipelineResource struct {
+	DataB64 string `json:"data_b64,omitempty"`
+	DataURL string `json:"data_url,omitempty"`
+}
+
+type PipelineRef struct {
+	Type   string `json:"type"`
+	ID     string `json:"id,omitempty"`
+	StepID string `json:"step_id,omitempty"`
+}
+
+type PipelineExecutor struct {
+	Kind                 string       `json:"kind"`
+	ProgramID            string       `json:"program_id,omitempty"`
+	ParticipantProgramID string       `json:"participant_program_id,omitempty"`
+	InteractorProgramID  string       `json:"interactor_program_id,omitempty"`
+	InteractorLimits     *Limits      `json:"interactor_limits,omitempty"`
+	InteractorAnswer     *PipelineRef `json:"interactor_answer,omitempty"`
+}
+
+type PipelineOutputSource struct {
+	Kind string `json:"kind"`
+	Path string `json:"path,omitempty"`
+}
+
+type PipelineOutput struct {
+	ID       string               `json:"id"`
+	Source   PipelineOutputSource `json:"source"`
+	MaxBytes int64                `json:"max_bytes"`
+}
+
+type PipelineStep struct {
+	ID       string           `json:"id"`
+	Executor PipelineExecutor `json:"executor"`
+	Stdin    []PipelineRef    `json:"stdin,omitempty"`
+	Outputs  []PipelineOutput `json:"outputs,omitempty"`
+	Limits   Limits           `json:"limits"`
+}
+
+type PipelineFinalJudge struct {
+	Kind     string      `json:"kind"`
+	Input    PipelineRef `json:"input"`
+	Expected PipelineRef `json:"expected"`
+	Actual   PipelineRef `json:"actual"`
+	SPJ      *SPJSpec    `json:"spj,omitempty"`
+}
+
+type PipelineV1 struct {
+	Version    int                         `json:"version"`
+	Resources  map[string]PipelineResource `json:"resources"`
+	Programs   []RunProgram                `json:"programs"`
+	Steps      []PipelineStep              `json:"steps"`
+	FinalJudge PipelineFinalJudge          `json:"final_judge"`
+}
+
 type StepResult struct {
 	ID               string `json:"id"`
 	ProgramID        string `json:"program_id,omitempty"`
@@ -178,6 +236,7 @@ type RunRequest struct {
 	SidecarOutputs    []OutputFile             `json:"sidecar_outputs,omitempty"`
 	EmitLogs          *bool                    `json:"emit_logs,omitempty"`
 	IgnoreTLE         bool                     `json:"ignore_tle,omitempty"`
+	Pipeline          *PipelineV1              `json:"pipeline,omitempty"`
 }
 
 type RunResponse struct {

@@ -105,6 +105,32 @@ func TestResolvePayloadURLsConsumeDataURLFields(t *testing.T) {
 	}
 }
 
+func TestResolvePipelineResourceURLOnceIntoPrivateRequestData(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = io.WriteString(w, "original testcase\n")
+	}))
+	defer server.Close()
+	setPayloadURLHTTPClientForTest(t, server.URL)
+
+	req := &model.RunRequest{Pipeline: &model.PipelineV1{
+		Resources: map[string]model.PipelineResource{
+			"testcase": {DataURL: "http://payload.example/testcase"},
+		},
+	}}
+	if err := resolveRunPayloadURLs(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	resource := req.Pipeline.Resources["testcase"]
+	if resource.DataURL != "" || resource.DataB64 != base64.StdEncoding.EncodeToString([]byte("original testcase\n")) {
+		t.Fatalf("pipeline resource URL was not consumed exactly once: %+v", resource)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("pipeline resource requests = %d, want 1", got)
+	}
+}
+
 func TestResolveRunPayloadURLsValidatesAllConflictsBeforeFetch(t *testing.T) {
 	var requests atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
