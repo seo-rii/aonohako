@@ -80,6 +80,115 @@ func TestRemoteRunnerForwardsSSELogsImagesAndResult(t *testing.T) {
 	}
 }
 
+func TestRemoteRunnerRedactsPipelineLogsImagesAndResultDiagnostics(t *testing.T) {
+	const secret = "PRIVATE-REMOTE-PIPELINE-DIAGNOSTIC"
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "event: log\ndata: {\"stream\":\"stderr\",\"chunk\":%q}\n\n", secret)
+		_, _ = w.Write([]byte("event: image\ndata: {\"mime\":\"image/png\",\"b64\":\"Zm9v\",\"ts\":123}\n\n"))
+		result := model.RunResponse{
+			Status:        model.RunStatusRE,
+			Stdout:        secret,
+			Stderr:        secret,
+			Reason:        secret,
+			VerdictSource: "step:phase2:exit_code",
+			Steps: []model.StepResult{{
+				ID:            "phase2",
+				Status:        model.RunStatusRE,
+				Stdout:        secret,
+				Stderr:        secret,
+				Reason:        secret,
+				VerdictSource: "exit_code",
+			}},
+		}
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = fmt.Fprintf(w, "event: result\ndata: %s\n\n", encoded)
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{URL: remote.URL},
+		},
+	})
+	var logCalled atomic.Bool
+	var imageCalled atomic.Bool
+	resp := runner.Run(context.Background(), &model.RunRequest{Pipeline: &model.PipelineV1{}}, Hooks{
+		OnLog:   func(string, string) { logCalled.Store(true) },
+		OnImage: func(string, string, int64) { imageCalled.Store(true) },
+	})
+	encoded, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), secret) {
+		t.Fatalf("remote pipeline diagnostic survived redaction: %s", encoded)
+	}
+	if logCalled.Load() || imageCalled.Load() {
+		t.Fatalf("remote pipeline forwarded private hooks: log=%v image=%v", logCalled.Load(), imageCalled.Load())
+	}
+	if resp.Status != model.RunStatusRE || resp.Reason != "runtime error" || resp.VerdictSource != "step:phase2:exit_code" {
+		t.Fatalf("unexpected remote pipeline response: %+v", resp)
+	}
+}
+
+func TestRemoteRunnerPipelineCancellationIsPromptAndRedacted(t *testing.T) {
+	requestCanceled := make(chan struct{})
+	unblock := make(chan struct{})
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: progress\ndata: {\"stage\":\"start\"}\n\n"))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		select {
+		case <-r.Context().Done():
+		case <-unblock:
+			return
+		}
+		<-r.Context().Done()
+		close(requestCanceled)
+	}))
+	defer func() {
+		close(unblock)
+		remote.Close()
+	}()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{URL: remote.URL},
+		},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(100*time.Millisecond, cancel)
+	started := time.Now()
+	resp := runner.Run(ctx, &model.RunRequest{Pipeline: &model.PipelineV1{}}, Hooks{})
+	if elapsed := time.Since(started); elapsed > 3*time.Second {
+		t.Fatalf("remote pipeline cancellation took %s", elapsed)
+	}
+	select {
+	case <-requestCanceled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("downstream pipeline request did not observe cancellation")
+	}
+	if resp.Status != model.RunStatusInitFail || resp.Reason != "pipeline initialization failed" {
+		t.Fatalf("unexpected redacted cancellation response: %+v", resp)
+	}
+}
+
 func TestRemoteRunnerForwardsRuntimeProfile(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/execute" {
@@ -391,6 +500,41 @@ func TestRemoteRunnerAbsoluteDeadlineIncludesPipelineLimitsAndOverhead(t *testin
 	want := 3*time.Second + remoteio.DefaultOperationOverhead
 	if remaining < want-time.Second || remaining > want+time.Second {
 		t.Fatalf("remote deadline remaining = %s, want about %s", remaining, want)
+	}
+}
+
+func TestRemoteRunnerAbsoluteDeadlineIncludesPipelineV1InteractiveAndSPJLimits(t *testing.T) {
+	var remaining time.Duration
+	runner := &remoteRunner{
+		client: &http.Client{Transport: executeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			deadline, ok := req.Context().Deadline()
+			if !ok {
+				t.Fatal("remote pipeline request context has no deadline")
+			}
+			remaining = time.Until(deadline)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"Accepted\"}\n\n")),
+			}, nil
+		})},
+		executeURL: "http://remote.example/execute",
+	}
+	interactorLimits := model.Limits{TimeMs: 3000}
+	resp := runner.Run(context.Background(), &model.RunRequest{Pipeline: &model.PipelineV1{
+		Steps: []model.PipelineStep{
+			{Limits: model.Limits{TimeMs: 1000}, Executor: model.PipelineExecutor{InteractorLimits: &interactorLimits}},
+			{Limits: model.Limits{TimeMs: 2000}},
+		},
+		FinalJudge: model.PipelineFinalJudge{SPJ: &model.SPJSpec{Limits: &model.Limits{TimeMs: 4000}}},
+	}}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("response = %+v", resp)
+	}
+	want := 9*time.Second + remoteio.DefaultOperationOverhead
+	if remaining < want-time.Second || remaining > want+time.Second {
+		t.Fatalf("remote pipeline deadline remaining = %s, want about %s", remaining, want)
 	}
 }
 

@@ -48,7 +48,7 @@ func Markdown() string {
 	fmt.Fprintf(&out, "| Captured sidecar total | — | %s |\n", HumanBytes(execute.MaxCapturedSidecarTotalBytes))
 	fmt.Fprintf(&out, "| Sidecar output paths | — | %d paths |\n", runvalidation.MaxSidecarOutputs)
 	fmt.Fprintf(&out, "| Step programs | — | %d programs |\n", runvalidation.MaxPrograms)
-	fmt.Fprintf(&out, "| Pipeline steps | — | %d steps |\n", runvalidation.MaxSteps)
+	fmt.Fprintf(&out, "| Pipeline steps | — | %d steps |\n", runvalidation.MaxPipelineSteps)
 	fmt.Fprintf(&out, "| Step stdin parts | — | %d parts |\n", runvalidation.MaxStdinParts)
 	fmt.Fprintf(&out, "| Step handoff | — | %s |\n", HumanBytes(runvalidation.MaxStepHandoffBytes))
 	return out.String()

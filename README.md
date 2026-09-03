@@ -6,7 +6,8 @@ binary, configurable runtime images, and testable build metadata.
 
 ## What is in this repository
 
-- `POST /compile`, `POST /execute`, `GET /livez`, and `GET /readyz`
+- `POST /compile`, `POST /execute`, `GET /capabilities`, `GET /livez`, and
+  `GET /readyz`
 - queue-controlled SSE responses with `progress`, `log`, `image`, `error`, and
   final `result` events
 - a `box` workspace layout that keeps submitted files immutable while allowing
@@ -17,6 +18,8 @@ binary, configurable runtime images, and testable build metadata.
 - `communication-v1` execution on explicitly enabled Cloud Run embedded helpers
   and dedicated self-hosted cgroup runners: one private manager process
   coordinates 2–64 isolated launches of one shared, read-only participant binary
+- an atomic [Pipeline V1](docs/pipeline-v1.md) execution contract with explicit
+  resources, private artifacts, batch/interactive steps, and final-judge input
 - `runtime-images.yml` as the source of truth for runtime image groups
 - Docker build tooling that can emit production multi-language images and
   single-language CI smoke images from the same YAML catalog

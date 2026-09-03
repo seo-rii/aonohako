@@ -176,7 +176,7 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET only")
 		return
 	}
-	capabilities := make([]string, 0, 2)
+	capabilities := make([]string, 0, 3)
 	if platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled) {
 		capabilities = append(capabilities, "communication-v1")
 	}
@@ -198,9 +198,33 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 			capabilities = append(capabilities, pythonpolicy.InstalledCapability)
 		}
 	}
+	pipelineSupported := s.supportsPipelineV1()
+	if pipelineSupported {
+		capabilities = append(capabilities, "pipeline-v1")
+	}
 	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": capabilities})
+	body := map[string]any{"capabilities": capabilities}
+	if pipelineSupported {
+		body["pipeline"] = map[string]any{
+			"versions":         []int{1},
+			"max_steps":        runvalidation.MaxPipelineSteps,
+			"executors":        []string{"batch", "interactive"},
+			"artifact_sources": []string{"participant_stdout", "participant_file", "interactor_output"},
+			"artifact_source_max_bytes": map[string]int64{
+				"participant_stdout": runvalidation.MaxStepHandoffBytes,
+				"participant_file":   runvalidation.MaxPipelineParticipantFileBytes,
+				"interactor_output":  runvalidation.MaxStepHandoffBytes,
+			},
+			"final_judges": []string{"diff", "spj"},
+		}
+	}
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func (s *Server) supportsPipelineV1() bool {
+	return s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded &&
+		s.cfg.Execution.Platform.SandboxBackend == platform.SandboxBackendHelper
 }
 
 func (s *Server) nextID(prefix string) string {
@@ -437,6 +461,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_python_library_mode", err.Error())
 		return
 	}
+	if req.Pipeline != nil && !s.supportsPipelineV1() {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "unsupported_capability", "pipeline-v1 is not supported by this execution transport")
+		return
+	}
 	if err := runvalidation.Validate(&req); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -537,21 +565,25 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hooks := execute.Hooks{
-		OnImage: func(mime, b64 string, ts int64) {
+	hooks := execute.Hooks{}
+	if req.Pipeline == nil {
+		hooks.OnImage = func(mime, b64 string, ts int64) {
 			if err := stream.Event("image", map[string]any{"mime": mime, "b64": b64, "ts": ts}); err != nil {
 				stopStream()
 			}
-		},
-	}
-	if req.EmitLogs == nil || *req.EmitLogs {
-		hooks.OnLog = func(streamName, msg string) {
-			if err := stream.Event("log", map[string]any{"stream": streamName, "chunk": msg}); err != nil {
-				stopStream()
+		}
+		if req.EmitLogs == nil || *req.EmitLogs {
+			hooks.OnLog = func(streamName, msg string) {
+				if err := stream.Event("log", map[string]any{"stream": streamName, "chunk": msg}); err != nil {
+					stopStream()
+				}
 			}
 		}
 	}
 	resp := s.execute.Run(streamCtx, &req, hooks)
+	if req.Pipeline != nil {
+		resp = execute.RedactPipelineResponse(resp)
+	}
 	if streamCtx.Err() != nil {
 		return
 	}

@@ -106,6 +106,22 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 	for i := range req.Programs {
 		binaryGroups = append(binaryGroups, binaryGroup{label: fmt.Sprintf("programs[%d].binaries", i), binaries: req.Programs[i].Binaries})
 	}
+	if req.Pipeline != nil {
+		for id, resource := range req.Pipeline.Resources {
+			if strings.TrimSpace(resource.DataURL) != "" && resource.DataB64 != "" {
+				return fmt.Errorf("pipeline.resources[%s] cannot combine data_b64 with data_url", id)
+			}
+			if err := validateOptionalPayloadURL(resource.DataURL); err != nil {
+				return fmt.Errorf("pipeline.resources[%s].data_url: %w", id, err)
+			}
+		}
+		for i := range req.Pipeline.Programs {
+			binaryGroups = append(binaryGroups, binaryGroup{label: fmt.Sprintf("pipeline.programs[%d].binaries", i), binaries: req.Pipeline.Programs[i].Binaries})
+		}
+		if req.Pipeline.FinalJudge.SPJ != nil && req.Pipeline.FinalJudge.SPJ.Binary != nil {
+			binaryGroups = append(binaryGroups, binaryGroup{label: "pipeline.final_judge.spj.binary", binaries: []model.Binary{*req.Pipeline.FinalJudge.SPJ.Binary}, singleItem: true})
+		}
+	}
 	for i := range req.Steps {
 		if err := validateOptionalPayloadURL(req.Steps[i].StdinURL); err != nil {
 			return fmt.Errorf("steps[%d].stdin_url: %w", i, err)
@@ -155,6 +171,27 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 	if !runHasBufferedPayloadURLs(req) {
 		return nil
 	}
+	if req.Pipeline != nil {
+		resourceBytes := 0
+		for _, resource := range req.Pipeline.Resources {
+			decoded, err := base64.StdEncoding.DecodeString(resource.DataB64)
+			if err != nil {
+				return err
+			}
+			resourceBytes += len(decoded)
+		}
+		resourceBudget := &payloadByteBudget{
+			remaining: runvalidation.MaxPipelineResourceTotalBytes - resourceBytes,
+			limit:     runvalidation.MaxPipelineResourceTotalBytes,
+			message:   "pipeline resources total size exceeded",
+		}
+		for id, resource := range req.Pipeline.Resources {
+			if err := resolveBase64URL(ctx, "pipeline.resources["+id+"]", &resource.DataB64, &resource.DataURL, runvalidation.MaxTextFieldBytes, resourceBudget); err != nil {
+				return err
+			}
+			req.Pipeline.Resources[id] = resource
+		}
+	}
 
 	if err := resolveTextURL(ctx, "expected_stdout", &req.ExpectedStdout, &req.ExpectedStdoutURL, runvalidation.MaxTextFieldBytes); err != nil {
 		return err
@@ -165,6 +202,18 @@ func resolveRunPayloadURLs(ctx context.Context, req *model.RunRequest) error {
 	for i := range req.Programs {
 		if err := resolveBinaryURLs(ctx, fmt.Sprintf("programs[%d].binaries", i), req.Programs[i].Binaries, budget); err != nil {
 			return err
+		}
+	}
+	if req.Pipeline != nil {
+		for i := range req.Pipeline.Programs {
+			if err := resolveBinaryURLs(ctx, fmt.Sprintf("pipeline.programs[%d].binaries", i), req.Pipeline.Programs[i].Binaries, budget); err != nil {
+				return err
+			}
+		}
+		if req.Pipeline.FinalJudge.SPJ != nil && req.Pipeline.FinalJudge.SPJ.Binary != nil {
+			if err := resolveBase64URL(ctx, "pipeline.final_judge.spj.binary", &req.Pipeline.FinalJudge.SPJ.Binary.DataB64, &req.Pipeline.FinalJudge.SPJ.Binary.DataURL, runvalidation.MaxBinaryFileBytes, budget); err != nil {
+				return err
+			}
 		}
 	}
 	if req.SPJ != nil && req.SPJ.Binary != nil {
@@ -209,6 +258,23 @@ func runHasBufferedPayloadURLs(req *model.RunRequest) bool {
 			if strings.TrimSpace(binary.DataURL) != "" {
 				return true
 			}
+		}
+	}
+	if req.Pipeline != nil {
+		for _, resource := range req.Pipeline.Resources {
+			if strings.TrimSpace(resource.DataURL) != "" {
+				return true
+			}
+		}
+		for _, program := range req.Pipeline.Programs {
+			for _, binary := range program.Binaries {
+				if strings.TrimSpace(binary.DataURL) != "" {
+					return true
+				}
+			}
+		}
+		if req.Pipeline.FinalJudge.SPJ != nil && req.Pipeline.FinalJudge.SPJ.Binary != nil && strings.TrimSpace(req.Pipeline.FinalJudge.SPJ.Binary.DataURL) != "" {
+			return true
 		}
 	}
 	if req.SPJ != nil && req.SPJ.Binary != nil && strings.TrimSpace(req.SPJ.Binary.DataURL) != "" {

@@ -23,7 +23,7 @@ import (
 const (
 	DefaultOutputBytes           = 64 << 10
 	DefaultWorkspaceBytes        = 128 << 20
-	MaxCapturedFileBytes         = 8 << 20
+	MaxCapturedFileBytes         = runvalidation.MaxPipelineParticipantFileBytes
 	MaxCapturedSidecarTotalBytes = 16 << 20
 
 	defaultMaxOutputBytes        = DefaultOutputBytes
@@ -120,6 +120,7 @@ type Service struct {
 type sandboxRunResult struct {
 	response            model.RunResponse
 	judgeOut            []byte
+	stdoutOut           []byte
 	stdoutLimitExceeded bool
 }
 
@@ -169,6 +170,11 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req.PythonLibraryMode != "" && !runvalidation.UsesPython(req) {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "python_library_mode requires a Python or PyPy execution target"}
 	}
+	if req.Pipeline != nil {
+		if err := runvalidation.ValidatePipelineV1(req); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
 	if req.SPJ != nil {
 		if err := runvalidation.ValidateSPJ(req.SPJ); err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -188,6 +194,9 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req.Communication != nil {
 		return s.runCommunication(ctx, req, hooks, tuning)
 	}
+	if req.Pipeline != nil {
+		return s.runPipelineV1(ctx, req, hooks, tuning)
+	}
 	if req.Interactor != nil {
 		return s.runInteractive(ctx, req, hooks, tuning)
 	}
@@ -198,10 +207,10 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 }
 
 func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput bool) sandboxRunResult {
-	return s.runOneWithStdin(ctx, req, nil, 0, hooks, tuning, evaluateOutput)
+	return s.runOneWithStdin(ctx, req, nil, 0, hooks, tuning, evaluateOutput, false)
 }
 
-func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput bool) sandboxRunResult {
+func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput, captureRawStdout bool) sandboxRunResult {
 	startWall := timing.MonotonicNow()
 	if reason := s.networkRequestRejection(req.EnableNetwork); reason != "" {
 		return sandboxRunResult{response: model.RunResponse{
@@ -345,6 +354,10 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	emitCapturedLog(hooks, "stdout", rawOut, stdoutResponseLimit)
 	emitCapturedLog(hooks, "stderr", fullErr, stderrResponseLimit)
 
+	var stdoutOut []byte
+	if captureRawStdout {
+		stdoutOut = append([]byte(nil), rawOut...)
+	}
 	return sandboxRunResult{
 		response: model.RunResponse{
 			Status:           status,
@@ -365,6 +378,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			SidecarErrors:    sidecarErrors,
 		},
 		judgeOut:            append([]byte(nil), judgeOut...),
+		stdoutOut:           stdoutOut,
 		stdoutLimitExceeded: res.StdoutTruncated,
 	}
 }
@@ -447,7 +461,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			stepReq.IgnoreTLE = req.IgnoreTLE
 		}
 
-		run := s.runOneWithStdin(ctx, stepReq, stdinReader, stdinMaxBytes, hooks, tuning, finalStep)
+		run := s.runOneWithStdin(ctx, stepReq, stdinReader, stdinMaxBytes, hooks, tuning, finalStep, false)
 		if closeStdin != nil {
 			_ = closeStdin()
 		}
