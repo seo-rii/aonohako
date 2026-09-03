@@ -16,6 +16,7 @@ type ExecRequest struct {
 	Dir                      string       `json:"dir"`
 	Env                      []string     `json:"env"`
 	Limits                   model.Limits `json:"limits"`
+	CPUTimeLimitMs           int          `json:"cpu_time_limit_ms,omitempty"`
 	ThreadLimit              int          `json:"thread_limit"`
 	OpenFileLimit            int          `json:"open_file_limit,omitempty"`
 	StackLimitBytes          uint64       `json:"stack_limit_bytes,omitempty"`
@@ -39,4 +40,14 @@ type ExecRequest struct {
 	PreserveFDs              []int        `json:"preserve_fds,omitempty"`
 	DisableFileSizeLimit     bool         `json:"disable_file_size_limit,omitempty"`
 	DisableAddressSpaceLimit bool         `json:"disable_address_space_limit,omitempty"`
+}
+
+func cpuTimeLimitMillis(req ExecRequest) int {
+	if req.CPUTimeLimitMs > 0 {
+		return req.CPUTimeLimitMs
+	}
+	if req.Limits.TimeMs > 0 {
+		return req.Limits.TimeMs
+	}
+	return 1
 }

@@ -457,7 +457,7 @@ reported as runtime failure instead of silently falling back to process stdout.
 | Metric | Source | Why |
 | --- | --- | --- |
 | `wall_time_ms` | `CLOCK_MONOTONIC` | stable wall clock, not affected by time jumps |
-| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec` for run-cgroup CPU usage | aggregates all threads inside the process and, when cgroups are enabled, covers the run cgroup rather than only the main PID |
+| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec`; Cloud Run embedded helpers translate the finalized value through a startup fixed-work calibration | aggregates all target threads and removes the dominant host-throughput difference between heterogeneous Cloud Run instances; `raw_cpu_time_ms` preserves scheduled host time |
 | `memory_kb` | `/proc/<pid>/statm` sampled during execution and `/proc/<pid>/smaps_rollup` near the limit or when AS is disabled; cgroup runs additionally use aggregate `memory.peak` | captures target RSS without charging the API server or sandbox helper, and reports the kernel aggregate peak for cgroup process trees |
 
 Important consequence:
@@ -466,6 +466,28 @@ Important consequence:
 - multiprocessing is not allowed by seccomp
 - because `fork`/`vfork`/`clone3` are denied and only thread-form `clone` is
   allowed, `cpu_time_ms` remains meaningful for the whole submission process
+
+Cloud Run does not guarantee a fixed processor model for a vCPU. An embedded
+Cloud Run helper therefore runs five samples of versioned, fixed,
+single-thread integer work before accepting traffic, measures them with
+`CLOCK_THREAD_CPUTIME_ID`, and uses the median to build an immutable instance
+scale. The default reference is 60 ms and may be changed with
+`AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS`; the scale is applied automatically
+only to `cloudrun + embedded + helper`. `AONOHAKO_CPU_NORMALIZATION=false` is
+the rollback switch. Calibration failure or a sample outside the supported
+duration/scale bounds fails startup rather than mixing raw and normalized
+semantics.
+
+The public CPU limit is converted back into raw host milliseconds before the
+process and cgroup watchdogs and helper `RLIMIT_CPU` are configured. Reporting
+uses ceiling division and the inverse budget uses floor division, preserving
+the strict-over-limit integer boundary except for the existing one-millisecond
+minimum. The wall deadline is separate: it is never shortened and receives
+10% or at least 100 ms of supervision slack above the larger of the public
+limit and the calibrated raw CPU allowance. Actual elapsed time remains in
+`wall_time_ms`. This calibration reduces hardware-model variance but cannot
+make instruction mixes, managed runtimes, memory performance, or later host
+contention identical.
 
 Memory enforcement uses several layers:
 
@@ -754,6 +776,10 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_REMOTE_STRICT_PROTOCOL` is a strict boolean; it defaults to `true`
   outside `dev` so remote responses without `X-Aonohako-Protocol-Version` are
   rejected in production remote fleets
+- `AONOHAKO_CPU_NORMALIZATION` defaults to `true` only for
+  `cloudrun + embedded + helper`; enabling it for another execution shape is
+  rejected, and `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS` must be between 1
+  and 5000
 - non-dev deployments also reject `0` for pending queue, global and
   per-principal upload, global stream, and per-principal stream caps so
   unlimited queue, upload, or open-stream settings stay development-only
@@ -841,6 +867,8 @@ Recommended Cloud Run deployment baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
+- `AONOHAKO_CPU_NORMALIZATION=true`
+- `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS=60`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, unless
   `AONOHAKO_INBOUND_AUTH=platform` is set because Cloud Run IAM, mTLS, private
   ingress, or a gateway enforces inbound authentication; use

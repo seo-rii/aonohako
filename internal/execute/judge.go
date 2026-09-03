@@ -17,10 +17,11 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/timing"
 	"aonohako/internal/util"
 )
 
-func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource, judgeInputPath string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
+func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource, judgeInputPath string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer) (string, *float64, string, string) {
 	status, reason, source := classifyRunStatusWithoutOutput(req, res)
 
 	var score *float64
@@ -34,7 +35,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 				source = "stdout_limit"
 			}
 		} else if hasSPJ(req) {
-			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir)
+			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir, cpuNormalizer)
 			if sc != nil {
 				score = sc
 			}
@@ -172,7 +173,7 @@ func hasSPJ(req *model.RunRequest) bool {
 	return req != nil && req.SPJ != nil
 }
 
-func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout, judgeInputPath string, sidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (bool, *float64, error) {
+func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout, judgeInputPath string, sidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer) (bool, *float64, error) {
 	if req == nil || req.SPJ == nil {
 		return false, nil, fmt.Errorf("spj is required")
 	}
@@ -251,7 +252,7 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 	}
 	args := buildCommandWithRuntimeTuning(spjPath, spjLang, spjReq, tuning)
 	args = append(args, inputPath, outputPath, solutionPath)
-	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, nil, 0, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)
+	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, nil, 0, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir, cpuNormalizer)
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
