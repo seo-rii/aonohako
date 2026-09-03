@@ -325,6 +325,14 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if remoteResult.TimeMs < 0 || remoteResult.WallTimeMs < 0 || remoteResult.CPUTimeMs < 0 || remoteResult.ProcessCPUTimeMs < 0 || remoteResult.MemoryKB < 0 {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: negative resource measurement"}
 			}
+			if remoteResult.RawCPUTimeMs != nil && *remoteResult.RawCPUTimeMs < 0 {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: negative raw CPU measurement"}
+			}
+			if normalization := remoteResult.CPUTimeNormalization; normalization != nil {
+				if strings.TrimSpace(normalization.Method) == "" || normalization.ScalePPM <= 0 || normalization.ReferenceTimeNs == 0 || normalization.ObservedTimeNs == 0 {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: malformed CPU normalization metadata"}
+				}
+			}
 			if remoteResult.Score != nil && (math.IsNaN(*remoteResult.Score) || math.IsInf(*remoteResult.Score, 0) || *remoteResult.Score < 0 || *remoteResult.Score > 1) {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: score out of range"}
 			}
@@ -346,6 +354,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				}
 				if step.TimeMs < 0 || step.WallTimeMs < 0 || step.CPUTimeMs < 0 || step.ProcessCPUTimeMs < 0 || step.MemoryKB < 0 || step.HandoffBytes < 0 {
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative measurement"}
+				}
+				if step.RawCPUTimeMs != nil && *step.RawCPUTimeMs < 0 {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative raw CPU measurement"}
 				}
 				var truncated bool
 				step.Stdout, truncated = capturedOutputValue([]byte(step.Stdout), stdoutResponseLimit)

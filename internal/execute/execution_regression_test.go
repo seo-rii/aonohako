@@ -16,6 +16,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/security"
+	"aonohako/internal/timing"
 )
 
 func TestCPUTimeAfterBaseline(t *testing.T) {
@@ -546,6 +547,7 @@ func TestEvaluateRunStatusRejectsTruncatedStdoutPrefix(t *testing.T) {
 		nil,
 		config.DefaultRuntimeTuningConfig(),
 		"",
+		timing.CPUNormalizer{},
 	)
 	if status != model.RunStatusWA {
 		t.Fatalf("status = %q, want %q", status, model.RunStatusWA)

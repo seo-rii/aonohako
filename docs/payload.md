@@ -394,7 +394,14 @@ root. Self-hosted cgroup timing is unchanged.
   "status": "Accepted",                     // Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Workspace Limit Exceeded|Runtime Error|Container Initialization Failed
   "time_ms": 42,                            // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                       // wall-clock time from CLOCK_MONOTONIC (ms)
-  "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
+  "cpu_time_ms": 30,                        // authoritative CPU time; normalized by Cloud Run helpers (ms)
+  "raw_cpu_time_ms": 49,                    // scheduled host CPU time before normalization (ms)
+  "cpu_time_normalization": {               // present when normalization is active
+    "method": "go-fixed-int-v1",
+    "scale_ppm": 600000,
+    "reference_time_ns": 60000000,
+    "observed_time_ns": 100000000
+  },
   "memory_kb": 8192,                        // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                           // nullable; process exit code
   "stdout": "",                             // truncated stdout (up to capture_limits.stdout_bytes when set, on WA/RE only)
@@ -412,6 +419,7 @@ root. Self-hosted cgroup timing is unchanged.
       "status": "Accepted",
       "wall_time_ms": 12,
       "cpu_time_ms": 8,
+      "raw_cpu_time_ms": 13,
       "memory_kb": 4096,
       "handoff_bytes": 128
     },
@@ -421,6 +429,7 @@ root. Self-hosted cgroup timing is unchanged.
       "status": "Accepted",
       "wall_time_ms": 30,
       "cpu_time_ms": 22,
+      "raw_cpu_time_ms": 36,
       "memory_kb": 8192
     }
   ],
@@ -724,8 +733,15 @@ for the compile phase and toolchain smoke tests.
 ### Runtime Measurements
 
 - `wall_time_ms` uses `CLOCK_MONOTONIC`
-- `cpu_time_ms` samples the Linux process CPU clock while the submission is
+- target CPU time samples the Linux process CPU clock while the submission is
   running and uses cgroup `cpu.stat` when per-run cgroups are enabled
+- Cloud Run embedded helpers calibrate fixed single-thread integer work at
+  startup, publish the scheduled value as `raw_cpu_time_ms`, and translate the
+  verdict-authoritative `cpu_time_ms` to a 60 ms reference host; watchdogs and
+  `RLIMIT_CPU` use the inverse raw-host budget
+- `cpu_time_normalization` reports the versioned method, parts-per-million
+  scale, reference duration, and measured per-instance calibration duration;
+  remote control planes pass it through without applying a second scale
 - `time_ms` is retained as a compatibility alias for `wall_time_ms`
 - `verdict_source` is diagnostic and non-authoritative. Local helper runners
   may report values such as `stdout`, `file_output`, `spj`, `exit_code`,

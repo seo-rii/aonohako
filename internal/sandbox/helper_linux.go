@@ -118,10 +118,7 @@ func MaybeRunFromEnv() bool {
 		envv[i] = ptr
 	}
 
-	timeMs := req.Limits.TimeMs
-	if timeMs < 1 {
-		timeMs = 1
-	}
+	timeMs := cpuTimeLimitMillis(req)
 	cpuSec := (timeMs+999)/1000 + 1
 	memMB := req.Limits.MemoryMB
 	if memMB < 16 {

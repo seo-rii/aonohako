@@ -40,6 +40,7 @@ type execResult struct {
 	MemoryKB         int64
 	WallTimeMs       int64
 	CPUTimeMs        int64
+	RawCPUTimeMs     *int64
 	ProcessCPUTimeMs int64
 	Reason           string
 	VerdictSource    string
@@ -50,6 +51,15 @@ func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (int64, 
 		return 0, false
 	}
 	return timing.MilliFromNanoseconds(usageNs - baselineNs), true
+}
+
+func normalizeExecResultCPU(result *execResult, normalizer timing.CPUNormalizer) {
+	if result == nil || !normalizer.Enabled() {
+		return
+	}
+	rawCPUTimeMs := result.CPUTimeMs
+	result.RawCPUTimeMs = &rawCPUTimeMs
+	result.CPUTimeMs = normalizer.NormalizeMillis(rawCPUTimeMs)
 }
 
 type sandboxStreamConfig struct {
@@ -67,6 +77,7 @@ type sandboxStreamConfig struct {
 	onTargetStarted           func()
 	targetRelease             <-chan struct{}
 	communicationRestricted   bool
+	cpuNormalizer             timing.CPUNormalizer
 }
 
 type sandboxIdentity struct {
@@ -161,13 +172,17 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer) execResult {
 	limits := req.Limits
-	timeMs := max(1, limits.TimeMs)
+	timeMs := max(1, cpuNormalizer.WallLimitMillis(limits.TimeMs))
 	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
 	defer cancel()
 
-	return executeSandboxCommandWithStdinLimit(ctx, ws, command, req, stdinReader, stdinMaxBytes, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
+		stdin:         stdinReader,
+		stdinMaxBytes: stdinMaxBytes,
+		cpuNormalizer: cpuNormalizer,
+	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
 
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
@@ -191,7 +206,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		restricted.EnableNetwork = false
 		req = &restricted
 	}
-	timeLimitMs := max(1, req.Limits.TimeMs)
+	cpuNormalizer := streams.cpuNormalizer
+	cpuTimeLimitMs := max(1, cpuNormalizer.RawLimitMillis(req.Limits.TimeMs))
 	memoryLimitKB := int64(0)
 	if req.Limits.MemoryMB > 0 {
 		memoryLimitKB = int64(req.Limits.MemoryMB) * 1024
@@ -397,6 +413,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		Dir:                      ws.BoxDir,
 		Env:                      innerEnv,
 		Limits:                   req.Limits,
+		CPUTimeLimitMs:           cpuTimeLimitMs,
 		ThreadLimit:              threadLimit,
 		OpenFileLimit:            openFileLimit,
 		StackLimitBytes:          security.StackLimitForCommand(runtimeBase),
@@ -857,7 +874,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 						if cpuTimeMs > maxCPUTimeMs {
 							maxCPUTimeMs = cpuTimeMs
 						}
-						if targetStarted && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+						if targetStarted && result.Status == "OK" && cpuTimeMs > int64(cpuTimeLimitMs) {
 							result.Status = model.RunStatusTLE
 							result.Reason = "cpu time limit exceeded"
 							result.VerdictSource = "cpu_time_cgroup"
@@ -896,7 +913,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 					if cpuTimeAvailable && cpuTimeMs > maxCPUTimeMs {
 						maxCPUTimeMs = cpuTimeMs
 					}
-					if cpuTimeAvailable && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+					if cpuTimeAvailable && result.Status == "OK" && cpuTimeMs > int64(cpuTimeLimitMs) {
 						result.Status = model.RunStatusTLE
 						result.Reason = "cpu time limit exceeded"
 						result.VerdictSource = "cpu_time"
@@ -1093,7 +1110,7 @@ done:
 		result.Reason = "memory limit exceeded"
 		result.VerdictSource = "address_space"
 	}
-	result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatus(result.Status, result.Reason, result.VerdictSource, result.CPUTimeMs, timeLimitMs, runGroup.Path != "")
+	result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatus(result.Status, result.Reason, result.VerdictSource, result.CPUTimeMs, cpuTimeLimitMs, runGroup.Path != "")
 	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
 		result.Status = model.RunStatusInitFail
 		result.Reason = clipUTF8(result.Stderr, responseStderrLimitBytes(req))
@@ -1106,6 +1123,7 @@ done:
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
 	}
+	normalizeExecResultCPU(&result, cpuNormalizer)
 	return result
 }
 
