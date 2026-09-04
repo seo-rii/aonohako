@@ -1438,6 +1438,7 @@ func TestWorkflowSandboxJobCoversRootBackedWorkspacePermissionChecks(t *testing.
 		"TestRunBlocksUnixDatagramSendWhenNetworkDisabled",
 		"TestRunBlocksUnixDatagramSendToAccessibleSocketWhenNetworkDisabled",
 		"TestRunSPJUsesCleanWorkspaceAndReadableFiles",
+		"TestRunPipelineInteractiveArtifactBatchAndExplicitOriginalInputSPJ",
 	} {
 		if !strings.Contains(suiteBody, marker) {
 			t.Fatalf("sandbox security suite must cover %q", marker)

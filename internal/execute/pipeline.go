@@ -546,6 +546,12 @@ func (s *Service) runPipelineFinalJudge(ctx context.Context, req *model.RunReque
 	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "final judge workspace preparation failed", VerdictSource: "final:spj"}
 	}
+	if os.Geteuid() == 0 {
+		identity := sandboxIdentity{uid: defaultSandboxUID, gid: defaultSandboxGID}
+		if err := hardenWorkspaceRootForIdentity(ws.RootDir, identity); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "final judge workspace preparation failed", VerdictSource: "final:spj"}
+		}
+	}
 	judgeReq := &model.RunRequest{
 		Stdin:             string(judge.input),
 		ExpectedStdout:    string(judge.expected),

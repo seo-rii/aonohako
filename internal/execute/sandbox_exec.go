@@ -107,12 +107,19 @@ type teeCaptureWriter struct {
 	forward io.Writer
 }
 
-func hardenWorkspaceForIdentity(ws Workspace, runtimeBase string, identity sandboxIdentity) error {
-	if err := os.Chown(ws.RootDir, os.Geteuid(), int(identity.gid)); err != nil {
+func hardenWorkspaceRootForIdentity(rootDir string, identity sandboxIdentity) error {
+	if err := os.Chown(rootDir, os.Geteuid(), int(identity.gid)); err != nil {
 		return fmt.Errorf("workspace chown failed: %w", err)
 	}
-	if err := os.Chmod(ws.RootDir, 0o710); err != nil {
+	if err := os.Chmod(rootDir, 0o710); err != nil {
 		return fmt.Errorf("workspace chmod failed: %w", err)
+	}
+	return nil
+}
+
+func hardenWorkspaceForIdentity(ws Workspace, runtimeBase string, identity sandboxIdentity) error {
+	if err := hardenWorkspaceRootForIdentity(ws.RootDir, identity); err != nil {
+		return err
 	}
 	for _, dir := range security.WorkspaceScopedDirs(ws.RootDir) {
 		if err := os.Chown(dir, int(identity.uid), int(identity.gid)); err != nil {
