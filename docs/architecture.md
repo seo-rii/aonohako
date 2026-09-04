@@ -468,10 +468,13 @@ Important consequence:
   allowed, `cpu_time_ms` remains meaningful for the whole submission process
 
 Cloud Run does not guarantee a fixed processor model for a vCPU. An embedded
-Cloud Run helper therefore runs five samples of versioned, fixed,
-single-thread integer work before accepting traffic, measures them with
-`CLOCK_THREAD_CPUTIME_ID`, and uses the median to build an immutable instance
-scale. The default reference is 60 ms and may be changed with
+Cloud Run helper therefore warms the calibration loop, then runs five samples
+of versioned, fixed, single-thread integer work before accepting traffic,
+measures them with `CLOCK_THREAD_CPUTIME_ID`, and uses the median to build an
+immutable instance scale. The sorted samples' central-three span must be at
+most 10% of the median; a wider span fails startup and logs all five samples,
+the median, and the measured spread instead of trusting an unstable scale. The
+default reference is 60 ms and may be changed with
 `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS`; the scale is applied automatically
 only to `cloudrun + embedded + helper`. `AONOHAKO_CPU_NORMALIZATION=false` is
 the rollback switch. Calibration failure or a sample outside the supported

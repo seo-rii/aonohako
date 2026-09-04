@@ -12,6 +12,7 @@ const (
 	cpuNormalizationScaleUnit    = uint64(1_000_000)
 	cpuNormalizationWallSlackPct = uint64(10)
 	cpuNormalizationMinWallSlack = 100
+	cpuCalibrationMaxSpreadPPM   = uint64(100_000)
 	CPUNormalizationMethod       = "go-fixed-int-v1"
 	DefaultCPUReferenceTimeNs    = uint64(60_000_000)
 	MinimumCPUCalibrationTimeNs  = uint64(1_000_000)
@@ -132,6 +133,32 @@ func calibrationMedian(samples []uint64) (uint64, error) {
 	}
 	slices.Sort(ordered)
 	return ordered[len(ordered)/2], nil
+}
+
+func validateCalibrationStability(samples []uint64, median uint64) error {
+	if len(samples) < 3 || len(samples)%2 == 0 {
+		return fmt.Errorf("CPU calibration stability requires at least three samples and an odd sample count")
+	}
+	if median == 0 {
+		return fmt.Errorf("CPU calibration stability requires a positive median")
+	}
+
+	ordered := slices.Clone(samples)
+	slices.Sort(ordered)
+	middle := len(ordered) / 2
+	centralSpreadNs := ordered[middle+1] - ordered[middle-1]
+	centralSpreadPPM := mulDivCeilUint64(centralSpreadNs, cpuNormalizationScaleUnit, median)
+	if centralSpreadPPM > cpuCalibrationMaxSpreadPPM {
+		return fmt.Errorf(
+			"CPU calibration samples are unstable: samples_ns=%v median_ns=%d central_spread_ns=%d central_spread_ppm=%d max_spread_ppm=%d",
+			samples,
+			median,
+			centralSpreadNs,
+			centralSpreadPPM,
+			cpuCalibrationMaxSpreadPPM,
+		)
+	}
+	return nil
 }
 
 func mulDivCeilInt64(value int64, multiplier, divisor uint64) int64 {
