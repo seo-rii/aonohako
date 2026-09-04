@@ -191,6 +191,15 @@ while true do
 end
 `)},
 		},
+		"quickjs": {
+			compileLang: "JAVASCRIPT_QUICKJS",
+			memoryMB:    64,
+			sources: []model.Source{source("Main.js", `const chunks = [];
+while (true) {
+  chunks.push(new Uint8Array(8 * 1024 * 1024));
+}
+`)},
+		},
 		"perl": {
 			compileLang: "PERL",
 			memoryMB:    64,
@@ -1494,6 +1503,10 @@ func runLanguageSecuritySuite() error {
 	return nil
 }
 
+func isMemoryLimitVerdictSource(source string) bool {
+	return strings.HasPrefix(source, "memory") || source == "address_space" || source == "runtime_memory"
+}
+
 func runRuntimeMemorySuite() error {
 	rawLanguages := strings.TrimSpace(os.Getenv("AONOHAKO_LANGUAGES"))
 	if rawLanguages == "" {
@@ -1552,8 +1565,7 @@ func runRuntimeMemorySuite() error {
 			if err != nil {
 				return fmt.Errorf("%s memory execute request failed: %w", language, err)
 			}
-			if resp.Status != model.RunStatusMLE ||
-				(!strings.HasPrefix(resp.VerdictSource, "memory") && resp.VerdictSource != "address_space") {
+			if resp.Status != model.RunStatusMLE || !isMemoryLimitVerdictSource(resp.VerdictSource) {
 				return fmt.Errorf("%s memory stress status=%s source=%q reason=%q stdout=%q stderr=%q", language, resp.Status, resp.VerdictSource, resp.Reason, resp.Stdout, resp.Stderr)
 			}
 			covered++
@@ -2897,6 +2909,23 @@ await new Promise((resolve) => {
   }, 500);
 });
 `, tcpPort)),
+				},
+			},
+		},
+		"quickjs": {
+			{
+				name:           "process-deny",
+				compileLang:    "JAVASCRIPT_QUICKJS",
+				expectedStdout: "process:blocked\n",
+				limits:         limits,
+				sources: []model.Source{
+					source("Main.js", `let blocked = false;
+try {
+  blocked = os.exec(["/bin/true"], { block: true }) < 0;
+} catch (_) {
+  blocked = true;
+}
+console.log(`+"`process:${blocked ? \"blocked\" : \"leaked\"}`"+`);`),
 				},
 			},
 		},
@@ -5094,6 +5123,15 @@ console.log(values[0] + values[1]);`),
 				source("Main.ts", `const values: number[] = (await Bun.stdin.text()).trim().split(/\s+/).map(Number);
 await Bun.write("same-folder.txt", String(values[0] + values[1]));
 console.log(await Bun.file("same-folder.txt").text());`),
+			},
+		},
+		"quickjs": {
+			compileLang: "JAVASCRIPT_QUICKJS",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 6000, MemoryMB: 256},
+			sources: []model.Source{
+				source("Main.js", `const values = std.in.getline().trim().split(/\s+/).map(Number);
+console.log(values[0] + values[1]);`),
 			},
 		},
 		"elm": {

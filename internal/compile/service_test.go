@@ -394,6 +394,13 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 	}{compileKind: "deno", runLang: "deno"}
 	tests["javascript-deno"] = denoProfile
 	tests["typescript-deno"] = denoProfile
+	quickJSProfile := struct {
+		compileKind string
+		runLang     string
+	}{compileKind: "quickjs", runLang: "quickjs"}
+	tests["quickjs"] = quickJSProfile
+	tests["qjs"] = quickJSProfile
+	tests["javascript-quickjs"] = quickJSProfile
 	tests["assemblyscript"] = struct {
 		compileKind string
 		runLang     string

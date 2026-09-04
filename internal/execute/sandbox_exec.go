@@ -1097,6 +1097,11 @@ done:
 		result.Reason = "sandbox helper failed before target start: out of memory"
 		result.VerdictSource = "sandbox_helper_oom"
 	}
+	if targetStarted && runtimeBase == "qjs" && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && bytes.Contains(result.Stderr, []byte("InternalError: out of memory")) {
+		result.Status = model.RunStatusMLE
+		result.Reason = "memory limit exceeded"
+		result.VerdictSource = "runtime_memory"
+	}
 	if addressSpaceProximityCanClassifyMLE(runtimeBase, runLang) && !disableAddressSpaceLimit && result.Status != model.RunStatusTLE && result.Status != model.RunStatusInitFail && memoryLimitKB > 0 && maxVmSizeKB > 0 && maxVmSizeKB+addressSpaceSlackKB >= addressSpaceLimitKB {
 		result.Status = model.RunStatusMLE
 		result.Reason = "memory limit exceeded"

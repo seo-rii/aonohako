@@ -164,6 +164,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"DENO",
 		"JAVASCRIPT_DENO",
 		"TYPESCRIPT_DENO",
+		"JAVASCRIPT_QUICKJS",
 		"KOTLIN_JVM",
 		"KOTLIN_JVM8",
 		"KOTLIN_JVM11",
@@ -328,6 +329,7 @@ func TestNormalizeRunLangSupportsExtendedRuntimeSet(t *testing.T) {
 	}
 	tests[denoJSKey] = "deno"
 	tests[denoTSKey] = "deno"
+	tests[quickJSKey] = "quickjs"
 	tests["ASSEMBLYSCRIPT"] = "assemblyscript"
 	tests["FACTOR"] = "factor"
 	tests["CHEZ_SCHEME"] = "chez-scheme"
@@ -452,6 +454,16 @@ func TestBunProfilesUseDedicatedRuntime(t *testing.T) {
 		if got := NormalizeRunLang(alias); got != "bun" {
 			t.Fatalf("NormalizeRunLang(%q) = %q, want bun", alias, got)
 		}
+	}
+}
+
+func TestQuickJSProfileUsesDedicatedJavaScriptRuntime(t *testing.T) {
+	profile, ok := Resolve(quickJSKey)
+	if !ok {
+		t.Fatal("Resolve(JAVASCRIPT_QUICKJS) reported unsupported language")
+	}
+	if profile.SourceLang != quickJSKey || profile.Extension != "js" || profile.CompileKind != "quickjs" || profile.RunLang != "quickjs" {
+		t.Fatalf("JAVASCRIPT_QUICKJS profile = %+v", profile)
 	}
 }
 

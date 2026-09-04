@@ -649,10 +649,21 @@ printf '%s\n' 'Prolog compiler (GNU Prolog) 1.4.5'
 		t.Fatalf("WriteFile fake gplc: %v", err)
 	}
 
+	quickJSScript := `#!/usr/bin/env bash
+set -eu
+[ "$#" -eq 1 ]
+[ "$1" = --help ]
+printf '%s\n' 'QuickJS version 2026-06-04'
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(binDir, "qjs"), []byte(quickJSScript), 0o755); err != nil {
+		t.Fatalf("WriteFile fake qjs: %v", err)
+	}
+
 	cmd := exec.Command("bash", path, "test:image")
 	cmd.Env = append(os.Environ(),
 		"PATH="+binDir+":"+os.Getenv("PATH"),
-		"AONOHAKO_LANGUAGES=erlang,gnu-prolog,sml,smlnj,dafny,tla",
+		"AONOHAKO_LANGUAGES=erlang,gnu-prolog,sml,smlnj,dafny,tla,quickjs",
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -661,11 +672,12 @@ printf '%s\n' 'Prolog compiler (GNU Prolog) 1.4.5'
 
 	body := string(out)
 	for _, want := range []string{
-		"- Languages: `erlang,gnu-prolog,sml,smlnj,dafny,tla`",
+		"- Languages: `erlang,gnu-prolog,sml,smlnj,dafny,tla,quickjs`",
 		"| Erlang | `27` |",
 		"| GNU Prolog | `Prolog compiler (GNU Prolog) 1.4.5` |",
 		"| MLton | `MLton 20241230` |",
 		"| SML/NJ | `Standard ML of New Jersey v110.99.9` |",
+		"| QuickJS | `QuickJS version 2026-06-04` |",
 		"| Java runtime | `openjdk version \"21-test\"` |",
 		"| Dafny | `4.11.0+test` |",
 		"| TLA+ TLC | `TLC2 Version 2.19 of 08 August 2024 (rev: test)` |",

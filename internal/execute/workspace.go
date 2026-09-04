@@ -324,7 +324,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		return rocqPath, lang, nil
 	case "haxe":
 		return primaryPath, lang, nil
-	case "vb6", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "forth", "bun", "deno", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "algol68":
+	case "vb6", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "forth", "bun", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "algol68":
 		if sourcePath == "" {
 			sourcePath = primaryPath
 		}

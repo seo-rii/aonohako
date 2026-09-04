@@ -652,3 +652,14 @@ func (denoCompiler) Compile(ctx context.Context, job CompileJob) model.CompileRe
 		},
 	}.Compile(ctx, job)
 }
+
+type quickJSCompiler struct{}
+
+func (quickJSCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
+	return checkedSourcesCompiler{
+		exts:           []string{".js"},
+		noSourceReason: "no QuickJS sources",
+		bin:            "qjsc",
+		prefix:         []string{"-s", "-c", "-o", os.DevNull},
+	}.Compile(ctx, job)
+}

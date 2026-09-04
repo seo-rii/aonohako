@@ -214,7 +214,7 @@ func TestTwoStepSuiteStressesFastTargetTransitions(t *testing.T) {
 
 func TestStrictRuntimeMemoryCasesCoverNativeAndScriptRuntimes(t *testing.T) {
 	cases := strictRuntimeMemoryCases()
-	for _, language := range []string{"go", "rust", "pony", "powershell", "ruby", "php", "lua", "luajit", "perl", "bun"} {
+	for _, language := range []string{"go", "rust", "pony", "powershell", "ruby", "php", "lua", "luajit", "quickjs", "perl", "bun"} {
 		tc, ok := cases[language]
 		if !ok {
 			t.Fatalf("strict runtime-memory cases are missing language %q", language)
@@ -225,6 +225,19 @@ func TestStrictRuntimeMemoryCasesCoverNativeAndScriptRuntimes(t *testing.T) {
 		}
 		if tc.memoryMB <= 0 || len(tc.sources) == 0 {
 			t.Fatalf("language %q has incomplete runtime-memory case: %+v", language, tc)
+		}
+	}
+}
+
+func TestMemoryLimitVerdictSourcesIncludeRuntimeReportedOOM(t *testing.T) {
+	for _, source := range []string{"memory_rss", "memory_reported", "address_space", "runtime_memory"} {
+		if !isMemoryLimitVerdictSource(source) {
+			t.Fatalf("memory verdict source %q was rejected", source)
+		}
+	}
+	for _, source := range []string{"", "cpu_time", "wall_time", "exit_code"} {
+		if isMemoryLimitVerdictSource(source) {
+			t.Fatalf("non-memory verdict source %q was accepted", source)
 		}
 	}
 }
@@ -247,6 +260,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"coffeescript",
 		"deno",
 		"bun",
+		"quickjs",
 		"assemblyscript",
 		"factor",
 		"chez-scheme",

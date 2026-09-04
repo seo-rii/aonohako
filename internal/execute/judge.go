@@ -522,7 +522,7 @@ func addressSpaceProximityCanClassifyMLE(commandBase, runLang string) bool {
 		return false
 	}
 	switch commandBase {
-	case "aonohako-gleam-run", "beam.smp", "bun", "deno", "dotnet", "elixir", "erl", "erlexec", "ghdl", "java", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "vvp", "wasmtime":
+	case "aonohako-gleam-run", "beam.smp", "bun", "deno", "dotnet", "elixir", "erl", "erlexec", "ghdl", "java", "node", "pypy3", "python3", "qjs", "sbcl", "umjunsik-lang-go", "vvp", "wasmtime":
 		return false
 	default:
 		return true

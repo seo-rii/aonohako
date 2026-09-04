@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"aonohako/internal/config"
@@ -351,6 +352,15 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"lua5.4", "-E", primaryPath}
 	case "luajit":
 		return []string{"luajit", "-E", primaryPath}
+	case "quickjs":
+		memoryBytes := int64(max(16, req.Limits.MemoryMB)) * 1024 * 1024
+		return []string{
+			"qjs",
+			"--memory-limit", strconv.FormatInt(memoryBytes, 10),
+			"--stack-size", "1048576",
+			"--std",
+			primaryPath,
+		}
 	case "perl":
 		return []string{"perl", primaryPath}
 	case "ocaml":

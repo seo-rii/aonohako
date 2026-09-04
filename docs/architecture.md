@@ -476,7 +476,7 @@ Memory enforcement uses several layers:
   it includes the API server's fork-time RSS and sandbox-helper setup before the
   target `execve()`
 - `RLIMIT_AS` to constrain virtual address space growth; most native programs use a tight memory-plus-slack cap, while Python/PyPy, Node, Deno, Bun/JSC, Wasmtime, and umjunsik-lang-go use higher but finite virtual caps; Bun and Deno use a 64 GiB floor and are excluded from address-space-proximity MLE inference, while compiled Go binaries, Java, and .NET disable this limit because their startup reservations are not proportional to RSS
-- runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Deno receives a V8 old-space cap through `--v8-flags`; Java-family launchers receive heap, stack, direct-memory, metaspace/class-space, and code-cache caps as applicable; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
+- runtime memory knobs for managed runtimes: Node receives V8 old-space, semi-space, stack, and disabled wasm trap-handler flags; Deno receives a V8 old-space cap through `--v8-flags`; QuickJS receives engine memory and stack caps; Java-family launchers receive heap, stack, direct-memory, metaspace/class-space, and code-cache caps as applicable; Wasmtime receives memory-reservation, linear-memory, table, instance, and wasm-stack caps; umjunsik-lang-go receives `GOMEMLIMIT` and lower `GOGC`
 - deployment-validated runtime tuning for selected JVM, Go, Erlang/Elixir,
   .NET GC, Kotlin/Native, Deno, Node, and Wasmtime
   numeric knobs, with bounded environment variables and startup rejection for
@@ -930,7 +930,7 @@ Production profiles currently group languages like this:
 | Profile | Languages |
 | --- | --- |
 | `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
-| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `rescript`, `scala`, `typescript` |
+| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
@@ -1015,6 +1015,18 @@ and the C compiler/linker, but it receives no Unix-socket exception. Here,
 `-static` links the CHICKEN runtime and statically available extensions, not
 system libraries such as libc or libm. The resulting native artifact runs under
 the ordinary process and socket denials.
+
+The `JAVASCRIPT_QUICKJS` profile builds the checksum-pinned official QuickJS
+2026-06-04 source release. Compilation asks `qjsc` to emit stripped bytecode as
+C into a reserved cache path, which validates syntax without evaluating
+top-level code; only the submitted `.js` source is returned as an artifact.
+Execution enables the standard I/O module for contest input, supplies explicit
+engine memory and stack limits, and otherwise retains the default runtime
+sandbox denial of child processes and Unix/network sockets. QuickJS's explicit
+out-of-memory diagnostic is classified as MLE instead of a generic runtime
+error. The pinned source is patched before compilation so the module loader
+treats `.so` files as source instead of calling `dlopen`; the image build proves
+the hardening against QuickJS's own example shared module.
 
 The `MOONBIT` profile uses the checksum-pinned native toolchain and matching
 core snapshot. The compiler replaces submission manifests with a fixed,

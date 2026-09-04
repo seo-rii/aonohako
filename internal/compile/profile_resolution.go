@@ -282,6 +282,8 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "LUA54"
 	case "luajit", "lua-jit":
 		l = "LUAJIT"
+	case "quickjs", "qjs", "javascript-quickjs", "javascript_quickjs", "quickjs-javascript", "quickjs_javascript":
+		l = "JAVASCRIPT_QUICKJS"
 	}
 	return profiles.Resolve(l)
 }
