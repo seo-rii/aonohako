@@ -42,6 +42,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "spj-stable-stdin-url", fn: TestRunSPJUsesSingleStableStdinURLFetch},
 		{name: "spj-step-input", fn: TestRunStepSPJReceivesExactFinalStepStdin},
 		{name: "spj-finite-score", fn: TestRunSPJRejectsNonFiniteScore},
+		{name: "pipeline-final-spj-workspace", fn: TestRunPipelineInteractiveArtifactBatchAndExplicitOriginalInputSPJ},
 		{name: "interactive-basic", fn: TestRunInteractiveIOAcceptsInteractorVerdict},
 		{name: "interactor-output-limit", fn: TestRunInteractiveUsesInteractorOutputLimit},
 		{name: "interactive-fixture-isolation", fn: TestRunInteractiveKeepsJudgeFixturesUnreadableToContestant},
