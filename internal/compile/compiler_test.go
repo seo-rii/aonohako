@@ -2,6 +2,7 @@ package compile
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -52,7 +53,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"racket", "javascript", "ruby", "php", "lua", "luajit", "perl",
 		"raku", "r", "mercury", "prolog", "gnu-prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "fsharp",
-		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor",
+		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "bun", "deno", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor",
 		"ocaml", "elixir", "csharp", "dart", "none",
 	} {
 		if _, ok := lookupCompiler(kind); !ok {
@@ -95,6 +96,86 @@ func TestChickenSchemeCompilerLinksChickenRuntimeStatically(t *testing.T) {
 	want := []string{"-O3", "-d0", "-no-trace", "-static", "-o", "/tmp/aonohako-chicken/Main", "/tmp/aonohako-chicken/Main.scm"}
 	if got := compiler.args(job, "/tmp/aonohako-chicken/Main.scm"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("Chicken Scheme compiler args = %v, want %v", got, want)
+	}
+}
+
+func TestBunCompilerUsesSyntaxOnlyTrustedCacheAndPublishesOnlySubmittedFiles(t *testing.T) {
+	workDir := t.TempDir()
+	for name, body := range map[string]string{
+		"Main.ts":       "const answer: number = 42; console.log(answer);\n",
+		"lib/helper.js": "export const helper = 1;\n",
+		"data.json":     "{\"ok\":true}\n",
+	} {
+		path := filepath.Join(workDir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runner := &recordingCommandRunner{
+		result: CommandResult{Status: model.CompileStatusOK},
+		hook: func(workDir, _ string, args, _ []string) {
+			for _, arg := range args {
+				if !strings.HasPrefix(arg, "--outfile=") {
+					continue
+				}
+				output := filepath.Join(workDir, strings.TrimPrefix(arg, "--outfile="))
+				if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(output, []byte("validation output"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+		},
+	}
+
+	resp := bunCompiler{}.Compile(context.Background(), CompileJob{
+		WorkDir: workDir,
+		Request: &model.CompileRequest{Sources: []model.Source{
+			{Name: "Main.ts"},
+			{Name: "lib/helper.js"},
+			{Name: "data.json"},
+		}},
+		Runner: runner,
+	})
+	if resp.Status != model.CompileStatusOK {
+		t.Fatalf("response = %+v", resp)
+	}
+	if len(runner.commands) != 2 {
+		t.Fatalf("commands = %+v, want one syntax check per Bun source", runner.commands)
+	}
+	wantEnv := []string{"BUN_RUNTIME_TRANSPILER_CACHE_PATH=0", "BUN_OPTIONS="}
+	wantSources := []string{filepath.Join(workDir, "Main.ts"), filepath.Join(workDir, "lib/helper.js")}
+	for index, command := range runner.commands {
+		wantArgs := []string{
+			"--no-install",
+			"--no-env-file",
+			"--no-macros",
+			"--config=/dev/null",
+			"build",
+			"--target=bun",
+			"--no-bundle",
+			fmt.Sprintf("--outfile=.cache/aonohako-bun-check-%03d.js", index),
+			wantSources[index],
+		}
+		if command.bin != "bun" || !reflect.DeepEqual(command.args, wantArgs) || !reflect.DeepEqual(command.env, wantEnv) {
+			t.Fatalf("command %d = %+v, want args %v env %v", index, command, wantArgs, wantEnv)
+		}
+	}
+	wantArtifacts := []string{"Main.ts", "lib/helper.js", "data.json"}
+	if len(resp.Artifacts) != len(wantArtifacts) {
+		t.Fatalf("artifacts = %+v, want submitted files only", resp.Artifacts)
+	}
+	for index, want := range wantArtifacts {
+		if resp.Artifacts[index].Name != want {
+			t.Fatalf("artifact %d = %+v, want %q", index, resp.Artifacts[index], want)
+		}
+		if strings.HasPrefix(resp.Artifacts[index].Name, ".cache/") {
+			t.Fatalf("validation artifact leaked into response: %+v", resp.Artifacts[index])
+		}
 	}
 }
 

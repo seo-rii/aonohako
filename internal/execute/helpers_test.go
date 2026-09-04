@@ -418,6 +418,7 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"golfscript", "/tmp/Main.gs", "ruby", true},
 		{"haxe", "/tmp/Main.n", "neko", true},
 		{"deno", "/tmp/Main.ts", "deno", true},
+		{"bun", "/tmp/Main.ts", "bun", true},
 		{"kotlin-jvm", "/tmp/Main.jar", "java", true},
 		{"duckdb", "/tmp/Main.sql", "aonohako-duckdb-run", true},
 		{"bqn", "/tmp/Main.bqn", "bqn", true},
@@ -906,6 +907,21 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	}) {
 		t.Fatalf("deno command with tuning = %v", denoArgs)
 	}
+	bunArgs := buildCommandWithRuntimeTuning("/tmp/Main.ts", "bun", req, tuning)
+	if !reflect.DeepEqual(bunArgs, []string{
+		"bun",
+		"--smol",
+		"--no-install",
+		"--no-env-file",
+		"--no-addons",
+		"--no-macros",
+		"--unhandled-rejections=strict",
+		"--config=/dev/null",
+		"run",
+		"/tmp/Main.ts",
+	}) {
+		t.Fatalf("bun command = %v", bunArgs)
+	}
 
 	uhmArgs := buildCommandWithRuntimeTuning("/tmp/Main.umm", "uhmlang", req, tuning)
 	if !reflect.DeepEqual(uhmArgs, []string{
@@ -1122,6 +1138,7 @@ func TestAddressSpaceLimitBytes(t *testing.T) {
 		{"node_high_virtual_cap", "node", 128, 1024 * 1024 * 1024},
 		{"node_scaled_virtual_cap", "node", 512, 2560 * 1024 * 1024},
 		{"deno_virtual_cap", "deno", 256, 65536 * 1024 * 1024},
+		{"bun_jsc_virtual_cap", "bun", 256, 65536 * 1024 * 1024},
 		{"wasmtime_virtual_cap", "wasmtime", 256, 2048 * 1024 * 1024},
 		{"go_interpreter_virtual_cap", "umjunsik-lang-go", 128, 1024 * 1024 * 1024},
 		{"elixir_virtual_cap", "elixir", 256, 8192 * 1024 * 1024},
@@ -1148,7 +1165,7 @@ func TestAddressSpaceLimitBytesAlwaysAtLeast512MB(t *testing.T) {
 }
 
 func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) {
-	for _, commandBase := range []string{"deno", "dotnet", "elixir", "java", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "wasmtime"} {
+	for _, commandBase := range []string{"bun", "deno", "dotnet", "elixir", "java", "node", "pypy3", "python3", "sbcl", "umjunsik-lang-go", "wasmtime"} {
 		if addressSpaceProximityCanClassifyMLE(commandBase, "") {
 			t.Fatalf("%s should not use address-space proximity for MLE classification", commandBase)
 		}

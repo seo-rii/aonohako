@@ -63,7 +63,7 @@ language-specific commands keep their declared order.
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
-  Node/Deno/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
+  Node/Deno/Bun/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog,
@@ -126,6 +126,17 @@ language-specific commands keep their declared order.
 - LuaJIT uses Debian's pinned OpenResty 2.1 build. Compilation emits raw
   bytecode only to `/dev/null`, with process and socket syscalls denied, and
   runtime startup ignores `LUA_INIT`.
+- Bun is pinned to the checksum-verified official 1.3.14 Linux x64 baseline
+  build. Both `JAVASCRIPT_BUN` and `TYPESCRIPT_BUN` perform syntax-only,
+  no-bundle transpilation with installation, environment files, macros, and
+  ambient config disabled. Bun 1.3.14's no-bundle `--outdir` path fails with an
+  empty output filename, so each validation uses a source-independent
+  `--outfile` under the reserved workspace cache and publishes only the
+  submitted files. Execution uses `--smol`, disables native addons, applies a
+  strict unhandled-rejection policy, and clears Bun's ambient options and
+  transpiler cache. JSC receives a finite 64 GiB virtual-address ceiling while
+  cgroup/RSS accounting enforces physical memory; process creation and network
+  sockets remain denied.
 - MoonBit is pinned to the official `moonc 0.10.9+6e6c44045` Linux x64
   toolchain and its matching core snapshot. Both archives are checksum-verified;
   submission builds synthesize a dependency-free module and use a single-job,

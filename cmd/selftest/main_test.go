@@ -103,6 +103,7 @@ func TestCompileExecuteCasesCoverVersionedAndAliasProfiles(t *testing.T) {
 		"why3":          {"WHY3", "WHYML"},
 		"smalltalk":     {"SMALLTALK", "GST"},
 		"apl":           {"APL", "GNU_APL"},
+		"bun":           {"JAVASCRIPT_BUN", "TYPESCRIPT_BUN"},
 	}
 
 	cases := compileExecuteCases()
@@ -188,7 +189,7 @@ func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
 func TestRuntimeStartupMemoryCoversResourceSensitiveLanguages(t *testing.T) {
 	limits := runtimeStartupMemoryMB()
 	compileCases := compileExecuteCases()
-	for _, language := range []string{"go", "rust", "pony", "powershell", "zig", "java", "kotlin-jvm", "erlang", "julia", "swift", "dart"} {
+	for _, language := range []string{"go", "rust", "pony", "powershell", "zig", "java", "kotlin-jvm", "erlang", "julia", "swift", "dart", "bun"} {
 		memoryMB, ok := limits[language]
 		if !ok || memoryMB <= 0 {
 			t.Fatalf("runtime startup memory is missing language %q", language)
@@ -213,7 +214,7 @@ func TestTwoStepSuiteStressesFastTargetTransitions(t *testing.T) {
 
 func TestStrictRuntimeMemoryCasesCoverNativeAndScriptRuntimes(t *testing.T) {
 	cases := strictRuntimeMemoryCases()
-	for _, language := range []string{"go", "rust", "pony", "powershell", "ruby", "php", "lua", "luajit", "perl"} {
+	for _, language := range []string{"go", "rust", "pony", "powershell", "ruby", "php", "lua", "luajit", "perl", "bun"} {
 		tc, ok := cases[language]
 		if !ok {
 			t.Fatalf("strict runtime-memory cases are missing language %q", language)
@@ -245,6 +246,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"typescript",
 		"coffeescript",
 		"deno",
+		"bun",
 		"assemblyscript",
 		"factor",
 		"chez-scheme",
