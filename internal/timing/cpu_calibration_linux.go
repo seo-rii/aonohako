@@ -59,6 +59,9 @@ func CalibrateCPU(referenceTimeNs uint64) (CPUNormalizer, error) {
 	if err != nil {
 		return CPUNormalizer{}, err
 	}
+	if err := validateCalibrationStability(samples, observedTimeNs); err != nil {
+		return CPUNormalizer{}, err
+	}
 	if observedTimeNs < MinimumCPUCalibrationTimeNs || observedTimeNs > MaximumCPUCalibrationTimeNs {
 		return CPUNormalizer{}, fmt.Errorf(
 			"CPU calibration observed time %d ns is outside [%d, %d]",

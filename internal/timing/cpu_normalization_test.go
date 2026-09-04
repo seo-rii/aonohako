@@ -2,6 +2,7 @@ package timing
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -125,6 +126,74 @@ func TestCalibrationStatisticUsesMedianAndRejectsInvalidSamples(t *testing.T) {
 	for _, samples := range [][]uint64{nil, {1, 2}, {0, 1, 2}} {
 		if _, err := calibrationMedian(samples); err == nil {
 			t.Fatalf("calibrationMedian(%v) unexpectedly succeeded", samples)
+		}
+	}
+}
+
+func TestCalibrationStabilityUsesCentralThreeSamples(t *testing.T) {
+	tests := []struct {
+		name    string
+		samples []uint64
+		median  uint64
+		wantErr bool
+	}{
+		{
+			name:    "single high outlier is ignored",
+			samples: []uint64{100, 102, 500, 95, 90},
+			median:  100,
+		},
+		{
+			name:    "ten percent boundary is accepted",
+			samples: []uint64{100, 105, 1_000, 1, 95},
+			median:  100,
+		},
+		{
+			name:    "central spread above ten percent is rejected",
+			samples: []uint64{100, 105, 1_000, 1, 94},
+			median:  100,
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateCalibrationStability(tc.samples, tc.median)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateCalibrationStability(%v, %d) error = %v, wantErr %v", tc.samples, tc.median, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestCalibrationStabilityErrorIncludesDiagnostics(t *testing.T) {
+	err := validateCalibrationStability([]uint64{1, 94, 100, 105, 1_000}, 100)
+	if err == nil {
+		t.Fatal("validateCalibrationStability unexpectedly succeeded")
+	}
+	message := err.Error()
+	for _, want := range []string{
+		"samples_ns=[1 94 100 105 1000]",
+		"median_ns=100",
+		"central_spread_ns=11",
+		"central_spread_ppm=110000",
+		"max_spread_ppm=100000",
+	} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("error %q does not contain %q", message, want)
+		}
+	}
+}
+
+func TestCalibrationStabilityRejectsInvalidInput(t *testing.T) {
+	for _, tc := range []struct {
+		samples []uint64
+		median  uint64
+	}{
+		{samples: nil, median: 1},
+		{samples: []uint64{1, 2}, median: 1},
+		{samples: []uint64{1, 2, 3}, median: 0},
+	} {
+		if err := validateCalibrationStability(tc.samples, tc.median); err == nil {
+			t.Fatalf("validateCalibrationStability(%v, %d) unexpectedly succeeded", tc.samples, tc.median)
 		}
 	}
 }
