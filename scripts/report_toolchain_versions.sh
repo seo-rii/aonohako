@@ -213,7 +213,7 @@ if has_language "bun"; then
 fi
 
 if has_language "quickjs"; then
-    report_once "QuickJS" qjs --help
+    report_once "QuickJS" bash -c 'qjs --help 2>&1 || [ "$?" -eq 1 ]'
 fi
 
 if has_language "elm"; then
