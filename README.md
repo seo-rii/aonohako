@@ -379,6 +379,16 @@ aonohako-selftest cgroup-preflight
   `X-Aonohako-Protocol-Version`. It defaults to `true` outside `dev` and
   `false` in `dev`, so production remote fleets fail closed on unversioned
   runner responses while local compatibility testing can still accept them.
+- `AONOHAKO_CPU_NORMALIZATION` defaults to `true` only for
+  `cloudrun + embedded + helper`. Before accepting traffic, the runner measures
+  versioned fixed single-thread work and uses that immutable per-instance scale
+  for both authoritative `cpu_time_ms` reporting and CPU TLE enforcement.
+  `raw_cpu_time_ms` and `cpu_time_normalization` retain diagnostics. Set this
+  variable to `false` to roll back to scheduled host CPU time.
+- `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS` selects the fixed-work reference
+  duration and defaults to `60`; values from `1` through `5000` are accepted.
+  Changing it changes the effective CPU-time scale and should be rolled out as
+  a judging-policy change.
 - `AONOHAKO_ALLOW_REQUEST_NETWORK` controls whether `/execute` may honor
   client-supplied `enable_network=true`. It defaults to `true` only for `dev`
   and `false` for `cloudrun` or `selfhosted`; public runners should route
@@ -647,6 +657,8 @@ For Cloud Run deployments, use this baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
+- `AONOHAKO_CPU_NORMALIZATION=true`
+- `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS=60`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
   `AONOHAKO_INBOUND_AUTH=platform` only when an upstream layer enforces
   inbound authentication

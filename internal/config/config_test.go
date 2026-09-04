@@ -112,6 +112,47 @@ func TestDefaultMaxActiveRunsEmbeddedHelperIsOne(t *testing.T) {
 	}
 }
 
+func TestDefaultCPUNormalizationOnlyForCloudRunEmbeddedHelper(t *testing.T) {
+	tests := []struct {
+		name string
+		opts platform.RuntimeOptions
+		want bool
+	}{
+		{
+			name: "Cloud Run embedded helper",
+			opts: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetCloudRun,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+			want: true,
+		},
+		{
+			name: "Cloud Run remote control plane",
+			opts: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetCloudRun,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+		},
+		{
+			name: "self-hosted embedded helper",
+			opts: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetSelfHosted,
+				ExecutionTransport: platform.ExecutionTransportEmbedded,
+				SandboxBackend:     platform.SandboxBackendHelper,
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := defaultCPUNormalization(tc.opts); got != tc.want {
+				t.Fatalf("defaultCPUNormalization(%+v) = %v, want %v", tc.opts, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDefaultMaxPrincipalStreams(t *testing.T) {
 	if got := defaultMaxPrincipalStreams(platform.RuntimeOptions{DeploymentTarget: platform.DeploymentTargetDev}); got != 0 {
 		t.Fatalf("dev default principal stream cap = %d, want 0", got)
@@ -1307,6 +1348,9 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "remote sse idle negative", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "-1"},
 		{name: "remote sse idle malformed", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: "soon"},
 		{name: "remote sse idle overflow", key: "AONOHAKO_REMOTE_SSE_IDLE_TIMEOUT_SEC", value: maxInt64Text},
+		{name: "CPU normalization reference zero", key: "AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS", value: "0"},
+		{name: "CPU normalization reference too large", key: "AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS", value: "5001"},
+		{name: "CPU normalization reference malformed", key: "AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS", value: "fast"},
 		{name: "communication participants below minimum", key: "AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS", value: "1"},
 		{name: "communication participants above maximum", key: "AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS", value: "65"},
 		{name: "communication participants malformed", key: "AONOHAKO_COMMUNICATION_MAX_PARTICIPANTS", value: "many"},
@@ -1320,6 +1364,7 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "work root max files malformed", key: "AONOHAKO_WORK_ROOT_MAX_FILES", value: "many"},
 		{name: "trusted runner ingress malformed", key: "AONOHAKO_TRUSTED_RUNNER_INGRESS", value: "sometimes"},
 		{name: "trusted platform headers malformed", key: "AONOHAKO_TRUSTED_PLATFORM_HEADERS", value: "sometimes"},
+		{name: "CPU normalization malformed", key: "AONOHAKO_CPU_NORMALIZATION", value: "sometimes"},
 	}
 
 	for _, tc := range tests {

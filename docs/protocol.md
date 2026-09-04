@@ -121,8 +121,15 @@ not duplicate stdout/stderr before `result`.
   "status": "Accepted",                 // see Status Codes below
   "time_ms": 42,                        // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                   // wall-clock execution time (ms)
-  "cpu_time_ms": 17,                    // finalized target CPU time after helper-baseline subtraction (ms)
-  "process_cpu_time_ms": 24,            // diagnostic raw helper + target process CPU time (ms)
+  "cpu_time_ms": 30,                    // authoritative target CPU time; Cloud Run runners normalize it (ms)
+  "raw_cpu_time_ms": 49,                // scheduled host CPU time before Cloud Run normalization (ms)
+  "process_cpu_time_ms": 55,            // diagnostic raw helper + target process CPU time (ms)
+  "cpu_time_normalization": {           // present when this runner normalized CPU time
+    "method": "go-fixed-int-v1",
+    "scale_ppm": 600000,
+    "reference_time_ns": 60000000,
+    "observed_time_ns": 100000000
+  },
   "memory_kb": 8192,                    // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                       // nullable; process exit code
   "stdout": "",                         // response-clipped stdout (default max `64 KiB`; explicit max `8 MiB`)
@@ -140,6 +147,7 @@ not duplicate stdout/stderr before `result`.
       "status": "Accepted",
       "wall_time_ms": 12,
       "cpu_time_ms": 8,
+      "raw_cpu_time_ms": 13,
       "memory_kb": 4096,
       "handoff_bytes": 128
     },
@@ -149,6 +157,7 @@ not duplicate stdout/stderr before `result`.
       "status": "Accepted",
       "wall_time_ms": 30,
       "cpu_time_ms": 22,
+      "raw_cpu_time_ms": 36,
       "memory_kb": 8192
     }
   ],
@@ -161,11 +170,31 @@ not duplicate stdout/stderr before `result`.
 }
 ```
 
-For helper-backed runs, `cpu_time_ms` is finalized from process wait usage after
-subtracting the CPU baseline captured before target release. This retains fast
-target CPU consumed after the last watchdog sample. `process_cpu_time_ms` is raw
-helper-plus-target diagnostic usage and must not be used for contestant timing
-or verdicts.
+For helper-backed runs, target CPU time is finalized from process wait usage
+after subtracting the CPU baseline captured before target release. This retains
+fast target CPU consumed after the last watchdog sample. Cloud Run embedded
+helpers then translate that scheduled host time through a startup fixed-work
+calibration. `cpu_time_ms` is the normalized, verdict-authoritative value;
+`raw_cpu_time_ms` preserves the scheduled host value. The same calibration is
+inverted before process/cgroup watchdog and `RLIMIT_CPU` enforcement, so the
+reported value and the CPU TLE boundary use the same unit.
+
+`cpu_time_normalization` identifies the calibration method and immutable
+per-instance scale. `scale_ppm` is normalized time per raw host time in parts
+per million. A remote control plane passes these fields through and does not
+calibrate them again. `process_cpu_time_ms` remains raw helper-plus-target
+diagnostic usage and must not be used for contestant timing or verdicts.
+
+On a calibrated Cloud Run helper, the wall deadline is an outer supervision
+guardrail. It is never shorter than the public `limits.time_ms` and includes
+enough bounded slack for a CPU-bound target to consume the host CPU budget that
+corresponds to that normalized limit. `wall_time_ms` always reports actual
+elapsed wall time. Sleeping or blocked programs are still terminated by this
+guardrail, but its exact raw duration can be longer on a slower calibrated host.
+
+Fixed-work calibration removes a large host-throughput component; it does not
+claim cycle-accurate equivalence across different instruction mixes, managed
+runtimes, memory systems, or later host contention.
 
 `capture_limits.stdout_bytes` and `capture_limits.stderr_bytes` optionally
 apply a separate, per-stream cap to `log` events and the top-level and step
