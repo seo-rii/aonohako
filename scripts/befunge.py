@@ -9,6 +9,32 @@ def pop(stack: list[int]) -> int:
     return stack.pop()
 
 
+_WHITESPACE = frozenset(b" \t\n\r\x0b\x0c")
+
+
+def read_int(buf: bytes, i: int) -> tuple[int, int]:
+    """Read a decimal integer from buf starting at i, scanf("%d")-style.
+
+    Skips leading whitespace, accepts an optional sign, then digits, and stops
+    at the first non-digit, returning the value and the advanced cursor so that
+    a following `~` continues from the same shared input position. When no digit
+    is present (EOF or a non-numeric byte) it yields 0 and leaves the cursor at
+    the first non-whitespace byte.
+    """
+    n = len(buf)
+    while i < n and buf[i] in _WHITESPACE:
+        i += 1
+    start = i
+    if i < n and buf[i] in (0x2B, 0x2D):  # '+' or '-'
+        i += 1
+    digits_start = i
+    while i < n and 0x30 <= buf[i] <= 0x39:
+        i += 1
+    if i == digits_start:
+        return 0, start
+    return int(buf[start:i].decode("ascii")), i
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: befunge.py <program>", file=sys.stderr)
@@ -26,9 +52,7 @@ def main() -> int:
         grid.append(list(" " * width))
 
     data = sys.stdin.buffer.read()
-    text = data.decode("utf-8", errors="replace")
-    number_tokens = iter(text.split())
-    char_pos = 0
+    input_pos = 0  # single shared cursor for both `&` and `~`
     stack: list[int] = []
     x = y = 0
     dx, dy = 1, 0
@@ -55,7 +79,7 @@ def main() -> int:
         elif op == "/":
             a = pop(stack)
             b = pop(stack)
-            stack.append(0 if a == 0 else int(b / a))
+            stack.append(0 if a == 0 else b // a)
         elif op == "%":
             a = pop(stack)
             b = pop(stack)
@@ -116,14 +140,12 @@ def main() -> int:
             else:
                 stack.append(0)
         elif op == "&":
-            try:
-                stack.append(int(next(number_tokens)))
-            except StopIteration:
-                stack.append(0)
+            value, input_pos = read_int(data, input_pos)
+            stack.append(value)
         elif op == "~":
-            if char_pos < len(data):
-                stack.append(data[char_pos])
-                char_pos += 1
+            if input_pos < len(data):
+                stack.append(data[input_pos])
+                input_pos += 1
             else:
                 stack.append(-1)
         elif op == "@":

@@ -67,3 +67,46 @@ func TestBefungeInput(t *testing.T) {
 		t.Fatalf("~ eof: out=%q exit=%d stderr=%q", out, c, e)
 	}
 }
+
+// TestBefungeDivisionFloorsConsistentlyWithMod guards the `/` opcode, which
+// previously used float division (int(b / a)): it truncated toward zero and lost
+// precision on large operands, and disagreed in sign with `%` (which floors), so
+// the b == (b/a)*a + (b%a) identity was broken for negatives. Division must now
+// floor to match `%`.
+func TestBefungeDivisionFloorsConsistentlyWithMod(t *testing.T) {
+	cases := []struct {
+		name string
+		prog string // pushes operands then applies the op and prints
+		want string
+	}{
+		{"positive quotient", "72/.@", "3 "},              // 7 / 2 == 3
+		{"negative quotient floors", "07-2/.@", "-4 "},    // -7 / 2 == -4 (was -3)
+		{"modulo floors toward divisor", "07-2%.@", "1 "}, // -7 mod 2 == 1
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, errOut, code := runBefunge(t, tc.prog, "")
+			if code != 0 {
+				t.Fatalf("exit=%d stderr=%q", code, errOut)
+			}
+			if out != tc.want {
+				t.Fatalf("%s = %q, want %q", tc.prog, out, tc.want)
+			}
+		})
+	}
+}
+
+// TestBefungeInputSharesOneCursorAcrossNumberAndChar pins that `&` and `~` read
+// from a single shared input cursor. Previously they tracked independent
+// positions, so a `~` after a `&` re-read bytes the `&` had already consumed.
+func TestBefungeInputSharesOneCursorAcrossNumberAndChar(t *testing.T) {
+	// `&` consumes "5"; `~` must then read 'A' (0x41 = 65), not re-read '5'.
+	// Output prints the char code (top) then the number: "65 5 ".
+	if out, e, c := runBefunge(t, "&~..@", "5A"); c != 0 || out != "65 5 " {
+		t.Fatalf("&~ shared cursor: out=%q exit=%d stderr=%q", out, c, e)
+	}
+	// Two consecutive `&` reads advance past both integers.
+	if out, e, c := runBefunge(t, "&&..@", "12 34"); c != 0 || out != "34 12 " {
+		t.Fatalf("&& sequential reads: out=%q exit=%d stderr=%q", out, c, e)
+	}
+}
