@@ -33,12 +33,25 @@ func TestDecodeB64RejectsMalformedInput(t *testing.T) {
 
 func TestMaterializeBase64FilesWritesDecodedContentAndMode(t *testing.T) {
 	root := t.TempDir()
+	const requestedMode os.FileMode = 0o640
+	// File creation applies the process umask, so derive the effective mode
+	// from a reference file without changing the test process's global umask.
+	reference := filepath.Join(root, "mode-reference")
+	if err := os.WriteFile(reference, nil, requestedMode); err != nil {
+		t.Fatalf("write mode reference: %v", err)
+	}
+	referenceInfo, err := os.Stat(reference)
+	if err != nil {
+		t.Fatalf("stat mode reference: %v", err)
+	}
+	wantMode := referenceInfo.Mode().Perm()
+
 	files := map[string]string{
 		"main.py":       EncodeB64([]byte("print('hi')\n")),
 		"pkg/helper.py": EncodeB64([]byte("X = 1\n")),
 		"data/blob.bin": EncodeB64([]byte{0x00, 0xff, 0x10}),
 	}
-	if err := MaterializeBase64Files(root, files, 0o640); err != nil {
+	if err := MaterializeBase64Files(root, files, requestedMode); err != nil {
 		t.Fatalf("MaterializeBase64Files: %v", err)
 	}
 
@@ -56,8 +69,8 @@ func TestMaterializeBase64FilesWritesDecodedContentAndMode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("stat %s: %v", name, err)
 		}
-		if info.Mode().Perm() != 0o640 {
-			t.Fatalf("%s mode = %o, want 640", name, info.Mode().Perm())
+		if info.Mode().Perm() != wantMode {
+			t.Fatalf("%s mode = %o, want %o", name, info.Mode().Perm(), wantMode)
 		}
 	}
 }
