@@ -68,24 +68,34 @@ func TestBefungeInput(t *testing.T) {
 	}
 }
 
-// TestBefungeDivisionFloorsConsistentlyWithMod guards the `/` opcode, which
-// previously used float division (int(b / a)): it truncated toward zero and lost
-// precision on large operands, and disagreed in sign with `%` (which floors), so
-// the b == (b/a)*a + (b%a) identity was broken for negatives. Division must now
-// floor to match `%`.
-func TestBefungeDivisionFloorsConsistentlyWithMod(t *testing.T) {
+// Division truncates toward zero, as in the reference interpreter, while
+// retaining integer precision for operands that cannot be represented as floats.
+func TestBefungeDivisionTruncatesTowardZero(t *testing.T) {
 	cases := []struct {
-		name string
-		prog string // pushes operands then applies the op and prints
-		want string
+		name  string
+		prog  string
+		stdin string
+		want  string
 	}{
-		{"positive quotient", "72/.@", "3 "},              // 7 / 2 == 3
-		{"negative quotient floors", "07-2/.@", "-4 "},    // -7 / 2 == -4 (was -3)
-		{"modulo floors toward divisor", "07-2%.@", "1 "}, // -7 mod 2 == 1
+		{"positive operands", "72/.@", "", "3 "},
+		{"negative dividend", "07-2/.@", "", "-3 "},
+		{"negative divisor", "702-/.@", "", "-3 "},
+		{"both operands negative", "07-02-/.@", "", "3 "},
+		{"negative fraction", "01-2/.@", "", "0 "},
+		{"negative divisor fraction", "102-/.@", "", "0 "},
+		{"exact negative quotient", "08-2/.@", "", "-4 "},
+		{"zero dividend", "02/.@", "", "0 "},
+		{"zero divisor", "70/.@", "", "0 "},
+		{"integer beyond float precision", "&&/.@", "9007199254740993 1", "9007199254740993 "},
+		{"large positive quotient", "&&/.@", "18014398509481987 2", "9007199254740993 "},
+		{"large negative dividend", "&&/.@", "-18014398509481987 2", "-9007199254740993 "},
+		{"large negative divisor", "&&/.@", "18014398509481987 -2", "-9007199254740993 "},
+		{"large negative operands", "&&/.@", "-18014398509481987 -2", "9007199254740993 "},
+		{"modulo retains existing behavior", "07-2%.@", "", "1 "},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out, errOut, code := runBefunge(t, tc.prog, "")
+			out, errOut, code := runBefunge(t, tc.prog, tc.stdin)
 			if code != 0 {
 				t.Fatalf("exit=%d stderr=%q", code, errOut)
 			}

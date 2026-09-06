@@ -79,7 +79,12 @@ def main() -> int:
         elif op == "/":
             a = pop(stack)
             b = pop(stack)
-            stack.append(0 if a == 0 else b // a)
+            if a == 0:
+                stack.append(0)
+            else:
+                # Truncate toward zero without losing precision through floats.
+                quotient = abs(b) // abs(a)
+                stack.append(-quotient if (b < 0) != (a < 0) else quotient)
         elif op == "%":
             a = pop(stack)
             b = pop(stack)
