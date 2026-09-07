@@ -30,9 +30,28 @@ func TestParseLibraryMode(t *testing.T) {
 	}
 }
 
+// TestValidateOptionalLibraryModeRequiresCanonicalValue pins the API contract:
+// empty is the accepted default, canonical values pass, and non-canonical
+// variants ParseLibraryMode would normalize are rejected because the request
+// value is stored and compared verbatim downstream.
+func TestValidateOptionalLibraryModeRequiresCanonicalValue(t *testing.T) {
+	for _, mode := range []LibraryMode{"", LibraryModeStdlib, LibraryModeInstalled} {
+		if err := ValidateOptionalLibraryMode(mode); err != nil {
+			t.Fatalf("ValidateOptionalLibraryMode(%q) = %v, want nil", mode, err)
+		}
+	}
+	for _, mode := range []LibraryMode{"STDLIB", " installed ", "Installed", "all", "true"} {
+		if err := ValidateOptionalLibraryMode(mode); err == nil {
+			t.Fatalf("ValidateOptionalLibraryMode(%q) unexpectedly succeeded", mode)
+		}
+	}
+}
+
 func TestEffectiveLibraryModeDefaultsToStdlib(t *testing.T) {
-	if got := EffectiveLibraryMode(""); got != LibraryModeStdlib {
-		t.Fatalf("empty effective mode = %q, want stdlib", got)
+	for _, mode := range []LibraryMode{"", LibraryModeStdlib, "unknown", "INSTALLED"} {
+		if got := EffectiveLibraryMode(mode); got != LibraryModeStdlib {
+			t.Fatalf("EffectiveLibraryMode(%q) = %q, want stdlib", mode, got)
+		}
 	}
 	if got := EffectiveLibraryMode(LibraryModeInstalled); got != LibraryModeInstalled {
 		t.Fatalf("installed effective mode = %q, want installed", got)

@@ -259,7 +259,7 @@ def run(program_path: str) -> int:
         elif op == "div":
             b = pop(stack)
             a = pop(stack)
-            stack.append(int(a / b))
+            stack.append(a // b)
         elif op == "mod":
             b = pop(stack)
             a = pop(stack)
