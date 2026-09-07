@@ -161,6 +161,41 @@ func validateCalibrationStability(samples []uint64, median uint64) error {
 	return nil
 }
 
+func calibrationMedianWithRetries(maxAttempts int, collectSamples func() ([]uint64, error), onUnstable func(int, error)) (uint64, error) {
+	if maxAttempts < 1 {
+		return 0, fmt.Errorf("CPU calibration requires at least one attempt")
+	}
+	if collectSamples == nil {
+		return 0, fmt.Errorf("CPU calibration sample collector is required")
+	}
+
+	unstableAttempts := make([]string, 0, maxAttempts)
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		samples, err := collectSamples()
+		if err != nil {
+			return 0, fmt.Errorf("CPU calibration attempt %d failed: %w", attempt, err)
+		}
+		median, err := calibrationMedian(samples)
+		if err != nil {
+			return 0, fmt.Errorf("CPU calibration attempt %d failed: %w", attempt, err)
+		}
+		if err := validateCalibrationStability(samples, median); err != nil {
+			if onUnstable != nil {
+				onUnstable(attempt, err)
+			}
+			unstableAttempts = append(unstableAttempts, fmt.Sprintf("attempt %d: %v", attempt, err))
+			continue
+		}
+		return median, nil
+	}
+
+	return 0, fmt.Errorf(
+		"CPU calibration remained unstable after %d attempts: %s",
+		maxAttempts,
+		strings.Join(unstableAttempts, "; "),
+	)
+}
+
 func mulDivCeilInt64(value int64, multiplier, divisor uint64) int64 {
 	if value <= 0 || multiplier == 0 {
 		return 0

@@ -1,6 +1,7 @@
 package timing
 
 import (
+	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -195,5 +196,73 @@ func TestCalibrationStabilityRejectsInvalidInput(t *testing.T) {
 		if err := validateCalibrationStability(tc.samples, tc.median); err == nil {
 			t.Fatalf("validateCalibrationStability(%v, %d) unexpectedly succeeded", tc.samples, tc.median)
 		}
+	}
+}
+
+func TestCalibrationMedianWithRetriesRecoversFromTransientInstability(t *testing.T) {
+	attempts := [][]uint64{
+		{1, 94, 100, 105, 1_000},
+		{90, 95, 100, 102, 500},
+	}
+	collected := 0
+	var unstableAttempts []int
+	median, err := calibrationMedianWithRetries(5, func() ([]uint64, error) {
+		samples := attempts[collected]
+		collected++
+		return samples, nil
+	}, func(attempt int, _ error) {
+		unstableAttempts = append(unstableAttempts, attempt)
+	})
+	if err != nil {
+		t.Fatalf("calibrationMedianWithRetries: %v", err)
+	}
+	if median != 100 || collected != 2 {
+		t.Fatalf("result = (median %d, attempts %d), want (100, 2)", median, collected)
+	}
+	if len(unstableAttempts) != 1 || unstableAttempts[0] != 1 {
+		t.Fatalf("unstable attempts = %v, want [1]", unstableAttempts)
+	}
+}
+
+func TestCalibrationMedianWithRetriesFailsAfterAllAttemptsAreUnstable(t *testing.T) {
+	const maxAttempts = 5
+	collected := 0
+	median, err := calibrationMedianWithRetries(maxAttempts, func() ([]uint64, error) {
+		collected++
+		return []uint64{1, 94, 100, 105, uint64(1_000 + collected)}, nil
+	}, nil)
+	if err == nil {
+		t.Fatal("calibrationMedianWithRetries unexpectedly succeeded")
+	}
+	if median != 0 || collected != maxAttempts {
+		t.Fatalf("result = (median %d, attempts %d), want (0, %d)", median, collected, maxAttempts)
+	}
+	message := err.Error()
+	if !strings.Contains(message, "remained unstable after 5 attempts") || !strings.Contains(message, "attempt 1:") || !strings.Contains(message, "attempt 5:") {
+		t.Fatalf("error lacks retry diagnostics: %q", message)
+	}
+}
+
+func TestCalibrationMedianWithRetriesDoesNotRetryCollectorErrors(t *testing.T) {
+	wantErr := errors.New("clock unavailable")
+	collected := 0
+	_, err := calibrationMedianWithRetries(5, func() ([]uint64, error) {
+		collected++
+		return nil, wantErr
+	}, nil)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want wrapped %v", err, wantErr)
+	}
+	if collected != 1 {
+		t.Fatalf("collector calls = %d, want 1", collected)
+	}
+}
+
+func TestCalibrationMedianWithRetriesRejectsInvalidConfiguration(t *testing.T) {
+	if _, err := calibrationMedianWithRetries(0, func() ([]uint64, error) { return nil, nil }, nil); err == nil {
+		t.Fatal("zero attempts unexpectedly succeeded")
+	}
+	if _, err := calibrationMedianWithRetries(1, nil, nil); err == nil {
+		t.Fatal("nil collector unexpectedly succeeded")
 	}
 }

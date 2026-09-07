@@ -4,13 +4,15 @@ package timing
 
 import (
 	"fmt"
+	"log/slog"
 	"math/bits"
 	"runtime"
 )
 
 const (
-	cpuCalibrationSamples    = 5
-	cpuCalibrationIterations = 20_000_000
+	cpuCalibrationSamples     = 5
+	cpuCalibrationMaxAttempts = 5
+	cpuCalibrationIterations  = 20_000_000
 )
 
 var cpuCalibrationSink uint64
@@ -28,38 +30,20 @@ func CalibrateCPU(referenceTimeNs uint64) (CPUNormalizer, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	// Warm the code and thread before collecting fixed-work CPU samples.
-	cpuCalibrationSink = cpuCalibrationWork(cpuCalibrationIterations / 10)
-	samples := make([]uint64, 0, cpuCalibrationSamples)
-	var expectedChecksum uint64
-	for sample := 0; sample < cpuCalibrationSamples; sample++ {
-		before, err := CurrentThreadCPUTimeNs()
-		if err != nil {
-			return CPUNormalizer{}, fmt.Errorf("read CPU calibration start clock: %w", err)
-		}
-		checksum := cpuCalibrationWork(cpuCalibrationIterations)
-		after, err := CurrentThreadCPUTimeNs()
-		if err != nil {
-			return CPUNormalizer{}, fmt.Errorf("read CPU calibration end clock: %w", err)
-		}
-		if after <= before {
-			return CPUNormalizer{}, fmt.Errorf("CPU calibration clock did not advance")
-		}
-		if sample == 0 {
-			expectedChecksum = checksum
-		} else if checksum != expectedChecksum {
-			return CPUNormalizer{}, fmt.Errorf("CPU calibration checksum changed between samples")
-		}
-		cpuCalibrationSink = checksum
-		samples = append(samples, after-before)
-	}
+	observedTimeNs, err := calibrationMedianWithRetries(
+		cpuCalibrationMaxAttempts,
+		collectCPUCalibrationSamples,
+		func(attempt int, err error) {
+			slog.Warn(
+				"aonohako CPU normalization calibration pass unstable",
+				"attempt", attempt,
+				"max_attempts", cpuCalibrationMaxAttempts,
+				"err", err,
+			)
+		},
+	)
 	runtime.KeepAlive(cpuCalibrationSink)
-
-	observedTimeNs, err := calibrationMedian(samples)
 	if err != nil {
-		return CPUNormalizer{}, err
-	}
-	if err := validateCalibrationStability(samples, observedTimeNs); err != nil {
 		return CPUNormalizer{}, err
 	}
 	if observedTimeNs < MinimumCPUCalibrationTimeNs || observedTimeNs > MaximumCPUCalibrationTimeNs {
@@ -78,6 +62,36 @@ func CalibrateCPU(referenceTimeNs uint64) (CPUNormalizer, error) {
 		)
 	}
 	return NewCPUNormalizer(CPUNormalizationMethod, referenceTimeNs, observedTimeNs)
+}
+
+func collectCPUCalibrationSamples() ([]uint64, error) {
+	// Re-warm before every attempt so a transient cold-start or frequency change
+	// does not carry directly into the next set of samples.
+	cpuCalibrationSink = cpuCalibrationWork(cpuCalibrationIterations / 10)
+	samples := make([]uint64, 0, cpuCalibrationSamples)
+	var expectedChecksum uint64
+	for sample := 0; sample < cpuCalibrationSamples; sample++ {
+		before, err := CurrentThreadCPUTimeNs()
+		if err != nil {
+			return nil, fmt.Errorf("read CPU calibration start clock: %w", err)
+		}
+		checksum := cpuCalibrationWork(cpuCalibrationIterations)
+		after, err := CurrentThreadCPUTimeNs()
+		if err != nil {
+			return nil, fmt.Errorf("read CPU calibration end clock: %w", err)
+		}
+		if after <= before {
+			return nil, fmt.Errorf("CPU calibration clock did not advance")
+		}
+		if sample == 0 {
+			expectedChecksum = checksum
+		} else if checksum != expectedChecksum {
+			return nil, fmt.Errorf("CPU calibration checksum changed between samples")
+		}
+		cpuCalibrationSink = checksum
+		samples = append(samples, after-before)
+	}
+	return samples, nil
 }
 
 func cpuCalibrationWork(iterations uint64) uint64 {
