@@ -19,6 +19,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/timing"
 	"aonohako/internal/util"
 )
 
@@ -81,7 +82,10 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
-		var requestedTimeMs int64
+		// The selected instance's calibration arrives only with its result.
+		// Cover the maximum supported wall allowance for each sequential stage,
+		// including each stage's minimum slack, before adding transport overhead.
+		var requestedWallTimeMs int64
 		if req.Pipeline != nil {
 			for _, step := range req.Pipeline.Steps {
 				stepTimeMs := min(max(step.Limits.TimeMs, 0), runvalidation.MaxTimeMs)
@@ -89,7 +93,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 					interactorTimeMs := min(max(step.Executor.InteractorLimits.TimeMs, 0), runvalidation.MaxTimeMs)
 					stepTimeMs = max(stepTimeMs, interactorTimeMs)
 				}
-				requestedTimeMs += int64(stepTimeMs)
+				requestedWallTimeMs += int64(timing.MaximumCPUWallLimitMillis(stepTimeMs))
 			}
 		} else if runvalidation.UsesSteps(req) {
 			for _, step := range req.Steps {
@@ -100,7 +104,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				if stepTimeMs > runvalidation.MaxTimeMs {
 					stepTimeMs = runvalidation.MaxTimeMs
 				}
-				requestedTimeMs += int64(stepTimeMs)
+				requestedWallTimeMs += int64(timing.MaximumCPUWallLimitMillis(stepTimeMs))
 			}
 		} else {
 			mainTimeMs := req.Limits.TimeMs
@@ -110,7 +114,6 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if mainTimeMs > runvalidation.MaxTimeMs {
 				mainTimeMs = runvalidation.MaxTimeMs
 			}
-			requestedTimeMs = int64(mainTimeMs)
 			if req.Interactor != nil && req.Interactor.Limits != nil {
 				interactorTimeMs := req.Interactor.Limits.TimeMs
 				if interactorTimeMs < 0 {
@@ -119,10 +122,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				if interactorTimeMs > runvalidation.MaxTimeMs {
 					interactorTimeMs = runvalidation.MaxTimeMs
 				}
-				if int64(interactorTimeMs) > requestedTimeMs {
-					requestedTimeMs = int64(interactorTimeMs)
-				}
+				mainTimeMs = max(mainTimeMs, interactorTimeMs)
 			}
+			requestedWallTimeMs = int64(timing.MaximumCPUWallLimitMillis(mainTimeMs))
 		}
 		spj := req.SPJ
 		if req.Pipeline != nil {
@@ -133,9 +135,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if spj.Limits != nil && spj.Limits.TimeMs > 0 {
 				spjTimeMs = min(spj.Limits.TimeMs, runvalidation.MaxTimeMs)
 			}
-			requestedTimeMs += int64(spjTimeMs)
+			requestedWallTimeMs += int64(timing.MaximumCPUWallLimitMillis(spjTimeMs))
 		}
-		absoluteTimeout = time.Duration(requestedTimeMs)*time.Millisecond + remoteio.DefaultOperationOverhead
+		absoluteTimeout = time.Duration(requestedWallTimeMs)*time.Millisecond + remoteio.DefaultOperationOverhead
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()

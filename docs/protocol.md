@@ -192,6 +192,13 @@ corresponds to that normalized limit. `wall_time_ms` always reports actual
 elapsed wall time. Sleeping or blocked programs are still terminated by this
 guardrail, but its exact raw duration can be longer on a slower calibrated host.
 
+Remote controllers allow for the maximum supported raw CPU expansion (4x) plus
+the runner's wall slack for every sequential execution/SPJ stage, then add a
+single 30-second operation overhead. Concurrent contestant/interactor limits
+contribute their maximum, not their sum. This keeps the outer deadline from
+preempting a valid calibrated execution before its per-instance scale is known;
+a shorter caller deadline remains authoritative.
+
 Fixed-work calibration removes a large host-throughput component; it does not
 claim cycle-accurate equivalence across different instruction mixes, managed
 runtimes, memory systems, or later host contention.

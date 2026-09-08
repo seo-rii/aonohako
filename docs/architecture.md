@@ -495,6 +495,14 @@ limit and the calibrated raw CPU allowance. Actual elapsed time remains in
 make instruction mixes, managed runtimes, memory performance, or later host
 contention identical.
 
+A remote control plane does not know the selected runner instance's calibration
+before execution. Its absolute deadline therefore budgets for the maximum
+supported raw CPU expansion (4x), including the same wall slack, for each
+sequential execution or special-judge stage. Concurrent contestant/interactor
+pairs use the larger allowance. The control plane adds its fixed 30-second
+operation overhead once; a shorter caller deadline still takes precedence.
+This outer deadline does not change the runner's actual calibrated CPU limits.
+
 Memory enforcement uses several layers:
 
 - live RSS sampling from `/proc/<pid>/statm`

@@ -54,7 +54,7 @@ func CalibrateCPU(referenceTimeNs uint64) (CPUNormalizer, error) {
 			MaximumCPUCalibrationTimeNs,
 		)
 	}
-	if referenceTimeNs > observedTimeNs*4 || observedTimeNs > referenceTimeNs*4 {
+	if referenceTimeNs > observedTimeNs*cpuNormalizationMaxRatio || observedTimeNs > referenceTimeNs*cpuNormalizationMaxRatio {
 		return CPUNormalizer{}, fmt.Errorf(
 			"CPU calibration scale is outside the supported 0.25x..4x range: reference=%d ns observed=%d ns",
 			referenceTimeNs,

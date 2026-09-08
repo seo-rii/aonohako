@@ -82,6 +82,40 @@ func TestDisabledCPUNormalizerIsIdentity(t *testing.T) {
 	}
 }
 
+func TestMaximumCPUWallLimitMillis(t *testing.T) {
+	for _, tc := range []struct {
+		limit int
+		want  int
+	}{
+		{limit: -1, want: -1},
+		{limit: 0, want: 0},
+		{limit: 1, want: 104},
+		{limit: 25, want: 200},
+		{limit: 251, want: 1105},
+		{limit: 60_000, want: 264_000},
+		{limit: 600_000, want: 2_640_000},
+		{limit: math.MaxInt, want: math.MaxInt},
+	} {
+		if got := MaximumCPUWallLimitMillis(tc.limit); got != tc.want {
+			t.Errorf("MaximumCPUWallLimitMillis(%d) = %d, want %d", tc.limit, got, tc.want)
+		}
+	}
+}
+
+func TestMaximumCPUWallLimitCoversSupportedCalibrations(t *testing.T) {
+	for _, observed := range []uint64{25, 50, 100, 175, 400} {
+		normalizer, err := NewCPUNormalizer("test-v1", 100, observed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, limit := range []int{1, 25, 251, 1_000, 60_000, 600_000} {
+			if bound, actual := MaximumCPUWallLimitMillis(limit), normalizer.WallLimitMillis(limit); bound < actual {
+				t.Errorf("limit=%d observed=%d: maximum wall allowance %d is below actual %d", limit, observed, bound, actual)
+			}
+		}
+	}
+}
+
 func TestCPUNormalizerRejectsInvalidCalibration(t *testing.T) {
 	for _, tc := range []struct {
 		method    string

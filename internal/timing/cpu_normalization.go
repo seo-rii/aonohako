@@ -10,6 +10,7 @@ import (
 
 const (
 	cpuNormalizationScaleUnit    = uint64(1_000_000)
+	cpuNormalizationMaxRatio     = uint64(4)
 	cpuNormalizationWallSlackPct = uint64(10)
 	cpuNormalizationMinWallSlack = 100
 	cpuCalibrationMaxSpreadPPM   = uint64(100_000)
@@ -103,6 +104,18 @@ func (n CPUNormalizer) WallLimitMillis(normalizedLimitMs int) int {
 		return int(maxInt)
 	}
 	return int(base64 + slack)
+}
+
+// MaximumCPUWallLimitMillis bounds the wall allowance of any supported startup
+// calibration. Remote callers do not know the selected instance's scale until
+// its result arrives, so they must budget for the slowest supported host.
+func MaximumCPUWallLimitMillis(normalizedLimitMs int) int {
+	normalizer := CPUNormalizer{
+		method:          CPUNormalizationMethod,
+		referenceTimeNs: 1,
+		observedTimeNs:  cpuNormalizationMaxRatio,
+	}
+	return normalizer.WallLimitMillis(normalizedLimitMs)
 }
 
 func (n CPUNormalizer) Info() (CPUNormalizationInfo, bool) {
