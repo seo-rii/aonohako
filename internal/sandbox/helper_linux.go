@@ -4,6 +4,7 @@ package sandbox
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -616,7 +617,20 @@ func MaybeRunFromEnv() bool {
 		}
 	}
 	if targetReadyFile != nil {
-		if _, err := targetReadyFile.Write([]byte{1}); err != nil {
+		// Match wait4's final user+system accounting with a baseline from the
+		// same API family, rather than subtracting a different CPU clock.
+		var usage unix.Rusage
+		if err := unix.Getrusage(unix.RUSAGE_SELF, &usage); err != nil {
+			fail("read target rusage baseline: %v", err)
+		}
+		usageNs := usage.Utime.Nano() + usage.Stime.Nano()
+		if usageNs < 0 {
+			fail("negative target rusage baseline")
+		}
+		var ready [TargetReadyMessageSize]byte
+		ready[0] = 1
+		binary.LittleEndian.PutUint64(ready[1:], uint64(usageNs))
+		if n, err := targetReadyFile.Write(ready[:]); err != nil || n != len(ready) {
 			fail("signal target ready: %v", err)
 		}
 		var release [1]byte

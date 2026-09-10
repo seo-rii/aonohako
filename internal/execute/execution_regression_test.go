@@ -25,20 +25,20 @@ func TestCPUTimeAfterBaseline(t *testing.T) {
 		usageNs     uint64
 		baselineNs  uint64
 		baselineSet bool
-		wantMs      int64
+		wantNs      uint64
 		wantOK      bool
 	}{
-		{name: "zero baseline is valid", usageNs: 3_500_000, baselineSet: true, wantMs: 3, wantOK: true},
-		{name: "subtracts helper CPU", usageNs: 8_500_000, baselineNs: 3_000_000, baselineSet: true, wantMs: 5, wantOK: true},
+		{name: "zero baseline is valid", usageNs: 3_500_001, baselineSet: true, wantNs: 3_500_001, wantOK: true},
+		{name: "subtracts helper CPU", usageNs: 8_500_001, baselineNs: 3_000_000, baselineSet: true, wantNs: 5_500_001, wantOK: true},
 		{name: "equal usage is zero target CPU", usageNs: 3_000_000, baselineNs: 3_000_000, baselineSet: true, wantOK: true},
 		{name: "missing baseline", usageNs: 3_500_000, wantOK: false},
 		{name: "rejects underflow", usageNs: 2_000_000, baselineNs: 3_000_000, baselineSet: true, wantOK: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotMs, gotOK := cpuTimeAfterBaseline(tt.usageNs, tt.baselineNs, tt.baselineSet)
-			if gotMs != tt.wantMs || gotOK != tt.wantOK {
-				t.Fatalf("cpuTimeAfterBaseline() = (%d, %v), want (%d, %v)", gotMs, gotOK, tt.wantMs, tt.wantOK)
+			gotNs, gotOK := cpuTimeAfterBaseline(tt.usageNs, tt.baselineNs, tt.baselineSet)
+			if gotNs != tt.wantNs || gotOK != tt.wantOK {
+				t.Fatalf("cpuTimeAfterBaseline() = (%d, %v), want (%d, %v)", gotNs, gotOK, tt.wantNs, tt.wantOK)
 			}
 		})
 	}
@@ -887,9 +887,11 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 	if strings.Contains(processAccounting, "Maxrss") {
 		t.Fatalf("no-cgroup accounting must not charge pre-exec parent/helper RSS to the target")
 	}
-	if !strings.Contains(processAccounting, "cpuTimeAfterBaseline(usageCPUNs, cpuBaselineNs, cpuBaselineSet)") ||
-		!strings.Contains(processAccounting, "result.CPUTimeMs = finalCPUTimeMs") {
-		t.Fatalf("no-cgroup accounting must finalize target CPU from process wait usage minus the helper baseline")
+	if !strings.Contains(baselineBlock, "binary.LittleEndian.Uint64(ready[1:])") ||
+		!strings.Contains(processAccounting, "finalizeWaitCPUTime(&result, usageCPUNs, true)") ||
+		!strings.Contains(body, "cpuTimeAfterBaseline(usageNs, result.CPUAccounting.RusageBaselineNs, available)") ||
+		strings.Contains(processAccounting, "usageCPUNs - cpuBaselineNs") {
+		t.Fatalf("no-cgroup accounting must finalize precise target CPU from wait usage minus a matching rusage baseline")
 	}
 	watchdogStart := strings.Index(body, "if targetStarted {\n\t\t\t\tif cpuNs, err := timing.ProcessCPUTimeNs")
 	watchdogEnd := strings.Index(body, "if targetStarted && result.Status == \"OK\" && (lastWorkspaceScan.IsZero()")

@@ -92,6 +92,10 @@ func TestHelperWaitsForParentBaselineBeforeTargetExec(t *testing.T) {
 	source := string(raw)
 	closeDescriptors := strings.Index(source, "unix.CloseRange(3")
 	signalReady := strings.Index(source, "targetReadyFile.Write")
+	rusageBaseline := strings.Index(source, "unix.Getrusage(unix.RUSAGE_SELF, &usage)")
+	if rusageBaseline < 0 || rusageBaseline >= signalReady || !strings.Contains(source[rusageBaseline:signalReady], "binary.LittleEndian.PutUint64") {
+		t.Fatal("helper must transmit a final-wait-compatible CPU baseline before release")
+	}
 	waitRelease := strings.Index(source, "io.ReadFull(targetReleaseFile")
 	targetExec := strings.Index(source, "unix.RawSyscall(unix.SYS_EXECVE")
 	if closeDescriptors < 0 || signalReady < 0 || waitRelease < 0 || targetExec < 0 {

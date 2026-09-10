@@ -100,7 +100,15 @@ func classifyRunStatusWithoutOutput(req *model.RunRequest, res execResult) (stri
 }
 
 func applyFinalCPUTimeStatus(status, reason, source string, cpuTimeMs int64, limitMs int, cgroupBacked bool) (string, string, string) {
-	if limitMs <= 0 || cpuTimeMs <= int64(limitMs) {
+	return applyCPUTimeLimitStatus(status, reason, source, limitMs > 0 && cpuTimeMs > int64(limitMs), cgroupBacked)
+}
+
+func applyFinalCPUTimeStatusNs(status, reason, source string, cpuTimeNs, limitNs uint64, cgroupBacked bool) (string, string, string) {
+	return applyCPUTimeLimitStatus(status, reason, source, cpuTimeNs > limitNs, cgroupBacked)
+}
+
+func applyCPUTimeLimitStatus(status, reason, source string, exceeded, cgroupBacked bool) (string, string, string) {
+	if !exceeded {
 		return status, reason, source
 	}
 	if status != "OK" && status != model.RunStatusAccepted {

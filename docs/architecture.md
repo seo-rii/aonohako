@@ -484,11 +484,12 @@ the rollback switch. Calibration failure or a sample outside the supported
 duration/scale bounds fails startup rather than mixing raw and normalized
 semantics.
 
-The public CPU limit is converted back into raw host milliseconds before the
-process and cgroup watchdogs and helper `RLIMIT_CPU` are configured. Reporting
-uses ceiling division and the inverse budget uses floor division, preserving
-the strict-over-limit integer boundary except for the existing one-millisecond
-minimum. The wall deadline is separate: it is never shortened and receives
+The public CPU limit is converted back into raw host nanoseconds for process and
+cgroup watchdogs. Reporting scales the raw nanosecond value before rounding up
+to whole milliseconds; the inverse budget uses floor division at nanosecond
+precision, preserving the strict-over-limit boundary without a fractional-ms
+loss. The helper's coarser `RLIMIT_CPU` input is rounded up separately. The wall
+deadline is separate: it is never shortened and receives
 10% or at least 100 ms of supervision slack above the larger of the public
 limit and the calibrated raw CPU allowance. Actual elapsed time remains in
 `wall_time_ms`. This calibration reduces hardware-model variance but cannot
@@ -546,10 +547,14 @@ The stable contract is:
   completed sandbox setup but before the parent releases the target `execve()`;
   because the execute sandbox denies process creation and allows only
   thread-form `clone`, this includes all target threads without charging helper
-  setup time; after process exit, no-cgroup runs finalize the same metric from
-  wait usage minus that helper baseline so the CPU tail after the last watchdog
-  sample is retained; `process_cpu_time_ms` remains the raw helper-plus-target
-  diagnostic and is not a contestant timing value
+  setup time; after process exit, no-cgroup runs finalize CPU from wait usage
+  minus a separate helper `getrusage(RUSAGE_SELF)` baseline, never a baseline from
+  a different clock. The maximum of that final delta and process-clock polling
+  retains the CPU tail after the last watchdog sample. An unavailable or
+  underflowing final counter cannot produce a successful verdict. Optional
+  `cpu_accounting` and nanosecond fields describe one sandbox, not pipeline
+  totals. `process_cpu_time_ms` remains the raw helper-plus-target diagnostic
+  and is not a contestant timing value
 - RSS and virtual size are sampled from procfs only after the ready pipe reports
   the close-on-exec target transition and are refined with `smaps_rollup` near
   the limit or when address-space limits are disabled; cgroup runs additionally

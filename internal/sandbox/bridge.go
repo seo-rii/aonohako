@@ -9,6 +9,8 @@ const (
 	RequestFDEnv       = "AONOHAKO_SANDBOX_REQUEST_FD"
 	TargetReadyFDEnv   = "AONOHAKO_SANDBOX_TARGET_READY_FD"
 	TargetReleaseFDEnv = "AONOHAKO_SANDBOX_TARGET_RELEASE_FD"
+	// A version byte followed by the helper's pre-exec RUSAGE_SELF CPU ns.
+	TargetReadyMessageSize = 9
 )
 
 type ExecRequest struct {

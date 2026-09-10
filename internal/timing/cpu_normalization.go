@@ -14,13 +14,14 @@ const (
 	cpuNormalizationWallSlackPct = uint64(10)
 	cpuNormalizationMinWallSlack = 100
 	cpuCalibrationMaxSpreadPPM   = uint64(100_000)
+	nanosecondsPerMillisecond    = uint64(1_000_000)
 	CPUNormalizationMethod       = "go-fixed-int-v1"
 	DefaultCPUReferenceTimeNs    = uint64(60_000_000)
 	MinimumCPUCalibrationTimeNs  = uint64(1_000_000)
 	MaximumCPUCalibrationTimeNs  = uint64(5_000_000_000)
 )
 
-// CPUNormalizer translates scheduled CPU milliseconds on one host into a
+// CPUNormalizer translates scheduled CPU time on one host into a
 // versioned fixed-work reference. The zero value is an identity mapping.
 type CPUNormalizer struct {
 	method          string
@@ -54,6 +55,42 @@ func NewCPUNormalizer(method string, referenceTimeNs, observedTimeNs uint64) (CP
 
 func (n CPUNormalizer) Enabled() bool {
 	return n.method != "" && n.referenceTimeNs > 0 && n.observedTimeNs > 0
+}
+
+// NormalizeNanoseconds rounds up at nanosecond precision. It preserves the
+// sub-millisecond CPU time needed for strict limit comparisons; callers should
+// convert to whole milliseconds only when reporting a result.
+func (n CPUNormalizer) NormalizeNanoseconds(rawTimeNs uint64) uint64 {
+	if !n.Enabled() {
+		return rawTimeNs
+	}
+	return mulDivCeilUint64(rawTimeNs, n.referenceTimeNs, n.observedTimeNs)
+}
+
+// RawLimitNanoseconds returns floor(limit_ms * 1e6 * observed/reference), with
+// saturation on overflow. Non-positive limits return zero. Unlike the legacy
+// millisecond API, this does not round a fractional raw allowance to whole ms.
+func (n CPUNormalizer) RawLimitNanoseconds(normalizedLimitMs int) uint64 {
+	if normalizedLimitMs <= 0 {
+		return 0
+	}
+	reference, observed := uint64(1), uint64(1)
+	if n.Enabled() {
+		reference, observed = n.referenceTimeNs, n.observedTimeNs
+	}
+
+	// Keep the division remainder so conversion to nanoseconds neither loses
+	// fractional milliseconds nor overflows before a shrinking ratio is applied.
+	wholeMs, remainder, overflow := mulDivUint64(uint64(normalizedLimitMs), observed, reference)
+	if overflow || wholeMs > math.MaxUint64/nanosecondsPerMillisecond {
+		return math.MaxUint64
+	}
+	wholeNs := wholeMs * nanosecondsPerMillisecond
+	fractionNs := mulDivFloorUint64(remainder, nanosecondsPerMillisecond, reference)
+	if fractionNs > math.MaxUint64-wholeNs {
+		return math.MaxUint64
+	}
+	return wholeNs + fractionNs
 }
 
 // NormalizeMillis rounds up so the returned integer and RawLimitMillis share

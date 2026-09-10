@@ -211,6 +211,18 @@ type CPUTimeNormalization struct {
 	ObservedTimeNs  uint64 `json:"observed_time_ns"`
 }
 
+// CPUAccounting keeps the independent raw accounting inputs auditable. These
+// values describe only resource counters, never contestant input or output.
+type CPUAccounting struct {
+	ProcessClockBaselineNs uint64 `json:"process_clock_baseline_ns"`
+	RusageBaselineNs       uint64 `json:"rusage_baseline_ns"`
+	ProcessClockPeakNs     uint64 `json:"process_clock_peak_ns"`
+	WaitUserNs             uint64 `json:"wait_user_ns"`
+	WaitSystemNs           uint64 `json:"wait_system_ns"`
+	WaitTargetNs           uint64 `json:"wait_target_ns"`
+	SelectedSource         string `json:"selected_source"`
+}
+
 type SidecarOutput struct {
 	Path    string `json:"path"`
 	DataB64 string `json:"data_b64"`
@@ -252,7 +264,10 @@ type RunResponse struct {
 	TimeMs               int64                 `json:"time_ms"`
 	WallTimeMs           int64                 `json:"wall_time_ms"`
 	CPUTimeMs            int64                 `json:"cpu_time_ms"`
+	CPUTimeNs            uint64                `json:"cpu_time_ns,omitempty"`
 	RawCPUTimeMs         *int64                `json:"raw_cpu_time_ms,omitempty"`
+	RawCPUTimeNs         *uint64               `json:"raw_cpu_time_ns,omitempty"`
+	CPUAccounting        *CPUAccounting        `json:"cpu_accounting,omitempty"`
 	ProcessCPUTimeMs     int64                 `json:"process_cpu_time_ms,omitempty"`
 	CPUTimeNormalization *CPUTimeNormalization `json:"cpu_time_normalization,omitempty"`
 	MemoryKB             int64                 `json:"memory_kb"`

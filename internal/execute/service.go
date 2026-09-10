@@ -394,7 +394,10 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			TimeMs:           res.WallTimeMs,
 			WallTimeMs:       res.WallTimeMs,
 			CPUTimeMs:        res.CPUTimeMs,
+			CPUTimeNs:        res.CPUTimeNs,
 			RawCPUTimeMs:     res.RawCPUTimeMs,
+			RawCPUTimeNs:     res.RawCPUTimeNs,
+			CPUAccounting:    res.CPUAccounting,
 			ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 			MemoryKB:         res.MemoryKB,
 			ExitCode:         res.ExitCode,
@@ -767,6 +770,11 @@ func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) mod
 	resp.WallTimeMs = wallMs
 	resp.CPUTimeMs = cpuMs
 	resp.RawCPUTimeMs = rawCPUTimeMs
+	// These diagnostics describe one sandbox, not the aggregate of its stages.
+	// Do not leave the final stage's precise counter beside a summed ms total.
+	resp.CPUTimeNs = 0
+	resp.RawCPUTimeNs = nil
+	resp.CPUAccounting = nil
 	resp.ProcessCPUTimeMs = processCPUTimeMs
 	if memoryKB > resp.MemoryKB {
 		resp.MemoryKB = memoryKB

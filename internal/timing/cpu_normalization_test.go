@@ -3,9 +3,137 @@ package timing
 import (
 	"errors"
 	"math"
+	"math/big"
 	"strings"
 	"testing"
 )
+
+func TestCPUNormalizerNanosecondsPreserveFractionalMilliseconds(t *testing.T) {
+	normalizer, err := NewCPUNormalizer("test-v1", 3, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		raw, want uint64
+	}{
+		{raw: 0, want: 0},
+		{raw: 1, want: 2},
+		{raw: 666_666, want: 999_999},
+		{raw: 666_667, want: 1_000_001},
+		{raw: 1_999_999, want: 2_999_999},
+	} {
+		if got := normalizer.NormalizeNanoseconds(tc.raw); got != tc.want {
+			t.Errorf("NormalizeNanoseconds(%d) = %d, want %d", tc.raw, got, tc.want)
+		}
+	}
+}
+
+func TestCPUNormalizerNanosecondForwardInverseBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		reference uint64
+		observed  uint64
+		limitMs   int
+		wantRawNs uint64
+	}{
+		{name: "identity", reference: 100, observed: 100, limitMs: 1, wantRawNs: 1_000_000},
+		{name: "slow host", reference: 100, observed: 175, limitMs: 1, wantRawNs: 1_750_000},
+		{name: "fast host", reference: 100, observed: 60, limitMs: 1, wantRawNs: 600_000},
+		{name: "fractional floor", reference: 3, observed: 2, limitMs: 5, wantRawNs: 3_333_333},
+		{name: "sub nanosecond allowance", reference: 2_000_000, observed: 1, limitMs: 1, wantRawNs: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			normalizer, err := NewCPUNormalizer("test-v1", tc.reference, tc.observed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rawLimit := normalizer.RawLimitNanoseconds(tc.limitMs)
+			if rawLimit != tc.wantRawNs {
+				t.Fatalf("RawLimitNanoseconds(%d) = %d, want %d", tc.limitMs, rawLimit, tc.wantRawNs)
+			}
+			limitNs := uint64(tc.limitMs) * 1_000_000
+			if got := normalizer.NormalizeNanoseconds(rawLimit); got > limitNs {
+				t.Errorf("normalized raw limit = %d, exceeds %d", got, limitNs)
+			}
+			if got := normalizer.NormalizeNanoseconds(rawLimit + 1); got <= limitNs {
+				t.Errorf("normalized first over-limit raw time = %d, want > %d", got, limitNs)
+			}
+		})
+	}
+}
+
+func TestDisabledCPUNormalizerNanoseconds(t *testing.T) {
+	var normalizer CPUNormalizer
+	for _, raw := range []uint64{0, 1, 123_456_789, math.MaxUint64} {
+		if got := normalizer.NormalizeNanoseconds(raw); got != raw {
+			t.Errorf("NormalizeNanoseconds(%d) = %d, want identity", raw, got)
+		}
+	}
+	for _, tc := range []struct {
+		limit int
+		want  uint64
+	}{
+		{limit: -1, want: 0},
+		{limit: 0, want: 0},
+		{limit: 123, want: 123_000_000},
+	} {
+		if got := normalizer.RawLimitNanoseconds(tc.limit); got != tc.want {
+			t.Errorf("RawLimitNanoseconds(%d) = %d, want %d", tc.limit, got, tc.want)
+		}
+	}
+	normalizer, err := NewCPUNormalizer("test-v1", 3, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, limit := range []int{-1, 0} {
+		if got := normalizer.RawLimitNanoseconds(limit); got != 0 {
+			t.Errorf("enabled RawLimitNanoseconds(%d) = %d, want 0", limit, got)
+		}
+	}
+}
+
+func TestCPUNormalizerNanosecondsOverflowMatchesExactArithmetic(t *testing.T) {
+	// Compare with arbitrary-precision arithmetic, including an overflowing
+	// intermediate product whose final quotient still fits in uint64.
+	for _, ratio := range []struct{ reference, observed uint64 }{
+		{1, 1},
+		{1, math.MaxUint64},
+		{math.MaxUint64, 1},
+		{math.MaxUint64, math.MaxUint64},
+		{1_000_000, math.MaxUint64},
+		{999_999, math.MaxUint64},
+		{math.MaxUint64, math.MaxUint64 - 1},
+	} {
+		normalizer, err := NewCPUNormalizer("test-v1", ratio.reference, ratio.observed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, raw := range []uint64{0, 1, 1_000_001, math.MaxUint64 - 1, math.MaxUint64} {
+			product := new(big.Int).Mul(new(big.Int).SetUint64(raw), new(big.Int).SetUint64(ratio.reference))
+			product.Add(product, new(big.Int).SetUint64(ratio.observed-1))
+			product.Quo(product, new(big.Int).SetUint64(ratio.observed))
+			want := uint64(math.MaxUint64)
+			if product.IsUint64() {
+				want = product.Uint64()
+			}
+			if got := normalizer.NormalizeNanoseconds(raw); got != want {
+				t.Errorf("NormalizeNanoseconds(%d) reference=%d observed=%d: got %d, want %d", raw, ratio.reference, ratio.observed, got, want)
+			}
+		}
+		for _, limit := range []int{1, 2, 1_000_001, math.MaxInt} {
+			product := new(big.Int).Mul(big.NewInt(int64(limit)), big.NewInt(1_000_000))
+			product.Mul(product, new(big.Int).SetUint64(ratio.observed))
+			product.Quo(product, new(big.Int).SetUint64(ratio.reference))
+			want := uint64(math.MaxUint64)
+			if product.IsUint64() {
+				want = product.Uint64()
+			}
+			if got := normalizer.RawLimitNanoseconds(limit); got != want {
+				t.Errorf("RawLimitNanoseconds(%d) reference=%d observed=%d: got %d, want %d", limit, ratio.reference, ratio.observed, got, want)
+			}
+		}
+	}
+}
 
 func TestCPUNormalizerForwardInverseBoundary(t *testing.T) {
 	tests := []struct {
