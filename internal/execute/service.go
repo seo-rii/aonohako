@@ -344,7 +344,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
-		return sandboxRunResult{response: model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason, VerdictSource: res.VerdictSource}}
+		return sandboxRunResult{response: initializationFailureResponse(res, wallMs)}
 	}
 
 	rawOut := res.Stdout
@@ -757,6 +757,19 @@ func prefixStepVerdictSource(stepID, source string) string {
 		return "step:" + stepID
 	}
 	return "step:" + stepID + ":" + source
+}
+
+// Preserve counter diagnostics even when accounting itself fails, while keeping
+// initialization failures out of output judging and captured-output delivery.
+func initializationFailureResponse(res execResult, wallMs int64) model.RunResponse {
+	return model.RunResponse{
+		Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs,
+		CPUTimeMs: res.CPUTimeMs, CPUTimeNs: res.CPUTimeNs,
+		RawCPUTimeMs: res.RawCPUTimeMs, RawCPUTimeNs: res.RawCPUTimeNs,
+		CPUAccounting: res.CPUAccounting, ProcessCPUTimeMs: res.ProcessCPUTimeMs,
+		MemoryKB: res.MemoryKB, ExitCode: res.ExitCode,
+		Reason: res.Reason, VerdictSource: res.VerdictSource,
+	}
 }
 
 func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) model.RunResponse {

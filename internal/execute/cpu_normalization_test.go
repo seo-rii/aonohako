@@ -101,6 +101,23 @@ func TestNormalizeExecResultCPUPreservesMeasuredZero(t *testing.T) {
 	}
 }
 
+func TestInitializationFailurePreservesCPUAccountingWithoutOutput(t *testing.T) {
+	rawMs, rawNs, exitCode := int64(2), uint64(1_500_000), 0
+	accounting := &model.CPUAccounting{RusageBaselineNs: 3_000_000, WaitUserNs: 2_000_000}
+	response := initializationFailureResponse(execResult{
+		Status: model.RunStatusInitFail, Reason: "invalid final accounting", VerdictSource: "cpu_accounting",
+		CPUTimeMs: 3, CPUTimeNs: 2_250_000, RawCPUTimeMs: &rawMs, RawCPUTimeNs: &rawNs,
+		CPUAccounting: accounting, ProcessCPUTimeMs: 2, ExitCode: &exitCode,
+		MemoryKB: 1024, Stdout: []byte("private output"), Stderr: []byte("private stderr"),
+	}, 7)
+	if response.Status != model.RunStatusInitFail || response.CPUAccounting != accounting || response.RawCPUTimeNs != &rawNs || response.CPUTimeNs != 2_250_000 || response.CPUTimeMs != 3 || response.ProcessCPUTimeMs != 2 || response.RawCPUTimeMs != &rawMs {
+		t.Fatalf("lost failure diagnostics: %+v", response)
+	}
+	if response.Stdout != "" || response.Stderr != "" || response.TimeMs != 7 || response.WallTimeMs != 7 || response.MemoryKB != 1024 || response.ExitCode != &exitCode {
+		t.Fatalf("invalid failure response boundary: %+v", response)
+	}
+}
+
 func TestNormalizeExecResultCPUDisabledLeavesLegacyShape(t *testing.T) {
 	result := execResult{Status: "OK", CPUTimeMs: 50}
 	normalizeExecResultCPU(&result, timing.CPUNormalizer{})
