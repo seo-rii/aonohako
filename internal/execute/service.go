@@ -121,6 +121,7 @@ func sumRawCPUTime(values ...*int64) *int64 {
 type Service struct {
 	deploymentTarget             platform.DeploymentTarget
 	cpuNormalizer                timing.CPUNormalizer
+	shortCaseSampling            bool
 	runtimeTuning                config.RuntimeTuningConfig
 	runtimeTuningProfiles        map[string]config.RuntimeTuningConfig
 	cgroupParentDir              string
@@ -160,6 +161,7 @@ func NewWithConfig(cfg config.Config) *Service {
 	}
 	return &Service{
 		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
+		shortCaseSampling:            cfg.Execution.CPUNormalization.ShortCaseSampling,
 		runtimeTuning:                cfg.Execution.RuntimeTuning.WithSafeDefaults(),
 		runtimeTuningProfiles:        profiles,
 		cgroupParentDir:              cfg.Execution.Cgroup.ParentDir,
@@ -219,7 +221,13 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	case runvalidation.UsesSteps(req):
 		response = s.runStepPipeline(ctx, req, hooks, tuning)
 	default:
-		response = s.runOne(ctx, req, hooks, tuning, true).response
+		if s.shortCaseSampling && s.cpuNormalizer.Enabled() {
+			response = runShortCaseBatch(ctx, req, hooks, func(ctx context.Context, req *model.RunRequest, stdin io.Reader, maxBytes int64, hooks Hooks) model.RunResponse {
+				return s.runOneWithStdin(ctx, req, stdin, maxBytes, hooks, tuning, true, false).response
+			})
+		} else {
+			response = s.runOne(ctx, req, hooks, tuning, true).response
+		}
 	}
 	return s.decorateCPUTimeNormalization(response)
 }

@@ -68,8 +68,9 @@ type ExecutionConfig struct {
 }
 
 type CPUNormalizationConfig struct {
-	Enabled         bool
-	ReferenceTimeNs uint64
+	Enabled           bool
+	ReferenceTimeNs   uint64
+	ShortCaseSampling bool
 }
 
 type CgroupConfig struct {
@@ -264,6 +265,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cpuNormalizationEnabled, err := parseBoolEnv("AONOHAKO_CPU_NORMALIZATION", os.Getenv("AONOHAKO_CPU_NORMALIZATION"), defaultCPUNormalization(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	shortCaseSampling, err := parseBoolEnv("AONOHAKO_CPU_SHORT_CASE_SAMPLING", os.Getenv("AONOHAKO_CPU_SHORT_CASE_SAMPLING"), cpuNormalizationEnabled)
 	if err != nil {
 		return Config{}, err
 	}
@@ -617,8 +622,9 @@ func Load() (Config, error) {
 			StrictProtocol: remoteStrictProtocol,
 		},
 		CPUNormalization: CPUNormalizationConfig{
-			Enabled:         cpuNormalizationEnabled,
-			ReferenceTimeNs: uint64(cpuNormalizationReferenceMs) * uint64(time.Millisecond),
+			Enabled:           cpuNormalizationEnabled,
+			ReferenceTimeNs:   uint64(cpuNormalizationReferenceMs) * uint64(time.Millisecond),
+			ShortCaseSampling: shortCaseSampling,
 		},
 		RuntimeTuning:          runtimeTuning,
 		RuntimeTuningProfiles:  runtimeTuningProfiles,

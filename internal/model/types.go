@@ -223,6 +223,23 @@ type CPUAccounting struct {
 	SelectedSource         string `json:"selected_source"`
 }
 
+type CPUTimeSample struct {
+	Status        string         `json:"status"`
+	CPUTimeMs     int64          `json:"cpu_time_ms"`
+	CPUTimeNs     uint64         `json:"cpu_time_ns"`
+	RawCPUTimeMs  *int64         `json:"raw_cpu_time_ms,omitempty"`
+	RawCPUTimeNs  *uint64        `json:"raw_cpu_time_ns,omitempty"`
+	WallTimeMs    int64          `json:"wall_time_ms"`
+	MemoryKB      int64          `json:"memory_kb"`
+	CPUAccounting *CPUAccounting `json:"cpu_accounting,omitempty"`
+}
+
+type CPUTimeSampling struct {
+	Method         string          `json:"method"`
+	SelectedSample int             `json:"selected_sample"`
+	Samples        []CPUTimeSample `json:"samples"`
+}
+
 type SidecarOutput struct {
 	Path    string `json:"path"`
 	DataB64 string `json:"data_b64"`
@@ -268,6 +285,7 @@ type RunResponse struct {
 	RawCPUTimeMs         *int64                `json:"raw_cpu_time_ms,omitempty"`
 	RawCPUTimeNs         *uint64               `json:"raw_cpu_time_ns,omitempty"`
 	CPUAccounting        *CPUAccounting        `json:"cpu_accounting,omitempty"`
+	CPUTimeSampling      *CPUTimeSampling      `json:"cpu_time_sampling,omitempty"`
 	ProcessCPUTimeMs     int64                 `json:"process_cpu_time_ms,omitempty"`
 	CPUTimeNormalization *CPUTimeNormalization `json:"cpu_time_normalization,omitempty"`
 	MemoryKB             int64                 `json:"memory_kb"`

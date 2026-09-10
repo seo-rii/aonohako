@@ -125,6 +125,21 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				mainTimeMs = max(mainTimeMs, interactorTimeMs)
 			}
 			requestedWallTimeMs = int64(timing.MaximumCPUWallLimitMillis(mainTimeMs))
+			// The downstream instance also owns its short-case sampling policy.
+			// Any ordinary batch can qualify after its first execution, so reserve
+			// two further full wall allowances even when the caller's policy is off.
+			// URL payloads are resolved/frozen downstream before repetition; ignore
+			// those transport references only in this private eligibility copy.
+			repeatReq := *req
+			repeatReq.StdinURL = ""
+			repeatReq.ExpectedStdoutURL = ""
+			repeatReq.Binaries = append([]model.Binary(nil), req.Binaries...)
+			for i := range repeatReq.Binaries {
+				repeatReq.Binaries[i].DataURL = ""
+			}
+			if shortCaseRepeatEligible(&repeatReq, hooks) {
+				requestedWallTimeMs *= 3
+			}
 		}
 		spj := req.SPJ
 		if req.Pipeline != nil {

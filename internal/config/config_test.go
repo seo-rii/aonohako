@@ -1309,6 +1309,41 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	}
 }
 
+func TestLoadShortCaseSamplingSetting(t *testing.T) {
+	for _, tc := range []struct {
+		name, value string
+		want        bool
+		wantErr     bool
+	}{
+		{"default without normalization", "", false, false},
+		{"explicit enable", "true", true, false},
+		{"explicit disable", "false", false, false},
+		{"invalid", "sometimes", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AONOHAKO_DEPLOYMENT_TARGET", "dev")
+			t.Setenv("AONOHAKO_EXECUTION_TRANSPORT", "remote")
+			t.Setenv("AONOHAKO_SANDBOX_BACKEND", "none")
+			t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
+			t.Setenv("AONOHAKO_CPU_NORMALIZATION", "false")
+			t.Setenv("AONOHAKO_CPU_SHORT_CASE_SAMPLING", tc.value)
+			cfg, err := Load()
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "AONOHAKO_CPU_SHORT_CASE_SAMPLING") {
+					t.Fatalf("error = %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Execution.CPUNormalization.ShortCaseSampling != tc.want {
+				t.Fatalf("sampling = %v, want %v", cfg.Execution.CPUNormalization.ShortCaseSampling, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 	const maxInt64Text = "9223372036854775807"
 	tests := []struct {

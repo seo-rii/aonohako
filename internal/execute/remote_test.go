@@ -1,6 +1,7 @@
 package execute
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -557,9 +558,14 @@ func TestRemoteRunnerAbsoluteDeadlineAllowsCPUNormalization(t *testing.T) {
 		want time.Duration
 	}{
 		{
-			name: "sixty second CPU limit permits slow normalized host",
+			name: "sixty second CPU limit permits three runs on slow normalized host",
 			req:  model.RunRequest{Limits: model.Limits{TimeMs: 60_000}},
-			want: 294 * time.Second, // 240s raw CPU + 24s wall slack + 30s overhead.
+			want: 822 * time.Second, // 3 * (240s raw CPU + 24s wall slack) + 30s overhead.
+		},
+		{
+			name: "minimum wall slack applies to all three sampled runs",
+			req:  model.RunRequest{Limits: model.Limits{TimeMs: 1}},
+			want: 30_312 * time.Millisecond,
 		},
 		{
 			name: "minimum wall slack applies to each sequential step",
@@ -625,7 +631,7 @@ func TestRemoteRunnerAbsoluteDeadlineAllowsCPUNormalization(t *testing.T) {
 		{
 			name: "extreme main limit is clamped before scaling",
 			req:  model.RunRequest{Limits: model.Limits{TimeMs: maxInt}},
-			want: 2670 * time.Second,
+			want: 7950 * time.Second,
 		},
 		{
 			name: "interactor and SPJ limits are clamped before scaling",
@@ -670,7 +676,7 @@ func TestRemoteRunnerAbsoluteDeadlineHonorsExplicitTimeoutAndParentDeadline(t *t
 	t.Run("earlier parent deadline remains authoritative", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		assertRemoteRunnerAbsoluteDeadline(t, ctx, req, 0, 294*time.Second)
+		assertRemoteRunnerAbsoluteDeadline(t, ctx, req, 0, 822*time.Second)
 	})
 	t.Run("earlier parent deadline also overrides explicit timeout", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -678,10 +684,69 @@ func TestRemoteRunnerAbsoluteDeadlineHonorsExplicitTimeoutAndParentDeadline(t *t
 		assertRemoteRunnerAbsoluteDeadline(t, ctx, req, 5*time.Second, 5*time.Second)
 	})
 	t.Run("later parent deadline does not extend derived timeout", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
-		assertRemoteRunnerAbsoluteDeadline(t, ctx, req, 0, 294*time.Second)
+		assertRemoteRunnerAbsoluteDeadline(t, ctx, req, 0, 822*time.Second)
 	})
+}
+
+func TestRemoteRunnerAbsoluteDeadlineIncludesOnlyEligibleShortCaseRepetitions(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*model.RunRequest)
+		want   time.Duration
+	}{
+		{name: "ordinary batch", want: 43_200 * time.Millisecond},
+		{
+			name: "URL payloads are frozen by receiver",
+			mutate: func(req *model.RunRequest) {
+				req.Binaries = []model.Binary{{Name: "Main", DataURL: "https://payload.example/program"}}
+				req.StdinURL = "https://payload.example/input"
+				req.ExpectedStdoutURL = "https://payload.example/answer"
+			},
+			want: 43_200 * time.Millisecond,
+		},
+		{name: "ignore TLE", mutate: func(req *model.RunRequest) { req.IgnoreTLE = true }, want: 34_400 * time.Millisecond},
+		{name: "network", mutate: func(req *model.RunRequest) { req.EnableNetwork = true }, want: 34_400 * time.Millisecond},
+		{name: "file output", mutate: func(req *model.RunRequest) { req.FileOutputs = []model.OutputFile{{Path: "answer"}} }, want: 34_400 * time.Millisecond},
+		{name: "sidecar output", mutate: func(req *model.RunRequest) { req.SidecarOutputs = []model.OutputFile{{Path: "image"}} }, want: 34_400 * time.Millisecond},
+		{name: "interactor", mutate: func(req *model.RunRequest) { req.Interactor = &model.InteractorSpec{} }, want: 34_400 * time.Millisecond},
+		{name: "communication", mutate: func(req *model.RunRequest) { req.Communication = &model.CommunicationSpec{} }, want: 34_400 * time.Millisecond},
+		{name: "SPJ", mutate: func(req *model.RunRequest) { req.SPJ = &model.SPJSpec{} }, want: 38_800 * time.Millisecond},
+		{
+			name: "step pipeline",
+			mutate: func(req *model.RunRequest) {
+				req.Steps = []model.RunStep{{Limits: model.Limits{TimeMs: 1000}}}
+			},
+			want: 34_400 * time.Millisecond,
+		},
+		{
+			name: "pipeline v1",
+			mutate: func(req *model.RunRequest) {
+				req.Pipeline = &model.PipelineV1{Steps: []model.PipelineStep{{Limits: model.Limits{TimeMs: 1000}}}}
+			},
+			want: 34_400 * time.Millisecond,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &model.RunRequest{Limits: model.Limits{TimeMs: 1000}}
+			if tc.mutate != nil {
+				tc.mutate(req)
+			}
+			original, err := json.Marshal(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertRemoteRunnerAbsoluteDeadline(t, context.Background(), req, 0, tc.want)
+			after, err := json.Marshal(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(after, original) {
+				t.Fatal("timeout eligibility changed the caller's request payload")
+			}
+		})
+	}
 }
 
 func assertRemoteRunnerAbsoluteDeadline(t *testing.T, ctx context.Context, req *model.RunRequest, absoluteTimeout, want time.Duration) {
