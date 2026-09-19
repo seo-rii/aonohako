@@ -308,7 +308,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"-XX:ReservedCodeCacheSize=64m",
 			"-XX:-UseCompressedClassPointers",
 			fmt.Sprintf("-Xmx%dm", xmx),
-			"-Xss1m",
+			fmt.Sprintf("-Xss%dk", tuning.JavaStackSizeKB),
 			fmt.Sprintf("-XX:MaxDirectMemorySize=%dm", directMB),
 			fmt.Sprintf("-XX:MaxMetaspaceSize=%dm", metaspaceMB),
 			"-Dfile.encoding=UTF-8",

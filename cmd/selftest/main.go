@@ -1087,6 +1087,57 @@ printfn"%A"(getans(fac(a))0I)
 					}
 				}
 			}
+
+			if language == "java" && variantIndex == 0 {
+				deepRecursionSource := model.Source{Name: "Main.java", DataB64: encodeScript(`public class Main {
+  private static int[] next;
+
+  private static int visit(int node) {
+    return node < 0 ? 0 : 1 + visit(next[node]);
+  }
+
+  public static void main(String[] args) {
+    int depth = 100000;
+    next = new int[depth];
+    for (int i = 0; i + 1 < depth; i++) {
+      next[i] = i + 1;
+    }
+    next[depth - 1] = -1;
+    System.out.println(visit(0));
+  }
+}`)}
+				deepCompileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+					Lang:    compileLanguage,
+					Sources: []model.Source{deepRecursionSource},
+				})
+				if err != nil {
+					return fmt.Errorf("java deep-recursion compile request failed: %w", err)
+				}
+				if deepCompileResp.Status != model.CompileStatusOK {
+					return fmt.Errorf("java deep-recursion compile failed: status=%s reason=%s stdout=%q stderr=%q", deepCompileResp.Status, deepCompileResp.Reason, deepCompileResp.Stdout, deepCompileResp.Stderr)
+				}
+
+				deepBinaries := make([]model.Binary, 0, len(deepCompileResp.Artifacts))
+				for _, artifact := range deepCompileResp.Artifacts {
+					deepBinaries = append(deepBinaries, model.Binary{
+						Name:    artifact.Name,
+						DataB64: artifact.DataB64,
+						Mode:    artifact.Mode,
+					})
+				}
+				deepRunResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+					Lang:           profile.RunLang,
+					Binaries:       deepBinaries,
+					ExpectedStdout: "100000\n",
+					Limits:         model.Limits{TimeMs: 12000, MemoryMB: 768, OutputBytes: 1024},
+				})
+				if err != nil {
+					return fmt.Errorf("java deep-recursion execute request failed: %w", err)
+				}
+				if deepRunResp.Status != model.RunStatusAccepted {
+					return fmt.Errorf("java deep-recursion execute failed: status=%s reason=%s stdout=%q stderr=%q", deepRunResp.Status, deepRunResp.Reason, deepRunResp.Stdout, deepRunResp.Stderr)
+				}
+			}
 		}
 		if language == "rust" {
 			installedSources := []model.Source{

@@ -306,6 +306,32 @@ func TestBuildCommandJavaAlwaysHasJarFlag(t *testing.T) {
 	}
 }
 
+func TestBuildCommandJavaUsesDeepRecursionStackByDefault(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 128}}
+	args := buildCommand("/tmp/Main.jar", "java", req)
+	if !containsArg(args, "-Xss16384k") {
+		t.Fatalf("java command missing default recursion stack: %v", args)
+	}
+}
+
+func TestBuildCommandJavaStackTuningDoesNotChangeOtherJVMRuntimes(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 256}}
+	tuning := config.DefaultRuntimeTuningConfig()
+	tuning.JavaStackSizeKB = 8192
+
+	for _, lang := range []string{"clojure", "groovy", "kotlin-jvm", "scala"} {
+		t.Run(lang, func(t *testing.T) {
+			args := buildCommandWithRuntimeTuning("/tmp/Main", lang, req, tuning)
+			if !containsArg(args, "-Xss1m") {
+				t.Fatalf("%s command should retain its existing stack size: %v", lang, args)
+			}
+			if containsArg(args, "-Xss8192k") {
+				t.Fatalf("%s command unexpectedly used Java-only stack tuning: %v", lang, args)
+			}
+		})
+	}
+}
+
 func TestBuildCommandJavaBoundsOffHeapMemory(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -842,6 +868,7 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	req := &model.RunRequest{Limits: model.Limits{MemoryMB: 256}}
 	tuning := config.RuntimeTuningConfig{
 		JVMHeapPercent:            40,
+		JavaStackSizeKB:           8192,
 		GoMemoryReserveMB:         64,
 		GoGOGC:                    80,
 		ErlangSchedulers:          2,
@@ -870,6 +897,9 @@ func TestBuildCommandUsesRuntimeTuningConfig(t *testing.T) {
 	javaArgs := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java", req, tuning)
 	if !containsArg(javaArgs, "-Xmx102m") {
 		t.Fatalf("java command with tuning = %v", javaArgs)
+	}
+	if !containsArg(javaArgs, "-Xss8192k") {
+		t.Fatalf("java command with tuning missing stack size = %v", javaArgs)
 	}
 	if !containsArg(javaArgs, "-XX:MaxDirectMemorySize=32m") || !containsArg(javaArgs, "-XX:MaxMetaspaceSize=64m") {
 		t.Fatalf("java command with tuning missing off-heap guards = %v", javaArgs)
