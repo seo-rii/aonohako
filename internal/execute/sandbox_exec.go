@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,16 +41,67 @@ type execResult struct {
 	MemoryKB         int64
 	WallTimeMs       int64
 	CPUTimeMs        int64
+	CPUTimeNs        uint64
+	RawCPUTimeMs     *int64
+	RawCPUTimeNs     *uint64
+	CPUAccounting    *model.CPUAccounting
 	ProcessCPUTimeMs int64
 	Reason           string
 	VerdictSource    string
 }
 
-func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (int64, bool) {
+func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (uint64, bool) {
 	if !baselineSet || usageNs < baselineNs {
 		return 0, false
 	}
-	return timing.MilliFromNanoseconds(usageNs - baselineNs), true
+	return usageNs - baselineNs, true
+}
+
+// A poll is only a lower bound: the final wait sample must account for the
+// unsampled tail before a no-cgroup execution can be considered successful.
+func finalizeWaitCPUTime(result *execResult, usageNs uint64, available bool) {
+	finalCPUNs, ok := cpuTimeAfterBaseline(usageNs, result.CPUAccounting.RusageBaselineNs, available)
+	if !ok {
+		if result.ExitCode != nil && *result.ExitCode != 0 {
+			return // Higher-level classification retains the contestant's RE.
+		}
+		if result.Status == "OK" || result.Status == model.RunStatusAccepted {
+			result.Status = model.RunStatusInitFail
+			result.Reason = "sandbox final CPU accounting unavailable or below baseline"
+			result.VerdictSource = "cpu_accounting"
+		}
+		return
+	}
+	result.CPUAccounting.WaitTargetNs = finalCPUNs
+	if finalCPUNs > result.CPUTimeNs {
+		result.CPUTimeNs = finalCPUNs
+		result.CPUAccounting.SelectedSource = "wait_rusage"
+	}
+}
+
+func normalizeExecResultCPU(result *execResult, normalizer timing.CPUNormalizer) {
+	if result == nil || !normalizer.Enabled() {
+		return
+	}
+	rawCPUTimeMs := result.CPUTimeMs
+	result.RawCPUTimeMs = &rawCPUTimeMs
+	if result.CPUAccounting == nil {
+		// Compatibility for synthetic results that carry only legacy ms.
+		result.CPUTimeMs = normalizer.NormalizeMillis(rawCPUTimeMs)
+		return
+	}
+	rawCPUTimeNs := result.CPUTimeNs
+	result.RawCPUTimeNs = &rawCPUTimeNs
+	result.CPUTimeNs = normalizer.NormalizeNanoseconds(rawCPUTimeNs)
+	result.CPUTimeMs = ceilCPUMilliseconds(result.CPUTimeNs)
+}
+
+func ceilCPUMilliseconds(ns uint64) int64 {
+	ms := ns / uint64(time.Millisecond)
+	if ns%uint64(time.Millisecond) != 0 {
+		ms++
+	}
+	return int64(ms)
 }
 
 type sandboxStreamConfig struct {
@@ -67,6 +119,7 @@ type sandboxStreamConfig struct {
 	onTargetStarted           func()
 	targetRelease             <-chan struct{}
 	communicationRestricted   bool
+	cpuNormalizer             timing.CPUNormalizer
 }
 
 type sandboxIdentity struct {
@@ -168,13 +221,17 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer) execResult {
 	limits := req.Limits
-	timeMs := max(1, limits.TimeMs)
+	timeMs := max(1, cpuNormalizer.WallLimitMillis(limits.TimeMs))
 	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
 	defer cancel()
 
-	return executeSandboxCommandWithStdinLimit(ctx, ws, command, req, stdinReader, stdinMaxBytes, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
+		stdin:         stdinReader,
+		stdinMaxBytes: stdinMaxBytes,
+		cpuNormalizer: cpuNormalizer,
+	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
 
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
@@ -198,7 +255,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		restricted.EnableNetwork = false
 		req = &restricted
 	}
-	timeLimitMs := max(1, req.Limits.TimeMs)
+	cpuNormalizer := streams.cpuNormalizer
+	cpuTimeLimitNs := cpuNormalizer.RawLimitNanoseconds(max(1, req.Limits.TimeMs))
+	// RLIMIT_CPU takes whole seconds; round its raw-ms input up, not down.
+	helperCPUTimeLimitMs := int(ceilCPUMilliseconds(cpuTimeLimitNs))
 	memoryLimitKB := int64(0)
 	if req.Limits.MemoryMB > 0 {
 		memoryLimitKB = int64(req.Limits.MemoryMB) * 1024
@@ -406,6 +466,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		Dir:                      ws.BoxDir,
 		Env:                      innerEnv,
 		Limits:                   req.Limits,
+		CPUTimeLimitMs:           helperCPUTimeLimitMs,
 		ThreadLimit:              threadLimit,
 		OpenFileLimit:            openFileLimit,
 		StackLimitBytes:          security.StackLimitForCommand(runtimeBase),
@@ -647,9 +708,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		waitCh <- cmd.Wait()
 	}()
 	readyCh := make(chan error, 1)
+	var ready [sandbox.TargetReadyMessageSize]byte
 	go func() {
-		var ready [1]byte
 		_, err := io.ReadFull(targetReadyRead, ready[:])
+		if err == nil && ready[0] != 1 {
+			err = fmt.Errorf("unsupported target synchronization version")
+		}
 		readyCh <- err
 	}()
 	select {
@@ -694,6 +758,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			Stderr: stderrBuf.Bytes(),
 		}
 	}
+	rusageBaselineNs := binary.LittleEndian.Uint64(ready[1:])
 	if runGroup.Path != "" {
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			cgroupLimitBaseline = stats
@@ -787,7 +852,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	watchdog := time.NewTicker(1 * time.Millisecond)
 	defer watchdog.Stop()
 	lastWorkspaceScan := time.Time{}
-	maxCPUTimeMs := int64(0)
+	maxCPUTimeNs := uint64(0)
+	processClockPeakNs := uint64(0)
 	maxRSSKB := int64(0)
 	maxVmSizeKB := int64(0)
 	var waitErr error
@@ -862,11 +928,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 						if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
 							cpuUsageMicros -= cgroupCPUBaselineMicros
 						}
-						cpuTimeMs := cpuUsageMicros / 1000
-						if cpuTimeMs > maxCPUTimeMs {
-							maxCPUTimeMs = cpuTimeMs
+						cpuNs := uint64(max(0, cpuUsageMicros)) * 1000
+						if cpuNs > maxCPUTimeNs {
+							maxCPUTimeNs = cpuNs
 						}
-						if targetStarted && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+						if targetStarted && result.Status == "OK" && cpuNs > cpuTimeLimitNs {
 							result.Status = model.RunStatusTLE
 							result.Reason = "cpu time limit exceeded"
 							result.VerdictSource = "cpu_time_cgroup"
@@ -895,17 +961,19 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 
 			if targetStarted {
 				if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
-					cpuTimeMs := timing.MilliFromNanoseconds(cpuNs)
 					cpuTimeAvailable := true
-					if targetCPUTimeMs, ok := cpuTimeAfterBaseline(cpuNs, cpuBaselineNs, cpuBaselineSet); ok {
-						cpuTimeMs = targetCPUTimeMs
+					if cpuBaselineSet && cpuNs >= cpuBaselineNs {
+						cpuNs -= cpuBaselineNs
 					} else if cpuBaselineSet {
 						cpuTimeAvailable = false
 					}
-					if cpuTimeAvailable && cpuTimeMs > maxCPUTimeMs {
-						maxCPUTimeMs = cpuTimeMs
+					if cpuTimeAvailable && cpuNs > processClockPeakNs {
+						processClockPeakNs = cpuNs
 					}
-					if cpuTimeAvailable && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+					if cpuTimeAvailable && cpuNs > maxCPUTimeNs {
+						maxCPUTimeNs = cpuNs
+					}
+					if cpuTimeAvailable && result.Status == "OK" && cpuNs > cpuTimeLimitNs {
 						result.Status = model.RunStatusTLE
 						result.Reason = "cpu time limit exceeded"
 						result.VerdictSource = "cpu_time"
@@ -981,7 +1049,13 @@ done:
 	}
 
 	result.WallTimeMs = timing.SinceMillis(wallStart)
-	result.CPUTimeMs = maxCPUTimeMs
+	result.CPUTimeNs = maxCPUTimeNs
+	result.CPUAccounting = &model.CPUAccounting{
+		ProcessClockBaselineNs: cpuBaselineNs,
+		RusageBaselineNs:       rusageBaselineNs,
+		ProcessClockPeakNs:     processClockPeakNs,
+		SelectedSource:         "process_clock",
+	}
 	result.Stdout = stdoutBuf.Bytes()
 	result.Stderr = stderrBuf.Bytes()
 	result.StdoutTruncated = stdoutBuf.Truncated()
@@ -989,6 +1063,9 @@ done:
 	result.MemoryKB = maxRSSKB
 
 	if runGroup.Path != "" {
+		if maxCPUTimeNs > processClockPeakNs {
+			result.CPUAccounting.SelectedSource = "cgroup"
+		}
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			if stats.MemoryPeakBytes > 0 {
 				peakKB := stats.MemoryPeakBytes / 1024
@@ -1004,8 +1081,9 @@ done:
 				if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
 					cpuUsageMicros -= cgroupCPUBaselineMicros
 				}
-				if cpuTimeMs := cpuUsageMicros / 1000; cpuTimeMs > result.CPUTimeMs {
-					result.CPUTimeMs = cpuTimeMs
+				if cpuNs := uint64(max(0, cpuUsageMicros)) * 1000; cpuNs > result.CPUTimeNs {
+					result.CPUTimeNs = cpuNs
+					result.CPUAccounting.SelectedSource = "cgroup"
 				}
 			}
 			if result.Status == "OK" {
@@ -1077,18 +1155,20 @@ done:
 		}
 		if processCPU := ps.UserTime() + ps.SystemTime(); processCPU > 0 {
 			result.ProcessCPUTimeMs = timing.MilliFromDuration(processCPU)
+			result.CPUAccounting.WaitUserNs = uint64(max(0, ps.UserTime().Nanoseconds()))
+			result.CPUAccounting.WaitSystemNs = uint64(max(0, ps.SystemTime().Nanoseconds()))
 			if targetStarted && runGroup.Path == "" {
 				usageCPUNs := uint64(processCPU.Nanoseconds())
-				if finalCPUTimeMs, ok := cpuTimeAfterBaseline(usageCPUNs, cpuBaselineNs, cpuBaselineSet); ok {
-					if finalCPUTimeMs > result.CPUTimeMs {
-						result.CPUTimeMs = finalCPUTimeMs
-					}
-				}
+				finalizeWaitCPUTime(&result, usageCPUNs, true)
 			}
-			if !targetStarted && result.CPUTimeMs <= 0 {
-				result.CPUTimeMs = result.ProcessCPUTimeMs
+			if !targetStarted && result.CPUTimeNs == 0 {
+				result.CPUTimeNs = uint64(processCPU.Nanoseconds())
 			}
+		} else if targetStarted && runGroup.Path == "" {
+			finalizeWaitCPUTime(&result, 0, ps.UserTime() >= 0 && ps.SystemTime() >= 0)
 		}
+	} else if targetStarted && runGroup.Path == "" {
+		finalizeWaitCPUTime(&result, 0, false)
 	}
 	helperRuntimeOOM := bytes.Contains(result.Stderr, []byte("fatal error: runtime: out of memory"))
 	helperPageSummaryOOM := bytes.Contains(result.Stderr, []byte("fatal error: failed to reserve page summary memory"))
@@ -1107,7 +1187,8 @@ done:
 		result.Reason = "memory limit exceeded"
 		result.VerdictSource = "address_space"
 	}
-	result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatus(result.Status, result.Reason, result.VerdictSource, result.CPUTimeMs, timeLimitMs, runGroup.Path != "")
+	result.CPUTimeMs = ceilCPUMilliseconds(result.CPUTimeNs)
+	result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatusNs(result.Status, result.Reason, result.VerdictSource, result.CPUTimeNs, cpuTimeLimitNs, runGroup.Path != "")
 	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
 		result.Status = model.RunStatusInitFail
 		result.Reason = clipUTF8(result.Stderr, responseStderrLimitBytes(req))
@@ -1120,6 +1201,7 @@ done:
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
 	}
+	normalizeExecResultCPU(&result, cpuNormalizer)
 	return result
 }
 

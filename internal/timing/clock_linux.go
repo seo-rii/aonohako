@@ -33,6 +33,10 @@ func CurrentProcessCPUTimeNs() (uint64, error) {
 	return readClockNs(unix.CLOCK_PROCESS_CPUTIME_ID)
 }
 
+func CurrentThreadCPUTimeNs() (uint64, error) {
+	return readClockNs(unix.CLOCK_THREAD_CPUTIME_ID)
+}
+
 func ProcessCPUTimeNs(pid int) (uint64, error) {
 	return readClockNs(processCPUClockID(pid))
 }

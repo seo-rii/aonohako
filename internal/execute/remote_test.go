@@ -1,6 +1,7 @@
 package execute
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -296,6 +297,65 @@ func TestRemoteRunnerClassifiesAcceptedCPUOverrun(t *testing.T) {
 	}
 }
 
+func TestRemoteRunnerPassesThroughCPUNormalizationMetadata(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"Accepted\",\"time_ms\":4,\"wall_time_ms\":4,\"cpu_time_ms\":30,\"raw_cpu_time_ms\":50,\"cpu_time_normalization\":{\"method\":\"go-fixed-int-v1\",\"scale_ppm\":600000,\"reference_time_ns\":60000000,\"observed_time_ns\":100000000}}\n\n"))
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{URL: remote.URL},
+		},
+	})
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:     "plain",
+		Binaries: []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+		Limits:   model.Limits{TimeMs: 100, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusAccepted || resp.RawCPUTimeMs == nil || *resp.RawCPUTimeMs != 50 {
+		t.Fatalf("unexpected remote normalized response: %+v", resp)
+	}
+	if resp.CPUTimeNormalization == nil || resp.CPUTimeNormalization.ScalePPM != 600_000 {
+		t.Fatalf("normalization metadata was not preserved: %+v", resp.CPUTimeNormalization)
+	}
+}
+
+func TestRemoteRunnerRejectsNegativeRawCPUTime(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: result\n"))
+		_, _ = w.Write([]byte("data: {\"status\":\"Accepted\",\"time_ms\":1,\"wall_time_ms\":1,\"cpu_time_ms\":1,\"raw_cpu_time_ms\":-1}\n\n"))
+	}))
+	defer remote.Close()
+
+	runner := newRemoteRunner(config.Config{
+		Execution: config.ExecutionConfig{
+			Platform: platform.RuntimeOptions{
+				DeploymentTarget:   platform.DeploymentTargetDev,
+				ExecutionTransport: platform.ExecutionTransportRemote,
+				SandboxBackend:     platform.SandboxBackendNone,
+			},
+			Remote: config.RemoteExecutorConfig{URL: remote.URL},
+		},
+	})
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		Lang:     "plain",
+		Binaries: []model.Binary{{Name: "main.txt", DataB64: "SGk="}},
+		Limits:   model.Limits{TimeMs: 100, MemoryMB: 64},
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "negative raw CPU") {
+		t.Fatalf("unexpected remote response: %+v", resp)
+	}
+}
+
 func TestRemoteRunnerSendsBearerToken(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -473,68 +533,259 @@ func TestRemoteRunnerAbsoluteDeadlineCannotBeExtendedByHeartbeats(t *testing.T) 
 }
 
 func TestRemoteRunnerAbsoluteDeadlineIncludesPipelineLimitsAndOverhead(t *testing.T) {
-	var remaining time.Duration
-	runner := &remoteRunner{
-		client: &http.Client{Transport: executeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-			deadline, ok := req.Context().Deadline()
-			if !ok {
-				t.Fatal("remote request context has no deadline")
-			}
-			remaining = time.Until(deadline)
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Status:     "200 OK",
-				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"Accepted\"}\n\n")),
-			}, nil
-		})},
-		executeURL: "http://remote.example/execute",
-	}
-	resp := runner.Run(context.Background(), &model.RunRequest{Steps: []model.RunStep{
+	assertRemoteRunnerAbsoluteDeadline(t, context.Background(), &model.RunRequest{Steps: []model.RunStep{
 		{Limits: model.Limits{TimeMs: 1000}},
 		{Limits: model.Limits{TimeMs: 2000}},
-	}}, Hooks{})
-	if resp.Status != model.RunStatusAccepted {
-		t.Fatalf("response = %+v", resp)
-	}
-	want := 3*time.Second + remoteio.DefaultOperationOverhead
-	if remaining < want-time.Second || remaining > want+time.Second {
-		t.Fatalf("remote deadline remaining = %s, want about %s", remaining, want)
-	}
+	}}, 0, 43_200*time.Millisecond)
 }
 
 func TestRemoteRunnerAbsoluteDeadlineIncludesPipelineV1InteractiveAndSPJLimits(t *testing.T) {
-	var remaining time.Duration
-	runner := &remoteRunner{
-		client: &http.Client{Transport: executeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-			deadline, ok := req.Context().Deadline()
-			if !ok {
-				t.Fatal("remote pipeline request context has no deadline")
-			}
-			remaining = time.Until(deadline)
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Status:     "200 OK",
-				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"Accepted\"}\n\n")),
-			}, nil
-		})},
-		executeURL: "http://remote.example/execute",
-	}
 	interactorLimits := model.Limits{TimeMs: 3000}
-	resp := runner.Run(context.Background(), &model.RunRequest{Pipeline: &model.PipelineV1{
+	assertRemoteRunnerAbsoluteDeadline(t, context.Background(), &model.RunRequest{Pipeline: &model.PipelineV1{
 		Steps: []model.PipelineStep{
 			{Limits: model.Limits{TimeMs: 1000}, Executor: model.PipelineExecutor{InteractorLimits: &interactorLimits}},
 			{Limits: model.Limits{TimeMs: 2000}},
 		},
 		FinalJudge: model.PipelineFinalJudge{SPJ: &model.SPJSpec{Limits: &model.Limits{TimeMs: 4000}}},
-	}}, Hooks{})
+	}}, 0, 69_600*time.Millisecond)
+}
+
+func TestRemoteRunnerAbsoluteDeadlineAllowsCPUNormalization(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	for _, tc := range []struct {
+		name string
+		req  model.RunRequest
+		want time.Duration
+	}{
+		{
+			name: "sixty second CPU limit permits three runs on slow normalized host",
+			req:  model.RunRequest{Limits: model.Limits{TimeMs: 60_000}},
+			want: 822 * time.Second, // 3 * (240s raw CPU + 24s wall slack) + 30s overhead.
+		},
+		{
+			name: "minimum wall slack applies to all three sampled runs",
+			req:  model.RunRequest{Limits: model.Limits{TimeMs: 1}},
+			want: 30_312 * time.Millisecond,
+		},
+		{
+			name: "minimum wall slack applies to each sequential step",
+			req: model.RunRequest{Steps: []model.RunStep{
+				{Limits: model.Limits{TimeMs: 1}},
+				{Limits: model.Limits{TimeMs: 2}},
+			}},
+			want: 30_212 * time.Millisecond,
+		},
+		{
+			name: "minimum wall slack applies to each pipeline v1 step",
+			req: model.RunRequest{Pipeline: &model.PipelineV1{Steps: []model.PipelineStep{
+				{Limits: model.Limits{TimeMs: 1}},
+				{Limits: model.Limits{TimeMs: 2}},
+			}}},
+			want: 30_212 * time.Millisecond,
+		},
+		{
+			name: "concurrent interactor uses larger allowance",
+			req: model.RunRequest{
+				Limits:     model.Limits{TimeMs: 1000},
+				Interactor: &model.InteractorSpec{Limits: &model.Limits{TimeMs: 3000}},
+			},
+			want: 43_200 * time.Millisecond,
+		},
+		{
+			name: "smaller interactor does not shorten main allowance",
+			req: model.RunRequest{
+				Limits:     model.Limits{TimeMs: 3000},
+				Interactor: &model.InteractorSpec{Limits: &model.Limits{TimeMs: 1000}},
+			},
+			want: 43_200 * time.Millisecond,
+		},
+		{
+			name: "default SPJ is a separate normalized stage",
+			req: model.RunRequest{
+				Limits: model.Limits{TimeMs: 2000},
+				SPJ:    &model.SPJSpec{},
+			},
+			want: 43_200 * time.Millisecond,
+		},
+		{
+			name: "explicit SPJ is a separate normalized stage",
+			req: model.RunRequest{
+				Limits: model.Limits{TimeMs: 2000},
+				SPJ:    &model.SPJSpec{Limits: &model.Limits{TimeMs: 4000}},
+			},
+			want: 56_400 * time.Millisecond,
+		},
+		{
+			name: "nonpositive SPJ time retains default allowance",
+			req: model.RunRequest{
+				Limits: model.Limits{TimeMs: 2000},
+				SPJ:    &model.SPJSpec{Limits: &model.Limits{TimeMs: -1}},
+			},
+			want: 43_200 * time.Millisecond,
+		},
+		{
+			name: "nonpositive main limits retain only operation overhead",
+			req:  model.RunRequest{Limits: model.Limits{TimeMs: -1}},
+			want: 30 * time.Second,
+		},
+		{
+			name: "extreme main limit is clamped before scaling",
+			req:  model.RunRequest{Limits: model.Limits{TimeMs: maxInt}},
+			want: 7950 * time.Second,
+		},
+		{
+			name: "interactor and SPJ limits are clamped before scaling",
+			req: model.RunRequest{
+				Limits:     model.Limits{TimeMs: -1},
+				Interactor: &model.InteractorSpec{Limits: &model.Limits{TimeMs: maxInt}},
+				SPJ:        &model.SPJSpec{Limits: &model.Limits{TimeMs: maxInt}},
+			},
+			want: 5310 * time.Second,
+		},
+		{
+			name: "sequential limits are clamped before scaling",
+			req: model.RunRequest{Steps: []model.RunStep{
+				{Limits: model.Limits{TimeMs: -1}},
+				{Limits: model.Limits{TimeMs: maxInt}},
+			}},
+			want: 2670 * time.Second,
+		},
+		{
+			name: "pipeline interactive limits are clamped before scaling",
+			req: model.RunRequest{Pipeline: &model.PipelineV1{Steps: []model.PipelineStep{
+				{Limits: model.Limits{TimeMs: -1}},
+				{
+					Limits:   model.Limits{TimeMs: -1},
+					Executor: model.PipelineExecutor{InteractorLimits: &model.Limits{TimeMs: maxInt}},
+				},
+			}}},
+			want: 2670 * time.Second,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertRemoteRunnerAbsoluteDeadline(t, context.Background(), &tc.req, 0, tc.want)
+		})
+	}
+}
+
+func TestRemoteRunnerAbsoluteDeadlineHonorsExplicitTimeoutAndParentDeadline(t *testing.T) {
+	req := &model.RunRequest{Limits: model.Limits{TimeMs: 60_000}}
+	t.Run("explicit timeout is not expanded", func(t *testing.T) {
+		assertRemoteRunnerAbsoluteDeadline(t, context.Background(), req, 5*time.Second, 5*time.Second)
+	})
+	t.Run("earlier parent deadline remains authoritative", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		assertRemoteRunnerAbsoluteDeadline(t, ctx, req, 0, 822*time.Second)
+	})
+	t.Run("earlier parent deadline also overrides explicit timeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		assertRemoteRunnerAbsoluteDeadline(t, ctx, req, 5*time.Second, 5*time.Second)
+	})
+	t.Run("later parent deadline does not extend derived timeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		assertRemoteRunnerAbsoluteDeadline(t, ctx, req, 0, 822*time.Second)
+	})
+}
+
+func TestRemoteRunnerAbsoluteDeadlineIncludesOnlyEligibleShortCaseRepetitions(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*model.RunRequest)
+		want   time.Duration
+	}{
+		{name: "ordinary batch", want: 43_200 * time.Millisecond},
+		{
+			name: "URL payloads are frozen by receiver",
+			mutate: func(req *model.RunRequest) {
+				req.Binaries = []model.Binary{{Name: "Main", DataURL: "https://payload.example/program"}}
+				req.StdinURL = "https://payload.example/input"
+				req.ExpectedStdoutURL = "https://payload.example/answer"
+			},
+			want: 43_200 * time.Millisecond,
+		},
+		{name: "ignore TLE", mutate: func(req *model.RunRequest) { req.IgnoreTLE = true }, want: 34_400 * time.Millisecond},
+		{name: "network", mutate: func(req *model.RunRequest) { req.EnableNetwork = true }, want: 34_400 * time.Millisecond},
+		{name: "file output", mutate: func(req *model.RunRequest) { req.FileOutputs = []model.OutputFile{{Path: "answer"}} }, want: 34_400 * time.Millisecond},
+		{name: "sidecar output", mutate: func(req *model.RunRequest) { req.SidecarOutputs = []model.OutputFile{{Path: "image"}} }, want: 34_400 * time.Millisecond},
+		{name: "interactor", mutate: func(req *model.RunRequest) { req.Interactor = &model.InteractorSpec{} }, want: 34_400 * time.Millisecond},
+		{name: "communication", mutate: func(req *model.RunRequest) { req.Communication = &model.CommunicationSpec{} }, want: 34_400 * time.Millisecond},
+		{name: "SPJ", mutate: func(req *model.RunRequest) { req.SPJ = &model.SPJSpec{} }, want: 38_800 * time.Millisecond},
+		{
+			name: "step pipeline",
+			mutate: func(req *model.RunRequest) {
+				req.Steps = []model.RunStep{{Limits: model.Limits{TimeMs: 1000}}}
+			},
+			want: 34_400 * time.Millisecond,
+		},
+		{
+			name: "pipeline v1",
+			mutate: func(req *model.RunRequest) {
+				req.Pipeline = &model.PipelineV1{Steps: []model.PipelineStep{{Limits: model.Limits{TimeMs: 1000}}}}
+			},
+			want: 34_400 * time.Millisecond,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &model.RunRequest{Limits: model.Limits{TimeMs: 1000}}
+			if tc.mutate != nil {
+				tc.mutate(req)
+			}
+			original, err := json.Marshal(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertRemoteRunnerAbsoluteDeadline(t, context.Background(), req, 0, tc.want)
+			after, err := json.Marshal(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(after, original) {
+				t.Fatal("timeout eligibility changed the caller's request payload")
+			}
+		})
+	}
+}
+
+func assertRemoteRunnerAbsoluteDeadline(t *testing.T, ctx context.Context, req *model.RunRequest, absoluteTimeout, want time.Duration) {
+	t.Helper()
+	var deadline time.Time
+	runner := &remoteRunner{
+		client: &http.Client{Transport: executeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			var ok bool
+			deadline, ok = req.Context().Deadline()
+			if !ok {
+				t.Fatal("remote request context has no deadline")
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"Accepted\"}\n\n")),
+			}, nil
+		})},
+		executeURL:      "http://remote.example/execute",
+		absoluteTimeout: absoluteTimeout,
+	}
+	started := time.Now()
+	resp := runner.Run(ctx, req, Hooks{})
+	finished := time.Now()
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("response = %+v", resp)
 	}
-	want := 9*time.Second + remoteio.DefaultOperationOverhead
-	if remaining < want-time.Second || remaining > want+time.Second {
-		t.Fatalf("remote pipeline deadline remaining = %s, want about %s", remaining, want)
+	earliest, latest := started.Add(want), finished.Add(want)
+	if parentDeadline, ok := ctx.Deadline(); ok {
+		if parentDeadline.Before(earliest) {
+			earliest = parentDeadline
+		}
+		if parentDeadline.Before(latest) {
+			latest = parentDeadline
+		}
+	}
+	if deadline.Before(earliest) || deadline.After(latest) {
+		t.Fatalf("remote deadline from start = %s, want between %s and %s", deadline.Sub(started), earliest.Sub(started), latest.Sub(started))
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/timing"
 	"aonohako/internal/util"
 )
 
@@ -81,7 +82,10 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
-		var requestedTimeMs int64
+		// The selected instance's calibration arrives only with its result.
+		// Cover the maximum supported wall allowance for each sequential stage,
+		// including each stage's minimum slack, before adding transport overhead.
+		var requestedWallTimeMs int64
 		if req.Pipeline != nil {
 			for _, step := range req.Pipeline.Steps {
 				stepTimeMs := min(max(step.Limits.TimeMs, 0), runvalidation.MaxTimeMs)
@@ -89,7 +93,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 					interactorTimeMs := min(max(step.Executor.InteractorLimits.TimeMs, 0), runvalidation.MaxTimeMs)
 					stepTimeMs = max(stepTimeMs, interactorTimeMs)
 				}
-				requestedTimeMs += int64(stepTimeMs)
+				requestedWallTimeMs += int64(timing.MaximumCPUWallLimitMillis(stepTimeMs))
 			}
 		} else if runvalidation.UsesSteps(req) {
 			for _, step := range req.Steps {
@@ -100,7 +104,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				if stepTimeMs > runvalidation.MaxTimeMs {
 					stepTimeMs = runvalidation.MaxTimeMs
 				}
-				requestedTimeMs += int64(stepTimeMs)
+				requestedWallTimeMs += int64(timing.MaximumCPUWallLimitMillis(stepTimeMs))
 			}
 		} else {
 			mainTimeMs := req.Limits.TimeMs
@@ -110,7 +114,6 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if mainTimeMs > runvalidation.MaxTimeMs {
 				mainTimeMs = runvalidation.MaxTimeMs
 			}
-			requestedTimeMs = int64(mainTimeMs)
 			if req.Interactor != nil && req.Interactor.Limits != nil {
 				interactorTimeMs := req.Interactor.Limits.TimeMs
 				if interactorTimeMs < 0 {
@@ -119,9 +122,23 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				if interactorTimeMs > runvalidation.MaxTimeMs {
 					interactorTimeMs = runvalidation.MaxTimeMs
 				}
-				if int64(interactorTimeMs) > requestedTimeMs {
-					requestedTimeMs = int64(interactorTimeMs)
-				}
+				mainTimeMs = max(mainTimeMs, interactorTimeMs)
+			}
+			requestedWallTimeMs = int64(timing.MaximumCPUWallLimitMillis(mainTimeMs))
+			// The downstream instance also owns its short-case sampling policy.
+			// Any ordinary batch can qualify after its first execution, so reserve
+			// two further full wall allowances even when the caller's policy is off.
+			// URL payloads are resolved/frozen downstream before repetition; ignore
+			// those transport references only in this private eligibility copy.
+			repeatReq := *req
+			repeatReq.StdinURL = ""
+			repeatReq.ExpectedStdoutURL = ""
+			repeatReq.Binaries = append([]model.Binary(nil), req.Binaries...)
+			for i := range repeatReq.Binaries {
+				repeatReq.Binaries[i].DataURL = ""
+			}
+			if shortCaseRepeatEligible(&repeatReq, hooks) {
+				requestedWallTimeMs *= 3
 			}
 		}
 		spj := req.SPJ
@@ -133,9 +150,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if spj.Limits != nil && spj.Limits.TimeMs > 0 {
 				spjTimeMs = min(spj.Limits.TimeMs, runvalidation.MaxTimeMs)
 			}
-			requestedTimeMs += int64(spjTimeMs)
+			requestedWallTimeMs += int64(timing.MaximumCPUWallLimitMillis(spjTimeMs))
 		}
-		absoluteTimeout = time.Duration(requestedTimeMs)*time.Millisecond + remoteio.DefaultOperationOverhead
+		absoluteTimeout = time.Duration(requestedWallTimeMs)*time.Millisecond + remoteio.DefaultOperationOverhead
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()
@@ -325,6 +342,14 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if remoteResult.TimeMs < 0 || remoteResult.WallTimeMs < 0 || remoteResult.CPUTimeMs < 0 || remoteResult.ProcessCPUTimeMs < 0 || remoteResult.MemoryKB < 0 {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: negative resource measurement"}
 			}
+			if remoteResult.RawCPUTimeMs != nil && *remoteResult.RawCPUTimeMs < 0 {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: negative raw CPU measurement"}
+			}
+			if normalization := remoteResult.CPUTimeNormalization; normalization != nil {
+				if strings.TrimSpace(normalization.Method) == "" || normalization.ScalePPM <= 0 || normalization.ReferenceTimeNs == 0 || normalization.ObservedTimeNs == 0 {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: malformed CPU normalization metadata"}
+				}
+			}
 			if remoteResult.Score != nil && (math.IsNaN(*remoteResult.Score) || math.IsInf(*remoteResult.Score, 0) || *remoteResult.Score < 0 || *remoteResult.Score > 1) {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: score out of range"}
 			}
@@ -346,6 +371,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				}
 				if step.TimeMs < 0 || step.WallTimeMs < 0 || step.CPUTimeMs < 0 || step.ProcessCPUTimeMs < 0 || step.MemoryKB < 0 || step.HandoffBytes < 0 {
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative measurement"}
+				}
+				if step.RawCPUTimeMs != nil && *step.RawCPUTimeMs < 0 {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative raw CPU measurement"}
 				}
 				var truncated bool
 				step.Stdout, truncated = capturedOutputValue([]byte(step.Stdout), stdoutResponseLimit)

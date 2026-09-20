@@ -3,11 +3,13 @@ package execute
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/timing"
 )
 
 type Runner interface {
@@ -23,7 +25,23 @@ func Build(cfg config.Config) (Runner, error) {
 		if cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetSelfHosted && strings.TrimSpace(cfg.Execution.Cgroup.ParentDir) == "" {
 			return nil, fmt.Errorf("selfhosted embedded helper execution requires a cgroup parent")
 		}
-		return NewWithConfig(cfg), nil
+		service := NewWithConfig(cfg)
+		if cfg.Execution.CPUNormalization.Enabled {
+			normalizer, err := timing.CalibrateCPU(cfg.Execution.CPUNormalization.ReferenceTimeNs)
+			if err != nil {
+				return nil, fmt.Errorf("CPU normalization calibration failed: %w", err)
+			}
+			service.cpuNormalizer = normalizer
+			info, _ := normalizer.Info()
+			slog.Info(
+				"aonohako CPU normalization calibrated",
+				"method", info.Method,
+				"scale_ppm", info.ScalePPM,
+				"reference_time_ns", info.ReferenceTimeNs,
+				"observed_time_ns", info.ObservedTimeNs,
+			)
+		}
+		return service, nil
 	case platform.ExecutionTransportRemote:
 		if cfg.Execution.Platform.SandboxBackend != platform.SandboxBackendNone {
 			return nil, fmt.Errorf("remote execution requires sandbox backend none")

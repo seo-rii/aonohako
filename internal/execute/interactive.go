@@ -158,7 +158,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	var contestantFinished atomic.Bool
 	var interactorFinished atomic.Bool
 	var contestantCanceledByInteractor atomic.Bool
-	contestantLimitMs := max(1, req.Limits.TimeMs)
+	contestantLimitMs := max(1, s.cpuNormalizer.WallLimitMillis(req.Limits.TimeMs))
 	contestantTimer := time.AfterFunc(time.Duration(contestantLimitMs)*time.Millisecond, func() {
 		if contestantFinished.Load() {
 			return
@@ -168,7 +168,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		cancelInteractor()
 	})
 	defer contestantTimer.Stop()
-	interactorLimitMs := max(1, interactorReq.Limits.TimeMs)
+	interactorLimitMs := max(1, s.cpuNormalizer.WallLimitMillis(interactorReq.Limits.TimeMs))
 	interactorTimer := time.AfterFunc(time.Duration(interactorLimitMs)*time.Millisecond, func() {
 		if interactorFinished.Load() {
 			return
@@ -190,10 +190,11 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			contestantArgs,
 			req,
 			sandboxStreamConfig{
-				stdin:        contestantInR,
-				liveStdin:    true,
-				stdout:       interactorIn,
-				onStdoutDone: interactorIn.Close,
+				stdin:         contestantInR,
+				liveStdin:     true,
+				stdout:        interactorIn,
+				onStdoutDone:  interactorIn.Close,
+				cpuNormalizer: s.cpuNormalizer,
 			},
 			hooks,
 			outputLimitBytes(req),
@@ -218,6 +219,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 					uid: interactiveJudgeSandboxUID,
 					gid: interactiveJudgeSandboxGID,
 				},
+				cpuNormalizer: s.cpuNormalizer,
 			},
 			Hooks{},
 			outputLimitBytes(interactorReq),
@@ -527,6 +529,7 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		TimeMs:           wallMs,
 		WallTimeMs:       wallMs,
 		CPUTimeMs:        contestantRes.CPUTimeMs + interactorRes.CPUTimeMs,
+		RawCPUTimeMs:     sumRawCPUTime(contestantRes.RawCPUTimeMs, interactorRes.RawCPUTimeMs),
 		ProcessCPUTimeMs: contestantRes.ProcessCPUTimeMs + interactorRes.ProcessCPUTimeMs,
 		MemoryKB:         max(contestantRes.MemoryKB, interactorRes.MemoryKB),
 		ExitCode:         contestantRes.ExitCode,
@@ -588,6 +591,7 @@ func interactiveContestantStepResult(req *model.RunRequest, res execResult) mode
 		TimeMs:           res.WallTimeMs,
 		WallTimeMs:       res.WallTimeMs,
 		CPUTimeMs:        res.CPUTimeMs,
+		RawCPUTimeMs:     res.RawCPUTimeMs,
 		ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB:         res.MemoryKB,
 		ExitCode:         res.ExitCode,
@@ -613,6 +617,7 @@ func interactiveInteractorStepResult(req *model.RunRequest, res execResult) mode
 		TimeMs:           res.WallTimeMs,
 		WallTimeMs:       res.WallTimeMs,
 		CPUTimeMs:        res.CPUTimeMs,
+		RawCPUTimeMs:     res.RawCPUTimeMs,
 		ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB:         res.MemoryKB,
 		ExitCode:         res.ExitCode,

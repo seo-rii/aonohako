@@ -102,8 +102,26 @@ func emitCapturedLog(hooks Hooks, stream string, output []byte, limit int) {
 	}
 }
 
+func sumRawCPUTime(values ...*int64) *int64 {
+	var total int64
+	found := false
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		total += *value
+		found = true
+	}
+	if !found {
+		return nil
+	}
+	return &total
+}
+
 type Service struct {
 	deploymentTarget             platform.DeploymentTarget
+	cpuNormalizer                timing.CPUNormalizer
+	shortCaseSampling            bool
 	runtimeTuning                config.RuntimeTuningConfig
 	runtimeTuningProfiles        map[string]config.RuntimeTuningConfig
 	cgroupParentDir              string
@@ -143,6 +161,7 @@ func NewWithConfig(cfg config.Config) *Service {
 	}
 	return &Service{
 		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
+		shortCaseSampling:            cfg.Execution.CPUNormalization.ShortCaseSampling,
 		runtimeTuning:                cfg.Execution.RuntimeTuning.WithSafeDefaults(),
 		runtimeTuningProfiles:        profiles,
 		cgroupParentDir:              cfg.Execution.Cgroup.ParentDir,
@@ -191,19 +210,38 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		}
 		tuning = profileTuning.WithSafeDefaults()
 	}
-	if req.Communication != nil {
-		return s.runCommunication(ctx, req, hooks, tuning)
+	var response model.RunResponse
+	switch {
+	case req.Communication != nil:
+		response = s.runCommunication(ctx, req, hooks, tuning)
+	case req.Pipeline != nil:
+		response = s.runPipelineV1(ctx, req, hooks, tuning)
+	case req.Interactor != nil:
+		response = s.runInteractive(ctx, req, hooks, tuning)
+	case runvalidation.UsesSteps(req):
+		response = s.runStepPipeline(ctx, req, hooks, tuning)
+	default:
+		if s.shortCaseSampling && s.cpuNormalizer.Enabled() {
+			response = runShortCaseBatch(ctx, req, hooks, func(ctx context.Context, req *model.RunRequest, stdin io.Reader, maxBytes int64, hooks Hooks) model.RunResponse {
+				return s.runOneWithStdin(ctx, req, stdin, maxBytes, hooks, tuning, true, false).response
+			})
+		} else {
+			response = s.runOne(ctx, req, hooks, tuning, true).response
+		}
 	}
-	if req.Pipeline != nil {
-		return s.runPipelineV1(ctx, req, hooks, tuning)
+	return s.decorateCPUTimeNormalization(response)
+}
+
+func (s *Service) decorateCPUTimeNormalization(response model.RunResponse) model.RunResponse {
+	if info, ok := s.cpuNormalizer.Info(); ok {
+		response.CPUTimeNormalization = &model.CPUTimeNormalization{
+			Method:          info.Method,
+			ScalePPM:        info.ScalePPM,
+			ReferenceTimeNs: info.ReferenceTimeNs,
+			ObservedTimeNs:  info.ObservedTimeNs,
+		}
 	}
-	if req.Interactor != nil {
-		return s.runInteractive(ctx, req, hooks, tuning)
-	}
-	if runvalidation.UsesSteps(req) {
-		return s.runStepPipeline(ctx, req, hooks, tuning)
-	}
-	return s.runOne(ctx, req, hooks, tuning, true).response
+	return response
 }
 
 func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput bool) sandboxRunResult {
@@ -303,10 +341,10 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		stdin = &sandboxPreparedStdin{file: judgeInput}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir)
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
-		return sandboxRunResult{response: model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason, VerdictSource: res.VerdictSource}}
+		return sandboxRunResult{response: initializationFailureResponse(res, wallMs)}
 	}
 
 	rawOut := res.Stdout
@@ -332,7 +370,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	status, evalReason, verdictSource := classifyRunStatusWithoutOutput(req, res)
 	var score *float64
 	if evaluateOutput {
-		status, score, evalReason, verdictSource = evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, judgeInputPath, sidecarOutputs, tuning, s.cgroupParentDir)
+		status, score, evalReason, verdictSource = evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, judgeInputPath, sidecarOutputs, tuning, s.cgroupParentDir, s.cpuNormalizer)
 	}
 	reason := res.Reason
 	if evalReason != "" {
@@ -364,6 +402,10 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			TimeMs:           res.WallTimeMs,
 			WallTimeMs:       res.WallTimeMs,
 			CPUTimeMs:        res.CPUTimeMs,
+			CPUTimeNs:        res.CPUTimeNs,
+			RawCPUTimeMs:     res.RawCPUTimeMs,
+			RawCPUTimeNs:     res.RawCPUTimeNs,
+			CPUAccounting:    res.CPUAccounting,
 			ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 			MemoryKB:         res.MemoryKB,
 			ExitCode:         res.ExitCode,
@@ -687,6 +729,7 @@ func stepResultFromResponse(id, programID string, resp model.RunResponse) model.
 		TimeMs:           resp.TimeMs,
 		WallTimeMs:       resp.WallTimeMs,
 		CPUTimeMs:        resp.CPUTimeMs,
+		RawCPUTimeMs:     resp.RawCPUTimeMs,
 		ProcessCPUTimeMs: resp.ProcessCPUTimeMs,
 		MemoryKB:         resp.MemoryKB,
 		ExitCode:         resp.ExitCode,
@@ -716,14 +759,29 @@ func prefixStepVerdictSource(stepID, source string) string {
 	return "step:" + stepID + ":" + source
 }
 
+// Preserve counter diagnostics even when accounting itself fails, while keeping
+// initialization failures out of output judging and captured-output delivery.
+func initializationFailureResponse(res execResult, wallMs int64) model.RunResponse {
+	return model.RunResponse{
+		Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs,
+		CPUTimeMs: res.CPUTimeMs, CPUTimeNs: res.CPUTimeNs,
+		RawCPUTimeMs: res.RawCPUTimeMs, RawCPUTimeNs: res.RawCPUTimeNs,
+		CPUAccounting: res.CPUAccounting, ProcessCPUTimeMs: res.ProcessCPUTimeMs,
+		MemoryKB: res.MemoryKB, ExitCode: res.ExitCode,
+		Reason: res.Reason, VerdictSource: res.VerdictSource,
+	}
+}
+
 func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) model.RunResponse {
 	var wallMs int64
 	var cpuMs int64
 	var processCPUTimeMs int64
+	var rawCPUTimeMs *int64
 	var memoryKB int64
 	for _, step := range steps {
 		wallMs += step.WallTimeMs
 		cpuMs += step.CPUTimeMs
+		rawCPUTimeMs = sumRawCPUTime(rawCPUTimeMs, step.RawCPUTimeMs)
 		processCPUTimeMs += step.ProcessCPUTimeMs
 		if step.MemoryKB > memoryKB {
 			memoryKB = step.MemoryKB
@@ -732,6 +790,12 @@ func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) mod
 	resp.TimeMs = wallMs
 	resp.WallTimeMs = wallMs
 	resp.CPUTimeMs = cpuMs
+	resp.RawCPUTimeMs = rawCPUTimeMs
+	// These diagnostics describe one sandbox, not the aggregate of its stages.
+	// Do not leave the final stage's precise counter beside a summed ms total.
+	resp.CPUTimeNs = 0
+	resp.RawCPUTimeNs = nil
+	resp.CPUAccounting = nil
 	resp.ProcessCPUTimeMs = processCPUTimeMs
 	if memoryKB > resp.MemoryKB {
 		resp.MemoryKB = memoryKB

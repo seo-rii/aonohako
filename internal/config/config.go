@@ -23,6 +23,7 @@ import (
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/rustpolicy"
 	"aonohako/internal/security"
+	"aonohako/internal/timing"
 )
 
 type RemoteAuthMode string
@@ -59,10 +60,17 @@ type InboundAuthConfig struct {
 type ExecutionConfig struct {
 	Platform               platform.RuntimeOptions
 	Remote                 RemoteExecutorConfig
+	CPUNormalization       CPUNormalizationConfig
 	RuntimeTuning          RuntimeTuningConfig
 	RuntimeTuningProfiles  map[string]RuntimeTuningConfig
 	ProblemRuntimeProfiles map[string]string
 	Cgroup                 CgroupConfig
+}
+
+type CPUNormalizationConfig struct {
+	Enabled           bool
+	ReferenceTimeNs   uint64
+	ShortCaseSampling bool
 }
 
 type CgroupConfig struct {
@@ -257,6 +265,24 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	remoteStrictProtocol, err := parseBoolEnv("AONOHAKO_REMOTE_STRICT_PROTOCOL", os.Getenv("AONOHAKO_REMOTE_STRICT_PROTOCOL"), defaultRemoteStrictProtocol(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	cpuNormalizationEnabled, err := parseBoolEnv("AONOHAKO_CPU_NORMALIZATION", os.Getenv("AONOHAKO_CPU_NORMALIZATION"), defaultCPUNormalization(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	shortCaseSampling, err := parseBoolEnv("AONOHAKO_CPU_SHORT_CASE_SAMPLING", os.Getenv("AONOHAKO_CPU_SHORT_CASE_SAMPLING"), cpuNormalizationEnabled)
+	if err != nil {
+		return Config{}, err
+	}
+	cpuNormalizationReferenceMs, err := parseBoundedIntEnv(
+		"AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS",
+		os.Getenv("AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS"),
+		int(timing.DefaultCPUReferenceTimeNs/uint64(time.Millisecond)),
+		int(timing.MinimumCPUCalibrationTimeNs/uint64(time.Millisecond)),
+		int(timing.MaximumCPUCalibrationTimeNs/uint64(time.Millisecond)),
+	)
 	if err != nil {
 		return Config{}, err
 	}
@@ -605,6 +631,11 @@ func Load() (Config, error) {
 			SSEIdleTimeout: time.Duration(remoteSSEIdleTimeoutSec) * time.Second,
 			StrictProtocol: remoteStrictProtocol,
 		},
+		CPUNormalization: CPUNormalizationConfig{
+			Enabled:           cpuNormalizationEnabled,
+			ReferenceTimeNs:   uint64(cpuNormalizationReferenceMs) * uint64(time.Millisecond),
+			ShortCaseSampling: shortCaseSampling,
+		},
 		RuntimeTuning:          runtimeTuning,
 		RuntimeTuningProfiles:  runtimeTuningProfiles,
 		ProblemRuntimeProfiles: problemRuntimeProfiles,
@@ -621,6 +652,9 @@ func Load() (Config, error) {
 
 	if platform.CloudRunMarkersPresent() && execution.Platform.DeploymentTarget != platform.DeploymentTargetCloudRun {
 		return Config{}, fmt.Errorf("AONOHAKO_DEPLOYMENT_TARGET=cloudrun is required when Cloud Run markers are present")
+	}
+	if execution.CPUNormalization.Enabled && !defaultCPUNormalization(execution.Platform) {
+		return Config{}, fmt.Errorf("AONOHAKO_CPU_NORMALIZATION=true requires cloudrun embedded helper execution")
 	}
 	contract, err := execution.Platform.SecurityContract()
 	if err != nil {
@@ -1052,6 +1086,12 @@ func defaultTrustedPlatformHeaders(opts platform.RuntimeOptions) bool {
 
 func defaultRemoteStrictProtocol(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget != platform.DeploymentTargetDev
+}
+
+func defaultCPUNormalization(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget == platform.DeploymentTargetCloudRun &&
+		opts.ExecutionTransport == platform.ExecutionTransportEmbedded &&
+		opts.SandboxBackend == platform.SandboxBackendHelper
 }
 
 func DefaultRuntimeTuningConfig() RuntimeTuningConfig {

@@ -457,7 +457,7 @@ reported as runtime failure instead of silently falling back to process stdout.
 | Metric | Source | Why |
 | --- | --- | --- |
 | `wall_time_ms` | `CLOCK_MONOTONIC` | stable wall clock, not affected by time jumps |
-| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec` for run-cgroup CPU usage | aggregates all threads inside the process and, when cgroups are enabled, covers the run cgroup rather than only the main PID |
+| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec`; Cloud Run embedded helpers translate the finalized value through a startup fixed-work calibration | aggregates all target threads and removes the dominant host-throughput difference between heterogeneous Cloud Run instances; `raw_cpu_time_ms` preserves scheduled host time |
 | `memory_kb` | `/proc/<pid>/statm` sampled during execution and `/proc/<pid>/smaps_rollup` near the limit or when AS is disabled; cgroup runs additionally use aggregate `memory.peak` | captures target RSS without charging the API server or sandbox helper, and reports the kernel aggregate peak for cgroup process trees |
 
 Important consequence:
@@ -466,6 +466,43 @@ Important consequence:
 - multiprocessing is not allowed by seccomp
 - because `fork`/`vfork`/`clone3` are denied and only thread-form `clone` is
   allowed, `cpu_time_ms` remains meaningful for the whole submission process
+
+Cloud Run does not guarantee a fixed processor model for a vCPU. An embedded
+Cloud Run helper therefore warms the calibration loop, then runs five samples
+of versioned, fixed, single-thread integer work before accepting traffic,
+measures them with `CLOCK_THREAD_CPUTIME_ID`, and uses the median to build an
+immutable instance scale. The sorted samples' central-three span must be at
+most 10% of the median. A wider span is treated as transient startup noise and
+the helper repeats a fresh warm-up plus five-sample pass, up to five total
+attempts. Each rejected pass logs all five samples, the median, and the measured
+spread. Only five consecutive unstable passes fail startup, so isolated noise
+does not discard an otherwise healthy Cloud Run instance. The default
+reference is 60 ms and may be changed with
+`AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS`; the scale is applied automatically
+only to `cloudrun + embedded + helper`. `AONOHAKO_CPU_NORMALIZATION=false` is
+the rollback switch. Calibration failure or a sample outside the supported
+duration/scale bounds fails startup rather than mixing raw and normalized
+semantics.
+
+The public CPU limit is converted back into raw host nanoseconds for process and
+cgroup watchdogs. Reporting scales the raw nanosecond value before rounding up
+to whole milliseconds; the inverse budget uses floor division at nanosecond
+precision, preserving the strict-over-limit boundary without a fractional-ms
+loss. The helper's coarser `RLIMIT_CPU` input is rounded up separately. The wall
+deadline is separate: it is never shortened and receives
+10% or at least 100 ms of supervision slack above the larger of the public
+limit and the calibrated raw CPU allowance. Actual elapsed time remains in
+`wall_time_ms`. This calibration reduces hardware-model variance but cannot
+make instruction mixes, managed runtimes, memory performance, or later host
+contention identical.
+
+A remote control plane does not know the selected runner instance's calibration
+before execution. Its absolute deadline therefore budgets for the maximum
+supported raw CPU expansion (4x), including the same wall slack, for each
+sequential execution or special-judge stage. Concurrent contestant/interactor
+pairs use the larger allowance. The control plane adds its fixed 30-second
+operation overhead once; a shorter caller deadline still takes precedence.
+This outer deadline does not change the runner's actual calibrated CPU limits.
 
 Memory enforcement uses several layers:
 
@@ -510,10 +547,14 @@ The stable contract is:
   completed sandbox setup but before the parent releases the target `execve()`;
   because the execute sandbox denies process creation and allows only
   thread-form `clone`, this includes all target threads without charging helper
-  setup time; after process exit, no-cgroup runs finalize the same metric from
-  wait usage minus that helper baseline so the CPU tail after the last watchdog
-  sample is retained; `process_cpu_time_ms` remains the raw helper-plus-target
-  diagnostic and is not a contestant timing value
+  setup time; after process exit, no-cgroup runs finalize CPU from wait usage
+  minus a separate helper `getrusage(RUSAGE_SELF)` baseline, never a baseline from
+  a different clock. The maximum of that final delta and process-clock polling
+  retains the CPU tail after the last watchdog sample. An unavailable or
+  underflowing final counter cannot produce a successful verdict. Optional
+  `cpu_accounting` and nanosecond fields describe one sandbox, not pipeline
+  totals. `process_cpu_time_ms` remains the raw helper-plus-target diagnostic
+  and is not a contestant timing value
 - RSS and virtual size are sampled from procfs only after the ready pipe reports
   the close-on-exec target transition and are refined with `smaps_rollup` near
   the limit or when address-space limits are disabled; cgroup runs additionally
@@ -754,6 +795,10 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_REMOTE_STRICT_PROTOCOL` is a strict boolean; it defaults to `true`
   outside `dev` so remote responses without `X-Aonohako-Protocol-Version` are
   rejected in production remote fleets
+- `AONOHAKO_CPU_NORMALIZATION` defaults to `true` only for
+  `cloudrun + embedded + helper`; enabling it for another execution shape is
+  rejected, and `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS` must be between 1
+  and 5000
 - non-dev deployments also reject `0` for pending queue, global and
   per-principal upload, global stream, and per-principal stream caps so
   unlimited queue, upload, or open-stream settings stay development-only
@@ -841,6 +886,8 @@ Recommended Cloud Run deployment baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
+- `AONOHAKO_CPU_NORMALIZATION=true`
+- `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS=60`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, unless
   `AONOHAKO_INBOUND_AUTH=platform` is set because Cloud Run IAM, mTLS, private
   ingress, or a gateway enforces inbound authentication; use
