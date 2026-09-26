@@ -22,6 +22,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  AONOHAKO_RUNTIME_REFRESH: ${{ inputs.force_runtime_checks || false }}
   GOCACHE: ${{ github.workspace }}/.cache/go-build
   GOMODCACHE: ${{ github.workspace }}/.cache/go-mod
 
@@ -42,6 +43,7 @@ jobs:
           go-version-file: go.mod
       - run: go test ./...
       - run: python3 scripts/runtime_incremental_test.py
+      - run: python3 scripts/runtime_incremental_go_test.py
       - run: ./scripts/build_runtime_images.sh -mode production -dry-run -tag-prefix local/aonohako
 
   supply-chain:
@@ -209,6 +211,7 @@ jobs:
     uses: ./.github/workflows/runtime-smoke.yml
     with:
       image_name: ${{ matrix.name }}
+      refresh_runtime: ${{ inputs.force_runtime_checks || false }}
 
   language-smoke-cache-write:
     if: ${{ needs.runtime-matrix.outputs.has_ci_cached == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -228,6 +231,7 @@ jobs:
     uses: ./.github/workflows/runtime-smoke.yml
     with:
       image_name: ${{ matrix.name }}
+      refresh_runtime: ${{ inputs.force_runtime_checks || false }}
       cache_ref: ghcr.io/${{ github.repository }}-buildcache:v1-ci-${{ matrix.name }}-linux-amd64
       cache_write: true
 
@@ -249,6 +253,7 @@ jobs:
     uses: ./.github/workflows/runtime-smoke.yml
     with:
       image_name: ${{ matrix.name }}
+      refresh_runtime: ${{ inputs.force_runtime_checks || false }}
       cache_ref: ghcr.io/${{ github.repository }}-buildcache:v1-ci-${{ matrix.name }}-linux-amd64
 
   toolchain-profile:
@@ -370,6 +375,7 @@ jobs:
     uses: ./.github/workflows/toolchain-profile.yml
     with:
       image_name: ${{ matrix.name }}
+      refresh_runtime: ${{ inputs.force_runtime_checks || false }}
       languages: ${{ matrix.languages }}
       cache_ref: ghcr.io/${{ github.repository }}-buildcache:v1-prod-${{ matrix.name }}-linux-amd64
       cache_write: true
@@ -392,6 +398,7 @@ jobs:
     uses: ./.github/workflows/toolchain-profile.yml
     with:
       image_name: ${{ matrix.name }}
+      refresh_runtime: ${{ inputs.force_runtime_checks || false }}
       languages: ${{ matrix.languages }}
       cache_ref: ghcr.io/${{ github.repository }}-buildcache:v1-prod-${{ matrix.name }}-linux-amd64
 

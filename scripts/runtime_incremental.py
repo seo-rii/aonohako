@@ -53,7 +53,7 @@ def validate_inventory(entries, label):
 
 def validation_inputs():
     records = command("git", "ls-tree", "-r", "-z", "HEAD").split(b"\0")
-    workflow, sandbox = [], []
+    workflow, sandbox, go_module = [], [], []
     for record in records:
         if not record:
             continue
@@ -63,7 +63,13 @@ def validation_inputs():
             workflow.append(record.decode())
         if path.endswith("_test.go") and path.startswith(("internal/execute/", "internal/compile/")):
             sandbox.append(record.decode())
-    return {"workflow": digest(sorted(workflow)), "sandbox": digest(sorted(sandbox))}
+        # The nested Go module is tested inside Go image builds, not by the
+        # root go test ./... job. Track its tests and fixtures independently of
+        # image inputs so test-only edits revalidate only Go-containing images.
+        if path.startswith("go-modules/"):
+            go_module.append(record.decode())
+    return {"workflow": digest(sorted(workflow)), "sandbox": digest(sorted(sandbox)),
+            "go_module": digest(sorted(go_module))}
 
 
 def context(env, event):
@@ -172,7 +178,10 @@ def plan(impact, inputs, source_sha, ctx, baseline=None, force=False):
     for family, entries in inventories.items():
         snapshot[family] = []
         for name, item in sorted(entries.items()):
-            verification = digest([item["fingerprint"], inputs["workflow"]])
+            verification_inputs = [item["fingerprint"], inputs["workflow"]]
+            if "go" in item.get("languages", "").split(",") or name == "ci-go":
+                verification_inputs.append(inputs["go_module"])
+            verification = digest(verification_inputs)
             previous = old.get(family, {}).get(name, {})
             snapshot[family].append({**item, "verification": verification,
                                     "changed": force or previous.get("fingerprint") != item["fingerprint"],
