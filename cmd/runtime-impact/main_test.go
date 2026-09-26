@@ -61,3 +61,23 @@ func TestFingerprintBucketAvoidsCIFeedbackLoop(t *testing.T) {
 		t.Fatalf("rust crate bucket = %q, want rust", got)
 	}
 }
+
+
+func TestParseTreeEntriesPreservesModeAndPath(t *testing.T) {
+	entries, err := parseTreeEntries([]byte(
+		"100644 blob 0123456789012345678901234567890123456789\tplain.txt\x00" +
+			"100755 blob abcdefabcdefabcdefabcdefabcdefabcdefabcd\tscripts/run\twith-tab.sh\x00",
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entry count = %d, want 2", len(entries))
+	}
+	if entries[0].Mode != "100644" || entries[0].Path != "plain.txt" {
+		t.Fatalf("first entry = %#v", entries[0])
+	}
+	if entries[1].Mode != "100755" || entries[1].Path != "scripts/run\twith-tab.sh" {
+		t.Fatalf("second entry = %#v", entries[1])
+	}
+}
