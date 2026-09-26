@@ -71,7 +71,7 @@ shared_installs:
     apt:
       - bash=5.2.37-2+b9
       - dash=0.5.12-12
-      - zsh=5.9-8+b23
+      - zsh=5.9-8+b24
       - zsh-common=5.9-8
       - fish=4.0.2-1
       - fish-common=4.0.2-1
@@ -88,7 +88,7 @@ shared_installs:
     script:
       - test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b9
       - test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
-      - test "$(dpkg-query -W -f='${Version}' zsh)" = 5.9-8+b23
+      - test "$(dpkg-query -W -f='${Version}' zsh)" = 5.9-8+b24
       - test "$(dpkg-query -W -f='${Version}' zsh-common)" = 5.9-8
       - test "$(dpkg-query -W -f='${Version}' fish)" = 4.0.2-1
       - test "$(dpkg-query -W -f='${Version}' fish-common)" = 4.0.2-1
@@ -3656,7 +3656,7 @@ languages:
         - -c
         - |
           set -eu
-          test "$(dpkg-query -W -f='${Version}' zsh)" = 5.9-8+b23
+          test "$(dpkg-query -W -f='${Version}' zsh)" = 5.9-8+b24
           test "$(dpkg-query -W -f='${Version}' zsh-common)" = 5.9-8
           startup_root=/tmp/aonohako-zsh-startup
           startup_leak=/tmp/aonohako-zsh-startup-leak
