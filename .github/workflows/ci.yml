@@ -172,20 +172,31 @@ jobs:
         run: |
           set -euo pipefail
           base_sha=""
-          while IFS= read -r sha; do
-            [ -n "${sha}" ] || continue
-            [ "${sha}" != "${GITHUB_SHA}" ] || continue
-            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
-              git fetch --no-tags --depth=1 origin "${sha}" >/dev/null 2>&1 || continue
-            fi
-            if git merge-base --is-ancestor "${sha}" HEAD; then
-              base_sha="${sha}"
-              break
-            fi
-          done < <(
-            gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?status=success&per_page=100" \
+          branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          branch_candidates="$(
+            gh api --method GET "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+              -f status=success -f branch="${branch}" -f per_page=100 \
               --jq '.workflow_runs[].head_sha' 2>/dev/null || true
-          )
+          )"
+          all_candidates="$(
+            gh api --method GET "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+              -f status=success -f per_page=100 \
+              --jq '.workflow_runs[].head_sha' 2>/dev/null || true
+          )"
+          for candidates in "${branch_candidates}" "${all_candidates}"; do
+            while IFS= read -r sha; do
+              [ -n "${sha}" ] || continue
+              [ "${sha}" != "${GITHUB_SHA}" ] || continue
+              if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+                git fetch --no-tags --depth=1 origin "${sha}" >/dev/null 2>&1 || continue
+              fi
+              if git merge-base --is-ancestor "${sha}" HEAD; then
+                base_sha="${sha}"
+                break
+              fi
+            done <<< "${candidates}"
+            [ -z "${base_sha}" ] || break
+          done
           echo "base_sha=${base_sha}" >> "${GITHUB_OUTPUT}"
           if [ -n "${base_sha}" ]; then
             echo "Using last successful ancestor ${base_sha} as runtime baseline." >> "${GITHUB_STEP_SUMMARY}"
