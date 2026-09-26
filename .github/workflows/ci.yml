@@ -47,6 +47,8 @@ jobs:
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
   image-sbom:
+    if: ${{ needs.runtime-matrix.outputs.ci_python_changed == 'true' }}
+    needs: runtime-matrix
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -121,6 +123,8 @@ jobs:
           compression-level: 9
 
   sandbox:
+    if: ${{ needs.runtime-matrix.outputs.ci_python_changed == 'true' }}
+    needs: runtime-matrix
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -159,6 +163,8 @@ jobs:
       has_production_regular: ${{ steps.matrix.outputs.has_production_regular }}
       has_production_cached: ${{ steps.matrix.outputs.has_production_cached }}
       has_any_runtime: ${{ steps.matrix.outputs.has_any_runtime }}
+      ci_python_changed: ${{ steps.matrix.outputs.ci_python_changed }}
+      production_type_i_changed: ${{ steps.matrix.outputs.production_type_i_changed }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -233,6 +239,8 @@ jobs:
           echo "has_production_regular=$([ "$(jq 'length' <<< "${production_regular_matrix}")" -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
           echo "has_production_cached=$([ "$(jq 'length' <<< "${production_cached_matrix}")" -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
           echo "has_any_runtime=$([ $(( $(jq 'length' <<< "${ci_matrix}") + $(jq 'length' <<< "${production_matrix}") )) -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          echo "ci_python_changed=$(jq -r 'any(.[]; .name == "ci-python")' <<< "${ci_matrix}")" >> "${GITHUB_OUTPUT}"
+          echo "production_type_i_changed=$(jq -r 'any(.[]; .name == "type-i")' <<< "${production_matrix}")" >> "${GITHUB_OUTPUT}"
 
           {
             echo "### Runtime impact"
@@ -250,7 +258,6 @@ jobs:
       - policy
       - unit
       - supply-chain
-      - sandbox
       - runtime-binaries
       - runtime-matrix
     permissions:
@@ -269,7 +276,6 @@ jobs:
       - policy
       - unit
       - supply-chain
-      - sandbox
       - runtime-binaries
       - runtime-matrix
     permissions:
@@ -291,7 +297,6 @@ jobs:
       - policy
       - unit
       - supply-chain
-      - sandbox
       - runtime-binaries
       - runtime-matrix
     permissions:
@@ -313,7 +318,6 @@ jobs:
       - policy
       - unit
       - supply-chain
-      - sandbox
       - runtime-binaries
       - runtime-matrix
     permissions:
@@ -414,7 +418,6 @@ jobs:
       - policy
       - unit
       - supply-chain
-      - sandbox
       - runtime-binaries
       - runtime-matrix
     permissions:
@@ -437,7 +440,6 @@ jobs:
       - policy
       - unit
       - supply-chain
-      - sandbox
       - runtime-binaries
       - runtime-matrix
     permissions:
@@ -535,13 +537,14 @@ jobs:
           compression-level: 0
 
   mixin-smoke:
+    if: ${{ needs.runtime-matrix.outputs.production_type_i_changed == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - policy
       - unit
       - supply-chain
-      - sandbox
       - runtime-binaries
+      - runtime-matrix
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
