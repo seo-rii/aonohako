@@ -17,6 +17,12 @@ preserved in `LICENSE.upstream`.
   when multiple integers share an input line. This was already fixed in the
   catalog; it is consolidated here, not a new fix for the reported timeout.
 
+* Count each `.` / `,` suffix token exactly once. The infix parser must inspect
+  `peekToken` before advancing; inspecting `curToken` again double-counts the
+  first sign and drops the last sign. For example, after `엄....`, both
+  `식어.,!` and `식어,.!` must print `4`, not `6` and `2`. This is a separate
+  pre-existing arithmetic bug, not the source-line/jump bug described below.
+
 Jungol submission **13681383** still times out with the previous catalog's
 input-only fix. With this patch, its recorded input produces `5`, `9`, `3`, and
 `8` on separate lines and terminates normally. The tests use an independently
@@ -56,6 +62,15 @@ input; LF/CRLF/tilde source variants; nine blank-line padding patterns; zero and
 100-case loops; and an actual infinite loop stopped by the caller's timeout.
 Finite programs have a two-second timeout per process; no instruction counter
 or artificial termination rule is added to the interpreter.
+
+Arithmetic coverage adds the two minimal mixed-sign reproducers and suffixes in
+assignments, input, multiplication, conditions, and jump targets. It also checks
+all 511 suffixes of length 0 through 8 for each of three starting values
+(`-4`, `0`, `4`), four expression contexts, and LF/CRLF/tilde separators:
+**18,396 generated arithmetic results**, batched into 36 bounded CLI invocations.
+Expected results use `count(".") - count(",")`, independently of the parser.
+Including the focused cases and the existing regressions, the suite has
+**125 leaf cases and 179 interpreter invocations**.
 
 ## Deployment
 
