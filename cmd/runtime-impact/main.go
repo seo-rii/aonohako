@@ -206,39 +206,26 @@ func repositoryRelativePath(path string) (string, error) {
 }
 
 func fingerprintSource(ref string) (sourceFingerprint, error) {
-	var paths []string
 	if ref == "" {
-		raw, err := gitOutput("ls-files", "-z")
-		if err != nil {
-			return sourceFingerprint{}, err
-		}
-		paths = splitNUL(raw)
-	} else {
-		raw, err := gitOutput("ls-tree", "-r", "--name-only", "-z", ref)
-		if err != nil {
-			return sourceFingerprint{}, err
-		}
-		paths = splitNUL(raw)
+		ref = "HEAD"
 	}
-	sort.Strings(paths)
+	raw, err := gitOutput("ls-tree", "-r", "-z", ref)
+	if err != nil {
+		return sourceFingerprint{}, err
+	}
+	entries, err := parseTreeEntries(raw)
+	if err != nil {
+		return sourceFingerprint{}, err
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 
 	common := sha256.New()
 	goModules := sha256.New()
 	rustCrates := sha256.New()
-	for _, path := range paths {
-		bucket := fingerprintBucket(path)
+	for _, entry := range entries {
+		bucket := fingerprintBucket(entry.Path)
 		if bucket == "" {
 			continue
-		}
-		var data []byte
-		var err error
-		if ref == "" {
-			data, err = os.ReadFile(filepath.FromSlash(path))
-		} else {
-			data, err = gitOutput("show", ref+":"+path)
-		}
-		if err != nil {
-			return sourceFingerprint{}, fmt.Errorf("read %s at %q: %w", path, ref, err)
 		}
 		var h hashWriter
 		switch bucket {
@@ -249,15 +236,45 @@ func fingerprintSource(ref string) (sourceFingerprint, error) {
 		default:
 			h = common
 		}
-		writeHashPart(h, path)
-		_, _ = h.Write(data)
-		_, _ = h.Write([]byte{0})
+		writeHashPart(h, entry.Path)
+		writeHashPart(h, entry.Mode)
+		writeHashPart(h, entry.Type)
+		writeHashPart(h, entry.Object)
 	}
 	return sourceFingerprint{
 		Common:     hex.EncodeToString(common.Sum(nil)),
 		GoModules:  hex.EncodeToString(goModules.Sum(nil)),
 		RustCrates: hex.EncodeToString(rustCrates.Sum(nil)),
 	}, nil
+}
+
+type treeEntry struct {
+	Mode   string
+	Type   string
+	Object string
+	Path   string
+}
+
+func parseTreeEntries(data []byte) ([]treeEntry, error) {
+	records := splitNUL(data)
+	entries := make([]treeEntry, 0, len(records))
+	for _, record := range records {
+		tab := strings.IndexByte(record, '\t')
+		if tab < 0 {
+			return nil, fmt.Errorf("malformed git tree entry %q", record)
+		}
+		fields := strings.Fields(record[:tab])
+		if len(fields) != 3 {
+			return nil, fmt.Errorf("malformed git tree metadata %q", record[:tab])
+		}
+		entries = append(entries, treeEntry{
+			Mode:   fields[0],
+			Type:   fields[1],
+			Object: fields[2],
+			Path:   record[tab+1:],
+		})
+	}
+	return entries, nil
 }
 
 func fingerprintBucket(path string) string {
