@@ -280,7 +280,7 @@ func fingerprintBucket(path string) string {
 		return ""
 	case base == "README.md" || base == "LICENSE" || base == "SECURITY.md" || base == "CONTRIBUTING.md":
 		return ""
-	case path == ".gitignore" || path == ".dockerignore":
+	case path == ".gitignore":
 		return ""
 	case strings.HasPrefix(path, "go-modules/"):
 		return "go"
