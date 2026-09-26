@@ -162,3 +162,73 @@ func TestInfiniteLoopRemainsBoundedByCaller(t *testing.T) {
 		t.Fatalf("loop unexpectedly terminated instead of requiring caller timeout: %v", err)
 	}
 }
+
+func TestMixedIntegerSuffix(t *testing.T) {
+	cases := []struct{ name, body, input, want string }{
+		{"period-comma", "엄....\n식어.,!", "", "4"},
+		{"comma-period", "엄....\n식어,.!", "", "4"},
+		{"negative-variable", "엄,,,,\n식어.,!", "", "-4"},
+		{"assignment", "엄....\n어엄어.,\n식어어!", "", "4"},
+		{"input", "엄식?.,\n식어!", "4\n", "4"},
+		{"right-multiplication", "엄....\n식.. 어.,!", "", "8"},
+		{"condition", "엄.,\n동탄어.,?식..!", "", "2"},
+		{"jump", "엄......\n준어.,\n식.!\n식..!\n식...!", "", "3"},
+	}
+	for _, tc := range cases {
+		for _, separator := range []struct{ name, value string }{{"lf", "\n"}, {"crlf", "\r\n"}, {"tilde", "~"}} {
+			t.Run(tc.name+"/"+separator.name, func(t *testing.T) {
+				source := "어떻게\n" + tc.body + "\n이 사람이름이냐ㅋㅋ"
+				run(t, strings.ReplaceAll(source, "\n", separator.value), tc.input, tc.want, 0)
+			})
+		}
+	}
+}
+
+// Enumerate every suffix of length 0..8 rather than sampling a few alternations.
+// The oracle counts signs; it does not duplicate the interpreter's token walk.
+// Batch expressions into bounded CLI programs to keep the image-build test cheap.
+func TestIntegerSuffixCombinations(t *testing.T) {
+	for _, base := range []int{-4, 0, 4} {
+		literal := ".,"
+		if base > 0 {
+			literal = strings.Repeat(".", base)
+		} else if base < 0 {
+			literal = strings.Repeat(",", -base)
+		}
+		for _, operand := range []struct {
+			name, prefix, tail string
+			factor             int
+		}{
+			{"literal", literal, "", 1},
+			{"variable", "어", "", 1},
+			{"indexed-variable", "어어", "", 1},
+			{"left-multiplication", "어", " ..", 2},
+		} {
+			var source, want strings.Builder
+			fmt.Fprintf(&source, "어떻게\n엄%s\n어엄%s\n", literal, literal)
+			count := 0
+			for length := 0; length <= 8; length++ {
+				for mask := 0; mask < 1<<length; mask++ {
+					suffix := []byte(strings.Repeat(".", length))
+					for bit := range suffix {
+						if mask&(1<<bit) != 0 {
+							suffix[bit] = ','
+						}
+					}
+					text := string(suffix)
+					delta := strings.Count(text, ".") - strings.Count(text, ",")
+					fmt.Fprintf(&source, "식%s%s%s!\n식ㅋ\n", operand.prefix, text, operand.tail)
+					fmt.Fprintln(&want, (base+delta)*operand.factor)
+					count++
+				}
+			}
+			source.WriteString("이 사람이름이냐ㅋㅋ")
+			for _, separator := range []struct{ name, value string }{{"lf", "\n"}, {"crlf", "\r\n"}, {"tilde", "~"}} {
+				t.Run(fmt.Sprintf("%d/%s/%s", base, operand.name, separator.name), func(t *testing.T) {
+					run(t, strings.ReplaceAll(source.String(), "\n", separator.value), "", want.String(), 0)
+					t.Logf("checked %d arithmetic expressions", count)
+				})
+			}
+		}
+	}
+}
