@@ -4127,22 +4127,21 @@ languages:
       script:
         - ln -sfn /usr/local/go/bin/go /usr/local/bin/go
         - ln -sfn /usr/local/go/bin/gofmt /usr/local/bin/gofmt
-        - git clone --depth=1 https://github.com/rycont/umjunsik-lang.git /tmp/umjunsik-lang
-        # Upstream uses Scanln for 식?, which cannot consume BOJ-style same-line integer input like "5 1".
-        - sed -i 's/fmt.Scanln(&integer)/fmt.Scan(\&integer)/' /tmp/umjunsik-lang/umjunsik-lang-go/eval/eval.go
-        - grep -q 'fmt.Scan(&integer)' /tmp/umjunsik-lang/umjunsik-lang-go/eval/eval.go
-        - cd /tmp/umjunsik-lang/umjunsik-lang-go && env -u GOROOT GOENV=off go build -o /usr/local/bin/umjunsik-lang-go .
+        - bash /tmp/aonohako-uhmlang/build.sh /usr/local/bin/umjunsik-lang-go
         - ln -sfn /usr/local/bin/umjunsik-lang-go /usr/bin/umjunsik-lang-go
-        - rm -rf /tmp/umjunsik-lang
     smoke:
       command:
         - bash
         - -lc
         - |
           printf '%s\n' '어떻게' '식........... ........ㅋ' '이 사람이름이냐ㅋㅋ' > Main.uhm
-          /usr/bin/umjunsik-lang-go Main.uhm | grep '^X$'
+          test "$(timeout 5s /usr/bin/umjunsik-lang-go Main.uhm)" = X
           printf '%s\n' '어떻게' '' '엄식?' '어엄식?' '' '동탄어?준... ....' '' '엄어,' '어엄어어.' '' '준.. ...' '식어어!' '' '이 사람이름이냐ㅋㅋ' > Main.uhm
-          printf '5 1\n' | /usr/bin/umjunsik-lang-go Main.uhm | grep '^6$'
+          test "$(printf '5 1\n' | timeout 5s /usr/bin/umjunsik-lang-go Main.uhm)" = 6
+          printf '%s\n' '어떻게' '준....' '식.!' '식..!' '이 사람이름이냐ㅋㅋ' > Jump.uhm
+          test "$(timeout 5s /usr/bin/umjunsik-lang-go Jump.uhm)" = 2
+          printf '%s\n' '어떻게' '준......' '' '' '식.!' '식..!' '이 사람이름이냐ㅋㅋ' > Blank.uhm
+          test "$(timeout 5s /usr/bin/umjunsik-lang-go Blank.uhm)" = 2
 
   zerolang:
     install:

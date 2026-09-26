@@ -75,7 +75,8 @@ RUN --mount=type=bind,source=go-modules,target=/tmp/aonohako-go-modules,ro \
       rm -rf /tmp/aonohako-go-build-cache; \
     fi
 
-RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
+RUN --mount=type=bind,source=third_party/umjunsik-lang-go,target=/tmp/aonohako-uhmlang,ro \
+    if [[ -n "${INSTALL_SCRIPT}" ]]; then \
       env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
     fi
 
