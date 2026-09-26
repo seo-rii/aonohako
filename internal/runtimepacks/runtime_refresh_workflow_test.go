@@ -14,7 +14,7 @@ type refreshWorkflow struct {
 		WorkflowCall struct {
 			Inputs map[string]struct {
 				Type     string `yaml:"type"`
-				Default  bool   `yaml:"default"`
+				Default  any    `yaml:"default"`
 				Required bool   `yaml:"required"`
 			} `yaml:"inputs"`
 		} `yaml:"workflow_call"`
@@ -63,7 +63,8 @@ func TestCIPropagatesRefreshToEveryRuntimeWorkflow(t *testing.T) {
 	for _, name := range []string{"runtime-smoke.yml", "toolchain-profile.yml"} {
 		workflow := read(name)
 		input, ok := workflow.On.WorkflowCall.Inputs["refresh_runtime"]
-		if !ok || input.Type != "boolean" || input.Default || input.Required {
+		defaultValue, booleanDefault := input.Default.(bool)
+		if !ok || input.Type != "boolean" || !booleanDefault || defaultValue || input.Required {
 			t.Errorf("%s must declare an optional refresh boolean defaulting to false", name)
 		}
 		if workflow.Env[refreshEnv] != "${{ inputs.refresh_runtime }}" {
