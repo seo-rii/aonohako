@@ -100,6 +100,8 @@ jobs:
           path: grype-ci-python.json
 
   runtime-binaries:
+    if: ${{ needs.runtime-matrix.outputs.has_any_runtime == 'true' }}
+    needs: runtime-matrix
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -138,36 +140,101 @@ jobs:
           "aonohako-ci-sandbox:ci-python"
           bash -ceu 'install -d -m 0755 /work /usr/local/bin/aonohako-sandbox-tests && export AONOHAKO_WORK_ROOT=/work && /usr/local/go/bin/go test -c ./internal/execute -o /usr/local/bin/aonohako-sandbox-tests/execute.test && chmod 0755 /usr/local/bin/aonohako-sandbox-tests/execute.test && /usr/local/bin/aonohako-sandbox-tests/execute.test -test.count=1 -test.run "^(TestSandboxSecurityRegressionSuite|TestRunBlocksForkForSubmittedTrustedRuntimeName|TestRunSPJRejectsTruncatedScore|TestRunInteractiveEnforcesInteractorWallLimit|TestCommunicationEndToEndWithoutCgroup|TestCommunicationWithoutCgroupCancellationReapsParticipants|TestCommunicationWithoutCgroupImmediateManagerStartsEveryParticipant|TestCommunicationManagerPipeCloseSignalsParticipantEOF)$" && /usr/local/go/bin/go test -c ./internal/compile -o /usr/local/bin/aonohako-sandbox-tests/compile.test && chmod 0755 /usr/local/bin/aonohako-sandbox-tests/compile.test && /usr/local/bin/aonohako-sandbox-tests/compile.test -test.count=1 -test.run "TestCompileSandboxSecurityRegressionSuite" && aonohako-selftest compile-security'
 
+
   runtime-matrix:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
+      base_sha: ${{ steps.baseline.outputs.base_sha }}
       ci_matrix: ${{ steps.matrix.outputs.ci_matrix }}
       ci_regular_matrix: ${{ steps.matrix.outputs.ci_regular_matrix }}
       ci_cached_matrix: ${{ steps.matrix.outputs.ci_cached_matrix }}
       production_matrix: ${{ steps.matrix.outputs.production_matrix }}
       production_regular_matrix: ${{ steps.matrix.outputs.production_regular_matrix }}
       production_cached_matrix: ${{ steps.matrix.outputs.production_cached_matrix }}
+      has_ci_regular: ${{ steps.matrix.outputs.has_ci_regular }}
+      has_ci_cached: ${{ steps.matrix.outputs.has_ci_cached }}
+      has_production_regular: ${{ steps.matrix.outputs.has_production_regular }}
+      has_production_cached: ${{ steps.matrix.outputs.has_production_cached }}
+      has_any_runtime: ${{ steps.matrix.outputs.has_any_runtime }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - id: matrix
+      - id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          ci_matrix=$(go run ./cmd/runtime-matrix -mode ci | jq -c '[.[] | {name: .Name}]')
-          production_matrix=$(go run ./cmd/runtime-matrix -mode production | jq -c '[.[] | {name: .Name, languages: (.Languages | join(","))}]')
-          ci_regular_matrix=$(jq -c '[.[] | select(.name != "ci-idris2" and .name != "ci-cuda-ocelot")]' <<< "${ci_matrix}")
-          ci_cached_matrix=$(jq -c '[.[] | select(.name == "ci-idris2" or .name == "ci-cuda-ocelot")]' <<< "${ci_matrix}")
-          production_regular_matrix=$(jq -c '[.[] | select(.name != "type-a" and .name != "type-c" and .name != "type-o")]' <<< "${production_matrix}")
-          production_cached_matrix=$(jq -c '[.[] | select(.name == "type-a" or .name == "type-c" or .name == "type-o")]' <<< "${production_matrix}")
+          set -euo pipefail
+          base_sha=""
+          while IFS= read -r sha; do
+            [ -n "${sha}" ] || continue
+            [ "${sha}" != "${GITHUB_SHA}" ] || continue
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "${sha}" >/dev/null 2>&1 || continue
+            fi
+            if git merge-base --is-ancestor "${sha}" HEAD; then
+              base_sha="${sha}"
+              break
+            fi
+          done < <(
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?status=success&per_page=100" \
+              --jq '.workflow_runs[].head_sha' 2>/dev/null || true
+          )
+          echo "base_sha=${base_sha}" >> "${GITHUB_OUTPUT}"
+          if [ -n "${base_sha}" ]; then
+            echo "Using last successful ancestor ${base_sha} as runtime baseline." >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "No successful ancestor baseline found; all runtime images will be checked." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+      - id: matrix
+        env:
+          BASE_SHA: ${{ steps.baseline.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          impact_args=(go run ./cmd/runtime-impact)
+          if [ -n "${BASE_SHA}" ]; then
+            impact_args+=(-base "${BASE_SHA}")
+          fi
+          impact_json="$("${impact_args[@]}")"
+          printf '%s\n' "${impact_json}" | jq . > runtime-impact.json
+
+          ci_matrix="$(jq -c '[.ci[] | select(.changed) | {name: .name, fingerprint: .fingerprint}]' runtime-impact.json)"
+          production_matrix="$(jq -c '[.production[] | select(.changed) | {name: .name, languages: .languages, fingerprint: .fingerprint}]' runtime-impact.json)"
+          ci_regular_matrix="$(jq -c '[.[] | select(.name != "ci-idris2" and .name != "ci-cuda-ocelot")]' <<< "${ci_matrix}")"
+          ci_cached_matrix="$(jq -c '[.[] | select(.name == "ci-idris2" or .name == "ci-cuda-ocelot")]' <<< "${ci_matrix}")"
+          production_regular_matrix="$(jq -c '[.[] | select(.name != "type-a" and .name != "type-c" and .name != "type-o")]' <<< "${production_matrix}")"
+          production_cached_matrix="$(jq -c '[.[] | select(.name == "type-a" or .name == "type-c" or .name == "type-o")]' <<< "${production_matrix}")"
+
           echo "ci_matrix=${ci_matrix}" >> "${GITHUB_OUTPUT}"
           echo "ci_regular_matrix=${ci_regular_matrix}" >> "${GITHUB_OUTPUT}"
           echo "ci_cached_matrix=${ci_cached_matrix}" >> "${GITHUB_OUTPUT}"
           echo "production_matrix=${production_matrix}" >> "${GITHUB_OUTPUT}"
           echo "production_regular_matrix=${production_regular_matrix}" >> "${GITHUB_OUTPUT}"
           echo "production_cached_matrix=${production_cached_matrix}" >> "${GITHUB_OUTPUT}"
+          echo "has_ci_regular=$([ "$(jq 'length' <<< "${ci_regular_matrix}")" -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          echo "has_ci_cached=$([ "$(jq 'length' <<< "${ci_cached_matrix}")" -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          echo "has_production_regular=$([ "$(jq 'length' <<< "${production_regular_matrix}")" -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          echo "has_production_cached=$([ "$(jq 'length' <<< "${production_cached_matrix}")" -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          echo "has_any_runtime=$([ $(( $(jq 'length' <<< "${ci_matrix}") + $(jq 'length' <<< "${production_matrix}") )) -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "### Runtime impact"
+            echo
+            echo "Baseline: \`${BASE_SHA:-<none>}\`"
+            echo
+            echo "Changed CI images: $(jq -r '[.[].name] | if length == 0 then "none" else join(", ") end' <<< "${ci_matrix}")"
+            echo
+            echo "Changed production images: $(jq -r '[.[].name] | if length == 0 then "none" else join(", ") end' <<< "${production_matrix}")"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   language-smoke:
+    if: ${{ needs.runtime-matrix.outputs.has_ci_regular == 'true' }}
     needs:
       - policy
       - unit
@@ -186,7 +253,7 @@ jobs:
       image_name: ${{ matrix.name }}
 
   language-smoke-cache-write:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.runtime-matrix.outputs.has_ci_cached == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     needs:
       - policy
       - unit
@@ -208,7 +275,7 @@ jobs:
       cache_write: true
 
   language-smoke-cache-read:
-    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    if: ${{ needs.runtime-matrix.outputs.has_ci_cached == 'true' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs:
       - policy
       - unit
@@ -229,6 +296,7 @@ jobs:
       cache_ref: ghcr.io/${{ github.repository }}-buildcache:v1-ci-${{ matrix.name }}-linux-amd64
 
   toolchain-profile:
+    if: ${{ needs.runtime-matrix.outputs.has_production_regular == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - policy
@@ -330,7 +398,7 @@ jobs:
           compression-level: 0
 
   toolchain-profile-cache-write:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.runtime-matrix.outputs.has_production_cached == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     needs:
       - policy
       - unit
@@ -353,7 +421,7 @@ jobs:
       cache_write: true
 
   toolchain-profile-cache-read:
-    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    if: ${{ needs.runtime-matrix.outputs.has_production_cached == 'true' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs:
       - policy
       - unit
@@ -394,11 +462,18 @@ jobs:
           path: toolchain-artifacts
           merge-multiple: false
       - id: bundle
+        env:
+          HAS_PRODUCTION_CHANGES: ${{ needs.runtime-matrix.outputs.has_production_regular == 'true' || needs.runtime-matrix.outputs.has_production_cached == 'true' }}
         run: |
           shopt -s nullglob
           dirs=(toolchain-artifacts/toolchain-profile-*)
           if [ "${#dirs[@]}" -eq 0 ]; then
-            echo "No toolchain profile artifacts were produced." >> "$GITHUB_STEP_SUMMARY"
+            if [ "${HAS_PRODUCTION_CHANGES}" != "true" ]; then
+              echo "No production runtime profiles changed since the last successful baseline." >> "$GITHUB_STEP_SUMMARY"
+              echo "has_artifacts=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            echo "No toolchain profile artifacts were produced for changed runtimes." >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           echo "has_artifacts=true" >> "${GITHUB_OUTPUT}"
