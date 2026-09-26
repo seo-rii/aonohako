@@ -1,0 +1,57 @@
+name: prepare-uhmlang-fork
+on:
+  push:
+    branches: [automation/prepare-uhmlang-fork-20260926]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.repository == 'seo-rii/aonohako'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+      - name: Replace only the verified UHMLANG catalog block
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p = Path('runtime-images.yml')
+          data = p.read_bytes()
+          assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == '96df84970010c2d7674ee82330a19ff2d34c024a'
+          start = data.index(b'  uhmlang:\n')
+          end = data.index(b'\n  zerolang:', start)
+          replacement = Path('.uhmlang-section.tmp.yml').read_bytes()
+          assert replacement.startswith(b'  uhmlang:\n') and replacement.endswith(b'\n')
+          p.write_bytes(data[:start] + replacement + data[end:])
+          PY
+          git diff --check
+      - name: Execute pinned fork installer and smoke failure regressions
+        env:
+          AONOHAKO_TEST_UHMLANG_LIVE: '1'
+        run: go test -count=1 -timeout=8m -v ./internal/runtimepacks -run '^TestUHMLANG'
+      - name: Repository tests and policy
+        run: |
+          go test ./...
+          bash scripts/check_repo_policy.sh
+          test -z "$(gofmt -l internal/runtimepacks/uhmlang_fork_test.go)"
+      - name: Store verified catalog blob without modifying any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+          from pathlib import Path
+          data = Path('runtime-images.yml').read_bytes()
+          expected = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          request = urllib.request.Request('https://api.github.com/repos/seo-rii/aonohako/git/blobs', data=json.dumps({'content': data.decode(), 'encoding': 'utf-8'}).encode(), headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
+          with urllib.request.urlopen(request, timeout=30) as response:
+              result = json.load(response)
+          assert result['sha'] == expected
+          print('VERIFIED_CATALOG_BLOB=' + expected)
+          PY
