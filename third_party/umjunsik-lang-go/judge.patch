@@ -39,3 +39,12 @@
  		p.nextToken()
  	}
  
+@@ -300,7 +305,7 @@
+ 	}
+ 
+ 	for p.peekTokenIs(token.PERIOD) || p.peekTokenIs(token.COMMA) {
+-		switch p.curToken.Type {
++		switch p.peekToken.Type {
+ 		case token.PERIOD:
+ 			result++
+ 		case token.COMMA:
