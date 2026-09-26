@@ -350,7 +350,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"apl":           {"kanapl@0.0.0", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl"},
 		"asm":           {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
 		"awk":           {"gawk --sandbox", "Main.awk"},
-		"bash":          {"5.2.37-2+b9", "bash --noprofile --norc -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-shell-syntax-leak", "Broken.sh"},
+		"bash":          {"5.2.37-2+b10", "bash --noprofile --norc -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-shell-syntax-leak", "Broken.sh"},
 		"bc":            {"bc -q Main.bc", "1 + 1"},
 		"befunge":       {"python3 /usr/local/lib/aonohako/befunge.py Main.bef", `>"ko",,91+,@`},
 		"bqn":           {"CBQN_COMMIT=d56147be877693eaed351745782c258bd7424de7", "bqn Main.bqn"},
@@ -415,7 +415,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"picolisp":      {"picolisp", "pil -version -bye", "Main.l", "printf '1 2\\n'", "pil Main.l -bye", "grep '^3$'", "Broken.l"},
 		"pony":          {"PONY_VERSION=0.69.1", "PONY_ARCHIVE_ROOT=0.69.1-38f9f11", "PONY_SHA256=8e1955ed1a63444ae13666031d5d3909cacfb475ca96643e878f36cf4edff9ab", "sha256sum -c -", "--cpu=generic", "--ponymaxthreads=1", "objdump -d Main", "test ! -e /opt/pony/bin/pony-doc", "test ! -e Broken"},
 		"posix-sh":      {"0.5.12-12", "/bin/dash -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-posix-shell-syntax-leak", "Broken.sh"},
-		"zsh":           {"5.9-8+b23", "/usr/bin/zsh -d -f -n SyntaxOnly.zsh", `test ! -e "${startup_leak}"`, "test ! -e /tmp/aonohako-zsh-syntax-leak", "printf '1 2\\n' | /usr/bin/zsh -d -f Main.zsh", "Broken.zsh"},
+		"zsh":           {"5.9-8+b24", "/usr/bin/zsh -d -f -n SyntaxOnly.zsh", `test ! -e "${startup_leak}"`, "test ! -e /tmp/aonohako-zsh-syntax-leak", "printf '1 2\\n' | /usr/bin/zsh -d -f Main.zsh", "Broken.zsh"},
 		"fish":          {"4.0.2-1", "/usr/bin/fish --no-config --private --no-execute SyntaxOnly.fish", `test ! -e "$startup_leak"`, "test ! -e /tmp/aonohako-fish-syntax-leak", "printf '1 2\\n' | /usr/bin/fish --no-config --private Main.fish", "Broken.fish"},
 		"powershell":    {"POWERSHELL_VERSION=7.6.5", "POWERSHELL_SHA256=b34ab3b19acac1d3d4d0d3cfdb02acf62f457b0b6a962ff008132033f7566844", "sha256sum -c -", "Parser]::ParseFile", "ForEach-Object -Parallel", "test ! -e /opt/microsoft/powershell/7/createdump", "Broken.ps1"},
 		"qbasic":        {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
@@ -1163,7 +1163,7 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 	if !ok {
 		t.Fatal("shell_runtime shared install missing from catalog")
 	}
-	for _, pkg := range []string{"bash=5.2.37-2+b9", "dash=0.5.12-12", "zsh=5.9-8+b23", "zsh-common=5.9-8", "fish=4.0.2-1", "fish-common=4.0.2-1", "diffutils", "findutils", "grep", "mawk", "sed"} {
+	for _, pkg := range []string{"bash=5.2.37-2+b10", "dash=0.5.12-12", "zsh=5.9-8+b24", "zsh-common=5.9-8", "fish=4.0.2-1", "fish-common=4.0.2-1", "diffutils", "findutils", "grep", "mawk", "sed"} {
 		if !slices.Contains(shared.Apt, pkg) {
 			t.Fatalf("shell runtime apt packages = %v, want %q", shared.Apt, pkg)
 		}

@@ -35,6 +35,7 @@ FROM ${RUNTIME_BASE} AS runtime-foundation
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends && \
     apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux && \
     rm -rf /var/lib/apt/lists/*
 
