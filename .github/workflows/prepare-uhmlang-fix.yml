@@ -1,0 +1,60 @@
+name: prepare-uhmlang-fix
+
+on:
+  push:
+    branches: [fix/uhmlang-13681383]
+    paths: [.github/workflows/prepare-uhmlang-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: github.repository == 'seo-rii/aonohako' && github.ref == 'refs/heads/fix/uhmlang-13681383'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Apply checked manifest and Docker integration edits
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          def checked(path, sha):
+              data = Path(path).read_bytes()
+              actual = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+              assert actual == sha, (path, actual, sha)
+              return data.decode("utf-8")
+
+          text = checked("runtime-images.yml", "96df84970010c2d7674ee82330a19ff2d34c024a")
+          start = text.index("\n  uhmlang:\n") + 1
+          end = text.index("\n  zerolang:", start) + 1
+          assert "fmt.Scanln" in text[start:end]
+          section = "  uhmlang:\n    install:\n      apt:\n        - git\n      script:\n        - ln -sfn /usr/local/go/bin/go /usr/local/bin/go\n        - ln -sfn /usr/local/go/bin/gofmt /usr/local/bin/gofmt\n        - bash /tmp/aonohako-uhmlang/build.sh /usr/local/bin/umjunsik-lang-go\n        - ln -sfn /usr/local/bin/umjunsik-lang-go /usr/bin/umjunsik-lang-go\n    smoke:\n      command:\n        - bash\n        - -lc\n        - |\n          printf '%s\\n' '어떻게' '식........... ........ㅋ' '이 사람이름이냐ㅋㅋ' > Main.uhm\n          test \"$(timeout 5s /usr/bin/umjunsik-lang-go Main.uhm)\" = X\n          printf '%s\\n' '어떻게' '' '엄식?' '어엄식?' '' '동탄어?준... ....' '' '엄어,' '어엄어어.' '' '준.. ...' '식어어!' '' '이 사람이름이냐ㅋㅋ' > Main.uhm\n          test \"$(printf '5 1\\n' | timeout 5s /usr/bin/umjunsik-lang-go Main.uhm)\" = 6\n          printf '%s\\n' '어떻게' '준....' '식.!' '식..!' '이 사람이름이냐ㅋㅋ' > Jump.uhm\n          test \"$(timeout 5s /usr/bin/umjunsik-lang-go Jump.uhm)\" = 2\n          printf '%s\\n' '어떻게' '준......' '' '' '식.!' '식..!' '이 사람이름이냐ㅋㅋ' > Blank.uhm\n          test \"$(timeout 5s /usr/bin/umjunsik-lang-go Blank.uhm)\" = 2\n\n"
+          Path("runtime-images.yml").write_text(text[:start] + section + text[end:], encoding="utf-8")
+          text = checked("docker/runtime.Dockerfile", "d984f7d4ef4236d47723a0f6e04ec1a8f172e25d")
+          old = "RUN if [[ -n \"${INSTALL_SCRIPT}\" ]]; then \\\n"
+          new = "RUN --mount=type=bind,source=third_party/umjunsik-lang-go,target=/tmp/aonohako-uhmlang,ro \\\n    if [[ -n \"${INSTALL_SCRIPT}\" ]]; then \\\n"
+          assert text.count(old) == 1
+          Path("docker/runtime.Dockerfile").write_text(text.replace(old, new), encoding="utf-8")
+          PY
+          git diff --check
+          git diff --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add runtime-images.yml docker/runtime.Dockerfile
+          git commit -m 'fix(uhmlang): wire pinned patch and regression checks into runtime build'
+          git push origin HEAD:refs/heads/fix/uhmlang-13681383
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Build interpreter and execute regressions
+        run: |
+          AONOHAKO_GO="$(command -v go)" \
+            bash third_party/umjunsik-lang-go/build.sh "${RUNNER_TEMP}/umjunsik-lang-go"
+      - name: Check repository policy and unit tests
+        run: |
+          bash scripts/check_repo_policy.sh
+          go test ./...
+          bash scripts/build_runtime_images.sh -mode production -dry-run -tag-prefix local/aonohako

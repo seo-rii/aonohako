@@ -1,0 +1,41 @@
+--- a/umjunsik-lang-go/eval/eval.go
++++ b/umjunsik-lang-go/eval/eval.go
+@@ -37,7 +37,8 @@
+ 		return &object.JUN{Index: obj.(*object.Integer).Value}
+ 	case *ast.SIKQExpression:
+ 		var integer int
+-		fmt.Scanln(&integer)
++		// Treat all whitespace as an input delimiter, not just newlines.
++		fmt.Scan(&integer)
+ 		return &object.Integer{Value: int64(integer)}
+ 	case *ast.SIKKIExpression:
+ 		obj := Eval(node.Value, env)
+@@ -68,7 +69,9 @@
+ 
+ 		switch result := result.(type) {
+ 		case *object.JUN:
+-			i = int(result.Index - 3)
++			// Lines include the header. Convert from one-based numbering and
++			// compensate for the for-loop increment after this iteration.
++			i = int(result.Index - 2)
+ 		case *object.Error:
+ 			return result
+ 		}
+--- a/umjunsik-lang-go/parser/parser.go
++++ b/umjunsik-lang-go/parser/parser.go
+@@ -76,9 +76,14 @@
+ 
+ func (p *Parser) parseExpressionStatement() *ast.ExpressionLine {
+ 	line := &ast.ExpressionLine{Token: p.curToken}
++	// Blank lines (including the header newline) occupy a jump target slot.
++	if p.curTokenIs(token.NEWLINE) {
++		return line
++	}
+ 	line.Expression = p.parseExpression()
+ 
+-	if p.peekTokenIs(token.NEWLINE) {
++	// An empty assignment may already have consumed its newline.
++	if !p.curTokenIs(token.NEWLINE) && p.peekTokenIs(token.NEWLINE) {
+ 		p.nextToken()
+ 	}
+ 
