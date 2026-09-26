@@ -350,7 +350,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"apl":           {"kanapl@0.0.0", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl"},
 		"asm":           {"Main.s", "Broken.s", "gcc -nostdlib -static -no-pie"},
 		"awk":           {"gawk --sandbox", "Main.awk"},
-		"bash":          {"5.2.37-2+b9", "bash --noprofile --norc -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-shell-syntax-leak", "Broken.sh"},
+		"bash":          {"5.2.37-2+b10", "bash --noprofile --norc -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-shell-syntax-leak", "Broken.sh"},
 		"bc":            {"bc -q Main.bc", "1 + 1"},
 		"befunge":       {"python3 /usr/local/lib/aonohako/befunge.py Main.bef", `>"ko",,91+,@`},
 		"bqn":           {"CBQN_COMMIT=d56147be877693eaed351745782c258bd7424de7", "bqn Main.bqn"},
@@ -1163,7 +1163,7 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 	if !ok {
 		t.Fatal("shell_runtime shared install missing from catalog")
 	}
-	for _, pkg := range []string{"bash=5.2.37-2+b9", "dash=0.5.12-12", "zsh=5.9-8+b24", "zsh-common=5.9-8", "fish=4.0.2-1", "fish-common=4.0.2-1", "diffutils", "findutils", "grep", "mawk", "sed"} {
+	for _, pkg := range []string{"bash=5.2.37-2+b10", "dash=0.5.12-12", "zsh=5.9-8+b24", "zsh-common=5.9-8", "fish=4.0.2-1", "fish-common=4.0.2-1", "diffutils", "findutils", "grep", "mawk", "sed"} {
 		if !slices.Contains(shared.Apt, pkg) {
 			t.Fatalf("shell runtime apt packages = %v, want %q", shared.Apt, pkg)
 		}
