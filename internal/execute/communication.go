@@ -72,6 +72,14 @@ type communicationOutputWriter struct {
 	exceeded  atomic.Bool
 }
 
+// Communication streams have a separate forwarding budget from captured diagnostics.
+func communicationOutputLimitBytes(req *model.RunRequest) int {
+	if req == nil || req.Limits.OutputBytes <= 0 {
+		return defaultMaxOutputBytes
+	}
+	return min(req.Limits.OutputBytes, runvalidation.MaxCommunicationOutputBytes)
+}
+
 func (w *communicationOutputWriter) Write(p []byte) (int, error) {
 	originalLength := len(p)
 	allowed := originalLength
@@ -387,7 +395,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		pipe := pipes[i]
 		participantOutput := &communicationOutputWriter{
 			target:    pipe.stdoutWrite,
-			remaining: int64(outputLimitBytes(process.request)),
+			remaining: int64(communicationOutputLimitBytes(process.request)),
 			onLimit:   cancelParticipant,
 		}
 		go func(index int, prepared communicationPreparedProcess) {

@@ -19,6 +19,7 @@ const (
 	MaxTimeMs                       = 600_000
 	MaxMemoryMB                     = 4096
 	MaxOutputBytes                  = 64 << 20
+	MaxCommunicationOutputBytes     = 128 << 20
 	MaxCaptureBytes                 = 8 << 20
 	MaxWorkspaceBytes               = 1 << 30
 	MaxBinaryFiles                  = 512
@@ -173,7 +174,7 @@ func ValidateCommunication(req *model.RunRequest) error {
 	if spec.Answer != "" && strings.TrimSpace(spec.AnswerURL) != "" {
 		return fmt.Errorf("communication.answer cannot combine inline content with url")
 	}
-	if err := ValidateRequiredLimits("limits", req.Limits); err != nil {
+	if err := validateRequiredLimits("limits", req.Limits, MaxCommunicationOutputBytes); err != nil {
 		return err
 	}
 
@@ -890,24 +891,32 @@ func ValidateRunLang(label, raw string) error {
 }
 
 func ValidateRequiredLimits(name string, limits model.Limits) error {
+	return validateRequiredLimits(name, limits, MaxOutputBytes)
+}
+
+func validateRequiredLimits(name string, limits model.Limits, maxOutputBytes int) error {
 	if limits.TimeMs <= 0 || limits.TimeMs > MaxTimeMs {
 		return fmt.Errorf("%s.time_ms must be between 1 and %d", name, MaxTimeMs)
 	}
 	if limits.MemoryMB <= 0 || limits.MemoryMB > MaxMemoryMB {
 		return fmt.Errorf("%s.memory_mb must be between 1 and %d", name, MaxMemoryMB)
 	}
-	return ValidateOptionalLimits(name, limits)
+	return validateOptionalLimits(name, limits, maxOutputBytes)
 }
 
 func ValidateOptionalLimits(name string, limits model.Limits) error {
+	return validateOptionalLimits(name, limits, MaxOutputBytes)
+}
+
+func validateOptionalLimits(name string, limits model.Limits, maxOutputBytes int) error {
 	if limits.TimeMs < 0 || limits.TimeMs > MaxTimeMs {
 		return fmt.Errorf("%s.time_ms must be between 0 and %d", name, MaxTimeMs)
 	}
 	if limits.MemoryMB < 0 || limits.MemoryMB > MaxMemoryMB {
 		return fmt.Errorf("%s.memory_mb must be between 0 and %d", name, MaxMemoryMB)
 	}
-	if limits.OutputBytes < 0 || limits.OutputBytes > MaxOutputBytes {
-		return fmt.Errorf("%s.output_bytes must be between 0 and %d", name, MaxOutputBytes)
+	if limits.OutputBytes < 0 || limits.OutputBytes > maxOutputBytes {
+		return fmt.Errorf("%s.output_bytes must be between 0 and %d", name, maxOutputBytes)
 	}
 	if limits.WorkspaceBytes < 0 || limits.WorkspaceBytes > MaxWorkspaceBytes {
 		return fmt.Errorf("%s.workspace_bytes must be between 0 and %d", name, MaxWorkspaceBytes)
