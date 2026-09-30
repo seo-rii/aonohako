@@ -3239,6 +3239,96 @@ raise SystemExit(0)
 	}
 }
 
+func TestRunSPJLargeInputFitsOneWorkspaceCopy(t *testing.T) {
+	requireSandboxSupport(t)
+	const inputBytes = 120 << 20
+	var requests atomic.Int64
+	chunk := bytes.Repeat([]byte("x"), 64<<10)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Length", fmt.Sprint(inputBytes))
+		for written := 0; written < inputBytes; {
+			n, err := w.Write(chunk[:min(len(chunk), inputBytes-written)])
+			written += n
+			if err != nil {
+				return
+			}
+		}
+	}))
+	defer server.Close()
+	setStdinURLHTTPClientForTest(t, server.URL)
+	contestant := `import sys
+total = 0
+while True:
+    chunk = sys.stdin.buffer.read(65536)
+    if not chunk:
+        break
+    total += len(chunk)
+print(total)
+`
+	checker := `import sys
+total = 0
+with open(sys.argv[1], "rb") as handle:
+    while True:
+        chunk = handle.read(65536)
+        if not chunk:
+            break
+        assert chunk == b"x" * len(chunk)
+        total += len(chunk)
+assert total == 120 * 1024 * 1024
+with open(sys.argv[2]) as handle:
+    assert int(handle.read()) == total
+`
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang:     "python",
+		Binaries: []model.Binary{{Name: "main.py", DataB64: b64(contestant)}},
+		StdinURL: "http://payload.example/input",
+		SPJ:      &model.SPJSpec{Binary: &model.Binary{Name: "checker.py", DataB64: b64(checker)}, Lang: "python"},
+		Limits:   model.Limits{TimeMs: 5000, MemoryMB: 128, WorkspaceBytes: 128 << 20},
+	}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected large input to fit without a second copy, got %+v", resp)
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("input fetched %d times, want one", requests.Load())
+	}
+}
+
+func TestRunSPJPreparedInputCannotBeOverwrittenByContestant(t *testing.T) {
+	requireSandboxSupport(t)
+
+	contestant := `import errno
+import os
+import sys
+
+assert sys.stdin.buffer.read() == b"trusted input\n"
+os.lseek(0, 0, os.SEEK_SET)
+try:
+    os.write(0, b"forged input!\n")
+except OSError as error:
+    assert error.errno == errno.EBADF
+else:
+    raise SystemExit(9)
+print("answer")
+`
+	checker := `import sys
+with open(sys.argv[1], "rb") as handle:
+    assert handle.read() == b"trusted input\n"
+with open(sys.argv[2], "rb") as handle:
+    assert handle.read() == b"answer\n"
+`
+	resp := New().Run(context.Background(), &model.RunRequest{
+		Lang:     "python",
+		Binaries: []model.Binary{{Name: "main.py", DataB64: b64(contestant)}},
+		Stdin:    "trusted input\n",
+		SPJ:      &model.SPJSpec{Binary: &model.Binary{Name: "checker.py", DataB64: b64(checker)}, Lang: "python"},
+		Limits:   model.Limits{TimeMs: 3000, MemoryMB: 128},
+	}, Hooks{})
+	if resp.Status != model.RunStatusAccepted {
+		t.Fatalf("expected unchanged read-only checker input, got %+v", resp)
+	}
+}
+
 func TestRunSPJUsesFileArgumentsWithoutDuplicatingStdoutOnStdin(t *testing.T) {
 	requireSandboxSupport(t)
 

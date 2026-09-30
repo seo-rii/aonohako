@@ -327,12 +327,37 @@ func materializeSPJSidecars(root string, specs []model.OutputFile, sidecars []mo
 
 func writeStdinTempFile(ctx context.Context, dir, pattern string, req *model.RunRequest, preparedPath string) (string, error) {
 	if strings.TrimSpace(preparedPath) != "" {
-		prepared, err := os.Open(preparedPath)
+		// The contestant has finished, and this path is the runner-owned input
+		// outside its writable workspace. Transfer it into the clean checker
+		// workspace without keeping two copies of a potentially large fixture.
+		info, err := os.Lstat(preparedPath)
 		if err != nil {
 			return "", err
 		}
-		defer prepared.Close()
-		return writeTempFileFromReader(dir, pattern, prepared, stdinURLMaxBytes(req.Limits))
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("prepared stdin is not a regular file")
+		}
+		if info.Size() > stdinURLMaxBytes(req.Limits) {
+			return "", fmt.Errorf("stdin too large")
+		}
+		target, err := os.CreateTemp(dir, pattern)
+		if err != nil {
+			return "", err
+		}
+		name := target.Name()
+		if err := target.Close(); err != nil {
+			os.Remove(name)
+			return "", err
+		}
+		if err := os.Rename(preparedPath, name); err != nil {
+			os.Remove(name)
+			return "", err
+		}
+		if err := os.Chmod(name, 0o444); err != nil {
+			os.Remove(name)
+			return "", err
+		}
+		return name, nil
 	}
 	if strings.TrimSpace(req.StdinURL) == "" {
 		return writeTempFile(dir, pattern, req.Stdin)

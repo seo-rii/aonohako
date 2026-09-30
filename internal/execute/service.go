@@ -295,12 +295,21 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			slog.Warn("execute judge input hardening failed", "err", err)
 			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin materialization failed"}}
 		}
-		if _, err := judgeInput.Seek(0, io.SeekStart); err != nil {
-			slog.Warn("execute judge input rewind failed", "err", err)
+		// chmod does not revoke write access from an already-open descriptor.
+		// Pass only a read-only descriptor to the contestant so that the same
+		// trusted input can subsequently be handed to the checker.
+		if err := judgeInput.Close(); err != nil {
+			slog.Warn("execute judge input close failed", "err", err)
 			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin materialization failed"}}
 		}
+		readonlyInput, err := os.Open(judgeInput.Name())
+		if err != nil {
+			slog.Warn("execute judge input reopen failed", "err", err)
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin materialization failed"}}
+		}
+		defer readonlyInput.Close()
 		judgeInputPath = judgeInput.Name()
-		stdin = &sandboxPreparedStdin{file: judgeInput}
+		stdin = &sandboxPreparedStdin{file: readonlyInput}
 	}
 
 	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir)
