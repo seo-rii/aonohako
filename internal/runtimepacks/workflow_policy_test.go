@@ -222,9 +222,12 @@ func TestCIWorkflowTargetsPersistentRegistryCaches(t *testing.T) {
 		t.Fatal("cache writers and readers must use complementary exact main-push guards")
 	}
 
+	// Exact cached/uncached profile sets are tested by executing the planner
+	// in TestIncrementalPlannerRetainsExactPersistentCacheTargets.
 	for _, required := range []string{
-		`select(.name == "ci-idris2" or .name == "ci-cuda-ocelot")`,
-		`select(.name == "type-a" or .name == "type-c" or .name == "type-o")`,
+		`python3 scripts/runtime_incremental.py plan`,
+		`ci_cached_matrix: ${{ steps.matrix.outputs.ci_cached_matrix }}`,
+		`production_cached_matrix: ${{ steps.matrix.outputs.production_cached_matrix }}`,
 		`ghcr.io/${{ github.repository }}-buildcache:v1-ci-${{ matrix.name }}-linux-amd64`,
 		`ghcr.io/${{ github.repository }}-buildcache:v1-prod-${{ matrix.name }}-linux-amd64`,
 	} {

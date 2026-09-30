@@ -65,6 +65,7 @@ type sandboxStreamConfig struct {
 	closeExtraFilesAfterStart bool
 	onTargetReady             func()
 	onTargetStarted           func()
+	startWallTimer            func() bool
 	targetRelease             <-chan struct{}
 	communicationRestricted   bool
 }
@@ -169,12 +170,39 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 }
 
 func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
-	limits := req.Limits
-	timeMs := max(1, limits.TimeMs)
-	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
+	timeLimit := time.Duration(max(1, req.Limits.TimeMs)) * time.Millisecond
+	// Match the existing input-download budget, without shortening a longer
+	// execution limit that previously also bounded initialization.
+	startupLimit := max(stdinURLDownloadTimeout, timeLimit)
+	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, timeLimit)
 	defer cancel()
 
-	return executeSandboxCommandWithStdinLimit(ctx, ws, command, req, stdinReader, stdinMaxBytes, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
+		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer,
+	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
+}
+
+// Ordinary runs have separate initialization and target-execution budgets. The
+// same context owns the helper throughout, so parent cancellation is never
+// detached. A startup timer that has already fired cannot be revived at release.
+func sandboxExecutionContext(parent context.Context, startup, execution time.Duration) (context.Context, func() bool, context.CancelFunc) {
+	ctx, cancel := context.WithCancelCause(parent)
+	timer := time.AfterFunc(startup, func() { cancel(context.DeadlineExceeded) })
+	start := func() bool {
+		if !timer.Stop() {
+			cancel(context.DeadlineExceeded)
+			return false
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+		timer.Reset(execution)
+		return true
+	}
+	return ctx, start, func() {
+		timer.Stop()
+		cancel(context.Canceled)
+	}
 }
 
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
@@ -732,6 +760,15 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		targetExecCh <- err
 	}()
 	wallStart := timing.MonotonicNow()
+	if streams.startWallTimer != nil && !streams.startWallTimer() {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		<-waitCh
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "sandbox initialization canceled before target release",
+			Stderr: stderrBuf.Bytes(),
+		}
+	}
 	if n, err := targetReleaseWrite.Write([]byte{1}); err != nil || n != 1 {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		<-waitCh
@@ -1060,7 +1097,7 @@ done:
 					result.Reason,
 					result.VerdictSource,
 					ws.Signal(),
-					ctx.Err(),
+					context.Cause(ctx),
 					parentKillReason,
 				)
 			}
@@ -1116,7 +1153,7 @@ done:
 		}
 		result.VerdictSource = "sandbox_init"
 	}
-	if result.Status == "OK" && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if result.Status == "OK" && errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
 	}

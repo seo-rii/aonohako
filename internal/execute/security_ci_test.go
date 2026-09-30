@@ -40,6 +40,8 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "spj-requested-sidecars", fn: TestRunSPJCanReadRequestedSidecarOutputs},
 		{name: "spj-default-sidecars", fn: TestRunSPJCanReadTopLevelSidecarOutputsByDefault},
 		{name: "spj-stable-stdin-url", fn: TestRunSPJUsesSingleStableStdinURLFetch},
+		{name: "spj-large-input", fn: TestRunSPJLargeInputFitsOneWorkspaceCopy},
+		{name: "spj-readonly-input", fn: TestRunSPJPreparedInputCannotBeOverwrittenByContestant},
 		{name: "spj-step-input", fn: TestRunStepSPJReceivesExactFinalStepStdin},
 		{name: "spj-finite-score", fn: TestRunSPJRejectsNonFiniteScore},
 		{name: "pipeline-final-spj-workspace", fn: TestRunPipelineInteractiveArtifactBatchAndExplicitOriginalInputSPJ},
