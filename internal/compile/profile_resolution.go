@@ -272,6 +272,16 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "MALBOLGE"
 	case "lolcode", "lol":
 		l = "LOLCODE"
+	case "shakespeare", "spl":
+		l = "SHAKESPEARE"
+	case "piet":
+		l = "PIET"
+	case "unlambda":
+		l = "UNLAMBDA"
+	case "lazyk", "lazy-k", "lazy_k":
+		l = "LAZYK"
+	case "intercal", "ick", "c-intercal":
+		l = "INTERCAL"
 	case "wasm", "webassembly":
 		l = "WASM"
 	case "assemblyscript":

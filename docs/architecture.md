@@ -929,7 +929,7 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace` |
 | `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
@@ -1145,6 +1145,31 @@ interpreter's practical I/O mapping (`<` writes and `/` reads, with EOF represen
 as 59048), while malformed non-graphical runtime memory terminates safely
 instead of reproducing the reference C implementation's undefined access or
 busy loop.
+
+The `SHAKESPEARE` profile runs plays with the pinned `shakespearelang` 1.0.0
+interpreter installed into the isolated `/opt/shakespeare` virtual environment,
+so its `click<8` pin never reaches the system Python. Compile performs a parse
+check through the bundled `shakespeare_run.py --check`. At runtime the same
+runner replaces the interpreter's console I/O: numeric input skips leading
+whitespace and accepts an optional sign (like the reference `spl2c`), character
+I/O is byte-exact, and interpreter errors exit non-zero instead of zero.
+
+The `PIET` profile accepts `.png` and netpbm `.ppm` (P3/P6) programs and runs
+them with npiet 1.3f built against libpng only, without GD and its large image
+codec dependency tree; GIF input is therefore not supported. `npiet -q`
+suppresses the interactive `? ` input prompts.
+
+The `UNLAMBDA` profile uses a bundled Unlambda 2.0 interpreter whose explicit
+CPS machine keeps `c` constant-time and avoids Python recursion limits. Debian's
+`unlambda` package is not used because it reads the program from stdin and
+treats the remaining bytes as program input. The `LAZYK` profile runs irori's
+Lazy K 1.0.0 interpreter, which accepts combinator, Unlambda-style, Iota, and
+Jot syntax. The `INTERCAL` profile compiles with Debian's C-INTERCAL 0.30
+`ick -b` (random E774 disabled) into a native executable; politeness errors
+fail compilation. Because the profile's GCC 16 defaults to C23, which rejects
+C-INTERCAL's prototype-less runtime declarations, `ick` and the npiet build both
+compile as `-std=gnu17`. The INTERCAL, Unlambda, and Lazy K selftests use non-A+B
+vectors because their native numeric I/O cannot express decimal A+B directly.
 
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the

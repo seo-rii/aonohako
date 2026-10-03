@@ -155,6 +155,11 @@ var profiles = map[string]Profile{
 	"BF":            {SourceLang: "BF", Extension: "bf", CompileKind: "brainfuck", RunLang: "brainfuck", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"MALBOLGE":      {SourceLang: "MALBOLGE", Extension: "mal", CompileKind: "malbolge", RunLang: "malbolge", TimeMultiplier: 5, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"LOLCODE":       {SourceLang: "LOLCODE", Extension: "lol", CompileKind: "lolcode", RunLang: "lolcode", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"SHAKESPEARE":   {SourceLang: "SHAKESPEARE", Extension: "spl", CompileKind: "shakespeare", RunLang: "shakespeare", TimeMultiplier: 5, TimeOffsetMs: 2000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"PIET":          {SourceLang: "PIET", Extension: "png", CompileKind: "piet", RunLang: "piet", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
+	"UNLAMBDA":      {SourceLang: "UNLAMBDA", Extension: "unl", CompileKind: "unlambda", RunLang: "unlambda", TimeMultiplier: 5, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"LAZYK":         {SourceLang: "LAZYK", Extension: "lazy", CompileKind: "lazyk", RunLang: "lazyk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"INTERCAL":      {SourceLang: "INTERCAL", Extension: "i", DefaultTarget: "Main", CompileKind: "intercal", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"APECODE":       {SourceLang: "APECODE", Extension: "ape", DefaultTarget: "Main", CompileKind: "apecode", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"WASM":          {SourceLang: "WASM", Extension: "wat", DefaultTarget: "Main.wasm", CompileKind: "wasm", RunLang: "wasm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	asProfileKey:    {SourceLang: asProfileKey, Extension: "ts", DefaultTarget: "Main.wasm", CompileKind: "assemblyscript", RunLang: "assemblyscript", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
@@ -243,7 +248,7 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
-	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "bun", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
+	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "bun", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "shakespeare", "piet", "unlambda", "lazyk", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
 		return key
 	case "chez", "chezscheme", "chez_scheme":
 		return "chez-scheme"
@@ -279,6 +284,12 @@ func NormalizeRunLang(language string) string {
 		return "smlnj"
 	case "lol":
 		return "lolcode"
+	case "spl":
+		return "shakespeare"
+	case "lazy-k", "lazy_k":
+		return "lazyk"
+	case "intercal", "ick", "c-intercal":
+		return "binary"
 	case "befunge93", "befunge-93", "bf93":
 		return "befunge"
 	case "vb":

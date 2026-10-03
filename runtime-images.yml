@@ -1288,6 +1288,131 @@ languages:
           printf '%s\n' 'HAI 1.2' 'VISIBLE "ok"' 'KTHXBYE' > Main.lol
           lci Main.lol | grep '^ok$'
 
+  shakespeare:
+    install:
+      apt:
+        - python3
+        - python3-venv
+      script:
+        - python3 -m venv /opt/shakespeare
+        - /opt/shakespeare/bin/pip install --no-cache-dir --no-deps shakespearelang==1.0.0 click==7.1.2 tatsu==5.6.1
+        - /opt/shakespeare/bin/pip uninstall -y pip
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          cat > Main.spl <<'SPL'
+          The Sum of Two Numbers.
+
+          Romeo, a young man who remembers the first number.
+          Juliet, a lady who remembers the second number.
+
+                              Act I: The only act.
+
+                              Scene I: Reading and adding.
+
+          [Enter Romeo and Juliet]
+
+          Juliet:
+            Listen to your heart!
+
+          Romeo:
+            Listen to your heart!
+            You are as good as the sum of yourself and me.
+            Open your heart!
+
+          [Exeunt]
+          SPL
+          /opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py --check Main.spl
+          test "$(printf '%s\n' '-4 17' | /opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py Main.spl)" = 13
+          printf '%s\n' 'Broken.' '' 'Romeo, a man.' '' 'Act I: x.' 'Scene I: y.' '[Enter Romeo]' 'Romeo: Hello!' > Broken.spl
+          if /opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py --check Broken.spl >/dev/null 2>&1; then exit 1; fi
+
+  piet:
+    install:
+      apt:
+        - curl
+        - gcc
+        - libc6-dev
+        - libpng-dev
+        - make
+      script:
+        - export NPIET_VERSION=1.3f
+        - export NPIET_SHA256=2ded856062abd73599e85e1e768ce6bc60ba2db22dc7d6a9b62763dca04b855a
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://www.bertnase.de/npiet/npiet-${NPIET_VERSION}.tar.gz" -o /tmp/npiet.tar.gz
+        - echo "${NPIET_SHA256}  /tmp/npiet.tar.gz" | sha256sum -c -
+        - tar -xzf /tmp/npiet.tar.gz -C /tmp
+        - cd "/tmp/npiet-${NPIET_VERSION}" && ./configure ac_cv_lib_gd_gdImageCreate=no ac_cv_header_gd_h=no && make npiet CFLAGS='-O2 -std=gnu17 -DHAVE_CONFIG_H'
+        - install -m 0755 "/tmp/npiet-${NPIET_VERSION}/npiet" /usr/local/bin/npiet
+        - rm -rf /tmp/npiet.tar.gz "/tmp/npiet-${NPIET_VERSION}"
+        - (npiet -v 2>&1 || true) | grep 'with PNG support'
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' P3 '5 3' 255 \
+            '255 192 192 0 0 0 0 0 0 0 0 0 0 192 0' \
+            '255 192 192 0 0 192 0 255 0 0 255 255 0 192 0' \
+            '0 0 0 0 0 0 0 0 0 0 0 0 0 192 0' > Main.ppm
+          test "$(printf '%s\n' '20 22' | npiet -q Main.ppm)" = 42
+
+  unlambda:
+    install:
+      apt:
+        - python3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s' '`r```.o.k.!i' > Main.unl
+          python3 /usr/local/lib/aonohako/unlambda.py Main.unl | grep '^ok!$'
+
+  lazyk:
+    install:
+      apt:
+        - curl
+        - gcc
+        - libc6-dev
+        - make
+      script:
+        - export LAZYK_VERSION=1.0.0
+        - export LAZYK_SHA256=c57edaab448f84eda2c98411e0fb4192e36113df49461db9285a62ca1f613d42
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://codeload.github.com/irori/lazyk/tar.gz/refs/tags/v${LAZYK_VERSION}" -o /tmp/lazyk.tar.gz
+        - echo "${LAZYK_SHA256}  /tmp/lazyk.tar.gz" | sha256sum -c -
+        - tar -xzf /tmp/lazyk.tar.gz -C /tmp
+        - make -C "/tmp/lazyk-${LAZYK_VERSION}" lazyk
+        - install -m 0755 "/tmp/lazyk-${LAZYK_VERSION}/lazyk" /usr/local/bin/lazyk
+        - rm -rf /tmp/lazyk.tar.gz "/tmp/lazyk-${LAZYK_VERSION}"
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s' 'I' > Main.lazy
+          test "$(printf 'ok' | lazyk Main.lazy)" = ok
+
+  intercal:
+    install:
+      apt:
+        - gcc
+        - intercal=30:0.30-6
+        - libc6-dev
+      script:
+        - test "$(dpkg-query -W -f='${Version}' intercal)" = 30:0.30-6
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          printf '%s\n' 'DO ,1 <- #3' 'DO ,1 SUB #1 <- #10' 'PLEASE DO ,1 SUB #2 <- #32' 'DO ,1 SUB #3 <- #134' 'DO .1 <- #1' 'PLEASE READ OUT ,1' 'DO GIVE UP' > Main.i
+          CC='gcc -std=gnu17' ick -b Main.i
+          test "$(./Main)" = ok
+          printf '%s\n' 'PLEASE DO .1 <- #1' 'PLEASE DO .2 <- #1' 'PLEASE GIVE UP' > Broken.i
+          if CC='gcc -std=gnu17' ick -b Broken.i >/dev/null 2>&1; then exit 1; fi
+
   wasm:
     install:
       shared:
@@ -4241,8 +4366,10 @@ profiles:
       - guile
       - haskell
       - idris2
+      - intercal
       - j
       - janet
+      - lazyk
       - lisp
       - lolcode
       - lua
@@ -4254,6 +4381,7 @@ profiles:
       - perl
       - php
       - picolisp
+      - piet
       - plain
       - prolog
       - pypy
@@ -4263,12 +4391,14 @@ profiles:
       - ruby
       - scheme
       - sed
+      - shakespeare
       - sml
       - smlnj
       - smalltalk
       - sqlite
       - tcl
       - uiua
+      - unlambda
       - wasm
       - whitespace
   type-b:

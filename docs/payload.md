@@ -618,6 +618,11 @@ The interactor is invoked as:
 | WHITESPACE | `whitespace` | Structural validation (whitespace-only source) |
 | BF | `brainfuck` | Bracket-balance validation |
 | LOLCODE | `lolcode` | Pass-through artifacts (requires `.lol`) |
+| SHAKESPEARE, SPL | `shakespeare` | `shakespeare_run.py --check` parse check (requires `.spl`) |
+| PIET | `piet` | PNG/PPM signature validation (requires `.png` or `.ppm`) |
+| UNLAMBDA | `unlambda` | Single complete expression validation (requires `.unl`) |
+| LAZYK, LAZY_K | `lazyk` | Pass-through artifacts (requires `.lazy`) |
+| INTERCAL | `intercal` | `CC="gcc -std=gnu17" ick -b <target>.i` |
 | WASM | `wasm` | `wat2wasm` or `wasm-validate` |
 | AHEUI | `aheui` | Pass-through artifacts |
 | UHMLANG, TEXT | `none` | Pass-through |
@@ -701,6 +706,10 @@ The interactor is invoked as:
 | `befunge` | `python3 /usr/local/lib/aonohako/befunge.py <file>` |
 | `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |
 | `lolcode` | `lci <file>` |
+| `shakespeare` | `/opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py <file>` |
+| `piet` | `npiet -q <file>` |
+| `unlambda` | `python3 /usr/local/lib/aonohako/unlambda.py <file>` |
+| `lazyk` | `lazyk <file>` |
 | `wasm` | `wasmtime run --dir=. -O memory-reservation=... -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=... -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-wasm-stack=1048576 <file>` |
 | `aheui` | `python3 -c '<aheui entry_point wrapper>' <file>` |
 | `text` | `cat <file>` |

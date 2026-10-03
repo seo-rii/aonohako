@@ -130,6 +130,8 @@ COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
 COPY --chmod=0644 scripts/befunge.py /usr/local/lib/aonohako/befunge.py
 COPY --chmod=0644 scripts/malbolge.py /usr/local/lib/aonohako/malbolge.py
+COPY --chmod=0644 scripts/unlambda.py /usr/local/lib/aonohako/unlambda.py
+COPY --chmod=0644 scripts/shakespeare_run.py /usr/local/lib/aonohako/shakespeare_run.py
 COPY --chmod=0755 scripts/apl_kanapl_runner.js /usr/local/bin/apl
 COPY --chmod=0755 scripts/acl2_check.sh /usr/local/bin/aonohako-acl2-check
 COPY --chmod=0755 scripts/alloy_check.py /usr/local/bin/aonohako-alloy-check
@@ -173,7 +175,7 @@ RUN if [[ ",${LANGUAGES}," == *",smlnj,"* ]]; then \
 
 RUN chmod 0755 /usr/local/lib/aonohako && \
     rm -f /usr/local/lib/aonohako/python/.empty && \
-    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py && \
+    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py /usr/local/lib/aonohako/unlambda.py /usr/local/lib/aonohako/shakespeare_run.py && \
     find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
     find /usr/local/lib/aonohako/python -type f -exec chmod 0644 {} + && \
     install -d -m 0700 /var/aonohako /var/aonohako/protected && \
