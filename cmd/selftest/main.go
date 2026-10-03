@@ -3543,6 +3543,81 @@ KTHXBYE
 `),
 			},
 		},
+		"shakespeare": {
+			compileLang: "SHAKESPEARE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.spl", `The Sum of Two Numbers.
+
+Romeo, a young man who remembers the first number.
+Juliet, a lady who remembers the second number.
+
+                    Act I: The only act.
+
+                    Scene I: Reading and adding.
+
+[Enter Romeo and Juliet]
+
+Juliet:
+  Listen to your heart!
+
+Romeo:
+  Listen to your heart!
+  You are as good as the sum of yourself and me.
+  Open your heart!
+  You are as good as the sum of a big big big cat and a big cat.
+  Speak your mind!
+
+[Exeunt]
+`),
+			},
+		},
+		"piet": {
+			compileLang: "PIET",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				// in(number), in(number), add, out(number), then a three-codel trap.
+				{Name: "Main.png", DataB64: "iVBORw0KGgoAAAANSUhEUgAAAAUAAAADCAIAAADUVFKvAAAAHUlEQVR4nGP4f+AAAxwAmWD+AYb/QNZ/BiQpqDwAOzAK/MpsrVcAAAAASUVORK5CYII="},
+			},
+		},
+		"unlambda": {
+			compileLang:    "UNLAMBDA",
+			stdin:          "20 22\n",
+			expectedStdout: "20 22\n",
+			nonABReason:    "Unlambda has no numeric I/O, so the bundled interpreter is exercised with a call/cc-free cat loop",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.unl", "```sii``s`k@``s`k`s``si`k|``s`kk``s``s`ks``s`k`sikk\n"),
+			},
+		},
+		"lazyk": {
+			compileLang:    "LAZYK",
+			stdin:          "20 22\n",
+			expectedStdout: "20 22\n",
+			nonABReason:    "Lazy K I/O is a Church-encoded byte stream, so the identity program exercises the full input-to-output path",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.lazy", "I\n"),
+			},
+		},
+		"intercal": {
+			compileLang:    "INTERCAL",
+			expectedStdout: "ok\n",
+			nonABReason:    "INTERCAL numeric I/O uses spelled-out digits and butchered Roman numerals, so Turing Text Model output is exercised instead",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.i", `DO ,1 <- #3
+DO ,1 SUB #1 <- #10
+PLEASE DO ,1 SUB #2 <- #32
+DO ,1 SUB #3 <- #134
+DO .1 <- #1
+PLEASE READ OUT ,1
+DO GIVE UP
+`),
+			},
+		},
 		"apecode": {
 			compileLang:    "APECODE",
 			stdin:          "1\n3\n3 1 2\n",

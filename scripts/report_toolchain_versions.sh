@@ -179,6 +179,26 @@ if has_language "malbolge"; then
     report_once "Malbolge interpreter" sh -c 'test -f /usr/local/lib/aonohako/malbolge.py && printf "bundled (1998 reference)"'
 fi
 
+if has_language "unlambda"; then
+    report_once "Unlambda interpreter" sh -c 'test -f /usr/local/lib/aonohako/unlambda.py && printf "bundled (Unlambda 2.0)"'
+fi
+
+if has_language "shakespeare"; then
+    report_once "shakespearelang" /opt/shakespeare/bin/python3 -c 'import importlib.metadata as m; print(m.version("shakespearelang"))'
+fi
+
+if has_language "piet"; then
+    report_once "npiet" sh -c 'npiet -v 2>&1 | head -n 1'
+fi
+
+if has_language "lazyk"; then
+    report_once "Lazy K" lazyk -v
+fi
+
+if has_language "intercal"; then
+    report_once "C-INTERCAL" dpkg-query -W -f='${Version}' intercal
+fi
+
 if has_language "pypy"; then
     report_once "PyPy" pypy3 --version
 fi
@@ -776,6 +796,11 @@ report_compile_option "bc" "pass-through .bc artifacts"
 report_compile_option "befunge" "pass-through .bef/.bf93 artifacts"
 report_compile_option "malbolge" "validate reference opcodes, then pass-through .mal/.mb artifacts"
 report_compile_option "lolcode" "pass-through .lol artifacts"
+report_compile_option "shakespeare" "shakespeare_run.py --check <source> (shakespearelang parse), then pass-through .spl artifacts"
+report_compile_option "piet" "validate PNG/PPM signature, then pass-through .png/.ppm artifacts; run with npiet -q"
+report_compile_option "unlambda" "validate one complete expression, then pass-through .unl artifacts"
+report_compile_option "lazyk" "pass-through .lazy artifacts"
+report_compile_option "intercal" "CC='gcc -std=gnu17' ick -b <target>.i"
 report_compile_option "forth" "pass-through .fs artifacts"
 report_compile_option "gforth" "pass-through .fs/.fth/.4th artifacts"
 report_compile_option "whitespace" "pass-through .ws artifacts"
