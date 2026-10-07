@@ -1,7 +1,9 @@
 package runvalidation
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -136,31 +138,60 @@ func ValidateCommunication(req *model.RunRequest) error {
 	if spec == nil {
 		return nil
 	}
-	if spec.Version != 1 {
-		return fmt.Errorf("communication.version must be 1")
+	if spec.Version != 1 && spec.Version != 2 {
+		return fmt.Errorf("communication.version must be 1 or 2")
 	}
 	if req.Pipeline != nil {
 		return fmt.Errorf("communication cannot be combined with pipeline")
 	}
-	if spec.ResultProtocol != "manager-result-v1" {
-		return fmt.Errorf("communication.result_protocol must be manager-result-v1")
+	protocol := "manager-result-v1"
+	if spec.Version == 2 {
+		protocol = "match-result-v1"
+	}
+	if spec.ResultProtocol != protocol {
+		return fmt.Errorf("communication.result_protocol must be %s", protocol)
 	}
 	if spec.ParticipantCount < MinCommunicationParticipants || spec.ParticipantCount > MaxCommunicationParticipants {
 		return fmt.Errorf("communication.participant_count must be between %d and %d", MinCommunicationParticipants, MaxCommunicationParticipants)
 	}
-	participantID := strings.TrimSpace(spec.ParticipantProgramID)
 	managerID := strings.TrimSpace(spec.ManagerProgramID)
-	if participantID == "" || managerID == "" {
+	participantIDs := []string{spec.ParticipantProgramID}
+	if spec.Version == 1 && (len(spec.ParticipantProgramIDs) != 0 || spec.MatchSeed != "" || spec.InputSHA256 != "" || spec.RuntimeFingerprint != "") {
+		return fmt.Errorf("communication-v1 cannot use participant_program_ids, match_seed, input_sha256, or runtime_fingerprint")
+	}
+	if spec.Version == 2 {
+		if spec.ParticipantProgramID != "" || len(spec.ParticipantProgramIDs) != 2 || spec.ParticipantCount != 2 {
+			return fmt.Errorf("communication-v2 requires exactly two participant_program_ids, participant_count 2, and no participant_program_id")
+		}
+		participantIDs = spec.ParticipantProgramIDs
+		if !validSHA256(spec.InputSHA256) {
+			return fmt.Errorf("communication.input_sha256 must be a lowercase SHA-256 hex string")
+		}
+		if !validSHA256(spec.RuntimeFingerprint) {
+			return fmt.Errorf("communication.runtime_fingerprint must be a lowercase SHA-256 hex string")
+		}
+		if spec.MatchSeed != "" && !validSHA256(spec.MatchSeed) {
+			return fmt.Errorf("communication.match_seed must be a lowercase SHA-256 hex string")
+		}
+	}
+	if participantIDs[0] == "" || managerID == "" {
 		return fmt.Errorf("communication participant_program_id and manager_program_id are required")
 	}
-	if participantID != spec.ParticipantProgramID || managerID != spec.ManagerProgramID {
+	if managerID != spec.ManagerProgramID {
 		return fmt.Errorf("communication program ids must not contain surrounding whitespace")
 	}
-	if participantID == managerID {
-		return fmt.Errorf("communication participant and manager program ids must differ")
+	referenced := map[string]bool{managerID: true}
+	for _, id := range participantIDs {
+		if strings.TrimSpace(id) == "" || id != strings.TrimSpace(id) {
+			return fmt.Errorf("communication participant program ids are required and must not contain surrounding whitespace")
+		}
+		if referenced[id] {
+			return fmt.Errorf("communication participant and manager program ids must differ")
+		}
+		referenced[id] = true
 	}
-	if len(req.Programs) != 2 || len(req.Steps) != 0 {
-		return fmt.Errorf("communication requires exactly two programs and no steps")
+	if len(req.Programs) != len(referenced) || len(req.Steps) != 0 {
+		return fmt.Errorf("communication requires exactly %d programs and no steps", len(referenced))
 	}
 	if req.Lang != "" || len(req.Binaries) > 0 || req.Stdin != "" || req.StdinURL != "" || req.ExpectedStdout != "" || req.ExpectedStdoutURL != "" || req.EntryPoint != "" || req.EnableNetwork {
 		return fmt.Errorf("communication cannot be combined with legacy execute fields")
@@ -191,7 +222,7 @@ func ValidateCommunication(req *model.RunRequest) error {
 			return fmt.Errorf("duplicate program id: %s", id)
 		}
 		seen[id] = struct{}{}
-		if id != participantID && id != managerID {
+		if !referenced[id] {
 			return fmt.Errorf("communication contains unreferenced program: %s", id)
 		}
 		if program.EnableNetwork {
@@ -201,7 +232,7 @@ func ValidateCommunication(req *model.RunRequest) error {
 			return err
 		}
 		if profiles.NormalizeRunLang(program.Lang) != "binary" {
-			return fmt.Errorf("communication-v1 supports native binary programs only: %s", id)
+			return fmt.Errorf("communication-v%d supports native binary programs only: %s", spec.Version, id)
 		}
 		if len(program.Binaries) == 0 {
 			return fmt.Errorf("program %s has no binaries", id)
@@ -209,14 +240,45 @@ func ValidateCommunication(req *model.RunRequest) error {
 		if err := ValidateBinaries("program "+id+" binaries", program.Binaries); err != nil {
 			return err
 		}
+		if spec.Version == 2 {
+			if !validSHA256(program.SourceSHA256) {
+				return fmt.Errorf("program %s source_sha256 must be a lowercase SHA-256 hex string", id)
+			}
+			for _, binary := range program.Binaries {
+				if binary.DataURL != "" || !validSHA256(binary.SHA256) {
+					return fmt.Errorf("program %s communication-v2 requires inline binaries with sha256", id)
+				}
+				hash := sha256.New()
+				if _, err := io.Copy(hash, base64.NewDecoder(base64.StdEncoding, strings.NewReader(binary.DataB64))); err != nil {
+					return fmt.Errorf("program %s binary %s base64 is invalid", id, binary.Name)
+				}
+				if hex.EncodeToString(hash.Sum(nil)) != binary.SHA256 {
+					return fmt.Errorf("program %s binary %s sha256 does not match decoded bytes", id, binary.Name)
+				}
+			}
+		}
 	}
-	if _, ok := seen[participantID]; !ok {
-		return fmt.Errorf("communication references unknown participant program: %s", participantID)
+	for _, id := range participantIDs {
+		if _, ok := seen[id]; !ok {
+			return fmt.Errorf("communication references unknown participant program: %s", id)
+		}
 	}
 	if _, ok := seen[managerID]; !ok {
 		return fmt.Errorf("communication references unknown manager program: %s", managerID)
 	}
 	return nil
+}
+
+func validSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func ValidateBinaryBudget(req *model.RunRequest) (int, error) {
