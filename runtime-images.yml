@@ -1858,13 +1858,118 @@ languages:
     install:
       apt:
         - octave
+        - gnuplot-nox
+        - ghostscript
+        - fonts-freefont-otf
+      script:
+        - |
+          install -d -m 0755 /usr/local/lib/aonohako/octave
+          cat > /usr/local/lib/aonohako/octave/plot_capture.m <<'OCTAVE'
+          1; # Keep script-style argv while isolating capture locals in a function.
+          function __aonohako_octave_run__ (encoded_path)
+            entry = char (matlab.net.base64decode (encoded_path));
+            if (! strcmp (getenv ("IMG_CAPTURE"), "1"))
+              error ("Octave plot capture requires a requested image sidecar");
+            endif
+            output_dir = getenv ("IMG_OUT_DIR");
+            if (isempty (output_dir))
+              error ("Octave plot capture requires a workspace image directory");
+            endif
+            warning ("off", "Octave:gnuplot-graphics");
+            graphics_toolkit ("gnuplot");
+            set (0, "defaultfigurevisible", "off");
+            addpath (fileparts (entry), "-begin");
+            source (entry, "base");
+            # Only successful completion captures figures still open here.
+            figures = sort (findall (0, "type", "figure"));
+            [created, message] = mkdir (output_dir);
+            if (! created)
+              warning ("aonohako:plot-capture", "Cannot create plot output: %s", message);
+              return;
+            endif
+            log_path = fullfile (output_dir, "images.jsonl");
+            log_file = fopen (log_path, "w");
+            if (log_file < 0)
+              warning ("aonohako:plot-capture", "Cannot open plot output");
+              return;
+            endif
+            total_bytes = 0;
+            unwind_protect
+              for index = 1:min (numel (figures), 20)
+                png_path = fullfile (output_dir, sprintf ("figure-%d.png", index));
+                image_file = -1;
+                unwind_protect
+                  try
+                    print (figures(index), png_path, "-dpng", "-S1280,720");
+                    info = stat (png_path);
+                    # Match the runner's 1 MiB event and 8 MiB stream budgets.
+                    if (info.size > 786000)
+                      warning ("aonohako:plot-capture", "Plot exceeds image size limit");
+                      continue;
+                    endif
+                    image_file = fopen (png_path, "rb");
+                    if (image_file < 0)
+                      error ("Cannot read rendered plot");
+                    endif
+                    raw = fread (image_file, 786001, "*uint8");
+                    if (numel (raw) > 786000)
+                      continue;
+                    endif
+                    payload = struct ("mime", "image/png", ...
+                                      "b64", matlab.net.base64encode (raw), ...
+                                      "ts", floor (time () * 1000));
+                    line = [jsonencode(payload), "\n"];
+                    if (numel (line) > 1048576 || total_bytes + numel (line) > 8388608)
+                      warning ("aonohako:plot-capture", "Plot output exceeds image budget");
+                      break;
+                    endif
+                    fwrite (log_file, line);
+                    fflush (log_file);
+                    total_bytes += numel (line);
+                  catch capture_error
+                    warning ("aonohako:plot-capture", "Could not capture a plot: %s", capture_error.message);
+                  end_try_catch
+                unwind_protect_cleanup
+                  if (image_file >= 0)
+                    fclose (image_file);
+                  endif
+                  [removed, message] = unlink (png_path);
+                end_unwind_protect
+              endfor
+            unwind_protect_cleanup
+              fclose (log_file);
+            end_unwind_protect
+          endfunction
+          __aonohako_octave_run__ (getenv ("AONOHAKO_OCTAVE_ENTRY"));
+          OCTAVE
+          chmod 0644 /usr/local/lib/aonohako/octave/plot_capture.m
     smoke:
       command:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'disp("ok")' > Main.m
           octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path Main.m | grep '^ok$'
+          cat > Plot.m <<'OCTAVE'
+          assert (isempty (argv ()));
+          values = fscanf (stdin, "%d", 2);
+          printf ("%d\n", sum (values));
+          figure (2); plot (1:3, [1 4 9]);
+          figure (1); imagesc ([1 2; 3 4]);
+          OCTAVE
+          export IMG_CAPTURE=1 IMG_OUT_DIR="$PWD/__img__"
+          export AONOHAKO_OCTAVE_ENTRY=$(printf '%s' "$PWD/Plot.m" | base64 -w0)
+          test "$(printf '%s\n' '-4 17' | octave-cli --quiet --no-gui --no-history --no-init-file --no-site-file /usr/local/lib/aonohako/octave/plot_capture.m)" = 13
+          octave-cli --quiet --no-gui --no-history --no-init-file --no-site-file --eval '
+            lines = strsplit (strtrim (fileread (fullfile (getenv ("IMG_OUT_DIR"), "images.jsonl"))), "\n");
+            assert (numel (lines) == 2);
+            for index = 1:2
+              payload = jsondecode (lines{index});
+              assert (strcmp (payload.mime, "image/png"));
+              raw = matlab.net.base64decode (payload.b64);
+              assert (isequal (raw(1:8), uint8 ([137 80 78 71 13 10 26 10])));
+            endfor'
 
   vhdl:
     install:

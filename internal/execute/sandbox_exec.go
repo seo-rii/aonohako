@@ -374,11 +374,17 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		threadLimit = shellSandboxThreadLimit
 	}
 	allowProcesses := false
+	allowFIFOs := false
 	switch runtimeBase {
 	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-vhdl-run", "aonohako-why3-prove", "ghdl", "vvp":
 		allowProcesses = true
 	case "bash", "dash", "zsh", "fish":
 		allowProcesses = trustedShellRuntime
+	case "octave-cli":
+		// Headless gnuplot needs child processes and FIFOs for capability queries.
+		// Ordinary Octave keeps both denied; sockets remain denied by default.
+		allowProcesses = runLang == "octave" && octaveImageCaptureEnabled(req)
+		allowFIFOs = allowProcesses
 	}
 	if isDotnet || isPowerShell {
 		if heapLimit := dotnetGCHeapHardLimitHex(req.Limits.MemoryMB, tuning); heapLimit != "" {
@@ -389,6 +395,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		allowUnixSockets = false
 		allowMemfdCreate = false
 		allowProcesses = false
+		allowFIFOs = false
 	}
 	runtimeState, err := security.AcquireRuntimeState(ws.RootDir, runtimeBase, int(identity.uid), int(identity.gid))
 	if err != nil {
@@ -443,6 +450,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  false,
 		AllowProcesses:           allowProcesses,
+		AllowFIFOs:               allowFIFOs,
 		DenyThreads:              streams.communicationRestricted,
 		AllowPositiveKillProbe:   trustedShellRuntime && runLang == "zsh",
 		AllowThreadSignals:       isFactor,
