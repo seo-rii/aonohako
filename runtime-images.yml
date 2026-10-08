@@ -3041,8 +3041,19 @@ languages:
         - bash
         - -lc
         - |
-          printf '%s' '"ok\n"' > Main.gs
-          ruby /usr/local/lib/aonohako/golfscript_sandboxed.rb Main.gs | grep '^ok$'
+          set -euo pipefail
+          printf '%s\n' '~ +' > Main.gs
+          result="$(printf '20 22\n' | ruby /usr/local/lib/aonohako/golfscript.rb -n Main.gs)"
+          test "${result}" = '42'
+          printf '%s\n' '~+' > Main.gs
+          result="$(printf '7 13\n' | ruby /usr/local/lib/aonohako/golfscript.rb -n Main.gs)"
+          test "${result}" = '20'
+          printf '%s\n' '+' > Underflow.gs
+          if printf '20 22\n' | ruby /usr/local/lib/aonohako/golfscript.rb -n Underflow.gs > Underflow.out 2> Underflow.err; then
+            echo 'GolfScript + unexpectedly accepted one input string' >&2
+            exit 1
+          fi
+          grep -q 'pop on empty stack' Underflow.err
 
   mojo:
     install:

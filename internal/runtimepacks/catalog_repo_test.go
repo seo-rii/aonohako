@@ -381,7 +381,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"gforth":        {"gforth Main.fs -e bye", ".\" ok\" cr"},
 		"gleam":         {"GLEAM_VERSION=1.16.0", "aonohako-gleam-run ."},
 		"gnucobol":      {"gnucobol", "cobc -x -free -O2 -o Main Main.cob"},
-		"golfscript":    {"golfscript_sandboxed.rb", "Main.gs"},
+		"golfscript":    {"golfscript.rb -n", "Main.gs", "~ +", "~+", "20 22", "7 13", "Underflow.gs", "pop on empty stack"},
 		"graphql":       {"graphql-core==3.2.6", "aonohako-graphql-run Main.graphql"},
 		"guile":         {"guile-3.0=3.0.10+really3.0.10-4", "guile-3.0-libs=3.0.10+really3.0.10-4", "guile_check.scm", "GUILE_AUTO_COMPILE=0", "--no-auto-compile --no-debug -q -s", "aonohako-guile-compile-leak", "test ! -e aonohako-guile-compile-leak", "Broken.scm"},
 		"fstar":         {"FSTAR_VERSION=2026.06.28", "fstar-v${FSTAR_VERSION}-Linux-x86_64.tar.gz", "fstar.exe Main.fst", "Lemma (1 + 1 == 2)"},
