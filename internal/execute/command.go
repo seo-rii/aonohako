@@ -1,6 +1,7 @@
 package execute
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,20 @@ runpy.run_path(path, run_name="__main__")
 `
 
 const pythonTrustedSitecustomizePath = "/usr/local/lib/aonohako/python/sitecustomize.py"
+
+// Octave only captures plots for the canonical image sidecar explicitly
+// requested by the control plane. Other sidecar files do not opt in.
+func octaveImageCaptureEnabled(req *model.RunRequest) bool {
+	if req == nil {
+		return false
+	}
+	for _, output := range req.SidecarOutputs {
+		if output.Path == "__img__/images.jsonl" {
+			return true
+		}
+	}
+	return false
+}
 
 const pythonInstalledRunner = `import importlib.util, os, runpy, site, sys
 path = sys.argv.pop(1)
@@ -148,6 +163,13 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		}
 		return []string{"aonohako-gdl-run", primaryPath, entry}
 	case "octave":
+		if octaveImageCaptureEnabled(req) {
+			// Pass the path as data and invoke a script, preserving empty argv.
+			// Plotting needs the installed function path, but no startup files.
+			return []string{"env", "AONOHAKO_OCTAVE_ENTRY=" + base64.StdEncoding.EncodeToString([]byte(primaryPath)),
+				"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-site-file",
+				"/usr/local/lib/aonohako/octave/plot_capture.m"}
+		}
 		return []string{"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-init-path", primaryPath}
 	case "vhdl":
 		top := strings.TrimSpace(req.EntryPoint)

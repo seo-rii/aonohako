@@ -553,6 +553,27 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 	}
 }
 
+func TestBuildCommandOctaveImageOptIn(t *testing.T) {
+	path := "/tmp/box/quote' and\nnewline.m"
+	direct := []string{"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-init-path", path}
+	for _, outputs := range [][]model.OutputFile{nil, {{Path: "result.png"}}, {{Path: "__img__/other.jsonl"}}} {
+		if got := buildCommand(path, "octave", &model.RunRequest{SidecarOutputs: outputs}); !reflect.DeepEqual(got, direct) {
+			t.Fatalf("non-image Octave command = %v, want %v", got, direct)
+		}
+	}
+	request := &model.RunRequest{SidecarOutputs: []model.OutputFile{{Path: "__img__/images.jsonl"}}}
+	got := buildCommand(path, "octave", request)
+	if len(got) != 9 || got[0] != "env" || got[2] != "octave-cli" || got[8] != "/usr/local/lib/aonohako/octave/plot_capture.m" {
+		t.Fatalf("image command must load the trusted helper without script arguments: %v", got)
+	}
+	if got[1] != "AONOHAKO_OCTAVE_ENTRY="+base64.StdEncoding.EncodeToString([]byte(path)) {
+		t.Fatalf("entry path must be encoded as data in image command: %v", got)
+	}
+	if containsArg(got, "--no-init-path") || containsArg(got, "--eval") {
+		t.Fatalf("image command must allow installed functions and retain script argv: %v", got)
+	}
+}
+
 func TestBuildCommandRunsChezSchemeAsScript(t *testing.T) {
 	got := buildCommand("/tmp/Main.scm", "chez-scheme", &model.RunRequest{})
 	want := []string{"/usr/bin/chezscheme", "--quiet", "--script", "/tmp/Main.scm"}
