@@ -3215,6 +3215,18 @@ public class Main {
 				},
 			},
 		},
+		"golfscript": {
+			{
+				name:                  "ruby-interpolation-disabled",
+				compileLang:           "GOLFSCRIPT",
+				expectedStdout:        "#{File.write('/tmp/aonohako-golfscript-ruby-leak', 'leaked')}\n",
+				forbiddenPathAfterRun: "/tmp/aonohako-golfscript-ruby-leak",
+				limits:                limits,
+				sources: []model.Source{
+					source("Main.gs", `;"#{File.write('/tmp/aonohako-golfscript-ruby-leak', 'leaked')}"`),
+				},
+			},
+		},
 		"ruby": {
 			{
 				name:           "process-and-network-denies",
@@ -4925,12 +4937,11 @@ values := stdin nextLine subStrings collect: [ :value | value asInteger ].
 			},
 		},
 		"golfscript": {
-			compileLang:    "GOLFSCRIPT",
-			expectedStdout: "ok\n",
-			nonABReason:    "the sandboxed compatibility runner accepts string literals only",
-			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			compileLang: "GOLFSCRIPT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.gs", `"ok\n"`),
+				source("Main.gs", `~+`),
 			},
 		},
 		"mojo": {
