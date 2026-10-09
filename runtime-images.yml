@@ -2855,13 +2855,41 @@ languages:
     install:
       apt:
         - curl
-        - default-jre-headless
+        - default-jdk-headless
+        - patch
         - wget
       script:
         - export TLA_VERSION=1.7.4
         - export TLA_URL="https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar"
         - install -d -m 0755 /usr/local/lib/aonohako
         - curl --retry 6 --retry-all-errors --retry-delay 2 -fL "$TLA_URL" -o /usr/local/lib/aonohako/tla2tools.jar || wget --tries=6 --waitretry=2 -O /usr/local/lib/aonohako/tla2tools.jar "$TLA_URL"
+        - |
+          (
+            printf '%s\n' '936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88  /usr/local/lib/aonohako/tla2tools.jar' | sha256sum -c -
+            # Backport the upstream local-TLC fix: FPSet must not export RMI sockets.
+            # https://github.com/tlaplus/tlaplus/commit/6fde5a9ea3967191118ce18b27878a9b4b24f77f
+            work="$(mktemp -d)"
+            trap 'rm -rf -- "$work"' EXIT
+            source_root="https://raw.githubusercontent.com/tlaplus/tlaplus/v${TLA_VERSION}/tlatools/org.lamport.tlatools/src"
+            mkdir -p "$work/src/tlc2/tool/fp" "$work/classes"
+            for name in FPSet MultiFPSet; do
+              curl --retry 6 --retry-all-errors --retry-delay 2 -fL \
+                "${source_root}/tlc2/tool/fp/${name}.java" -o "$work/src/tlc2/tool/fp/${name}.java"
+            done
+            printf '%s\n' \
+              "c8970e2a650e413cec45359ad0387ce474c50d4ef5b8158faac1fc5323cdd67f  $work/src/tlc2/tool/fp/FPSet.java" \
+              "472669d9cf7e8b5946790e6d0af28a509e3b51db69c470ea429ef06e162110a6  $work/src/tlc2/tool/fp/MultiFPSet.java" \
+              | sha256sum -c -
+            revision=6fde5a9ea3967191118ce18b27878a9b4b24f77f
+            curl --retry 6 --retry-all-errors --retry-delay 2 -fL \
+              "https://github.com/tlaplus/tlaplus/commit/${revision}.diff" -o "$work/remove-local-rmi.diff"
+            printf '%s\n' "1150635d9aabb72f389841e3bf60023db4d7497c4c231bdced5daa7081c26689  $work/remove-local-rmi.diff" | sha256sum -c -
+            patch --batch --fuzz=0 -p4 -d "$work/src" -i "$work/remove-local-rmi.diff"
+            javac --release 11 -cp /usr/local/lib/aonohako/tla2tools.jar \
+              -sourcepath "$work/src" -d "$work/classes" \
+              "$work/src/tlc2/tool/fp/FPSet.java" "$work/src/tlc2/tool/fp/MultiFPSet.java"
+            jar --update --file /usr/local/lib/aonohako/tla2tools.jar -C "$work/classes" .
+          )
         - chmod 0644 /usr/local/lib/aonohako/tla2tools.jar
     smoke:
       command:
