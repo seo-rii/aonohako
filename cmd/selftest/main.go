@@ -57,18 +57,38 @@ var (
 	standardABJudgeIO = []judgeIOCase{
 		{stdin: "20 22\n", expectedStdout: "42\n", a: 20, b: 22},
 		{stdin: "7 13\n", expectedStdout: "20\n", a: 7, b: 13},
+		{stdin: "0 0\n", expectedStdout: "0\n", a: 0, b: 0},
+		{stdin: "0 17\n", expectedStdout: "17\n", a: 0, b: 17},
+		{stdin: "91 8\n", expectedStdout: "99\n", a: 91, b: 8},
+		{stdin: "9 0\n", expectedStdout: "9\n", a: 9, b: 0},
+		{stdin: "12 88\n", expectedStdout: "100\n", a: 12, b: 88},
 	}
 	lineSeparatedABJudgeIO = []judgeIOCase{
 		{stdin: "20\n22\n", expectedStdout: "42\n", a: 20, b: 22},
 		{stdin: "7\n13\n", expectedStdout: "20\n", a: 7, b: 13},
+		{stdin: "0\n0\n", expectedStdout: "0\n", a: 0, b: 0},
+		{stdin: "0\n17\n", expectedStdout: "17\n", a: 0, b: 17},
+		{stdin: "91\n8\n", expectedStdout: "99\n", a: 91, b: 8},
+		{stdin: "9\n0\n", expectedStdout: "9\n", a: 9, b: 0},
+		{stdin: "12\n88\n", expectedStdout: "100\n", a: 12, b: 88},
 	}
 	singleDigitABJudgeIO = []judgeIOCase{
 		{stdin: "1 2\n", expectedStdout: "3\n", a: 1, b: 2},
 		{stdin: "3 4\n", expectedStdout: "7\n", a: 3, b: 4},
+		{stdin: "0 0\n", expectedStdout: "0\n", a: 0, b: 0},
+		{stdin: "0 7\n", expectedStdout: "7\n", a: 0, b: 7},
+		{stdin: "9 0\n", expectedStdout: "9\n", a: 9, b: 0},
+		{stdin: "4 5\n", expectedStdout: "9\n", a: 4, b: 5},
 	}
 	twoDigitABJudgeIO = []judgeIOCase{
 		{stdin: "20 22\n", expectedStdout: "42\n", a: 20, b: 22},
 		{stdin: "10 13\n", expectedStdout: "23\n", a: 10, b: 13},
+		{stdin: "00 00\n", expectedStdout: "0\n", a: 0, b: 0},
+		{stdin: "00 17\n", expectedStdout: "17\n", a: 0, b: 17},
+		{stdin: "91 08\n", expectedStdout: "99\n", a: 91, b: 8},
+		{stdin: "09 00\n", expectedStdout: "9\n", a: 9, b: 0},
+		{stdin: "12 88\n", expectedStdout: "100\n", a: 12, b: 88},
+		{stdin: "99 99\n", expectedStdout: "198\n", a: 99, b: 99},
 	}
 	sqlABJudgeIO = []judgeIOCase{
 		{
@@ -83,6 +103,11 @@ var (
 			a:              7,
 			b:              13,
 		},
+		{stdin: "create table input(a integer, b integer);\ninsert into input values (0, 0);\n", expectedStdout: "0\n", a: 0, b: 0},
+		{stdin: "create table input(a integer, b integer);\ninsert into input values (0, 17);\n", expectedStdout: "17\n", a: 0, b: 17},
+		{stdin: "create table input(a integer, b integer);\ninsert into input values (91, 8);\n", expectedStdout: "99\n", a: 91, b: 8},
+		{stdin: "create table input(a integer, b integer);\ninsert into input values (9, 0);\n", expectedStdout: "9\n", a: 9, b: 0},
+		{stdin: "create table input(a integer, b integer);\ninsert into input values (12, 88);\n", expectedStdout: "100\n", a: 12, b: 88},
 	}
 )
 
@@ -947,7 +972,12 @@ func runCompileExecuteSuite() error {
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
+	return verifyCompileExecuteLanguages(httpServer.URL, rawLanguages)
+}
+
+func verifyCompileExecuteLanguages(baseURL, rawLanguages string) error {
 	cases := compileExecuteCases()
+	semanticCases := languageSemanticCases()
 	startupMemory := runtimeStartupMemoryMB()
 	seen := map[string]struct{}{}
 	for _, rawLanguage := range strings.Split(rawLanguages, ",") {
@@ -976,7 +1006,7 @@ func runCompileExecuteSuite() error {
 			var compileResp model.CompileResponse
 			for attempt := 1; attempt <= compileAttempts; attempt++ {
 				var err error
-				compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
+				compileResp, err = postCompileRequest(baseURL, model.CompileRequest{
 					Lang:         compileLanguage,
 					Sources:      tc.sources,
 					EntryPoint:   tc.entryPoint,
@@ -987,6 +1017,9 @@ func runCompileExecuteSuite() error {
 				}
 				if compileResp.Status != model.CompileStatusOK {
 					return fmt.Errorf("%s/%s compile %d/%d failed: status=%s reason=%s stdout=%q stderr=%q", language, compileLanguage, attempt, compileAttempts, compileResp.Status, compileResp.Reason, compileResp.Stdout, compileResp.Stderr)
+				}
+				if len(compileResp.Artifacts) == 0 {
+					return fmt.Errorf("%s/%s compile succeeded without artifacts", language, compileLanguage)
 				}
 			}
 			if language == "fsharp" && variantIndex == 0 {
@@ -1006,7 +1039,7 @@ let a = bigint(System.Console.ReadLine())
 printfn"%A"(getans(fac(a))0I)
 `)}
 				for attempt := 1; attempt <= 20; attempt++ {
-					regressionResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+					regressionResp, err := postCompileRequest(baseURL, model.CompileRequest{
 						Lang:    compileLanguage,
 						Sources: []model.Source{regressionSource},
 					})
@@ -1045,7 +1078,7 @@ printfn"%A"(getans(fac(a))0I)
 				}}
 			}
 			for index, ioCase := range judgeIO {
-				runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				runResp, err := postExecuteRequest(baseURL, model.RunRequest{
 					Lang:              profile.RunLang,
 					Binaries:          binaries,
 					EntryPoint:        tc.entryPoint,
@@ -1061,6 +1094,28 @@ printfn"%A"(getans(fac(a))0I)
 					return fmt.Errorf("%s/%s execute case %d/%d failed: status=%s reason=%s stdout=%q stderr=%q", language, compileLanguage, index+1, len(judgeIO), runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
 				}
 			}
+			control := model.RunRequest{
+				Lang:              profile.RunLang,
+				Binaries:          binaries,
+				EntryPoint:        tc.entryPoint,
+				Stdin:             judgeIO[0].stdin,
+				ExpectedStdout:    judgeIO[0].expectedStdout + "aonohako-wrong-answer-control\n",
+				Limits:            limits,
+				PythonLibraryMode: tc.pythonLibraryMode,
+			}
+			controlResp, err := postExecuteRequest(baseURL, control)
+			if err != nil {
+				return fmt.Errorf("%s/%s wrong-answer control request failed: %w", language, compileLanguage, err)
+			}
+			if controlResp.Status != model.RunStatusWA {
+				return fmt.Errorf("%s/%s wrong-answer control returned status=%s, want %s: reason=%s stdout=%q stderr=%q", language, compileLanguage, controlResp.Status, model.RunStatusWA, controlResp.Reason, controlResp.Stdout, controlResp.Stderr)
+			}
+
+			for _, semanticCase := range semanticCases[language] {
+				if err := verifyLanguageSemanticCase(baseURL, language, compileLanguage, tc, semanticCase); err != nil {
+					return err
+				}
+			}
 
 			if memoryMB, ok := startupMemory[language]; ok {
 				startupLimits := limits
@@ -1070,7 +1125,7 @@ printfn"%A"(getans(fac(a))0I)
 					attempts = 5
 				}
 				for attempt := 1; attempt <= attempts; attempt++ {
-					startupResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+					startupResp, err := postExecuteRequest(baseURL, model.RunRequest{
 						Lang:              profile.RunLang,
 						Binaries:          binaries,
 						EntryPoint:        tc.entryPoint,
@@ -1106,7 +1161,7 @@ printfn"%A"(getans(fac(a))0I)
     System.out.println(visit(0));
   }
 }`)}
-				deepCompileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				deepCompileResp, err := postCompileRequest(baseURL, model.CompileRequest{
 					Lang:    compileLanguage,
 					Sources: []model.Source{deepRecursionSource},
 				})
@@ -1125,7 +1180,7 @@ printfn"%A"(getans(fac(a))0I)
 						Mode:    artifact.Mode,
 					})
 				}
-				deepRunResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				deepRunResp, err := postExecuteRequest(baseURL, model.RunRequest{
 					Lang:           profile.RunLang,
 					Binaries:       deepBinaries,
 					ExpectedStdout: "100000\n",
@@ -1184,7 +1239,7 @@ fn main() {
 }
 `)},
 			}
-			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+			compileResp, err := postCompileRequest(baseURL, model.CompileRequest{
 				Lang:          "RUST2024",
 				Sources:       installedSources,
 				EntryPoint:    "src/main.rs",
@@ -1200,7 +1255,7 @@ fn main() {
 			for _, artifact := range compileResp.Artifacts {
 				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
 			}
-			runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+			runResp, err := postExecuteRequest(baseURL, model.RunRequest{
 				Lang:           "binary",
 				Binaries:       binaries,
 				Stdin:          "20 22\n",
@@ -3527,7 +3582,7 @@ _start:
 			judgeIO:     twoDigitABJudgeIO,
 			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.bf", ",>,>,>,>,<[<<<+>>>-]++++++[<<<-------->>>-]<<<.>>>>[<<<+>>>-]++++++[<<<-------->>>-]<<<.>[-]++++++++++."),
+				source("Main.bf", brainfuckABProgram()),
 			},
 		},
 		"befunge": {
@@ -3535,7 +3590,7 @@ _start:
 			judgeIO:     standardABJudgeIO,
 			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.bef", `>&&+:91+/68*+,91+%68*+,52*,@`),
+				source("Main.bef", `>&&+.52*,@`),
 			},
 		},
 		"lolcode": {
@@ -4073,20 +4128,21 @@ end`),
 				source("Main.gleam", `import gleam/int
 import gleam/io
 
-@external(erlang, "aonohako_input", "read_sum")
-fn read_sum() -> Int
+@external(erlang, "aonohako_input", "read_values")
+fn read_values() -> #(Int, Int)
 
 pub fn main() {
-  read_sum()
+  let #(a, b) = read_values()
+  (a + b)
   |> int.to_string
   |> io.println
 }`),
 				source("src/aonohako_input.erl", `-module(aonohako_input).
--export([read_sum/0]).
+-export([read_values/0]).
 
-read_sum() ->
+read_values() ->
     {ok, [A, B]} = io:fread("", "~d ~d"),
-    A + B.
+    {A, B}.
 `),
 			},
 		},
@@ -4664,9 +4720,7 @@ fn main() {
 			judgeIO:     standardABJudgeIO,
 			limits:      model.Limits{TimeMs: 6000, MemoryMB: 512},
 			sources: []model.Source{
-				source("Main.sed", `s/^20[[:space:]][[:space:]]*22$/42/
-t
-s/^7[[:space:]][[:space:]]*13$/20/`),
+				source("Main.sed", sedABProgram),
 			},
 		},
 		"bc": {
@@ -5243,15 +5297,20 @@ main =
 				source("Main.purs", `module Main where
 import Prelude
 import Effect (Effect)
-foreign import printSum :: Effect Unit
+foreign import readA :: Effect Int
+foreign import readB :: Effect Int
+foreign import printInt :: Int -> Effect Unit
 main :: Effect Unit
-main = printSum
+main = do
+  a <- readA
+  b <- readB
+  printInt (a + b)
 `),
 				source("Main.js", `import { readFileSync } from "node:fs";
-export const printSum = () => {
-  const values = readFileSync(0, "utf8").trim().split(/\s+/).map(Number);
-  console.log(values[0] + values[1]);
-};`),
+const values = readFileSync(0, "utf8").trim().split(/\s+/).map(Number);
+export const readA = () => values[0];
+export const readB = () => values[1];
+export const printInt = value => () => console.log(value);`),
 			},
 		},
 		"kotlin-jvm": {
@@ -5272,7 +5331,9 @@ export const printSum = () => {
 			sources: []model.Source{
 				source("Main.kt", `fun main() {
   val values = readLine()!!.trim().split(Regex("\\s+")).map(String::toInt)
-  println(Helper.sum(values[0], values[1]))
+  val total = values[0] + values[1]
+  check(Helper.sum(values[0], values[1]) == total)
+  println(total)
 }`),
 				source("Helper.java", `final class Helper {
   static int sum(int a, int b) {

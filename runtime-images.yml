@@ -127,32 +127,38 @@ languages:
         - make
     smoke:
       command:
-        - /bin/sh
+        - /bin/bash
         - -c
         - |
+          set -euo pipefail
           printf '%s\n' '#include <stdio.h>' 'int main(void) {' '  puts("ok");' '  return 0;' '}' > Main.c
           gcc -O2 -pipe Main.c -o Main
-          [ "$(./Main)" = ok ]
+          smoke_value="$(./Main)"
+          test "${smoke_value}" = ok
 
   c:
     smoke:
       command:
-        - /bin/sh
+        - /bin/bash
         - -c
         - |
+          set -euo pipefail
           printf '%s\n' '#include <stdio.h>' 'int main(void) {' '  puts("ok");' '  return 0;' '}' > Main.c
           gcc -O2 -pipe Main.c -o Main
-          [ "$(./Main)" = ok ]
+          smoke_value="$(./Main)"
+          test "${smoke_value}" = ok
 
   cpp:
     smoke:
       command:
-        - /bin/sh
+        - /bin/bash
         - -c
         - |
+          set -euo pipefail
           printf '%s\n' '#include <iostream>' 'int main() {' '  std::cout << "ok\n";' '  return 0;' '}' > Main.cpp
           g++ -O2 -pipe Main.cpp -o Main
-          [ "$(./Main)" = ok ]
+          smoke_value="$(./Main)"
+          test "${smoke_value}" = ok
           printf '%s\n' \
             '#include "testlib.h"' \
             'int main(int argc, char *argv[]) {' \
@@ -177,12 +183,13 @@ languages:
         - aheui==1.2.5
     smoke:
       command:
-        - /bin/sh
+        - /bin/bash
         - -c
         - |
+          set -euo pipefail
           printf '%s' '밞바밤밣받밞밞밞밦밞바밝밣바박박밦밞받밞받밞발밣받뱔희밞땨몋드떠받볋' > Main.aheui
-          output="$(aheui Main.aheui 2>/tmp/aheui.stderr || true)"
-          printf '%s\n' "${output}" | grep '^Hello, World!$'
+          output="$(aheui Main.aheui 2>aheui.stderr)"
+          test "${output}" = 'Hello, World!'
 
   apecode:
     install:
@@ -203,10 +210,12 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'state main {' '  return true;' '}' > Main.ape
           apecc --check Main.ape
           apecc -o Main Main.ape
-          printf '%s\n' 1 3 '3 1 2' | ./Main | grep '^3 1 2$'
+          output="$(printf '%s\n' 1 3 '3 1 2' | ./Main)"
+          test "${output}" = '3 1 2'
 
   asm:
     install:
@@ -217,6 +226,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.s <<'ASM'
           .global _start
           .section .text
@@ -234,7 +244,8 @@ languages:
               .ascii "ok\n"
           ASM
           gcc -nostdlib -static -no-pie Main.s -o Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.s <<'ASM'
           .global _start
           .section .text
@@ -253,6 +264,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.asm <<'ASM'
           default rel
           global _start
@@ -272,7 +284,8 @@ languages:
           ASM
           nasm -felf64 Main.asm -o Main.o
           gcc -nostdlib -static -no-pie Main.o -o Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.asm <<'ASM'
           global _start
           section .text
@@ -331,14 +344,19 @@ languages:
         - pypy3
     smoke:
       command:
-        - pypy3
-        - -c
+        - bash
+        - -lc
         - |
+          set -euo pipefail
+          cat > Main.py <<'PYTHON'
           import sys
           from pathlib import Path
           assert sys.implementation.name == "pypy"
           Path("same-folder.txt").write_text("ok", encoding="utf-8")
           print(Path("same-folder.txt").read_text(encoding="utf-8"))
+          PYTHON
+          output="$(pypy3 Main.py)"
+          test "${output}" = 'ok'
 
   java:
     install:
@@ -350,11 +368,13 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'public class Main {' '  public static void main(String[] args) {' '    System.out.println("ok");' '  }' '}' > Main.java
           javac --release 11 -encoding UTF-8 Main.java
           printf '%s\n' 'Manifest-Version: 1.0' 'Main-Class: Main' '' > MANIFEST.MF
           jar cfm Main.jar MANIFEST.MF Main.class
-          java -XX:ReservedCodeCacheSize=64m -XX:-UseCompressedClassPointers -Xmx128m -Xss16384k -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -XX:+UseSerialGC -DONLINE_JUDGE=1 -jar Main.jar | grep '^ok$'
+          output="$(java -XX:ReservedCodeCacheSize=64m -XX:-UseCompressedClassPointers -Xmx128m -Xss16384k -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -XX:+UseSerialGC -DONLINE_JUDGE=1 -jar Main.jar)"
+          test "${output}" = 'ok'
 
   groovy:
     install:
@@ -367,6 +387,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.groovy <<'GROOVY'
           class Main {
               static void main(String[] args) {
@@ -380,7 +401,8 @@ languages:
           groovy_jars=(/usr/share/groovy/embeddable/groovy-all*.jar /usr/share/java/groovy-all*.jar /usr/share/java/groovy*.jar)
           groovy_cp='.'
           for jar in "${groovy_jars[@]}"; do groovy_cp="${groovy_cp}:${jar}"; done
-          java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${groovy_cp}" Main | grep '^ok$'
+          output="$(java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${groovy_cp}" Main)"
+          test "${output}" = 'ok'
           cat > Broken.groovy <<'GROOVY'
           class Broken {
               static void main(String[] args) {
@@ -401,13 +423,15 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'object Main extends App {' '  val path = new java.io.File("same-folder.txt")' '  val writer = new java.io.PrintWriter(path, "UTF-8")' '  writer.write("ok")' '  writer.close()' '  println(scala.io.Source.fromFile(path, "UTF-8").mkString.trim)' '}' > Main.scala
           scalac Main.scala
           shopt -s nullglob
           scala_jars=(/usr/share/java/scala*.jar)
           scala_cp='.'
           for jar in "${scala_jars[@]}"; do scala_cp="${scala_cp}:${jar}"; done
-          java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${scala_cp}" Main | grep '^ok$'
+          output="$(java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${scala_cp}" Main)"
+          test "${output}" = 'ok'
 
   javascript:
     install:
@@ -418,12 +442,14 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.js <<'JS'
           const fs = require('fs');
           fs.writeFileSync('same-folder.txt', 'ok');
           console.log(fs.readFileSync('same-folder.txt', 'utf8'));
           JS
-          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js | grep '^ok$'
+          output="$(node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js)"
+          test "${output}" = 'ok'
 
   assemblyscript:
     install:
@@ -491,7 +517,8 @@ languages:
           ASSEMBLYSCRIPT
           aonohako-assemblyscript-compile "${PWD}/Main.ts" "${PWD}/Main.wasm"
           wasm-validate Main.wasm
-          test "$(printf '%s\n' '-4 17' | wasmtime run -O memory-reservation=33554432 -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=33554432 -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-table-elements=65536 -W max-wasm-stack=1048576 -W trap-on-grow-failure=y Main.wasm)" = 13
+          smoke_value="$(printf '%s\n' '-4 17' | wasmtime run -O memory-reservation=33554432 -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=33554432 -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-table-elements=65536 -W max-wasm-stack=1048576 -W trap-on-grow-failure=y Main.wasm)"
+          test "${smoke_value}" = 13
           printf '%s\n' 'const broken: i32 = "nope";' > Broken.ts
           if aonohako-assemblyscript-compile "${PWD}/Broken.ts" "${PWD}/Broken.wasm" >/dev/null 2>&1; then exit 1; fi
           test ! -e Broken.wasm
@@ -525,7 +552,8 @@ languages:
           readln split-words [ string>number ] map-sum .
           FACTOR
           /opt/factor/factor -no-user-init -no-signals -q -datastack=256 -retainstack=256 -callstack=1024 -callbacks=256 /usr/local/lib/aonohako/factor_check.factor Main.factor
-          test "$(printf '%s\n' '-4 17' | /opt/factor/factor -no-user-init -no-signals -q -datastack=256 -retainstack=256 -callstack=1024 -callbacks=256 -young=2 -aging=4 -tenured=192 -codeheap=96 Main.factor)" = 13
+          smoke_value="$(printf '%s\n' '-4 17' | /opt/factor/factor -no-user-init -no-signals -q -datastack=256 -retainstack=256 -callstack=1024 -callbacks=256 -young=2 -aging=4 -tenured=192 -codeheap=96 Main.factor)"
+          test "${smoke_value}" = 13
           cat > SyntaxOnly.factor <<'FACTOR'
           USING: io.encodings.utf8 io.files ;
           "leak" "aonohako-factor-parser-leak" utf8 set-file-contents
@@ -546,9 +574,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' "fs = require 'fs'" "fs.writeFileSync 'same-folder.txt', 'ok'" "console.log fs.readFileSync('same-folder.txt', 'utf8')" > Main.coffee
           coffee --compile --bare --output . Main.coffee
-          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/coffee Main.coffee | grep '^ok$'
+          output="$(node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/coffee Main.coffee)"
+          test "${output}" = 'ok'
 
   typescript:
     install:
@@ -561,9 +591,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' "declare const require: any;" "const fs = require('fs');" "fs.writeFileSync('same-folder.txt', 'ok');" "console.log(fs.readFileSync('same-folder.txt', 'utf8'));" > Main.ts
           tsc Main.ts --module commonjs --target es2019 --outDir dist
-          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js | grep '^ok$'
+          output="$(node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 dist/Main.js)"
+          test "${output}" = 'ok'
 
   elm:
     install:
@@ -673,7 +705,8 @@ languages:
           }
           JS
           } > Main.js
-          printf 'ok\n' | node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js | grep '^ok$'
+          output="$(printf 'ok\n' | node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js)"
+          test "${output}" = 'ok'
           cat > Broken.elm <<'ELM'
           module Broken exposing (main)
           main =
@@ -710,7 +743,8 @@ languages:
           JSON
           printf '%s\n' 'Console.log("ok")' > Main.res
           rescript build
-          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 lib/js/Main.js | grep '^ok$'
+          output="$(node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 lib/js/Main.js)"
+          test "${output}" = 'ok'
           printf '%s\n' 'let broken = ' > Broken.res
           if rescript build >/dev/null 2>&1; then exit 1; fi
 
@@ -793,7 +827,8 @@ languages:
           PURS
           spago build
           printf '%s\n' 'require("./output/Main/index.js").main();' > Main.js
-          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js | grep '^ok$'
+          output="$(node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js)"
+          test "${output}" = 'ok'
           cat > src/Broken.purs <<'PURS'
           module Broken where
           broken =
@@ -806,11 +841,16 @@ languages:
         - ruby-full
     smoke:
       command:
-        - ruby
-        - -e
+        - bash
+        - -lc
         - |
+          set -euo pipefail
+          cat > Main.rb <<'RUBY'
           File.write("same-folder.txt", "ok")
           puts File.read("same-folder.txt")
+          RUBY
+          output="$(ruby Main.rb)"
+          test "${output}" = 'ok'
 
   php:
     install:
@@ -818,11 +858,17 @@ languages:
         - php
     smoke:
       command:
-        - php
-        - -r
+        - bash
+        - -lc
         - |
+          set -euo pipefail
+          cat > Main.php <<'PHP'
+          <?php
           file_put_contents("same-folder.txt", "ok");
           echo file_get_contents("same-folder.txt"), PHP_EOL;
+          PHP
+          output="$(php Main.php)"
+          test "${output}" = 'ok'
 
   lua:
     install:
@@ -832,16 +878,20 @@ languages:
         - test "$(dpkg-query -W -f='${Version}' lua5.4)" = 5.4.7-1+b2
     smoke:
       command:
-        - lua5.4
-        - -E
-        - -e
+        - bash
+        - -lc
         - |
+          set -euo pipefail
+          cat > Main.lua <<'LUA'
           local f = assert(io.open("same-folder.txt", "w"))
           f:write("ok")
           f:close()
           local r = assert(io.open("same-folder.txt", "r"))
           print(r:read("*a"))
           r:close()
+          LUA
+          output="$(lua5.4 -E Main.lua)"
+          test "${output}" = 'ok'
 
   luajit:
     install:
@@ -860,7 +910,8 @@ languages:
           print(a + b)
           LUA
           env LUA_INIT= luajit -b -t raw Main.lua /dev/null
-          test "$(printf '%s\n' '-4 17' | env LUA_INIT= luajit -E Main.lua)" = 13
+          smoke_value="$(printf '%s\n' '-4 17' | env LUA_INIT= luajit -E Main.lua)"
+          test "${smoke_value}" = 13
           cat > SyntaxOnly.lua <<'LUA'
           local output = assert(io.open("aonohako-luajit-compile-leak", "w"))
           output:write("leak")
@@ -877,15 +928,20 @@ languages:
         - perl
     smoke:
       command:
-        - perl
-        - -e
+        - bash
+        - -lc
         - |
+          set -euo pipefail
+          cat > Main.pl <<'PERL'
           open my $fh, '>', 'same-folder.txt' or die $!;
           print {$fh} "ok";
           close $fh;
           open my $rfh, '<', 'same-folder.txt' or die $!;
           print scalar <$rfh>;
           close $rfh;
+          PERL
+          output="$(perl Main.pl)"
+          test "${output}" = 'ok'
 
   elixir:
     install:
@@ -896,8 +952,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'File.write!("same-folder.txt", "ok")' 'IO.puts(File.read!("same-folder.txt"))' > Main.exs
-          env ERL_AFLAGS='+MIscs 128 +S 1:1 +A 1 +MMscs 0' elixir Main.exs | grep '^ok$'
+          output="$(env ERL_AFLAGS='+MIscs 128 +S 1:1 +A 1 +MMscs 0' elixir Main.exs)"
+          test "${output}" = 'ok'
 
   haskell:
     install:
@@ -908,9 +966,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'main :: IO ()' 'main = do' '  writeFile "same-folder.txt" "ok"' '  readFile "same-folder.txt" >>= putStrLn' > Main.hs
           ghc -O2 -o Main Main.hs
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   idris2:
     install:
@@ -935,6 +995,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.idr <<'IDRIS'
           module Main
 
@@ -942,7 +1003,8 @@ languages:
           main = putStrLn "ok"
           IDRIS
           idris2 --cg chez -o Main Main.idr
-          ./build/exec/Main | grep '^ok$'
+          output="$(./build/exec/Main)"
+          test "${output}" = 'ok'
           test -d build/exec/Main_app
           cat > Broken.idr <<'IDRIS'
           module Broken
@@ -962,6 +1024,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.hx <<'HAXE'
           class Main {
             static public function main() {
@@ -970,7 +1033,8 @@ languages:
           }
           HAXE
           haxe -main Main -neko Main.n
-          neko Main.n | grep '^ok$'
+          output="$(neko Main.n)"
+          test "${output}" = 'ok'
 
   lisp:
     install:
@@ -981,6 +1045,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.lisp <<'LISP'
           (with-open-file (out "same-folder.txt"
                                :direction :output
@@ -990,7 +1055,8 @@ languages:
           (with-open-file (in "same-folder.txt" :direction :input)
             (format t "~a~%" (read-line in nil "")))
           LISP
-          sbcl --noinform --script Main.lisp | grep '^ok$'
+          output="$(sbcl --noinform --script Main.lisp)"
+          test "${output}" = 'ok'
           cat > Broken.lisp <<'LISP'
           (format t "ok"
           LISP
@@ -1005,13 +1071,15 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           pil -version -bye >/dev/null
           cat > Main.l <<'PICOLISP'
           (in NIL
              (let (A (read) B (read))
                 (prinl (+ A B)) ) )
           PICOLISP
-          printf '1 2\n' | pil Main.l -bye | grep '^3$'
+          output="$(printf '1 2\n' | pil Main.l -bye)"
+          test "${output}" = '3'
           printf '%s\n' '(prinl "broken"' > Broken.l
           if pil Broken.l -bye >/dev/null 2>&1; then exit 1; fi
 
@@ -1021,9 +1089,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'import Foundation' 'try! "ok".write(toFile: "same-folder.txt", atomically: true, encoding: .utf8)' 'print(try! String(contentsOfFile: "same-folder.txt").trimmingCharacters(in: .whitespacesAndNewlines))' > Main.swift
           swiftc -O Main.swift -o Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   sqlite:
     install:
@@ -1034,9 +1104,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'create table numbers(v integer);' 'insert into numbers(v) values (1),(2),(3);' > setup.sql
           printf '%s\n' 'select sum(v) from numbers;' > Main.sql
-          [ "$(sqlite3 same-folder.db '.read setup.sql' '.read Main.sql')" = 6 ]
+          smoke_value="$(sqlite3 same-folder.db '.read setup.sql' '.read Main.sql')"
+          test "${smoke_value}" = 6
           [ -f same-folder.db ]
 
   julia:
@@ -1045,17 +1117,19 @@ languages:
         - ln -sfn /usr/local/julia/bin/julia /usr/local/bin/julia
     smoke:
       command:
-        - julia
-        - --startup-file=no
-        - --history-file=no
-        - --color=no
-        - -e
+        - bash
+        - -lc
         - |
+          set -euo pipefail
+          cat > Main.jl <<'JULIA'
           using Statistics
           open("same-folder.txt", "w") do io
               write(io, string(mean([1, 2, 3])))
           end
           println(read("same-folder.txt", String))
+          JULIA
+          output="$(julia --startup-file=no --history-file=no --color=no Main.jl)"
+          test "${output}" = '2.0'
 
   raku:
     install:
@@ -1066,9 +1140,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'spurt "same-folder.txt", "ok";' 'say slurp("same-folder.txt").trim;' > Main.raku
           raku -c Main.raku >/dev/null
-          raku Main.raku | grep '^ok$'
+          output="$(raku Main.raku)"
+          test "${output}" = 'ok'
 
   r:
     install:
@@ -1079,11 +1155,13 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.R <<'RS'
           writeLines("ok", "same-folder.txt")
           cat(readLines("same-folder.txt"), sep = "\n")
           RS
-          Rscript --vanilla Main.R | grep '^ok$'
+          output="$(Rscript --vanilla Main.R)"
+          test "${output}" = 'ok'
           cat > Broken.R <<'RS'
           if (
           RS
@@ -1100,6 +1178,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > main.erl <<'ERL'
           -module(main).
           -export([main/0]).
@@ -1109,7 +1188,8 @@ languages:
               io:format("~s~n", [Data]).
           ERL
           erlc main.erl
-          erl +S 1:1 +A 1 -noshell -pa . -s main main -s init stop | grep '^ok$'
+          output="$(erl +S 1:1 +A 1 -noshell -pa . -s main main -s init stop)"
+          test "${output}" = 'ok'
           cat > Broken.erl <<'ERL'
           -module(broken).
           -export([main/0]).
@@ -1127,6 +1207,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.pl <<'PROLOG'
           main :-
               setup_call_cleanup(
@@ -1141,7 +1222,8 @@ languages:
               ),
               writeln(Content).
           PROLOG
-          swipl -q -f Main.pl -g main -t halt | grep '^ok$'
+          output="$(swipl -q -f Main.pl -g main -t halt)"
+          test "${output}" = 'ok'
           cat > Broken.pl <<'PROLOG'
           main :-
               writeln(ok
@@ -1160,6 +1242,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.pl <<'PROLOG'
           main :-
               read_integer(A),
@@ -1169,8 +1252,10 @@ languages:
               nl.
           PROLOG
           gplc --no-top-level --no-debugger -o Main Main.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl
-          test "$(printf '20 22\n' | ./Main)" = 42
-          test "$(printf '7 13\n' | ./Main)" = 20
+          smoke_value="$(printf '20 22\n' | ./Main)"
+          test "${smoke_value}" = 42
+          smoke_value="$(printf '7 13\n' | ./Main)"
+          test "${smoke_value}" = 20
 
           cat > CompileOnly.pl <<'PROLOG'
           :- initialization(compile_only_init).
@@ -1205,6 +1290,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           python3 - <<'PY' > Main.ws
           S = " "
           T = "\t"
@@ -1221,7 +1307,8 @@ languages:
           program = ''.join(push(ord(ch)) + out_char() for ch in "ok\n") + L + L + L
           print(program, end="")
           PY
-          python3 /usr/local/lib/aonohako/whitespace.py Main.ws | grep '^ok$'
+          output="$(python3 /usr/local/lib/aonohako/whitespace.py Main.ws)"
+          test "${output}" = 'ok'
 
   bf:
     install:
@@ -1232,8 +1319,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s' '++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.' > Main.bf
-          python3 /usr/local/lib/aonohako/brainfuck.py Main.bf | grep '^Hello World!$'
+          output="$(python3 /usr/local/lib/aonohako/brainfuck.py Main.bf)"
+          test "${output}" = 'Hello World!'
 
   befunge:
     install:
@@ -1244,8 +1333,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s' '>"ko",,91+,@' > Main.bef
-          python3 /usr/local/lib/aonohako/befunge.py Main.bef | grep '^ok$'
+          output="$(python3 /usr/local/lib/aonohako/befunge.py Main.bef)"
+          test "${output}" = 'ok'
 
   malbolge:
     install:
@@ -1256,10 +1347,12 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.mal <<'MALBOLGE'
           ('&%:9]!~}|z2Vxwv-,POqponl$Hjig%eB@@>}=<M:9wv6WsU2T|nm-,jcL(I&%$#"`CB]V?Tx<uVtT`Rpo3NlF.Jh++FdbCBA@?]!~|4XzyTT43Qsqq(Lnmkj"Fhg${z@>
           MALBOLGE
-          [ "$(python3 /usr/local/lib/aonohako/malbolge.py Main.mal)" = 'Hello World!' ]
+          smoke_value="$(python3 /usr/local/lib/aonohako/malbolge.py Main.mal)"
+          test "${smoke_value}" = 'Hello World!'
 
   lolcode:
     install:
@@ -1285,8 +1378,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'HAI 1.2' 'VISIBLE "ok"' 'KTHXBYE' > Main.lol
-          lci Main.lol | grep '^ok$'
+          output="$(lci Main.lol)"
+          test "${output}" = 'ok'
 
   wasm:
     install:
@@ -1303,6 +1398,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.wat <<'WAT'
           (module
             (import "wasi_snapshot_preview1" "fd_write"
@@ -1325,7 +1421,7 @@ languages:
               drop))
           WAT
           wat2wasm Main.wat -o Main.wasm
-          wasmtime run --dir=. \
+          output="$(wasmtime run --dir=. \
             -O memory-reservation=33554432 \
             -O memory-reservation-for-growth=0 \
             -O memory-guard-size=65536 \
@@ -1336,7 +1432,8 @@ languages:
             -W max-table-elements=65536 \
             -W max-wasm-stack=1048576 \
             -W trap-on-grow-failure=y \
-            Main.wasm | grep '^ok$'
+            Main.wasm)"
+          test "${output}" = 'ok'
 
   ocaml:
     install:
@@ -1347,9 +1444,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'print_endline "ok"' > Main.ml
           ocamlopt -o Main Main.ml
-          env OCAMLRUNPARAM='s=32k' ./Main | grep '^ok$'
+          output="$(env OCAMLRUNPARAM='s=32k' ./Main)"
+          test "${output}" = 'ok'
 
   sml:
     install:
@@ -1360,6 +1459,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.sml <<'SML'
           val out = TextIO.openOut "same-folder.txt"
           val _ = TextIO.output (out, "ok\n")
@@ -1370,7 +1470,8 @@ languages:
           val _ = case line of SOME s => print s | NONE => ()
           SML
           mlton -output Main Main.sml
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.sml <<'SML'
           val _ = print (
           SML
@@ -1409,6 +1510,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.sml <<'SML'
           fun scanInt () = valOf (TextIO.scanStream (Int.scan StringCvt.DEC) TextIO.stdIn)
           val a = scanInt ()
@@ -1437,6 +1539,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.sml <<'SML'
           fun scanInt () = valOf (TextIO.scanStream (Int.scan StringCvt.DEC) TextIO.stdIn)
           val a = scanInt ()
@@ -1444,8 +1547,10 @@ languages:
           val _ = print (Int.toString (a + b) ^ "\n")
           SML
           mlton -output Main Main.sml
-          test "$(printf '%s\n' '20 22' | ./Main)" = 42
-          test "$(printf '%s\n' '7 13' | ./Main)" = 20
+          smoke_value="$(printf '%s\n' '20 22' | ./Main)"
+          test "${smoke_value}" = 42
+          smoke_value="$(printf '%s\n' '7 13' | ./Main)"
+          test "${smoke_value}" = 20
           cat > Broken.sml <<'SML'
           val _ = print (
           SML
@@ -1470,6 +1575,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > main.m <<'MERCURY'
           :- module main.
           :- interface.
@@ -1481,7 +1587,8 @@ languages:
               io.write_string("ok\n", !IO).
           MERCURY
           mmc --make --grade hlc.gc main
-          ./main | grep '^ok$'
+          output="$(./main)"
+          test "${output}" = 'ok'
           cat > broken.m <<'MERCURY'
           :- module broken.
           :- interface.
@@ -1505,9 +1612,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'package main' 'import "fmt"' 'func main() { fmt.Println("ok") }' > main.go
           env -u GOROOT GOENV=off go build -o Main main.go
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   zig:
     install:
@@ -1526,6 +1635,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.zig <<'ZIG'
           const std = @import("std");
           pub fn main() !void {
@@ -1536,7 +1646,8 @@ languages:
           }
           ZIG
           zig build-exe Main.zig -O ReleaseSafe -mcpu=baseline -femit-bin=Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.zig <<'ZIG'
           pub fn main() void {
               this is invalid
@@ -1553,6 +1664,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.f90 <<'F90'
           program main
             implicit none
@@ -1567,7 +1679,8 @@ languages:
           end program main
           F90
           gfortran -O2 -pipe Main.f90 -o Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.f90 <<'F90'
           program broken
             integer :: x
@@ -1587,6 +1700,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.d <<'D'
           import std.file : write, readText;
           import std.stdio : writeln;
@@ -1596,7 +1710,8 @@ languages:
           }
           D
           ldc2 Main.d -O3 -release -of=Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.d <<'D'
           void main() {
               this is invalid;
@@ -1615,6 +1730,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.m <<'OBJC'
           #include <stdio.h>
           int main(void) {
@@ -1623,7 +1739,8 @@ languages:
           }
           OBJC
           clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   objective-cpp:
     install:
@@ -1636,6 +1753,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.mm <<'OBJCPP'
           #include <iostream>
           int main() {
@@ -1644,7 +1762,8 @@ languages:
           }
           OBJCPP
           clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   coq:
     install:
@@ -1655,6 +1774,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.v <<'COQ'
           Theorem same_folder_ok : 1 = 1.
           Proof. reflexivity. Qed.
@@ -1676,6 +1796,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.v <<'COQ'
           Theorem same_folder_ok : 1 = 1.
           Proof. reflexivity. Qed.
@@ -1703,12 +1824,14 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.scm <<'SCM'
           (import (scheme base) (scheme write))
           (display "ok")
           (newline)
           SCM
-          chibi-scheme Main.scm | grep '^ok$'
+          output="$(chibi-scheme Main.scm)"
+          test "${output}" = 'ok'
 
   chez-scheme:
     install:
@@ -1726,7 +1849,8 @@ languages:
           (newline)
           SCM
           /usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm Main.scm
-          test "$(printf '%s\n' '-4 17' | /usr/bin/chezscheme --quiet --script Main.scm)" = 13
+          smoke_value="$(printf '%s\n' '-4 17' | /usr/bin/chezscheme --quiet --script Main.scm)"
+          test "${smoke_value}" = 13
           cat > SyntaxOnly.scm <<'SCM'
           (import (chezscheme))
           (system "touch aonohako-chez-compile-leak")
@@ -1770,7 +1894,8 @@ languages:
             grep_status=$?
           fi
           test "${grep_status}" -eq 1
-          test "$(printf '%s\n' '-4 17' | ./Main)" = 13
+          smoke_value="$(printf '%s\n' '-4 17' | ./Main)"
+          test "${smoke_value}" = 13
           cat > SyntaxOnly.scm <<'SCM'
           (import scheme (chicken process))
           (system "touch aonohako-chicken-compile-leak")
@@ -1803,7 +1928,8 @@ languages:
           (newline)
           SCM
           GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm Main.scm
-          test "$(printf '%s\n' '-4 17' | GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s Main.scm)" = 13
+          smoke_value="$(printf '%s\n' '-4 17' | GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s Main.scm)"
+          test "${smoke_value}" = 13
           cat > SyntaxOnly.scm <<'SCM'
           (system "touch aonohako-guile-compile-leak")
           SCM
@@ -1821,8 +1947,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'BEGIN { print "ok" }' > Main.awk
-          gawk --sandbox -f Main.awk | grep '^ok$'
+          output="$(gawk --sandbox -f Main.awk)"
+          test "${output}" = 'ok'
 
   tcl:
     install:
@@ -1833,8 +1961,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'puts "ok"' > Main.tcl
-          tclsh Main.tcl | grep '^ok$'
+          output="$(tclsh Main.tcl)"
+          test "${output}" = 'ok'
 
   gdl:
     install:
@@ -1847,12 +1977,14 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.pro <<'GDL'
           pro main
-            print, 'ok'
+            print, 'ok', format='(A)'
           end
           GDL
-          aonohako-gdl-run Main.pro main | grep 'ok'
+          output="$(aonohako-gdl-run Main.pro main)"
+          test "${output}" = ok
 
   octave:
     install:
@@ -1863,8 +1995,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'disp("ok")' > Main.m
-          octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path Main.m | grep '^ok$'
+          output="$(octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path Main.m)"
+          test "${output}" = 'ok'
 
   vhdl:
     install:
@@ -1875,6 +2009,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.vhd <<'VHDL'
           entity main_tb is
           end entity;
@@ -1901,6 +2036,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.v <<'VERILOG'
           module main;
             initial begin
@@ -1910,7 +2046,8 @@ languages:
           endmodule
           VERILOG
           iverilog -g2012 -o sim.vvp Main.v
-          vvp sim.vvp | grep '^ok$'
+          output="$(vvp sim.vvp)"
+          test "${output}" = 'ok'
 
   systemverilog:
     install:
@@ -1921,6 +2058,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.sv <<'SV'
           module main;
             logic ok = 1'b1;
@@ -1931,7 +2069,8 @@ languages:
           endmodule
           SV
           iverilog -g2012 -o sim.vvp Main.sv
-          vvp sim.vvp | grep '^ok$'
+          output="$(vvp sim.vvp)"
+          test "${output}" = 'ok'
 
   crystal:
     install:
@@ -1942,9 +2081,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'puts "ok"' > Main.cr
           crystal build Main.cr --release --no-debug -o Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           printf '%s\n' 'puts(' > Broken.cr
           if crystal build Broken.cr --release --no-debug -o Broken >/dev/null 2>&1; then exit 1; fi
 
@@ -1960,9 +2101,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'int main() {' '  print("ok\n");' '  return 0;' '}' > Main.vala
           valac --define=ONLINE_JUDGE -o Main Main.vala
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           printf '%s\n' 'int main() {' '  print(' > Broken.vala
           if valac --define=ONLINE_JUDGE -o Broken Broken.vala >/dev/null 2>&1; then exit 1; fi
 
@@ -1988,9 +2131,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' "fn main() {" "  println('ok')" "}" > Main.v
           v -o Main Main.v
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   odin:
     install:
@@ -2010,6 +2155,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > main.odin <<'ODIN'
           package main
           import "core:fmt"
@@ -2021,7 +2167,8 @@ languages:
           mv main.odin "${work}/main.odin"
           cd "${work}"
           odin build . -out:Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   c3:
     install:
@@ -2039,6 +2186,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.c3 <<'C3'
           import std::io;
           fn void main() {
@@ -2046,7 +2194,8 @@ languages:
           }
           C3
           c3c compile Main.c3 -o Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   hare:
     install:
@@ -2059,6 +2208,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.ha <<'HARE'
           use fmt;
           export fn main() void = {
@@ -2066,7 +2216,8 @@ languages:
           };
           HARE
           hare build -o Main Main.ha
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   rust:
     install:
@@ -2088,9 +2239,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'fn main() {' '    println!("ok");' '}' > main.rs
           rustc --edition 2024 -O -o Main main.rs
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   kotlin:
     install:
@@ -2119,10 +2272,12 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           mkdir -p /tmp/.konan /tmp/.konan.home
           printf '%s\n' 'fun main() {' '  println("ok")' '}' > Main.kt
           env KONAN_DATA_DIR=/usr/local/lib/aonohako/konan KONAN_USER_HOME=/tmp/.konan.home kotlinc-native -J-Xms64m -J-Xmx1024m -J-Xss1m Main.kt -o Main
-          ./Main.kexe | grep '^ok$'
+          output="$(./Main.kexe)"
+          test "${output}" = 'ok'
 
   pascal:
     install:
@@ -2133,6 +2288,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.pas <<'PAS'
           program Main;
           var
@@ -2151,7 +2307,8 @@ languages:
           end.
           PAS
           fpc -O2 -Xs -oMain Main.pas >/dev/null
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.pas <<'PAS'
           program Broken;
           begin
@@ -2168,6 +2325,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.dpr <<'PAS'
           program Main;
           var
@@ -2186,7 +2344,8 @@ languages:
           end.
           PAS
           fpc -Mdelphi -O2 -Xs -oMain Main.dpr >/dev/null
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.dpr <<'PAS'
           program Broken;
           begin
@@ -2203,6 +2362,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.pas <<'PAS'
           program Main;
           type
@@ -2219,7 +2379,8 @@ languages:
           end.
           PAS
           fpc -Mobjfpc -O2 -Xs -oMain Main.pas >/dev/null
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.pas <<'PAS'
           program Broken;
           type
@@ -2250,13 +2411,15 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.nim <<'NIM'
           import std/[os, strutils]
           writeFile("same-folder.txt", "ok")
           echo readFile("same-folder.txt").strip()
           NIM
           nim c -d:release --opt:speed --out:Main Main.nim >/dev/null
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.nim <<'NIM'
           proc main() =
             echo "oops"
@@ -2274,12 +2437,14 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.clj <<'CLOJURE'
           (require '[clojure.string :as str])
           (spit "same-folder.txt" "ok")
           (println (str/trim (slurp "same-folder.txt")))
           CLOJURE
-          java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp /usr/share/java/clojure-1.12.jar clojure.main Main.clj | grep '^ok$'
+          output="$(java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp /usr/share/java/clojure-1.12.jar clojure.main Main.clj)"
+          test "${output}" = 'ok'
           cat > Broken.clj <<'CLOJURE'
           (defn broken []
             (println "oops"
@@ -2295,6 +2460,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.rkt <<'RACKET'
           #lang racket
           (require racket/string)
@@ -2304,7 +2470,8 @@ languages:
           (displayln (string-trim (file->string "same-folder.txt")))
           RACKET
           raco make Main.rkt >/dev/null
-          racket Main.rkt | grep '^ok$'
+          output="$(racket Main.rkt)"
+          test "${output}" = 'ok'
           cat > Broken.rkt <<'RACKET'
           #lang racket
           (displayln "oops"
@@ -2320,6 +2487,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.adb <<'ADA'
           with Ada.Text_IO; use Ada.Text_IO;
           procedure Main is
@@ -2334,7 +2502,8 @@ languages:
           end Main;
           ADA
           gnatmake -O2 -o Main Main.adb >/dev/null
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.adb <<'ADA'
           with Ada.Text_IO; use Ada.Text_IO;
           procedure Broken is
@@ -2353,6 +2522,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.cob <<'COB'
           IDENTIFICATION DIVISION.
           PROGRAM-ID. Main.
@@ -2361,7 +2531,8 @@ languages:
               STOP RUN.
           COB
           cobc -x -free -O2 -o Main Main.cob
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   gnucobol:
     install:
@@ -2372,6 +2543,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.cob <<'COB'
           IDENTIFICATION DIVISION.
           PROGRAM-ID. Main.
@@ -2380,7 +2552,8 @@ languages:
               STOP RUN.
           COB
           cobc -x -free -O2 -o Main Main.cob
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   cython:
     install:
@@ -2394,10 +2567,14 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'print("ok")' > Main.pyx
           cython3 --embed -3 -o Main.c Main.pyx
-          gcc -O2 -pipe Main.c -o Main $(python3-config --includes --ldflags --embed)
-          ./Main | grep '^ok$'
+          python_config="$(python3-config --includes --ldflags --embed)"
+          read -r -a python_flags <<< "${python_config//$'\n'/ }"
+          gcc -O2 -pipe Main.c -o Main "${python_flags[@]}"
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   dart:
     install:
@@ -2417,6 +2594,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.dart <<'DART'
           import 'dart:io';
           void main() {
@@ -2425,7 +2603,8 @@ languages:
           }
           DART
           dart compile exe Main.dart -o Main >/dev/null
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           cat > Broken.dart <<'DART'
           void main() {
             print('oops'
@@ -2449,11 +2628,13 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           mkdir -p /tmp/csharp-home /tmp/csharp-packages
           env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_PROCESSOR_COUNT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet new console --force --no-restore --verbosity quiet -n App -o app
           printf '%s\n' 'Console.WriteLine("ok");' > app/Program.cs
           env HOME=/tmp/csharp-home DOTNET_CLI_HOME=/tmp/csharp-home NUGET_PACKAGES=/tmp/csharp-packages DOTNET_PROCESSOR_COUNT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish app --configuration Release -o publish
-          env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
+          output="$(env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll)"
+          test "${output}" = 'ok'
 
   fsharp:
     install:
@@ -2471,6 +2652,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           mkdir -p /tmp/fsharp-home /tmp/fsharp-packages
           cat > App.fsproj <<'FSPROJ'
           <Project Sdk="Microsoft.NET.Sdk">
@@ -2492,7 +2674,8 @@ languages:
               0
           FS
           env HOME=/tmp/fsharp-home DOTNET_CLI_HOME=/tmp/fsharp-home NUGET_PACKAGES=/tmp/fsharp-packages DOTNET_PROCESSOR_COUNT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.fsproj --configuration Release -o publish -p:UseAppHost=false
-          env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
+          output="$(env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll)"
+          test "${output}" = 'ok'
 
   vbnet:
     install:
@@ -2510,6 +2693,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           mkdir -p /tmp/vbnet-home /tmp/vbnet-packages
           cat > App.vbproj <<'VBPROJ'
           <Project Sdk="Microsoft.NET.Sdk">
@@ -2534,7 +2718,8 @@ languages:
           End Module
           VB
           env HOME=/tmp/vbnet-home DOTNET_CLI_HOME=/tmp/vbnet-home NUGET_PACKAGES=/tmp/vbnet-packages DOTNET_PROCESSOR_COUNT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=1 MSBuildEnableWorkloadResolver=false dotnet publish App.vbproj --configuration Release -o publish -p:UseAppHost=false
-          env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll | grep '^ok$'
+          output="$(env DOTNET_GCHeapHardLimit=8000000 DOTNET_EnableDiagnostics=0 COMPlus_EnableDiagnostics=0 dotnet ./publish/App.dll)"
+          test "${output}" = 'ok'
 
   gleam:
     install:
@@ -2563,6 +2748,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           workdir="$(mktemp -d)"
           trap 'rm -rf "${workdir}"' EXIT
           cd "${workdir}"
@@ -2573,7 +2759,8 @@ languages:
           mkdir -p build/packages
           cp -a /usr/local/lib/aonohako/gleam-packages/. build/packages/
           env HOME=/usr/local/lib/aonohako/gleam-home gleam build
-          aonohako-gleam-run . | grep '^ok$'
+          output="$(aonohako-gleam-run .)"
+          test "${output}" = 'ok'
 
   cuda-ocelot:
     install:
@@ -2614,6 +2801,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.cu <<'CUDA'
           #include <cstdio>
           int main() {
@@ -2622,7 +2810,8 @@ languages:
           }
           CUDA
           aonohako-cuda-ocelot-build Main.cu Main
-          aonohako-cuda-ocelot-run ./Main | grep '^ok$'
+          output="$(aonohako-cuda-ocelot-run ./Main)"
+          test "${output}" = 'ok'
 
   carbon:
     install:
@@ -2648,6 +2837,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.carbon <<'CARBON'
           import Core library "io";
 
@@ -2657,8 +2847,12 @@ languages:
           }
           CARBON
           carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=Main.o Main.carbon
-          carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o $(find /opt/carbon/lib/carbon/core -type f -name '*.o' -print | sort)
-          ./Main | grep '^Hello World!$'
+          core_objects="$(find /opt/carbon/lib/carbon/core -type f -name '*.o' -print | sort)"
+          test -n "${core_objects}"
+          mapfile -t core_object_paths <<< "${core_objects}"
+          carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o "${core_object_paths[@]}"
+          output="$(./Main)"
+          test "${output}" = 'Hello World!'
           printf '%s\n' 'fn Run(' > Broken.carbon
           if carbon compile --output-last-input-only --output=Broken.o Broken.carbon >/dev/null 2>&1; then exit 1; fi
 
@@ -2674,8 +2868,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'query { ok }' > Main.graphql
-          aonohako-graphql-run Main.graphql | grep '{"data":{"ok":"ok"}}'
+          output="$(aonohako-graphql-run Main.graphql)"
+          test "${output}" = '{"data":{"ok":"ok"}}'
 
   fstar:
     install:
@@ -2699,6 +2895,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.fst <<'FSTAR'
           module Main
           let ok () : Lemma (1 + 1 == 2) = ()
@@ -2723,6 +2920,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.als <<'ALLOY'
           sig A {}
           assert ok { all a: A | a = a }
@@ -2747,6 +2945,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.lisp <<'ACL2'
           (in-package "ACL2")
           (defthm plus-zero-right
@@ -2779,6 +2978,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.k <<'K'
           module MAIN
             imports INT
@@ -2808,6 +3008,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'theorem ok : True := by trivial' > Main.lean
           lean Main.lean
 
@@ -2820,6 +3021,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.agda <<'AGDA'
           module Main where
           data Unit : Set where
@@ -2848,6 +3050,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'method Main() ensures true {' '}' > Main.dfy
           env DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_PROCESSOR_COUNT=1 COMPlus_ThreadPool_ForceMinWorkerThreads=1 dafny verify --cores 1 Main.dfy >/dev/null
 
@@ -2868,6 +3071,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.tla <<'TLA'
           ---- MODULE Main ----
           VARIABLE x
@@ -2893,6 +3097,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'theory Main' '  goal G: true' 'end' > Main.mlw
           aonohako-why3-prove Main.mlw
 
@@ -2933,6 +3138,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > ROOT <<'ROOT'
           session Aonohako = HOL +
             theories Aonohako_Main
@@ -2955,8 +3161,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'Sub Main()' 'Print "ok"' 'End Sub' > Main.bas
-          aonohako-vb6-run Main.bas | grep '^ok$'
+          output="$(aonohako-vb6-run Main.bas)"
+          test "${output}" = 'ok'
 
   freebasic:
     install:
@@ -2967,9 +3175,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'print "ok"' > Main.bas
           fbc -x Main Main.bas
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   classic-basic:
     install:
@@ -2980,9 +3190,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'PRINT "ok"' > Main.bas
           fbc -lang qb -x Main Main.bas
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   qbasic:
     install:
@@ -2993,9 +3205,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'PRINT "ok"' > Main.bas
           fbc -lang qb -x Main Main.bas
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   smalltalk:
     install:
@@ -3029,8 +3243,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' "'ok' displayNl" > Main.st
-          gst -q Main.st | grep '^ok$'
+          output="$(gst -q Main.st)"
+          test "${output}" = 'ok'
 
   golfscript:
     install:
@@ -3070,9 +3286,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'def main():' '    print("ok")' > Main.mojo
           mojo build Main.mojo -o Main
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
 
   moonbit:
     install:
@@ -3106,12 +3324,14 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           export MOON_HOME=/opt/moonbit
           printf '%s\n' 'name = "aonohako/Main"' 'version = "0.0.0"' 'preferred_target = "native"' > moon.mod
           printf '%s\n' 'pkgtype(kind: "executable")' > moon.pkg
           printf '%s\n' 'fn main {' '  println("ok")' '}' > Main.mbt
           moon build --target-dir .aonohako-moonbit-build --target native --release --strip --frozen --jobs 1
-          ./.aonohako-moonbit-build/native/release/build/Main.exe | grep '^ok$'
+          output="$(./.aonohako-moonbit-build/native/release/build/Main.exe)"
+          test "${output}" = 'ok'
           printf '%s\n' 'fn broken {' '  let value :' '}' > Broken.mbt
           if moon build --target-dir .aonohako-moonbit-broken --target native --release --strip --frozen --jobs 1 >/dev/null 2>&1; then exit 1; fi
 
@@ -3147,8 +3367,8 @@ languages:
           FENNEL
           aonohako-fennel-compile Main.fnl Main.lua
           luac5.4 -p -- Main.lua
-          printf '2 3\n' | lua5.4 Main.lua | grep -Fx 'debug:blocked'
-          printf '2 3\n' | lua5.4 Main.lua | grep -Fx '5'
+          output="$(printf '2 3\n' | lua5.4 Main.lua)"
+          test "${output}" = $'debug:blocked\n5'
           test ! -e /tmp/fennel-exec-leak
 
           cat > CompilerPrint.fnl <<'FENNEL'
@@ -3158,7 +3378,8 @@ languages:
           aonohako-fennel-compile CompilerPrint.fnl CompilerPrint.lua > CompilerPrint.stdout 2> CompilerPrint.stderr
           test ! -s CompilerPrint.stdout
           grep -Fx 'compiler-diagnostic' CompilerPrint.stderr
-          lua5.4 CompilerPrint.lua | grep -Fx 'runtime-ok'
+          output="$(lua5.4 CompilerPrint.lua)"
+          test "${output}" = 'runtime-ok'
 
           cat > InvalidLua.fnl <<'FENNEL'
           (lua "this is not valid Lua!")
@@ -3174,7 +3395,8 @@ languages:
           (print (mathmod.sum 2 3))
           FENNEL
           aonohako-fennel-compile Include.fnl Include.lua
-          lua5.4 Include.lua | grep -Fx '5'
+          output="$(lua5.4 Include.lua)"
+          test "${output}" = '5'
 
           mkdir -p native
           cat > NativeLeak.c <<'C'
@@ -3214,9 +3436,8 @@ languages:
           (print (if dotted-ok "dotted:leaked" "dotted:blocked"))
           FENNEL
           aonohako-fennel-compile NativeRequire.fnl NativeRequire.lua
-          lua5.4 NativeRequire.lua | grep -Fx 'loaders:blocked'
-          lua5.4 NativeRequire.lua | grep -Fx 'exact:blocked'
-          lua5.4 NativeRequire.lua | grep -Fx 'dotted:blocked'
+          output="$(lua5.4 NativeRequire.lua)"
+          test "${output}" = $'loaders:blocked\nexact:blocked\ndotted:blocked'
           test ! -e /tmp/fennel-native-leak
 
           mkdir -p signal-bin
@@ -3243,7 +3464,8 @@ languages:
           set -e
           test "${signal_status}" -eq 143
           test ! -e Signal.lua
-          test -z "$(find . -maxdepth 1 -type d -name '.aonohako-fennel.*' -print -quit)"
+          smoke_value="$(find . -maxdepth 1 -type d -name '.aonohako-fennel.*' -print -quit)"
+          test -z "${smoke_value}"
 
           printf '%s\n' '(local broken' > Broken.fnl
           if aonohako-fennel-compile Broken.fnl Broken.lua >/dev/null 2>&1; then exit 1; fi
@@ -3296,8 +3518,9 @@ languages:
           writeln(a + b);
           writeln(numLocales, " ", here.maxTaskPar);
           CHAPEL
-          for path in /usr/share/chapel/2.9/tools/c2chapel/c2chapel.py /usr/share/chapel/2.9/tools/c2chapel/c2chapel /usr/share/chapel/2.9/tools/chpl-language-server/chpl-language-server /usr/share/chapel/2.9/tools/chpl-language-server/src/chpl-shim.py /usr/share/chapel/2.9/tools/chpl-language-server/chpl-shim /usr/share/chapel/2.9/tools/chplcheck/chplcheck /usr/share/chapel/2.9/modules/dists/fixDistDocs.perl /usr/share/chapel/2.9/modules/internal/fixInternalDocs.sh; do test "$(stat -c %a "${path}")" = 750; done
-          test "$(find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 | wc -l)" -eq 37
+          for path in /usr/share/chapel/2.9/tools/c2chapel/c2chapel.py /usr/share/chapel/2.9/tools/c2chapel/c2chapel /usr/share/chapel/2.9/tools/chpl-language-server/chpl-language-server /usr/share/chapel/2.9/tools/chpl-language-server/src/chpl-shim.py /usr/share/chapel/2.9/tools/chpl-language-server/chpl-shim /usr/share/chapel/2.9/tools/chplcheck/chplcheck /usr/share/chapel/2.9/modules/dists/fixDistDocs.perl /usr/share/chapel/2.9/modules/internal/fixInternalDocs.sh; do smoke_value="$(stat -c %a "${path}")"; test "${smoke_value}" = 750; done
+          smoke_value="$(find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 | wc -l)"
+          test "${smoke_value}" -eq 37
           if find /usr/lib/chapel/2.9/third-party/chpl-venv -type f -perm /0111 -perm /0005 -print -quit | grep -q .; then exit 1; fi
           test -d /usr/lib/chapel/2.9/third-party
           if find /usr/lib/chapel/2.9/third-party -path '*/bin/*' -type l -print -quit | grep -q .; then exit 1; fi
@@ -3417,7 +3640,9 @@ languages:
         - |
           set -euo pipefail
           a68g --version | grep '3.13.3'
-          test "$(nm -D --undefined-only "$(command -v a68g)" | grep -Ec '[[:space:]](system|fork|execve|dlopen|dlsym)(@|$)' || true)" -eq 0
+          symbols="$(nm -D --undefined-only "$(command -v a68g)")"
+          if printf '%s\n' "${symbols}" | grep -Eq '[[:space:]](system|fork|execve|dlopen|dlsym)(@|$)'; then exit 1; else grep_status=$?; fi
+          test "${grep_status}" -eq 1
 
           cat > Main.a68 <<'ALGOL68'
           BEGIN
@@ -3430,14 +3655,16 @@ languages:
           A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --check --file Main.a68 --no-pragmats
           output="$(printf '2 3\n' | A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --run --file Main.a68 --no-pragmats)"
           test "${output}" = 5
-          test -z "$(find . -maxdepth 1 -type f \( -name 'Main.c' -o -name 'Main.so' -o -name 'Main.o' -o -name 'Main.sh' -o -name 'Main.lst' \) -print -quit)"
+          smoke_value="$(find . -maxdepth 1 -type f \( -name 'Main.c' -o -name 'Main.so' -o -name 'Main.o' -o -name 'Main.sh' -o -name 'Main.lst' \) -print -quit)"
+          test -z "${smoke_value}"
 
           cat > Pragmat.a68 <<'ALGOL68'
           PR COMPILE PR
           BEGIN print (("pragmat ignored", new line)) END
           ALGOL68
           if A68G_OPTIONS='-O1 --compile --debug' a68g --quiet --no-compile -O0 --run --file Pragmat.a68 --no-pragmats >/dev/null 2>&1; then exit 1; fi
-          test -z "$(find . -maxdepth 1 -type f -name 'Pragmat.*' ! -name 'Pragmat.a68' -print -quit)"
+          smoke_value="$(find . -maxdepth 1 -type f -name 'Pragmat.*' ! -name 'Pragmat.a68' -print -quit)"
+          test -z "${smoke_value}"
 
           cat > Process.a68 <<'ALGOL68'
           BEGIN print ((system ("touch /tmp/a68g-system-leak"), new line)) END
@@ -3504,11 +3731,14 @@ languages:
         - |
           set -euo pipefail
           koka --version 2>&1 | grep -F 'version: 3.2.3'
-          test "$(cat /opt/koka/meta/version)" = v3.2.3
-          test "$(stat -c '%u:%g:%a' /opt/koka/bin/koka)" = '0:0:755'
+          smoke_value="$(cat /opt/koka/meta/version)"
+          test "${smoke_value}" = v3.2.3
+          smoke_value="$(stat -c '%u:%g:%a' /opt/koka/bin/koka)"
+          test "${smoke_value}" = '0:0:755'
           if find /opt/koka -type d -perm /0022 -print -quit | grep -q .; then exit 1; fi
           if find /opt/koka -type f -perm /0022 -print -quit | grep -q .; then exit 1; fi
-          test "$(find /opt/koka -type f -perm /0111 | wc -l)" -eq 1
+          smoke_value="$(find /opt/koka -type f -perm /0111 | wc -l)"
+          test "${smoke_value}" -eq 1
           ! command -v conan >/dev/null 2>&1
           ! command -v vcpkg >/dev/null 2>&1
 
@@ -3517,7 +3747,8 @@ languages:
             println("Hello, World!")
           KOKA
           koka --compile -O2 --no-debug -j1 -v0 --console=raw --no-autoinstall --cc=/usr/bin/gcc-16 '--ccopts=-march=x86-64 -mtune=generic' '--cclinkopts=-march=x86-64 -mtune=generic' --builddir=.aonohako-koka-build --output=Main main.kk
-          test "$(stat -c %a Main)" = 644
+          smoke_value="$(stat -c %a Main)"
+          test "${smoke_value}" = 644
           chmod 0755 Main
           test -x Main
           readelf -n Main | grep -F 'x86 ISA needed: x86-64-baseline'
@@ -3525,7 +3756,8 @@ languages:
           if readelf -d Main | grep -E 'Shared library: \[[^]]*[/\\]' >/dev/null; then exit 1; fi
           readelf -d Main | grep -F 'Shared library: [libm.so.6]'
           readelf -d Main | grep -F 'Shared library: [libc.so.6]'
-          ./Main | grep -Fx 'Hello, World!'
+          output="$(./Main)"
+          test "${output}" = 'Hello, World!'
 
           install -d -m 0755 /tmp/aonohako-koka-evil
           printf '%s\n' 'void marker(void) {}' > /tmp/aonohako-koka-evil/evil.c
@@ -3583,8 +3815,10 @@ languages:
         - |
           set -euo pipefail
           ponyc --version 2>&1 | grep -F '0.69.1'
-          test "$(stat -c '%u:%g:%a' /opt/pony/bin/ponyc)" = '0:0:755'
-          test "$(find /opt/pony -type f -perm /0111 | wc -l)" -eq 1
+          smoke_value="$(stat -c '%u:%g:%a' /opt/pony/bin/ponyc)"
+          test "${smoke_value}" = '0:0:755'
+          smoke_value="$(find /opt/pony -type f -perm /0111 | wc -l)"
+          test "${smoke_value}" -eq 1
           test ! -e /opt/pony/bin/pony-doc
           test ! -e /opt/pony/bin/pony-lint
           test ! -e /opt/pony/bin/pony-lsp
@@ -3607,7 +3841,8 @@ languages:
           readelf -W -l Main | grep -F 'GNU_STACK' | grep -F 'RW '
           if readelf -W -l Main | grep -F 'GNU_STACK' | grep -F 'RWE'; then exit 1; fi
           readelf -W -l Main | grep -F 'GNU_RELRO'
-          ./Main --ponymaxthreads=1 | grep -Fx 'Hello, World!'
+          output="$(./Main --ponymaxthreads=1)"
+          test "${output}" = 'Hello, World!'
 
           printf '%s\n' 'actor Main' '  new create(env: Env) =>' '    env.out.print(' > broken.pony
           rm -f Broken
@@ -3627,8 +3862,10 @@ languages:
         - -c
         - |
           set -euo pipefail
-          test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b10
-          test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
+          smoke_value="$(dpkg-query -W -f='${Version}' bash)"
+          test "${smoke_value}" = 5.2.37-2+b10
+          smoke_value="$(dpkg-query -W -f='${Version}' dash)"
+          test "${smoke_value}" = 0.5.12-12
           rm -f /tmp/aonohako-shell-syntax-leak
           printf '%s\n' 'value=$(touch /tmp/aonohako-shell-syntax-leak)' > SyntaxOnly.sh
           bash --noprofile --norc -n SyntaxOnly.sh
@@ -3646,8 +3883,10 @@ languages:
         - -c
         - |
           set -eu
-          test "$(dpkg-query -W -f='${Version}' bash)" = 5.2.37-2+b10
-          test "$(dpkg-query -W -f='${Version}' dash)" = 0.5.12-12
+          smoke_value="$(dpkg-query -W -f='${Version}' bash)"
+          test "${smoke_value}" = 5.2.37-2+b10
+          smoke_value="$(dpkg-query -W -f='${Version}' dash)"
+          test "${smoke_value}" = 0.5.12-12
           rm -f /tmp/aonohako-posix-shell-syntax-leak
           printf '%s\n' 'value=$(touch /tmp/aonohako-posix-shell-syntax-leak)' > SyntaxOnly.sh
           /bin/dash -n SyntaxOnly.sh
@@ -3666,9 +3905,11 @@ languages:
         - -f
         - -c
         - |
-          set -eu
-          test "$(dpkg-query -W -f='${Version}' zsh)" = 5.9-8+b24
-          test "$(dpkg-query -W -f='${Version}' zsh-common)" = 5.9-8
+          set -euo pipefail
+          smoke_value="$(dpkg-query -W -f='${Version}' zsh)"
+          test "${smoke_value}" = 5.9-8+b24
+          smoke_value="$(dpkg-query -W -f='${Version}' zsh-common)"
+          test "${smoke_value}" = 5.9-8
           startup_root=/tmp/aonohako-zsh-startup
           startup_leak=/tmp/aonohako-zsh-startup-leak
           rm -rf "${startup_root}" "${startup_leak}"
@@ -3677,7 +3918,8 @@ languages:
           ZDOTDIR="${startup_root}" HOME="${startup_root}" /usr/bin/zsh -d -f -c ':'
           test ! -e "${startup_leak}"
           printf '%s\n' 'read -r a b' 'print -r -- $((a + b))' > Main.zsh
-          test "$(printf '1 2\n' | /usr/bin/zsh -d -f Main.zsh)" = 3
+          smoke_value="$(printf '1 2\n' | /usr/bin/zsh -d -f Main.zsh)"
+          test "${smoke_value}" = 3
           rm -f /tmp/aonohako-zsh-syntax-leak
           printf '%s\n' 'value=$(touch /tmp/aonohako-zsh-syntax-leak)' > SyntaxOnly.zsh
           /usr/bin/zsh -d -f -n SyntaxOnly.zsh
@@ -3696,8 +3938,10 @@ languages:
         - --private
         - -c
         - |
-          test (dpkg-query -W -f='${Version}' fish) = 4.0.2-1; or exit 1
-          test (dpkg-query -W -f='${Version}' fish-common) = 4.0.2-1; or exit 1
+          set smoke_value (dpkg-query -W -f='${Version}' fish); or exit 1
+          test "$smoke_value" = 4.0.2-1; or exit 1
+          set smoke_value (dpkg-query -W -f='${Version}' fish-common); or exit 1
+          test "$smoke_value" = 4.0.2-1; or exit 1
           set startup_root /tmp/aonohako-fish-startup
           set startup_leak /tmp/aonohako-fish-startup-leak
           rm -rf "$startup_root" "$startup_leak"; or exit 1
@@ -3706,7 +3950,9 @@ languages:
           env XDG_CONFIG_HOME="$startup_root" HOME="$startup_root" /usr/bin/fish --no-config --private -c ':'; or exit 1
           test ! -e "$startup_leak"; or exit 1
           printf '%s\n' 'read -l a b' 'math "$a + $b"' > Main.fish; or exit 1
-          test (printf '1 2\n' | /usr/bin/fish --no-config --private Main.fish) = 3; or exit 1
+          printf '1 2\n' > Main.stdin; or exit 1
+          set output (/usr/bin/fish --no-config --private Main.fish < Main.stdin); or exit 1
+          test "$output" = 3; or exit 1
           rm -f /tmp/aonohako-fish-syntax-leak; or exit 1
           printf '%s\n' 'set value (touch /tmp/aonohako-fish-syntax-leak)' > SyntaxOnly.fish; or exit 1
           /usr/bin/fish --no-config --private --no-execute SyntaxOnly.fish; or exit 1
@@ -3753,18 +3999,25 @@ languages:
           export TERM=dumb
           export NO_COLOR=1
 
-          test "$(pwsh -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()')" = 7.6.5
-          test "$(pwsh -NoLogo -NoProfile -NonInteractive -Command '$env:PSModulePath')" = /var/empty/.local/share/powershell/Modules:/usr/local/share/powershell/Modules:/opt/microsoft/powershell/7/Modules
+          smoke_value="$(pwsh -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()')"
+          test "${smoke_value}" = 7.6.5
+          smoke_value="$(pwsh -NoLogo -NoProfile -NonInteractive -Command '$env:PSModulePath')"
+          test "${smoke_value}" = /var/empty/.local/share/powershell/Modules:/usr/local/share/powershell/Modules:/opt/microsoft/powershell/7/Modules
           test ! -e /opt/microsoft/powershell/7/createdump
-          test "$(stat -c '%u:%g:%a' /opt/microsoft/powershell/7/pwsh)" = '0:0:755'
-          test "$(stat -c '%u:%g:%a' /etc/passwd)" = '0:0:444'
+          smoke_value="$(stat -c '%u:%g:%a' /opt/microsoft/powershell/7/pwsh)"
+          test "${smoke_value}" = '0:0:755'
+          smoke_value="$(stat -c '%u:%g:%a' /etc/passwd)"
+          test "${smoke_value}" = '0:0:444'
           test ! -s /etc/passwd
-          test "$(stat -c '%u:%g:%a' /etc/group)" = '0:0:600'
+          smoke_value="$(stat -c '%u:%g:%a' /etc/group)"
+          test "${smoke_value}" = '0:0:600'
           for path in /var/empty /var/empty/.config /var/empty/.local/share /var/empty/.local/share/powershell/Modules /usr/local/share/powershell/Modules; do
-            test "$(stat -c '%u:%g' "${path}")" = '0:0'
+            smoke_value="$(stat -c '%u:%g' "${path}")"
+            test "${smoke_value}" = '0:0'
             if find "${path}" -maxdepth 0 -perm /022 -print -quit | grep -q .; then exit 1; fi
           done
-          test "$(find /opt/microsoft/powershell/7 -type f -perm /0111 | wc -l)" -eq 1
+          smoke_value="$(find /opt/microsoft/powershell/7 -type f -perm /0111 | wc -l)"
+          test "${smoke_value}" -eq 1
           if find /opt/microsoft/powershell/7 -type d -perm /0022 -print -quit | grep -q .; then exit 1; fi
           if find /opt/microsoft/powershell/7 -type f -perm /0022 -print -quit | grep -q .; then exit 1; fi
 
@@ -3776,7 +4029,8 @@ languages:
           Get-Content -LiteralPath same-folder.txt
           POWERSHELL
           pwsh -NoLogo -NoProfile -NonInteractive -Command '& { param($path) $tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors) > $null; if ($errors.Count) { $errors | ForEach-Object { [Console]::Error.WriteLine($_) }; exit 1 } }' Main.ps1
-          printf '1 2\n' | pwsh -NoLogo -NoProfile -NonInteractive -File Main.ps1 | grep -Fx 3
+          output="$(printf '1 2\n' | pwsh -NoLogo -NoProfile -NonInteractive -File Main.ps1)"
+          test "${output}" = '3'
 
           rm -f /tmp/aonohako-powershell-syntax-leak
           printf '%s\n' '$(Set-Content -LiteralPath /tmp/aonohako-powershell-syntax-leak -Value leaked)' > SyntaxOnly.ps1
@@ -3816,7 +4070,8 @@ languages:
           TS
           env BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 BUN_OPTIONS= bun --no-install --no-env-file --no-macros --config=/dev/null build --target=bun --no-bundle --outfile=.cache/aonohako-bun-check-main.js Main.ts
           test -f .cache/aonohako-bun-check-main.js
-          test "$(printf '%s\n' '-4 17' | env BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 BUN_OPTIONS= bun --smol --no-install --no-env-file --no-addons --no-macros --unhandled-rejections=strict --config=/dev/null run Main.ts)" = 13
+          smoke_value="$(printf '%s\n' '-4 17' | env BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 BUN_OPTIONS= bun --smol --no-install --no-env-file --no-addons --no-macros --unhandled-rejections=strict --config=/dev/null run Main.ts)"
+          test "${smoke_value}" = 13
           cat > SyntaxOnly.js <<'JS'
           Bun.write("aonohako-bun-compile-leak", "leaked");
           JS
@@ -3844,13 +4099,15 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           export DENO_DIR="$PWD/.cache/deno"
           export DENO_NO_PROMPT=1
           export DENO_NO_UPDATE_CHECK=1
 
           printf '%s\n' 'console.log("ok");' > Main.ts
           deno check --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --v8-flags=--max-old-space-size=512 Main.ts
-          deno run --cached-only --no-prompt --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --deny-read --deny-write --deny-net --deny-env --deny-run --deny-ffi --deny-sys --deny-import --v8-flags=--max-old-space-size=128 Main.ts | grep '^ok$'
+          output="$(deno run --cached-only --no-prompt --no-config --no-lock --no-npm --no-remote --node-modules-dir=none --deny-read --deny-write --deny-net --deny-env --deny-run --deny-ffi --deny-sys --deny-import --v8-flags=--max-old-space-size=128 Main.ts)"
+          test "${output}" = 'ok'
 
           rm -f /tmp/aonohako-deno-check-leak
           printf '%s\n' 'Deno.writeTextFileSync("/tmp/aonohako-deno-check-leak", "leaked");' > SyntaxOnly.ts
@@ -3903,6 +4160,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.js <<'QUICKJS'
           const values = std.in.getline().trim().split(/\s+/).map(Number);
           console.log(values[0] + values[1]);
@@ -3910,7 +4168,8 @@ languages:
           install -d -m 0700 .cache/quickjs
           qjsc -s -c -o .cache/quickjs/check.c Main.js
           test -s .cache/quickjs/check.c
-          test "$(printf '%s\n' '-4 17' | qjs --memory-limit 134217728 --stack-size 1048576 --std Main.js)" = 13
+          smoke_value="$(printf '%s\n' '-4 17' | qjs --memory-limit 134217728 --stack-size 1048576 --std Main.js)"
+          test "${smoke_value}" = 13
 
           rm -f aonohako-quickjs-compile-leak
           cat > SyntaxOnly.js <<'QUICKJS'
@@ -3950,12 +4209,14 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' 'final class Helper {' '  static String value() {' '    return "ok";' '  }' '}' > Helper.java
           printf '%s\n' 'fun main() {' '  println(Helper.value())' '}' > Main.kt
           kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar
           javac --release 8 -cp Main.jar Helper.java
           jar uf Main.jar Helper.class
-          java -Xms64m -Xmx128m -Xss1m -XX:+UseSerialGC -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -DONLINE_JUDGE=1 -jar Main.jar | grep '^ok$'
+          output="$(java -Xms64m -Xmx128m -Xss1m -XX:+UseSerialGC -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -DONLINE_JUDGE=1 -jar Main.jar)"
+          test "${output}" = 'ok'
 
   duckdb:
     install:
@@ -3973,9 +4234,11 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' "create table t(v varchar);" "insert into t values ('ok');" > setup.sql
           printf '%s\n' "select v from t;" > Main.sql
-          aonohako-duckdb-run Main.sql < setup.sql | grep '^ok$'
+          output="$(aonohako-duckdb-run Main.sql < setup.sql)"
+          test "${output}" = 'ok'
 
   bqn:
     install:
@@ -3993,8 +4256,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' '•Out "ok"' > Main.bqn
-          bqn Main.bqn | grep '^ok$'
+          output="$(bqn Main.bqn)"
+          test "${output}" = 'ok'
 
   apl:
     install:
@@ -4007,8 +4272,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' "⎕←'ok'" > Main.apl
-          node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl | grep '^ok$'
+          output="$(node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 /usr/local/bin/apl --script -f Main.apl)"
+          test "${output}" = 'ok'
 
   j:
     install:
@@ -4039,8 +4306,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' "echo 'ok'" 'exit 0' > Main.ijs
-          aonohako-j Main.ijs | grep '^ok$'
+          output="$(aonohako-j Main.ijs)"
+          test "${output}" = 'ok'
 
   uiua:
     install:
@@ -4060,8 +4329,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' '&p "ok"' > Main.ua
-          uiua run Main.ua --no-format | grep '^ok$'
+          output="$(uiua run Main.ua --no-format)"
+          test "${output}" = 'ok'
 
   janet:
     install:
@@ -4080,8 +4351,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' '(print "ok")' > Main.janet
-          janet Main.janet | grep '^ok$'
+          output="$(janet Main.janet)"
+          test "${output}" = 'ok'
 
   sed:
     install:
@@ -4092,8 +4365,10 @@ languages:
         - bash
         - -lc
         - |
-          printf '%s\n' 's/^/ok/' > Main.sed
-          printf '%s\n' '' | sed -f Main.sed | grep '^ok$'
+          set -euo pipefail
+          printf '%s\n' 's/^\([0-9]*\) \([0-9]*\)$/\2 \1/' > Main.sed
+          output="$(printf '%s\n' '20 22' '7 13' | sed -f Main.sed)"
+          test "${output}" = $'22 20\n13 7'
 
   bc:
     install:
@@ -4104,8 +4379,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' '1 + 1' > Main.bc
-          bc -q Main.bc | grep '^2$'
+          output="$(bc -q Main.bc)"
+          test "${output}" = '2'
 
   forth:
     install:
@@ -4116,8 +4393,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' '." ok" cr' > Main.fs
-          gforth Main.fs -e bye | grep '^ok$'
+          output="$(gforth Main.fs -e bye)"
+          test "${output}" = 'ok'
 
   gforth:
     install:
@@ -4128,8 +4407,10 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           printf '%s\n' '." ok" cr' > Main.fs
-          gforth Main.fs -e bye | grep '^ok$'
+          output="$(gforth Main.fs -e bye)"
+          test "${output}" = 'ok'
 
   uhmlang:
     install:
@@ -4202,6 +4483,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.0 <<'ZERO'
           pub fn main(world: World) -> Void raises {
             check world.out.write("ok\n")
@@ -4211,7 +4493,8 @@ languages:
           zero import --out Main.graph Main.0
           zero check Main.graph
           zero build --release release-fast --out Main Main.graph
-          ./Main | grep '^ok$'
+          output="$(./Main)"
+          test "${output}" = 'ok'
           printf '%s\n' 'pub fn main(' > Broken.0
           if zero import --out Broken.graph Broken.0 >/dev/null 2>&1; then exit 1; fi
 

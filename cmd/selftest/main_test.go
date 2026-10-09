@@ -85,46 +85,31 @@ func TestCompileExecuteCasesResolveProfilesAndSources(t *testing.T) {
 	}
 }
 
-func TestCompileExecuteCasesCoverVersionedAndAliasProfiles(t *testing.T) {
-	expected := map[string][]string{
-		"ada":           {"ADA", "ADA2012", "ADA2022"},
-		"c":             {"C", "C89", "C99", "C11", "C17", "C18", "C23"},
-		"cpp":           {"CPP", "CPP98", "CPP03", "CPP11", "CPP14", "CPP17", "CPP20", "CPP23", "CPP26"},
-		"fortran":       {"FORTRAN", "FORTRAN95", "FORTRAN2003", "FORTRAN2008", "FORTRAN2018"},
-		"java":          {"JAVA", "JAVA8", "JAVA11", "JAVA15", "JAVA17", "JAVA21"},
-		"kotlin-jvm":    {"KOTLIN_JVM", "KOTLIN_JVM8", "KOTLIN_JVM11", "KOTLIN_JVM17", "KOTLIN_JVM21", "KOTLIN_JAVA", "KOTLIN_JAVA8", "KOTLIN_JAVA11", "KOTLIN_JAVA17", "KOTLIN_JAVA21"},
-		"objective-c":   {"OBJECTIVE_C", "OBJC"},
-		"objective-cpp": {"OBJECTIVE_CPP", "OBJCPP"},
-		"php":           {"PHP", "PHP7", "PHP8"},
-		"rust":          {"RUST", "RUST2015", "RUST2018", "RUST2021", "RUST2024"},
-		"vbnet":         {"VBNET", "VB"},
-		"lean4":         {"LEAN4", "LEAN"},
-		"tla":           {"TLA", "TLAPLUS"},
-		"why3":          {"WHY3", "WHYML"},
-		"smalltalk":     {"SMALLTALK", "GST"},
-		"apl":           {"APL", "GNU_APL"},
-		"bun":           {"JAVASCRIPT_BUN", "TYPESCRIPT_BUN"},
-	}
-
+func TestCompileExecuteCasesCoverEverySourceProfile(t *testing.T) {
+	covered := map[string]bool{}
 	cases := compileExecuteCases()
-	for language, expectedProfiles := range expected {
+	for _, tc := range cases {
+		for _, compileLanguage := range append([]string{tc.compileLang}, tc.compileVariants...) {
+			covered[compileLanguage] = true
+		}
+	}
+	for language, semanticCases := range languageSemanticCases() {
 		tc, ok := cases[language]
 		if !ok {
-			t.Errorf("compile-execute cases are missing language %q", language)
+			t.Errorf("semantic cases have no baseline language %q", language)
 			continue
 		}
-		actual := map[string]struct{}{}
-		for _, compileLanguage := range append([]string{tc.compileLang}, tc.compileVariants...) {
-			actual[compileLanguage] = struct{}{}
-		}
-		for _, expectedProfile := range expectedProfiles {
-			if _, ok := actual[expectedProfile]; !ok {
-				t.Errorf(
-					"language %q does not exercise compile profile %q",
-					language,
-					expectedProfile,
-				)
+		for _, semantic := range semanticCases {
+			if semantic.compileLang != "" {
+				covered[semantic.compileLang] = true
+			} else {
+				covered[tc.compileLang] = true
 			}
+		}
+	}
+	for key := range profiles.All() {
+		if !covered[key] {
+			t.Errorf("compile-execute does not exercise source profile %q", key)
 		}
 	}
 }
@@ -163,12 +148,14 @@ func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
 			t.Errorf("interactive language %q unexpectedly opts out of A+B: %s", language, tc.nonABReason)
 			continue
 		}
-		if len(tc.judgeIO) < 2 {
-			t.Errorf("language %q has %d A+B judge cases, want at least 2", language, len(tc.judgeIO))
+		if len(tc.judgeIO) < 4 {
+			t.Errorf("language %q has %d A+B judge cases, want at least 4", language, len(tc.judgeIO))
 			continue
 		}
 
 		outputs := map[string]struct{}{}
+		inputs := map[string]bool{}
+		zero, zeroLeft, zeroRight, carry := false, false, false, false
 		for index, ioCase := range tc.judgeIO {
 			if ioCase.stdin == "" {
 				t.Errorf("language %q judge case %d has empty stdin", language, index+1)
@@ -177,10 +164,35 @@ func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
 			if ioCase.expectedStdout != want {
 				t.Errorf("language %q judge case %d expected stdout = %q, want %q", language, index+1, ioCase.expectedStdout, want)
 			}
+			if inputs[ioCase.stdin] {
+				t.Errorf("language %q repeats judge stdin %q", language, ioCase.stdin)
+			}
+			inputs[ioCase.stdin] = true
+			stdin := ioCase.stdin
+			if language == "sqlite" || language == "duckdb" {
+				const marker = "insert into input values ("
+				_, values, ok := strings.Cut(stdin, marker)
+				if !ok {
+					t.Errorf("language %q has no input row: %q", language, stdin)
+					continue
+				}
+				stdin = strings.ReplaceAll(strings.TrimSuffix(values, ");\n"), ",", " ")
+			}
+			var a, b int
+			if n, err := fmt.Sscanf(strings.Join(strings.Fields(stdin), " "), "%d %d", &a, &b); err != nil || n != 2 || a != ioCase.a || b != ioCase.b {
+				t.Errorf("language %q judge stdin %q does not encode operands %d/%d", language, ioCase.stdin, ioCase.a, ioCase.b)
+			}
+			zero = zero || (a == 0 && b == 0)
+			zeroLeft = zeroLeft || (a == 0 && b > 0)
+			zeroRight = zeroRight || (a > 0 && b == 0)
+			carry = carry || (a%10+b%10 >= 10)
 			outputs[ioCase.expectedStdout] = struct{}{}
 		}
-		if len(outputs) < 2 {
-			t.Errorf("language %q A+B cases do not require input-dependent outputs", language)
+		if len(outputs) < 3 || !zero || !zeroLeft || !zeroRight {
+			t.Errorf("language %q must exercise distinct sums, zero and each operand independently", language)
+		}
+		if language != "asm" && language != "nasm" && language != "wasm" && !carry {
+			t.Errorf("language %q never exercises decimal carry", language)
 		}
 	}
 }
