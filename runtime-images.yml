@@ -2868,16 +2868,26 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           cat > Main.tla <<'TLA'
           ---- MODULE Main ----
           VARIABLE x
-          Init == x = 0
-          Next == x' = x
+          Init == x = FALSE
+          Next == x' = ~x
           Spec == Init /\ [][Next]_x
+          TypeOK == x \in BOOLEAN
+          StaysFalse == x = FALSE
           ====
           TLA
-          printf '%s\n' 'SPECIFICATION Spec' > Main.cfg
+          printf '%s\n' 'SPECIFICATION Spec' 'INVARIANT TypeOK' > Main.cfg
           aonohako-tla-run Main.tla
+          printf '%s\n' 'SPECIFICATION Spec' 'INVARIANT StaysFalse' > Main.cfg
+          if aonohako-tla-run Main.tla > invalid.stdout 2> invalid.stderr; then
+            printf '%s\n' 'TLC accepted a model that violates its invariant' >&2
+            exit 1
+          fi
+          test ! -s invalid.stdout
+          grep -Fq 'Invariant StaysFalse is violated.' invalid.stderr
 
   why3:
     install:

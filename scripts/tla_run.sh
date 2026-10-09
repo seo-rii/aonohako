@@ -17,7 +17,8 @@ trap cleanup EXIT
 
 if java -Xms32m -Xmx256m -Xss1m -XX:+UseSerialGC -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -cp /usr/local/lib/aonohako/tla2tools.jar tlc2.TLC "${args[@]}" >"$out"; then
   exit 0
+else
+  status=$?
 fi
-status=$?
 head -c 65536 "$out" >&2 || true
 exit "$status"
