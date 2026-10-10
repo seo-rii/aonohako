@@ -47,21 +47,32 @@ type communicationManagerResult struct {
 	Verdict string   `json:"verdict"`
 	Score   *float64 `json:"score"`
 	Message string   `json:"message"`
+	match   *communicationMatchManagerResult
 }
 
 type communicationProcessResult struct {
-	manager     bool
-	participant int
-	request     *model.RunRequest
-	result      execResult
+	entryPoint       string
+	manager          bool
+	participant      int
+	request          *model.RunRequest
+	result           execResult
+	completedAt      time.Time
+	wallDeadlineAt   time.Time
+	resultProtocolAt time.Time
+}
+
+type communicationManagerProtocol struct {
+	result      communicationManagerResult
+	err         error
 	completedAt time.Time
 }
 
 type communicationPreparedProcess struct {
-	workDir string
-	ws      Workspace
-	args    []string
-	request *model.RunRequest
+	entryPoint string
+	workDir    string
+	ws         Workspace
+	args       []string
+	request    *model.RunRequest
 }
 
 type communicationOutputWriter struct {
@@ -113,13 +124,35 @@ func (s *Service) supportsCommunicationV1() bool {
 	}, s.cgroupParentDir, s.communicationEnabled)
 }
 
-func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
+func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) (response model.RunResponse) {
 	startedAt := timing.MonotonicNow()
+	competitive := req.Communication != nil && req.Communication.Version == 2
+	defer func() {
+		if !competitive {
+			return
+		}
+		if response.Match == nil {
+			response.Match = communicationMatchFailure(req, response.Reason)
+		}
+		response.Score = nil
+		response.Match.RuntimeFingerprint = s.competitiveRuntimeIdentity.RuntimeFingerprint
+		response.Match.RunnerSHA256 = s.competitiveRuntimeIdentity.RunnerSHA256
+		response.Match.ImageDigest = s.competitiveRuntimeIdentity.ImageDigest
+		for _, code := range []string{"input_integrity", "runtime_fingerprint"} {
+			if response.VerdictSource == "communication:"+code {
+				response.Match.Retriable = false
+				response.Match.ErrorCode = code
+			}
+		}
+	}()
 	if !s.supportsCommunicationV1() {
 		return communicationFailure("CommunicationJudge unsupported: communication-v1 requires an explicitly enabled Cloud Run embedded helper or a self-hosted cgroup runner", "communication:capability", 0)
 	}
 	if err := runvalidation.ValidateCommunication(req); err != nil {
 		return communicationFailure("invalid communication request: "+err.Error(), "communication:request", 0)
+	}
+	if competitive && (s.competitiveRuntimeIdentity.RuntimeFingerprint == "" || req.Communication.RuntimeFingerprint != s.competitiveRuntimeIdentity.RuntimeFingerprint) {
+		return communicationFailure("competitive runtime fingerprint is unavailable or does not match the pinned runner", "communication:runtime_fingerprint", 0)
 	}
 	if req.Communication.ParticipantCount > s.communicationMaxParticipants {
 		return communicationFailure(
@@ -133,6 +166,8 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		)
 	}
 	participantProgram, managerProgram := communicationPrograms(req)
+	participantPrograms := communicationParticipantPrograms(req)
+	participantProgram = participantPrograms[0]
 	participantLimits := req.Limits
 	if participantLimits.WorkspaceBytes <= 0 || participantLimits.WorkspaceBytes > communicationParticipantWorkspaceBytes {
 		participantLimits.WorkspaceBytes = communicationParticipantWorkspaceBytes
@@ -168,9 +203,11 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				0,
 			)
 		}
-		participantArtifactBytes, err := communicationProgramDecodedBytes(participantProgram)
-		if err != nil || participantArtifactBytes > participantReq.Limits.WorkspaceBytes {
-			return communicationFailure("communication participant artifacts exceed workspace policy", "communication:admission", 0)
+		for _, program := range participantPrograms {
+			participantArtifactBytes, err := communicationProgramDecodedBytes(program)
+			if err != nil || participantArtifactBytes > participantReq.Limits.WorkspaceBytes {
+				return communicationFailure("communication participant artifacts exceed workspace policy", "communication:admission", 0)
+			}
 		}
 		managerArtifactBytes, err := communicationProgramDecodedBytes(managerProgram)
 		if err != nil || managerArtifactBytes > managerReq.Limits.WorkspaceBytes {
@@ -212,9 +249,20 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	participants := make([]communicationPreparedProcess, req.Communication.ParticipantCount)
 	participants[0] = participantTemplate
 	for i := 1; i < len(participants); i++ {
-		process, err := cloneCommunicationProcess(participantTemplate, participantReq)
-		if err != nil {
-			return communicationFailure("participant workspace preparation failed", "communication:participant:init", 0)
+		var process communicationPreparedProcess
+		if competitive {
+			seatReq := communicationProgramRequest(req, participantPrograms[i], participantLimits)
+			var failure *model.RunResponse
+			process, failure = prepareCommunicationProcess(seatReq, tuning, "participant")
+			if failure != nil {
+				return communicationFailure("participant workspace preparation failed", "communication:participant:init", 0)
+			}
+		} else {
+			var err error
+			process, err = cloneCommunicationProcess(participantTemplate, participantReq)
+			if err != nil {
+				return communicationFailure("participant workspace preparation failed", "communication:participant:init", 0)
+			}
 		}
 		participants[i] = process
 		prepared = append(prepared, process)
@@ -233,6 +281,15 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	inputPath, err := writeCommunicationDataFile(ctx, filepath.Join(manager.ws.RootDir, ".tmp"), "communication-input-*", req.Communication.Input, req.Communication.InputURL, managerRemaining)
 	if err != nil {
 		return communicationFailure("communication input materialization failed", "communication:input", 0)
+	}
+	if competitive {
+		valid, err := communicationFileMatchesSHA256(inputPath, req.Communication.InputSHA256)
+		if err != nil {
+			return communicationFailure("communication input integrity check failed", "communication:input", 0)
+		}
+		if !valid {
+			return communicationFailure("communication input does not match immutable fixture sha256", "communication:input_integrity", 0)
+		}
 	}
 	managerRemaining, err = communicationWorkspaceRemaining(manager.ws.RootDir, managerReq.Limits.WorkspaceBytes)
 	if err != nil {
@@ -348,17 +405,14 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		writeFD := readFD + 1
 		manager.args = append(manager.args, "/proc/self/fd/"+strconv.Itoa(readFD), "/proc/self/fd/"+strconv.Itoa(writeFD))
 	}
+	if competitive {
+		manager.args = append(manager.args, req.Communication.MatchSeed)
+	}
 
-	managerResultCh := make(chan struct {
-		result communicationManagerResult
-		err    error
-	}, 1)
+	managerResultCh := make(chan communicationManagerProtocol, 1)
 	go func() {
-		managerResult, readErr := readCommunicationManagerResult(resultRead)
-		managerResultCh <- struct {
-			result communicationManagerResult
-			err    error
-		}{result: managerResult, err: readErr}
+		managerResult, readErr := readCommunicationResult(resultRead, req.Communication.Version)
+		managerResultCh <- communicationManagerProtocol{result: managerResult, err: readErr, completedAt: time.Now()}
 	}()
 
 	totalProcesses := len(participants) + 1
@@ -366,6 +420,13 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	releaseTargets := make(chan struct{})
 	processCh := make(chan communicationProcessResult, totalProcesses)
 	allParticipantsStarted := make(chan struct{})
+	allTargetsStarted := make(chan struct{})
+	var startedTargets atomic.Int32
+	onTargetStarted := func() {
+		if startedTargets.Add(1) == int32(totalProcesses) {
+			close(allTargetsStarted)
+		}
+	}
 	managerFilesMonitorDone := make(chan struct{})
 	go func() {
 		defer close(managerFilesMonitorDone)
@@ -382,10 +443,13 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	}()
 	participantCancels := make([]context.CancelFunc, len(participants))
 	participantTimers := make([]*time.Timer, len(participants))
+	participantDeadlineNano := make([]atomic.Int64, len(participants))
 	var startedParticipants atomic.Int32
 	var firstParticipantFailure *communicationProcessResult
 	var managerCompletedAt time.Time
 	cancellationTriggered := false
+	var participantCancellationAt time.Time
+	var participantCancellationNano atomic.Int64
 
 	for i := range participants {
 		participantCtx, cancelParticipant := context.WithCancel(communicationCtx)
@@ -415,6 +479,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 						if startedParticipants.Add(1) == int32(len(participants)) {
 							close(allParticipantsStarted)
 						}
+						onTargetStarted()
 					},
 					targetRelease:           releaseTargets,
 					communicationRestricted: true,
@@ -429,15 +494,21 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				res.Reason = "participant output limit exceeded"
 				res.VerdictSource = "output_limit"
 			}
-			processCh <- communicationProcessResult{
+			process := communicationProcessResult{
+				entryPoint:  prepared.entryPoint,
 				participant: index,
 				request:     prepared.request,
 				result:      res,
 				completedAt: time.Now(),
 			}
+			if deadlineAt := participantDeadlineNano[index].Load(); deadlineAt != 0 {
+				process.wallDeadlineAt = time.Unix(0, deadlineAt)
+			}
+			processCh <- process
 		}(i, process)
 	}
 
+	var managerDeadlineNano atomic.Int64
 	managerCtx, cancelManager := context.WithCancel(communicationCtx)
 	defer cancelManager()
 	go func() {
@@ -453,6 +524,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				},
 				extraFiles:              managerFiles,
 				onTargetReady:           func() { readyCh <- true },
+				onTargetStarted:         onTargetStarted,
 				targetRelease:           releaseTargets,
 				communicationRestricted: true,
 			},
@@ -461,12 +533,17 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			tuning,
 			aggregate.Path,
 		)
-		publishCommunicationManagerProcess(processCh, communicationProcessResult{
+		process := communicationProcessResult{
+			entryPoint:  manager.entryPoint,
 			manager:     true,
 			participant: -1,
 			request:     manager.request,
 			result:      res,
-		}, closeManagerFiles)
+		}
+		if deadlineAt := managerDeadlineNano.Load(); deadlineAt != 0 {
+			process.wallDeadlineAt = time.Unix(0, deadlineAt)
+		}
+		publishCommunicationManagerProcess(processCh, process, closeManagerFiles)
 	}()
 
 	readyProcesses := 0
@@ -474,6 +551,20 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	released := false
 	startupTimer := time.NewTimer(communicationStartupTimeout)
 	defer startupTimer.Stop()
+	// A fast failing player must not prevent the other separately identified
+	// target from starting. Otherwise a coordinator-created startup failure
+	// would erase a valid twenty-game forfeit.
+	cancelAfterParticipantFailure := func() {
+		if !competitive {
+			participantCancellationAt = time.Now()
+			cancelCommunication()
+			return
+		}
+		go cancelCommunicationAfterStartupBoundary(func() {
+			participantCancellationNano.CompareAndSwap(0, time.Now().UnixNano())
+			cancelCommunication()
+		}, allTargetsStarted, startupTimer.C, communicationCtx.Done())
+	}
 	for readyProcesses < totalProcesses {
 		select {
 		case managerReady := <-readyCh:
@@ -484,6 +575,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			if !process.manager && communicationProcessFailed(process) {
 				failure := process
 				firstParticipantFailure = &failure
+				participantCancellationAt = time.Now()
 			}
 			cancellationTriggered = true
 			cancelCommunication()
@@ -515,9 +607,19 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		released = true
 		for i := range participantTimers {
 			cancel := participantCancels[i]
-			participantTimers[i] = time.AfterFunc(time.Duration(participantWallMs)*time.Millisecond, cancel)
+			participantTimers[i] = time.AfterFunc(time.Duration(participantWallMs)*time.Millisecond, func() {
+				if competitive {
+					participantDeadlineNano[i].CompareAndSwap(0, time.Now().UnixNano())
+				}
+				cancel()
+			})
 		}
-		managerTimer := time.AfterFunc(time.Duration(managerWallMs)*time.Millisecond, cancelManager)
+		managerTimer := time.AfterFunc(time.Duration(managerWallMs)*time.Millisecond, func() {
+			if competitive {
+				managerDeadlineNano.CompareAndSwap(0, time.Now().UnixNano())
+			}
+			cancelManager()
+		})
 		defer managerTimer.Stop()
 	}
 	defer func() {
@@ -533,10 +635,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		}
 	}()
 
-	var managerProtocol struct {
-		result communicationManagerResult
-		err    error
-	}
+	var managerProtocol communicationManagerProtocol
 	managerProtocolReceived := false
 	var managerExitTimer *time.Timer
 	var managerExitWaitDone chan struct{}
@@ -572,8 +671,11 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			failure := process
 			firstParticipantFailure = &failure
 			cancellationTriggered = true
-			cancelCommunication()
+			cancelAfterParticipantFailure()
 		}
+	}
+	if competitive && firstParticipantFailure != nil {
+		participantCancellationNano.CompareAndSwap(0, time.Now().UnixNano())
 	}
 	cancelCommunication()
 	if managerExitTimer != nil {
@@ -585,18 +687,34 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		managerProtocol = <-managerResultCh
 	}
 
-	response := buildCommunicationResponse(
-		results,
-		managerProtocol.result,
-		managerProtocol.err,
-		int(startedParticipants.Load()),
-		timing.SinceMillis(startedAt),
-		firstParticipantFailure,
-	)
+	if competitive {
+		for i := range results {
+			if results[i].manager {
+				results[i].resultProtocolAt = managerProtocol.completedAt
+			}
+		}
+		if canceledAt := participantCancellationNano.Load(); canceledAt != 0 {
+			participantCancellationAt = time.Unix(0, canceledAt)
+		}
+		response = buildCommunicationMatchResponse(req, results, managerProtocol.result.match, managerProtocol.err,
+			int(startedParticipants.Load()), timing.SinceMillis(startedAt), firstParticipantFailure, participantCancellationAt, ctx.Err())
+	} else {
+		response = buildCommunicationResponse(
+			results, managerProtocol.result, managerProtocol.err, int(startedParticipants.Load()),
+			timing.SinceMillis(startedAt), firstParticipantFailure,
+		)
+	}
 	if aggregate.Path != "" {
 		stats, statErr := cgroup.ReadStats(aggregate.Path)
 		if statErr != nil {
 			slog.Warn("communication aggregate cgroup stats failed", "path", aggregate.Path, "err", statErr)
+			if competitive {
+				response.Status = model.RunStatusRE
+				response.Reason = "competitive aggregate resource accounting failed"
+				response.VerdictSource = "communication:aggregate_accounting"
+				response.Match = communicationMatchFailure(req, response.Reason)
+				response.Score = nil
+			}
 		} else {
 			if peakKB := (stats.MemoryPeakBytes + 1023) / 1024; peakKB > response.MemoryKB {
 				response.MemoryKB = peakKB
@@ -608,6 +726,10 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 					response.VerdictSource = "communication:aggregate"
 					zero := 0.0
 					response.Score = &zero
+					if competitive {
+						response.Match = communicationMatchFailure(req, response.Reason)
+						response.Score = nil
+					}
 				}
 			}
 		}
@@ -743,12 +865,16 @@ func prepareCommunicationProcess(req *model.RunRequest, tuning config.RuntimeTun
 	if failure != nil {
 		return communicationPreparedProcess{}, failure
 	}
+	entryPoint := ""
+	if len(args) > 0 {
+		entryPoint, _ = filepath.Rel(ws.BoxDir, args[0])
+	}
 	args, err := canonicalizeCommunicationExecutable(ws, args, label)
 	if err != nil {
 		_ = os.RemoveAll(workDir)
 		return communicationPreparedProcess{}, &model.RunResponse{Status: model.RunStatusInitFail, Reason: label + " executable canonicalization failed"}
 	}
-	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req}, nil
+	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req, entryPoint: entryPoint}, nil
 }
 
 func canonicalizeCommunicationExecutable(ws Workspace, args []string, label string) ([]string, error) {
@@ -807,7 +933,7 @@ func cloneCommunicationProcess(template communicationPreparedProcess, req *model
 	for i, arg := range template.args {
 		args[i] = strings.Replace(arg, template.ws.RootDir, ws.RootDir, 1)
 	}
-	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req}, nil
+	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req, entryPoint: template.entryPoint}, nil
 }
 
 func copyReadOnlyArtifacts(sourceRoot, destinationRoot string) error {

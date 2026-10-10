@@ -31,6 +31,7 @@ import (
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/queue"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runtimeidentity"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/rustpolicy"
@@ -177,8 +178,13 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	capabilities := make([]string, 0, 3)
-	if platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled) {
+	communicationSupported := platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled)
+	competitiveIdentity, competitiveIdentityErr := runtimeidentity.Competitive(s.cfg.CompetitiveRuntimeFingerprint)
+	if communicationSupported {
 		capabilities = append(capabilities, "communication-v1")
+		if competitiveIdentityErr == nil {
+			capabilities = append(capabilities, "communication-v2")
+		}
 	}
 	installedModeAllowed := s.cfg.AllowRequestPythonInstalledLibraries ||
 		s.cfg.DefaultPythonLibraryMode == pythonpolicy.LibraryModeInstalled
@@ -205,6 +211,15 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	w.Header().Set("Content-Type", "application/json")
 	body := map[string]any{"capabilities": capabilities}
+	if communicationSupported && competitiveIdentityErr == nil {
+		body["communication_v2"] = map[string]any{
+			"participant_count": 2, "games_per_match": 20,
+			"result_protocol": "match-result-v1", "inline_artifact_sha256_required": true,
+			"runtime_fingerprint": competitiveIdentity.RuntimeFingerprint,
+			"runner_sha256":       competitiveIdentity.RunnerSHA256,
+			"image_digest":        competitiveIdentity.ImageDigest,
+		}
+	}
 	if pipelineSupported {
 		body["pipeline"] = map[string]any{
 			"versions":         []int{1},

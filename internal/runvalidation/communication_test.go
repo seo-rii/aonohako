@@ -37,7 +37,7 @@ func TestValidateCommunicationContract(t *testing.T) {
 		edit func(*model.RunRequest)
 		want string
 	}{
-		{name: "version", edit: func(req *model.RunRequest) { req.Communication.Version = 2 }, want: "version must be 1"},
+		{name: "version", edit: func(req *model.RunRequest) { req.Communication.Version = 3 }, want: "version must be 1 or 2"},
 		{name: "minimum participants", edit: func(req *model.RunRequest) { req.Communication.ParticipantCount = 1 }, want: "between 2 and 64"},
 		{name: "maximum participants", edit: func(req *model.RunRequest) { req.Communication.ParticipantCount = 65 }, want: "between 2 and 64"},
 		{name: "protocol", edit: func(req *model.RunRequest) { req.Communication.ResultProtocol = "legacy" }, want: "manager-result-v1"},
