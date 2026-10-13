@@ -23,7 +23,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "unlambda", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "quickjs", "rescript", "scala", "typescript"}) {
@@ -172,6 +172,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-haskell",
 		"ci-haxe",
 		"ci-idris2",
+		"ci-intercal",
 		"ci-isabelle",
 		"ci-j",
 		"ci-janet",
@@ -182,6 +183,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-koka",
 		"ci-kotlin",
 		"ci-kotlin-jvm",
+		"ci-lazyk",
 		"ci-lean4",
 		"ci-lisp",
 		"ci-lolcode",
@@ -204,6 +206,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-perl",
 		"ci-php",
 		"ci-picolisp",
+		"ci-piet",
 		"ci-plain",
 		"ci-pony",
 		"ci-posix-sh",
@@ -224,6 +227,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-scala",
 		"ci-scheme",
 		"ci-sed",
+		"ci-shakespeare",
 		"ci-smalltalk",
 		"ci-sml",
 		"ci-smlnj",
@@ -235,6 +239,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-typescript",
 		"ci-uhmlang",
 		"ci-uiua",
+		"ci-unlambda",
 		"ci-vala",
 		"ci-vb6",
 		"ci-vbnet",
@@ -399,6 +404,11 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "default-jdk-headless", "kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar", "javac --release 8 -cp Main.jar Helper.java", "jar uf Main.jar Helper.class", "java -Xms64m -Xmx128m -Xss1m -XX:+UseSerialGC -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -DONLINE_JUDGE=1 -jar Main.jar"},
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
 		"lolcode":       {"LCI_VERSION=0.11.2", "cb1065936d3a7463928dcddfc345a8d7d8602678394efc0e54981f9dd98c27d2", "lci Main.lol", `VISIBLE "ok"`},
+		"shakespeare":   {"python3 -m venv /opt/shakespeare", "--no-deps shakespearelang==1.0.0 click==7.1.2 tatsu==5.6.1", "/opt/shakespeare/bin/pip uninstall -y pip", "shakespeare_run.py --check Main.spl", "'-4 17'", "= 13", "Broken.spl"},
+		"piet":          {"NPIET_VERSION=1.3f", "NPIET_SHA256=2ded856062abd73599e85e1e768ce6bc60ba2db22dc7d6a9b62763dca04b855a", "sha256sum -c -", "ac_cv_lib_gd_gdImageCreate=no", "make npiet CFLAGS='-O2 -std=gnu17 -DHAVE_CONFIG_H'", "with PNG support", "npiet -q Main.ppm", "= 42"},
+		"unlambda":      {"python3 /usr/local/lib/aonohako/unlambda.py Main.unl", "^ok!$"},
+		"lazyk":         {"LAZYK_VERSION=1.0.0", "LAZYK_SHA256=c57edaab448f84eda2c98411e0fb4192e36113df49461db9285a62ca1f613d42", "sha256sum -c -", "lazyk Main.lazy"},
+		"intercal":      {"intercal=30:0.30-6", "dpkg-query -W", "CC='gcc -std=gnu17' ick -b Main.i", "test \"$(./Main)\" = ok", "Broken.i"},
 		"lua":           {"lua5.4=5.4.7-1+b2", "dpkg-query -W", "lua5.4", "-E"},
 		"luajit":        {"luajit=2.1.0+openresty20250117-2", "dpkg-query -W", "luajit -b -t raw", "LUA_INIT=", "aonohako-luajit-compile-leak", "Broken.lua"},
 		"malbolge":      {"python3 /usr/local/lib/aonohako/malbolge.py Main.mal", "Hello World!"},

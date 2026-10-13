@@ -5,6 +5,9 @@ const (
 	chezSchemeCompileKind    = "chez-scheme"
 	guileCompileKind         = "guile"
 	chickenSchemeCompileKind = "chicken-scheme"
+
+	shakespearePython = "/opt/shakespeare/bin/python3"
+	shakespeareRunner = "/usr/local/lib/aonohako/shakespeare_run.py"
 )
 
 var compileRegistry = map[string]Compiler{
@@ -198,6 +201,11 @@ var compileRegistry = map[string]Compiler{
 	"brainfuck":     brainfuckCompiler{},
 	"malbolge":      malbolgeCompiler{},
 	"lolcode":       passThroughCompiler{exts: []string{".lol"}, noSourceReason: "no lolcode sources"},
+	"shakespeare":   checkedSourcesCompiler{exts: []string{".spl"}, noSourceReason: "no shakespeare sources", bin: shakespearePython, prefix: []string{shakespeareRunner, "--check"}},
+	"piet":          pietCompiler{},
+	"unlambda":      unlambdaCompiler{},
+	"lazyk":         passThroughCompiler{exts: []string{".lazy"}, noSourceReason: "no lazy k sources"},
+	"intercal":      intercalCompiler{},
 	"apecode":       apeCodeCompiler{},
 	"wasm":          wasmCompiler{},
 	asCompileKind:   assemblyScriptCompiler{},
