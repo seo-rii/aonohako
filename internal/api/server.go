@@ -87,6 +87,7 @@ type Server struct {
 	}
 	execute execute.Runner
 	queue   *queue.Manager
+	work    workLifecycle
 	seq     atomic.Uint64
 	streams atomic.Int64
 	uploads atomic.Int64
@@ -166,8 +167,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/healthz", s.readyz)
 	mux.HandleFunc("/capabilities", s.capabilities)
-	mux.Handle("/compile", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler))))
-	mux.Handle("/execute", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler))))
+	mux.Handle("/compile", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler)))))
+	mux.Handle("/execute", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler)))))
 	return mux
 }
 
@@ -238,6 +239,10 @@ func (s *Server) livez(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) readyz(w http.ResponseWriter, _ *http.Request) {
+	if s.work.isDraining() {
+		writeJSONError(w, http.StatusServiceUnavailable, "server_draining")
+		return
+	}
 	if s.readinessCheck != nil {
 		if err := s.readinessCheck(); err != nil {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
@@ -402,6 +407,9 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer permit.Release()
+	if !s.work.start(streamCtx) {
+		return
+	}
 
 	if err := stream.Event("progress", map[string]any{"stage": "start", "request_id": reqID, "ts": time.Now().UnixMilli()}); err != nil {
 		return
@@ -560,6 +568,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer permit.Release()
+	if !s.work.start(streamCtx) {
+		return
+	}
 
 	if err := stream.Event("progress", map[string]any{"stage": "start", "request_id": reqID, "ts": time.Now().UnixMilli()}); err != nil {
 		return
