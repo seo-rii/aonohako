@@ -187,9 +187,13 @@ if has_language "picolisp"; then
     report_once "PicoLisp" pil -version -bye
 fi
 
-if has_language "assemblyscript" || has_language "javascript" || has_language "typescript" || has_language "coffeescript" || has_language "elm" || has_language "rescript" || has_language "purescript"; then
+if has_language "entry" || has_language "assemblyscript" || has_language "javascript" || has_language "typescript" || has_language "coffeescript" || has_language "elm" || has_language "rescript" || has_language "purescript"; then
     report_once "Node.js" node --version
     report_once "npm" npm --version
+fi
+
+if has_language "entry"; then
+    report_once "Entry" node --input-type=module -e 'import { ENGINE_VERSION, GRADER_VERSION } from "/usr/local/lib/aonohako/entry-runtime.mjs"; console.log(ENGINE_VERSION + " / " + GRADER_VERSION);'
 fi
 
 if has_language "assemblyscript"; then
@@ -698,6 +702,7 @@ report_compile_option "chez-scheme" "/usr/bin/chezscheme --quiet --script /usr/l
 report_compile_option "guile" "GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm <source.scm>; run with auto-compilation disabled"
 report_compile_option "chicken-scheme" "csc -O3 -d0 -no-trace -static -o <target> <source.scm>; run the native artifact with the CHICKEN runtime and extensions statically linked"
 report_compile_option "javascript" "node --check"
+report_compile_option "entry" "node --disallow-code-generation-from-strings --no-addons /usr/local/lib/aonohako/entry-runner.mjs --check Main.entry.json; immutable Entry 4.0.23 / entry-v1 JSON artifacts"
 report_compile_option "assemblyscript" "aonohako-assemblyscript-compile <source.ts> <target.wasm>; wasm-validate <target.wasm>; run with bounded Wasmtime and no filesystem preopens"
 report_compile_option "factor" "/opt/factor/factor -no-user-init -no-signals -q /usr/local/lib/aonohako/factor_check.factor <source.factor>; run with bounded stacks and immutable vocabulary roots"
 report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"

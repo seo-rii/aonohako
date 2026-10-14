@@ -317,7 +317,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"-jar",
 			primaryPath,
 		}
-	case "javascript", "apl":
+	case "javascript", "apl", "entry":
 		limitMB := max(64, req.Limits.MemoryMB)
 		oldSpaceMB := max(32, (limitMB*tuning.NodeOldSpacePercent)/100)
 		semiSpaceMB := limitMB / 64
@@ -335,6 +335,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			fmt.Sprintf("--stack-size=%d", tuning.NodeStackSizeKB),
 		}
 		switch lang {
+		case "entry":
+			return append(args, "--disallow-code-generation-from-strings", "--no-addons", "/usr/local/lib/aonohako/entry-runner.mjs", primaryPath, req.EntryMode)
 		case "apl":
 			return append(args, "/usr/local/bin/apl", "--script", "-f", primaryPath)
 		default:

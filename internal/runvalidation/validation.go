@@ -50,6 +50,9 @@ var supportedRunLangs = func() map[string]struct{} {
 }()
 
 func Validate(req *model.RunRequest) error {
+	if err := ValidateEntry(req); err != nil {
+		return err
+	}
 	if len(req.Stdin) > MaxTextFieldBytes {
 		return fmt.Errorf("stdin too large: max %d bytes", MaxTextFieldBytes)
 	}

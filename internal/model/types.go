@@ -215,6 +215,7 @@ type SidecarError struct {
 
 type RunRequest struct {
 	Lang              string                   `json:"lang"`
+	EntryMode         string                   `json:"entry_mode,omitempty"`
 	Binaries          []Binary                 `json:"binaries"`
 	Programs          []RunProgram             `json:"programs,omitempty"`
 	Steps             []RunStep                `json:"steps,omitempty"`

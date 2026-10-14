@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"aonohako/internal/config"
+	"aonohako/internal/entrypolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/runvalidation"
@@ -32,6 +33,12 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 			if status == "OK" {
 				reason = "stdout exceeded output limit"
 				source = "stdout_limit"
+			}
+		} else if req.EntryMode == "state" {
+			var err error
+			outputOK, err = entrypolicy.CompareState([]byte(req.ExpectedStdout), judgeOut)
+			if err != nil {
+				return model.RunStatusInitFail, nil, "invalid Entry state expectation", "entry_state"
 			}
 		} else if hasSPJ(req) {
 			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir)
@@ -58,6 +65,8 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	if status == "OK" && evaluateOutputs {
 		if stdoutLimitExceeded {
 			source = "stdout_limit"
+		} else if req.EntryMode == "state" {
+			source = "entry_state"
 		} else if hasSPJ(req) {
 			source = "spj"
 		} else if judgeSource != "" {
@@ -84,6 +93,9 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 
 func classifyRunStatusWithoutOutput(req *model.RunRequest, res execResult) (string, string, string) {
 	status := res.Status
+	if profiles.NormalizeRunLang(req.Lang) == "entry" && status == "OK" && res.ExitCode != nil && *res.ExitCode == 124 {
+		return model.RunStatusTLE, "Entry instruction or logical tick limit exceeded", "entry_limit"
+	}
 	source := res.VerdictSource
 	reason := ""
 	status, reason, source = applyFinalCPUTimeStatus(status, reason, source, res.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(source, "cpu_time_cgroup"))
