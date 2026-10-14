@@ -365,7 +365,9 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
-		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		if !sse.ResponseStarted(err) {
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		}
 		return
 	}
 	streamCtx, stopStream := context.WithCancel(r.Context())
@@ -523,7 +525,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
-		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		if !sse.ResponseStarted(err) {
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		}
 		return
 	}
 	streamCtx, stopStream := context.WithCancel(r.Context())

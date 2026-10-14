@@ -3,6 +3,7 @@ package sse
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -10,6 +11,17 @@ import (
 )
 
 const DefaultWriteTimeout = 10 * time.Second
+
+type responseStartedError struct{ error }
+
+func (e *responseStartedError) Unwrap() error { return e.error }
+
+// ResponseStarted reports whether initialization failed after committing the
+// SSE response. Callers must not append an HTTP error response in this case.
+func ResponseStarted(err error) bool {
+	var started *responseStartedError
+	return errors.As(err, &started)
+}
 
 type Writer struct {
 	w            http.ResponseWriter
@@ -20,10 +32,6 @@ type Writer struct {
 }
 
 func New(w http.ResponseWriter, writeTimeout time.Duration) (*Writer, error) {
-	_, ok := w.(http.Flusher)
-	if !ok {
-		return nil, fmt.Errorf("streaming unsupported")
-	}
 	if writeTimeout <= 0 {
 		writeTimeout = DefaultWriteTimeout
 	}
@@ -38,10 +46,10 @@ func New(w http.ResponseWriter, writeTimeout time.Duration) (*Writer, error) {
 	headers.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	if err := controller.Flush(); err != nil {
-		return nil, fmt.Errorf("flush initial sse response: %w", err)
+		return nil, &responseStartedError{fmt.Errorf("flush initial sse response: %w", err)}
 	}
 	if err := controller.SetWriteDeadline(time.Time{}); err != nil {
-		return nil, fmt.Errorf("clear initial sse write deadline: %w", err)
+		return nil, &responseStartedError{fmt.Errorf("clear initial sse write deadline: %w", err)}
 	}
 	return &Writer{w: w, controller: controller, writeTimeout: writeTimeout}, nil
 }
