@@ -48,6 +48,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "pipeline-final-spj-workspace", fn: TestRunPipelineInteractiveArtifactBatchAndExplicitOriginalInputSPJ},
 		{name: "interactive-basic", fn: TestRunInteractiveIOAcceptsInteractorVerdict},
 		{name: "interactor-output-limit", fn: TestRunInteractiveUsesInteractorOutputLimit},
+		{name: "stdout-limit-verdict-combinations", fn: TestStdoutLimitCombinationsAcrossExecutionModes},
 		{name: "interactive-fixture-isolation", fn: TestRunInteractiveKeepsJudgeFixturesUnreadableToContestant},
 		{name: "proc-fd", fn: TestRunBlocksProcFDBrowsingOutsideSandbox},
 		{name: "proc-environ", fn: TestRunBlocksProcEnvironRead},
