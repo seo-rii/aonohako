@@ -1214,8 +1214,8 @@ done
 	if strings.Contains(resp.Reason, "handoff exceeded") {
 		t.Fatalf("file handoff stdout flood should not be reported as handoff overflow: %q", resp.Reason)
 	}
-	if resp.VerdictSource != "step:encode:stdout" {
-		t.Fatalf("verdict_source = %q, want step:encode:stdout", resp.VerdictSource)
+	if resp.VerdictSource != "step:encode:stdout_limit" {
+		t.Fatalf("verdict_source = %q, want step:encode:stdout_limit", resp.VerdictSource)
 	}
 	if len(resp.Steps) != 1 || resp.Steps[0].HandoffBytes != int64(len("encoded-file\n")) {
 		t.Fatalf("unexpected step results: %+v", resp.Steps)
@@ -1482,8 +1482,8 @@ func TestRunOutputLimitUsesConfiguredUnifiedCap(t *testing.T) {
 	})
 
 	want := strings.Repeat("a", 8192)
-	if resp.Status != model.RunStatusWA {
-		t.Fatalf("expected WA, got %+v", resp)
+	if resp.Status != model.RunStatusRE {
+		t.Fatalf("expected output-limit RE, got %+v", resp)
 	}
 	if resp.Stdout != want {
 		t.Fatalf("unexpected stdout length=%d", len(resp.Stdout))
@@ -1634,7 +1634,7 @@ func TestCaptureLimitZeroDoesNotDisableOutputLimitVerdict(t *testing.T) {
 		logs++
 	}})
 
-	if resp.Status != model.RunStatusWA ||
+	if resp.Status != model.RunStatusRE ||
 		resp.Reason != "stdout exceeded output limit" ||
 		resp.VerdictSource != "stdout_limit" {
 		t.Fatalf("capture limit changed output-limit verdict: %+v", resp)

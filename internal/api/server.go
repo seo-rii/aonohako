@@ -376,7 +376,9 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
-		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		if !sse.ResponseStarted(err) {
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		}
 		return
 	}
 	streamCtx, stopStream := context.WithCancel(r.Context())
@@ -545,7 +547,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
-		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		if !sse.ResponseStarted(err) {
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		}
 		return
 	}
 	streamCtx, stopStream := context.WithCancel(r.Context())
@@ -911,9 +915,9 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					principal += "unknown"
 				}
 			}
-			if len(principal) > 240 {
-				principal = principal[:240]
-			}
+			// Keep usage keys bounded without merging identities that share a prefix.
+			sum := sha256.Sum256([]byte(principal))
+			principal = "platform:" + hex.EncodeToString(sum[:])
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
 			return
 		case config.InboundAuthBearer:
