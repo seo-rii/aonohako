@@ -32,6 +32,9 @@ type Writer struct {
 }
 
 func New(w http.ResponseWriter, writeTimeout time.Duration) (*Writer, error) {
+	if !supportsResponseControllerFlush(w) {
+		return nil, fmt.Errorf("streaming unsupported: %w", http.ErrNotSupported)
+	}
 	if writeTimeout <= 0 {
 		writeTimeout = DefaultWriteTimeout
 	}
@@ -52,6 +55,21 @@ func New(w http.ResponseWriter, writeTimeout time.Duration) (*Writer, error) {
 		return nil, &responseStartedError{fmt.Errorf("clear initial sse write deadline: %w", err)}
 	}
 	return &Writer{w: w, controller: controller, writeTimeout: writeTimeout}, nil
+}
+
+// Match ResponseController's flush capabilities without flushing and committing
+// a response. A missing capability must leave room for an HTTP error response.
+func supportsResponseControllerFlush(w http.ResponseWriter) bool {
+	for {
+		switch writer := w.(type) {
+		case interface{ FlushError() error }, http.Flusher:
+			return true
+		case interface{ Unwrap() http.ResponseWriter }:
+			w = writer.Unwrap()
+		default:
+			return false
+		}
+	}
 }
 
 func (s *Writer) Event(name string, data any) error {

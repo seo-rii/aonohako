@@ -41,9 +41,14 @@ type sseMiddlewareWriter struct{ http.ResponseWriter }
 
 func (w sseMiddlewareWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
+// Expose deadlines without exposing a flush method or an unwrap chain.
+type sseNoFlushWriter struct{ http.ResponseWriter }
+
+func (sseNoFlushWriter) SetWriteDeadline(time.Time) error { return nil }
+
 func TestSSEInitializationResponseBoundary(t *testing.T) {
 	for _, path := range []string{"/compile", "/execute"} {
-		for _, mode := range []string{"wrapped", "flush failure", "clear deadline failure"} {
+		for _, mode := range []string{"wrapped", "no flush", "flush failure", "clear deadline failure"} {
 			t.Run(path+"/"+mode, func(t *testing.T) {
 				s := newServerForTest(t)
 				called := false
@@ -72,13 +77,29 @@ func TestSSEInitializationResponseBoundary(t *testing.T) {
 				if mode == "clear deadline failure" {
 					w.clearErr = errors.New("deadline failed")
 				}
-				s.Handler().ServeHTTP(sseMiddlewareWriter{sseMiddlewareWriter{w}}, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)))
-				if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "text/event-stream" {
+				var responseWriter http.ResponseWriter = w
+				if mode == "no flush" {
+					responseWriter = sseNoFlushWriter{responseWriter}
+				}
+				s.Handler().ServeHTTP(sseMiddlewareWriter{sseMiddlewareWriter{responseWriter}}, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)))
+				wantStatus, wantContentType := http.StatusOK, "text/event-stream"
+				if mode == "no flush" {
+					wantStatus, wantContentType = http.StatusInternalServerError, "application/json"
+				}
+				if w.Code != wantStatus || w.Header().Get("Content-Type") != wantContentType {
 					t.Fatalf("response = %d %q", w.Code, w.Header().Get("Content-Type"))
 				}
 				if mode == "wrapped" {
 					if !called || !strings.Contains(w.Body.String(), "event: result\n") {
 						t.Fatalf("wrapped response = %q, runner called = %v", w.Body.String(), called)
+					}
+				} else if mode == "no flush" {
+					var payload map[string]string
+					if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+						t.Fatal(err)
+					}
+					if called || payload["error"] != "stream_init_failed" || payload["message"] == "" {
+						t.Fatalf("unsupported writer response = %q, runner called = %v", w.Body.String(), called)
 					}
 				} else if called || w.Body.Len() != 0 {
 					t.Fatalf("failed initialization ran service or appended a body: called=%v, body=%q", called, w.Body.String())

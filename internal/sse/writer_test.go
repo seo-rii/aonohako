@@ -90,7 +90,8 @@ func TestNewMarksOnlyCommittedInitializationFailures(t *testing.T) {
 		started bool
 	}{
 		{"no deadlines", httptest.NewRecorder(), http.ErrNotSupported, false},
-		{"no flush", noFlushDeadlineWriter{httptest.NewRecorder()}, http.ErrNotSupported, true},
+		{"no flush", noFlushDeadlineWriter{httptest.NewRecorder()}, http.ErrNotSupported, false},
+		{"wrapped no flush", unwrapResponseWriter{noFlushDeadlineWriter{httptest.NewRecorder()}}, http.ErrNotSupported, false},
 		{"flush error", &flushErrorResponseWriter{w: newDeadlineResponseWriter(), flushErr: failure}, failure, true},
 		{"clear deadline error", &flushErrorResponseWriter{w: newDeadlineResponseWriter(), clearErr: failure}, failure, true},
 	} {
