@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"sync"
 	"testing"
@@ -19,6 +21,93 @@ type deadlineResponseWriter struct {
 	deadline    time.Time
 	blockWrites bool
 	writes      int
+}
+
+type unwrapResponseWriter struct{ http.ResponseWriter }
+
+func (w unwrapResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// This writer deliberately exposes FlushError without implementing Flusher.
+type flushErrorResponseWriter struct {
+	w        *deadlineResponseWriter
+	flushErr error
+	clearErr error
+}
+
+func (w *flushErrorResponseWriter) Header() http.Header         { return w.w.Header() }
+func (w *flushErrorResponseWriter) WriteHeader(status int)      { w.w.WriteHeader(status) }
+func (w *flushErrorResponseWriter) Write(p []byte) (int, error) { return w.w.Write(p) }
+func (w *flushErrorResponseWriter) FlushError() error           { return w.flushErr }
+func (w *flushErrorResponseWriter) SetWriteDeadline(deadline time.Time) error {
+	if deadline.IsZero() && w.clearErr != nil {
+		return w.clearErr
+	}
+	return w.w.SetWriteDeadline(deadline)
+}
+
+type noFlushDeadlineWriter struct{ http.ResponseWriter }
+
+func (noFlushDeadlineWriter) SetWriteDeadline(time.Time) error { return nil }
+
+func TestNewSupportsResponseControllerWriters(t *testing.T) {
+	for _, kind := range []string{"direct", "unwrap", "multiple unwrap", "FlushError", "wrapped FlushError"} {
+		t.Run(kind, func(t *testing.T) {
+			base := newDeadlineResponseWriter()
+			var w http.ResponseWriter = base
+			switch kind {
+			case "unwrap":
+				w = unwrapResponseWriter{w}
+			case "multiple unwrap":
+				w = unwrapResponseWriter{unwrapResponseWriter{w}}
+			case "FlushError":
+				w = &flushErrorResponseWriter{w: base}
+			case "wrapped FlushError":
+				w = unwrapResponseWriter{&flushErrorResponseWriter{w: base}}
+			}
+			stream, err := New(w, time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := stream.Event("result", map[string]string{"status": "OK"}); err != nil {
+				t.Fatal(err)
+			}
+			if got := base.body.String(); got != "event: result\ndata: {\"status\":\"OK\"}\n\n" {
+				t.Fatalf("body = %q", got)
+			}
+			if !base.deadline.IsZero() {
+				t.Fatal("successful event retained a write deadline")
+			}
+		})
+	}
+}
+
+func TestNewMarksOnlyCommittedInitializationFailures(t *testing.T) {
+	failure := errors.New("transport failed")
+	for _, tc := range []struct {
+		name    string
+		writer  http.ResponseWriter
+		want    error
+		started bool
+	}{
+		{"no deadlines", httptest.NewRecorder(), http.ErrNotSupported, false},
+		{"no flush", noFlushDeadlineWriter{httptest.NewRecorder()}, http.ErrNotSupported, false},
+		{"wrapped no flush", unwrapResponseWriter{noFlushDeadlineWriter{httptest.NewRecorder()}}, http.ErrNotSupported, false},
+		{"flush error", &flushErrorResponseWriter{w: newDeadlineResponseWriter(), flushErr: failure}, failure, true},
+		{"clear deadline error", &flushErrorResponseWriter{w: newDeadlineResponseWriter(), clearErr: failure}, failure, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stream, err := New(tc.writer, time.Second)
+			if stream != nil || !errors.Is(err, tc.want) {
+				t.Fatalf("New = %v, %v; want error %v", stream, err, tc.want)
+			}
+			if ResponseStarted(fmt.Errorf("wrapped: %w", err)) != tc.started {
+				t.Fatalf("ResponseStarted(%v) = %v, want %v", err, ResponseStarted(err), tc.started)
+			}
+		})
+	}
+	if ResponseStarted(nil) {
+		t.Fatal("nil error reports a started response")
+	}
 }
 
 func newDeadlineResponseWriter() *deadlineResponseWriter {
