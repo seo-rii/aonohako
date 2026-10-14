@@ -340,11 +340,9 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			if captureRawStdout {
 				stdout = run.stdoutOut
 			}
-			if run.stdoutLimitExceeded {
-				resp.Status = model.RunStatusRE
-				resp.Reason = "stdout exceeded output limit"
-				resp.VerdictSource = "stdout"
-			}
+			resp.Status, resp.Reason, resp.VerdictSource = applyStdoutLimitVerdict(
+				resp.Status, resp.Reason, resp.VerdictSource, run.stdoutLimitExceeded,
+			)
 			if len(stepReq.FileOutputs) > 0 {
 				participantFileOutput = run.judgeOut
 			}
@@ -402,11 +400,6 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			interactorOutputErr = run.interactorOutputErr
 			if run.participantFileErr != nil {
 				interactorOutputErr = run.participantFileErr
-			}
-			if (resp.Status == "OK" || resp.Status == model.RunStatusAccepted) && resp.StdoutTruncated {
-				resp.Status = model.RunStatusRE
-				resp.Reason = "participant stdout exceeded output limit"
-				resp.VerdictSource = "participant:stdout_limit"
 			}
 		}
 		_ = stdin.Close()
