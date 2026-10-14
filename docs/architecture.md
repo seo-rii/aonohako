@@ -811,8 +811,9 @@ The following checks are enforced before the HTTP server starts:
   positive end-to-end communication wall budget
 - `/compile` and `/execute` streams are capped globally, and outside `dev` they
   are also capped per principal. Bearer auth uses a token fingerprint as the
-  principal key; platform auth uses the upstream principal header such as
-  `X-Aonohako-Principal`. Platform auth ignores generic forwarded identity
+  principal key; platform auth hashes the full upstream principal header such
+  as `X-Aonohako-Principal` with SHA-256 for a bounded usage key without prefix
+  truncation. Platform auth ignores generic forwarded identity
   headers. With `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`, the application
   verifies the principal signature itself over method, request URI, principal,
   timestamp, and body digest; outside `dev`, startup rejects platform auth

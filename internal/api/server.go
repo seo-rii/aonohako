@@ -893,9 +893,9 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					principal += "unknown"
 				}
 			}
-			if len(principal) > 240 {
-				principal = principal[:240]
-			}
+			// Keep usage keys bounded without merging identities that share a prefix.
+			sum := sha256.Sum256([]byte(principal))
+			principal = "platform:" + hex.EncodeToString(sum[:])
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
 			return
 		case config.InboundAuthBearer:
