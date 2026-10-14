@@ -43,6 +43,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "spj-large-input", fn: TestRunSPJLargeInputFitsOneWorkspaceCopy},
 		{name: "spj-readonly-input", fn: TestRunSPJPreparedInputCannotBeOverwrittenByContestant},
 		{name: "spj-step-input", fn: TestRunStepSPJReceivesExactFinalStepStdin},
+		{name: "remote-two-step-logs", fn: TestRemoteRunnerTwoStepLogsMatchLocalExecution},
 		{name: "spj-finite-score", fn: TestRunSPJRejectsNonFiniteScore},
 		{name: "pipeline-final-spj-workspace", fn: TestRunPipelineInteractiveArtifactBatchAndExplicitOriginalInputSPJ},
 		{name: "interactive-basic", fn: TestRunInteractiveIOAcceptsInteractorVerdict},

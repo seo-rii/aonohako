@@ -443,7 +443,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			Lang:              program.Lang,
 			Binaries:          program.Binaries,
 			Stdin:             stdin,
-			Limits:            step.Limits,
+			Limits:            effectiveStepLimits(step),
 			CaptureLimits:     req.CaptureLimits,
 			RuntimeProfile:    req.RuntimeProfile,
 			PythonLibraryMode: req.PythonLibraryMode,
@@ -456,9 +456,6 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			if handoffFrom == "file" || handoffFrom == "file_output" {
 				handoffFromFile = true
 				stepReq.FileOutputs = []model.OutputFile{{Path: step.Handoff.Path}}
-			}
-			if step.Handoff.MaxBytes > 0 && stepReq.Limits.OutputBytes < int(step.Handoff.MaxBytes) {
-				stepReq.Limits.OutputBytes = int(step.Handoff.MaxBytes)
 			}
 		}
 		finalStep := i == len(req.Steps)-1
