@@ -16,12 +16,33 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runvalidation"
 )
 
 type executeRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f executeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func TestRemoteRunnerRejectsExpandedRequestBeforeMarshalAndUpload(t *testing.T) {
+	called := false
+	runner := &remoteRunner{
+		client: &http.Client{Transport: executeRoundTripFunc(func(*http.Request) (*http.Response, error) {
+			called = true
+			return nil, fmt.Errorf("unexpected HTTP request")
+		})},
+		executeURL: "http://remote.example/execute",
+	}
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		ExpectedStdout: strings.Repeat("<", runvalidation.MaxJSONRequestBytes/6+1),
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "remote request too large") {
+		t.Fatalf("response = %+v, want request size rejection", resp)
+	}
+	if called {
+		t.Fatal("oversized request reached the HTTP transport")
+	}
 }
 
 func TestRemoteRunnerForwardsSSELogsImagesAndResult(t *testing.T) {

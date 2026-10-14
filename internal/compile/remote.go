@@ -17,6 +17,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/util"
 )
 
@@ -60,6 +61,13 @@ func newRemoteRunner(cfg config.Config) Runner {
 func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
 	if req == nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	if err := runvalidation.ValidateRemoteCompileRequestSize(req); err != nil {
+		var sizeErr *runvalidation.RemoteRequestSizeError
+		if errors.As(err, &sizeErr) {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 	}
 
 	body, err := json.Marshal(req)

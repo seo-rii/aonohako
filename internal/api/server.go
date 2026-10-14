@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	MaxJSONBodyBytes = 64 << 20
+	MaxJSONBodyBytes = runvalidation.MaxJSONRequestBytes
 
 	maxRunTextFieldBytes              = runvalidation.MaxTextFieldBytes
 	maxRunTimeMs                      = runvalidation.MaxTimeMs
@@ -342,6 +342,17 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
+		if err := runvalidation.ValidateRemoteCompileRequestSize(&req); err != nil {
+			var sizeErr *runvalidation.RemoteRequestSizeError
+			if errors.As(err, &sizeErr) {
+				writeJSONErrorMessage(w, http.StatusRequestEntityTooLarge, "remote_request_too_large", err.Error())
+			} else {
+				writeJSONErrorMessage(w, http.StatusInternalServerError, "remote_request_encode_failed", err.Error())
+			}
+			return
+		}
+	}
 
 	releaseStream, ok, code := s.acquireStream(principal)
 	if !ok {
@@ -500,6 +511,17 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		// syntax and credential validation before stream/queue admission.
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
 		return
+	}
+	if s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
+		if err := runvalidation.ValidateRemoteRequestSize(&req); err != nil {
+			var sizeErr *runvalidation.RemoteRequestSizeError
+			if errors.As(err, &sizeErr) {
+				writeJSONErrorMessage(w, http.StatusRequestEntityTooLarge, "remote_request_too_large", err.Error())
+			} else {
+				writeJSONErrorMessage(w, http.StatusInternalServerError, "remote_request_encode_failed", err.Error())
+			}
+			return
+		}
 	}
 	releaseStream, ok, code := s.acquireStream(principal)
 	if !ok {
