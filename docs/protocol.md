@@ -282,6 +282,10 @@ Both `/compile` and `/execute` share the same bounded queue:
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` (default: `0` in `dev`, `16` in
   `cloudrun` or `selfhosted`). This caps simultaneous streams for one bearer,
   platform, or anonymous remote principal.
+  Authenticated platform identities use a SHA-256 digest of the complete
+  principal as their bounded internal stream and request-rate key; long
+  identities with the same prefix keep separate limits. This does not change
+  the principal header or the value covered by the platform signature.
 - **Per-principal request rate**:
   `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` (default: `0` in `dev`, `60` in
   `cloudrun` or `selfhosted`). This caps `/compile` and `/execute` requests per
