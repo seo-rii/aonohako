@@ -174,6 +174,14 @@ output fields above. An omitted object or member preserves the legacy
 stream. Each explicit member must be between `0` and `8 MiB`.
 These response limits do not alter output comparison, SPJ evaluation,
 `limits.output_bytes` OLE detection, or step handoff data.
+For legacy two-step requests, capture limits apply independently to each step.
+Remote log forwarding therefore uses the sum of the two per-step capture
+budgets for each stream, since legacy `log` events do not carry step IDs.
+The remote receiver keeps a separate per-event and cumulative protocol safety
+bound derived from the effective step output limits (including handoff space),
+capped at `8 MiB` per step and stream. Display clipping within that safety
+bound leaves the final verdict and score unchanged; exceeding the safety
+bound is a protocol failure.
 `limits.output_bytes` may be set up to `64 MiB` and remains the judging
 boundary. Truncation flags cover both execution-limit and response-capture
 clipping. A configured cap cannot expose bytes beyond the execution capture

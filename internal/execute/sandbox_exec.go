@@ -1262,6 +1262,16 @@ func outputLimitBytes(req *model.RunRequest) int {
 	return req.Limits.OutputBytes
 }
 
+// effectiveStepLimits includes the capture space needed for a legacy handoff.
+// Both the local runner and remote transport must budget the same output.
+func effectiveStepLimits(step model.RunStep) model.Limits {
+	limits := step.Limits
+	if step.Handoff != nil && step.Handoff.MaxBytes > 0 {
+		limits.OutputBytes = max(limits.OutputBytes, int(min(step.Handoff.MaxBytes, int64(hardMaxOutputBytes))))
+	}
+	return limits
+}
+
 func responseOutputLimitBytes(req *model.RunRequest) int {
 	return min(outputLimitBytes(req), maxResponseOutputBytes)
 }
