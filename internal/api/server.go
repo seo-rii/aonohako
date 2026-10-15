@@ -261,7 +261,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req model.CompileRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_json", "invalid json: "+err.Error())
+		writeRequestBodyError(w, err)
 		return
 	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
@@ -463,7 +463,7 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req model.RunRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_json", "invalid json: "+err.Error())
+		writeRequestBodyError(w, err)
 		return
 	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
@@ -870,12 +870,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 				bodyHash, err := hashAndRestoreRequestBody(w, r)
 				releaseHashSlot()
 				if err != nil {
-					status := http.StatusBadRequest
-					var maxErr *http.MaxBytesError
-					if errors.As(err, &maxErr) {
-						status = http.StatusRequestEntityTooLarge
-					}
-					writeJSONErrorMessage(w, status, "invalid_request_body", "invalid request body")
+					writeRequestBodyError(w, err)
 					return
 				}
 				verifiedAt := time.Now()
@@ -984,6 +979,9 @@ func (s *Server) acquirePayloadURLFetch() (func(), bool) {
 }
 
 func hashAndRestoreRequestBody(w http.ResponseWriter, r *http.Request) (string, error) {
+	if err := checkJSONBodySize(r); err != nil {
+		return "", err
+	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
 	if err != nil {
 		return "", err
@@ -1197,26 +1195,5 @@ func (s *Server) applyGoModulePolicy(req *model.CompileRequest) error {
 		!s.cfg.AllowRequestGoInstalledModules {
 		return fmt.Errorf("go_module_mode %q is not allowed by server policy", gomodulepolicy.ModeInstalled)
 	}
-	return nil
-}
-
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
-	body := http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
-	dec := json.NewDecoder(body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		return err
-	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return errors.New("unexpected trailing data")
-		}
-		return err
-	}
-	if err := body.Close(); err != nil {
-		return err
-	}
-	r.Body = http.NoBody
-	r.ContentLength = 0
 	return nil
 }

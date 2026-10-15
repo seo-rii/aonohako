@@ -379,8 +379,26 @@ omitted for terse policy errors:
 {"error": "invalid_json", "message": "invalid json: ..."}
 ```
 
-Pre-SSE failures include method mismatches (`method_not_allowed`), malformed or
-oversized JSON (`invalid_json` / `invalid_request_body`), auth failures
+Both endpoints use the same request-body errors, including signed platform
+body hashing and Bearer-authenticated JSON decoding:
+
+| HTTP status | `error` | Meaning |
+| --- | --- | --- |
+| 413 | `request_body_too_large` | Body exceeds the 64 MiB JSON limit, including trailing whitespace. |
+| 400 | `invalid_json` | Empty, incomplete, or syntactically invalid JSON. |
+| 400 | `invalid_json_type` | A JSON value has the wrong type for a request field. |
+| 400 | `unknown_json_field` | The request contains an unrecognized field. |
+| 400 | `unexpected_trailing_json` | A second JSON value follows the request. |
+| 400 | `invalid_request_body` | Reading or closing the request body failed. |
+
+Missing or invalid Bearer credentials and invalid platform signature metadata
+are rejected before reading the body. Signed platform requests apply the body
+size limit while computing the digest, before verifying the complete signature.
+These checks apply to both Content-Length and chunked request bodies.
+An over-limit Content-Length is rejected without reading or buffering the body;
+chunked bodies remain bounded while they are read.
+
+Pre-SSE failures also include method mismatches (`method_not_allowed`), auth failures
 (`unauthorized` / `server_auth_misconfigured`), request validation failures
 (`invalid_request`, `invalid_runtime_profile`, `network_not_allowed`,
 `invalid_go_module_mode`, `invalid_python_library_mode`,
