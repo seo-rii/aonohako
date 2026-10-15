@@ -58,7 +58,7 @@ func TestEntryExecutionFailuresTakePriorityOverOutputJudging(t *testing.T) {
 			{"final cpu time", execResult{Status: "OK", ExitCode: &budgetExit, CPUTimeMs: 3001, StdoutTruncated: true}, model.RunStatusTLE, "cpu_time_final"},
 			{"sandbox memory", execResult{Status: model.RunStatusMLE, Reason: "memory limit exceeded", VerdictSource: "memory_cgroup", ExitCode: &budgetExit, StdoutTruncated: true}, model.RunStatusMLE, "memory_cgroup"},
 			{"runtime error", execResult{Status: "OK", ExitCode: &runtimeExit, StdoutTruncated: true}, model.RunStatusRE, "exit_code"},
-			{"output limit", execResult{Status: "OK", StdoutTruncated: true}, model.RunStatusWA, "stdout_limit"},
+			{"output limit", execResult{Status: "OK", StdoutTruncated: true}, model.RunStatusRE, "stdout_limit"},
 		} {
 			t.Run(mode+"/"+tc.name, func(t *testing.T) {
 				req := &model.RunRequest{Lang: "entry", EntryMode: mode, ExpectedStdout: "invalid private state expectation", Limits: model.Limits{TimeMs: 3000, MemoryMB: 256}}
