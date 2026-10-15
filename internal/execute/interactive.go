@@ -455,6 +455,9 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 	stderrResponseLimit := responseStderrLimitBytes(req)
 
 	contestantStatus, contestantReason, contestantSource := classifyRunStatusWithoutOutput(req, contestantRes)
+	contestantStatus, contestantReason, contestantSource = applyStdoutLimitVerdict(
+		contestantStatus, contestantReason, contestantSource, contestantRes.StdoutTruncated,
+	)
 	if contestantStatus == "OK" {
 		contestantStatus = model.RunStatusAccepted
 	}
@@ -560,7 +563,7 @@ func classifyInteractorStatus(req *model.RunRequest, res execResult) (string, st
 	}
 	switch *res.ExitCode {
 	case 0:
-		return model.RunStatusAccepted, "", "exit_code"
+		return applyStdoutLimitVerdict(model.RunStatusAccepted, "", "exit_code", res.StdoutTruncated)
 	case 3:
 		return model.RunStatusRE, firstNonEmptyString(clipUTF8(res.Stderr, responseStderrLimitBytes(req)), "interactor failed"), "exit_code"
 	default:
@@ -570,6 +573,7 @@ func classifyInteractorStatus(req *model.RunRequest, res execResult) (string, st
 
 func interactiveContestantStepResult(req *model.RunRequest, res execResult) model.StepResult {
 	status, reason, source := classifyRunStatusWithoutOutput(req, res)
+	status, reason, source = applyStdoutLimitVerdict(status, reason, source, res.StdoutTruncated)
 	if status == "OK" {
 		status = model.RunStatusAccepted
 	}

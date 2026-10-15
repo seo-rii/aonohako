@@ -300,7 +300,7 @@ func TestRunPipelineRejectsTruncatedInteractiveParticipantStdoutBeforeArtifacts(
 		MaxBytes: 1,
 	})
 	resp := New().Run(context.Background(), req, Hooks{})
-	if resp.Status != model.RunStatusRE || resp.VerdictSource != "step:phase1:participant:stdout_limit" {
+	if resp.Status != model.RunStatusRE || resp.VerdictSource != "step:phase1:contestant:stdout_limit" {
 		t.Fatalf("pipeline response = %+v, want fail-closed interactive stdout limit", resp)
 	}
 	if len(resp.Steps) != 1 || resp.Steps[0].HandoffBytes != 0 {
