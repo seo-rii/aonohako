@@ -2,58 +2,21 @@ package execute
 
 import "bytes"
 
-type lineSpan struct{ s, e int }
-
 func compareOutputs(expected, actual []byte) bool {
-	ee := splitLinesTrim(expected)
-	aa := splitLinesTrim(actual)
-	ee = dropTrailingBlank(ee)
-	aa = dropTrailingBlank(aa)
-	if len(ee) != len(aa) {
-		return false
-	}
-	for i := range ee {
-		e := expected[ee[i].s:ee[i].e]
-		a := actual[aa[i].s:aa[i].e]
-		if !bytes.Equal(e, a) {
+	// Remove trailing blank lines and whitespace on the last content line before
+	// walking the remaining lines. All slices borrow the inputs, so even output
+	// consisting of millions of newlines needs only constant auxiliary memory.
+	expected = bytes.TrimRight(expected, " \t\r\n")
+	actual = bytes.TrimRight(actual, " \t\r\n")
+	for len(expected) > 0 && len(actual) > 0 {
+		var expectedLine, actualLine []byte
+		expectedLine, expected, _ = bytes.Cut(expected, []byte{'\n'})
+		actualLine, actual, _ = bytes.Cut(actual, []byte{'\n'})
+		expectedLine = bytes.TrimRight(expectedLine, " \t\r")
+		actualLine = bytes.TrimRight(actualLine, " \t\r")
+		if !bytes.Equal(expectedLine, actualLine) {
 			return false
 		}
 	}
-	return true
-}
-
-func splitLinesTrim(b []byte) []lineSpan {
-	var out []lineSpan
-	i := 0
-	for i <= len(b) {
-		j := bytes.IndexByte(b[i:], '\n')
-		var end int
-		if j < 0 {
-			end = len(b)
-		} else {
-			end = i + j
-		}
-		t := end
-		for t > i && (b[t-1] == ' ' || b[t-1] == '\t' || b[t-1] == '\r') {
-			t--
-		}
-		out = append(out, lineSpan{s: i, e: t})
-		if j < 0 {
-			break
-		}
-		i = end + 1
-	}
-	return out
-}
-
-func dropTrailingBlank(spans []lineSpan) []lineSpan {
-	i := len(spans) - 1
-	for i >= 0 {
-		if spans[i].e-spans[i].s == 0 {
-			i--
-			continue
-		}
-		break
-	}
-	return spans[:i+1]
+	return len(expected) == 0 && len(actual) == 0
 }

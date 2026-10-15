@@ -16,12 +16,33 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runvalidation"
 )
 
 type executeRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f executeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func TestRemoteRunnerRejectsExpandedRequestBeforeMarshalAndUpload(t *testing.T) {
+	called := false
+	runner := &remoteRunner{
+		client: &http.Client{Transport: executeRoundTripFunc(func(*http.Request) (*http.Response, error) {
+			called = true
+			return nil, fmt.Errorf("unexpected HTTP request")
+		})},
+		executeURL: "http://remote.example/execute",
+	}
+	resp := runner.Run(context.Background(), &model.RunRequest{
+		ExpectedStdout: strings.Repeat("<", runvalidation.MaxJSONRequestBytes/6+1),
+	}, Hooks{})
+	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "remote request too large") {
+		t.Fatalf("response = %+v, want request size rejection", resp)
+	}
+	if called {
+		t.Fatal("oversized request reached the HTTP transport")
+	}
 }
 
 func TestRemoteRunnerForwardsSSELogsImagesAndResult(t *testing.T) {
@@ -615,6 +636,219 @@ func TestRemoteRunnerRejectsCumulativeLogOverflow(t *testing.T) {
 	}, Hooks{})
 	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "log stream too large") {
 		t.Fatalf("response = %+v, want cumulative log rejection", resp)
+	}
+}
+
+func TestRemoteRunnerAcceptsTwoStepLogBudgets(t *testing.T) {
+	const chunkBytes = 40 << 10
+	for _, streams := range [][]string{{"stdout"}, {"stderr"}, {"stdout", "stderr"}} {
+		t.Run(strings.Join(streams, "+"), func(t *testing.T) {
+			score := 0.75
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req model.RunRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Error(err)
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				if req.EmitLogs == nil || *req.EmitLogs {
+					for range 2 {
+						for _, stream := range streams {
+							_, _ = fmt.Fprintf(w, "event: log\ndata: {\"stream\":%q,\"chunk\":%q}\n\n", stream, strings.Repeat("x", chunkBytes))
+						}
+					}
+				}
+				_, _ = fmt.Fprintf(w, "event: result\ndata: {\"status\":\"Accepted\",\"score\":%v}\n\n", score)
+			}))
+			defer remote.Close()
+			for _, emitLogs := range []bool{true, false} {
+				logs := map[string]int{}
+				runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL}
+				resp := runner.Run(context.Background(), &model.RunRequest{
+					Steps: []model.RunStep{
+						{ID: "first", Limits: model.Limits{TimeMs: 1000, OutputBytes: 128 << 10}},
+						{ID: "second", Limits: model.Limits{TimeMs: 1000, OutputBytes: 128 << 10}},
+					},
+					EmitLogs: &emitLogs,
+				}, Hooks{OnLog: func(stream, msg string) { logs[stream] += len(msg) }})
+				if resp.Status != model.RunStatusAccepted || resp.Score == nil || *resp.Score != score {
+					t.Fatalf("emit_logs=%v changed verdict: %+v", emitLogs, resp)
+				}
+				for _, stream := range streams {
+					want := 0
+					if emitLogs {
+						want = 2 * chunkBytes
+					}
+					if logs[stream] != want {
+						t.Fatalf("emit_logs=%v %s bytes = %d, want %d", emitLogs, stream, logs[stream], want)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestRemoteRunnerClipsDisplayLogsWithoutChangingVerdict(t *testing.T) {
+	for _, twoStep := range []bool{false, true} {
+		t.Run(fmt.Sprintf("two_step=%v", twoStep), func(t *testing.T) {
+			capture := 1024
+			req := &model.RunRequest{
+				Limits:        model.Limits{TimeMs: 1000, OutputBytes: 128 << 10},
+				CaptureLimits: &model.CaptureLimits{StdoutBytes: &capture},
+			}
+			count := 1
+			if twoStep {
+				req.Steps = []model.RunStep{{Limits: req.Limits}, {Limits: req.Limits}}
+				req.Limits = model.Limits{}
+				count = 2
+			}
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				for range count {
+					_, _ = fmt.Fprintf(w, "event: log\ndata: {\"stream\":\"stdout\",\"chunk\":%q}\n\n", strings.Repeat("x", 40<<10))
+				}
+				_, _ = fmt.Fprint(w, "event: result\ndata: {\"status\":\"Wrong Answer\",\"score\":0.25}\n\n")
+			}))
+			defer remote.Close()
+			bytes := 0
+			runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL}
+			resp := runner.Run(context.Background(), req, Hooks{OnLog: func(_, msg string) { bytes += len(msg) }})
+			if resp.Status != model.RunStatusWA || resp.Score == nil || *resp.Score != 0.25 {
+				t.Fatalf("display clipping changed verdict: %+v", resp)
+			}
+			if bytes != count*capture {
+				t.Fatalf("display bytes = %d, want %d", bytes, count*capture)
+			}
+		})
+	}
+}
+
+func TestRemoteRunnerRejectsTwoStepLogFlood(t *testing.T) {
+	for _, eventOverflow := range []bool{false, true} {
+		t.Run(fmt.Sprintf("event_overflow=%v", eventOverflow), func(t *testing.T) {
+			chunkBytes, count := 1024, 3
+			wantReason := "log stream too large"
+			if eventOverflow {
+				chunkBytes, count = 1025, 1
+				wantReason = "log event too large"
+			}
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				for range count {
+					_, _ = fmt.Fprintf(w, "event: log\ndata: {\"stream\":\"stdout\",\"chunk\":%q}\n\n", strings.Repeat("x", chunkBytes))
+				}
+				_, _ = fmt.Fprint(w, "event: result\ndata: {\"status\":\"Accepted\"}\n\n")
+			}))
+			defer remote.Close()
+			runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL}
+			resp := runner.Run(context.Background(), &model.RunRequest{Steps: []model.RunStep{
+				{Limits: model.Limits{TimeMs: 1000, OutputBytes: 1024}},
+				{Limits: model.Limits{TimeMs: 1000, OutputBytes: 1024}},
+			}}, Hooks{})
+			if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, wantReason) {
+				t.Fatalf("response = %+v, want %s", resp, wantReason)
+			}
+		})
+	}
+}
+
+func TestRemoteRunnerPreservesPerStepAndFailedStepCaptureBudgets(t *testing.T) {
+	for _, failedFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failed_first=%v", failedFirst), func(t *testing.T) {
+			capture := 96 << 10
+			first := model.StepResult{ID: "first", Status: model.RunStatusAccepted, Stdout: strings.Repeat("a", 80<<10)}
+			second := model.StepResult{ID: "second", Status: model.RunStatusAccepted, Stdout: strings.Repeat("b", 1024)}
+			result := model.RunResponse{Status: model.RunStatusAccepted, Stdout: second.Stdout, Steps: []model.StepResult{first, second}}
+			if failedFirst {
+				first.Status = model.RunStatusRE
+				result = model.RunResponse{Status: model.RunStatusRE, Stdout: first.Stdout, Steps: []model.StepResult{first}}
+			}
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				raw, err := json.Marshal(result)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				_, _ = fmt.Fprintf(w, "event: result\ndata: %s\n\n", raw)
+			}))
+			defer remote.Close()
+			runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL}
+			resp := runner.Run(context.Background(), &model.RunRequest{
+				Steps: []model.RunStep{
+					{ID: "first", Limits: model.Limits{TimeMs: 1000, OutputBytes: 1024}, Handoff: &model.StepHandoff{MaxBytes: 128 << 10}},
+					{ID: "second", Limits: model.Limits{TimeMs: 1000, OutputBytes: 1024}},
+				},
+				CaptureLimits: &model.CaptureLimits{StdoutBytes: &capture},
+			}, Hooks{})
+			if resp.Status != result.Status || resp.Stdout != result.Stdout || resp.StdoutTruncated || len(resp.Steps) != len(result.Steps) {
+				t.Fatalf("top-level capture changed: status=%s bytes=%d truncated=%v steps=%d", resp.Status, len(resp.Stdout), resp.StdoutTruncated, len(resp.Steps))
+			}
+			for i, step := range resp.Steps {
+				if step.Stdout != result.Steps[i].Stdout || step.StdoutTruncated {
+					t.Fatalf("step %s capture changed: bytes=%d truncated=%v", step.ID, len(step.Stdout), step.StdoutTruncated)
+				}
+			}
+		})
+	}
+}
+
+func TestRemoteRunnerTwoStepLogsMatchLocalExecution(t *testing.T) {
+	forceDirectMode(t)
+	const chunkBytes = 40 << 10
+	payload := strings.Repeat("x", chunkBytes)
+	req := &model.RunRequest{
+		Programs: []model.RunProgram{
+			{ID: "first", Lang: "binary", Binaries: []model.Binary{{Name: "first.sh", Mode: "exec", DataB64: b64("#!/bin/sh\nprintf '%s' '" + payload + "'\nprintf '%s' '" + payload + "' >&2\n")}}},
+			{ID: "second", Lang: "binary", Binaries: []model.Binary{{Name: "second.sh", Mode: "exec", DataB64: b64("#!/bin/sh\nIFS= read -r data\nprintf '%s' \"$data\"\nprintf '%s' '" + payload + "' >&2\n")}}},
+		},
+		Steps: []model.RunStep{
+			{ID: "first", ProgramID: "first", Limits: model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 128 << 10}, Handoff: &model.StepHandoff{ID: "handoff", From: "stdout", MaxBytes: 128 << 10}},
+			{ID: "second", ProgramID: "second", StdinFrom: "handoff", Limits: model.Limits{TimeMs: 1000, MemoryMB: 128, OutputBytes: 128 << 10}},
+		},
+		ExpectedStdout: payload,
+	}
+	svc := New()
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var forwarded model.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&forwarded); err != nil {
+			t.Error(err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		hooks := Hooks{}
+		if forwarded.EmitLogs == nil || *forwarded.EmitLogs {
+			hooks.OnLog = func(stream, msg string) {
+				_, _ = fmt.Fprintf(w, "event: log\ndata: {\"stream\":%q,\"chunk\":%q}\n\n", stream, msg)
+			}
+		}
+		result := svc.Run(r.Context(), &forwarded, hooks)
+		raw, err := json.Marshal(result)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_, _ = fmt.Fprintf(w, "event: result\ndata: %s\n\n", raw)
+	}))
+	defer remote.Close()
+	for _, emitLogs := range []bool{true, false} {
+		req.EmitLogs = &emitLogs
+		localLogs, remoteLogs := map[string]string{}, map[string]string{}
+		localHooks := Hooks{}
+		if emitLogs {
+			localHooks.OnLog = func(stream, msg string) { localLogs[stream] += msg }
+		}
+		localResult := svc.Run(context.Background(), req, localHooks)
+		runner := &remoteRunner{client: remote.Client(), executeURL: remote.URL}
+		remoteResult := runner.Run(context.Background(), req, Hooks{OnLog: func(stream, msg string) { remoteLogs[stream] += msg }})
+		if localResult.Status != model.RunStatusAccepted || remoteResult.Status != localResult.Status || remoteResult.Score != nil {
+			t.Fatalf("emit_logs=%v verdicts differ: local=%s remote=%s reason=%s score=%v", emitLogs, localResult.Status, remoteResult.Status, remoteResult.Reason, remoteResult.Score)
+		}
+		for _, stream := range []string{"stdout", "stderr"} {
+			if remoteLogs[stream] != localLogs[stream] {
+				t.Fatalf("emit_logs=%v %s differs: local=%d remote=%d", emitLogs, stream, len(localLogs[stream]), len(remoteLogs[stream]))
+			}
+		}
 	}
 }
 

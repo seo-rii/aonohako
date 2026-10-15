@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	MaxJSONBodyBytes = 64 << 20
+	MaxJSONBodyBytes = runvalidation.MaxJSONRequestBytes
 
 	maxRunTextFieldBytes              = runvalidation.MaxTextFieldBytes
 	maxRunTimeMs                      = runvalidation.MaxTimeMs
@@ -342,6 +342,17 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
+		if err := runvalidation.ValidateRemoteCompileRequestSize(&req); err != nil {
+			var sizeErr *runvalidation.RemoteRequestSizeError
+			if errors.As(err, &sizeErr) {
+				writeJSONErrorMessage(w, http.StatusRequestEntityTooLarge, "remote_request_too_large", err.Error())
+			} else {
+				writeJSONErrorMessage(w, http.StatusInternalServerError, "remote_request_encode_failed", err.Error())
+			}
+			return
+		}
+	}
 
 	releaseStream, ok, code := s.acquireStream(principal)
 	if !ok {
@@ -365,7 +376,9 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
-		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		if !sse.ResponseStarted(err) {
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		}
 		return
 	}
 	streamCtx, stopStream := context.WithCancel(r.Context())
@@ -501,6 +514,17 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
 		return
 	}
+	if s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
+		if err := runvalidation.ValidateRemoteRequestSize(&req); err != nil {
+			var sizeErr *runvalidation.RemoteRequestSizeError
+			if errors.As(err, &sizeErr) {
+				writeJSONErrorMessage(w, http.StatusRequestEntityTooLarge, "remote_request_too_large", err.Error())
+			} else {
+				writeJSONErrorMessage(w, http.StatusInternalServerError, "remote_request_encode_failed", err.Error())
+			}
+			return
+		}
+	}
 	releaseStream, ok, code := s.acquireStream(principal)
 	if !ok {
 		writeJSONError(w, http.StatusTooManyRequests, code)
@@ -523,7 +547,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
-		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		if !sse.ResponseStarted(err) {
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		}
 		return
 	}
 	streamCtx, stopStream := context.WithCancel(r.Context())
@@ -884,9 +910,9 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					principal += "unknown"
 				}
 			}
-			if len(principal) > 240 {
-				principal = principal[:240]
-			}
+			// Keep usage keys bounded without merging identities that share a prefix.
+			sum := sha256.Sum256([]byte(principal))
+			principal = "platform:" + hex.EncodeToString(sum[:])
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
 			return
 		case config.InboundAuthBearer:
