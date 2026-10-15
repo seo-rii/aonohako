@@ -256,6 +256,15 @@ Both `/compile` and `/execute` share the same bounded queue:
   policy-disabled `python_library_mode` values, Python-library problem-policy
   conflicts, and disallowed `enable_network=true` before acquiring a stream or
   queue slot.
+- Remote `/compile` and `/execute` also check the complete JSON wire size after
+  payload URL expansion and policy normalization, before stream or queue
+  admission. The same `64 MiB` HTTP body limit includes base64 data, JSON field
+  overhead, and text escaping. An expanded request over that limit returns HTTP
+  `413` with `error=remote_request_too_large`; no SSE stream or remote operation
+  starts.
+  Embedded execution retains the existing per-field budgets. The size check
+  counts bytes without constructing a second JSON payload, and the remote
+  runner repeats it before encoding and uploading.
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `1` for
   `embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`,
   otherwise `max(1, cpu−2)`). The `embedded + helper` backend rejects values

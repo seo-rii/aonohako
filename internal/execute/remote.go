@@ -73,6 +73,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if err := runvalidation.ValidateRemoteRequestSize(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 
 	body, err := json.Marshal(req)
 	if err != nil {

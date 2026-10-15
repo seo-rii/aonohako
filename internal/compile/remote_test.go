@@ -3,6 +3,7 @@ package compile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/rustpolicy"
 )
 
@@ -23,6 +25,30 @@ type compileRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f compileRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func TestRemoteRunnerRejectsExpandedCompileBeforeMarshalAndUpload(t *testing.T) {
+	called := false
+	client := &http.Client{Transport: compileRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		called = true
+		return nil, fmt.Errorf("unexpected HTTP request")
+	})}
+	runner := &remoteRunner{
+		client: client, metadataClient: client,
+		compileURL:  "http://remote.example/compile",
+		auth:        config.RemoteAuthCloudRunIDToken,
+		metadataURL: "http://metadata.example/identity",
+	}
+	resp := runner.Run(context.Background(), &model.CompileRequest{
+		Lang: "PYTHON3", Version: strings.Repeat("<", runvalidation.MaxJSONRequestBytes/6+1),
+		Sources: []model.Source{{Name: "Main.py", DataB64: "eA=="}},
+	})
+	if resp.Status != model.CompileStatusInvalid || !strings.Contains(resp.Reason, "remote request too large") {
+		t.Fatalf("response = %+v, want expanded compile size rejection", resp)
+	}
+	if called {
+		t.Fatal("oversized compile reached HTTP transport or metadata auth")
+	}
 }
 
 func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
