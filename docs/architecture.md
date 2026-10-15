@@ -1269,6 +1269,23 @@ In practice, submissions should be treated as able to read world-readable files
 inside the runtime image. That is why the image must never contain secrets,
 private credentials, or sensitive configuration.
 
+## Server Shutdown
+
+On SIGINT or SIGTERM, the API enters draining state before HTTP shutdown.
+`/compile` and `/execute` reject new work with `503 server_draining`, readiness
+returns `503`, and liveness remains available. Requests still uploading,
+preparing payloads, or waiting in the queue are canceled immediately. The
+transition from a queue permit to a running job shares the drain lock, so a
+queued request cannot start after draining begins.
+
+Running compile and execute jobs have a ten-second HTTP completion grace.
+When it expires, all remaining job contexts are canceled and HTTP connections
+are closed. The server then waits separately for every admitted handler to
+return, including synchronous runner cleanup of processes, cgroups and work
+directories, before it exits. Cleanup is not abandoned when the HTTP grace
+expires. A second termination signal restores the operating system's default
+forced termination behavior and can interrupt this wait.
+
 ## Verification Strategy
 
 The repository verifies the design through:
