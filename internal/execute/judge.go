@@ -23,18 +23,14 @@ import (
 
 func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource, judgeInputPath string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
 	status, reason, source := classifyRunStatusWithoutOutput(req, res)
+	stdoutLimitExceeded := judgeSource == "stdout" && res.StdoutTruncated
+	status, reason, source = applyStdoutLimitVerdict(status, reason, source, stdoutLimitExceeded)
 
 	var score *float64
 	outputOK := false
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
-	stdoutLimitExceeded := judgeSource == "stdout" && res.StdoutTruncated
-	if evaluateOutputs {
-		if stdoutLimitExceeded {
-			if status == "OK" {
-				reason = "stdout exceeded output limit"
-				source = "stdout_limit"
-			}
-		} else if req.EntryMode == "state" {
+	if evaluateOutputs && !stdoutLimitExceeded {
+		if req.EntryMode == "state" {
 			var err error
 			outputOK, err = entrypolicy.CompareState([]byte(req.ExpectedStdout), judgeOut)
 			if err != nil {
@@ -63,9 +59,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	}
 
 	if status == "OK" && evaluateOutputs {
-		if stdoutLimitExceeded {
-			source = "stdout_limit"
-		} else if req.EntryMode == "state" {
+		if req.EntryMode == "state" {
 			source = "entry_state"
 		} else if hasSPJ(req) {
 			source = "spj"
@@ -93,15 +87,15 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 
 func classifyRunStatusWithoutOutput(req *model.RunRequest, res execResult) (string, string, string) {
 	status := res.Status
-	if profiles.NormalizeRunLang(req.Lang) == "entry" && status == "OK" && res.ExitCode != nil && *res.ExitCode == 124 {
-		return model.RunStatusTLE, "Entry instruction or logical tick limit exceeded", "entry_limit"
-	}
 	source := res.VerdictSource
-	reason := ""
+	reason := res.Reason
 	status, reason, source = applyFinalCPUTimeStatus(status, reason, source, res.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(source, "cpu_time_cgroup"))
 	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
 		status = model.RunStatusMLE
 		source = "memory_reported"
+	}
+	if profiles.NormalizeRunLang(req.Lang) == "entry" && status == "OK" && res.ExitCode != nil && *res.ExitCode == 124 {
+		return model.RunStatusTLE, "Entry instruction or logical tick limit exceeded", "entry_limit"
 	}
 	if status == "OK" && res.ExitCode != nil && *res.ExitCode != 0 {
 		status = model.RunStatusRE

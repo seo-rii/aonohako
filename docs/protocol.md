@@ -174,6 +174,14 @@ output fields above. An omitted object or member preserves the legacy
 stream. Each explicit member must be between `0` and `8 MiB`.
 These response limits do not alter output comparison, SPJ evaluation,
 `limits.output_bytes` OLE detection, or step handoff data.
+For legacy two-step requests, capture limits apply independently to each step.
+Remote log forwarding therefore uses the sum of the two per-step capture
+budgets for each stream, since legacy `log` events do not carry step IDs.
+The remote receiver keeps a separate per-event and cumulative protocol safety
+bound derived from the effective step output limits (including handoff space),
+capped at `8 MiB` per step and stream. Display clipping within that safety
+bound leaves the final verdict and score unchanged; exceeding the safety
+bound is a protocol failure.
 `limits.output_bytes` may be set up to `64 MiB` and remains the judging
 boundary. Truncation flags cover both execution-limit and response-capture
 clipping. A configured cap cannot expose bytes beyond the execution capture
@@ -248,6 +256,15 @@ Both `/compile` and `/execute` share the same bounded queue:
   policy-disabled `python_library_mode` values, Python-library problem-policy
   conflicts, and disallowed `enable_network=true` before acquiring a stream or
   queue slot.
+- Remote `/compile` and `/execute` also check the complete JSON wire size after
+  payload URL expansion and policy normalization, before stream or queue
+  admission. The same `64 MiB` HTTP body limit includes base64 data, JSON field
+  overhead, and text escaping. An expanded request over that limit returns HTTP
+  `413` with `error=remote_request_too_large`; no SSE stream or remote operation
+  starts.
+  Embedded execution retains the existing per-field budgets. The size check
+  counts bytes without constructing a second JSON payload, and the remote
+  runner repeats it before encoding and uploading.
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `1` for
   `embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`,
   otherwise `max(1, cpu−2)`). The `embedded + helper` backend rejects values
@@ -274,6 +291,10 @@ Both `/compile` and `/execute` share the same bounded queue:
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` (default: `0` in `dev`, `16` in
   `cloudrun` or `selfhosted`). This caps simultaneous streams for one bearer,
   platform, or anonymous remote principal.
+  Authenticated platform identities use a SHA-256 digest of the complete
+  principal as their bounded internal stream and request-rate key; long
+  identities with the same prefix keep separate limits. This does not change
+  the principal header or the value covered by the platform signature.
 - **Per-principal request rate**:
   `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` (default: `0` in `dev`, `60` in
   `cloudrun` or `selfhosted`). This caps `/compile` and `/execute` requests per
@@ -358,8 +379,26 @@ omitted for terse policy errors:
 {"error": "invalid_json", "message": "invalid json: ..."}
 ```
 
-Pre-SSE failures include method mismatches (`method_not_allowed`), malformed or
-oversized JSON (`invalid_json` / `invalid_request_body`), auth failures
+Both endpoints use the same request-body errors, including signed platform
+body hashing and Bearer-authenticated JSON decoding:
+
+| HTTP status | `error` | Meaning |
+| --- | --- | --- |
+| 413 | `request_body_too_large` | Body exceeds the 64 MiB JSON limit, including trailing whitespace. |
+| 400 | `invalid_json` | Empty, incomplete, or syntactically invalid JSON. |
+| 400 | `invalid_json_type` | A JSON value has the wrong type for a request field. |
+| 400 | `unknown_json_field` | The request contains an unrecognized field. |
+| 400 | `unexpected_trailing_json` | A second JSON value follows the request. |
+| 400 | `invalid_request_body` | Reading or closing the request body failed. |
+
+Missing or invalid Bearer credentials and invalid platform signature metadata
+are rejected before reading the body. Signed platform requests apply the body
+size limit while computing the digest, before verifying the complete signature.
+These checks apply to both Content-Length and chunked request bodies.
+An over-limit Content-Length is rejected without reading or buffering the body;
+chunked bodies remain bounded while they are read.
+
+Pre-SSE failures also include method mismatches (`method_not_allowed`), auth failures
 (`unauthorized` / `server_auth_misconfigured`), request validation failures
 (`invalid_request`, `invalid_runtime_profile`, `network_not_allowed`,
 `invalid_go_module_mode`, `invalid_python_library_mode`,
