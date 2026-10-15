@@ -161,6 +161,13 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if err := runvalidation.ValidateEntry(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if req.EntryMode == "state" {
+		// Hidden scenario-derived state must never reach response or SSE logs.
+		hooks = Hooks{}
+	}
 	if _, err := runvalidation.ValidateBinaryBudget(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
@@ -358,6 +365,10 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	}
 	if res.ExitCode != nil && *res.ExitCode != 0 {
 		errResp, stderrResponseTruncated = capturedOutputValue(fullErr, stderrResponseLimit)
+	}
+	if req.EntryMode == "state" {
+		outResp, errResp = "", ""
+		stdoutResponseTruncated, stderrResponseTruncated = false, false
 	}
 
 	emitCapturedLog(hooks, "stdout", rawOut, stdoutResponseLimit)

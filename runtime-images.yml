@@ -409,6 +409,30 @@ languages:
           for jar in "${scala_jars[@]}"; do scala_cp="${scala_cp}:${jar}"; done
           java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${scala_cp}" Main | grep '^ok$'
 
+  entry:
+    install:
+      shared:
+        - node24
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          node --input-type=module <<'JS'
+          import { writeFileSync } from 'node:fs';
+          const project = { scenes: [{id:'scene'}], objects: [{id:'sprite',objectType:'sprite',scene:'scene',entity:{x:0,y:0},script:[[{type:'when_run_button_click',params:[null]},{type:'dialog',params:[{type:'text',params:['ok']},'speak',null]}]]}] };
+          const submission = {format:'entry-submission',version:1,engineVersion:'4.0.23',graderVersion:'entry-v1',mode:'stdio',project};
+          writeFileSync('Main.entry.json',JSON.stringify(submission));
+          JS
+          node /usr/local/lib/aonohako/entry-runner.mjs --check Main.entry.json
+          node /usr/local/lib/aonohako/entry-runner.mjs Main.entry.json stdio </dev/null | grep '^ok$'
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const submission=JSON.parse(readFileSync('Main.entry.json','utf8')); submission.mode='state';
+          writeFileSync('Main.entry.json',JSON.stringify(submission));
+          JS
+          printf '%s' '{"version":1,"seed":1,"ticks":60,"events":[]}' | node /usr/local/lib/aonohako/entry-runner.mjs Main.entry.json state | grep '"say":"ok"'
+
   javascript:
     install:
       shared:
@@ -4292,6 +4316,7 @@ profiles:
       - coffeescript
       - deno
       - elm
+      - entry
       - graphql
       - groovy
       - haxe
