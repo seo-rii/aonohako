@@ -947,6 +947,10 @@ func runCompileExecuteSuite() error {
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
+	return verifyCompileExecuteLanguages(httpServer.URL, rawLanguages)
+}
+
+func verifyCompileExecuteLanguages(baseURL, rawLanguages string) error {
 	cases := compileExecuteCases()
 	startupMemory := runtimeStartupMemoryMB()
 	seen := map[string]struct{}{}
@@ -971,12 +975,17 @@ func runCompileExecuteSuite() error {
 			if !ok {
 				return fmt.Errorf("compile-execute selftest could not resolve compile profile %q", compileLanguage)
 			}
+			if language == "tla" {
+				if err := verifyTLAModelChecking(baseURL, compileLanguage); err != nil {
+					return err
+				}
+			}
 
 			compileAttempts := max(tc.compileAttempts, 1)
 			var compileResp model.CompileResponse
 			for attempt := 1; attempt <= compileAttempts; attempt++ {
 				var err error
-				compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
+				compileResp, err = postCompileRequest(baseURL, model.CompileRequest{
 					Lang:         compileLanguage,
 					Sources:      tc.sources,
 					EntryPoint:   tc.entryPoint,
@@ -1006,7 +1015,7 @@ let a = bigint(System.Console.ReadLine())
 printfn"%A"(getans(fac(a))0I)
 `)}
 				for attempt := 1; attempt <= 20; attempt++ {
-					regressionResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+					regressionResp, err := postCompileRequest(baseURL, model.CompileRequest{
 						Lang:    compileLanguage,
 						Sources: []model.Source{regressionSource},
 					})
@@ -1045,7 +1054,7 @@ printfn"%A"(getans(fac(a))0I)
 				}}
 			}
 			for index, ioCase := range judgeIO {
-				runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				runResp, err := postExecuteRequest(baseURL, model.RunRequest{
 					Lang:              profile.RunLang,
 					Binaries:          binaries,
 					EntryPoint:        tc.entryPoint,
@@ -1070,7 +1079,7 @@ printfn"%A"(getans(fac(a))0I)
 					attempts = 5
 				}
 				for attempt := 1; attempt <= attempts; attempt++ {
-					startupResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+					startupResp, err := postExecuteRequest(baseURL, model.RunRequest{
 						Lang:              profile.RunLang,
 						Binaries:          binaries,
 						EntryPoint:        tc.entryPoint,
@@ -1106,7 +1115,7 @@ printfn"%A"(getans(fac(a))0I)
     System.out.println(visit(0));
   }
 }`)}
-				deepCompileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+				deepCompileResp, err := postCompileRequest(baseURL, model.CompileRequest{
 					Lang:    compileLanguage,
 					Sources: []model.Source{deepRecursionSource},
 				})
@@ -1125,7 +1134,7 @@ printfn"%A"(getans(fac(a))0I)
 						Mode:    artifact.Mode,
 					})
 				}
-				deepRunResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+				deepRunResp, err := postExecuteRequest(baseURL, model.RunRequest{
 					Lang:           profile.RunLang,
 					Binaries:       deepBinaries,
 					ExpectedStdout: "100000\n",
@@ -1184,7 +1193,7 @@ fn main() {
 }
 `)},
 			}
-			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
+			compileResp, err := postCompileRequest(baseURL, model.CompileRequest{
 				Lang:          "RUST2024",
 				Sources:       installedSources,
 				EntryPoint:    "src/main.rs",
@@ -1200,7 +1209,7 @@ fn main() {
 			for _, artifact := range compileResp.Artifacts {
 				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
 			}
-			runResp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
+			runResp, err := postExecuteRequest(baseURL, model.RunRequest{
 				Lang:           "binary",
 				Binaries:       binaries,
 				Stdin:          "20 22\n",
