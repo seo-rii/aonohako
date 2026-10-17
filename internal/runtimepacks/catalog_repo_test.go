@@ -9,6 +9,35 @@ import (
 	"testing"
 )
 
+func TestOctaveImageCaptureRuntime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := catalog.Languages["octave"]
+	for _, dependency := range []string{"octave", "gnuplot-nox", "ghostscript", "fonts-freefont-otf"} {
+		if !slices.Contains(spec.Install.Apt, dependency) {
+			t.Fatalf("Octave image rendering needs %s", dependency)
+		}
+	}
+	helper := strings.Join(spec.Install.Script, "\n")
+	for _, contract := range []string{
+		"/usr/local/lib/aonohako/octave/plot_capture.m", `source (entry, "base")`,
+		`getenv ("IMG_CAPTURE")`, `getenv ("IMG_OUT_DIR")`, `"-S1280,720"`,
+		`min (numel (figures), 20)`, `total_bytes + numel (line) > 8388608`,
+	} {
+		if !strings.Contains(helper, contract) {
+			t.Fatalf("Octave capture install is missing %q", contract)
+		}
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, contract := range []string{`isempty (argv ())`, `fscanf (stdin`, `numel (lines) == 2`, `uint8 ([137 80 78 71 13 10 26 10])`} {
+		if !strings.Contains(smoke, contract) {
+			t.Fatalf("Octave smoke is missing %q", contract)
+		}
+	}
+}
+
 func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
 	if err != nil {

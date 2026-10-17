@@ -53,6 +53,7 @@ func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
 		"ghdl",
 		"vvp",
 		"wasmtime",
+		"octave-cli",
 	} {
 		command := []string{filepath.Join(workspaceRoot, "box", name)}
 		if got := sandboxCommandBase(command); got != "" {
@@ -66,6 +67,30 @@ func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
 	optWorkspaceRoot := "/opt/aonohako-work/run-1"
 	if got := sandboxCommandBase([]string{filepath.Join(optWorkspaceRoot, "box", "dotnet")}, optWorkspaceRoot); got != "" {
 		t.Fatalf("workspace runtime under trusted root = %q, want untrusted empty base", got)
+	}
+}
+
+func TestOctavePlotProcessesRequireImageOptIn(t *testing.T) {
+	body, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(body)
+	if !strings.Contains(source, `allowProcesses = runLang == "octave" && octaveImageCaptureEnabled(req)`) {
+		t.Fatal("Octave child processes must require both the runtime and image sidecar opt-in")
+	}
+	for _, marker := range []string{"allowFIFOs := false", "allowFIFOs = allowProcesses", "allowFIFOs = false", "AllowFIFOs:               allowFIFOs"} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("Octave FIFO policy is missing %q", marker)
+		}
+	}
+	start := strings.Index(source, `case "octave-cli":`)
+	if start < 0 {
+		t.Fatal("missing Octave runtime policy")
+	}
+	end := strings.Index(source[start:], "\n\t}")
+	if end < 0 || strings.Contains(source[start:start+end], "allowUnixSockets") {
+		t.Fatal("Octave plotting must not enable Unix sockets")
 	}
 }
 
