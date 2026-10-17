@@ -47,6 +47,7 @@ type Binary struct {
 	DataB64 string `json:"data_b64"`
 	DataURL string `json:"data_url,omitempty"`
 	Mode    string `json:"mode,omitempty"`
+	SHA256  string `json:"sha256,omitempty"`
 }
 
 type Limits struct {
@@ -77,15 +78,19 @@ type InteractorSpec struct {
 }
 
 type CommunicationSpec struct {
-	Version              int    `json:"version"`
-	ParticipantProgramID string `json:"participant_program_id"`
-	ManagerProgramID     string `json:"manager_program_id"`
-	ParticipantCount     int    `json:"participant_count"`
-	ResultProtocol       string `json:"result_protocol"`
-	Input                string `json:"input,omitempty"`
-	InputURL             string `json:"input_url,omitempty"`
-	Answer               string `json:"answer,omitempty"`
-	AnswerURL            string `json:"answer_url,omitempty"`
+	Version               int      `json:"version"`
+	ParticipantProgramID  string   `json:"participant_program_id"`
+	ParticipantProgramIDs []string `json:"participant_program_ids,omitempty"`
+	ManagerProgramID      string   `json:"manager_program_id"`
+	ParticipantCount      int      `json:"participant_count"`
+	ResultProtocol        string   `json:"result_protocol"`
+	Input                 string   `json:"input,omitempty"`
+	InputURL              string   `json:"input_url,omitempty"`
+	InputSHA256           string   `json:"input_sha256,omitempty"`
+	RuntimeFingerprint    string   `json:"runtime_fingerprint,omitempty"`
+	Answer                string   `json:"answer,omitempty"`
+	AnswerURL             string   `json:"answer_url,omitempty"`
+	MatchSeed             string   `json:"match_seed,omitempty"`
 }
 
 type OutputFile struct {
@@ -98,6 +103,41 @@ type RunProgram struct {
 	Binaries      []Binary `json:"binaries"`
 	EntryPoint    string   `json:"entry_point,omitempty"`
 	EnableNetwork bool     `json:"enable_network,omitempty"`
+	SourceSHA256  string   `json:"source_sha256,omitempty"`
+}
+
+type MatchArtifact struct {
+	Name   string `json:"name"`
+	SHA256 string `json:"sha256"`
+}
+
+type MatchParticipant struct {
+	Seat          int             `json:"seat"`
+	ProgramID     string          `json:"program_id"`
+	SourceSHA256  string          `json:"source_sha256"`
+	EntryPoint    string          `json:"entry_point,omitempty"`
+	Artifacts     []MatchArtifact `json:"artifacts"`
+	Status        string          `json:"status"`
+	Reason        string          `json:"reason,omitempty"`
+	VerdictSource string          `json:"verdict_source,omitempty"`
+	CPUTimeMs     int64           `json:"cpu_time_ms"`
+	MemoryKB      int64           `json:"memory_kb"`
+}
+
+type MatchResult struct {
+	Version            int                `json:"version"`
+	Outcome            string             `json:"outcome"`
+	Games              int                `json:"games"`
+	Wins               *[2]int            `json:"wins,omitempty"`
+	Retriable          bool               `json:"retriable"`
+	Participants       []MatchParticipant `json:"participants"`
+	Message            string             `json:"message,omitempty"`
+	MatchSeed          string             `json:"match_seed,omitempty"`
+	InputSHA256        string             `json:"input_sha256,omitempty"`
+	RuntimeFingerprint string             `json:"runtime_fingerprint,omitempty"`
+	RunnerSHA256       string             `json:"runner_sha256,omitempty"`
+	ImageDigest        string             `json:"image_digest,omitempty"`
+	ErrorCode          string             `json:"error_code,omitempty"`
 }
 
 type StepHandoff struct {
@@ -255,6 +295,7 @@ type RunResponse struct {
 	VerdictSource       string          `json:"verdict_source,omitempty"`
 	Score               *float64        `json:"score,omitempty"`
 	StartedParticipants int             `json:"started_participants,omitempty"`
+	Match               *MatchResult    `json:"match,omitempty"`
 	Steps               []StepResult    `json:"steps,omitempty"`
 	SidecarOutputs      []SidecarOutput `json:"sidecar_outputs,omitempty"`
 	SidecarErrors       []SidecarError  `json:"sidecar_errors,omitempty"`
