@@ -13,7 +13,13 @@ import (
 	"aonohako/internal/remoteio"
 )
 
-const DefaultWriteTimeout = 10 * time.Second
+const (
+	DefaultWriteTimeout = 10 * time.Second
+	// Keep heartbeats alive after escaped display frames fill their share.
+	// Four MiB covers the longest computed communication deadline even at
+	// the minimum production heartbeat interval of one second.
+	heartbeatWireReserve = 4 << 20
+)
 
 type responseStartedError struct{ error }
 
@@ -113,9 +119,14 @@ func (s *Writer) Event(name string, data any) error {
 	frameBytes := frameOverhead + len(payload)
 	if name != "result" {
 		// Keep room for a full result even when escaped logs fill the stream.
-		// Logs have a smaller share so images and control events retain space.
+		// Logs have a smaller share so images and control events retain space;
+		// display events cannot consume the heartbeats' remaining allowance.
 		auxLimit := remoteio.DefaultSSEStreamBytes - remoteio.DefaultSSELineBytes
-		if s.auxWireBytes+frameBytes > auxLimit || (name == "log" && s.logWireBytes+frameBytes > auxLimit-(16<<20)) {
+		if name == "heartbeat" {
+			if s.auxWireBytes+frameBytes > auxLimit {
+				return fmt.Errorf("SSE heartbeat exceeds wire budget: max %d bytes", auxLimit)
+			}
+		} else if s.auxWireBytes+frameBytes > auxLimit-heartbeatWireReserve || (name == "log" && s.logWireBytes+frameBytes > auxLimit-(16<<20)) {
 			return nil
 		}
 	}

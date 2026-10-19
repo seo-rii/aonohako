@@ -198,8 +198,11 @@ boundary and sets its corresponding `stdout_truncated`, `stderr_truncated`, or
 raw handoff data, and binary sidecars are unaffected.
 
 Non-result frames use at most 64 MiB of wire space, including at most 48 MiB
-for logs. Events beyond those display budgets are omitted, reserving space for
-images/control events and the final result within the 128 MiB stream limit.
+for logs. Four MiB of that allowance is reserved for heartbeats, so escaped
+logs, images, or diagnostics cannot suppress liveness signals. Events beyond
+the display budgets are omitted; exhausting the heartbeat allowance returns
+an explicit stream error. The final result retains its own space within the
+128 MiB stream limit.
 This is a wire limit in addition to the per-stream capture limits; escaped logs
 may therefore stop earlier. No binary sidecar is shortened to meet this limit.
 
