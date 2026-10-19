@@ -1185,6 +1185,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "7")
 	t.Setenv("AONOHAKO_MAX_ACTIVE_STREAMS", "11")
 	t.Setenv("AONOHAKO_MAX_ACTIVE_UPLOADS", "4")
+	t.Setenv("AONOHAKO_MAX_RETAINED_REQUEST_BYTES", "123456789")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", "2")
 	t.Setenv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", "6")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "5")
@@ -1224,6 +1225,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	}
 	if cfg.MaxActiveUploads != 4 {
 		t.Fatalf("max active uploads mismatch: %d", cfg.MaxActiveUploads)
+	}
+	if cfg.MaxRetainedRequestBytes != 123456789 {
+		t.Fatalf("max retained request bytes = %d", cfg.MaxRetainedRequestBytes)
 	}
 	if cfg.MaxPrincipalUploads != 2 {
 		t.Fatalf("max principal uploads mismatch: %d", cfg.MaxPrincipalUploads)
@@ -1289,6 +1293,9 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "pending malformed", key: "AONOHAKO_MAX_PENDING_QUEUE", value: "many"},
 		{name: "streams negative", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "-1"},
 		{name: "streams malformed", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "many"},
+		{name: "request bytes zero", key: "AONOHAKO_MAX_RETAINED_REQUEST_BYTES", value: "0"},
+		{name: "request bytes negative", key: "AONOHAKO_MAX_RETAINED_REQUEST_BYTES", value: "-1"},
+		{name: "request bytes malformed", key: "AONOHAKO_MAX_RETAINED_REQUEST_BYTES", value: "many"},
 		{name: "uploads negative", key: "AONOHAKO_MAX_ACTIVE_UPLOADS", value: "-1"},
 		{name: "uploads malformed", key: "AONOHAKO_MAX_ACTIVE_UPLOADS", value: "many"},
 		{name: "principal uploads negative", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", value: "-1"},

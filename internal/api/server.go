@@ -85,12 +85,13 @@ type Server struct {
 	compile interface {
 		Run(context.Context, *model.CompileRequest) model.CompileResponse
 	}
-	execute execute.Runner
-	queue   *queue.Manager
-	work    workLifecycle
-	seq     atomic.Uint64
-	streams atomic.Int64
-	uploads atomic.Int64
+	execute      execute.Runner
+	queue        *queue.Manager
+	work         workLifecycle
+	seq          atomic.Uint64
+	streams      atomic.Int64
+	uploads      atomic.Int64
+	requestBytes requestByteBudget
 
 	principalMu      sync.Mutex
 	principalStreams map[string]int
@@ -121,6 +122,9 @@ func New(cfg config.Config) (*Server, error) {
 func NewWithServices(cfg config.Config, compileService interface {
 	Run(context.Context, *model.CompileRequest) model.CompileResponse
 }, executeRunner execute.Runner) *Server {
+	if cfg.MaxRetainedRequestBytes <= 0 {
+		cfg.MaxRetainedRequestBytes = config.DefaultMaxRetainedRequestBytes
+	}
 	payloadURLFetchSlots := defaultPayloadURLFetchSlots
 	if cfg.MaxActiveStreams > 0 {
 		payloadURLFetchSlots = min(payloadURLFetchSlots, cfg.MaxActiveStreams)
@@ -133,6 +137,7 @@ func NewWithServices(cfg config.Config, compileService interface {
 		compile:          compileService,
 		execute:          executeRunner,
 		queue:            queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
+		requestBytes:     requestByteBudget{limit: cfg.MaxRetainedRequestBytes},
 		principalStreams: map[string]int{},
 		principalUploads: map[string]int{},
 		principalRates:   map[string]principalRateWindow{},
@@ -269,6 +274,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		writeRequestBodyError(w, err)
 		return
 	}
+	if err := retainRequestBytes(r.Context(), &req); err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+		return
+	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
 		return
@@ -339,6 +348,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		cancelFetch()
 		releaseFetch()
 		if err != nil {
+			if errors.Is(err, errRequestByteBudget) {
+				writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+				return
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				writeJSONErrorMessage(w, http.StatusGatewayTimeout, "payload_url_fetch_timeout", "payload url fetch timed out")
 				return
@@ -346,6 +359,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
 			return
 		}
+	}
+	if err := retainRequestBytes(r.Context(), &req); err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+		return
 	}
 	if s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
 		if err := runvalidation.ValidateRemoteCompileRequestSize(&req); err != nil {
@@ -474,6 +491,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeRequestBodyError(w, err)
 		return
 	}
+	if err := retainRequestBytes(r.Context(), &req); err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+		return
+	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_runtime_profile", err.Error())
 		return
@@ -505,6 +526,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		cancelFetch()
 		releaseFetch()
 		if err != nil {
+			if errors.Is(err, errRequestByteBudget) {
+				writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+				return
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				writeJSONErrorMessage(w, http.StatusGatewayTimeout, "payload_url_fetch_timeout", "payload url fetch timed out")
 				return
@@ -520,6 +545,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		// Streaming stdin URLs are not fetched here, but still receive the same
 		// syntax and credential validation before stream/queue admission.
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
+		return
+	}
+	if err := retainRequestBytes(r.Context(), &req); err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
 		return
 	}
 	if s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
@@ -671,6 +700,19 @@ func (s *Server) withUploadAdmission(next http.Handler) http.Handler {
 		admission := &uploadAdmission{release: release}
 		defer admission.Release()
 		ctx := context.WithValue(r.Context(), uploadAdmissionContextKey{}, admission)
+		reservation := &requestByteReservation{budget: &s.requestBytes}
+		// HTTP enforces a declared Content-Length. Chunked/unknown bodies reserve
+		// the full input cap before any body hashing or decoding begins.
+		bodyBytes := int64(maxJSONBodyBytes)
+		if r.ContentLength >= 0 {
+			bodyBytes = min(bodyBytes, r.ContentLength)
+		}
+		if err := reservation.resize(bodyBytes); err != nil {
+			writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+			return
+		}
+		defer reservation.resize(0)
+		ctx = context.WithValue(ctx, requestByteContextKey{}, reservation)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -1001,7 +1043,7 @@ func hashAndRestoreRequestBody(w http.ResponseWriter, r *http.Request) (string, 
 		return "", err
 	}
 	sum := sha256.Sum256(body)
-	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.Body = &restoredRequestBody{bytes.NewReader(body)}
 	r.ContentLength = int64(len(body))
 	return hex.EncodeToString(sum[:]), nil
 }

@@ -444,6 +444,14 @@ admission failures, and SSE initialization failure (`stream_init_failed`).
 After the SSE stream is admitted, terminal failures are reported as SSE
 `error` events before the final `result` event.
 
+Request data admission also shares `AONOHAKO_MAX_RETAINED_REQUEST_BYTES` across
+`/compile` and `/execute` (default 256 MiB). Its reservation persists while a
+request is queued and until its handler finishes. Exhaustion returns HTTP 429
+with `request_byte_budget_exceeded` before SSE initialization. URL fetches reserve
+their maximum permitted field size before downloading; known-length JSON bodies
+reserve their length, and unknown-length bodies reserve the 64 MiB input cap.
+The budget covers retained request strings, not total process RSS.
+
 Callers should implement exponential backoff on 429.
 
 ---
