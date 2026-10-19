@@ -14,7 +14,7 @@ The catalog checks had a second weakness: shell sequences and pipelines often di
 - Every baseline source profile executes an intentionally incorrect expected output and must return `Wrong Answer`. Successful compilation must return artifacts. HTTP regression tests reject old-input-only runtimes, unconditional `Accepted`, empty artifacts, and unconditional compile success.
 - Every A+B exception has additional conformance cases. Proof/definition checkers must reject invalid proofs or definitions; special runtimes exercise arithmetic, source selection, transformations or explicit rejection. GolfScript also checks compact `~+`, signed/tab-separated input and `+` stack underflow.
 - Gleam, PureScript and Kotlin perform arithmetic in the submitted language while retaining the existing FFI/mixed-source checks.
-- Shell smokes preserve exit status and compare complete solution stdout. Actual catalog scripts are tested with failing and noisy toolchain stand-ins. Installation configuration is unchanged.
+- Shell smokes preserve exit status and compare complete solution stdout. Actual catalog scripts are tested with failing and noisy toolchain stand-ins.
 - Inventory tests derive required source profiles from `profiles.All()` and require every A+B exception to have conformance fixtures. `TEXT` is executed explicitly in the `plain` image.
 
 The matrix below lists every audited catalog language. The input count is per source profile; the last column counts additional conformance fixtures, each compiled/executed with that language's source variants. Every row also has the wrong-answer control.
@@ -23,7 +23,7 @@ The matrix below lists every audited catalog language. The input count is per so
 
 The shared A+B corpus focuses on zero, input dependence and carry; it is not a complete language conformance suite. Only the dedicated GolfScript case adds signed/whitespace input in this change. The one-digit assembly/WASM fixtures and two-digit Brainfuck/Uiua fixtures retain explicit operand-format bounds. APL and Zerolang use source-dependent arithmetic when their current runners expose no stable stdin contract. VB6 remains a literal console subset, and GraphQL exposes a fixed schema; the tests verify those boundaries rather than claiming general arithmetic support.
 
-TLA has an additional valid two-state invariant case. A separate exit-status defect was found in its runtime wrapper and reported for scope approval; this test-only change does not yet add a failing-invariant assertion.
+TLA has an additional valid two-state invariant case. Both TLA source profiles also require a valid model to be Accepted and a false invariant to return Runtime Error with the TLC counterexample. The runtime wrapper preserves TLC's exit status, and its pinned jar backports the upstream fix that avoids RMI socket initialization for local fingerprint storage inside the sandbox.
 
 ## Complete language inventory
 

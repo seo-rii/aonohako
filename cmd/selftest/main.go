@@ -1001,6 +1001,11 @@ func verifyCompileExecuteLanguages(baseURL, rawLanguages string) error {
 			if !ok {
 				return fmt.Errorf("compile-execute selftest could not resolve compile profile %q", compileLanguage)
 			}
+			if language == "tla" {
+				if err := verifyTLAModelChecking(baseURL, compileLanguage); err != nil {
+					return err
+				}
+			}
 
 			compileAttempts := max(tc.compileAttempts, 1)
 			var compileResp model.CompileResponse
