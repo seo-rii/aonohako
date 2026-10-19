@@ -518,7 +518,7 @@ func TestRemoteRunnerAbsoluteDeadlineIncludesPipelineLimitsAndOverhead(t *testin
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("response = %+v", resp)
 	}
-	want := 3*time.Second + remoteio.DefaultOperationOverhead
+	want := 3*time.Second + 2*stdinURLDownloadTimeout + remoteio.DefaultRequestUploadTimeout + remoteio.DefaultOperationOverhead
 	if remaining < want-time.Second || remaining > want+time.Second {
 		t.Fatalf("remote deadline remaining = %s, want about %s", remaining, want)
 	}
@@ -553,7 +553,7 @@ func TestRemoteRunnerAbsoluteDeadlineIncludesPipelineV1InteractiveAndSPJLimits(t
 	if resp.Status != model.RunStatusAccepted {
 		t.Fatalf("response = %+v", resp)
 	}
-	want := 9*time.Second + remoteio.DefaultOperationOverhead
+	want := 9*time.Second + 3*stdinURLDownloadTimeout + remoteio.DefaultRequestUploadTimeout + remoteio.DefaultOperationOverhead
 	if remaining < want-time.Second || remaining > want+time.Second {
 		t.Fatalf("remote pipeline deadline remaining = %s, want about %s", remaining, want)
 	}

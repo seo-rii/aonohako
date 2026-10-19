@@ -90,61 +90,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
-		var requestedTimeMs int64
-		if req.Pipeline != nil {
-			for _, step := range req.Pipeline.Steps {
-				stepTimeMs := min(max(step.Limits.TimeMs, 0), runvalidation.MaxTimeMs)
-				if step.Executor.InteractorLimits != nil {
-					interactorTimeMs := min(max(step.Executor.InteractorLimits.TimeMs, 0), runvalidation.MaxTimeMs)
-					stepTimeMs = max(stepTimeMs, interactorTimeMs)
-				}
-				requestedTimeMs += int64(stepTimeMs)
-			}
-		} else if runvalidation.UsesSteps(req) {
-			for _, step := range req.Steps {
-				stepTimeMs := step.Limits.TimeMs
-				if stepTimeMs < 0 {
-					stepTimeMs = 0
-				}
-				if stepTimeMs > runvalidation.MaxTimeMs {
-					stepTimeMs = runvalidation.MaxTimeMs
-				}
-				requestedTimeMs += int64(stepTimeMs)
-			}
-		} else {
-			mainTimeMs := req.Limits.TimeMs
-			if mainTimeMs < 0 {
-				mainTimeMs = 0
-			}
-			if mainTimeMs > runvalidation.MaxTimeMs {
-				mainTimeMs = runvalidation.MaxTimeMs
-			}
-			requestedTimeMs = int64(mainTimeMs)
-			if req.Interactor != nil && req.Interactor.Limits != nil {
-				interactorTimeMs := req.Interactor.Limits.TimeMs
-				if interactorTimeMs < 0 {
-					interactorTimeMs = 0
-				}
-				if interactorTimeMs > runvalidation.MaxTimeMs {
-					interactorTimeMs = runvalidation.MaxTimeMs
-				}
-				if int64(interactorTimeMs) > requestedTimeMs {
-					requestedTimeMs = int64(interactorTimeMs)
-				}
-			}
-		}
-		spj := req.SPJ
-		if req.Pipeline != nil {
-			spj = req.Pipeline.FinalJudge.SPJ
-		}
-		if spj != nil {
-			spjTimeMs := defaultSPJTimeMs
-			if spj.Limits != nil && spj.Limits.TimeMs > 0 {
-				spjTimeMs = min(spj.Limits.TimeMs, runvalidation.MaxTimeMs)
-			}
-			requestedTimeMs += int64(spjTimeMs)
-		}
-		absoluteTimeout = time.Duration(requestedTimeMs)*time.Millisecond + remoteio.DefaultOperationOverhead
+		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()
