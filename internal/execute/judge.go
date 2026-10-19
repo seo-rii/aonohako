@@ -27,8 +27,12 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 
 	var score *float64
 	outputOK := false
+	// Required file output must have been collected successfully. Diagnostic
+	// stdout cannot stand in for missing or unreadable judge data, even when a
+	// resource verdict is retained and ignore_tle requests partial scoring.
+	judgeOutputAvailable := len(req.FileOutputs) == 0 || judgeSource == "file_output"
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
-	if evaluateOutputs && !stdoutLimitExceeded {
+	if evaluateOutputs && judgeOutputAvailable && !stdoutLimitExceeded {
 		if hasSPJ(req) {
 			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir)
 			if sc != nil {
@@ -111,10 +115,15 @@ func captureFileOutput(ws Workspace, spec model.OutputFile) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer output.cleanup()
 	if output.info.Size() > maxCapturedFileBytes {
+		output.cleanup()
 		return nil, fmt.Errorf("captured output too large")
 	}
+	return readCapturedOutput(output)
+}
+
+func readCapturedOutput(output capturedOutputFile) ([]byte, error) {
+	defer output.cleanup()
 	if _, err := output.file.Seek(0, 0); err != nil {
 		return nil, err
 	}
@@ -146,13 +155,7 @@ func captureSidecarOutputs(ws Workspace, specs []model.OutputFile) ([]model.Side
 			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "sidecar total size exceeded"})
 			continue
 		}
-		if _, err := output.file.Seek(0, 0); err != nil {
-			output.cleanup()
-			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "read failed"})
-			continue
-		}
-		data, err := ioReadAll(bufio.NewReader(output.file))
-		output.cleanup()
+		data, err := readCapturedOutput(output)
 		if err != nil {
 			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "read failed"})
 			continue

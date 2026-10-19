@@ -190,6 +190,12 @@ instead of copying stderr.
 `false` suppresses contestant stdout/stderr `log` SSE events for the whole
 request without changing output capture, judging, or the final `result`
 payload.
+When `file_outputs` is present, only the collected file is judge data. Missing,
+oversized, or unreadable files never fall back to stdout. A retained TLE with
+`ignore_tle=true` receives score `0` when that file is unavailable; the SPJ is
+not invoked with substitute data. An existing execution failure keeps its
+status, reason, and source.
+
 Sidecar paths must be unique after relative-path normalization; `x` and `./x`
 are duplicates and are rejected before stream or queue admission.
 

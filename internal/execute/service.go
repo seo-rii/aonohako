@@ -332,7 +332,8 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	if len(req.FileOutputs) > 0 {
 		captured, err := captureFileOutput(ws, req.FileOutputs[0])
 		if err != nil {
-			if res.Status == "OK" {
+			judgeOut = nil
+			if status, _, _ := classifyRunStatusWithoutOutput(req, res); status == "OK" {
 				res.Status = model.RunStatusRE
 				res.Reason = "file output capture failed: " + err.Error()
 				res.VerdictSource = "file_output"

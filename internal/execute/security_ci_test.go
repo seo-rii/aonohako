@@ -49,6 +49,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "interactive-basic", fn: TestRunInteractiveIOAcceptsInteractorVerdict},
 		{name: "interactor-output-limit", fn: TestRunInteractiveUsesInteractorOutputLimit},
 		{name: "stdout-limit-verdict-combinations", fn: TestStdoutLimitCombinationsAcrossExecutionModes},
+		{name: "required-file-output-ignored-tle", fn: TestRunRequiredFileOutputIgnoredTLE},
 		{name: "interactive-fixture-isolation", fn: TestRunInteractiveKeepsJudgeFixturesUnreadableToContestant},
 		{name: "proc-fd", fn: TestRunBlocksProcFDBrowsingOutsideSandbox},
 		{name: "proc-environ", fn: TestRunBlocksProcEnvironRead},
