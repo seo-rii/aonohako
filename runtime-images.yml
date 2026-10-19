@@ -187,7 +187,9 @@ languages:
         - -c
         - |
           set -euo pipefail
-          printf '%s' '밞바밤밣받밞밞밞밦밞바밝밣바박박밦밞받밞받밞발밣받뱔희밞땨몋드떠받볋' > Main.aheui
+          # Print each character and halt with zero on the selected stack:
+          # rpaheui uses the remaining stack top as the process exit status.
+          printf '%s' '밣밞따맣발밤따밞밞따다맣밤받따밞따맣밤받따밞따맣밤받따밞따받다맣밞박다밤따맣밣밤따맣밞밞따밦다맣밤받따밞따받다맣밤받따밞따밦다맣밤받따밞따맣발발따밤따맣발밦따받다맣바하' > Main.aheui
           output="$(aheui Main.aheui 2>aheui.stderr)"
           test "${output}" = 'Hello, World!'
 
