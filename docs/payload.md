@@ -229,6 +229,13 @@ SPJ, and interactor fields share one request-wide 48 MiB decoded budget across
 inline base64 and URL-backed payloads; invalid collection counts or paths are
 rejected before any outbound request is made.
 
+JSON text fields must contain valid UTF-8. In particular, `expected_stdout_url`
+is checked immediately after downloading and rejected with HTTP 400
+`invalid_payload_url` if it contains invalid UTF-8, before stream or queue
+admission. The runner also validates inline text before local execution or
+remote JSON encoding. Base64 payloads, pipeline resources, and streaming
+`stdin_url` retain their byte-preserving behavior.
+
 ### Two-step execute mode
 
 `/execute` also accepts a two-step pipeline shape without a separate endpoint.

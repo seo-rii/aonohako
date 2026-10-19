@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"aonohako/internal/model"
 	"aonohako/internal/payloadurl"
@@ -316,6 +317,9 @@ func resolveTextURL(ctx context.Context, label string, inline *string, rawURL *s
 	data, err := downloadPayloadURL(ctx, *rawURL, maxBytes)
 	if err != nil {
 		return fmt.Errorf("%s_url: %w", label, err)
+	}
+	if !utf8.Valid(data) {
+		return fmt.Errorf("%s_url must contain valid UTF-8", label)
 	}
 	if inline != nil {
 		*inline = string(data)
