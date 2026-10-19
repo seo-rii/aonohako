@@ -703,6 +703,7 @@ func stepResultFromResponse(id, programID string, resp model.RunResponse) model.
 		StdoutTruncated:  resp.StdoutTruncated,
 		StderrTruncated:  resp.StderrTruncated,
 		Reason:           resp.Reason,
+		ReasonTruncated:  resp.ReasonTruncated,
 		VerdictSource:    resp.VerdictSource,
 	}
 }

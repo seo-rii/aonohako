@@ -130,6 +130,7 @@ not duplicate stdout/stderr before `result`.
   "stdout_truncated": false,            // true when stdout exceeded the capture cap
   "stderr_truncated": false,            // true when stderr exceeded the capture cap
   "reason": "",                         // failure reason
+  "reason_truncated": false,           // true when the wire budget clipped this diagnostic
   "verdict_source": "stdout",           // diagnostic source that selected the final verdict, when known
   "score": null,                        // nullable float; SPJ, interactive, or communication score (0.0–1.0)
   "started_participants": 64,           // communication-v1 only; participant targets whose exec was confirmed
@@ -187,6 +188,20 @@ boundary. Truncation flags cover both execution-limit and response-capture
 clipping. A configured cap cannot expose bytes beyond the execution capture
 boundary. Output-derived interactive and sandbox-initialization reasons obey
 the stderr cap and fall back to a short structural reason when it is zero.
+
+The `/execute` SSE writer also budgets the encoded JSON bytes, including control
+character and HTML escaping. A complete final result frame fits within 64 MiB;
+top-level and step stdout, stderr, and reason fields share the remaining space
+after metadata and sidecars. Each clipped string retains a prefix at a UTF-8
+boundary and sets its corresponding `stdout_truncated`, `stderr_truncated`, or
+`reason_truncated` flag. Existing truncation flags remain set. Judging, scores,
+raw handoff data, and binary sidecars are unaffected.
+
+Non-result frames use at most 64 MiB of wire space, including at most 48 MiB
+for logs. Events beyond those display budgets are omitted, reserving space for
+images/control events and the final result within the 128 MiB stream limit.
+This is a wire limit in addition to the per-stream capture limits; escaped logs
+may therefore stop earlier. No binary sidecar is shortened to meet this limit.
 
 ### Status Codes
 
