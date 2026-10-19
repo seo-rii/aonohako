@@ -1,6 +1,9 @@
 package compile
 
 import (
+	"encoding/base64"
+	"fmt"
+	"io"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -10,11 +13,65 @@ import (
 	"aonohako/internal/model"
 )
 
-// PrepareResponse applies the same diagnostic bounds at the API boundary,
-// including validation failures returned before a compiler is started.
+// PrepareResponse applies the diagnostic and final artifact bounds at the API
+// boundary, including compilers that combine multiple artifact collections.
 func PrepareResponse(resp model.CompileResponse) model.CompileResponse {
 	if len(resp.ReasonCode) > compilewire.ReasonCodeBytes {
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "invalid compile result: reason_code too long"}
+	}
+	var artifactErr error
+	if len(resp.Artifacts) > compilewire.ArtifactCount {
+		artifactErr = fmt.Errorf("too many artifacts: max %d", compilewire.ArtifactCount)
+	} else {
+		// Reserve one extra Base64 quantum per file for separate padding. CR/LF
+		// are valid Base64 whitespace, but each occupies two JSON wire bytes.
+		// Bound their expansion before any decoding, without normalizing or
+		// allocating another copy of the artifact payloads.
+		encodedLimit := int64(base64.StdEncoding.EncodedLen(compilewire.ArtifactTotalBytes) + 4*compilewire.ArtifactCount)
+		var encodedTotal int64
+		for _, artifact := range resp.Artifacts {
+			if len(artifact.Name) > compilewire.ArtifactNameBytes {
+				artifactErr = fmt.Errorf("artifact name too long: max %d bytes", compilewire.ArtifactNameBytes)
+				break
+			}
+			encodedTotal += int64(len(artifact.DataB64))
+			if encodedTotal <= encodedLimit {
+				encodedTotal += int64(strings.Count(artifact.DataB64, "\r")) + int64(strings.Count(artifact.DataB64, "\n"))
+			}
+			if encodedTotal > encodedLimit {
+				artifactErr = fmt.Errorf("encoded artifact total size exceeded: max %d JSON bytes", encodedLimit)
+				break
+			}
+		}
+		var total int64
+		for _, artifact := range resp.Artifacts {
+			if artifactErr != nil {
+				break
+			}
+			// Count decoded bytes with a fixed-size buffer, including for remote
+			// artifacts whose Base64 contains CR/LF. Stop after the file limit.
+			decoded, err := io.Copy(io.Discard, io.LimitReader(base64.NewDecoder(base64.StdEncoding, strings.NewReader(artifact.DataB64)), compilewire.ArtifactBytes+1))
+			if err != nil {
+				artifactErr = fmt.Errorf("artifact data invalid base64: %w", err)
+				break
+			}
+			if decoded > compilewire.ArtifactBytes {
+				artifactErr = fmt.Errorf("artifact too large: max %d bytes", compilewire.ArtifactBytes)
+				break
+			}
+			total += decoded
+			if total > compilewire.ArtifactTotalBytes {
+				artifactErr = fmt.Errorf("artifact total size exceeded: max %d bytes", compilewire.ArtifactTotalBytes)
+				break
+			}
+		}
+	}
+	if artifactErr != nil {
+		resp.Status = model.CompileStatusInternal
+		resp.Artifacts = nil
+		resp.Reason = "invalid compile result: " + artifactErr.Error()
+		resp.ReasonCode = ""
+		resp.ReasonTruncated = false
 	}
 	return capCompileResponseOutput(resp)
 }

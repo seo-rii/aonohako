@@ -80,6 +80,9 @@ SSE event budget; a `data:` line allows that payload plus its seven framing
 bytes. The complete stream is limited to 128 MiB, including duplicated logs,
 errors, progress and heartbeats. The producer reserves a full result frame
 before emitting auxiliary events and never truncates artifact data to fit.
+The final combined artifact list is checked again at the API boundary, including
+its encoded wire size. An invalid or over-budget list produces an `Internal Error`
+result with no artifacts and bounded diagnostics.
 Execute streams retain their separate 64 MiB line/event and 128 MiB stream
 limits. Update remote control planes before runners: older compile readers
 still reject results larger than their 64 MiB limit.
