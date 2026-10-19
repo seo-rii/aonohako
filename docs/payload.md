@@ -190,6 +190,9 @@ instead of copying stderr.
 `false` suppresses contestant stdout/stderr `log` SSE events for the whole
 request without changing output capture, judging, or the final `result`
 payload.
+Sidecar paths must be unique after relative-path normalization; `x` and `./x`
+are duplicates and are rejected before stream or queue admission.
+
 `runtime_profile`, when present, must name a profile configured by the runner
 operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded
 numeric tuning values and cannot pass arbitrary runtime flags. Non-dev servers

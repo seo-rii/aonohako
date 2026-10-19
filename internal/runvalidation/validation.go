@@ -112,8 +112,8 @@ func Validate(req *model.RunRequest) error {
 		if len(req.FileOutputs) > 1 {
 			return fmt.Errorf("at most one file output is supported")
 		}
-		if len(req.SidecarOutputs) > MaxSidecarOutputs {
-			return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+		if err := ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
+			return err
 		}
 		if err := ValidateRequiredLimits("limits", req.Limits); err != nil {
 			return err
@@ -165,6 +165,26 @@ func ValidateTextEncoding(req *model.RunRequest) error {
 				return fmt.Errorf("steps[%d].stdin_parts[%d].data must contain valid UTF-8", i, j)
 			}
 		}
+	}
+	return nil
+}
+
+// ValidateSidecarOutputs applies the same path normalization used by local
+// capture and remote result validation, so one file can only be requested once.
+func ValidateSidecarOutputs(specs []model.OutputFile) error {
+	if len(specs) > MaxSidecarOutputs {
+		return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+	}
+	seen := make(map[string]struct{}, len(specs))
+	for i, spec := range specs {
+		clean, err := util.ValidateRelativePath(spec.Path)
+		if err != nil {
+			return fmt.Errorf("sidecar_outputs[%d].path: %w", i, err)
+		}
+		if _, duplicate := seen[clean]; duplicate {
+			return fmt.Errorf("duplicate sidecar output path: %s", clean)
+		}
+		seen[clean] = struct{}{}
 	}
 	return nil
 }
@@ -629,8 +649,8 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 	if len(req.FileOutputs) > 1 {
 		return fmt.Errorf("at most one file output is supported")
 	}
-	if len(req.SidecarOutputs) > MaxSidecarOutputs {
-		return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+	if err := ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
+		return err
 	}
 
 	programs := make(map[string]struct{}, len(req.Programs))
