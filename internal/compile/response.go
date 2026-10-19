@@ -4,9 +4,20 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
+	"aonohako/internal/compilewire"
 	"aonohako/internal/model"
 )
+
+// PrepareResponse applies the same diagnostic bounds at the API boundary,
+// including validation failures returned before a compiler is started.
+func PrepareResponse(resp model.CompileResponse) model.CompileResponse {
+	if len(resp.ReasonCode) > compilewire.ReasonCodeBytes {
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "invalid compile result: reason_code too long"}
+	}
+	return capCompileResponseOutput(resp)
+}
 
 func capCompileResponseOutput(resp model.CompileResponse, workDirs ...string) model.CompileResponse {
 	var truncated bool
@@ -33,6 +44,14 @@ func capCompileResponseOutput(resp model.CompileResponse, workDirs ...string) mo
 		if resp.Reason != rawReason {
 			slog.Warn("compile internal reason redacted", "reason", rawReason)
 		}
+	}
+	if len(resp.Reason) > compilewire.ReasonBytes {
+		end := compilewire.ReasonBytes
+		for end > 0 && !utf8.RuneStart(resp.Reason[end]) {
+			end--
+		}
+		resp.Reason = resp.Reason[:end]
+		resp.ReasonTruncated = true
 	}
 	if resp.ReasonCode == "" {
 		resp.ReasonCode = compileReasonCode(resp.Status, resp.Reason)

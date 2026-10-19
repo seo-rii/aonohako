@@ -378,7 +378,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	releaseUploadAdmission(r.Context())
 
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
-	stream, err := sse.New(w, s.sseWriteTimeout)
+	stream, err := sse.NewCompile(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
 		if !sse.ResponseStarted(err) {
@@ -428,7 +428,7 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := s.compile.Run(streamCtx, &req)
+	resp := compile.PrepareResponse(s.compile.Run(streamCtx, &req))
 	if streamCtx.Err() != nil {
 		return
 	}
