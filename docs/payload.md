@@ -197,7 +197,10 @@ not invoked with substitute data. An existing execution failure keeps its
 status, reason, and source.
 
 Sidecar paths must be unique after relative-path normalization; `x` and `./x`
-are duplicates and are rejected before stream or queue admission.
+are duplicates and are rejected before stream or queue admission. Capture is
+best effort in request order: each file is limited to 8 MiB, and only successful
+captures consume the 16 MiB total. A rejected file does not prevent a later file
+from using the remaining space.
 
 `runtime_profile`, when present, must name a profile configured by the runner
 operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded

@@ -149,8 +149,7 @@ func captureSidecarOutputs(ws Workspace, specs []model.OutputFile) ([]model.Side
 			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "file too large"})
 			continue
 		}
-		totalBytes += output.info.Size()
-		if totalBytes > maxCapturedSidecarTotalBytes {
+		if totalBytes+output.info.Size() > maxCapturedSidecarTotalBytes {
 			output.cleanup()
 			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "sidecar total size exceeded"})
 			continue
@@ -160,6 +159,7 @@ func captureSidecarOutputs(ws Workspace, specs []model.OutputFile) ([]model.Side
 			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "read failed"})
 			continue
 		}
+		totalBytes += int64(len(data))
 		outputs = append(outputs, model.SidecarOutput{Path: spec.Path, DataB64: util.EncodeB64(data)})
 	}
 	return outputs, errs
