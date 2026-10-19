@@ -190,6 +190,7 @@ instead of copying stderr.
 `false` suppresses contestant stdout/stderr `log` SSE events for the whole
 request without changing output capture, judging, or the final `result`
 payload.
+
 When `file_outputs` is present, only the collected file is judge data. Missing,
 oversized, or unreadable files never fall back to stdout. A retained TLE with
 `ignore_tle=true` receives score `0` when that file is unavailable; the SPJ is
@@ -201,6 +202,10 @@ are duplicates and are rejected before stream or queue admission. Capture is
 best effort in request order: each file is limited to 8 MiB, and only successful
 captures consume the 16 MiB total. A rejected file does not prevent a later file
 from using the remaining space.
+
+Ordinary materialized stdin, including streamed URL input, is passed through an
+`O_RDONLY` descriptor. Changing file permission bits alone is insufficient:
+the runner closes the writable preparation descriptor before reopening it.
 
 `runtime_profile`, when present, must name a profile configured by the runner
 operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded

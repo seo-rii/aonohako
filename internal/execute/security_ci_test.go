@@ -57,6 +57,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "scratch-writes", fn: TestRunBlocksWritesOutsideWorkspaceTempDirs},
 		{name: "submitted-file-removal", fn: TestRunPreventsRemovingOrReplacingSubmittedFiles},
 		{name: "submitted-file-overwrite", fn: TestRunPreventsOverwritingSubmittedFilesButAllowsNewFiles},
+		{name: "stdin-readonly-descriptor", fn: TestRunStdinDescriptorIsReadOnly},
 		{name: "thread-storm", fn: TestRunBlocksThreadStorms},
 		{name: "many-small-files", fn: TestRunMarksWorkspaceEntryLimitExceeded},
 		{name: "deep-workspace-tree", fn: TestRunMarksWorkspaceDepthLimitExceeded},
