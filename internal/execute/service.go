@@ -161,6 +161,12 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if err := runvalidation.ValidateTextEncoding(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if err := runvalidation.ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 	if _, err := runvalidation.ValidateBinaryBudget(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
@@ -326,7 +332,8 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	if len(req.FileOutputs) > 0 {
 		captured, err := captureFileOutput(ws, req.FileOutputs[0])
 		if err != nil {
-			if res.Status == "OK" {
+			judgeOut = nil
+			if status, _, _ := classifyRunStatusWithoutOutput(req, res); status == "OK" {
 				res.Status = model.RunStatusRE
 				res.Reason = "file output capture failed: " + err.Error()
 				res.VerdictSource = "file_output"
@@ -696,6 +703,7 @@ func stepResultFromResponse(id, programID string, resp model.RunResponse) model.
 		StdoutTruncated:  resp.StdoutTruncated,
 		StderrTruncated:  resp.StderrTruncated,
 		Reason:           resp.Reason,
+		ReasonTruncated:  resp.ReasonTruncated,
 		VerdictSource:    resp.VerdictSource,
 	}
 }

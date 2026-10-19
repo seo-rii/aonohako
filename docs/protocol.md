@@ -130,6 +130,7 @@ not duplicate stdout/stderr before `result`.
   "stdout_truncated": false,            // true when stdout exceeded the capture cap
   "stderr_truncated": false,            // true when stderr exceeded the capture cap
   "reason": "",                         // failure reason
+  "reason_truncated": false,           // true when the wire budget clipped this diagnostic
   "verdict_source": "stdout",           // diagnostic source that selected the final verdict, when known
   "score": null,                        // nullable float; SPJ, interactive, or communication score (0.0–1.0)
   "started_participants": 64,           // communication-v1 only; participant targets whose exec was confirmed
@@ -187,6 +188,42 @@ boundary. Truncation flags cover both execution-limit and response-capture
 clipping. A configured cap cannot expose bytes beyond the execution capture
 boundary. Output-derived interactive and sandbox-initialization reasons obey
 the stderr cap and fall back to a short structural reason when it is zero.
+
+The `/execute` SSE writer also budgets the encoded JSON bytes, including control
+character and HTML escaping. A complete final result frame fits within 64 MiB;
+top-level and step stdout, stderr, and reason fields share the remaining space
+after metadata and sidecars. Each clipped string retains a prefix at a UTF-8
+boundary and sets its corresponding `stdout_truncated`, `stderr_truncated`, or
+`reason_truncated` flag. Existing truncation flags remain set. Judging, scores,
+raw handoff data, and binary sidecars are unaffected.
+
+Non-result frames use at most 64 MiB of wire space, including at most 48 MiB
+for logs. Four MiB of that allowance is reserved for heartbeats, so escaped
+logs, images, or diagnostics cannot suppress liveness signals. Events beyond
+the display budgets are omitted; exhausting the heartbeat allowance returns
+an explicit stream error. The final result retains its own space within the
+128 MiB stream limit.
+This is a wire limit in addition to the per-stream capture limits; escaped logs
+may therefore stop earlier. No binary sidecar is shortened to meet this limit.
+
+Remote execution has a finite absolute deadline, independent of heartbeats.
+Its default allowance is the sum of:
+
+- request upload (30 seconds by default);
+- queue waiting and result transfer (30 seconds combined);
+- one cumulative streaming stdin download allowance (60 seconds), when used;
+- sandbox startup `max(60 seconds, execution limit)` plus execution, for each
+  sequential stage and the final SPJ;
+- for interactive stages, the longer of the two role limits, with startup
+  preceding their shared release barrier.
+
+Communication sessions instead reserve 60 seconds for preparation and the
+manager's wall allowance calculated for one runnable target CPU, including
+Cloud Run contention slack. The control plane does not assume remote CPU or
+cgroup capacity. Pipeline resource URLs are resolved before the remote call.
+An earlier caller deadline still wins, and heartbeats only reset the separate
+idle timer. For example, a one-second single run with streaming stdin has a
+181-second default absolute allowance, including upload and transfer.
 
 ### Status Codes
 

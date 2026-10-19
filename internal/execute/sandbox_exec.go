@@ -551,10 +551,17 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			if err := stdinTemp.Chmod(0o400); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
 			}
-			if _, err := stdinTemp.Seek(0, 0); err != nil {
+			// chmod does not revoke write access from the existing descriptor.
+			// Reopen after materialization so the target receives only read access.
+			if err := stdinTemp.Close(); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
 			}
-			cmd.Stdin = stdinTemp
+			readonlyStdin, err := os.Open(stdinTemp.Name())
+			if err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+			}
+			defer readonlyStdin.Close()
+			cmd.Stdin = readonlyStdin
 		}
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{

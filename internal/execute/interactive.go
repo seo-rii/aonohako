@@ -159,17 +159,18 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	var interactorFinished atomic.Bool
 	var contestantCanceledByInteractor atomic.Bool
 	contestantLimitMs := max(1, req.Limits.TimeMs)
-	contestantTimer := time.AfterFunc(time.Duration(contestantLimitMs)*time.Millisecond, func() {
+	interactorLimitMs := max(1, interactorReq.Limits.TimeMs)
+	contestantLimit := time.Duration(contestantLimitMs) * time.Millisecond
+	interactorLimit := time.Duration(interactorLimitMs) * time.Millisecond
+	startupLimit := max(stdinURLDownloadTimeout, contestantLimit, interactorLimit)
+	timers := newInteractiveExecutionTimers(ctx, startupLimit, contestantLimit, interactorLimit, func() {
 		if contestantFinished.Load() {
 			return
 		}
 		contestantDeadlineHit.Store(true)
 		cancelContestant()
 		cancelInteractor()
-	})
-	defer contestantTimer.Stop()
-	interactorLimitMs := max(1, interactorReq.Limits.TimeMs)
-	interactorTimer := time.AfterFunc(time.Duration(interactorLimitMs)*time.Millisecond, func() {
+	}, func() {
 		if interactorFinished.Load() {
 			return
 		}
@@ -178,8 +179,11 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		}
 		cancelInteractor()
 		cancelContestant()
+	}, func() {
+		cancelContestant()
+		cancelInteractor()
 	})
-	defer interactorTimer.Stop()
+	defer timers.stop()
 
 	contestantCh := make(chan execResult, 1)
 	interactorCh := make(chan execResult, 1)
@@ -190,10 +194,13 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			contestantArgs,
 			req,
 			sandboxStreamConfig{
-				stdin:        contestantInR,
-				liveStdin:    true,
-				stdout:       interactorIn,
-				onStdoutDone: interactorIn.Close,
+				stdin:          contestantInR,
+				liveStdin:      true,
+				stdout:         interactorIn,
+				onStdoutDone:   interactorIn.Close,
+				onTargetReady:  func() { timers.targetReady(0) },
+				targetRelease:  timers.release,
+				startWallTimer: func() bool { return contestantCtx.Err() == nil },
 			},
 			hooks,
 			outputLimitBytes(req),
@@ -201,6 +208,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			s.cgroupParentDir,
 		)
 		contestantFinished.Store(true)
+		timers.finish(0)
 		contestantCh <- res
 	}()
 	go func() {
@@ -210,10 +218,13 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			interactorArgs,
 			interactorReq,
 			sandboxStreamConfig{
-				stdin:        interactorInR,
-				liveStdin:    true,
-				stdout:       contestantIn,
-				onStdoutDone: contestantIn.Close,
+				stdin:          interactorInR,
+				liveStdin:      true,
+				stdout:         contestantIn,
+				onStdoutDone:   contestantIn.Close,
+				onTargetReady:  func() { timers.targetReady(1) },
+				targetRelease:  timers.release,
+				startWallTimer: func() bool { return interactorCtx.Err() == nil },
 				identity: sandboxIdentity{
 					uid: interactiveJudgeSandboxUID,
 					gid: interactiveJudgeSandboxGID,
@@ -225,6 +236,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			s.cgroupParentDir,
 		)
 		interactorFinished.Store(true)
+		timers.finish(1)
 		interactorCh <- res
 	}()
 
@@ -237,7 +249,6 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		case res := <-contestantCh:
 			contestantRes = res
 			gotContestant = true
-			contestantTimer.Stop()
 			contestantIn.Close()
 			contestantStatus, _, _ := classifyRunStatusWithoutOutput(req, res)
 			if contestantStatus != "OK" {
@@ -246,7 +257,6 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		case res := <-interactorCh:
 			interactorRes = res
 			gotInteractor = true
-			interactorTimer.Stop()
 			interactorIn.Close()
 			interactorStatus, _, _ := classifyInteractorStatus(interactorReq, res)
 			if interactorStatus == model.RunStatusAccepted {
