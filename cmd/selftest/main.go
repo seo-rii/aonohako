@@ -4138,7 +4138,8 @@ fn read_values() -> #(Int, Int)
 
 pub fn main() {
   let #(a, b) = read_values()
-  (a + b)
+  let sum = a + b
+  sum
   |> int.to_string
   |> io.println
 }`),
