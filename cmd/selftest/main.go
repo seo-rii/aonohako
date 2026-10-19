@@ -976,6 +976,10 @@ func runCompileExecuteSuite() error {
 }
 
 func verifyCompileExecuteLanguages(baseURL, rawLanguages string) error {
+	if err := runAgdaWorkspaceRegression(baseURL, rawLanguages); err != nil {
+		return err
+	}
+
 	cases := compileExecuteCases()
 	semanticCases := languageSemanticCases()
 	startupMemory := runtimeStartupMemoryMB()
