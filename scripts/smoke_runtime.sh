@@ -14,7 +14,8 @@ done
 
 work_root="${AONOHAKO_SMOKE_WORK_ROOT:-/work}"
 mkdir -p "${work_root}"
-chmod 0755 "${work_root}"
+# Match the Cloud Run entrypoint: helpers may traverse this root, not list it.
+chmod 0711 "${work_root}"
 export AONOHAKO_EXECUTION_MODE=local-root
 export AONOHAKO_WORK_ROOT="${work_root}"
 aonohako-selftest compile-execute

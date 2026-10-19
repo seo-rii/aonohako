@@ -369,6 +369,17 @@ aonohako-selftest cgroup-preflight
   Base64 validation, or payload URL fetches. The slot is released only after
   the request enters the bounded run queue or terminates early. Both limits
   default to `0` in development; production targets reject `0`.
+- `AONOHAKO_MAX_RETAINED_REQUEST_BYTES` defaults to `268435456` (256 MiB)
+  and must be positive. It caps shared request data across upload, queueing,
+  and execution. Known-length bodies reserve their input bytes; unknown-length
+  bodies reserve the 64 MiB input cap. After decoding, every request-owned
+  string is charged, including URL-expanded Base64 resources and metadata.
+  URL downloads reserve the maximum permitted replacement field before fetching,
+  then shrink to the actual size. Insufficient capacity returns HTTP 429 with
+  `request_byte_budget_exceeded` before SSE starts. Reservations last until the
+  handler finishes, including cancellation and cleanup. This is a retained-data
+  budget, not an RSS limit: allow additional memory for decoder/download scratch,
+  responses, and sandbox execution.
 - `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY` defaults to
   `min(4, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
   `min(4, AONOHAKO_MAX_ACTIVE_RUNS)` and accepts values from `1` through `64`.

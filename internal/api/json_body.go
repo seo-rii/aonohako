@@ -22,11 +22,18 @@ func writeRequestBodyError(w http.ResponseWriter, err error) {
 	var maxErr *http.MaxBytesError
 	var syntaxErr *json.SyntaxError
 	var typeErr *json.UnmarshalTypeError
+	var collectionErr *jsonCollectionLimitError
 	switch {
 	case errors.As(err, &maxErr):
 		writeJSONErrorMessage(w, http.StatusRequestEntityTooLarge, "request_body_too_large", fmt.Sprintf("request body too large: max %d bytes", maxErr.Limit))
 	case errors.Is(err, errUnexpectedTrailingJSON):
 		writeJSONErrorMessage(w, http.StatusBadRequest, "unexpected_trailing_json", "request body must contain exactly one JSON value")
+	case errors.As(err, &collectionErr):
+		code := "invalid_request"
+		if collectionErr.field == "sources" {
+			code = "too_many_sources"
+		}
+		writeJSONErrorMessage(w, http.StatusBadRequest, code, err.Error())
 	case errors.As(err, &typeErr):
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_json_type", "invalid json: "+err.Error())
 	case strings.HasPrefix(err.Error(), "json: unknown field "):
@@ -45,7 +52,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	body := http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	dec := json.NewDecoder(body)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
+	if err := decodeBoundedJSON(dec, dst); err != nil {
 		return err
 	}
 	// Decode without a request schema so every second JSON value is classified
