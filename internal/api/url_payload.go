@@ -314,6 +314,12 @@ func resolveTextURL(ctx context.Context, label string, inline *string, rawURL *s
 	if inline != nil && *inline != "" {
 		return fmt.Errorf("%s cannot combine inline content with url", label)
 	}
+	finishReservation, err := reservePayloadBytes(ctx, int64(maxBytes))
+	if err != nil {
+		return err
+	}
+	retained := int64(0)
+	defer func() { finishReservation(retained) }()
 	data, err := downloadPayloadURL(ctx, *rawURL, maxBytes)
 	if err != nil {
 		return fmt.Errorf("%s_url: %w", label, err)
@@ -323,6 +329,7 @@ func resolveTextURL(ctx context.Context, label string, inline *string, rawURL *s
 	}
 	if inline != nil {
 		*inline = string(data)
+		retained = int64(len(*inline))
 	}
 	*rawURL = ""
 	return nil
@@ -339,6 +346,12 @@ func resolveBase64URL(ctx context.Context, label string, inline, rawURL *string,
 	if budget != nil && budget.remaining < downloadLimit {
 		downloadLimit = max(0, budget.remaining)
 	}
+	finishReservation, err := reservePayloadBytes(ctx, int64(base64.StdEncoding.EncodedLen(downloadLimit)))
+	if err != nil {
+		return err
+	}
+	retained := int64(0)
+	defer func() { finishReservation(retained) }()
 	data, err := downloadPayloadURL(ctx, *rawURL, downloadLimit)
 	if err != nil {
 		var tooLarge *payloadDownloadTooLargeError
@@ -355,6 +368,7 @@ func resolveBase64URL(ctx context.Context, label string, inline, rawURL *string,
 	}
 	if inline != nil {
 		*inline = base64.StdEncoding.EncodeToString(data)
+		retained = int64(len(*inline))
 	}
 	*rawURL = ""
 	return nil
