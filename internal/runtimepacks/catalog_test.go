@@ -347,8 +347,8 @@ func TestSmokeScriptRunsSandboxSelftestBeforeLanguageSmoke(t *testing.T) {
 	if !strings.Contains(body, "export AONOHAKO_EXECUTION_MODE=local-root") || !strings.Contains(body, `work_root="${AONOHAKO_SMOKE_WORK_ROOT:-/work}"`) || !strings.Contains(body, `export AONOHAKO_WORK_ROOT="${work_root}"`) {
 		t.Fatalf("smoke_runtime.sh must force a dedicated local-root work root for compile/execute smoke")
 	}
-	if !strings.Contains(body, `chmod 0755 "${work_root}"`) {
-		t.Fatalf("smoke_runtime.sh must keep the smoke work root traversable for sandboxed helpers")
+	if !strings.Contains(body, `chmod 0711 "${work_root}"`) {
+		t.Fatalf("smoke_runtime.sh must preserve the production traverse-only work root")
 	}
 }
 
