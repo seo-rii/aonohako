@@ -594,7 +594,7 @@ The interactor is invoked as:
 | DAFNY | `dafny` | `dafny verify --cores 1` |
 | TLA, TLAPLUS | `tla` | TLA+ model/tooling pass-through plus runner wrapper |
 | WHY3, WHYML | `why3` | `why3` proof wrapper |
-| ISABELLE | `isabelle` | `isabelle process_theories -o naproche_server=false -D .` |
+| ISABELLE | `isabelle` | `isabelle build -o naproche_server=false -D .` |
 | FSTAR | `fstar` | `fstar.exe` verification |
 | ALLOY | `alloy` | Alloy CLI execution plus receipt validation |
 | ACL2 | `acl2` | ACL2 batch proof wrapper |

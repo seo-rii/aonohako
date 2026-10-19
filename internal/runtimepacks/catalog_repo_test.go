@@ -388,7 +388,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"hare":          {"hare build -o Main Main.ha", "fmt::println"},
 		"idris2":        {"IDRIS2_VERSION=0.8.0", "make bootstrap SCHEME=chezscheme PREFIX=/usr/local", "idris2 --cg chez -o Main Main.idr", "test -d build/exec/Main_app"},
 		"haxe":          {"haxe -main Main -neko Main.n", "neko Main.n"},
-		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle process_theories -o naproche_server=false -D ."},
+		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle build -o naproche_server=false -D ."},
 		"j":             {"J_VERSION=963", "J_SOURCE_COMMIT=a9728936d7bd7743024db26a8fcb72e5f2fcadac", "ff5b91383265d27e2b9edb4c934ba1b642784417196ba6c2b09a2661c2a173d1", "aonohako-j Main.ijs", "echo 'ok'"},
 		"janet":         {"JANET_VERSION=1.41.2", "janet Main.janet"},
 		"javascript":    {"node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js"},
