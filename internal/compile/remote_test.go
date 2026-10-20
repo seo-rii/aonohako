@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"aonohako/internal/compilewire"
 	"aonohako/internal/config"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
@@ -227,7 +228,7 @@ func TestRemoteRunnerCompileRejectsOversizedSSEEvents(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: result\n"))
 		_, _ = w.Write([]byte("data: "))
-		_, _ = w.Write([]byte(strings.Repeat("x", remoteio.DefaultSSELineBytes+1)))
+		_, _ = w.Write([]byte(strings.Repeat("x", compilewire.SSELineBytes+1)))
 		_, _ = w.Write([]byte("\n\n"))
 	}))
 	defer remote.Close()

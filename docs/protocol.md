@@ -62,7 +62,8 @@ Client                        aonohako
   "stderr": "",                          // compiler stderr, capped at 1 MiB
   "stdout_truncated": false,             // true when stdout exceeded the compile capture cap
   "stderr_truncated": false,             // true when stderr exceeded the compile capture cap
-  "reason": "",                          // human-readable failure reason
+  "reason": "",                          // human-readable failure reason, capped at 1 MiB
+  "reason_truncated": false,             // true when reason exceeded the compile diagnostic cap
   "reason_code": ""                      // optional machine-readable reason, e.g. "memory_limit_exceeded"
 }
 ```
@@ -71,6 +72,20 @@ Client                        aonohako
 `emit_logs=false`, those events are omitted while the final result retains its
 captured compiler diagnostics. Failed compilation still emits a structural
 `error` event without copying stdout/stderr into that event.
+
+Compile artifacts are limited to 512 files, 16 MiB decoded per file and 48 MiB
+decoded in total, with at most 4096 bytes per artifact name. Their Base64
+padding, names and JSON-escaped diagnostics fit the compile-specific 96 MiB
+SSE event budget; a `data:` line allows that payload plus its seven framing
+bytes. The complete stream is limited to 128 MiB, including duplicated logs,
+errors, progress and heartbeats. The producer reserves a full result frame
+before emitting auxiliary events and never truncates artifact data to fit.
+The final combined artifact list is checked again at the API boundary, including
+its encoded wire size. An invalid or over-budget list produces an `Internal Error`
+result with no artifacts and bounded diagnostics.
+Execute streams retain their separate 64 MiB line/event and 128 MiB stream
+limits. Update remote control planes before runners: older compile readers
+still reject results larger than their 64 MiB limit.
 
 ---
 

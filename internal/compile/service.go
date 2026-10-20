@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"aonohako/internal/compilewire"
 	"aonohako/internal/config"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
@@ -24,13 +25,13 @@ const buildTimeout = 60 * time.Second
 const (
 	MaxDecodedSourceBytes      = 16 << 20
 	MaxDecodedSourceTotalBytes = 48 << 20
-	MaxSourceFiles             = 512
-	OutputCaptureBytes         = 1 << 20
+	MaxSourceFiles             = compilewire.ArtifactCount
+	OutputCaptureBytes         = compilewire.OutputBytes
 
 	maxDecodedSourceBytes      = MaxDecodedSourceBytes
 	maxDecodedSourceTotalBytes = MaxDecodedSourceTotalBytes
-	maxArtifactBytes           = 16 << 20
-	maxArtifactTotalBytes      = 48 << 20
+	maxArtifactBytes           = compilewire.ArtifactBytes
+	maxArtifactTotalBytes      = compilewire.ArtifactTotalBytes
 	maxSourceFiles             = MaxSourceFiles
 	ocamlCompileRunParam       = "s=32k"
 	compileSandboxMemoryMB     = 2048
