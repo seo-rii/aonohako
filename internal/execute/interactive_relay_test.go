@@ -136,41 +136,54 @@ func TestReconcileInteractiveRelayResults(t *testing.T) {
 
 // A terminal correct/wrong reply is optional for the contestant to read after
 // emitting its final answer. When the contestant has already exited, writing
-// the reply must not turn the interactor's successful exit into a stream_io RE.
-func TestRunInteractiveIOAcceptsFinalReplyAfterContestantExit(t *testing.T) {
+// the reply must not turn the interactor's exit-code verdict into a relay RE.
+func TestRunInteractiveIOFinalReplyAfterContestantExit(t *testing.T) {
 	requireSandboxSupport(t)
 	contestant := "import sys\n" +
 		"if sys.stdin.readline().strip() != 'ready':\n" +
 		"    raise SystemExit(2)\n" +
 		"print('! 0', flush=True)\n"
-	interactor := "import sys\nimport time\n" +
+	interactorPrefix := "import sys\nimport time\n" +
 		"print('ready', flush=True)\n" +
 		"if sys.stdin.readline().strip() != '! 0':\n" +
-		"    raise SystemExit(1)\n" +
+		"    raise SystemExit(3)\n" +
 		"if sys.stdin.read():\n" +
-		"    raise SystemExit(1)\n" +
-		"time.sleep(0.1)\n" +
-		"print('correct', flush=True)\n"
+		"    raise SystemExit(3)\n" +
+		"time.sleep(0.1)\n"
 
-	resp := New().Run(context.Background(), &model.RunRequest{
-		Lang: "python",
-		Binaries: []model.Binary{{
-			Name:    "main.py",
-			DataB64: base64.StdEncoding.EncodeToString([]byte(contestant)),
-		}},
-		Interactor: &model.InteractorSpec{
-			Lang: "python",
-			Binaries: []model.Binary{{
-				Name:    "interactor.py",
-				DataB64: base64.StdEncoding.EncodeToString([]byte(interactor)),
-			}},
-		},
-		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
-	}, Hooks{})
-	if resp.Status != model.RunStatusAccepted {
-		t.Fatalf("final reply to exited contestant must not cause RE: %+v", resp)
-	}
-	if resp.Score == nil || *resp.Score != 1 {
-		t.Fatalf("expected interactor score 1, got %+v", resp.Score)
+	for _, tc := range []struct {
+		name       string
+		reply      string
+		exitCode   int
+		wantStatus string
+		wantScore  float64
+	}{
+		{"correct", "correct", 0, model.RunStatusAccepted, 1},
+		{"wrong", "wrong", 1, model.RunStatusWA, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			interactor := interactorPrefix + fmt.Sprintf("print('%s', flush=True)\nraise SystemExit(%d)\n", tc.reply, tc.exitCode)
+			resp := New().Run(context.Background(), &model.RunRequest{
+				Lang: "python",
+				Binaries: []model.Binary{{
+					Name:    "main.py",
+					DataB64: base64.StdEncoding.EncodeToString([]byte(contestant)),
+				}},
+				Interactor: &model.InteractorSpec{
+					Lang: "python",
+					Binaries: []model.Binary{{
+						Name:    "interactor.py",
+						DataB64: base64.StdEncoding.EncodeToString([]byte(interactor)),
+					}},
+				},
+				Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
+			}, Hooks{})
+			if resp.Status != tc.wantStatus {
+				t.Fatalf("final reply to exited contestant = %q, want %q: %+v", resp.Status, tc.wantStatus, resp)
+			}
+			if resp.Score == nil || *resp.Score != tc.wantScore {
+				t.Fatalf("interactor score = %+v, want %v", resp.Score, tc.wantScore)
+			}
+		})
 	}
 }
