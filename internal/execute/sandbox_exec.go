@@ -1006,7 +1006,7 @@ done:
 		}
 		select {
 		case <-stdinCopyDone:
-			if err := <-stdinCopyErr; err != nil {
+			if err := <-stdinCopyErr; err != nil && !isExpectedPostExitStdinRelayError(err) {
 				stdinRelayErr = err
 			}
 		case <-time.After(100 * time.Millisecond):
@@ -1169,6 +1169,15 @@ done:
 		result.VerdictSource = "wall_time"
 	}
 	return result
+}
+
+// The sandbox deliberately closes live stdin after the target exits, waking
+// its copy goroutine with ErrClosedPipe or a write to the exited target with
+// EPIPE. These are shutdown signals, not contestant runtime errors. They must
+// not override the interactor's final verdict. Unexpected read/write errors
+// are still reported as stream_io failures.
+func isExpectedPostExitStdinRelayError(err error) bool {
+	return errors.Is(err, io.ErrClosedPipe) || errors.Is(err, os.ErrClosed) || errors.Is(err, syscall.EPIPE)
 }
 
 // waitErrorIsProcessExit reports whether cmd.Wait returned the target's normal
