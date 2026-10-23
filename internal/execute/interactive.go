@@ -2,6 +2,7 @@ package execute
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -278,16 +279,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	cancelInteractor()
 	contestantIn.Close()
 	interactorIn.Close()
-	if err := interactorIn.Err(); err != nil && contestantRes.Status == "OK" {
-		contestantRes.Status = model.RunStatusRE
-		contestantRes.Reason = "interactive relay to interactor failed: " + err.Error()
-		contestantRes.VerdictSource = "stream_io"
-	}
-	if err := contestantIn.Err(); err != nil && interactorRes.Status == "OK" {
-		interactorRes.Status = model.RunStatusRE
-		interactorRes.Reason = "interactive relay to contestant failed: " + err.Error()
-		interactorRes.VerdictSource = "stream_io"
-	}
+	reconcileInteractiveRelayResults(&contestantRes, &interactorRes, interactorIn.Err(), contestantIn.Err())
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(contestantWS, req.SidecarOutputs)
 	resp := interactiveResponse(
@@ -332,6 +324,40 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		interactorOutputBytes: interactorOutputBytes,
 		interactorOutputErr:   interactorOutputErr,
 	}
+}
+
+// reconcileInteractiveRelayResults preserves a completed interactor verdict
+// when a terminal protocol reply arrives after the contestant has exited.
+// Go's exec.Cmd.Wait returns the stdout copy goroutine's io.ErrClosedPipe even
+// when the sender exited normally; that transport error is not a judge RE.
+// Only an actual closed pipe, a zero-exit contestant and a finished interactor
+// are sufficient to discount the relay failure. Other I/O errors, nonzero
+// contestant exits and timeouts retain their existing verdicts.
+func reconcileInteractiveRelayResults(contestant, interactor *execResult, toInteractorErr, toContestantErr error) {
+	finalVerdictAvailable := contestant.ExitCode != nil && *contestant.ExitCode == 0 && interactor.ExitCode != nil
+	apply := func(res *execResult, relayErr error, label string) {
+		if relayErr == nil {
+			return
+		}
+		if finalVerdictAvailable && errors.Is(relayErr, io.ErrClosedPipe) {
+			// Preserve the interactor's exit-code verdict instead of promoting
+			// a post-exit stdout copy error to RE. Do not hide unrelated errors.
+			if res.Status == model.RunStatusRE && res.VerdictSource == "stream_io" &&
+				errors.Is(res.streamRelayErr, io.ErrClosedPipe) {
+				res.Status = "OK"
+				res.Reason = ""
+				res.VerdictSource = ""
+			}
+			return
+		}
+		if res.Status == "OK" {
+			res.Status = model.RunStatusRE
+			res.Reason = label + ": " + relayErr.Error()
+			res.VerdictSource = "stream_io"
+		}
+	}
+	apply(contestant, toInteractorErr, "interactive relay to interactor failed")
+	apply(interactor, toContestantErr, "interactive relay to contestant failed")
 }
 
 func captureInteractorOutput(path string, dest io.Writer, maxBytes int64) (int64, error) {
