@@ -43,6 +43,9 @@ type execResult struct {
 	ProcessCPUTimeMs int64
 	Reason           string
 	VerdictSource    string
+	// The typed stdout/stderr copy error from cmd.Wait, if any. Only interactive
+	// verdict reconciliation may discount an expected peer shutdown.
+	streamRelayErr   error
 }
 
 func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (int64, bool) {
@@ -1114,6 +1117,7 @@ done:
 			if streams.stdout != nil || streams.stderr != nil {
 				result.Reason = "sandbox stream relay failed: " + waitErr.Error()
 				result.VerdictSource = "stream_io"
+				result.streamRelayErr = waitErr
 			} else {
 				result.Reason = "sandbox process wait failed: " + waitErr.Error()
 				result.VerdictSource = "wait_status"
