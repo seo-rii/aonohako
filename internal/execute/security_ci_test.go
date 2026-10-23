@@ -47,6 +47,7 @@ func TestSandboxSecurityRegressionSuite(t *testing.T) {
 		{name: "spj-finite-score", fn: TestRunSPJRejectsNonFiniteScore},
 		{name: "pipeline-final-spj-workspace", fn: TestRunPipelineInteractiveArtifactBatchAndExplicitOriginalInputSPJ},
 		{name: "interactive-basic", fn: TestRunInteractiveIOAcceptsInteractorVerdict},
+		{name: "interactive-final-reply-after-exit", fn: TestRunInteractiveIOFinalReplyAfterContestantExit},
 		{name: "interactor-output-limit", fn: TestRunInteractiveUsesInteractorOutputLimit},
 		{name: "stdout-limit-verdict-combinations", fn: TestStdoutLimitCombinationsAcrossExecutionModes},
 		{name: "required-file-output-ignored-tle", fn: TestRunRequiredFileOutputIgnoredTLE},

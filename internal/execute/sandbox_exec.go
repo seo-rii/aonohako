@@ -43,6 +43,9 @@ type execResult struct {
 	ProcessCPUTimeMs int64
 	Reason           string
 	VerdictSource    string
+	// The typed stdout/stderr copy error from cmd.Wait, if any. Only interactive
+	// verdict reconciliation may discount an expected peer shutdown.
+	streamRelayErr   error
 }
 
 func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (int64, bool) {
@@ -1003,7 +1006,7 @@ done:
 		}
 		select {
 		case <-stdinCopyDone:
-			if err := <-stdinCopyErr; err != nil {
+			if err := <-stdinCopyErr; err != nil && !isExpectedPostExitStdinRelayError(err) {
 				stdinRelayErr = err
 			}
 		case <-time.After(100 * time.Millisecond):
@@ -1114,6 +1117,7 @@ done:
 			if streams.stdout != nil || streams.stderr != nil {
 				result.Reason = "sandbox stream relay failed: " + waitErr.Error()
 				result.VerdictSource = "stream_io"
+				result.streamRelayErr = waitErr
 			} else {
 				result.Reason = "sandbox process wait failed: " + waitErr.Error()
 				result.VerdictSource = "wait_status"
@@ -1165,6 +1169,15 @@ done:
 		result.VerdictSource = "wall_time"
 	}
 	return result
+}
+
+// The sandbox deliberately closes live stdin after the target exits, waking
+// its copy goroutine with ErrClosedPipe or a write to the exited target with
+// EPIPE. These are shutdown signals, not contestant runtime errors. They must
+// not override the interactor's final verdict. Unexpected read/write errors
+// are still reported as stream_io failures.
+func isExpectedPostExitStdinRelayError(err error) bool {
+	return errors.Is(err, io.ErrClosedPipe) || errors.Is(err, os.ErrClosed) || errors.Is(err, syscall.EPIPE)
 }
 
 // waitErrorIsProcessExit reports whether cmd.Wait returned the target's normal
