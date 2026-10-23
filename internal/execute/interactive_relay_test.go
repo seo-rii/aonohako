@@ -3,7 +3,6 @@ package execute
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"testing"
