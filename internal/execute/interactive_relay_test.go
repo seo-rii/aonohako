@@ -5,10 +5,34 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"os"
+	"syscall"
 	"testing"
 
 	"aonohako/internal/model"
 )
+
+func TestExpectedPostExitStdinRelayError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"pipe closed by cleanup", io.ErrClosedPipe, true},
+		{"fd closed by cleanup", os.ErrClosed, true},
+		{"child stdin pipe closed", syscall.EPIPE, true},
+		{"wrapped closed pipe", fmt.Errorf("copy stopped: %w", io.ErrClosedPipe), true},
+		{"unrelated I/O error", io.ErrUnexpectedEOF, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isExpectedPostExitStdinRelayError(tc.err); got != tc.want {
+				t.Fatalf("post-exit stdin error %v expected=%t, got=%t", tc.err, tc.want, got)
+			}
+		})
+	}
+}
 
 func TestReconcileInteractiveRelayResults(t *testing.T) {
 	ok, wrong := 0, 1
