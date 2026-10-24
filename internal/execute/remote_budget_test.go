@@ -54,7 +54,7 @@ func TestRemoteExecutionBudgetBoundaries(t *testing.T) {
 				Limits:     model.Limits{TimeMs: 1000},
 				Interactor: &model.InteractorSpec{Limits: &model.Limits{TimeMs: 90_000}},
 			},
-			want: 240 * time.Second,
+			want: 600 * time.Second,
 		},
 		{
 			name: "interactive omitted role time inherits contestant time",
@@ -62,7 +62,7 @@ func TestRemoteExecutionBudgetBoundaries(t *testing.T) {
 				Limits:     model.Limits{TimeMs: 9000},
 				Interactor: &model.InteractorSpec{Limits: &model.Limits{}},
 			},
-			want: 129 * time.Second,
+			want: 147 * time.Second,
 		},
 		{
 			name: "legacy URL parts share one download allowance",
@@ -88,11 +88,11 @@ func TestRemoteExecutionBudgetBoundaries(t *testing.T) {
 			req: model.RunRequest{Pipeline: &model.PipelineV1{
 				Steps: []model.PipelineStep{{
 					Limits:   model.Limits{TimeMs: 1000},
-					Executor: model.PipelineExecutor{InteractorLimits: &model.Limits{TimeMs: 90_000}},
+					Executor: model.PipelineExecutor{Kind: "interactive", InteractorLimits: &model.Limits{TimeMs: 90_000}},
 				}},
 				FinalJudge: model.PipelineFinalJudge{SPJ: &model.SPJSpec{Limits: &model.Limits{TimeMs: 120_000}}},
 			}},
-			want: 480 * time.Second,
+			want: 840 * time.Second,
 		},
 		{
 			name: "explicit wall allowance extends a single stage without changing CPU time",
@@ -106,6 +106,24 @@ func TestRemoteExecutionBudgetBoundaries(t *testing.T) {
 				Interactor: &model.InteractorSpec{Limits: &model.Limits{TimeMs: 1000}},
 			},
 			want: 150 * time.Second,
+		},
+		{
+			name: "interactive pipeline step receives slack, batch step does not",
+			req: model.RunRequest{Pipeline: &model.PipelineV1{
+				Steps: []model.PipelineStep{
+					{Limits: model.Limits{TimeMs: 1000}, Executor: model.PipelineExecutor{Kind: "interactive"}},
+					{Limits: model.Limits{TimeMs: 1000}, Executor: model.PipelineExecutor{Kind: "batch"}},
+				},
+			}},
+			want: 185 * time.Second,
+		},
+		{
+			name: "explicit interactive wall overrides default slack",
+			req: model.RunRequest{
+				Limits: model.Limits{TimeMs: 10_000, WallTimeMs: 12_000},
+				Interactor: &model.InteractorSpec{Limits: &model.Limits{TimeMs: 10_000}},
+			},
+			want: 132 * time.Second,
 		},
 		{
 			name: "zero time still has a nonzero execution allowance",
