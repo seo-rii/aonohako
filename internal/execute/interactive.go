@@ -159,8 +159,10 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	var contestantFinished atomic.Bool
 	var interactorFinished atomic.Bool
 	var contestantCanceledByInteractor atomic.Bool
-	contestantLimitMs := wallTimeLimitMs(req.Limits)
-	interactorLimitMs := wallTimeLimitMs(interactorReq.Limits)
+	// Protocol round trips may block on each peer and should not consume CPU
+	// time budget. Keep a separate, more generous bounded wall safety guard.
+	contestantLimitMs := interactiveWallTimeMs(req.Limits)
+	interactorLimitMs := interactiveWallTimeMs(interactorReq.Limits)
 	contestantLimit := time.Duration(contestantLimitMs) * time.Millisecond
 	interactorLimit := time.Duration(interactorLimitMs) * time.Millisecond
 	startupLimit := max(stdinURLDownloadTimeout, contestantLimit, interactorLimit)

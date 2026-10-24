@@ -25,8 +25,22 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 	if req.Pipeline != nil {
 		needsDownload = false // URL resources have already been resolved by the API.
 		for _, step := range req.Pipeline.Steps[:min(len(req.Pipeline.Steps), runvalidation.MaxPipelineSteps)] {
-			timeMs := max(step.Limits.TimeMs, wallTimeLimitMs(step.Limits))
-			if step.Executor.InteractorLimits != nil {
+			wallMs := wallTimeLimitMs(step.Limits)
+			interactive := strings.EqualFold(strings.TrimSpace(step.Executor.Kind), "interactive")
+			if interactive {
+				wallMs = interactiveWallTimeMs(step.Limits)
+			}
+			timeMs := max(step.Limits.TimeMs, wallMs)
+			if interactive {
+				// Mirror the role's runtime defaults, including inherited wall
+				// budgets, before bounding the remote control plane.
+				interactor := &model.RunRequest{
+					Limits: step.Limits,
+					Interactor: &model.InteractorSpec{Limits: step.Executor.InteractorLimits},
+				}
+				roleLimits := interactorRunRequest(interactor).Limits
+				timeMs = max(timeMs, roleLimits.TimeMs, interactiveWallTimeMs(roleLimits))
+			} else if step.Executor.InteractorLimits != nil {
 				roleLimits := *step.Executor.InteractorLimits
 				timeMs = max(timeMs, roleLimits.TimeMs, wallTimeLimitMs(roleLimits))
 			}
@@ -56,7 +70,8 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 		timeMs := max(req.Limits.TimeMs, wallTimeLimitMs(req.Limits))
 		if req.Interactor != nil {
 			roleLimits := interactorRunRequest(req).Limits
-			timeMs = max(timeMs, roleLimits.TimeMs, wallTimeLimitMs(roleLimits))
+			timeMs = max(req.Limits.TimeMs, interactiveWallTimeMs(req.Limits),
+				roleLimits.TimeMs, interactiveWallTimeMs(roleLimits))
 		}
 		addStage(timeMs)
 	}

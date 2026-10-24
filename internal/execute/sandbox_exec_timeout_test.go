@@ -179,3 +179,23 @@ func TestRunSandboxExplicitWallGuardStillStopsDeadlock(t *testing.T) {
 		t.Fatalf("explicit wall guard did not stop sleeping target: %+v", result)
 	}
 }
+
+func TestInteractiveWallTimeDefaultSlack(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		limits model.Limits
+		want   int
+	}{
+		{"ten second interactive", model.Limits{TimeMs: 10_000}, 30_000},
+		{"minimum wait slack", model.Limits{TimeMs: 500}, 3500},
+		{"explicit smaller wall limit", model.Limits{TimeMs: 10_000, WallTimeMs: 12_000}, 12_000},
+		{"explicit sub-CPU deadline", model.Limits{TimeMs: 1000, WallTimeMs: 500}, 500},
+		{"cap unvalidated big values", model.Limits{TimeMs: 600_000}, 600_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := interactiveWallTimeMs(tc.limits); got != tc.want {
+				t.Fatalf("wall allowance = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}

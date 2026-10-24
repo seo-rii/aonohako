@@ -13,3 +13,21 @@ func wallTimeLimitMs(limits model.Limits) int {
 	}
 	return min(max(1, limits.TimeMs), runvalidation.MaxTimeMs)
 }
+
+const (
+	interactiveWallMultiplier = 3
+	interactiveWallMinSlackMs = 3000
+)
+
+// interactiveWallTimeMs allows synchronous query/response sessions to wait
+// without consuming their CPU budget. Explicit deadlines always take priority.
+// The CPU limit itself is never multiplied. Clamp before arithmetic to avoid
+// overflow for internal/unvalidated requests.
+func interactiveWallTimeMs(limits model.Limits) int {
+	if limits.WallTimeMs > 0 {
+		return wallTimeLimitMs(limits)
+	}
+	cpuMs := int64(wallTimeLimitMs(limits))
+	return int(min(int64(runvalidation.MaxTimeMs),
+		max(cpuMs*interactiveWallMultiplier, cpuMs+interactiveWallMinSlackMs)))
+}
