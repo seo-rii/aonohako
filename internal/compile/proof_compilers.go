@@ -31,10 +31,10 @@ func compileRocq(ctx context.Context, workDir string, sources []model.Source) mo
 type isabelleCompiler struct{}
 
 func (isabelleCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
-	return compileIsabelle(ctx, job.WorkDir, job.Request.Sources)
+	return compileIsabelle(ctx, job.WorkDir, job.Request.Sources, job.Runner)
 }
 
-func compileIsabelle(ctx context.Context, workDir string, sources []model.Source) model.CompileResponse {
+func compileIsabelle(ctx context.Context, workDir string, sources []model.Source, runner CommandRunner) model.CompileResponse {
 	thyFiles := sourcePathsByExt(workDir, sources, ".thy")
 	if len(thyFiles) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no isabelle sources"}
@@ -99,7 +99,14 @@ func compileIsabelle(ctx context.Context, workDir string, sources []model.Source
 			return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 		}
 	}
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "isabelle", []string{"process_theories", "-o", "naproche_server=false", "-D", "."}, isabelleCompileEnv(workDir))
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	// build -D selects the submitted ROOT sessions. process_theories -D only
+	// sets the directory of an adhoc session and, without theory arguments,
+	// succeeds without checking any of the submitted proofs.
+	result := runner.Run(ctx, workDir, "isabelle", []string{"build", "-o", "naproche_server=false", "-D", "."}, isabelleCompileEnv(workDir))
+	stdout, stderr, status, reason := result.Stdout, result.Stderr, result.Status, result.Reason
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}

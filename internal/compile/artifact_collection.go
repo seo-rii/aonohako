@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 
+	"aonohako/internal/compilewire"
 	"aonohako/internal/model"
 	"aonohako/internal/util"
 )
@@ -28,6 +29,9 @@ func readSingleArtifact(root, rel, name, mode string) ([]model.Artifact, error) 
 
 func readOpenedArtifact(artifact openedArtifact, name, mode string) ([]model.Artifact, error) {
 	defer artifact.cleanup()
+	if len(name) > compilewire.ArtifactNameBytes {
+		return nil, fmt.Errorf("artifact name too long: max %d bytes", compilewire.ArtifactNameBytes)
+	}
 	if artifact.info.Size() > maxArtifactBytes {
 		return nil, fmt.Errorf("artifact too large: %s", name)
 	}
@@ -54,9 +58,19 @@ func collectArtifacts(root string, include func(name string) bool, prefix string
 		if include != nil && !include(d.Name()) {
 			return nil
 		}
+		if len(artifacts) >= compilewire.ArtifactCount {
+			return fmt.Errorf("too many artifacts: max %d", compilewire.ArtifactCount)
+		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
+		}
+		name := filepath.ToSlash(rel)
+		if prefix != "" {
+			name = filepath.ToSlash(filepath.Join(prefix, rel))
+		}
+		if len(name) > compilewire.ArtifactNameBytes {
+			return fmt.Errorf("artifact name too long: max %d bytes", compilewire.ArtifactNameBytes)
 		}
 		artifact, err := openArtifact(root, rel)
 		if err != nil {
@@ -76,10 +90,6 @@ func collectArtifacts(root string, include func(name string) bool, prefix string
 		if err != nil {
 			artifact.cleanup()
 			return err
-		}
-		name := filepath.ToSlash(rel)
-		if prefix != "" {
-			name = filepath.ToSlash(filepath.Join(prefix, rel))
 		}
 		mode := ""
 		if info.Mode().Perm()&0o111 != 0 {

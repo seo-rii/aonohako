@@ -2,6 +2,7 @@ package execute
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -159,17 +160,18 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	var interactorFinished atomic.Bool
 	var contestantCanceledByInteractor atomic.Bool
 	contestantLimitMs := max(1, req.Limits.TimeMs)
-	contestantTimer := time.AfterFunc(time.Duration(contestantLimitMs)*time.Millisecond, func() {
+	interactorLimitMs := max(1, interactorReq.Limits.TimeMs)
+	contestantLimit := time.Duration(contestantLimitMs) * time.Millisecond
+	interactorLimit := time.Duration(interactorLimitMs) * time.Millisecond
+	startupLimit := max(stdinURLDownloadTimeout, contestantLimit, interactorLimit)
+	timers := newInteractiveExecutionTimers(ctx, startupLimit, contestantLimit, interactorLimit, func() {
 		if contestantFinished.Load() {
 			return
 		}
 		contestantDeadlineHit.Store(true)
 		cancelContestant()
 		cancelInteractor()
-	})
-	defer contestantTimer.Stop()
-	interactorLimitMs := max(1, interactorReq.Limits.TimeMs)
-	interactorTimer := time.AfterFunc(time.Duration(interactorLimitMs)*time.Millisecond, func() {
+	}, func() {
 		if interactorFinished.Load() {
 			return
 		}
@@ -178,8 +180,11 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		}
 		cancelInteractor()
 		cancelContestant()
+	}, func() {
+		cancelContestant()
+		cancelInteractor()
 	})
-	defer interactorTimer.Stop()
+	defer timers.stop()
 
 	contestantCh := make(chan execResult, 1)
 	interactorCh := make(chan execResult, 1)
@@ -190,10 +195,13 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			contestantArgs,
 			req,
 			sandboxStreamConfig{
-				stdin:        contestantInR,
-				liveStdin:    true,
-				stdout:       interactorIn,
-				onStdoutDone: interactorIn.Close,
+				stdin:          contestantInR,
+				liveStdin:      true,
+				stdout:         interactorIn,
+				onStdoutDone:   interactorIn.Close,
+				onTargetReady:  func() { timers.targetReady(0) },
+				targetRelease:  timers.release,
+				startWallTimer: func() bool { return contestantCtx.Err() == nil },
 			},
 			hooks,
 			outputLimitBytes(req),
@@ -201,6 +209,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			s.cgroupParentDir,
 		)
 		contestantFinished.Store(true)
+		timers.finish(0)
 		contestantCh <- res
 	}()
 	go func() {
@@ -210,10 +219,13 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			interactorArgs,
 			interactorReq,
 			sandboxStreamConfig{
-				stdin:        interactorInR,
-				liveStdin:    true,
-				stdout:       contestantIn,
-				onStdoutDone: contestantIn.Close,
+				stdin:          interactorInR,
+				liveStdin:      true,
+				stdout:         contestantIn,
+				onStdoutDone:   contestantIn.Close,
+				onTargetReady:  func() { timers.targetReady(1) },
+				targetRelease:  timers.release,
+				startWallTimer: func() bool { return interactorCtx.Err() == nil },
 				identity: sandboxIdentity{
 					uid: interactiveJudgeSandboxUID,
 					gid: interactiveJudgeSandboxGID,
@@ -225,6 +237,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			s.cgroupParentDir,
 		)
 		interactorFinished.Store(true)
+		timers.finish(1)
 		interactorCh <- res
 	}()
 
@@ -237,7 +250,6 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		case res := <-contestantCh:
 			contestantRes = res
 			gotContestant = true
-			contestantTimer.Stop()
 			contestantIn.Close()
 			contestantStatus, _, _ := classifyRunStatusWithoutOutput(req, res)
 			if contestantStatus != "OK" {
@@ -246,7 +258,6 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		case res := <-interactorCh:
 			interactorRes = res
 			gotInteractor = true
-			interactorTimer.Stop()
 			interactorIn.Close()
 			interactorStatus, _, _ := classifyInteractorStatus(interactorReq, res)
 			if interactorStatus == model.RunStatusAccepted {
@@ -268,16 +279,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	cancelInteractor()
 	contestantIn.Close()
 	interactorIn.Close()
-	if err := interactorIn.Err(); err != nil && contestantRes.Status == "OK" {
-		contestantRes.Status = model.RunStatusRE
-		contestantRes.Reason = "interactive relay to interactor failed: " + err.Error()
-		contestantRes.VerdictSource = "stream_io"
-	}
-	if err := contestantIn.Err(); err != nil && interactorRes.Status == "OK" {
-		interactorRes.Status = model.RunStatusRE
-		interactorRes.Reason = "interactive relay to contestant failed: " + err.Error()
-		interactorRes.VerdictSource = "stream_io"
-	}
+	reconcileInteractiveRelayResults(&contestantRes, &interactorRes, interactorIn.Err(), contestantIn.Err())
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(contestantWS, req.SidecarOutputs)
 	resp := interactiveResponse(
@@ -322,6 +324,40 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		interactorOutputBytes: interactorOutputBytes,
 		interactorOutputErr:   interactorOutputErr,
 	}
+}
+
+// reconcileInteractiveRelayResults preserves a completed interactor verdict
+// when a terminal protocol reply arrives after the contestant has exited.
+// Go's exec.Cmd.Wait returns the stdout copy goroutine's io.ErrClosedPipe even
+// when the sender exited normally; that transport error is not a judge RE.
+// Only an actual closed pipe, a zero-exit contestant and a finished interactor
+// are sufficient to discount the relay failure. Other I/O errors, nonzero
+// contestant exits and timeouts retain their existing verdicts.
+func reconcileInteractiveRelayResults(contestant, interactor *execResult, toInteractorErr, toContestantErr error) {
+	finalVerdictAvailable := contestant.ExitCode != nil && *contestant.ExitCode == 0 && interactor.ExitCode != nil
+	apply := func(res *execResult, relayErr error, label string) {
+		if relayErr == nil {
+			return
+		}
+		if finalVerdictAvailable && errors.Is(relayErr, io.ErrClosedPipe) {
+			// Preserve the interactor's exit-code verdict instead of promoting
+			// a post-exit stdout copy error to RE. Do not hide unrelated errors.
+			if res.Status == model.RunStatusRE && res.VerdictSource == "stream_io" &&
+				errors.Is(res.streamRelayErr, io.ErrClosedPipe) {
+				res.Status = "OK"
+				res.Reason = ""
+				res.VerdictSource = ""
+			}
+			return
+		}
+		if res.Status == "OK" {
+			res.Status = model.RunStatusRE
+			res.Reason = label + ": " + relayErr.Error()
+			res.VerdictSource = "stream_io"
+		}
+	}
+	apply(contestant, toInteractorErr, "interactive relay to interactor failed")
+	apply(interactor, toContestantErr, "interactive relay to contestant failed")
 }
 
 func captureInteractorOutput(path string, dest io.Writer, maxBytes int64) (int64, error) {

@@ -89,6 +89,18 @@ as `/execute` when it runs as a root-backed embedded helper:
   submission-controlled `sitecustomize.py`, user site packages, and `PYTHON*`
   environment hooks do not execute during bytecode compilation
 
+Python and PyPy compilation returns both source files and sibling `.pyc` files.
+When executing a `.py` entry point, the isolated launcher loads its compatible
+sibling bytecode first, avoiding repeated parsing and bytecode generation for
+each testcase. Source files remain available for local imports and tracebacks;
+the submission still sees the original `.py` path in `__file__` and `sys.argv[0]`.
+Code filenames, including nested functions, are relocated to the execution
+workspace so source inspection also works after changing directories.
+Source-only requests and missing, incompatible, or malformed bytecode fall back
+to source execution. Exceptions raised by the loaded program do not trigger a
+second execution through the fallback path. Explicit `.pyc` entry points remain
+supported through `runpy`.
+
 ### Execute
 
 `/execute` is the security-sensitive path.

@@ -190,6 +190,23 @@ instead of copying stderr.
 `false` suppresses contestant stdout/stderr `log` SSE events for the whole
 request without changing output capture, judging, or the final `result`
 payload.
+
+When `file_outputs` is present, only the collected file is judge data. Missing,
+oversized, or unreadable files never fall back to stdout. A retained TLE with
+`ignore_tle=true` receives score `0` when that file is unavailable; the SPJ is
+not invoked with substitute data. An existing execution failure keeps its
+status, reason, and source.
+
+Sidecar paths must be unique after relative-path normalization; `x` and `./x`
+are duplicates and are rejected before stream or queue admission. Capture is
+best effort in request order: each file is limited to 8 MiB, and only successful
+captures consume the 16 MiB total. A rejected file does not prevent a later file
+from using the remaining space.
+
+Ordinary materialized stdin, including streamed URL input, is passed through an
+`O_RDONLY` descriptor. Changing file permission bits alone is insufficient:
+the runner closes the writable preparation descriptor before reopening it.
+
 `runtime_profile`, when present, must name a profile configured by the runner
 operator through `AONOHAKO_RUNTIME_TUNING_PROFILES`; it selects only bounded
 numeric tuning values and cannot pass arbitrary runtime flags. Non-dev servers
@@ -228,6 +245,13 @@ time and after every redirect. Execute binaries in the top-level, `programs`,
 SPJ, and interactor fields share one request-wide 48 MiB decoded budget across
 inline base64 and URL-backed payloads; invalid collection counts or paths are
 rejected before any outbound request is made.
+
+JSON text fields must contain valid UTF-8. In particular, `expected_stdout_url`
+is checked immediately after downloading and rejected with HTTP 400
+`invalid_payload_url` if it contains invalid UTF-8, before stream or queue
+admission. The runner also validates inline text before local execution or
+remote JSON encoding. Base64 payloads, pipeline resources, and streaming
+`stdin_url` retain their byte-preserving behavior.
 
 ### Two-step execute mode
 
@@ -570,7 +594,7 @@ The interactor is invoked as:
 | DAFNY | `dafny` | `dafny verify --cores 1` |
 | TLA, TLAPLUS | `tla` | TLA+ model/tooling pass-through plus runner wrapper |
 | WHY3, WHYML | `why3` | `why3` proof wrapper |
-| ISABELLE | `isabelle` | `isabelle process_theories -o naproche_server=false -D .` |
+| ISABELLE | `isabelle` | `isabelle build -o naproche_server=false -D .` |
 | FSTAR | `fstar` | `fstar.exe` verification |
 | ALLOY | `alloy` | Alloy CLI execution plus receipt validation |
 | ACL2 | `acl2` | ACL2 batch proof wrapper |
