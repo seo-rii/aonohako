@@ -1553,7 +1553,7 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 		"pyparsing==3.3.2",
 		"pylatexenc==2.10",
 		"jax[cpu]==0.10.0",
-		"setuptools==80.10.2",
+		"setuptools==84.1.0",
 	} {
 		if !slices.Contains(python.Install.Pip, pkg) {
 			t.Fatalf("python runtime must include %q, got %v", pkg, python.Install.Pip)

@@ -62,7 +62,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN python -m pip install --no-cache-dir --upgrade pip && \
     python -m pip install --no-cache-dir \
-      setuptools==80.10.2 \
+      setuptools==84.1.0 \
       numpy==2.4.4 pandas==3.0.2 seaborn==0.13.2 matplotlib==3.10.8 pillow==13.0.0 \
       six==1.17.0 qiskit==2.4.0 pyparsing==3.3.2 pylatexenc==2.10 jax[cpu]==0.10.0 && \
     python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \

@@ -302,7 +302,7 @@ languages:
         - python3
         - python3-pip
       pip:
-        - setuptools==80.10.2
+        - setuptools==84.1.0
         - numpy==2.4.4
         - pandas==3.0.2
         - seaborn==0.13.2
