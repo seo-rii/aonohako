@@ -173,8 +173,11 @@ digits, `.`, `_`, `-`, and `/`.
 `limits.time_ms` (CPU budget) and `limits.memory_mb` are required and bounded at the API
 boundary. An optional `limits.wall_time_ms` selects an independent hard wall-clock
 deadline for blocked I/O, deadlocks and sandbox stalls; omitted or zero
-preserves the legacy `time_ms` wall deadline. CPU accounting and CPU TLE
-classification continue to use `time_ms`. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
+preserves the legacy `time_ms` wall deadline for ordinary execution. CPU
+accounting and CPU TLE classification continue to use `time_ms`. Interactive
+execution, including Pipeline V1 interactive steps, defaults to a larger bounded
+wall safety allowance (`max(3 * time_ms, time_ms + 3000 ms)`, capped at
+600000 ms) when no explicit wall limit is supplied; batch steps are unchanged. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
 server-side values when `0` or omitted, but values above the hard API caps are
 rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
