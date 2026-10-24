@@ -24,6 +24,9 @@ read-only compiled artifacts, pipe pair, CPU allowance, and memory limit. The
 manager retains its separate trusted identity. The runner admits the combined
 memory and workspace budget before starting any submitted program.
 
+As in V1, wall-clock allowances are derived from the CPU limits and runner
+scheduling policy. A nonzero `limits.wall_time_ms` is rejected.
+
 ## Request
 
 Use `programs` for the three programs and this communication specification:

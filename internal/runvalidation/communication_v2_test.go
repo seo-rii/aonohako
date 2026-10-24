@@ -47,6 +47,7 @@ func TestValidateCommunicationV2BindsSeatsAndArtifacts(t *testing.T) {
 		}, "exactly two"},
 		{"count mismatch", func(r *model.RunRequest) { r.Communication.ParticipantCount = 3 }, "participant_count 2"},
 		{"old result", func(r *model.RunRequest) { r.Communication.ResultProtocol = "manager-result-v1" }, "match-result-v1"},
+		{"explicit wall limit", func(r *model.RunRequest) { r.Limits.WallTimeMs = 600000 }, "does not support limits.wall_time_ms"},
 		{"seed", func(r *model.RunRequest) { r.Communication.MatchSeed = strings.Repeat("A", 64) }, "match_seed"},
 		{"input binding", func(r *model.RunRequest) { r.Communication.InputSHA256 = "" }, "input_sha256"},
 		{"runtime binding", func(r *model.RunRequest) { r.Communication.RuntimeFingerprint = "" }, "runtime_fingerprint"},
