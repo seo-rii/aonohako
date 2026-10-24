@@ -118,6 +118,29 @@ func TestJSONCollectionSchemaInventory(t *testing.T) {
 	}
 }
 
+func TestCommunicationParticipantIDsAdmissionBounds(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want []string
+	}{
+		{`{"communication":{"participant_program_ids":["seat0","seat1"]}}`, []string{"seat0", "seat1"}},
+		{`{"communication":{"participant_program_ids":["seat0","seat1","seat2"]}}`, nil},
+	} {
+		var req model.RunRequest
+		err := decodeJSONBody(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader(tc.body)), &req)
+		if tc.want != nil {
+			if err != nil || req.Communication == nil || !reflect.DeepEqual(req.Communication.ParticipantProgramIDs, tc.want) {
+				t.Fatalf("valid seat IDs changed: request = %+v, error = %v", req.Communication, err)
+			}
+			continue
+		}
+		var limitErr *jsonCollectionLimitError
+		if !errors.As(err, &limitErr) || limitErr.field != "communication.participant_program_ids" || limitErr.limit != 2 {
+			t.Fatalf("oversized seat IDs did not hit the admission limit: %v", err)
+		}
+	}
+}
+
 func TestJSONCollectionKeysCannotBypassBounds(t *testing.T) {
 	for _, key := range []string{`steps`, `STEPS`, `st\u0065ps`, `\u017Fteps`} {
 		t.Run(key, func(t *testing.T) {
