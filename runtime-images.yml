@@ -1467,7 +1467,7 @@ languages:
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://www.bertnase.de/npiet/npiet-${NPIET_VERSION}.tar.gz" -o /tmp/npiet.tar.gz
         - echo "${NPIET_SHA256}  /tmp/npiet.tar.gz" | sha256sum -c -
         - tar -xzf /tmp/npiet.tar.gz -C /tmp
-        - cd "/tmp/npiet-${NPIET_VERSION}" && ./configure ac_cv_lib_gd_gdImageCreate=no ac_cv_header_gd_h=no && make npiet CFLAGS='-O2 -std=gnu17 -DHAVE_CONFIG_H'
+        - (cd "/tmp/npiet-${NPIET_VERSION}" && ./configure ac_cv_lib_gd_gdImageCreate=no ac_cv_header_gd_h=no && make npiet CFLAGS='-O2 -std=gnu17 -DHAVE_CONFIG_H')
         - install -m 0755 "/tmp/npiet-${NPIET_VERSION}/npiet" /usr/local/bin/npiet
         - rm -rf /tmp/npiet.tar.gz "/tmp/npiet-${NPIET_VERSION}"
         - (npiet -v 2>&1 || true) | grep 'with PNG support'
