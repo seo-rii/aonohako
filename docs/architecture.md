@@ -89,6 +89,18 @@ as `/execute` when it runs as a root-backed embedded helper:
   submission-controlled `sitecustomize.py`, user site packages, and `PYTHON*`
   environment hooks do not execute during bytecode compilation
 
+Python and PyPy compilation returns both source files and sibling `.pyc` files.
+When executing a `.py` entry point, the isolated launcher loads its compatible
+sibling bytecode first, avoiding repeated parsing and bytecode generation for
+each testcase. Source files remain available for local imports and tracebacks;
+the submission still sees the original `.py` path in `__file__` and `sys.argv[0]`.
+Code filenames, including nested functions, are relocated to the execution
+workspace so source inspection also works after changing directories.
+Source-only requests and missing, incompatible, or malformed bytecode fall back
+to source execution. Exceptions raised by the loaded program do not trigger a
+second execution through the fallback path. Explicit `.pyc` entry points remain
+supported through `runpy`.
+
 ### Execute
 
 `/execute` is the security-sensitive path.
@@ -534,6 +546,23 @@ The stable contract is:
 - after a normal `OK` resource run, non-zero exit becomes `Runtime Error`; then
   stdout/file-output or SPJ evaluation decides between `Accepted` and
   `Wrong Answer`
+- judging stdout or a step's execution stdout exceeding `limits.output_bytes`
+  becomes `Runtime Error` with reason `stdout exceeded output limit` and source
+  `stdout_limit` only after otherwise successful execution. Initialization
+  failure, TLE, MLE, WLE, and abnormal exit retain their existing status, reason,
+  and source even when stdout overflow was also observed. Legacy and Pipeline
+  steps prefix the source with `step:<id>:`; interactive roles add `contestant:`
+  or `interactor:`. This replaces the previous normal-run overflow `Wrong Answer`
+  classification and applies the same precedence to ordinary, legacy-step,
+  Pipeline batch, and interactive execution.
+- ordinary file-output judging may discard oversized diagnostic stdout without
+  changing the verdict because the complete file supplies the judge input.
+  Intermediate legacy steps and Pipeline steps still reject execution stdout
+  overflow before handing off artifacts. Truncation solely for response display
+  (`capture_limits`) never selects an output-limit verdict. Stderr capture
+  truncation is also diagnostic.
+- `ignore_tle` preserves TLE while evaluating a score; truncated judging stdout
+  cannot produce a successful comparison or SPJ score and therefore scores zero.
 
 Local helper responses include `verdict_source` diagnostic metadata when the
 runner can identify the source that selected the final status. The field is
@@ -811,8 +840,9 @@ The following checks are enforced before the HTTP server starts:
   positive end-to-end communication wall budget
 - `/compile` and `/execute` streams are capped globally, and outside `dev` they
   are also capped per principal. Bearer auth uses a token fingerprint as the
-  principal key; platform auth uses the upstream principal header such as
-  `X-Aonohako-Principal`. Platform auth ignores generic forwarded identity
+  principal key; platform auth hashes the full upstream principal header such
+  as `X-Aonohako-Principal` with SHA-256 for a bounded usage key without prefix
+  truncation. Platform auth ignores generic forwarded identity
   headers. With `AONOHAKO_PLATFORM_PRINCIPAL_HMAC_SECRET`, the application
   verifies the principal signature itself over method, request URI, principal,
   timestamp, and body digest; outside `dev`, startup rejects platform auth
@@ -1275,6 +1305,23 @@ What the current Cloud Run-compatible design does not claim:
 In practice, submissions should be treated as able to read world-readable files
 inside the runtime image. That is why the image must never contain secrets,
 private credentials, or sensitive configuration.
+
+## Server Shutdown
+
+On SIGINT or SIGTERM, the API enters draining state before HTTP shutdown.
+`/compile` and `/execute` reject new work with `503 server_draining`, readiness
+returns `503`, and liveness remains available. Requests still uploading,
+preparing payloads, or waiting in the queue are canceled immediately. The
+transition from a queue permit to a running job shares the drain lock, so a
+queued request cannot start after draining begins.
+
+Running compile and execute jobs have a ten-second HTTP completion grace.
+When it expires, all remaining job contexts are canceled and HTTP connections
+are closed. The server then waits separately for every admitted handler to
+return, including synchronous runner cleanup of processes, cgroups and work
+directories, before it exits. Cleanup is not abandoned when the HTTP grace
+expires. A second termination signal restores the operating system's default
+forced termination behavior and can interrupt this wait.
 
 ## Verification Strategy
 

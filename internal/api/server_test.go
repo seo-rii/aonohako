@@ -2033,10 +2033,8 @@ func TestExecuteRejectsOversizedTextFieldsBeforeQueueing(t *testing.T) {
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("expected 400 for oversized %s, got %d", field, resp.StatusCode)
-			}
+			// The complete JSON body exceeds its budget before field validation.
+			assertJSONBodyError(t, resp, http.StatusRequestEntityTooLarge, "request_body_too_large")
 		})
 	}
 }

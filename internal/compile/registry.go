@@ -74,7 +74,7 @@ var compileRegistry = map[string]Compiler{
 	"carbon":  carbonCompiler{coreObjectDir: defaultCarbonCoreObjectDir, prebuiltRuntimeDir: defaultCarbonPrebuiltRuntimeDir},
 	"graphql": passThroughCompiler{exts: []string{".graphql"}, noSourceReason: "no graphql sources"},
 	"lean4":   checkedSourcesCompiler{exts: []string{".lean"}, noSourceReason: "no lean sources", bin: "lean"},
-	"agda":    checkedSourcesCompiler{exts: []string{".agda"}, noSourceReason: "no agda sources", bin: "agda"},
+	"agda":    agdaCompiler{},
 	"dafny":   checkedSourcesCompiler{exts: []string{".dfy"}, noSourceReason: "no dafny sources", bin: "dafny", prefix: []string{"verify", "--cores", "1"}, env: []string{"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1", "DOTNET_PROCESSOR_COUNT=1", "COMPlus_ThreadPool_ForceMinWorkerThreads=1"}},
 	"tla":     passThroughCompiler{exts: []string{".tla", ".cfg"}, noSourceReason: "no tla sources"},
 	"why3":    checkedSourcesCompiler{exts: []string{".mlw"}, noSourceReason: "no why3 sources", bin: "aonohako-why3-prove"},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"aonohako/internal/model"
 	"aonohako/internal/payloadurl"
@@ -51,6 +52,9 @@ var supportedRunLangs = func() map[string]struct{} {
 }()
 
 func Validate(req *model.RunRequest) error {
+	if err := ValidateTextEncoding(req); err != nil {
+		return err
+	}
 	if len(req.Stdin) > MaxTextFieldBytes {
 		return fmt.Errorf("stdin too large: max %d bytes", MaxTextFieldBytes)
 	}
@@ -108,8 +112,8 @@ func Validate(req *model.RunRequest) error {
 		if len(req.FileOutputs) > 1 {
 			return fmt.Errorf("at most one file output is supported")
 		}
-		if len(req.SidecarOutputs) > MaxSidecarOutputs {
-			return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+		if err := ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
+			return err
 		}
 		if err := ValidateRequiredLimits("limits", req.Limits); err != nil {
 			return err
@@ -127,6 +131,60 @@ func Validate(req *model.RunRequest) error {
 	}
 	if _, err := ValidateBinaryBudget(req); err != nil {
 		return err
+	}
+	return nil
+}
+
+// ValidateTextEncoding rejects text that encoding/json would silently replace
+// during remote forwarding. Base64 payloads and streamed URL bodies remain byte
+// preserving and are not subject to this text-only contract.
+func ValidateTextEncoding(req *model.RunRequest) error {
+	if req == nil {
+		return nil
+	}
+	if !utf8.ValidString(req.Stdin) {
+		return fmt.Errorf("stdin must contain valid UTF-8")
+	}
+	if !utf8.ValidString(req.ExpectedStdout) {
+		return fmt.Errorf("expected_stdout must contain valid UTF-8")
+	}
+	if req.Communication != nil {
+		if !utf8.ValidString(req.Communication.Input) {
+			return fmt.Errorf("communication.input must contain valid UTF-8")
+		}
+		if !utf8.ValidString(req.Communication.Answer) {
+			return fmt.Errorf("communication.answer must contain valid UTF-8")
+		}
+	}
+	for i, step := range req.Steps {
+		if !utf8.ValidString(step.Stdin) {
+			return fmt.Errorf("steps[%d].stdin must contain valid UTF-8", i)
+		}
+		for j, part := range step.StdinParts {
+			if !utf8.ValidString(part.Data) {
+				return fmt.Errorf("steps[%d].stdin_parts[%d].data must contain valid UTF-8", i, j)
+			}
+		}
+	}
+	return nil
+}
+
+// ValidateSidecarOutputs applies the same path normalization used by local
+// capture and remote result validation, so one file can only be requested once.
+func ValidateSidecarOutputs(specs []model.OutputFile) error {
+	if len(specs) > MaxSidecarOutputs {
+		return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+	}
+	seen := make(map[string]struct{}, len(specs))
+	for i, spec := range specs {
+		clean, err := util.ValidateRelativePath(spec.Path)
+		if err != nil {
+			return fmt.Errorf("sidecar_outputs[%d].path: %w", i, err)
+		}
+		if _, duplicate := seen[clean]; duplicate {
+			return fmt.Errorf("duplicate sidecar output path: %s", clean)
+		}
+		seen[clean] = struct{}{}
 	}
 	return nil
 }
@@ -591,8 +649,8 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 	if len(req.FileOutputs) > 1 {
 		return fmt.Errorf("at most one file output is supported")
 	}
-	if len(req.SidecarOutputs) > MaxSidecarOutputs {
-		return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+	if err := ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
+		return err
 	}
 
 	programs := make(map[string]struct{}, len(req.Programs))
