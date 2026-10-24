@@ -109,8 +109,8 @@ error.
   "stdin": "hello\n",                        // input fed to process stdin (max 64 MiB)
   "expected_stdout": "hello\n",              // expected output for built-in diff (max 64 MiB)
   "limits": {
-    "time_ms": 2000,                         // CPU and default wall-clock time limit, 1..600000 ms
-    "wall_time_ms": 6000,                    // optional wall-clock safety deadline, 1..600000 ms; 0/omitted uses time_ms
+    "time_ms": 2000,                         // CPU time limit, 1..600000 ms; basis for the default wall allowance
+    "wall_time_ms": 6000,                    // optional unscaled wall-clock deadline, 1..600000 ms; 0/omitted uses runner defaults
     "memory_mb": 256,                        // memory limit, 1..4096 MB
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..67108864
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
@@ -171,14 +171,16 @@ interactive command channel, submitted GDL paths are limited to ASCII letters,
 digits, `.`, `_`, `-`, and `/`.
 
 `limits.time_ms` and `limits.memory_mb` are required and bounded at the API
-boundary. `limits.time_ms` is the CPU budget; in ordinary execution it is also
-the default wall-clock safety deadline. An optional `limits.wall_time_ms` selects an independent hard wall-clock
-deadline for blocked I/O, deadlocks and sandbox stalls; omitted or zero
-preserves the legacy `time_ms` wall deadline for ordinary execution. CPU
-accounting and CPU TLE classification continue to use `time_ms`. Interactive
-execution, including Pipeline V1 interactive steps, defaults to a larger bounded
-wall safety allowance (`max(3 * time_ms, time_ms + 3000 ms)`, capped at
-600000 ms) when no explicit wall limit is supplied; batch steps are unchanged.
+boundary. `limits.time_ms` is the CPU budget. An optional `limits.wall_time_ms`
+selects an independent hard wall-clock deadline for blocked I/O, deadlocks and
+sandbox stalls. This explicit deadline is never scaled by CPU normalization.
+When it is omitted or zero, ordinary execution uses `time_ms` as its base wall
+allowance. Interactive execution, including Pipeline V1 interactive steps, uses
+`min(600000 ms, max(3 * time_ms, time_ms + 3000 ms))` as its base allowance.
+With CPU normalization enabled, either default is extended to cover the
+calibrated CPU allowance and scheduling slack if that is larger; this effective
+default can exceed 600000 ms on slower hosts. CPU accounting and CPU TLE
+classification continue to use `time_ms`.
 Communication mode uses runner-managed wall allowances and rejects nonzero
 `limits.wall_time_ms`. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
 server-side values when `0` or omitted, but values above the hard API caps are

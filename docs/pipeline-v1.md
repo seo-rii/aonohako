@@ -77,10 +77,12 @@ are never accepted. `participant_stdout` and `interactor_output` allow at most
 8 MiB. Interactive stdout truncation is an artifact failure, never a prefix
 handoff.
 
-Interactive steps use a safety wall-clock allowance of
+Interactive steps use a base safety wall-clock allowance of
 `min(600000 ms, max(3 * time_ms, time_ms + 3000 ms))` by default, while
-their CPU limit remains `time_ms`. Explicit `limits.wall_time_ms` and
-`executor.interactor_limits.wall_time_ms` override this default; a missing
+their CPU limit remains `time_ms`. CPU normalization can extend this default
+to cover a larger calibrated CPU allowance and scheduling slack, including
+beyond 600000 ms on slower hosts. Explicit `limits.wall_time_ms` and
+`executor.interactor_limits.wall_time_ms` override the default without scaling; a missing
 interactor wall limit inherits the participant's explicit wall limit. Batch
 steps and the final judge retain their own wall-time semantics. The remote
 request deadline also includes the larger interactive allowance.
