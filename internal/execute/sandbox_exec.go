@@ -150,6 +150,9 @@ const (
 
 type sandboxPreparedStdin struct {
 	file *os.File
+	// Shared frozen inputs live outside the scanned workspace, but still
+	// consume this run's workspace quota just as materialized stdin does.
+	outsideWorkspaceBytes int64
 }
 
 func (s *sandboxPreparedStdin) Read(p []byte) (int, error) {
@@ -303,6 +306,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	if workspaceLimitBytes > hardMaxWorkspaceBytes {
 		workspaceLimitBytes = hardMaxWorkspaceBytes
+	}
+	workspaceAvailableBytes := workspaceLimitBytes
+	if prepared, ok := streams.stdin.(*sandboxPreparedStdin); ok && prepared.file != nil {
+		workspaceAvailableBytes -= prepared.outsideWorkspaceBytes
 	}
 	baseEnv := util.BaseEnv()
 	innerEnv := append(append(baseEnv[:0:0], baseEnv...), security.ThreadLimitEnv()...)
@@ -1049,7 +1056,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 					killTarget(result.VerdictSource)
 					continue
 				}
-				if usage.Bytes > workspaceLimitBytes {
+				if usage.Bytes > workspaceAvailableBytes {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace quota exceeded"
 					result.VerdictSource = "workspace_bytes"
@@ -1162,7 +1169,7 @@ done:
 			result.Status = model.RunStatusWLE
 			result.Reason = "workspace scan failed"
 			result.VerdictSource = "workspace_scan_final"
-		case usage.Bytes > workspaceLimitBytes:
+		case usage.Bytes > workspaceAvailableBytes:
 			result.Status = model.RunStatusWLE
 			result.Reason = "workspace quota exceeded"
 			result.VerdictSource = "workspace_bytes_final"

@@ -430,7 +430,10 @@ aonohako-selftest cgroup-preflight
   Memory is the maximum, while wall and elapsed time include all executions.
   Network, SPJ, interactive, communication, pipeline, file/sidecar-output,
   image-emitting, and ignore-TLE requests are not repeated. URL stdin is fetched
-  once within its existing size bound; repeated log/image events are suppressed.
+  once into a private file within its existing size bound, then reopened read-only
+  for each sample without buffering it on the Go heap or duplicating its storage.
+  Its bytes still count against each run's workspace quota. Repeated log/image
+  events are suppressed.
   This can triple execution work for short cases; set the variable to `false`
   to disable repetition independently. Submission aggregation remains the
   control plane's existing policy (Jungol uses the maximum testcase CPU).

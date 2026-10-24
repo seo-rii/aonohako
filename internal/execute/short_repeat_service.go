@@ -2,8 +2,8 @@ package execute
 
 import (
 	"context"
-	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync/atomic"
 
@@ -19,14 +19,23 @@ func runShortCaseBatch(ctx context.Context, req *model.RunRequest, hooks Hooks, 
 	if !shortCaseRepeatEligible(&frozen, hooks) {
 		return run(ctx, req, nil, 0, hooks)
 	}
-	var stdinMaxBytes int64
+	var stdinMaxBytes, frozenInputBytes int64
+	var frozenInputPath string
 	if strings.TrimSpace(req.StdinURL) != "" {
+		// Keep the fixture outside every contestant workspace. It stays under
+		// the configured work root and its existing URL size bound, while a
+		// fixed-size copy buffer avoids retaining the payload on the Go heap.
+		workDir, err := createRunWorkDir()
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin_url: input workspace failed: " + err.Error()}
+		}
+		defer os.RemoveAll(workDir)
 		stdinMaxBytes = stdinURLMaxBytes(req.Limits)
 		reader, err := openStdinURL(ctx, req.StdinURL, stdinMaxBytes, nil)
 		if err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin_url: " + err.Error()}
 		}
-		data, readErr := io.ReadAll(io.LimitReader(reader, stdinMaxBytes+1))
+		path, readErr := writeTempFileFromReader(workDir, "stdin-*", reader, stdinMaxBytes)
 		closeErr := reader.Close()
 		if readErr == nil {
 			readErr = closeErr
@@ -34,10 +43,30 @@ func runShortCaseBatch(ctx context.Context, req *model.RunRequest, hooks Hooks, 
 		if readErr != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin_url: " + readErr.Error()}
 		}
-		if int64(len(data)) > stdinMaxBytes {
-			return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("stdin_url: download too large: max %d bytes", stdinMaxBytes)}
+		info, err := os.Stat(path)
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin_url: frozen input stat failed: " + err.Error()}
 		}
-		frozen.Stdin = string(data)
+		frozenInputPath, frozenInputBytes = path, info.Size()
+		frozen.Stdin = ""
+	}
+	runOnce := func(ctx context.Context, hooks Hooks) model.RunResponse {
+		if err := ctx.Err(); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "short-case execution interrupted: " + err.Error()}
+		}
+		if frozenInputPath == "" {
+			return run(ctx, &frozen, strings.NewReader(frozen.Stdin), stdinMaxBytes, hooks)
+		}
+		// A new read-only descriptor gives every sample an independent offset
+		// and cannot modify the shared fixture. The sandbox consumes it directly
+		// instead of creating another full-sized copy in its workspace.
+		file, err := os.Open(frozenInputPath)
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin_url: frozen input open failed: " + err.Error()}
+		}
+		defer file.Close()
+		stdin := &sandboxPreparedStdin{file: file, outsideWorkspaceBytes: frozenInputBytes}
+		return run(ctx, &frozen, stdin, stdinMaxBytes, hooks)
 	}
 	var imageEmitted atomic.Bool
 	firstHooks := hooks
@@ -47,11 +76,11 @@ func runShortCaseBatch(ctx context.Context, req *model.RunRequest, hooks Hooks, 
 			hooks.OnImage(mime, b64, ts)
 		}
 	}
-	first := run(ctx, &frozen, strings.NewReader(frozen.Stdin), stdinMaxBytes, firstHooks)
+	first := runOnce(ctx, firstHooks)
 	if imageEmitted.Load() {
 		return first
 	}
 	return runShortCaseMedian(ctx, first, func(ctx context.Context) model.RunResponse {
-		return run(ctx, &frozen, strings.NewReader(frozen.Stdin), stdinMaxBytes, Hooks{})
+		return runOnce(ctx, Hooks{})
 	})
 }
