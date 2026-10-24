@@ -67,8 +67,12 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 	}
 	if spj != nil {
 		timeMs := defaultSPJTimeMs
-		if spj.Limits != nil && spj.Limits.TimeMs > 0 {
-			timeMs = max(spj.Limits.TimeMs, wallTimeLimitMs(*spj.Limits))
+		if spj.Limits != nil {
+			limits := *spj.Limits
+			if limits.TimeMs <= 0 {
+				limits.TimeMs = defaultSPJTimeMs
+			}
+			timeMs = max(limits.TimeMs, wallTimeLimitMs(limits))
 		}
 		addStage(timeMs)
 	}
