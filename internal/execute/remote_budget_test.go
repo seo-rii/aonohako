@@ -95,6 +95,19 @@ func TestRemoteExecutionBudgetBoundaries(t *testing.T) {
 			want: 480 * time.Second,
 		},
 		{
+			name: "explicit wall allowance extends a single stage without changing CPU time",
+			req:  model.RunRequest{Limits: model.Limits{TimeMs: 1000, WallTimeMs: 30_000}},
+			want: 150 * time.Second,
+		},
+		{
+			name: "explicit wall allowance for interactive role is also reserved remotely",
+			req: model.RunRequest{
+				Limits:     model.Limits{TimeMs: 1000, WallTimeMs: 30_000},
+				Interactor: &model.InteractorSpec{Limits: &model.Limits{TimeMs: 1000}},
+			},
+			want: 150 * time.Second,
+		},
+		{
 			name: "zero time still has a nonzero execution allowance",
 			req:  model.RunRequest{},
 			want: 120*time.Second + time.Millisecond,

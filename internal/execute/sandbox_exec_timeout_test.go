@@ -132,3 +132,50 @@ func TestRunSandboxExecutionStillEnforcesWallTimeLimit(t *testing.T) {
 	}
 	t.Logf("5000 ms target killed at wall=%d ms, source=%s", result.WallTimeMs, result.VerdictSource)
 }
+
+func TestWallTimeLimitMs(t *testing.T) {
+	for _, tc := range []struct {
+		limits model.Limits
+		want   int
+	}{
+		{model.Limits{TimeMs: 1000}, 1000},
+		{model.Limits{TimeMs: 1000, WallTimeMs: 30_000}, 30_000},
+		{model.Limits{TimeMs: 1000, WallTimeMs: 300}, 300},
+		{model.Limits{}, 1},
+	} {
+		if got := wallTimeLimitMs(tc.limits); got != tc.want {
+			t.Fatalf("wall time = %d, want %d for %+v", got, tc.want, tc.limits)
+		}
+	}
+}
+
+func TestRunSandboxCPUWaitingDoesNotExhaustExplicitWallBudget(t *testing.T) {
+	requireSandboxSupport(t)
+	ws, err := prepareWorkspaceDirs(sandboxAccessibleTempDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runCommandWithSandbox(context.Background(), ws, []string{"/bin/sleep", "0.4"},
+		&model.RunRequest{Lang: "binary", Limits: model.Limits{TimeMs: 100, WallTimeMs: 2500, MemoryMB: 256}},
+		nil, 0, Hooks{}, 1024, config.DefaultRuntimeTuningConfig(), "")
+	if result.Status != "OK" || result.ExitCode == nil || *result.ExitCode != 0 {
+		t.Fatalf("sleep should fit a separate wall allowance despite exceeding the CPU limit in elapsed time: %+v", result)
+	}
+	if result.WallTimeMs < 400 || result.CPUTimeMs >= 100 {
+		t.Fatalf("wall=%d, CPU=%d; want elapsed wait with low CPU", result.WallTimeMs, result.CPUTimeMs)
+	}
+}
+
+func TestRunSandboxExplicitWallGuardStillStopsDeadlock(t *testing.T) {
+	requireSandboxSupport(t)
+	ws, err := prepareWorkspaceDirs(sandboxAccessibleTempDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runCommandWithSandbox(context.Background(), ws, []string{"/bin/sleep", "5"},
+		&model.RunRequest{Lang: "binary", Limits: model.Limits{TimeMs: 1000, WallTimeMs: 350, MemoryMB: 256}},
+		nil, 0, Hooks{}, 1024, config.DefaultRuntimeTuningConfig(), "")
+	if result.Status != model.RunStatusTLE || result.VerdictSource != "wall_time" {
+		t.Fatalf("explicit wall guard did not stop sleeping target: %+v", result)
+	}
+}

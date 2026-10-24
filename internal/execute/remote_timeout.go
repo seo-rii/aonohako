@@ -25,9 +25,10 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 	if req.Pipeline != nil {
 		needsDownload = false // URL resources have already been resolved by the API.
 		for _, step := range req.Pipeline.Steps[:min(len(req.Pipeline.Steps), runvalidation.MaxPipelineSteps)] {
-			timeMs := step.Limits.TimeMs
+			timeMs := max(step.Limits.TimeMs, wallTimeLimitMs(step.Limits))
 			if step.Executor.InteractorLimits != nil {
-				timeMs = max(timeMs, step.Executor.InteractorLimits.TimeMs)
+				roleLimits := *step.Executor.InteractorLimits
+				timeMs = max(timeMs, roleLimits.TimeMs, wallTimeLimitMs(roleLimits))
 			}
 			addStage(timeMs)
 		}
@@ -35,7 +36,8 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 	} else if runvalidation.UsesSteps(req) {
 		needsDownload = false
 		for _, step := range req.Steps[:min(len(req.Steps), runvalidation.MaxSteps)] {
-			addStage(effectiveStepLimits(step).TimeMs)
+			stepLimits := effectiveStepLimits(step)
+			addStage(max(stepLimits.TimeMs, wallTimeLimitMs(stepLimits)))
 			needsDownload = needsDownload || strings.TrimSpace(step.StdinURL) != ""
 			for _, part := range step.StdinParts {
 				needsDownload = needsDownload || strings.TrimSpace(part.DataURL) != ""
@@ -51,9 +53,10 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 		wallMs, _ := communicationWallAllowanceMs(platform.DeploymentTargetCloudRun, "", count, 1, communicationManagerLimits(limits).TimeMs)
 		budget += stdinURLDownloadTimeout + time.Duration(wallMs)*time.Millisecond
 	} else {
-		timeMs := req.Limits.TimeMs
+		timeMs := max(req.Limits.TimeMs, wallTimeLimitMs(req.Limits))
 		if req.Interactor != nil {
-			timeMs = max(timeMs, interactorRunRequest(req).Limits.TimeMs)
+			roleLimits := interactorRunRequest(req).Limits
+			timeMs = max(timeMs, roleLimits.TimeMs, wallTimeLimitMs(roleLimits))
 		}
 		addStage(timeMs)
 	}
@@ -64,8 +67,12 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 	}
 	if spj != nil {
 		timeMs := defaultSPJTimeMs
-		if spj.Limits != nil && spj.Limits.TimeMs > 0 {
-			timeMs = spj.Limits.TimeMs
+		if spj.Limits != nil {
+			limits := *spj.Limits
+			if limits.TimeMs <= 0 {
+				limits.TimeMs = defaultSPJTimeMs
+			}
+			timeMs = max(limits.TimeMs, wallTimeLimitMs(limits))
 		}
 		addStage(timeMs)
 	}

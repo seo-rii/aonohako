@@ -174,11 +174,11 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 }
 
 func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
-	timeLimit := time.Duration(max(1, req.Limits.TimeMs)) * time.Millisecond
-	// Match the existing input-download budget, without shortening a longer
-	// execution limit that previously also bounded initialization.
-	startupLimit := max(stdinURLDownloadTimeout, timeLimit)
-	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, timeLimit)
+	wallLimit := time.Duration(wallTimeLimitMs(req.Limits)) * time.Millisecond
+	// Preparation stays separate from the wall-clock safety deadline. CPU
+	// limits continue to be enforced by the sandbox watchdog and RLIMIT_CPU.
+	startupLimit := max(stdinURLDownloadTimeout, wallLimit)
+	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, wallLimit)
 	defer cancel()
 
 	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{

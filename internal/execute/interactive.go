@@ -168,8 +168,8 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	var contestantFinished atomic.Bool
 	var interactorFinished atomic.Bool
 	var contestantCanceledByInteractor atomic.Bool
-	contestantLimitMs := max(1, req.Limits.TimeMs)
-	interactorLimitMs := max(1, interactorReq.Limits.TimeMs)
+	contestantLimitMs := wallTimeLimitMs(req.Limits)
+	interactorLimitMs := wallTimeLimitMs(interactorReq.Limits)
 	contestantLimit := time.Duration(contestantLimitMs) * time.Millisecond
 	interactorLimit := time.Duration(interactorLimitMs) * time.Millisecond
 	startupLimit := max(stdinURLDownloadTimeout, contestantLimit, interactorLimit)
@@ -464,6 +464,9 @@ func interactorRunRequest(req *model.RunRequest) *model.RunRequest {
 	}
 	if req.Interactor.Limits != nil {
 		limits = *req.Interactor.Limits
+		if limits.WallTimeMs <= 0 {
+			limits.WallTimeMs = req.Limits.WallTimeMs
+		}
 		if limits.TimeMs <= 0 {
 			limits.TimeMs = req.Limits.TimeMs
 			if limits.TimeMs <= 0 {

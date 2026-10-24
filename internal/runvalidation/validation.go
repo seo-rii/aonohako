@@ -973,6 +973,9 @@ func validateOptionalLimits(name string, limits model.Limits, maxOutputBytes int
 	if limits.MemoryMB < 0 || limits.MemoryMB > MaxMemoryMB {
 		return fmt.Errorf("%s.memory_mb must be between 0 and %d", name, MaxMemoryMB)
 	}
+	if limits.WallTimeMs < 0 || limits.WallTimeMs > MaxTimeMs {
+		return fmt.Errorf("%s.wall_time_ms must be between 0 and %d", name, MaxTimeMs)
+	}
 	if limits.OutputBytes < 0 || limits.OutputBytes > maxOutputBytes {
 		return fmt.Errorf("%s.output_bytes must be between 0 and %d", name, maxOutputBytes)
 	}
@@ -1053,5 +1056,5 @@ func UsesPython(req *model.RunRequest) bool {
 }
 
 func LimitsAreZero(l model.Limits) bool {
-	return l.TimeMs == 0 && l.MemoryMB == 0 && l.OutputBytes == 0 && l.WorkspaceBytes == 0
+	return l.TimeMs == 0 && l.WallTimeMs == 0 && l.MemoryMB == 0 && l.OutputBytes == 0 && l.WorkspaceBytes == 0
 }
