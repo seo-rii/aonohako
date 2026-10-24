@@ -14,9 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"aonohako/internal/compilewire"
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/util"
 )
 
@@ -60,6 +62,13 @@ func newRemoteRunner(cfg config.Config) Runner {
 func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model.CompileResponse {
 	if req == nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "nil request"}
+	}
+	if err := runvalidation.ValidateRemoteCompileRequestSize(req); err != nil {
+		var sizeErr *runvalidation.RemoteRequestSizeError
+		if errors.As(err, &sizeErr) {
+			return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+		}
+		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: err.Error()}
 	}
 
 	body, err := json.Marshal(req)
@@ -136,7 +145,7 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 		return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote compile protocol mismatch: " + err.Error()}
 	}
 
-	reader := remoteio.NewSSEReader(resp.Body)
+	reader := remoteio.NewCompileSSEReader(resp.Body)
 	idleTimeout := r.idleTimeout
 	if idleTimeout == 0 {
 		idleTimeout = remoteio.DefaultSSEIdleTimeout
@@ -184,6 +193,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 			if err := json.Unmarshal([]byte(event.Data), &remoteResult); err != nil {
 				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "remote result decode failed: " + err.Error()}
 			}
+			if len(remoteResult.ReasonCode) > compilewire.ReasonCodeBytes {
+				return model.CompileResponse{Status: model.CompileStatusInternal, Reason: "invalid remote result: reason_code too long"}
+			}
 			if strings.TrimSpace(remoteResult.Reason) == "" {
 				remoteResult.Reason = remoteErrorReason
 			}
@@ -198,6 +210,9 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 			seenArtifacts := make(map[string]struct{}, len(remoteResult.Artifacts))
 			var artifactBytes int64
 			for i, artifact := range remoteResult.Artifacts {
+				if len(artifact.Name) > compilewire.ArtifactNameBytes {
+					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("invalid remote result artifact[%d].name: max %d bytes", i, compilewire.ArtifactNameBytes)}
+				}
 				if artifact.Mode != "" && artifact.Mode != "exec" {
 					return model.CompileResponse{Status: model.CompileStatusInternal, Reason: fmt.Sprintf("invalid remote result artifact[%d].mode: %q", i, artifact.Mode)}
 				}

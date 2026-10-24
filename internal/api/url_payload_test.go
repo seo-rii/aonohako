@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
 	"aonohako/internal/payloadurl"
+	"aonohako/internal/platform"
 	"aonohako/internal/runvalidation"
 )
 
@@ -44,6 +46,206 @@ func setPayloadURLHTTPClientForTest(t *testing.T, targetURL string) {
 		testClient.CloseIdleConnections()
 		payloadURLHTTPClient = previous
 	})
+}
+
+func TestExecuteChecksExpandedRemoteRequestBeforeSSE(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		transport platform.ExecutionTransport
+		delta     int
+		wantCode  int
+	}{
+		{name: "remote below", transport: platform.ExecutionTransportRemote, delta: -1, wantCode: http.StatusOK},
+		{name: "remote exactly", transport: platform.ExecutionTransportRemote, delta: 0, wantCode: http.StatusOK},
+		{name: "remote above", transport: platform.ExecutionTransportRemote, delta: 1, wantCode: http.StatusRequestEntityTooLarge},
+		{name: "embedded above", transport: platform.ExecutionTransportEmbedded, delta: 1, wantCode: http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := model.RunRequest{
+				Lang:           "binary",
+				Binaries:       []model.Binary{{Name: "program", DataB64: "eA==", Mode: "exec"}},
+				ExpectedStdout: "x",
+				Limits:         model.Limits{TimeMs: 1000, MemoryMB: 64},
+			}
+			inline, err := json.Marshal(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			overhead := len(inline) - 1
+			encodedTextBytes := MaxJSONBodyBytes + tc.delta - overhead
+			// A URL body of about 11 MiB expands to about 64 MiB because '<'
+			// is escaped as six JSON bytes by the remote json.Marshal encoder.
+			expected := strings.Repeat("<", encodedTextBytes/6) + strings.Repeat("x", encodedTextBytes%6)
+			assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = io.WriteString(w, expected)
+			}))
+			defer assetServer.Close()
+			setPayloadURLHTTPClientForTest(t, assetServer.URL)
+			// This fixture downloads 11 MiB under the race detector; its
+			// contract is the byte boundary, independent of transfer speed.
+			payloadURLHTTPClient.Timeout = 30 * time.Second
+			cfg := configForTest(t)
+			cfg.Execution.Platform.ExecutionTransport = tc.transport
+			var calls atomic.Int64
+			s := NewWithServices(cfg, compileRunnerStub{}, executeRunnerStub{run: func(_ context.Context, expanded *model.RunRequest, _ execute.Hooks) model.RunResponse {
+				calls.Add(1)
+				if expanded.ExpectedStdout != expected || expanded.ExpectedStdoutURL != "" {
+					t.Error("runner did not receive the expanded request")
+				}
+				return model.RunResponse{Status: model.RunStatusAccepted}
+			}})
+			server := httptest.NewServer(s.Handler())
+			defer server.Close()
+			req.ExpectedStdout = ""
+			req.ExpectedStdoutURL = "http://payload.example/expected"
+			body, err := json.Marshal(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := http.Post(server.URL+"/execute", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			raw, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != tc.wantCode {
+				t.Fatalf("status = %d, want %d; body = %s", resp.StatusCode, tc.wantCode, raw)
+			}
+			if tc.wantCode == http.StatusRequestEntityTooLarge {
+				var envelope map[string]string
+				if err := json.Unmarshal(raw, &envelope); err != nil {
+					t.Fatal(err)
+				}
+				if envelope["error"] != "remote_request_too_large" || !strings.Contains(envelope["message"], "after payload expansion") || resp.Header.Get("Content-Type") != "application/json" {
+					t.Fatalf("unexpected pre-SSE error: headers=%v body=%s", resp.Header, raw)
+				}
+				if calls.Load() != 0 {
+					t.Fatal("oversized expanded request reached execution")
+				}
+			} else if calls.Load() != 1 || !strings.Contains(string(raw), "event: result") {
+				t.Fatalf("valid expanded request did not execute: calls=%d body=%s", calls.Load(), raw)
+			}
+			if active, pending := s.queue.Snapshot(); active != 0 || pending != 0 || s.streams.Load() != 0 {
+				t.Fatalf("admission leaked: active=%d pending=%d streams=%d", active, pending, s.streams.Load())
+			}
+		})
+	}
+}
+
+func TestCompileChecksExpandedRemoteRequestBeforeSSE(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		transport platform.ExecutionTransport
+		delta     int
+		wantCode  int
+	}{
+		{name: "remote below", transport: platform.ExecutionTransportRemote, delta: -1, wantCode: http.StatusOK},
+		{name: "remote exactly", transport: platform.ExecutionTransportRemote, delta: 0, wantCode: http.StatusOK},
+		{name: "remote above", transport: platform.ExecutionTransportRemote, delta: 1, wantCode: http.StatusRequestEntityTooLarge},
+		{name: "embedded above", transport: platform.ExecutionTransportEmbedded, delta: 1, wantCode: http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := model.CompileRequest{
+				Lang: "PYTHON3", Version: "v",
+				Sources: []model.Source{{Name: "Main.py"}, {Name: "helper.py"}, {Name: "data.py"}},
+			}
+			inline, err := json.Marshal(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			overhead := len(inline) - len(req.Version)
+			// These three sources satisfy both decoded limits. Their base64
+			// payloads plus ordinary request metadata reach the JSON boundary.
+			payload := strings.Repeat("x", maxCompileDecodedSourceBytes-256)
+			encodedBytes := base64.StdEncoding.EncodedLen(len(payload))
+			req.Version = strings.Repeat("v", MaxJSONBodyBytes+tc.delta-overhead-3*encodedBytes)
+			var downloads atomic.Int64
+			assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				downloads.Add(1)
+				_, _ = io.WriteString(w, payload)
+			}))
+			defer assetServer.Close()
+			setPayloadURLHTTPClientForTest(t, assetServer.URL)
+			payloadURLHTTPClient.Timeout = 30 * time.Second
+			cfg := configForTest(t)
+			cfg.Execution.Platform.ExecutionTransport = tc.transport
+			cfg.MaxActiveStreams, cfg.MaxActiveUploads = 1, 1
+			var calls atomic.Int64
+			s := NewWithServices(cfg, compileRunnerStub{run: func(_ context.Context, expanded *model.CompileRequest) model.CompileResponse {
+				calls.Add(1)
+				if expanded.Version != req.Version || len(expanded.Sources) != 3 {
+					t.Error("compiler did not receive the expanded request")
+				}
+				for _, source := range expanded.Sources {
+					if source.DataURL != "" || len(source.DataB64) != encodedBytes {
+						t.Error("compiler source was not expanded")
+					}
+				}
+				return model.CompileResponse{Status: model.CompileStatusOK}
+			}}, execute.New())
+			// Oversize rejection must precede stream and queue admission, even
+			// while both capacities are already exhausted.
+			releaseHeld := func() {}
+			if tc.wantCode == http.StatusRequestEntityTooLarge {
+				active, err := s.queue.Acquire()
+				if err != nil {
+					t.Fatal(err)
+				}
+				pending, err := s.queue.Acquire()
+				if err != nil {
+					t.Fatal(err)
+				}
+				release, ok, code := s.acquireStream("held")
+				if !ok {
+					t.Fatalf("hold stream: %s", code)
+				}
+				releaseHeld = sync.OnceFunc(func() { pending.Cancel(); active.Release(); release() })
+			}
+			defer releaseHeld()
+			server := httptest.NewServer(s.Handler())
+			defer server.Close()
+			for i := range req.Sources {
+				req.Sources[i].DataURL = fmt.Sprintf("http://payload.example/source/%d", i)
+			}
+			body, err := json.Marshal(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := http.Post(server.URL+"/compile", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			raw, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != tc.wantCode {
+				t.Fatalf("status = %d, want %d; body = %s", resp.StatusCode, tc.wantCode, raw)
+			}
+			if downloads.Load() != 3 {
+				t.Fatalf("downloads = %d, want 3", downloads.Load())
+			}
+			if tc.wantCode == http.StatusRequestEntityTooLarge {
+				var envelope map[string]string
+				if err := json.Unmarshal(raw, &envelope); err != nil {
+					t.Fatal(err)
+				}
+				if envelope["error"] != "remote_request_too_large" || !strings.Contains(envelope["message"], "after payload expansion") || resp.Header.Get("Content-Type") != "application/json" || calls.Load() != 0 {
+					t.Fatalf("unexpected pre-SSE compile rejection: calls=%d headers=%v body=%s", calls.Load(), resp.Header, raw)
+				}
+			} else if calls.Load() != 1 || !strings.Contains(string(raw), "event: result") {
+				t.Fatalf("valid expanded compile did not execute: calls=%d body=%s", calls.Load(), raw)
+			}
+			releaseHeld()
+			if active, pending := s.queue.Snapshot(); active != 0 || pending != 0 || s.streams.Load() != 0 || s.uploads.Load() != 0 || len(s.payloadURLFetchSlots) != 0 {
+				t.Fatalf("compile admission leaked: active=%d pending=%d streams=%d uploads=%d fetches=%d", active, pending, s.streams.Load(), s.uploads.Load(), len(s.payloadURLFetchSlots))
+			}
+		})
+	}
 }
 
 func TestDownloadPayloadURLRejectsLoopbackBeforeRequest(t *testing.T) {

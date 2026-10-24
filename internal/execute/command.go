@@ -13,14 +13,49 @@ import (
 	"aonohako/internal/pythonpolicy"
 )
 
-const pythonStdlibRunner = `import os, runpy, site, sys
+// pythonRunMain consumes compileall's sibling bytecode without changing the
+// source entry point exposed to the submission. Old source-only payloads and
+// bytecode from a different interpreter retain the source execution path.
+const pythonRunMain = `def _run_python_main(path):
+    code = None
+    if path.lower().endswith(".py"):
+        try:
+            code = importlib.machinery.SourcelessFileLoader("__main__", path + "c").get_code("__main__")
+        except (ImportError, OSError, EOFError, ValueError):
+            pass
+    if code is None:
+        return runpy.run_path(path, run_name="__main__")
+    # compileall and execution use different workspaces. Relocate nested code
+    # as well so tracebacks and source inspection survive a later chdir().
+    original_filename = code.co_filename
+    def relocate_code(value):
+        if not isinstance(value, types.CodeType) or value.co_filename != original_filename:
+            return value
+        return value.replace(co_filename=path, co_consts=tuple(relocate_code(item) for item in value.co_consts))
+    code = relocate_code(code)
+    main = types.ModuleType("__main__")
+    main.__file__ = path
+    main.__package__ = ""
+    main.__cached__ = None
+    previous_main = sys.modules["__main__"]
+    previous_argv0 = sys.argv[0]
+    try:
+        sys.modules["__main__"] = main
+        sys.argv[0] = path
+        exec(code, main.__dict__)
+    finally:
+        sys.modules["__main__"] = previous_main
+        sys.argv[0] = previous_argv0
+_run_python_main(path)
+`
+
+const pythonStdlibRunner = `import importlib.machinery, os, runpy, site, sys, types
 path = sys.argv.pop(1)
 site.setquit()
 site.setcopyright()
 site.sethelper()
 sys.path.insert(0, os.path.dirname(path))
-runpy.run_path(path, run_name="__main__")
-`
+` + pythonRunMain
 
 const pythonTrustedSitecustomizePath = "/usr/local/lib/aonohako/python/sitecustomize.py"
 
@@ -38,7 +73,7 @@ func octaveImageCaptureEnabled(req *model.RunRequest) bool {
 	return false
 }
 
-const pythonInstalledRunner = `import importlib.util, os, runpy, site, sys
+const pythonInstalledRunner = `import importlib.machinery, importlib.util, os, runpy, site, sys, types
 path = sys.argv.pop(1)
 trusted_sitecustomize_path = sys.argv.pop(1)
 site.setquit()
@@ -54,8 +89,7 @@ trusted_sitecustomize = importlib.util.module_from_spec(spec)
 sys.modules["sitecustomize"] = trusted_sitecustomize
 spec.loader.exec_module(trusted_sitecustomize)
 sys.path.insert(0, os.path.dirname(path))
-runpy.run_path(path, run_name="__main__")
-`
+` + pythonRunMain
 
 func buildCommand(primaryPath, lang string, req *model.RunRequest) []string {
 	return buildCommandWithRuntimeTuning(primaryPath, lang, req, config.DefaultRuntimeTuningConfig())
@@ -430,7 +464,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 	case "smalltalk":
 		return []string{"gst", "-q", primaryPath}
 	case "golfscript":
-		return []string{"ruby", "/usr/local/lib/aonohako/golfscript_sandboxed.rb", primaryPath}
+		// GolfScript string literals must not interpolate arbitrary Ruby code.
+		return []string{"ruby", "/usr/local/lib/aonohako/golfscript.rb", "-n", primaryPath}
 	case "haxe":
 		return []string{"neko", primaryPath}
 	case "raku":
