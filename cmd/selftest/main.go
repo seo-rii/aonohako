@@ -1206,7 +1206,7 @@ printfn"%A"(getans(fac(a))0I)
 			}
 		}
 		if language == "entry" {
-			if err := runEntryStateSelftest(httpServer.URL); err != nil {
+			if err := runEntryStateSelftest(baseURL); err != nil {
 				return err
 			}
 		}
