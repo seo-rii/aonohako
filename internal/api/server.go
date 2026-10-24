@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 
 	"aonohako/internal/compile"
 	"aonohako/internal/config"
+	"aonohako/internal/entrypolicy"
 	"aonohako/internal/execute"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
@@ -214,6 +216,10 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 	if pipelineSupported {
 		capabilities = append(capabilities, "pipeline-v1")
 	}
+	entrySupported := s.supportsEntryV1()
+	if entrySupported {
+		capabilities = append(capabilities, entrypolicy.Capability)
+	}
 	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	w.Header().Set("Content-Type", "application/json")
 	body := map[string]any{"capabilities": capabilities}
@@ -225,6 +231,9 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 			"runner_sha256":       competitiveIdentity.RunnerSHA256,
 			"image_digest":        competitiveIdentity.ImageDigest,
 		}
+	}
+	if entrySupported {
+		body["entry"] = map[string]any{"engine_version": "4.0.23", "grader_version": entrypolicy.Capability, "modes": []string{"stdio", "state"}}
 	}
 	if pipelineSupported {
 		body["pipeline"] = map[string]any{
@@ -246,6 +255,36 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 func (s *Server) supportsPipelineV1() bool {
 	return s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded &&
 		s.cfg.Execution.Platform.SandboxBackend == platform.SandboxBackendHelper
+}
+
+func (s *Server) supportsEntryV1() bool {
+	if !s.supportsPipelineV1() {
+		return false
+	}
+	installed := false
+	for _, language := range strings.Split(os.Getenv("AONOHAKO_LANGUAGES"), ",") {
+		if language == "entry" {
+			installed = true
+		}
+	}
+	if !installed {
+		return false
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		return false
+	}
+	for _, path := range []string{entrypolicy.RunnerPath, "/usr/local/lib/aonohako/entry-runtime.mjs"} {
+		file, err := os.Open(path)
+		if err != nil {
+			return false
+		}
+		info, err := file.Stat()
+		_ = file.Close()
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) nextID(prefix string) string {

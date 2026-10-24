@@ -25,6 +25,7 @@ type Profile struct {
 }
 
 var profiles = map[string]Profile{
+	"ENTRY":         {SourceLang: "ENTRY", Extension: "entry.json", DefaultTarget: "Main.entry.json", CompileKind: "entry", RunLang: "entry", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"C":             {SourceLang: "C", Extension: "c", DefaultTarget: "Main", CompileKind: "c", CompileStd: "c11", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"C89":           {SourceLang: "C89", Extension: "c", DefaultTarget: "Main", CompileKind: "c", CompileStd: "c90", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"C99":           {SourceLang: "C99", Extension: "c", DefaultTarget: "Main", CompileKind: "c", CompileStd: "c99", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
@@ -243,6 +244,8 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
+	case "entry":
+		return key
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "bun", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
 		return key
 	case "chez", "chezscheme", "chez_scheme":

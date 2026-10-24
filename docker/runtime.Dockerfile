@@ -127,6 +127,7 @@ COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako /usr/local/bin/aono
 COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
+COPY --chmod=0444 scripts/entry-runner.mjs scripts/entry-runtime.mjs scripts/entry-supported-blocks.json /usr/local/lib/aonohako/
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
 COPY --chmod=0644 scripts/befunge.py /usr/local/lib/aonohako/befunge.py
 COPY --chmod=0644 scripts/malbolge.py /usr/local/lib/aonohako/malbolge.py

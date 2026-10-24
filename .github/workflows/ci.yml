@@ -42,6 +42,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./...
+      - run: node --test scripts/entry-runtime.test.mjs
       - run: python3 scripts/runtime_incremental_test.py
       - run: python3 scripts/runtime_incremental_go_test.py
       - run: ./scripts/build_runtime_images.sh -mode production -dry-run -tag-prefix local/aonohako

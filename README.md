@@ -15,6 +15,8 @@ binary, configurable runtime images, and testable build metadata.
 - symlink-safe output capture for file outputs and sidecar artifacts
 - SPJ and interactive IO judging support for problems that need custom verdict
   logic or bidirectional contestant/interactor communication
+- [Entry block judging](docs/entry-judging.md) with selectable standard I/O or
+  deterministic stage-state comparison, using immutable Entry JSON submissions
 - `communication-v1` execution on explicitly enabled Cloud Run embedded helpers
   and dedicated self-hosted cgroup runners: one private manager process
   coordinates 2–64 isolated launches of one shared, read-only participant binary

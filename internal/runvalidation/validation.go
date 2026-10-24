@@ -57,6 +57,9 @@ func Validate(req *model.RunRequest) error {
 	if err := ValidateTextEncoding(req); err != nil {
 		return err
 	}
+	if err := ValidateEntry(req); err != nil {
+		return err
+	}
 	if len(req.Stdin) > MaxTextFieldBytes {
 		return fmt.Errorf("stdin too large: max %d bytes", MaxTextFieldBytes)
 	}

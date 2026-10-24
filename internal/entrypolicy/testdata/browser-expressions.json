@@ -1,0 +1,195 @@
+{
+  "objects": [
+    {
+      "id": "y8fv",
+      "name": "블록 친구",
+      "script": "[[{\"id\":\"gold36\",\"x\":0,\"y\":0,\"type\":\"when_run_button_click\",\"params\":[null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},{\"id\":\"gold37\",\"x\":0,\"y\":0,\"type\":\"set_variable\",\"params\":[\"quotient\",{\"id\":\"gold16\",\"x\":0,\"y\":0,\"type\":\"quotient_and_mod\",\"params\":[null,{\"id\":\"gold14\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[-7],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null,{\"id\":\"gold15\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[3],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null,\"QUOTIENT\"],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},{\"id\":\"gold38\",\"x\":0,\"y\":0,\"type\":\"set_variable\",\"params\":[\"mod\",{\"id\":\"gold19\",\"x\":0,\"y\":0,\"type\":\"quotient_and_mod\",\"params\":[null,{\"id\":\"gold17\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[-7],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null,{\"id\":\"gold18\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[3],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null,\"MOD\"],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},{\"id\":\"gold39\",\"x\":0,\"y\":0,\"type\":\"set_variable\",\"params\":[\"substring\",{\"id\":\"gold23\",\"x\":0,\"y\":0,\"type\":\"substring\",\"params\":[null,{\"id\":\"gold20\",\"x\":0,\"y\":0,\"type\":\"text\",\"params\":[\"abcdef\"],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null,{\"id\":\"gold21\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[5],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null,{\"id\":\"gold22\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[2],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},{\"id\":\"gold40\",\"x\":0,\"y\":0,\"type\":\"set_variable\",\"params\":[\"char\",{\"id\":\"gold26\",\"x\":0,\"y\":0,\"type\":\"char_at\",\"params\":[null,{\"id\":\"gold24\",\"x\":0,\"y\":0,\"type\":\"text\",\"params\":[\"a한c\"],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null,{\"id\":\"gold25\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[2],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},{\"id\":\"gold41\",\"x\":0,\"y\":0,\"type\":\"set_variable\",\"params\":[\"blankZero\",{\"id\":\"gold29\",\"x\":0,\"y\":0,\"type\":\"boolean_basic_operator\",\"params\":[{\"id\":\"gold27\",\"x\":0,\"y\":0,\"type\":\"text\",\"params\":[\"\"],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},\"EQUAL\",{\"id\":\"gold28\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[0],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]}],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},{\"id\":\"gold42\",\"x\":0,\"y\":0,\"type\":\"set_variable\",\"params\":[\"numericString\",{\"id\":\"gold32\",\"x\":0,\"y\":0,\"type\":\"boolean_basic_operator\",\"params\":[{\"id\":\"gold30\",\"x\":0,\"y\":0,\"type\":\"text\",\"params\":[\"01\"],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},\"EQUAL\",{\"id\":\"gold31\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[1],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]}],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},{\"id\":\"gold43\",\"x\":0,\"y\":0,\"type\":\"set_variable\",\"params\":[\"not\",{\"id\":\"gold34\",\"x\":0,\"y\":0,\"type\":\"boolean_not\",\"params\":[null,{\"id\":\"gold33\",\"x\":0,\"y\":0,\"type\":\"False\",\"params\":[null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},{\"id\":\"gold44\",\"x\":0,\"y\":0,\"type\":\"set_variable\",\"params\":[\"done\",{\"id\":\"gold35\",\"x\":0,\"y\":0,\"type\":\"number\",\"params\":[1],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]},null],\"statements\":[],\"movable\":null,\"deletable\":1,\"emphasized\":false,\"readOnly\":null,\"copyable\":true,\"assemble\":true,\"extensions\":[]}]]",
+      "objectType": "sprite",
+      "rotateMethod": "free",
+      "scene": "7dwq",
+      "sprite": {
+        "pictures": [
+          {
+            "id": "9sh2",
+            "dimension": {
+              "width": 96,
+              "height": 96
+            },
+            "fileurl": "data:image/png;base64,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",
+            "name": "기본 모양",
+            "imageType": "png"
+          }
+        ],
+        "sounds": []
+      },
+      "selectedPictureId": "9sh2",
+      "lock": false,
+      "entity": {
+        "x": 0,
+        "y": 0,
+        "regX": 48,
+        "regY": 48,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "direction": 90,
+        "width": 96,
+        "height": 96,
+        "font": "undefinedpx ",
+        "visible": true
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "7dwq",
+      "name": "장면 1"
+    }
+  ],
+  "variables": [
+    {
+      "name": "quotient",
+      "id": "quotient",
+      "visible": false,
+      "value": "initial",
+      "variableType": "variable",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": -230,
+      "y": -105
+    },
+    {
+      "name": "mod",
+      "id": "mod",
+      "visible": false,
+      "value": "initial",
+      "variableType": "variable",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": -230,
+      "y": 0
+    },
+    {
+      "name": "substring",
+      "id": "substring",
+      "visible": false,
+      "value": "initial",
+      "variableType": "variable",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": -230,
+      "y": 28
+    },
+    {
+      "name": "char",
+      "id": "char",
+      "visible": false,
+      "value": "initial",
+      "variableType": "variable",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": -230,
+      "y": 56
+    },
+    {
+      "name": "blankZero",
+      "id": "blankZero",
+      "visible": false,
+      "value": "initial",
+      "variableType": "variable",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": -230,
+      "y": 84
+    },
+    {
+      "name": "numericString",
+      "id": "numericString",
+      "visible": false,
+      "value": "initial",
+      "variableType": "variable",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": -230,
+      "y": 112
+    },
+    {
+      "name": "not",
+      "id": "not",
+      "visible": false,
+      "value": "initial",
+      "variableType": "variable",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": -138,
+      "y": -105
+    },
+    {
+      "name": "done",
+      "id": "done",
+      "visible": false,
+      "value": "initial",
+      "variableType": "variable",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": -138,
+      "y": -77
+    },
+    {
+      "name": "초시계",
+      "id": "brih",
+      "visible": false,
+      "value": "0",
+      "variableType": "timer",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": 134,
+      "y": -70
+    },
+    {
+      "name": " 대답 ",
+      "id": "1vu8",
+      "visible": false,
+      "value": "0",
+      "variableType": "answer",
+      "isCloud": false,
+      "isRealTime": false,
+      "cloudDate": false,
+      "object": null,
+      "x": 150,
+      "y": -100
+    }
+  ],
+  "messages": [],
+  "functions": [],
+  "tables": [],
+  "speed": 60,
+  "interface": {
+    "menuWidth": 280,
+    "canvasWidth": 480,
+    "object": "y8fv"
+  },
+  "expansionBlocks": [],
+  "aiUtilizeBlocks": [],
+  "hardwareLiteBlocks": [],
+  "externalModules": [],
+  "externalModulesLite": []
+}

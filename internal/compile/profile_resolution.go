@@ -295,6 +295,10 @@ func applyRequestedVersion(profile profiles.Profile, raw string) (profiles.Profi
 	}
 
 	switch profile.CompileKind {
+	case "entry":
+		if version != "entry-v1" {
+			return profile, fmt.Errorf("unsupported Entry grader version")
+		}
 	case "c":
 		std, ok := cStandardVersion(version)
 		if !ok {

@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"aonohako/internal/config"
+	"aonohako/internal/entrypolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/runvalidation"
@@ -33,7 +34,13 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	judgeOutputAvailable := len(req.FileOutputs) == 0 || judgeSource == "file_output"
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
 	if evaluateOutputs && judgeOutputAvailable && !stdoutLimitExceeded {
-		if hasSPJ(req) {
+		if req.EntryMode == "state" {
+			var err error
+			outputOK, err = entrypolicy.CompareState([]byte(req.ExpectedStdout), judgeOut)
+			if err != nil {
+				return model.RunStatusInitFail, nil, "invalid Entry state expectation", "entry_state"
+			}
+		} else if hasSPJ(req) {
 			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir)
 			if sc != nil {
 				score = sc
@@ -56,7 +63,9 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	}
 
 	if status == "OK" && evaluateOutputs {
-		if hasSPJ(req) {
+		if req.EntryMode == "state" {
+			source = "entry_state"
+		} else if hasSPJ(req) {
 			source = "spj"
 		} else if judgeSource != "" {
 			source = judgeSource
@@ -88,6 +97,9 @@ func classifyRunStatusWithoutOutput(req *model.RunRequest, res execResult) (stri
 	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
 		status = model.RunStatusMLE
 		source = "memory_reported"
+	}
+	if profiles.NormalizeRunLang(req.Lang) == "entry" && status == "OK" && res.ExitCode != nil && *res.ExitCode == 124 {
+		return model.RunStatusTLE, "Entry instruction or logical tick limit exceeded", "entry_limit"
 	}
 	if status == "OK" && res.ExitCode != nil && *res.ExitCode != 0 {
 		status = model.RunStatusRE

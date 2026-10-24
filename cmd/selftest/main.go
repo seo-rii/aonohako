@@ -116,6 +116,7 @@ type compileExecuteCase struct {
 	compileVariants   []string
 	compileAttempts   int
 	entryPoint        string
+	entryMode         string
 	stdin             string
 	expectedStdout    string
 	judgeIO           []judgeIOCase
@@ -1089,6 +1090,7 @@ printfn"%A"(getans(fac(a))0I)
 			for index, ioCase := range judgeIO {
 				runResp, err := postExecuteRequest(baseURL, model.RunRequest{
 					Lang:              profile.RunLang,
+					EntryMode:         tc.entryMode,
 					Binaries:          binaries,
 					EntryPoint:        tc.entryPoint,
 					Stdin:             ioCase.stdin,
@@ -1201,6 +1203,11 @@ printfn"%A"(getans(fac(a))0I)
 				if deepRunResp.Status != model.RunStatusAccepted {
 					return fmt.Errorf("java deep-recursion execute failed: status=%s reason=%s stdout=%q stderr=%q", deepRunResp.Status, deepRunResp.Reason, deepRunResp.Stdout, deepRunResp.Stderr)
 				}
+			}
+		}
+		if language == "entry" {
+			if err := runEntryStateSelftest(httpServer.URL); err != nil {
+				return err
 			}
 		}
 		if language == "rust" {
@@ -3388,6 +3395,51 @@ if {[catch {socket 127.0.0.1 %d} s]} {
 	}
 }
 
+func entrySmokeSource(mode string) string {
+	return fmt.Sprintf(`{
+"format":"entry-submission","version":1,"engineVersion":"4.0.23","graderVersion":"entry-v1","mode":%q,
+"project":{"scenes":[{"id":"scene"}],"variables":[{"id":"a","variableType":"variable","value":0}],
+"objects":[{"id":"sprite","objectType":"sprite","scene":"scene","entity":{"x":0,"y":0},"script":[[
+{"type":"when_run_button_click","params":[null]},
+{"type":"ask_and_wait","params":[{"type":"text","params":["a?"]},null]},
+{"type":"set_variable","params":["a",{"type":"get_canvas_input_value","params":[null]},null]},
+{"type":"ask_and_wait","params":[{"type":"text","params":["b?"]},null]},
+{"type":"dialog","params":[{"type":"calc_basic","params":[{"type":"get_variable","params":["a"]},"PLUS",{"type":"get_canvas_input_value","params":[null]}]},"speak",null]},
+{"type":"move_x","params":[{"type":"number","params":[100]},null]}
+]]}]}}`, mode)
+}
+
+// Exercise the image-owned JSON compiler and private state comparator through
+// the same HTTP API used by the control plane, including a wrong-answer result.
+func runEntryStateSelftest(serverURL string) error {
+	compiled, err := postCompileRequest(serverURL, model.CompileRequest{
+		Lang: "ENTRY", Version: "entry-v1", EntryPoint: "Main.entry.json",
+		Sources: []model.Source{{Name: "Main.entry.json", DataB64: encodeScript(entrySmokeSource("state"))}},
+	})
+	if err != nil || compiled.Status != model.CompileStatusOK || len(compiled.Artifacts) != 1 {
+		return fmt.Errorf("Entry state compile failed: status=%s error=%v", compiled.Status, err)
+	}
+	artifact := compiled.Artifacts[0]
+	for _, tc := range []struct {
+		expected string
+		status   string
+	}{
+		{`{"version":1,"objects":{"sprite":{"x":100,"say":"42"}},"variables":{"a":"20"}}`, model.RunStatusAccepted},
+		{`{"version":1,"objects":{"sprite":{"x":101}}}`, model.RunStatusWA},
+	} {
+		result, err := postExecuteRequest(serverURL, model.RunRequest{
+			Lang: "entry", EntryMode: "state", EntryPoint: "Main.entry.json",
+			Binaries:       []model.Binary{{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode}},
+			Stdin:          `{"version":1,"seed":1,"ticks":60,"events":[],"input":"20\n22\n"}`,
+			ExpectedStdout: tc.expected, Limits: model.Limits{TimeMs: 8000, MemoryMB: 1024},
+		})
+		if err != nil || result.Status != tc.status || result.Stdout != "" || result.Stderr != "" {
+			return fmt.Errorf("Entry state execution/redaction failed: status=%s error=%v", result.Status, err)
+		}
+	}
+	return nil
+}
+
 func compileExecuteCases() map[string]compileExecuteCase {
 	source := func(name, body string) model.Source {
 		return model.Source{Name: name, DataB64: encodeScript(body)}
@@ -4320,6 +4372,14 @@ public class Main {
   }
 }`),
 			},
+		},
+		"entry": {
+			compileLang: "ENTRY",
+			entryPoint:  "Main.entry.json",
+			entryMode:   "stdio",
+			judgeIO:     lineSeparatedABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources:     []model.Source{source("Main.entry.json", entrySmokeSource("stdio"))},
 		},
 		"javascript": {
 			compileLang: "JAVASCRIPT",
