@@ -59,6 +59,7 @@ type sandboxStreamConfig struct {
 	stdin                     io.Reader
 	stdinMaxBytes             int64
 	liveStdin                 bool
+	stdinFile                 *os.File
 	stdout                    io.Writer
 	onStdoutDone              func()
 	stderr                    io.Writer
@@ -494,7 +495,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	var stdinLiveWrite *os.File
 	var stdinCopyDone chan struct{}
 	var stdinCopyErr chan error
-	if streams.liveStdin {
+	if streams.stdinFile != nil {
+		// A real fd avoids os/exec's stdin copy goroutine.
+		cmd.Stdin = streams.stdinFile
+	} else if streams.liveStdin {
 		stdinLiveReader = streams.stdin
 		if stdinLiveReader == nil {
 			stdinLiveReader = strings.NewReader("")
@@ -602,6 +606,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	sandbox.TrimParentMemoryBeforeSandbox()
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
+	}
+	if streams.stdinFile != nil {
+		// Child owns its copy. Holding this read end would suppress EPIPE
+		// after the receiving peer exits.
+		_ = streams.stdinFile.Close()
 	}
 	if streams.closeExtraFilesAfterStart {
 		for _, file := range streams.extraFiles {
