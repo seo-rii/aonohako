@@ -178,7 +178,9 @@ preserves the legacy `time_ms` wall deadline for ordinary execution. CPU
 accounting and CPU TLE classification continue to use `time_ms`. Interactive
 execution, including Pipeline V1 interactive steps, defaults to a larger bounded
 wall safety allowance (`max(3 * time_ms, time_ms + 3000 ms)`, capped at
-600000 ms) when no explicit wall limit is supplied; batch steps are unchanged. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
+600000 ms) when no explicit wall limit is supplied; batch steps are unchanged.
+Communication mode uses runner-managed wall allowances and rejects nonzero
+`limits.wall_time_ms`. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
 server-side values when `0` or omitted, but values above the hard API caps are
 rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
@@ -364,7 +366,9 @@ file/sidecar output capture, and `ignore_tle`. `input`/`input_url` and the
 optional `answer`/`answer_url` pairs are mutually exclusive. `limits` applies
 to every participant. Manager and aggregate ceilings are runner policy: the
 manager currently receives 512 MiB and up to the participant time plus one
-second, within the public time cap.
+second, within the public time cap. Communication wall allowances are derived
+from the CPU limits and runner scheduling policy; an independent nonzero
+`limits.wall_time_ms` is rejected rather than silently ignored.
 
 Every participant receives its zero-based participant ID as the final command
 argument. The manager receives these arguments in order:

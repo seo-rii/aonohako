@@ -50,6 +50,7 @@ func TestValidateCommunicationContract(t *testing.T) {
 		}, want: "cannot combine"},
 		{name: "program network", edit: func(req *model.RunRequest) { req.Programs[0].EnableNetwork = true }, want: "cannot enable network"},
 		{name: "managed runtime", edit: func(req *model.RunRequest) { req.Programs[0].Lang = "python" }, want: "native binary"},
+		{name: "explicit wall limit", edit: func(req *model.RunRequest) { req.Limits.WallTimeMs = 600000 }, want: "does not support limits.wall_time_ms"},
 		{name: "unreferenced program", edit: func(req *model.RunRequest) { req.Programs[1].ID = "other" }, want: "unreferenced program"},
 	}
 	for _, tc := range tests {

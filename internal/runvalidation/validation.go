@@ -235,6 +235,9 @@ func ValidateCommunication(req *model.RunRequest) error {
 	if err := validateRequiredLimits("limits", req.Limits, MaxCommunicationOutputBytes); err != nil {
 		return err
 	}
+	if req.Limits.WallTimeMs != 0 {
+		return fmt.Errorf("communication does not support limits.wall_time_ms; wall allowances are runner policy")
+	}
 
 	seen := make(map[string]struct{}, len(req.Programs))
 	for i, program := range req.Programs {
