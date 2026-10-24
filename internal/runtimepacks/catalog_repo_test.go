@@ -1562,8 +1562,8 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 	scriptBody := strings.Join(python.Install.Script, "\n")
 	for _, marker := range []string{
 		"download.pytorch.org/whl/cpu",
-		"torch==2.11.0+cpu",
-		"torchvision==0.26.0+cpu",
+		"torch==2.13.0+cpu",
+		"torchvision==0.28.0+cpu",
 	} {
 		if !strings.Contains(scriptBody, marker) {
 			t.Fatalf("python runtime install script must contain %q, got %q", marker, scriptBody)
