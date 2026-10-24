@@ -52,6 +52,28 @@ test('state scenarios seed randomness and dispatch keys/clicks/messages determin
   assert.deepEqual(first.state.lists.l,['01']); assert.ok(first.state.variables.v >= 1 && first.state.variables.v <= 100);
 });
 
+test('rotation respects the exported object rotation method', () => {
+  // Entry 4.0.23 Entity.setRotation forces zero for non-free rotation methods.
+  for (const rotateMethod of ['free', 'none', 'vertical']) {
+    for (const type of ['rotate_absolute', 'rotate_relative']) {
+      const program = submission([start(block(type, [number(90), null]), block('move_direction', [number(10), null]))]);
+      program.project.objects[0].rotateMethod = rotateMethod;
+      const state = runProject(program, scenario({ ticks: 1 })).state.objects.sprite;
+      const free = rotateMethod === 'free';
+      assert.equal(state.rotation, free ? 90 : 0);
+      assert.ok(Math.abs(state.x - (free ? 0 : 10)) < 1e-12);
+      assert.equal(state.y, free ? -10 : 0);
+    }
+    if (rotateMethod !== 'free') {
+      const program = submission([]);
+      program.project.objects[0].rotateMethod = rotateMethod;
+      program.project.objects[0].entity.rotation = 90;
+      assert.equal(runProject(program, scenario()).state.objects.sprite.rotation, 0);
+      assert.equal(runProject(program, scenario({ initial: { objects: { sprite: { rotation: 90 } } } })).state.objects.sprite.rotation, 0);
+    }
+  }
+});
+
 test('bounded state mode stops at configured ticks; stdio infinite loops fail', () => {
   const forever = submission([start(block('repeat_inf',[null],[[block('move_x',[number(1),null])]]))]);
   assert.equal(runProject(forever,scenario({ticks:5})).state.objects.sprite.x,5);

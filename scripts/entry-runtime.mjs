@@ -112,6 +112,7 @@ export function validateSubmission(submission) {
       rotation: entity.rotation ?? 0, visible: entity.visible ?? true,
       size: Math.abs(entity.scaleX ?? 1) * 100, say: '' };
     requireThat([...numericState].every(key => finite(state[key])) && typeof state.visible === 'boolean', 'Invalid object state');
+    if ((object.rotateMethod ?? 'free') !== 'free') state.rotation = 0;
     let scripts = object.script;
     if (typeof scripts === 'string') { try { scripts = JSON.parse(scripts); } catch { fail('Invalid object script JSON'); } }
     requireThat(Array.isArray(scripts), 'Invalid object script');
@@ -222,6 +223,7 @@ export function runProject(submission, input = '') {
           strictKeys(value, [...numericState, 'visible'], 'initial object');
           for (const [key, field] of Object.entries(value)) requireThat(key === 'visible' ? typeof field === 'boolean' : finite(field), 'Invalid initial object value');
           Object.assign(objects.get(id).state, value);
+          if ((objects.get(id).object.rotateMethod ?? 'free') !== 'free') objects.get(id).state.rotation = 0;
         } else if (kind === 'variables') {
           requireThat(variables.has(id) && variables.get(id).type === 'variable' && scalar(value), 'Unknown or invalid initial variable');
           variables.get(id).value = normalizedScalar(value);
@@ -377,8 +379,11 @@ export function runProject(submission, input = '') {
         case 'move_direction': { const distance = n(0), radians = (state.rotation + state.direction - 90) * Math.PI / 180; state.x = cleanNumber(state.x + Math.cos(radians) * distance); state.y = cleanNumber(state.y - Math.sin(radians) * distance); break; }
         case 'direction_absolute': state.direction = normalizeAngle(n(0)); break;
         case 'direction_relative': state.direction = normalizeAngle(state.direction + n(0)); break;
-        case 'rotate_absolute': state.rotation = normalizeAngle(n(0)); break;
-        case 'rotate_relative': state.rotation = normalizeAngle(state.rotation + n(0)); break;
+        case 'rotate_absolute': case 'rotate_relative': {
+          const rotation = n(0) + (block.type === 'rotate_relative' ? state.rotation : 0);
+          state.rotation = (object.object.rotateMethod ?? 'free') === 'free' ? normalizeAngle(rotation) : 0;
+          break;
+        }
         case 'show': state.visible = true; break;
         case 'hide': state.visible = false; break;
         case 'set_scale_size': state.size = Math.max(0, n(0)); break;
