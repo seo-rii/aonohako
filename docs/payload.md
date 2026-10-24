@@ -109,7 +109,8 @@ error.
   "stdin": "hello\n",                        // input fed to process stdin (max 64 MiB)
   "expected_stdout": "hello\n",              // expected output for built-in diff (max 64 MiB)
   "limits": {
-    "time_ms": 2000,                         // wall-clock time limit, 1..600000 ms
+    "time_ms": 2000,                         // CPU time limit (and default wall limit), 1..600000 ms
+    "wall_time_ms": 6000,                    // optional wall-clock safety deadline, 1..600000 ms; 0/omitted uses time_ms
     "memory_mb": 256,                        // memory limit, 1..4096 MB
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..67108864
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
@@ -169,8 +170,11 @@ manifests or command arguments. Because GDL sources are compiled through its
 interactive command channel, submitted GDL paths are limited to ASCII letters,
 digits, `.`, `_`, `-`, and `/`.
 
-`limits.time_ms` and `limits.memory_mb` are required and bounded at the API
-boundary. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
+`limits.time_ms` (CPU budget) and `limits.memory_mb` are required and bounded at the API
+boundary. An optional `limits.wall_time_ms` selects an independent hard wall-clock
+deadline for blocked I/O, deadlocks and sandbox stalls; omitted or zero
+preserves the legacy `time_ms` wall deadline. CPU accounting and CPU TLE
+classification continue to use `time_ms`. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
 server-side values when `0` or omitted, but values above the hard API caps are
 rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
