@@ -19,6 +19,7 @@ import (
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runtimeidentity"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/rustpolicy"
@@ -161,6 +162,7 @@ type Config struct {
 	HeartbeatInterval                    time.Duration
 	BodyReadTimeout                      time.Duration
 	CommunicationEnabled                 bool
+	CompetitiveRuntimeFingerprint        string
 	CommunicationMaxParticipants         int
 	CommunicationMemoryBudgetMB          int
 	CommunicationCPUCount                int
@@ -188,6 +190,10 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	competitiveRuntimeFingerprint := os.Getenv("AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT")
+	if competitiveRuntimeFingerprint != "" && !runtimeidentity.ValidImageDigest(competitiveRuntimeFingerprint) {
+		return Config{}, fmt.Errorf("AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT must be the deployed immutable sha256 image digest")
+	}
 	port := getenv("PORT", "8080")
 	runtimePlatform, err := platform.CurrentRuntimeOptions()
 	if err != nil {
@@ -805,6 +811,7 @@ func Load() (Config, error) {
 		HeartbeatInterval:                    time.Duration(heartbeatSec) * time.Second,
 		BodyReadTimeout:                      time.Duration(bodyReadTimeoutSec) * time.Second,
 		CommunicationEnabled:                 communicationEnabled,
+		CompetitiveRuntimeFingerprint:        competitiveRuntimeFingerprint,
 		CommunicationMaxParticipants:         communicationMaxParticipants,
 		CommunicationMemoryBudgetMB:          communicationMemoryBudgetMB,
 		CommunicationCPUCount:                communicationCPUCount,

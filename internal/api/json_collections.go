@@ -21,21 +21,22 @@ type jsonCollectionField struct {
 // Every request collection must have an admission bound. Keep these tied to
 // the semantic validators; the schema inventory test rejects unreviewed additions.
 var jsonCollectionLimits = map[jsonCollectionField]int{
-	{reflect.TypeFor[model.CompileRequest](), "Sources"}:    maxCompileSourceFiles,
-	{reflect.TypeFor[model.RunRequest](), "Binaries"}:       runvalidation.MaxBinaryFiles,
-	{reflect.TypeFor[model.RunRequest](), "Programs"}:       runvalidation.MaxPrograms,
-	{reflect.TypeFor[model.RunRequest](), "Steps"}:          runvalidation.MaxSteps,
-	{reflect.TypeFor[model.RunRequest](), "FileOutputs"}:    1,
-	{reflect.TypeFor[model.RunRequest](), "SidecarOutputs"}: runvalidation.MaxSidecarOutputs,
-	{reflect.TypeFor[model.RunProgram](), "Binaries"}:       runvalidation.MaxBinaryFiles,
-	{reflect.TypeFor[model.RunStep](), "StdinParts"}:        runvalidation.MaxStdinParts,
-	{reflect.TypeFor[model.InteractorSpec](), "Binaries"}:   runvalidation.MaxBinaryFiles,
-	{reflect.TypeFor[model.SPJSpec](), "SidecarOutputs"}:    runvalidation.MaxSidecarOutputs,
-	{reflect.TypeFor[model.PipelineV1](), "Resources"}:      runvalidation.MaxPipelineResources,
-	{reflect.TypeFor[model.PipelineV1](), "Programs"}:       runvalidation.MaxPrograms,
-	{reflect.TypeFor[model.PipelineV1](), "Steps"}:          runvalidation.MaxPipelineSteps,
-	{reflect.TypeFor[model.PipelineStep](), "Stdin"}:        runvalidation.MaxStdinParts,
-	{reflect.TypeFor[model.PipelineStep](), "Outputs"}:      runvalidation.MaxPipelineOutputs,
+	{reflect.TypeFor[model.CompileRequest](), "Sources"}:                  maxCompileSourceFiles,
+	{reflect.TypeFor[model.RunRequest](), "Binaries"}:                     runvalidation.MaxBinaryFiles,
+	{reflect.TypeFor[model.RunRequest](), "Programs"}:                     runvalidation.MaxPrograms,
+	{reflect.TypeFor[model.RunRequest](), "Steps"}:                        runvalidation.MaxSteps,
+	{reflect.TypeFor[model.RunRequest](), "FileOutputs"}:                  1,
+	{reflect.TypeFor[model.RunRequest](), "SidecarOutputs"}:               runvalidation.MaxSidecarOutputs,
+	{reflect.TypeFor[model.RunProgram](), "Binaries"}:                     runvalidation.MaxBinaryFiles,
+	{reflect.TypeFor[model.RunStep](), "StdinParts"}:                      runvalidation.MaxStdinParts,
+	{reflect.TypeFor[model.InteractorSpec](), "Binaries"}:                 runvalidation.MaxBinaryFiles,
+	{reflect.TypeFor[model.CommunicationSpec](), "ParticipantProgramIDs"}: 2,
+	{reflect.TypeFor[model.SPJSpec](), "SidecarOutputs"}:                  runvalidation.MaxSidecarOutputs,
+	{reflect.TypeFor[model.PipelineV1](), "Resources"}:                    runvalidation.MaxPipelineResources,
+	{reflect.TypeFor[model.PipelineV1](), "Programs"}:                     runvalidation.MaxPrograms,
+	{reflect.TypeFor[model.PipelineV1](), "Steps"}:                        runvalidation.MaxPipelineSteps,
+	{reflect.TypeFor[model.PipelineStep](), "Stdin"}:                      runvalidation.MaxStdinParts,
+	{reflect.TypeFor[model.PipelineStep](), "Outputs"}:                    runvalidation.MaxPipelineOutputs,
 }
 
 type jsonCollectionLimitError struct {

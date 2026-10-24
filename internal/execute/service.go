@@ -15,6 +15,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
+	"aonohako/internal/runtimeidentity"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/timing"
@@ -103,6 +104,7 @@ func emitCapturedLog(hooks Hooks, stream string, output []byte, limit int) {
 }
 
 type Service struct {
+	competitiveRuntimeIdentity   runtimeidentity.CompetitiveIdentity
 	deploymentTarget             platform.DeploymentTarget
 	runtimeTuning                config.RuntimeTuningConfig
 	runtimeTuningProfiles        map[string]config.RuntimeTuningConfig
@@ -133,6 +135,7 @@ func New() *Service {
 }
 
 func NewWithConfig(cfg config.Config) *Service {
+	competitiveIdentity, _ := runtimeidentity.Competitive(cfg.CompetitiveRuntimeFingerprint)
 	profiles := make(map[string]config.RuntimeTuningConfig, len(cfg.Execution.RuntimeTuningProfiles))
 	for name, tuning := range cfg.Execution.RuntimeTuningProfiles {
 		profiles[name] = tuning.WithSafeDefaults()
@@ -143,6 +146,7 @@ func NewWithConfig(cfg config.Config) *Service {
 	}
 	return &Service{
 		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
+		competitiveRuntimeIdentity:   competitiveIdentity,
 		runtimeTuning:                cfg.Execution.RuntimeTuning.WithSafeDefaults(),
 		runtimeTuningProfiles:        profiles,
 		cgroupParentDir:              cfg.Execution.Cgroup.ParentDir,
