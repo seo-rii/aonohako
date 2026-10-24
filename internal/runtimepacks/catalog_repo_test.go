@@ -355,7 +355,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"befunge":       {"python3 /usr/local/lib/aonohako/befunge.py Main.bef", `>"ko",,91+,@`},
 		"bqn":           {"CBQN_COMMIT=d56147be877693eaed351745782c258bd7424de7", "bqn Main.bqn"},
 		"c3":            {"C3_VERSION=0.7.11", "c3c compile Main.c3"},
-		"carbon":        {"CARBON_VERSION=0.0.0-0.nightly.2026.05.02", "16719a509201acd2a7d82c260fba073c14ce7eb53c44c6ae7dda1fa083b6fa2a", "aonohako-carbon-warmup.carbon", "carbon build-runtimes --output-directory=/opt/carbon/lib/carbon/aonohako-runtimes", "aonohako-runtimes/libcxx/lib/libc++.a", "chmod -R a+rX /opt/carbon/lib/carbon/aonohako-runtimes", "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=Main.o Main.carbon", "carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o", "./Main | grep '^Hello World!$'", "Broken.carbon"},
+		"carbon":        {"CARBON_VERSION=0.0.0-0.nightly.2026.05.02", "16719a509201acd2a7d82c260fba073c14ce7eb53c44c6ae7dda1fa083b6fa2a", "aonohako-carbon-warmup.carbon", "carbon build-runtimes --output-directory=/opt/carbon/lib/carbon/aonohako-runtimes", "aonohako-runtimes/libcxx/lib/libc++.a", "chmod -R a+rX /opt/carbon/lib/carbon/aonohako-runtimes", "carbon compile --optimize=speed --no-debug-info --output-last-input-only --output=Main.o Main.carbon", "carbon --prebuilt-runtimes=/opt/carbon/lib/carbon/aonohako-runtimes link --output=Main Main.o", `output="$(./Main)"`, `test "${output}" = 'Hello World!'`, "Broken.carbon"},
 		"bun":           {"BUN_VERSION=1.3.14", "BUN_SHA256=a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7", "bun-linux-x64-baseline.zip", "sha256sum -c -", "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0", "BUN_OPTIONS=", "--no-install --no-env-file --no-macros --config=/dev/null build --target=bun --no-bundle --outfile=.cache/aonohako-bun-check", "--smol --no-install --no-env-file --no-addons --no-macros --unhandled-rejections=strict --config=/dev/null run Main.ts", "aonohako-bun-compile-leak", "Broken.ts"},
 		"chapel":        {"CHAPEL_VERSION=2.9.0", "CHAPEL_DEB_SHA256=11f93de9e725a7c74608b4afcc7c8fc8bec380f27b09883cd6f69d6fbe66e13d", "sha256sum -c -", "set -euo pipefail", "chpl-language-server/src/chpl-shim.py", "chpl-venv", "fixDistDocs.perl", "fixInternalDocs.sh", "third-party", "-type l", "-perm /0001", "CHPL_COMM=none CHPL_TASKS=qthreads CHPL_TARGET_CPU=none chpl --local --fast", "here.maxTaskPar", "CHPL_RT_NUM_THREADS_PER_LOCALE=1 ./Main -nl 1", "./Main -nl 2", "test ! -e Broken"},
 		"chez-scheme":   {"chezscheme=10.0.0+dfsg-5", "chez_scheme_check.scm", "/usr/bin/chezscheme --quiet --script", "aonohako-chez-compile-leak", "test ! -e aonohako-chez-compile-leak", "Broken.scm"},
@@ -381,14 +381,14 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"gforth":        {"gforth Main.fs -e bye", ".\" ok\" cr"},
 		"gleam":         {"GLEAM_VERSION=1.16.0", "aonohako-gleam-run ."},
 		"gnucobol":      {"gnucobol", "cobc -x -free -O2 -o Main Main.cob"},
-		"golfscript":    {"golfscript_sandboxed.rb", "Main.gs"},
+		"golfscript":    {"golfscript.rb -n", "Main.gs", "~ +", "~+", "20 22", "7 13", "Underflow.gs", "pop on empty stack"},
 		"graphql":       {"graphql-core==3.2.6", "aonohako-graphql-run Main.graphql"},
 		"guile":         {"guile-3.0=3.0.10+really3.0.10-4", "guile-3.0-libs=3.0.10+really3.0.10-4", "guile_check.scm", "GUILE_AUTO_COMPILE=0", "--no-auto-compile --no-debug -q -s", "aonohako-guile-compile-leak", "test ! -e aonohako-guile-compile-leak", "Broken.scm"},
 		"fstar":         {"FSTAR_VERSION=2026.06.28", "fstar-v${FSTAR_VERSION}-Linux-x86_64.tar.gz", "fstar.exe Main.fst", "Lemma (1 + 1 == 2)"},
 		"hare":          {"hare build -o Main Main.ha", "fmt::println"},
 		"idris2":        {"IDRIS2_VERSION=0.8.0", "make bootstrap SCHEME=chezscheme PREFIX=/usr/local", "idris2 --cg chez -o Main Main.idr", "test -d build/exec/Main_app"},
 		"haxe":          {"haxe -main Main -neko Main.n", "neko Main.n"},
-		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle process_theories -o naproche_server=false -D ."},
+		"isabelle":      {"ISABELLE_VERSION=Isabelle2025-2", "www.cl.cam.ac.uk/research/hvg/Isabelle/dist", "sha256sum -c -", "isabelle build -o naproche_server=false -D ."},
 		"j":             {"J_VERSION=963", "J_SOURCE_COMMIT=a9728936d7bd7743024db26a8fcb72e5f2fcadac", "ff5b91383265d27e2b9edb4c934ba1b642784417196ba6c2b09a2661c2a173d1", "aonohako-j Main.ijs", "echo 'ok'"},
 		"janet":         {"JANET_VERSION=1.41.2", "janet Main.janet"},
 		"javascript":    {"node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 Main.js"},
@@ -412,18 +412,18 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"octave":        {"octave-cli --quiet", "Main.m"},
 		"odin":          {"ODIN_VERSION=dev-2026-04", "odin build . -out:Main"},
 		"pascal":        {"fpc", "Broken.pas"},
-		"picolisp":      {"picolisp", "pil -version -bye", "Main.l", "printf '1 2\\n'", "pil Main.l -bye", "grep '^3$'", "Broken.l"},
+		"picolisp":      {"picolisp", "pil -version -bye", "Main.l", "printf '1 2\\n'", "pil Main.l -bye", `test "${output}" = '3'`, "Broken.l"},
 		"pony":          {"PONY_VERSION=0.69.1", "PONY_ARCHIVE_ROOT=0.69.1-38f9f11", "PONY_SHA256=8e1955ed1a63444ae13666031d5d3909cacfb475ca96643e878f36cf4edff9ab", "sha256sum -c -", "--cpu=generic", "--ponymaxthreads=1", "objdump -d Main", "test ! -e /opt/pony/bin/pony-doc", "test ! -e Broken"},
 		"posix-sh":      {"0.5.12-12", "/bin/dash -n SyntaxOnly.sh", "test ! -e /tmp/aonohako-posix-shell-syntax-leak", "Broken.sh"},
 		"zsh":           {"5.9-8+b24", "/usr/bin/zsh -d -f -n SyntaxOnly.zsh", `test ! -e "${startup_leak}"`, "test ! -e /tmp/aonohako-zsh-syntax-leak", "printf '1 2\\n' | /usr/bin/zsh -d -f Main.zsh", "Broken.zsh"},
-		"fish":          {"4.0.2-1", "/usr/bin/fish --no-config --private --no-execute SyntaxOnly.fish", `test ! -e "$startup_leak"`, "test ! -e /tmp/aonohako-fish-syntax-leak", "printf '1 2\\n' | /usr/bin/fish --no-config --private Main.fish", "Broken.fish"},
+		"fish":          {"4.0.2-1", "/usr/bin/fish --no-config --private --no-execute SyntaxOnly.fish", `test ! -e "$startup_leak"`, "test ! -e /tmp/aonohako-fish-syntax-leak", "/usr/bin/fish --no-config --private Main.fish < Main.stdin", "Broken.fish"},
 		"powershell":    {"POWERSHELL_VERSION=7.6.5", "POWERSHELL_SHA256=b34ab3b19acac1d3d4d0d3cfdb02acf62f457b0b6a962ff008132033f7566844", "sha256sum -c -", "Parser]::ParseFile", "ForEach-Object -Parallel", "test ! -e /opt/microsoft/powershell/7/createdump", "Broken.ps1"},
 		"qbasic":        {"fbc -lang qb -x Main Main.bas", "PRINT \"ok\""},
 		"raku":          {"raku -c Main.raku", "raku Main.raku"},
 		"racket":        {"raco make", "Broken.rkt"},
 		"rocq":          {"rocq c Main.v", "coqc -q Main.v"},
 		"scheme":        {"chibi-scheme Main.scm", "(scheme base)"},
-		"sed":           {"sed -f Main.sed", "s/^/ok/"},
+		"sed":           {"sed -f Main.sed", `s/^\([0-9]*\) \([0-9]*\)$/\2 \1/`, `test "${output}" = $'22 20\n13 7'`},
 		"sml":           {"MLTON_VERSION=20241230", "mlton -output Main Main.sml"},
 		"mlton":         {"MLTON_VERSION=20241230", "mlton -output Main Main.sml", "20 22", "7 13", "Broken.sml"},
 		"smlnj":         {"SMLNJ_VERSION=110.99.9", "SMLNJ_CONFIG_SHA256=bf479ba518652fc193ac0954e46c72c5356a33c6980f9fcb6bcf6e55c7731418", "SMLNJ_RUNTIME_SHA256=216e0193a193ae2e59296d27c42e61a3aa7a16ddda936d3a06a2b9459276b792", "SMLNJ_BOOT_SHA256=2b4c23bb4e49be040043ab70a3df8e92c26ffe1cba652ed80348cd3fe2d19c63", "smlnj.cs.uchicago.edu/dist/working", "URLGETTER=/bin/false", "-default 64 -nolib", "/opt/smlnj/bin/.run/run.amd64-linux", "@SMLload=/usr/local/lib/aonohako/smlnj-run", "20 22", "7 13", "Broken.sml", "broken.stderr"},
@@ -1085,7 +1085,7 @@ func TestRepositoryCatalogPinsAndHardensKokaRuntime(t *testing.T) {
 	smoke := strings.Join(spec.Smoke.Command, "\n")
 	for _, marker := range []string{
 		"set -euo pipefail",
-		"test \"$(find /opt/koka -type f -perm /0111 | wc -l)\" -eq 1",
+		`smoke_value="$(find /opt/koka -type f -perm /0111 | wc -l)"`, `test "${smoke_value}" -eq 1`,
 		"! command -v conan",
 		"! command -v vcpkg",
 		"--no-autoinstall",
@@ -1094,7 +1094,7 @@ func TestRepositoryCatalogPinsAndHardensKokaRuntime(t *testing.T) {
 		"--cclinkopts=-march=x86-64 -mtune=generic",
 		"--builddir=.aonohako-koka-build",
 		"--output=Main main.kk",
-		"test \"$(stat -c %a Main)\" = 644",
+		`smoke_value="$(stat -c %a Main)"`, `test "${smoke_value}" = 644`,
 		"x86 ISA needed: x86-64-baseline",
 		"(RPATH|RUNPATH)",
 		"evil/libevil.so",
@@ -1137,7 +1137,7 @@ func TestRepositoryCatalogPinsAndHardensPonyRuntime(t *testing.T) {
 	smoke := strings.Join(spec.Smoke.Command, "\n")
 	for _, marker := range []string{
 		"set -euo pipefail",
-		"test \"$(find /opt/pony -type f -perm /0111 | wc -l)\" -eq 1",
+		`smoke_value="$(find /opt/pony -type f -perm /0111 | wc -l)"`, `test "${smoke_value}" -eq 1`,
 		"test ! -e /opt/pony/bin/pony-doc",
 		"-perm /0001",
 		"--cpu=generic",
@@ -1547,13 +1547,13 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 		"pandas==3.0.2",
 		"seaborn==0.13.2",
 		"matplotlib==3.10.8",
-		"pillow==12.3.0",
+		"pillow==13.0.0",
 		"six==1.17.0",
 		"qiskit==2.4.0",
 		"pyparsing==3.3.2",
 		"pylatexenc==2.10",
 		"jax[cpu]==0.10.0",
-		"setuptools==80.10.2",
+		"setuptools==84.1.0",
 	} {
 		if !slices.Contains(python.Install.Pip, pkg) {
 			t.Fatalf("python runtime must include %q, got %v", pkg, python.Install.Pip)
@@ -1562,8 +1562,8 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 	scriptBody := strings.Join(python.Install.Script, "\n")
 	for _, marker := range []string{
 		"download.pytorch.org/whl/cpu",
-		"torch==2.11.0+cpu",
-		"torchvision==0.26.0+cpu",
+		"torch==2.13.0+cpu",
+		"torchvision==0.28.0+cpu",
 	} {
 		if !strings.Contains(scriptBody, marker) {
 			t.Fatalf("python runtime install script must contain %q, got %q", marker, scriptBody)

@@ -51,25 +51,25 @@ func main() {
 		serverErr <- httpServer.ListenAndServe()
 	}()
 
+	var serveErr error
+	serverStopped := false
 	select {
-	case err := <-serverErr:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("aonohako server stopped", "err", err)
-			os.Exit(1)
-		}
+	case serveErr = <-serverErr:
+		serverStopped = true
 	case <-ctx.Done():
 		stop()
 		slog.Info("aonohako shutdown requested")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := httpServer.Shutdown(shutdownCtx); err != nil {
-			slog.Error("aonohako graceful shutdown failed", "err", err)
-			_ = httpServer.Close()
-			os.Exit(1)
-		}
-		if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("aonohako server stopped", "err", err)
-			os.Exit(1)
-		}
+	}
+	shutdownErr := shutdownServer(httpServer, server, 10*time.Second)
+	if !serverStopped {
+		serveErr = <-serverErr
+	}
+	if shutdownErr != nil {
+		slog.Error("aonohako shutdown completed after forced cancellation", "err", shutdownErr)
+		os.Exit(1)
+	}
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		slog.Error("aonohako server stopped", "err", serveErr)
+		os.Exit(1)
 	}
 }

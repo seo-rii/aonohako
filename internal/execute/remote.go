@@ -73,6 +73,15 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if err := runvalidation.ValidateTextEncoding(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if err := runvalidation.ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if err := runvalidation.ValidateRemoteRequestSize(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -81,61 +90,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
-		var requestedTimeMs int64
-		if req.Pipeline != nil {
-			for _, step := range req.Pipeline.Steps {
-				stepTimeMs := min(max(step.Limits.TimeMs, 0), runvalidation.MaxTimeMs)
-				if step.Executor.InteractorLimits != nil {
-					interactorTimeMs := min(max(step.Executor.InteractorLimits.TimeMs, 0), runvalidation.MaxTimeMs)
-					stepTimeMs = max(stepTimeMs, interactorTimeMs)
-				}
-				requestedTimeMs += int64(stepTimeMs)
-			}
-		} else if runvalidation.UsesSteps(req) {
-			for _, step := range req.Steps {
-				stepTimeMs := step.Limits.TimeMs
-				if stepTimeMs < 0 {
-					stepTimeMs = 0
-				}
-				if stepTimeMs > runvalidation.MaxTimeMs {
-					stepTimeMs = runvalidation.MaxTimeMs
-				}
-				requestedTimeMs += int64(stepTimeMs)
-			}
-		} else {
-			mainTimeMs := req.Limits.TimeMs
-			if mainTimeMs < 0 {
-				mainTimeMs = 0
-			}
-			if mainTimeMs > runvalidation.MaxTimeMs {
-				mainTimeMs = runvalidation.MaxTimeMs
-			}
-			requestedTimeMs = int64(mainTimeMs)
-			if req.Interactor != nil && req.Interactor.Limits != nil {
-				interactorTimeMs := req.Interactor.Limits.TimeMs
-				if interactorTimeMs < 0 {
-					interactorTimeMs = 0
-				}
-				if interactorTimeMs > runvalidation.MaxTimeMs {
-					interactorTimeMs = runvalidation.MaxTimeMs
-				}
-				if int64(interactorTimeMs) > requestedTimeMs {
-					requestedTimeMs = int64(interactorTimeMs)
-				}
-			}
-		}
-		spj := req.SPJ
-		if req.Pipeline != nil {
-			spj = req.Pipeline.FinalJudge.SPJ
-		}
-		if spj != nil {
-			spjTimeMs := defaultSPJTimeMs
-			if spj.Limits != nil && spj.Limits.TimeMs > 0 {
-				spjTimeMs = min(spj.Limits.TimeMs, runvalidation.MaxTimeMs)
-			}
-			requestedTimeMs += int64(spjTimeMs)
-		}
-		absoluteTimeout = time.Duration(requestedTimeMs)*time.Millisecond + remoteio.DefaultOperationOverhead
+		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()
@@ -216,6 +171,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	remoteErrorReason := ""
 	logBytes := map[string]int{"stdout": 0, "stderr": 0}
 	logCaptureBytes := map[string]int{"stdout": 0, "stderr": 0}
+	logLimits := remoteLogLimits(req)
 	var imageBytes int
 
 	for {
@@ -247,18 +203,17 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if chunk.Stream != "stdout" && chunk.Stream != "stderr" {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote log event has invalid stream"}
 			}
-			logSafetyLimit := min(outputLimitBytes(req), maxResponseCaptureBytes)
-			if len(chunk.Chunk) > logSafetyLimit {
-				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log event too large: max %d bytes", logSafetyLimit)}
+			if len(chunk.Chunk) > logLimits.event {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log event too large: max %d bytes", logLimits.event)}
 			}
 			logBytes[chunk.Stream] += len(chunk.Chunk)
-			if logBytes[chunk.Stream] > logSafetyLimit {
-				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log stream too large: max %d bytes", logSafetyLimit)}
+			if logBytes[chunk.Stream] > logLimits.stream {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote log stream too large: max %d bytes", logLimits.stream)}
 			}
 			if hooks.OnLog != nil {
-				captureLimit := responseStdoutLimitBytes(req)
+				captureLimit := logLimits.stdout
 				if chunk.Stream == "stderr" {
-					captureLimit = responseStderrLimitBytes(req)
+					captureLimit = logLimits.stderr
 				}
 				remaining := captureLimit - logCaptureBytes[chunk.Stream]
 				if remaining > 0 {
@@ -337,6 +292,11 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			}
 			stdoutResponseLimit := responseStdoutLimitBytes(req)
 			stderrResponseLimit := responseStderrLimitBytes(req)
+			if runvalidation.UsesSteps(req) && len(remoteResult.Steps) > 0 && len(remoteResult.Steps) <= len(req.Steps) {
+				lastReq := &model.RunRequest{Limits: effectiveStepLimits(req.Steps[len(remoteResult.Steps)-1]), CaptureLimits: req.CaptureLimits}
+				stdoutResponseLimit = responseStdoutLimitBytes(lastReq)
+				stderrResponseLimit = responseStderrLimitBytes(lastReq)
+			}
 			for i := range remoteResult.Steps {
 				step := &remoteResult.Steps[i]
 				switch step.Status {
@@ -347,12 +307,18 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				if step.TimeMs < 0 || step.WallTimeMs < 0 || step.CPUTimeMs < 0 || step.ProcessCPUTimeMs < 0 || step.MemoryKB < 0 || step.HandoffBytes < 0 {
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative measurement"}
 				}
+				stepStdoutLimit, stepStderrLimit := stdoutResponseLimit, stderrResponseLimit
+				if runvalidation.UsesSteps(req) && i < len(req.Steps) {
+					stepReq := &model.RunRequest{Limits: effectiveStepLimits(req.Steps[i]), CaptureLimits: req.CaptureLimits}
+					stepStdoutLimit = responseStdoutLimitBytes(stepReq)
+					stepStderrLimit = responseStderrLimitBytes(stepReq)
+				}
 				var truncated bool
-				step.Stdout, truncated = capturedOutputValue([]byte(step.Stdout), stdoutResponseLimit)
+				step.Stdout, truncated = capturedOutputValue([]byte(step.Stdout), stepStdoutLimit)
 				if truncated {
 					step.StdoutTruncated = true
 				}
-				step.Stderr, truncated = capturedOutputValue([]byte(step.Stderr), stderrResponseLimit)
+				step.Stderr, truncated = capturedOutputValue([]byte(step.Stderr), stepStderrLimit)
 				if truncated {
 					step.StderrTruncated = true
 				}
@@ -414,6 +380,31 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			return remoteResult
 		}
 	}
+}
+
+type remoteLogBudget struct {
+	event, stream  int
+	stdout, stderr int
+}
+
+func remoteLogLimits(req *model.RunRequest) remoteLogBudget {
+	if !runvalidation.UsesSteps(req) {
+		limit := min(outputLimitBytes(req), maxResponseCaptureBytes)
+		return remoteLogBudget{event: limit, stream: limit, stdout: responseStdoutLimitBytes(req), stderr: responseStderrLimitBytes(req)}
+	}
+	// Legacy log events have no step identifier. Bound the stream by the sum
+	// of the budgets that the local runner applies independently to each step.
+	// Display clipping is separate from the larger protocol safety bound.
+	var budget remoteLogBudget
+	for _, step := range req.Steps[:min(len(req.Steps), runvalidation.MaxSteps)] {
+		stepReq := &model.RunRequest{Limits: effectiveStepLimits(step), CaptureLimits: req.CaptureLimits}
+		limit := min(outputLimitBytes(stepReq), maxResponseCaptureBytes)
+		budget.event = max(budget.event, limit)
+		budget.stream += limit
+		budget.stdout += responseStdoutLimitBytes(stepReq)
+		budget.stderr += responseStderrLimitBytes(stepReq)
+	}
+	return budget
 }
 
 func (r *remoteRunner) authorizationHeader(ctx context.Context) (string, error) {

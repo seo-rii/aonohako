@@ -28,6 +28,8 @@ import (
 
 type RemoteAuthMode string
 
+const DefaultMaxRetainedRequestBytes = 256 << 20
+
 const (
 	RemoteAuthNone            RemoteAuthMode = "none"
 	RemoteAuthBearer          RemoteAuthMode = "bearer"
@@ -153,6 +155,7 @@ type Config struct {
 	MaxActiveStreams                     int
 	MaxActiveUploads                     int
 	MaxPrincipalUploads                  int
+	MaxRetainedRequestBytes              int64
 	PlatformBodyHashConcurrency          int
 	MaxPrincipalStreams                  int
 	MaxPrincipalRequestsPerMinute        int
@@ -213,6 +216,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	maxPrincipalUploads, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", os.Getenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS"), defaultUploadLimit(runtimePlatform, defaultMaxPrincipalUploads))
+	if err != nil {
+		return Config{}, err
+	}
+	maxRetainedRequestBytes, err := parsePositiveIntEnv("AONOHAKO_MAX_RETAINED_REQUEST_BYTES", os.Getenv("AONOHAKO_MAX_RETAINED_REQUEST_BYTES"), DefaultMaxRetainedRequestBytes)
 	if err != nil {
 		return Config{}, err
 	}
@@ -797,6 +804,7 @@ func Load() (Config, error) {
 		MaxActiveStreams:                     maxActiveStreams,
 		MaxActiveUploads:                     maxActiveUploads,
 		MaxPrincipalUploads:                  maxPrincipalUploads,
+		MaxRetainedRequestBytes:              int64(maxRetainedRequestBytes),
 		PlatformBodyHashConcurrency:          platformBodyHashConcurrency,
 		MaxPrincipalStreams:                  maxPrincipalStreams,
 		MaxPrincipalRequestsPerMinute:        maxPrincipalRequestsPerMinute,

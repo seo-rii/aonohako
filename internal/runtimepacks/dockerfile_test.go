@@ -134,8 +134,8 @@ func TestDockerfilesUsePatchedRuntimeDependencies(t *testing.T) {
 	for _, marker := range []string{
 		"ARG RUNTIME_BASE=" + patchedTrixie,
 		"ARG PYTHON_IMAGE=python:3.13-slim-trixie@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280",
-		"setuptools==80.10.2",
-		"pillow==12.3.0",
+		"setuptools==84.1.0",
+		"pillow==13.0.0",
 	} {
 		if !strings.Contains(serverBody, marker) {
 			t.Fatalf("server Dockerfile must contain patched runtime dependency marker %q", marker)
@@ -178,8 +178,8 @@ func TestRuntimeDockerfileUsesPatchedGoBuilderImage(t *testing.T) {
 	if len(m) != 2 {
 		t.Fatalf("runtime.Dockerfile is missing a parseable digest-pinned GO_IMAGE default")
 	}
-	if m[1] != "1.26.6" {
-		t.Fatalf("GO_IMAGE default = %s, want 1.26.6 to satisfy go.mod and CI image builds", m[1])
+	if m[1] != "1.26.10" {
+		t.Fatalf("GO_IMAGE default = %s, want 1.26.10 to satisfy go.mod and CI image builds", m[1])
 	}
 }
 

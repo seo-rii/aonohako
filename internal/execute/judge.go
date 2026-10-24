@@ -22,18 +22,18 @@ import (
 
 func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource, judgeInputPath string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
 	status, reason, source := classifyRunStatusWithoutOutput(req, res)
+	stdoutLimitExceeded := judgeSource == "stdout" && res.StdoutTruncated
+	status, reason, source = applyStdoutLimitVerdict(status, reason, source, stdoutLimitExceeded)
 
 	var score *float64
 	outputOK := false
+	// Required file output must have been collected successfully. Diagnostic
+	// stdout cannot stand in for missing or unreadable judge data, even when a
+	// resource verdict is retained and ignore_tle requests partial scoring.
+	judgeOutputAvailable := len(req.FileOutputs) == 0 || judgeSource == "file_output"
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
-	stdoutLimitExceeded := judgeSource == "stdout" && res.StdoutTruncated
-	if evaluateOutputs {
-		if stdoutLimitExceeded {
-			if status == "OK" {
-				reason = "stdout exceeded output limit"
-				source = "stdout_limit"
-			}
-		} else if hasSPJ(req) {
+	if evaluateOutputs && judgeOutputAvailable && !stdoutLimitExceeded {
+		if hasSPJ(req) {
 			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir)
 			if sc != nil {
 				score = sc
@@ -56,9 +56,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	}
 
 	if status == "OK" && evaluateOutputs {
-		if stdoutLimitExceeded {
-			source = "stdout_limit"
-		} else if hasSPJ(req) {
+		if hasSPJ(req) {
 			source = "spj"
 		} else if judgeSource != "" {
 			source = judgeSource
@@ -85,7 +83,7 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 func classifyRunStatusWithoutOutput(req *model.RunRequest, res execResult) (string, string, string) {
 	status := res.Status
 	source := res.VerdictSource
-	reason := ""
+	reason := res.Reason
 	status, reason, source = applyFinalCPUTimeStatus(status, reason, source, res.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(source, "cpu_time_cgroup"))
 	if status == "OK" && req.Limits.MemoryMB > 0 && res.MemoryKB > int64(req.Limits.MemoryMB*1024) {
 		status = model.RunStatusMLE
@@ -117,10 +115,15 @@ func captureFileOutput(ws Workspace, spec model.OutputFile) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer output.cleanup()
 	if output.info.Size() > maxCapturedFileBytes {
+		output.cleanup()
 		return nil, fmt.Errorf("captured output too large")
 	}
+	return readCapturedOutput(output)
+}
+
+func readCapturedOutput(output capturedOutputFile) ([]byte, error) {
+	defer output.cleanup()
 	if _, err := output.file.Seek(0, 0); err != nil {
 		return nil, err
 	}
@@ -146,23 +149,17 @@ func captureSidecarOutputs(ws Workspace, specs []model.OutputFile) ([]model.Side
 			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "file too large"})
 			continue
 		}
-		totalBytes += output.info.Size()
-		if totalBytes > maxCapturedSidecarTotalBytes {
+		if totalBytes+output.info.Size() > maxCapturedSidecarTotalBytes {
 			output.cleanup()
 			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "sidecar total size exceeded"})
 			continue
 		}
-		if _, err := output.file.Seek(0, 0); err != nil {
-			output.cleanup()
-			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "read failed"})
-			continue
-		}
-		data, err := ioReadAll(bufio.NewReader(output.file))
-		output.cleanup()
+		data, err := readCapturedOutput(output)
 		if err != nil {
 			errs = append(errs, model.SidecarError{Path: spec.Path, Reason: "read failed"})
 			continue
 		}
+		totalBytes += int64(len(data))
 		outputs = append(outputs, model.SidecarOutput{Path: spec.Path, DataB64: util.EncodeB64(data)})
 	}
 	return outputs, errs

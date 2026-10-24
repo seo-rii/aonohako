@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	MaxJSONBodyBytes = 64 << 20
+	MaxJSONBodyBytes = runvalidation.MaxJSONRequestBytes
 
 	maxRunTextFieldBytes              = runvalidation.MaxTextFieldBytes
 	maxRunTimeMs                      = runvalidation.MaxTimeMs
@@ -86,11 +86,13 @@ type Server struct {
 	compile interface {
 		Run(context.Context, *model.CompileRequest) model.CompileResponse
 	}
-	execute execute.Runner
-	queue   *queue.Manager
-	seq     atomic.Uint64
-	streams atomic.Int64
-	uploads atomic.Int64
+	execute      execute.Runner
+	queue        *queue.Manager
+	work         workLifecycle
+	seq          atomic.Uint64
+	streams      atomic.Int64
+	uploads      atomic.Int64
+	requestBytes requestByteBudget
 
 	principalMu      sync.Mutex
 	principalStreams map[string]int
@@ -121,6 +123,9 @@ func New(cfg config.Config) (*Server, error) {
 func NewWithServices(cfg config.Config, compileService interface {
 	Run(context.Context, *model.CompileRequest) model.CompileResponse
 }, executeRunner execute.Runner) *Server {
+	if cfg.MaxRetainedRequestBytes <= 0 {
+		cfg.MaxRetainedRequestBytes = config.DefaultMaxRetainedRequestBytes
+	}
 	payloadURLFetchSlots := defaultPayloadURLFetchSlots
 	if cfg.MaxActiveStreams > 0 {
 		payloadURLFetchSlots = min(payloadURLFetchSlots, cfg.MaxActiveStreams)
@@ -133,6 +138,7 @@ func NewWithServices(cfg config.Config, compileService interface {
 		compile:          compileService,
 		execute:          executeRunner,
 		queue:            queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
+		requestBytes:     requestByteBudget{limit: cfg.MaxRetainedRequestBytes},
 		principalStreams: map[string]int{},
 		principalUploads: map[string]int{},
 		principalRates:   map[string]principalRateWindow{},
@@ -167,8 +173,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/healthz", s.readyz)
 	mux.HandleFunc("/capabilities", s.capabilities)
-	mux.Handle("/compile", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler))))
-	mux.Handle("/execute", s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler))))
+	mux.Handle("/compile", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler)))))
+	mux.Handle("/execute", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler)))))
 	return mux
 }
 
@@ -253,6 +259,10 @@ func (s *Server) livez(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) readyz(w http.ResponseWriter, _ *http.Request) {
+	if s.work.isDraining() {
+		writeJSONError(w, http.StatusServiceUnavailable, "server_draining")
+		return
+	}
 	if s.readinessCheck != nil {
 		if err := s.readinessCheck(); err != nil {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
@@ -276,7 +286,11 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req model.CompileRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_json", "invalid json: "+err.Error())
+		writeRequestBodyError(w, err)
+		return
+	}
+	if err := retainRequestBytes(r.Context(), &req); err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
 		return
 	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
@@ -349,11 +363,30 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		cancelFetch()
 		releaseFetch()
 		if err != nil {
+			if errors.Is(err, errRequestByteBudget) {
+				writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+				return
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				writeJSONErrorMessage(w, http.StatusGatewayTimeout, "payload_url_fetch_timeout", "payload url fetch timed out")
 				return
 			}
 			writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
+			return
+		}
+	}
+	if err := retainRequestBytes(r.Context(), &req); err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+		return
+	}
+	if s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
+		if err := runvalidation.ValidateRemoteCompileRequestSize(&req); err != nil {
+			var sizeErr *runvalidation.RemoteRequestSizeError
+			if errors.As(err, &sizeErr) {
+				writeJSONErrorMessage(w, http.StatusRequestEntityTooLarge, "remote_request_too_large", err.Error())
+			} else {
+				writeJSONErrorMessage(w, http.StatusInternalServerError, "remote_request_encode_failed", err.Error())
+			}
 			return
 		}
 	}
@@ -377,10 +410,12 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	releaseUploadAdmission(r.Context())
 
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
-	stream, err := sse.New(w, s.sseWriteTimeout)
+	stream, err := sse.NewCompile(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
-		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		if !sse.ResponseStarted(err) {
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		}
 		return
 	}
 	streamCtx, stopStream := context.WithCancel(r.Context())
@@ -417,12 +452,15 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer permit.Release()
+	if !s.work.start(streamCtx) {
+		return
+	}
 
 	if err := stream.Event("progress", map[string]any{"stage": "start", "request_id": reqID, "ts": time.Now().UnixMilli()}); err != nil {
 		return
 	}
 
-	resp := s.compile.Run(streamCtx, &req)
+	resp := compile.PrepareResponse(s.compile.Run(streamCtx, &req))
 	if streamCtx.Err() != nil {
 		return
 	}
@@ -465,7 +503,11 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req model.RunRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_json", "invalid json: "+err.Error())
+		writeRequestBodyError(w, err)
+		return
+	}
+	if err := retainRequestBytes(r.Context(), &req); err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
 		return
 	}
 	if err := s.applyRuntimeProfilePolicy(req.ProblemID, &req.RuntimeProfile); err != nil {
@@ -499,6 +541,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		cancelFetch()
 		releaseFetch()
 		if err != nil {
+			if errors.Is(err, errRequestByteBudget) {
+				writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+				return
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				writeJSONErrorMessage(w, http.StatusGatewayTimeout, "payload_url_fetch_timeout", "payload url fetch timed out")
 				return
@@ -515,6 +561,21 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		// syntax and credential validation before stream/queue admission.
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_payload_url", err.Error())
 		return
+	}
+	if err := retainRequestBytes(r.Context(), &req); err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+		return
+	}
+	if s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportRemote {
+		if err := runvalidation.ValidateRemoteRequestSize(&req); err != nil {
+			var sizeErr *runvalidation.RemoteRequestSizeError
+			if errors.As(err, &sizeErr) {
+				writeJSONErrorMessage(w, http.StatusRequestEntityTooLarge, "remote_request_too_large", err.Error())
+			} else {
+				writeJSONErrorMessage(w, http.StatusInternalServerError, "remote_request_encode_failed", err.Error())
+			}
+			return
+		}
 	}
 	releaseStream, ok, code := s.acquireStream(principal)
 	if !ok {
@@ -538,7 +599,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {
 		permit.Cancel()
-		writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		if !sse.ResponseStarted(err) {
+			writeJSONErrorMessage(w, http.StatusInternalServerError, "stream_init_failed", err.Error())
+		}
 		return
 	}
 	streamCtx, stopStream := context.WithCancel(r.Context())
@@ -575,6 +638,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer permit.Release()
+	if !s.work.start(streamCtx) {
+		return
+	}
 
 	if err := stream.Event("progress", map[string]any{"stage": "start", "request_id": reqID, "ts": time.Now().UnixMilli()}); err != nil {
 		return
@@ -649,6 +715,19 @@ func (s *Server) withUploadAdmission(next http.Handler) http.Handler {
 		admission := &uploadAdmission{release: release}
 		defer admission.Release()
 		ctx := context.WithValue(r.Context(), uploadAdmissionContextKey{}, admission)
+		reservation := &requestByteReservation{budget: &s.requestBytes}
+		// HTTP enforces a declared Content-Length. Chunked/unknown bodies reserve
+		// the full input cap before any body hashing or decoding begins.
+		bodyBytes := int64(maxJSONBodyBytes)
+		if r.ContentLength >= 0 {
+			bodyBytes = min(bodyBytes, r.ContentLength)
+		}
+		if err := reservation.resize(bodyBytes); err != nil {
+			writeJSONError(w, http.StatusTooManyRequests, "request_byte_budget_exceeded")
+			return
+		}
+		defer reservation.resize(0)
+		ctx = context.WithValue(ctx, requestByteContextKey{}, reservation)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -859,12 +938,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 				bodyHash, err := hashAndRestoreRequestBody(w, r)
 				releaseHashSlot()
 				if err != nil {
-					status := http.StatusBadRequest
-					var maxErr *http.MaxBytesError
-					if errors.As(err, &maxErr) {
-						status = http.StatusRequestEntityTooLarge
-					}
-					writeJSONErrorMessage(w, status, "invalid_request_body", "invalid request body")
+					writeRequestBodyError(w, err)
 					return
 				}
 				verifiedAt := time.Now()
@@ -904,9 +978,9 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 					principal += "unknown"
 				}
 			}
-			if len(principal) > 240 {
-				principal = principal[:240]
-			}
+			// Keep usage keys bounded without merging identities that share a prefix.
+			sum := sha256.Sum256([]byte(principal))
+			principal = "platform:" + hex.EncodeToString(sum[:])
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
 			return
 		case config.InboundAuthBearer:
@@ -973,6 +1047,9 @@ func (s *Server) acquirePayloadURLFetch() (func(), bool) {
 }
 
 func hashAndRestoreRequestBody(w http.ResponseWriter, r *http.Request) (string, error) {
+	if err := checkJSONBodySize(r); err != nil {
+		return "", err
+	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
 	if err != nil {
 		return "", err
@@ -981,7 +1058,7 @@ func hashAndRestoreRequestBody(w http.ResponseWriter, r *http.Request) (string, 
 		return "", err
 	}
 	sum := sha256.Sum256(body)
-	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.Body = &restoredRequestBody{bytes.NewReader(body)}
 	r.ContentLength = int64(len(body))
 	return hex.EncodeToString(sum[:]), nil
 }
@@ -1186,26 +1263,5 @@ func (s *Server) applyGoModulePolicy(req *model.CompileRequest) error {
 		!s.cfg.AllowRequestGoInstalledModules {
 		return fmt.Errorf("go_module_mode %q is not allowed by server policy", gomodulepolicy.ModeInstalled)
 	}
-	return nil
-}
-
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
-	body := http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
-	dec := json.NewDecoder(body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		return err
-	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return errors.New("unexpected trailing data")
-		}
-		return err
-	}
-	if err := body.Close(); err != nil {
-		return err
-	}
-	r.Body = http.NoBody
-	r.ContentLength = 0
 	return nil
 }

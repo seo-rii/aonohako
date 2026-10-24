@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"aonohako/internal/compilewire"
 )
 
 const (
@@ -37,6 +39,16 @@ func NewSSEReader(r io.Reader) *SSEReader {
 		maxEventBytes:  DefaultSSEEventBytes,
 		maxStreamBytes: DefaultSSEStreamBytes,
 	}
+}
+
+// NewCompileSSEReader accepts the compile artifact wire envelope without
+// widening execute streams or removing the independent whole-stream bound.
+func NewCompileSSEReader(r io.Reader) *SSEReader {
+	reader := NewSSEReader(r)
+	reader.maxLineBytes = compilewire.SSELineBytes
+	reader.maxEventBytes = compilewire.SSEEventBytes
+	reader.maxStreamBytes = compilewire.SSEStreamBytes
+	return reader
 }
 
 func (r *SSEReader) SetActivityCallback(fn func()) {

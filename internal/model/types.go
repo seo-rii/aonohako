@@ -39,6 +39,7 @@ type CompileResponse struct {
 	StdoutTruncated bool       `json:"stdout_truncated,omitempty"`
 	StderrTruncated bool       `json:"stderr_truncated,omitempty"`
 	Reason          string     `json:"reason,omitempty"`
+	ReasonTruncated bool       `json:"reason_truncated,omitempty"`
 	ReasonCode      string     `json:"reason_code,omitempty"`
 }
 
@@ -239,6 +240,7 @@ type StepResult struct {
 	StdoutTruncated  bool   `json:"stdout_truncated,omitempty"`
 	StderrTruncated  bool   `json:"stderr_truncated,omitempty"`
 	Reason           string `json:"reason,omitempty"`
+	ReasonTruncated  bool   `json:"reason_truncated,omitempty"`
 	VerdictSource    string `json:"verdict_source,omitempty"`
 	HandoffBytes     int64  `json:"handoff_bytes,omitempty"`
 }
@@ -292,6 +294,7 @@ type RunResponse struct {
 	StdoutTruncated     bool            `json:"stdout_truncated,omitempty"`
 	StderrTruncated     bool            `json:"stderr_truncated,omitempty"`
 	Reason              string          `json:"reason,omitempty"`
+	ReasonTruncated     bool            `json:"reason_truncated,omitempty"`
 	VerdictSource       string          `json:"verdict_source,omitempty"`
 	Score               *float64        `json:"score,omitempty"`
 	StartedParticipants int             `json:"started_participants,omitempty"`
