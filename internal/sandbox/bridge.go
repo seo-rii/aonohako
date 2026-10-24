@@ -9,6 +9,8 @@ const (
 	RequestFDEnv       = "AONOHAKO_SANDBOX_REQUEST_FD"
 	TargetReadyFDEnv   = "AONOHAKO_SANDBOX_TARGET_READY_FD"
 	TargetReleaseFDEnv = "AONOHAKO_SANDBOX_TARGET_RELEASE_FD"
+	// A version byte followed by the helper's pre-exec RUSAGE_SELF CPU ns.
+	TargetReadyMessageSize = 9
 )
 
 type ExecRequest struct {
@@ -16,6 +18,7 @@ type ExecRequest struct {
 	Dir                      string       `json:"dir"`
 	Env                      []string     `json:"env"`
 	Limits                   model.Limits `json:"limits"`
+	CPUTimeLimitMs           int          `json:"cpu_time_limit_ms,omitempty"`
 	ThreadLimit              int          `json:"thread_limit"`
 	OpenFileLimit            int          `json:"open_file_limit,omitempty"`
 	StackLimitBytes          uint64       `json:"stack_limit_bytes,omitempty"`
@@ -28,6 +31,7 @@ type ExecRequest struct {
 	AllowSocketConnect       bool         `json:"allow_socket_connect,omitempty"`
 	AllowSocketServer        bool         `json:"allow_socket_server,omitempty"`
 	AllowProcesses           bool         `json:"allow_processes,omitempty"`
+	AllowFIFOs               bool         `json:"allow_fifos,omitempty"`
 	DenyThreads              bool         `json:"deny_threads,omitempty"`
 	AllowProcessGroups       bool         `json:"allow_process_groups,omitempty"`
 	AllowPositiveKillProbe   bool         `json:"allow_positive_kill_probe,omitempty"`
@@ -39,4 +43,14 @@ type ExecRequest struct {
 	PreserveFDs              []int        `json:"preserve_fds,omitempty"`
 	DisableFileSizeLimit     bool         `json:"disable_file_size_limit,omitempty"`
 	DisableAddressSpaceLimit bool         `json:"disable_address_space_limit,omitempty"`
+}
+
+func cpuTimeLimitMillis(req ExecRequest) int {
+	if req.CPUTimeLimitMs > 0 {
+		return req.CPUTimeLimitMs
+	}
+	if req.Limits.TimeMs > 0 {
+		return req.Limits.TimeMs
+	}
+	return 1
 }

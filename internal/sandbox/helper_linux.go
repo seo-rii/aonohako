@@ -4,6 +4,7 @@ package sandbox
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -118,10 +119,7 @@ func MaybeRunFromEnv() bool {
 		envv[i] = ptr
 	}
 
-	timeMs := req.Limits.TimeMs
-	if timeMs < 1 {
-		timeMs = 1
-	}
+	timeMs := cpuTimeLimitMillis(req)
 	cpuSec := (timeMs+999)/1000 + 1
 	memMB := req.Limits.MemoryMB
 	if memMB < 16 {
@@ -391,12 +389,12 @@ func MaybeRunFromEnv() bool {
 		uint32(unix.SYS_FCHOWN),
 		uint32(unix.SYS_LCHOWN),
 		uint32(unix.SYS_FCHOWNAT),
-		uint32(unix.SYS_MKNOD),
-		uint32(unix.SYS_MKNODAT),
 	} {
 		appendJump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, sysno, 0, 1)
 		appendStmt(unix.BPF_RET|unix.BPF_K, deny)
 	}
+	program = append(program, fifoCreationFilter(uint32(unix.SYS_MKNOD), 1, 2, req.AllowFIFOs)...)
+	program = append(program, fifoCreationFilter(uint32(unix.SYS_MKNODAT), 2, 3, req.AllowFIFOs)...)
 	if req.AllowPositiveKillProbe {
 		// Zsh polls child liveness with kill(pid, 0). Keep process-group
 		// targets and every signal-delivery form denied by accepting only
@@ -619,7 +617,20 @@ func MaybeRunFromEnv() bool {
 		}
 	}
 	if targetReadyFile != nil {
-		if _, err := targetReadyFile.Write([]byte{1}); err != nil {
+		// Match wait4's final user+system accounting with a baseline from the
+		// same API family, rather than subtracting a different CPU clock.
+		var usage unix.Rusage
+		if err := unix.Getrusage(unix.RUSAGE_SELF, &usage); err != nil {
+			fail("read target rusage baseline: %v", err)
+		}
+		usageNs := usage.Utime.Nano() + usage.Stime.Nano()
+		if usageNs < 0 {
+			fail("negative target rusage baseline")
+		}
+		var ready [TargetReadyMessageSize]byte
+		ready[0] = 1
+		binary.LittleEndian.PutUint64(ready[1:], uint64(usageNs))
+		if n, err := targetReadyFile.Write(ready[:]); err != nil || n != len(ready) {
 			fail("signal target ready: %v", err)
 		}
 		var release [1]byte

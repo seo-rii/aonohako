@@ -302,19 +302,19 @@ languages:
         - python3
         - python3-pip
       pip:
-        - setuptools==80.10.2
+        - setuptools==84.1.0
         - numpy==2.4.4
         - pandas==3.0.2
         - seaborn==0.13.2
         - matplotlib==3.10.8
-        - pillow==12.3.0
+        - pillow==13.0.0
         - six==1.17.0
         - qiskit==2.4.0
         - pyparsing==3.3.2
         - pylatexenc==2.10
         - jax[cpu]==0.10.0
       script:
-        - python3 -m pip install --break-system-packages --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.11.0+cpu torchvision==0.26.0+cpu
+        - python3 -m pip install --break-system-packages --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.13.0+cpu torchvision==0.28.0+cpu
     smoke:
       command:
         - python3
@@ -434,6 +434,31 @@ languages:
           for jar in "${scala_jars[@]}"; do scala_cp="${scala_cp}:${jar}"; done
           output="$(java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${scala_cp}" Main)"
           test "${output}" = 'ok'
+
+  entry:
+    install:
+      shared:
+        - node24
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          node --input-type=module <<'JS'
+          import { writeFileSync } from 'node:fs';
+          const project = { scenes: [{id:'scene'}], objects: [{id:'sprite',objectType:'sprite',scene:'scene',entity:{x:0,y:0},script:[[{type:'when_run_button_click',params:[null]},{type:'dialog',params:[{type:'text',params:['ok']},'speak',null]}]]}] };
+          const submission = {format:'entry-submission',version:1,engineVersion:'4.0.23',graderVersion:'entry-v1',mode:'stdio',project};
+          writeFileSync('Main.entry.json',JSON.stringify(submission));
+          JS
+          node /usr/local/lib/aonohako/entry-runner.mjs --check Main.entry.json
+          node /usr/local/lib/aonohako/entry-runner.mjs Main.entry.json stdio </dev/null | grep '^ok$'
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const submission=JSON.parse(readFileSync('Main.entry.json','utf8')); submission.mode='state';
+          writeFileSync('Main.entry.json',JSON.stringify(submission));
+          JS
+          printf '%s' '{"version":1,"seed":1,"ticks":60,"events":[]}' | node /usr/local/lib/aonohako/entry-runner.mjs Main.entry.json state | grep '"say":"ok"'
 
   javascript:
     install:
@@ -1385,6 +1410,141 @@ languages:
           output="$(lci Main.lol)"
           test "${output}" = 'ok'
 
+  shakespeare:
+    install:
+      apt:
+        - python3
+        - python3-venv
+      script:
+        - python3 -m venv /opt/shakespeare
+        - /opt/shakespeare/bin/pip install --no-cache-dir --no-deps shakespearelang==1.0.0 click==7.1.2 tatsu==5.6.1
+        - /opt/shakespeare/bin/pip uninstall -y pip
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.spl <<'SPL'
+          The Sum of Two Numbers.
+
+          Romeo, a young man who remembers the first number.
+          Juliet, a lady who remembers the second number.
+
+                              Act I: The only act.
+
+                              Scene I: Reading and adding.
+
+          [Enter Romeo and Juliet]
+
+          Juliet:
+            Listen to your heart!
+
+          Romeo:
+            Listen to your heart!
+            You are as good as the sum of yourself and me.
+            Open your heart!
+
+          [Exeunt]
+          SPL
+          /opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py --check Main.spl
+          output="$(printf '%s\n' '-4 17' | /opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py Main.spl)"
+          test "${output}" = 13
+          printf '%s\n' 'Broken.' '' 'Romeo, a man.' '' 'Act I: x.' 'Scene I: y.' '[Enter Romeo]' 'Romeo: Hello!' > Broken.spl
+          if /opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py --check Broken.spl >/dev/null 2>&1; then exit 1; fi
+
+  piet:
+    install:
+      apt:
+        - curl
+        - gcc
+        - libc6-dev
+        - libpng-dev
+        - make
+      script:
+        - export NPIET_VERSION=1.3f
+        - export NPIET_SHA256=2ded856062abd73599e85e1e768ce6bc60ba2db22dc7d6a9b62763dca04b855a
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://www.bertnase.de/npiet/npiet-${NPIET_VERSION}.tar.gz" -o /tmp/npiet.tar.gz
+        - echo "${NPIET_SHA256}  /tmp/npiet.tar.gz" | sha256sum -c -
+        - tar -xzf /tmp/npiet.tar.gz -C /tmp
+        - (cd "/tmp/npiet-${NPIET_VERSION}" && ./configure ac_cv_lib_gd_gdImageCreate=no ac_cv_header_gd_h=no && make npiet CFLAGS='-O2 -std=gnu17 -DHAVE_CONFIG_H')
+        - install -m 0755 "/tmp/npiet-${NPIET_VERSION}/npiet" /usr/local/bin/npiet
+        - rm -rf /tmp/npiet.tar.gz "/tmp/npiet-${NPIET_VERSION}"
+        - (npiet -v 2>&1 || true) | grep 'with PNG support'
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          printf '%s\n' P3 '5 3' 255 \
+            '255 192 192 0 0 0 0 0 0 0 0 0 0 192 0' \
+            '255 192 192 0 0 192 0 255 0 0 255 255 0 192 0' \
+            '0 0 0 0 0 0 0 0 0 0 0 0 0 192 0' > Main.ppm
+          output="$(printf '%s\n' '20 22' | npiet -q Main.ppm)"
+          test "${output}" = 42
+
+  unlambda:
+    install:
+      apt:
+        - python3
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          printf '%s' '`r```.o.k.!i' > Main.unl
+          output="$(python3 /usr/local/lib/aonohako/unlambda.py Main.unl)"
+          test "${output}" = 'ok!'
+
+  lazyk:
+    install:
+      apt:
+        - curl
+        - gcc
+        - libc6-dev
+        - make
+      script:
+        - export LAZYK_VERSION=1.0.0
+        - export LAZYK_SHA256=c57edaab448f84eda2c98411e0fb4192e36113df49461db9285a62ca1f613d42
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://codeload.github.com/irori/lazyk/tar.gz/refs/tags/v${LAZYK_VERSION}" -o /tmp/lazyk.tar.gz
+        - echo "${LAZYK_SHA256}  /tmp/lazyk.tar.gz" | sha256sum -c -
+        - tar -xzf /tmp/lazyk.tar.gz -C /tmp
+        - make -C "/tmp/lazyk-${LAZYK_VERSION}" lazyk
+        - install -m 0755 "/tmp/lazyk-${LAZYK_VERSION}/lazyk" /usr/local/bin/lazyk
+        - rm -rf /tmp/lazyk.tar.gz "/tmp/lazyk-${LAZYK_VERSION}"
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          printf '%s' 'I' > Main.lazy
+          output="$(printf 'ok' | lazyk Main.lazy)"
+          test "${output}" = ok
+
+  intercal:
+    install:
+      apt:
+        - gcc
+        - intercal=30:0.30-6
+        - libc6-dev
+      script:
+        - test "$(dpkg-query -W -f='${Version}' intercal)" = 30:0.30-6
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          printf '%s\n' 'DO ,1 <- #3' 'DO ,1 SUB #1 <- #10' 'PLEASE DO ,1 SUB #2 <- #32' 'DO ,1 SUB #3 <- #134' 'DO .1 <- #1' 'PLEASE READ OUT ,1' 'DO GIVE UP' > Main.i
+          CC='gcc -std=gnu17' ick -b Main.i
+          output="$(./Main)"
+          test "${output}" = ok
+          printf '%s\n' 'PLEASE DO .1 <- #1' 'PLEASE DO .2 <- #1' 'PLEASE GIVE UP' > Broken.i
+          if CC='gcc -std=gnu17' ick -b Broken.i >/dev/null 2>&1; then exit 1; fi
+
   wasm:
     install:
       shared:
@@ -1992,6 +2152,126 @@ languages:
     install:
       apt:
         - octave
+        - gnuplot-nox
+        - ghostscript
+        - fonts-freefont-otf
+      script:
+        - |
+          install -d -m 0755 /usr/local/lib/aonohako/octave
+          cat > /usr/local/lib/aonohako/octave/plot_capture.m <<'OCTAVE'
+          1; # Keep script-style argv while isolating capture locals in a function.
+          function __aonohako_octave_run__ (encoded_path)
+            entry = char (matlab.net.base64decode (encoded_path));
+            if (! strcmp (getenv ("IMG_CAPTURE"), "1"))
+              error ("Octave plot capture requires a requested image sidecar");
+            endif
+            output_dir = getenv ("IMG_OUT_DIR");
+            if (isempty (output_dir))
+              error ("Octave plot capture requires a workspace image directory");
+            endif
+            warning ("off", "Octave:gnuplot-graphics");
+            graphics_toolkit ("gnuplot");
+            set (0, "defaultfigurevisible", "off");
+            addpath (fileparts (entry), "-begin");
+            source (entry, "base");
+            # Only successful completion captures figures still open here.
+            figures = sort (findall (0, "type", "figure"));
+            if (isempty (figures))
+              return;
+            endif
+            [created, message] = mkdir (output_dir);
+            if (! created)
+              warning ("aonohako:plot-capture", "Cannot create plot output: %s", message);
+              return;
+            endif
+            log_path = fullfile (output_dir, "images.jsonl");
+            log_file = fopen (log_path, "a+");
+            if (log_file < 0)
+              warning ("aonohako:plot-capture", "Cannot open plot output");
+              return;
+            endif
+            capture_dir = "";
+            unwind_protect
+              fseek (log_file, 0, "bof");
+              existing = fread (log_file, 8388609, "*uint8");
+              total_bytes = numel (existing);
+              if (total_bytes >= 8388608)
+                warning ("aonohako:plot-capture", "Plot output exceeds image budget");
+                return;
+              endif
+              existing_events = 0;
+              for record = strsplit (char (existing(:).'), "\n")
+                if (! isempty (strtrim (record{1})))
+                  existing_events += 1;
+                endif
+              endfor
+              if (existing_events >= 20)
+                return;
+              endif
+              separator = "";
+              if (! isempty (existing) && existing(end) != 10)
+                separator = "\n";
+              endif
+              fseek (log_file, 0, "eof");
+              candidate_dir = tempname (output_dir, "octave-capture-");
+              [created, message] = mkdir (candidate_dir);
+              if (! created || ! isempty (message))
+                warning ("aonohako:plot-capture", "Cannot create plot temporary directory: %s", message);
+                return;
+              endif
+              capture_dir = candidate_dir;
+              for index = 1:min (numel (figures), 20 - existing_events)
+                png_path = fullfile (capture_dir, "figure.png");
+                image_file = -1;
+                unwind_protect
+                  try
+                    print (figures(index), png_path, "-dpng", "-S1280,720");
+                    info = stat (png_path);
+                    # Match the runner's 1 MiB event and 8 MiB stream budgets.
+                    if (info.size > 786000)
+                      warning ("aonohako:plot-capture", "Plot exceeds image size limit");
+                      continue;
+                    endif
+                    image_file = fopen (png_path, "rb");
+                    if (image_file < 0)
+                      error ("Cannot read rendered plot");
+                    endif
+                    raw = fread (image_file, 786001, "*uint8");
+                    if (numel (raw) > 786000)
+                      continue;
+                    endif
+                    payload = struct ("mime", "image/png", ...
+                                      "b64", matlab.net.base64encode (raw), ...
+                                      "ts", floor (time () * 1000));
+                    line = [separator, jsonencode(payload), "\n"];
+                    if (numel (line) > 1048576 || total_bytes + numel (line) > 8388608)
+                      warning ("aonohako:plot-capture", "Plot output exceeds image budget");
+                      break;
+                    endif
+                    fwrite (log_file, line);
+                    fflush (log_file);
+                    total_bytes += numel (line);
+                    separator = "";
+                  catch capture_error
+                    warning ("aonohako:plot-capture", "Could not capture a plot: %s", capture_error.message);
+                  end_try_catch
+                unwind_protect_cleanup
+                  if (image_file >= 0)
+                    fclose (image_file);
+                  endif
+                  [removed, message] = unlink (png_path);
+                end_unwind_protect
+              endfor
+            unwind_protect_cleanup
+              fclose (log_file);
+              if (! isempty (capture_dir))
+                [removed, message] = rmdir (capture_dir);
+              endif
+            end_unwind_protect
+          endfunction
+          __aonohako_octave_run__ (getenv ("AONOHAKO_OCTAVE_ENTRY"));
+          OCTAVE
+          chmod 0644 /usr/local/lib/aonohako/octave/plot_capture.m
     smoke:
       command:
         - bash
@@ -2001,6 +2281,26 @@ languages:
           printf '%s\n' 'disp("ok")' > Main.m
           output="$(octave-cli --quiet --no-gui --no-history --no-init-file --no-init-path Main.m)"
           test "${output}" = 'ok'
+          cat > Plot.m <<'OCTAVE'
+          assert (isempty (argv ()));
+          values = fscanf (stdin, "%d", 2);
+          printf ("%d\n", sum (values));
+          figure (2); plot (1:3, [1 4 9]);
+          figure (1); imagesc ([1 2; 3 4]);
+          OCTAVE
+          export IMG_CAPTURE=1 IMG_OUT_DIR="$PWD/__img__"
+          export AONOHAKO_OCTAVE_ENTRY=$(printf '%s' "$PWD/Plot.m" | base64 -w0)
+          output="$(printf '%s\n' '-4 17' | octave-cli --quiet --no-gui --no-history --no-init-file --no-site-file /usr/local/lib/aonohako/octave/plot_capture.m)"
+          test "${output}" = 13
+          octave-cli --quiet --no-gui --no-history --no-init-file --no-site-file --eval '
+            lines = strsplit (strtrim (fileread (fullfile (getenv ("IMG_OUT_DIR"), "images.jsonl"))), "\n");
+            assert (numel (lines) == 2);
+            for index = 1:2
+              payload = jsondecode (lines{index});
+              assert (strcmp (payload.mime, "image/png"));
+              raw = matlab.net.base64decode (payload.b64);
+              assert (isequal (raw(1:8), uint8 ([137 80 78 71 13 10 26 10])));
+            endfor'
 
   vhdl:
     install:
@@ -3341,10 +3641,10 @@ languages:
         - moon
         - moonc
       script:
-        - export MOONBIT_VERSION=0.10.9+6e6c44045
+        - export MOONBIT_VERSION=0.10.17+d971670cd
         - export MOONBIT_URL_VERSION="${MOONBIT_VERSION/+/%2B}"
-        - export MOONBIT_ARCHIVE_SHA256=0e81deb35eca29e892415cf954ea42b48a43bcf277ad36a3ae1e97d2d1dfe732
-        - export MOONBIT_CORE_SHA256=d92b84ea0bc11ec9a9fe57d313416a6694a5826f4307e8e65d5075079ee913ca
+        - export MOONBIT_ARCHIVE_SHA256=d0a96eaf91c77cfcdd7b7df75390c5a1a95d0b8a328b1a5ed6fee050cfbf8d50
+        - export MOONBIT_CORE_SHA256=2d837ecbef5933c09726d63682a7695123d622e6aee13525fbc98c4b49433714
         - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://cli.moonbitlang.com/binaries/${MOONBIT_URL_VERSION}/moonbit-linux-x86_64.tar.gz" -o /tmp/moonbit.tar.gz
         - echo "${MOONBIT_ARCHIVE_SHA256}  /tmp/moonbit.tar.gz" | sha256sum -c -
         - install -d -m 0755 /opt/moonbit /opt/moonbit/lib
@@ -4574,8 +4874,10 @@ profiles:
       - guile
       - haskell
       - idris2
+      - intercal
       - j
       - janet
+      - lazyk
       - lisp
       - lolcode
       - lua
@@ -4587,6 +4889,7 @@ profiles:
       - perl
       - php
       - picolisp
+      - piet
       - plain
       - prolog
       - pypy
@@ -4596,12 +4899,14 @@ profiles:
       - ruby
       - scheme
       - sed
+      - shakespeare
       - sml
       - smlnj
       - smalltalk
       - sqlite
       - tcl
       - uiua
+      - unlambda
       - wasm
       - whitespace
   type-b:
@@ -4614,6 +4919,7 @@ profiles:
       - coffeescript
       - deno
       - elm
+      - entry
       - graphql
       - groovy
       - haxe

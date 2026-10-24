@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 
 	"aonohako/internal/compile"
 	"aonohako/internal/config"
+	"aonohako/internal/entrypolicy"
 	"aonohako/internal/execute"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
@@ -31,6 +33,7 @@ import (
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/queue"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runtimeidentity"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/rustpolicy"
@@ -183,8 +186,13 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	capabilities := make([]string, 0, 3)
-	if platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled) {
+	communicationSupported := platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled)
+	competitiveIdentity, competitiveIdentityErr := runtimeidentity.Competitive(s.cfg.CompetitiveRuntimeFingerprint)
+	if communicationSupported {
 		capabilities = append(capabilities, "communication-v1")
+		if competitiveIdentityErr == nil {
+			capabilities = append(capabilities, "communication-v2")
+		}
 	}
 	installedModeAllowed := s.cfg.AllowRequestPythonInstalledLibraries ||
 		s.cfg.DefaultPythonLibraryMode == pythonpolicy.LibraryModeInstalled
@@ -208,9 +216,25 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 	if pipelineSupported {
 		capabilities = append(capabilities, "pipeline-v1")
 	}
+	entrySupported := s.supportsEntryV1()
+	if entrySupported {
+		capabilities = append(capabilities, entrypolicy.Capability)
+	}
 	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	w.Header().Set("Content-Type", "application/json")
 	body := map[string]any{"capabilities": capabilities}
+	if communicationSupported && competitiveIdentityErr == nil {
+		body["communication_v2"] = map[string]any{
+			"participant_count": 2, "games_per_match": 20,
+			"result_protocol": "match-result-v1", "inline_artifact_sha256_required": true,
+			"runtime_fingerprint": competitiveIdentity.RuntimeFingerprint,
+			"runner_sha256":       competitiveIdentity.RunnerSHA256,
+			"image_digest":        competitiveIdentity.ImageDigest,
+		}
+	}
+	if entrySupported {
+		body["entry"] = map[string]any{"engine_version": "4.0.23", "grader_version": entrypolicy.Capability, "modes": []string{"stdio", "state"}}
+	}
 	if pipelineSupported {
 		body["pipeline"] = map[string]any{
 			"versions":         []int{1},
@@ -231,6 +255,36 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 func (s *Server) supportsPipelineV1() bool {
 	return s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded &&
 		s.cfg.Execution.Platform.SandboxBackend == platform.SandboxBackendHelper
+}
+
+func (s *Server) supportsEntryV1() bool {
+	if !s.supportsPipelineV1() {
+		return false
+	}
+	installed := false
+	for _, language := range strings.Split(os.Getenv("AONOHAKO_LANGUAGES"), ",") {
+		if language == "entry" {
+			installed = true
+		}
+	}
+	if !installed {
+		return false
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		return false
+	}
+	for _, path := range []string{entrypolicy.RunnerPath, "/usr/local/lib/aonohako/entry-runtime.mjs"} {
+		file, err := os.Open(path)
+		if err != nil {
+			return false
+		}
+		info, err := file.Stat()
+		_ = file.Close()
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) nextID(prefix string) string {

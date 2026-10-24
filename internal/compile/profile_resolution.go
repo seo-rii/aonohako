@@ -272,6 +272,16 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "MALBOLGE"
 	case "lolcode", "lol":
 		l = "LOLCODE"
+	case "shakespeare", "spl":
+		l = "SHAKESPEARE"
+	case "piet":
+		l = "PIET"
+	case "unlambda":
+		l = "UNLAMBDA"
+	case "lazyk", "lazy-k", "lazy_k":
+		l = "LAZYK"
+	case "intercal", "ick", "c-intercal":
+		l = "INTERCAL"
 	case "wasm", "webassembly":
 		l = "WASM"
 	case "assemblyscript":
@@ -295,6 +305,10 @@ func applyRequestedVersion(profile profiles.Profile, raw string) (profiles.Profi
 	}
 
 	switch profile.CompileKind {
+	case "entry":
+		if version != "entry-v1" {
+			return profile, fmt.Errorf("unsupported Entry grader version")
+		}
 	case "c":
 		std, ok := cStandardVersion(version)
 		if !ok {

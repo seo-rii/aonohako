@@ -179,6 +179,26 @@ if has_language "malbolge"; then
     report_once "Malbolge interpreter" sh -c 'test -f /usr/local/lib/aonohako/malbolge.py && printf "bundled (1998 reference)"'
 fi
 
+if has_language "unlambda"; then
+    report_once "Unlambda interpreter" sh -c 'test -f /usr/local/lib/aonohako/unlambda.py && printf "bundled (Unlambda 2.0)"'
+fi
+
+if has_language "shakespeare"; then
+    report_once "shakespearelang" /opt/shakespeare/bin/python3 -c 'import importlib.metadata as m; print(m.version("shakespearelang"))'
+fi
+
+if has_language "piet"; then
+    report_once "npiet" sh -c 'npiet -v 2>&1 | head -n 1'
+fi
+
+if has_language "lazyk"; then
+    report_once "Lazy K" lazyk -v
+fi
+
+if has_language "intercal"; then
+    report_once "C-INTERCAL" dpkg-query -W -f='${Version}' intercal
+fi
+
 if has_language "pypy"; then
     report_once "PyPy" pypy3 --version
 fi
@@ -187,9 +207,13 @@ if has_language "picolisp"; then
     report_once "PicoLisp" pil -version -bye
 fi
 
-if has_language "assemblyscript" || has_language "javascript" || has_language "typescript" || has_language "coffeescript" || has_language "elm" || has_language "rescript" || has_language "purescript"; then
+if has_language "entry" || has_language "assemblyscript" || has_language "javascript" || has_language "typescript" || has_language "coffeescript" || has_language "elm" || has_language "rescript" || has_language "purescript"; then
     report_once "Node.js" node --version
     report_once "npm" npm --version
+fi
+
+if has_language "entry"; then
+    report_once "Entry" node --input-type=module -e 'import { ENGINE_VERSION, GRADER_VERSION } from "/usr/local/lib/aonohako/entry-runtime.mjs"; console.log(ENGINE_VERSION + " / " + GRADER_VERSION);'
 fi
 
 if has_language "assemblyscript"; then
@@ -698,6 +722,7 @@ report_compile_option "chez-scheme" "/usr/bin/chezscheme --quiet --script /usr/l
 report_compile_option "guile" "GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm <source.scm>; run with auto-compilation disabled"
 report_compile_option "chicken-scheme" "csc -O3 -d0 -no-trace -static -o <target> <source.scm>; run the native artifact with the CHICKEN runtime and extensions statically linked"
 report_compile_option "javascript" "node --check"
+report_compile_option "entry" "node --disallow-code-generation-from-strings --no-addons /usr/local/lib/aonohako/entry-runner.mjs --check Main.entry.json; immutable Entry 4.0.23 / entry-v1 JSON artifacts"
 report_compile_option "assemblyscript" "aonohako-assemblyscript-compile <source.ts> <target.wasm>; wasm-validate <target.wasm>; run with bounded Wasmtime and no filesystem preopens"
 report_compile_option "factor" "/opt/factor/factor -no-user-init -no-signals -q /usr/local/lib/aonohako/factor_check.factor <source.factor>; run with bounded stacks and immutable vocabulary roots"
 report_compile_option "typescript" "tsc --module commonjs --target es2019 --sourceMap --outDir dist"
@@ -776,6 +801,11 @@ report_compile_option "bc" "pass-through .bc artifacts"
 report_compile_option "befunge" "pass-through .bef/.bf93 artifacts"
 report_compile_option "malbolge" "validate reference opcodes, then pass-through .mal/.mb artifacts"
 report_compile_option "lolcode" "pass-through .lol artifacts"
+report_compile_option "shakespeare" "shakespeare_run.py --check <source> (shakespearelang parse), then pass-through .spl artifacts"
+report_compile_option "piet" "validate PNG/PPM signature, then pass-through .png/.ppm artifacts; run with npiet -q"
+report_compile_option "unlambda" "validate one complete expression, then pass-through .unl artifacts"
+report_compile_option "lazyk" "pass-through .lazy artifacts"
+report_compile_option "intercal" "CC='gcc -std=gnu17' ick -b <target>.i"
 report_compile_option "forth" "pass-through .fs artifacts"
 report_compile_option "gforth" "pass-through .fs/.fth/.4th artifacts"
 report_compile_option "whitespace" "pass-through .ws artifacts"

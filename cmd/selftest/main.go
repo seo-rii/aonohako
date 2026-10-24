@@ -116,6 +116,7 @@ type compileExecuteCase struct {
 	compileVariants   []string
 	compileAttempts   int
 	entryPoint        string
+	entryMode         string
 	stdin             string
 	expectedStdout    string
 	judgeIO           []judgeIOCase
@@ -1086,16 +1087,19 @@ printfn"%A"(getans(fac(a))0I)
 					expectedStdout: tc.expectedStdout,
 				}}
 			}
+			baseRequest := model.RunRequest{
+				Lang:              profile.RunLang,
+				EntryMode:         tc.entryMode,
+				Binaries:          binaries,
+				EntryPoint:        tc.entryPoint,
+				Limits:            limits,
+				PythonLibraryMode: tc.pythonLibraryMode,
+			}
 			for index, ioCase := range judgeIO {
-				runResp, err := postExecuteRequest(baseURL, model.RunRequest{
-					Lang:              profile.RunLang,
-					Binaries:          binaries,
-					EntryPoint:        tc.entryPoint,
-					Stdin:             ioCase.stdin,
-					ExpectedStdout:    ioCase.expectedStdout,
-					Limits:            limits,
-					PythonLibraryMode: tc.pythonLibraryMode,
-				})
+				request := baseRequest
+				request.Stdin = ioCase.stdin
+				request.ExpectedStdout = ioCase.expectedStdout
+				runResp, err := postExecuteRequest(baseURL, request)
 				if err != nil {
 					return fmt.Errorf("%s/%s execute case %d/%d request failed: %w", language, compileLanguage, index+1, len(judgeIO), err)
 				}
@@ -1103,15 +1107,9 @@ printfn"%A"(getans(fac(a))0I)
 					return fmt.Errorf("%s/%s execute case %d/%d failed: status=%s reason=%s stdout=%q stderr=%q", language, compileLanguage, index+1, len(judgeIO), runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
 				}
 			}
-			control := model.RunRequest{
-				Lang:              profile.RunLang,
-				Binaries:          binaries,
-				EntryPoint:        tc.entryPoint,
-				Stdin:             judgeIO[0].stdin,
-				ExpectedStdout:    judgeIO[0].expectedStdout + "aonohako-wrong-answer-control\n",
-				Limits:            limits,
-				PythonLibraryMode: tc.pythonLibraryMode,
-			}
+			control := baseRequest
+			control.Stdin = judgeIO[0].stdin
+			control.ExpectedStdout = judgeIO[0].expectedStdout + "aonohako-wrong-answer-control\n"
 			controlResp, err := postExecuteRequest(baseURL, control)
 			if err != nil {
 				return fmt.Errorf("%s/%s wrong-answer control request failed: %w", language, compileLanguage, err)
@@ -1134,15 +1132,11 @@ printfn"%A"(getans(fac(a))0I)
 					attempts = 5
 				}
 				for attempt := 1; attempt <= attempts; attempt++ {
-					startupResp, err := postExecuteRequest(baseURL, model.RunRequest{
-						Lang:              profile.RunLang,
-						Binaries:          binaries,
-						EntryPoint:        tc.entryPoint,
-						Stdin:             judgeIO[0].stdin,
-						ExpectedStdout:    judgeIO[0].expectedStdout,
-						Limits:            startupLimits,
-						PythonLibraryMode: tc.pythonLibraryMode,
-					})
+					request := baseRequest
+					request.Stdin = judgeIO[0].stdin
+					request.ExpectedStdout = judgeIO[0].expectedStdout
+					request.Limits = startupLimits
+					startupResp, err := postExecuteRequest(baseURL, request)
 					if err != nil {
 						return fmt.Errorf("%s/%s constrained startup attempt %d failed: %w", language, compileLanguage, attempt, err)
 					}
@@ -1201,6 +1195,11 @@ printfn"%A"(getans(fac(a))0I)
 				if deepRunResp.Status != model.RunStatusAccepted {
 					return fmt.Errorf("java deep-recursion execute failed: status=%s reason=%s stdout=%q stderr=%q", deepRunResp.Status, deepRunResp.Reason, deepRunResp.Stdout, deepRunResp.Stderr)
 				}
+			}
+		}
+		if language == "entry" {
+			if err := runEntryStateSelftest(baseURL); err != nil {
+				return err
 			}
 		}
 		if language == "rust" {
@@ -3388,6 +3387,51 @@ if {[catch {socket 127.0.0.1 %d} s]} {
 	}
 }
 
+func entrySmokeSource(mode string) string {
+	return fmt.Sprintf(`{
+"format":"entry-submission","version":1,"engineVersion":"4.0.23","graderVersion":"entry-v1","mode":%q,
+"project":{"scenes":[{"id":"scene"}],"variables":[{"id":"a","variableType":"variable","value":0}],
+"objects":[{"id":"sprite","objectType":"sprite","scene":"scene","entity":{"x":0,"y":0},"script":[[
+{"type":"when_run_button_click","params":[null]},
+{"type":"ask_and_wait","params":[{"type":"text","params":["a?"]},null]},
+{"type":"set_variable","params":["a",{"type":"get_canvas_input_value","params":[null]},null]},
+{"type":"ask_and_wait","params":[{"type":"text","params":["b?"]},null]},
+{"type":"dialog","params":[{"type":"calc_basic","params":[{"type":"get_variable","params":["a"]},"PLUS",{"type":"get_canvas_input_value","params":[null]}]},"speak",null]},
+{"type":"move_x","params":[{"type":"number","params":[100]},null]}
+]]}]}}`, mode)
+}
+
+// Exercise the image-owned JSON compiler and private state comparator through
+// the same HTTP API used by the control plane, including a wrong-answer result.
+func runEntryStateSelftest(serverURL string) error {
+	compiled, err := postCompileRequest(serverURL, model.CompileRequest{
+		Lang: "ENTRY", Version: "entry-v1", EntryPoint: "Main.entry.json",
+		Sources: []model.Source{{Name: "Main.entry.json", DataB64: encodeScript(entrySmokeSource("state"))}},
+	})
+	if err != nil || compiled.Status != model.CompileStatusOK || len(compiled.Artifacts) != 1 {
+		return fmt.Errorf("Entry state compile failed: status=%s error=%v", compiled.Status, err)
+	}
+	artifact := compiled.Artifacts[0]
+	for _, tc := range []struct {
+		expected string
+		status   string
+	}{
+		{`{"version":1,"objects":{"sprite":{"x":100,"say":"42"}},"variables":{"a":"20"}}`, model.RunStatusAccepted},
+		{`{"version":1,"objects":{"sprite":{"x":101}}}`, model.RunStatusWA},
+	} {
+		result, err := postExecuteRequest(serverURL, model.RunRequest{
+			Lang: "entry", EntryMode: "state", EntryPoint: "Main.entry.json",
+			Binaries:       []model.Binary{{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode}},
+			Stdin:          `{"version":1,"seed":1,"ticks":60,"events":[],"input":"20\n22\n"}`,
+			ExpectedStdout: tc.expected, Limits: model.Limits{TimeMs: 8000, MemoryMB: 1024},
+		})
+		if err != nil || result.Status != tc.status || result.Stdout != "" || result.Stderr != "" {
+			return fmt.Errorf("Entry state execution/redaction failed: status=%s error=%v", result.Status, err)
+		}
+	}
+	return nil
+}
+
 func compileExecuteCases() map[string]compileExecuteCase {
 	source := func(name, body string) model.Source {
 		return model.Source{Name: name, DataB64: encodeScript(body)}
@@ -3616,6 +3660,81 @@ X IS NOW A NUMBR
 Y IS NOW A NUMBR
 VISIBLE SUM OF X AN Y
 KTHXBYE
+`),
+			},
+		},
+		"shakespeare": {
+			compileLang: "SHAKESPEARE",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.spl", `The Sum of Two Numbers.
+
+Romeo, a young man who remembers the first number.
+Juliet, a lady who remembers the second number.
+
+                    Act I: The only act.
+
+                    Scene I: Reading and adding.
+
+[Enter Romeo and Juliet]
+
+Juliet:
+  Listen to your heart!
+
+Romeo:
+  Listen to your heart!
+  You are as good as the sum of yourself and me.
+  Open your heart!
+  You are as good as the sum of a big big big cat and a big cat.
+  Speak your mind!
+
+[Exeunt]
+`),
+			},
+		},
+		"piet": {
+			compileLang: "PIET",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				// in(number), in(number), add, out(number), then a three-codel trap.
+				{Name: "Main.png", DataB64: "iVBORw0KGgoAAAANSUhEUgAAAAUAAAADCAIAAADUVFKvAAAAHUlEQVR4nGP4f+AAAxwAmWD+AYb/QNZ/BiQpqDwAOzAK/MpsrVcAAAAASUVORK5CYII="},
+			},
+		},
+		"unlambda": {
+			compileLang:    "UNLAMBDA",
+			stdin:          "20 22\n",
+			expectedStdout: "20 22\n",
+			nonABReason:    "Unlambda has no numeric I/O, so the bundled interpreter is exercised with a call/cc-free cat loop",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.unl", "```sii``s`k@``s`k`s``si`k|``s`kk``s``s`ks``s`k`sikk\n"),
+			},
+		},
+		"lazyk": {
+			compileLang:    "LAZYK",
+			stdin:          "20 22\n",
+			expectedStdout: "20 22\n",
+			nonABReason:    "Lazy K I/O is a Church-encoded byte stream, so the identity program exercises the full input-to-output path",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.lazy", "I\n"),
+			},
+		},
+		"intercal": {
+			compileLang:    "INTERCAL",
+			expectedStdout: "ok\n",
+			nonABReason:    "INTERCAL numeric I/O uses spelled-out digits and butchered Roman numerals, so Turing Text Model output is exercised instead",
+			limits:         model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{
+				source("Main.i", `DO ,1 <- #3
+DO ,1 SUB #1 <- #10
+PLEASE DO ,1 SUB #2 <- #32
+DO ,1 SUB #3 <- #134
+DO .1 <- #1
+PLEASE READ OUT ,1
+DO GIVE UP
 `),
 			},
 		},
@@ -4320,6 +4439,14 @@ public class Main {
   }
 }`),
 			},
+		},
+		"entry": {
+			compileLang: "ENTRY",
+			entryPoint:  "Main.entry.json",
+			entryMode:   "stdio",
+			judgeIO:     lineSeparatedABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 1024},
+			sources:     []model.Source{source("Main.entry.json", entrySmokeSource("stdio"))},
 		},
 		"javascript": {
 			compileLang: "JAVASCRIPT",

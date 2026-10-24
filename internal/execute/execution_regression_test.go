@@ -16,6 +16,7 @@ import (
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/security"
+	"aonohako/internal/timing"
 )
 
 func TestCPUTimeAfterBaseline(t *testing.T) {
@@ -24,20 +25,20 @@ func TestCPUTimeAfterBaseline(t *testing.T) {
 		usageNs     uint64
 		baselineNs  uint64
 		baselineSet bool
-		wantMs      int64
+		wantNs      uint64
 		wantOK      bool
 	}{
-		{name: "zero baseline is valid", usageNs: 3_500_000, baselineSet: true, wantMs: 3, wantOK: true},
-		{name: "subtracts helper CPU", usageNs: 8_500_000, baselineNs: 3_000_000, baselineSet: true, wantMs: 5, wantOK: true},
+		{name: "zero baseline is valid", usageNs: 3_500_001, baselineSet: true, wantNs: 3_500_001, wantOK: true},
+		{name: "subtracts helper CPU", usageNs: 8_500_001, baselineNs: 3_000_000, baselineSet: true, wantNs: 5_500_001, wantOK: true},
 		{name: "equal usage is zero target CPU", usageNs: 3_000_000, baselineNs: 3_000_000, baselineSet: true, wantOK: true},
 		{name: "missing baseline", usageNs: 3_500_000, wantOK: false},
 		{name: "rejects underflow", usageNs: 2_000_000, baselineNs: 3_000_000, baselineSet: true, wantOK: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotMs, gotOK := cpuTimeAfterBaseline(tt.usageNs, tt.baselineNs, tt.baselineSet)
-			if gotMs != tt.wantMs || gotOK != tt.wantOK {
-				t.Fatalf("cpuTimeAfterBaseline() = (%d, %v), want (%d, %v)", gotMs, gotOK, tt.wantMs, tt.wantOK)
+			gotNs, gotOK := cpuTimeAfterBaseline(tt.usageNs, tt.baselineNs, tt.baselineSet)
+			if gotNs != tt.wantNs || gotOK != tt.wantOK {
+				t.Fatalf("cpuTimeAfterBaseline() = (%d, %v), want (%d, %v)", gotNs, gotOK, tt.wantNs, tt.wantOK)
 			}
 		})
 	}
@@ -53,6 +54,7 @@ func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
 		"ghdl",
 		"vvp",
 		"wasmtime",
+		"octave-cli",
 	} {
 		command := []string{filepath.Join(workspaceRoot, "box", name)}
 		if got := sandboxCommandBase(command); got != "" {
@@ -66,6 +68,30 @@ func TestSandboxCommandBaseRejectsWorkspaceTrustedNameSpoof(t *testing.T) {
 	optWorkspaceRoot := "/opt/aonohako-work/run-1"
 	if got := sandboxCommandBase([]string{filepath.Join(optWorkspaceRoot, "box", "dotnet")}, optWorkspaceRoot); got != "" {
 		t.Fatalf("workspace runtime under trusted root = %q, want untrusted empty base", got)
+	}
+}
+
+func TestOctavePlotProcessesRequireImageOptIn(t *testing.T) {
+	body, err := os.ReadFile("sandbox_exec.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(body)
+	if !strings.Contains(source, `allowProcesses = runLang == "octave" && octaveImageCaptureEnabled(req)`) {
+		t.Fatal("Octave child processes must require both the runtime and image sidecar opt-in")
+	}
+	for _, marker := range []string{"allowFIFOs := false", "allowFIFOs = allowProcesses", "allowFIFOs = false", "AllowFIFOs:               allowFIFOs"} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("Octave FIFO policy is missing %q", marker)
+		}
+	}
+	start := strings.Index(source, `case "octave-cli":`)
+	if start < 0 {
+		t.Fatal("missing Octave runtime policy")
+	}
+	end := strings.Index(source[start:], "\n\t}")
+	if end < 0 || strings.Contains(source[start:start+end], "allowUnixSockets") {
+		t.Fatal("Octave plotting must not enable Unix sockets")
 	}
 }
 
@@ -593,6 +619,7 @@ func TestEvaluateRunStatusRejectsTruncatedStdoutPrefix(t *testing.T) {
 		nil,
 		config.DefaultRuntimeTuningConfig(),
 		"",
+		timing.CPUNormalizer{},
 	)
 	if status != model.RunStatusRE {
 		t.Fatalf("status = %q, want %q", status, model.RunStatusRE)
@@ -733,7 +760,9 @@ func TestRunInteractiveEnforcesInteractorWallLimit(t *testing.T) {
 		Interactor: &model.InteractorSpec{
 			Lang:     "python",
 			Binaries: []model.Binary{{Name: "interactor.py", DataB64: b64("import time\ntime.sleep(0.5)\n")}},
-			Limits:   &model.Limits{TimeMs: 50, MemoryMB: 128},
+			// Explicit wall limit preserves strict timeout tests despite
+			// the larger default allowance for interactive sessions.
+			Limits:   &model.Limits{TimeMs: 50, WallTimeMs: 50, MemoryMB: 128},
 		},
 		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
 	}, Hooks{})
@@ -885,9 +914,11 @@ func TestSandboxTargetSynchronizationWaitsForExecTransition(t *testing.T) {
 	if strings.Contains(processAccounting, "Maxrss") {
 		t.Fatalf("no-cgroup accounting must not charge pre-exec parent/helper RSS to the target")
 	}
-	if !strings.Contains(processAccounting, "cpuTimeAfterBaseline(usageCPUNs, cpuBaselineNs, cpuBaselineSet)") ||
-		!strings.Contains(processAccounting, "result.CPUTimeMs = finalCPUTimeMs") {
-		t.Fatalf("no-cgroup accounting must finalize target CPU from process wait usage minus the helper baseline")
+	if !strings.Contains(baselineBlock, "binary.LittleEndian.Uint64(ready[1:])") ||
+		!strings.Contains(processAccounting, "finalizeWaitCPUTime(&result, usageCPUNs, true)") ||
+		!strings.Contains(body, "cpuTimeAfterBaseline(usageNs, result.CPUAccounting.RusageBaselineNs, available)") ||
+		strings.Contains(processAccounting, "usageCPUNs - cpuBaselineNs") {
+		t.Fatalf("no-cgroup accounting must finalize precise target CPU from wait usage minus a matching rusage baseline")
 	}
 	watchdogStart := strings.Index(body, "if targetStarted {\n\t\t\t\tif cpuNs, err := timing.ProcessCPUTimeNs")
 	watchdogEnd := strings.Index(body, "if targetStarted && result.Status == \"OK\" && (lastWorkspaceScan.IsZero()")

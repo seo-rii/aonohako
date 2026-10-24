@@ -134,8 +134,8 @@ func TestDockerfilesUsePatchedRuntimeDependencies(t *testing.T) {
 	for _, marker := range []string{
 		"ARG RUNTIME_BASE=" + patchedTrixie,
 		"ARG PYTHON_IMAGE=python:3.13-slim-trixie@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280",
-		"setuptools==80.10.2",
-		"pillow==12.3.0",
+		"setuptools==84.1.0",
+		"pillow==13.0.0",
 	} {
 		if !strings.Contains(serverBody, marker) {
 			t.Fatalf("server Dockerfile must contain patched runtime dependency marker %q", marker)
@@ -178,8 +178,8 @@ func TestRuntimeDockerfileUsesPatchedGoBuilderImage(t *testing.T) {
 	if len(m) != 2 {
 		t.Fatalf("runtime.Dockerfile is missing a parseable digest-pinned GO_IMAGE default")
 	}
-	if m[1] != "1.26.9" {
-		t.Fatalf("GO_IMAGE default = %s, want 1.26.9 to satisfy go.mod and CI image builds", m[1])
+	if m[1] != "1.26.10" {
+		t.Fatalf("GO_IMAGE default = %s, want 1.26.10 to satisfy go.mod and CI image builds", m[1])
 	}
 }
 
@@ -414,7 +414,12 @@ func TestRuntimeDockerfileCopiesSandboxSelftestBinary(t *testing.T) {
 	if !strings.Contains(body, "COPY --chmod=0644 scripts/malbolge.py /usr/local/lib/aonohako/malbolge.py") {
 		t.Fatalf("runtime.Dockerfile must copy the bundled Malbolge interpreter")
 	}
-	if !strings.Contains(body, "chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py") {
+	for _, helper := range []string{"unlambda.py", "shakespeare_run.py"} {
+		if !strings.Contains(body, "COPY --chmod=0644 scripts/"+helper+" /usr/local/lib/aonohako/"+helper) {
+			t.Fatalf("runtime.Dockerfile must copy the bundled %s helper", helper)
+		}
+	}
+	if !strings.Contains(body, "chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py /usr/local/lib/aonohako/unlambda.py /usr/local/lib/aonohako/shakespeare_run.py") {
 		t.Fatalf("runtime.Dockerfile must keep bundled helper scripts world-readable")
 	}
 	if !strings.Contains(body, "find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} +") {

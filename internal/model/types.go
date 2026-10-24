@@ -48,10 +48,12 @@ type Binary struct {
 	DataB64 string `json:"data_b64"`
 	DataURL string `json:"data_url,omitempty"`
 	Mode    string `json:"mode,omitempty"`
+	SHA256  string `json:"sha256,omitempty"`
 }
 
 type Limits struct {
 	TimeMs         int   `json:"time_ms"`
+	WallTimeMs     int   `json:"wall_time_ms,omitempty"`
 	MemoryMB       int   `json:"memory_mb"`
 	OutputBytes    int   `json:"output_bytes,omitempty"`
 	WorkspaceBytes int64 `json:"workspace_bytes,omitempty"`
@@ -78,15 +80,19 @@ type InteractorSpec struct {
 }
 
 type CommunicationSpec struct {
-	Version              int    `json:"version"`
-	ParticipantProgramID string `json:"participant_program_id"`
-	ManagerProgramID     string `json:"manager_program_id"`
-	ParticipantCount     int    `json:"participant_count"`
-	ResultProtocol       string `json:"result_protocol"`
-	Input                string `json:"input,omitempty"`
-	InputURL             string `json:"input_url,omitempty"`
-	Answer               string `json:"answer,omitempty"`
-	AnswerURL            string `json:"answer_url,omitempty"`
+	Version               int      `json:"version"`
+	ParticipantProgramID  string   `json:"participant_program_id"`
+	ParticipantProgramIDs []string `json:"participant_program_ids,omitempty"`
+	ManagerProgramID      string   `json:"manager_program_id"`
+	ParticipantCount      int      `json:"participant_count"`
+	ResultProtocol        string   `json:"result_protocol"`
+	Input                 string   `json:"input,omitempty"`
+	InputURL              string   `json:"input_url,omitempty"`
+	InputSHA256           string   `json:"input_sha256,omitempty"`
+	RuntimeFingerprint    string   `json:"runtime_fingerprint,omitempty"`
+	Answer                string   `json:"answer,omitempty"`
+	AnswerURL             string   `json:"answer_url,omitempty"`
+	MatchSeed             string   `json:"match_seed,omitempty"`
 }
 
 type OutputFile struct {
@@ -99,6 +105,41 @@ type RunProgram struct {
 	Binaries      []Binary `json:"binaries"`
 	EntryPoint    string   `json:"entry_point,omitempty"`
 	EnableNetwork bool     `json:"enable_network,omitempty"`
+	SourceSHA256  string   `json:"source_sha256,omitempty"`
+}
+
+type MatchArtifact struct {
+	Name   string `json:"name"`
+	SHA256 string `json:"sha256"`
+}
+
+type MatchParticipant struct {
+	Seat          int             `json:"seat"`
+	ProgramID     string          `json:"program_id"`
+	SourceSHA256  string          `json:"source_sha256"`
+	EntryPoint    string          `json:"entry_point,omitempty"`
+	Artifacts     []MatchArtifact `json:"artifacts"`
+	Status        string          `json:"status"`
+	Reason        string          `json:"reason,omitempty"`
+	VerdictSource string          `json:"verdict_source,omitempty"`
+	CPUTimeMs     int64           `json:"cpu_time_ms"`
+	MemoryKB      int64           `json:"memory_kb"`
+}
+
+type MatchResult struct {
+	Version            int                `json:"version"`
+	Outcome            string             `json:"outcome"`
+	Games              int                `json:"games"`
+	Wins               *[2]int            `json:"wins,omitempty"`
+	Retriable          bool               `json:"retriable"`
+	Participants       []MatchParticipant `json:"participants"`
+	Message            string             `json:"message,omitempty"`
+	MatchSeed          string             `json:"match_seed,omitempty"`
+	InputSHA256        string             `json:"input_sha256,omitempty"`
+	RuntimeFingerprint string             `json:"runtime_fingerprint,omitempty"`
+	RunnerSHA256       string             `json:"runner_sha256,omitempty"`
+	ImageDigest        string             `json:"image_digest,omitempty"`
+	ErrorCode          string             `json:"error_code,omitempty"`
 }
 
 type StepHandoff struct {
@@ -192,6 +233,7 @@ type StepResult struct {
 	TimeMs           int64  `json:"time_ms"`
 	WallTimeMs       int64  `json:"wall_time_ms"`
 	CPUTimeMs        int64  `json:"cpu_time_ms"`
+	RawCPUTimeMs     *int64 `json:"raw_cpu_time_ms,omitempty"`
 	ProcessCPUTimeMs int64  `json:"process_cpu_time_ms,omitempty"`
 	MemoryKB         int64  `json:"memory_kb"`
 	ExitCode         *int   `json:"exit_code,omitempty"`
@@ -203,6 +245,42 @@ type StepResult struct {
 	ReasonTruncated  bool   `json:"reason_truncated,omitempty"`
 	VerdictSource    string `json:"verdict_source,omitempty"`
 	HandoffBytes     int64  `json:"handoff_bytes,omitempty"`
+}
+
+type CPUTimeNormalization struct {
+	Method          string `json:"method"`
+	ScalePPM        int64  `json:"scale_ppm"`
+	ReferenceTimeNs uint64 `json:"reference_time_ns"`
+	ObservedTimeNs  uint64 `json:"observed_time_ns"`
+}
+
+// CPUAccounting keeps the independent raw accounting inputs auditable. These
+// values describe only resource counters, never contestant input or output.
+type CPUAccounting struct {
+	ProcessClockBaselineNs uint64 `json:"process_clock_baseline_ns"`
+	RusageBaselineNs       uint64 `json:"rusage_baseline_ns"`
+	ProcessClockPeakNs     uint64 `json:"process_clock_peak_ns"`
+	WaitUserNs             uint64 `json:"wait_user_ns"`
+	WaitSystemNs           uint64 `json:"wait_system_ns"`
+	WaitTargetNs           uint64 `json:"wait_target_ns"`
+	SelectedSource         string `json:"selected_source"`
+}
+
+type CPUTimeSample struct {
+	Status        string         `json:"status"`
+	CPUTimeMs     int64          `json:"cpu_time_ms"`
+	CPUTimeNs     uint64         `json:"cpu_time_ns"`
+	RawCPUTimeMs  *int64         `json:"raw_cpu_time_ms,omitempty"`
+	RawCPUTimeNs  *uint64        `json:"raw_cpu_time_ns,omitempty"`
+	WallTimeMs    int64          `json:"wall_time_ms"`
+	MemoryKB      int64          `json:"memory_kb"`
+	CPUAccounting *CPUAccounting `json:"cpu_accounting,omitempty"`
+}
+
+type CPUTimeSampling struct {
+	Method         string          `json:"method"`
+	SelectedSample int             `json:"selected_sample"`
+	Samples        []CPUTimeSample `json:"samples"`
 }
 
 type SidecarOutput struct {
@@ -217,6 +295,7 @@ type SidecarError struct {
 
 type RunRequest struct {
 	Lang              string                   `json:"lang"`
+	EntryMode         string                   `json:"entry_mode,omitempty"`
 	Binaries          []Binary                 `json:"binaries"`
 	Programs          []RunProgram             `json:"programs,omitempty"`
 	Steps             []RunStep                `json:"steps,omitempty"`
@@ -242,25 +321,32 @@ type RunRequest struct {
 }
 
 type RunResponse struct {
-	Status              string          `json:"status"`
-	TimeMs              int64           `json:"time_ms"`
-	WallTimeMs          int64           `json:"wall_time_ms"`
-	CPUTimeMs           int64           `json:"cpu_time_ms"`
-	ProcessCPUTimeMs    int64           `json:"process_cpu_time_ms,omitempty"`
-	MemoryKB            int64           `json:"memory_kb"`
-	ExitCode            *int            `json:"exit_code,omitempty"`
-	Stdout              string          `json:"stdout,omitempty"`
-	Stderr              string          `json:"stderr,omitempty"`
-	StdoutTruncated     bool            `json:"stdout_truncated,omitempty"`
-	StderrTruncated     bool            `json:"stderr_truncated,omitempty"`
-	Reason              string          `json:"reason,omitempty"`
-	ReasonTruncated     bool            `json:"reason_truncated,omitempty"`
-	VerdictSource       string          `json:"verdict_source,omitempty"`
-	Score               *float64        `json:"score,omitempty"`
-	StartedParticipants int             `json:"started_participants,omitempty"`
-	Steps               []StepResult    `json:"steps,omitempty"`
-	SidecarOutputs      []SidecarOutput `json:"sidecar_outputs,omitempty"`
-	SidecarErrors       []SidecarError  `json:"sidecar_errors,omitempty"`
+	Status               string                `json:"status"`
+	TimeMs               int64                 `json:"time_ms"`
+	WallTimeMs           int64                 `json:"wall_time_ms"`
+	CPUTimeMs            int64                 `json:"cpu_time_ms"`
+	CPUTimeNs            uint64                `json:"cpu_time_ns,omitempty"`
+	RawCPUTimeMs         *int64                `json:"raw_cpu_time_ms,omitempty"`
+	RawCPUTimeNs         *uint64               `json:"raw_cpu_time_ns,omitempty"`
+	CPUAccounting        *CPUAccounting        `json:"cpu_accounting,omitempty"`
+	CPUTimeSampling      *CPUTimeSampling      `json:"cpu_time_sampling,omitempty"`
+	ProcessCPUTimeMs     int64                 `json:"process_cpu_time_ms,omitempty"`
+	CPUTimeNormalization *CPUTimeNormalization `json:"cpu_time_normalization,omitempty"`
+	MemoryKB             int64                 `json:"memory_kb"`
+	ExitCode             *int                  `json:"exit_code,omitempty"`
+	Stdout               string                `json:"stdout,omitempty"`
+	Stderr               string                `json:"stderr,omitempty"`
+	StdoutTruncated      bool                  `json:"stdout_truncated,omitempty"`
+	StderrTruncated      bool                  `json:"stderr_truncated,omitempty"`
+	Reason               string                `json:"reason,omitempty"`
+	ReasonTruncated      bool                  `json:"reason_truncated,omitempty"`
+	VerdictSource        string                `json:"verdict_source,omitempty"`
+	Score                *float64              `json:"score,omitempty"`
+	StartedParticipants  int                   `json:"started_participants,omitempty"`
+	Match                *MatchResult          `json:"match,omitempty"`
+	Steps                []StepResult          `json:"steps,omitempty"`
+	SidecarOutputs       []SidecarOutput       `json:"sidecar_outputs,omitempty"`
+	SidecarErrors        []SidecarError        `json:"sidecar_errors,omitempty"`
 }
 
 const (

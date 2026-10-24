@@ -1,6 +1,7 @@
 package execute
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,6 +58,20 @@ sys.path.insert(0, os.path.dirname(path))
 ` + pythonRunMain
 
 const pythonTrustedSitecustomizePath = "/usr/local/lib/aonohako/python/sitecustomize.py"
+
+// Octave only captures plots for the canonical image sidecar explicitly
+// requested by the control plane. Other sidecar files do not opt in.
+func octaveImageCaptureEnabled(req *model.RunRequest) bool {
+	if req == nil {
+		return false
+	}
+	for _, output := range req.SidecarOutputs {
+		if output.Path == "__img__/images.jsonl" {
+			return true
+		}
+	}
+	return false
+}
 
 const pythonInstalledRunner = `import importlib.machinery, importlib.util, os, runpy, site, sys, types
 path = sys.argv.pop(1)
@@ -182,6 +197,13 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		}
 		return []string{"aonohako-gdl-run", primaryPath, entry}
 	case "octave":
+		if octaveImageCaptureEnabled(req) {
+			// Pass the path as data and invoke a script, preserving empty argv.
+			// Plotting needs the installed function path, but no startup files.
+			return []string{"env", "AONOHAKO_OCTAVE_ENTRY=" + base64.StdEncoding.EncodeToString([]byte(primaryPath)),
+				"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-site-file",
+				"/usr/local/lib/aonohako/octave/plot_capture.m"}
+		}
 		return []string{"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-init-path", primaryPath}
 	case "vhdl":
 		top := strings.TrimSpace(req.EntryPoint)
@@ -351,7 +373,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"-jar",
 			primaryPath,
 		}
-	case "javascript", "apl":
+	case "javascript", "apl", "entry":
 		limitMB := max(64, req.Limits.MemoryMB)
 		oldSpaceMB := max(32, (limitMB*tuning.NodeOldSpacePercent)/100)
 		semiSpaceMB := limitMB / 64
@@ -369,6 +391,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			fmt.Sprintf("--stack-size=%d", tuning.NodeStackSizeKB),
 		}
 		switch lang {
+		case "entry":
+			return append(args, "--disallow-code-generation-from-strings", "--no-addons", "/usr/local/lib/aonohako/entry-runner.mjs", primaryPath, req.EntryMode)
 		case "apl":
 			return append(args, "/usr/local/bin/apl", "--script", "-f", primaryPath)
 		default:
@@ -526,6 +550,14 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"python3", "/usr/local/lib/aonohako/brainfuck.py", primaryPath}
 	case "malbolge":
 		return []string{"python3", "/usr/local/lib/aonohako/malbolge.py", primaryPath}
+	case "unlambda":
+		return []string{"python3", "/usr/local/lib/aonohako/unlambda.py", primaryPath}
+	case "shakespeare":
+		return []string{"/opt/shakespeare/bin/python3", "/usr/local/lib/aonohako/shakespeare_run.py", primaryPath}
+	case "piet":
+		return []string{"npiet", "-q", primaryPath}
+	case "lazyk":
+		return []string{"lazyk", primaryPath}
 	case "wasm":
 		limitMB := max(16, req.Limits.MemoryMB)
 		guestMemoryMB := max(1, limitMB-64)

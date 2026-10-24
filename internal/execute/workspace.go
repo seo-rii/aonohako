@@ -59,6 +59,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var tclPath string
 	var gdlPath string
 	var octavePath string
+	var pietPath string
 	var verilogPath string
 	var sourcePath string
 	var malbolgePath string
@@ -185,6 +186,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(lowerClean, ".m") && octavePath == "" {
 			octavePath = dest
 		}
+		if lang == "piet" && pietPath == "" && (strings.HasSuffix(lowerClean, ".png") || strings.HasSuffix(lowerClean, ".ppm")) {
+			pietPath = dest
+		}
 		if strings.HasSuffix(lowerClean, ".vvp") && verilogPath == "" {
 			verilogPath = dest
 		}
@@ -195,7 +199,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		} else if strings.HasSuffix(lowerClean, ".mb") && malbolgePath == "" {
 			malbolgePath = dest
 		}
-		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".sml", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
+		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".sml", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".spl", ".unl", ".lazy", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -218,6 +222,8 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 
 	switch lang {
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "chapel-binary", "chicken-scheme", "c3", "javascript", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "assemblyscript", "factor", "aheui", "apecode", "cuda-ocelot":
+		return primaryPath, lang, nil
+	case "entry":
 		return primaryPath, lang, nil
 	case "smlnj":
 		if sourcePath == "" {
@@ -279,6 +285,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			octavePath = primaryPath
 		}
 		return octavePath, lang, nil
+	case "piet":
+		if pietPath == "" {
+			pietPath = primaryPath
+		}
+		return pietPath, lang, nil
 	case "vhdl", "gleam", "isabelle":
 		return ws.BoxDir, lang, nil
 	case "verilog":
@@ -324,7 +335,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		return rocqPath, lang, nil
 	case "haxe":
 		return primaryPath, lang, nil
-	case "vb6", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "forth", "bun", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "algol68":
+	case "vb6", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "shakespeare", "unlambda", "lazyk", "forth", "bun", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "algol68":
 		if sourcePath == "" {
 			sourcePath = primaryPath
 		}

@@ -77,6 +77,7 @@ func verifyLanguageSemanticCase(baseURL, language, compileLanguage string, basel
 	}
 	request := model.RunRequest{
 		Lang:           profile.RunLang,
+		EntryMode:      baseline.entryMode,
 		Binaries:       binaries,
 		EntryPoint:     baseline.entryPoint,
 		Stdin:          tc.stdin,

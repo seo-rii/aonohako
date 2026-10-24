@@ -109,7 +109,8 @@ error.
   "stdin": "hello\n",                        // input fed to process stdin (max 64 MiB)
   "expected_stdout": "hello\n",              // expected output for built-in diff (max 64 MiB)
   "limits": {
-    "time_ms": 2000,                         // wall-clock time limit, 1..600000 ms
+    "time_ms": 2000,                         // CPU time limit, 1..600000 ms; basis for the default wall allowance
+    "wall_time_ms": 6000,                    // optional unscaled wall-clock time limit, 1..600000 ms; 0/omitted uses runner defaults
     "memory_mb": 256,                        // memory limit, 1..4096 MB
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..67108864
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
@@ -170,7 +171,18 @@ interactive command channel, submitted GDL paths are limited to ASCII letters,
 digits, `.`, `_`, `-`, and `/`.
 
 `limits.time_ms` and `limits.memory_mb` are required and bounded at the API
-boundary. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
+boundary. `limits.time_ms` is the CPU budget. An optional `limits.wall_time_ms`
+selects an independent hard wall-clock deadline for blocked I/O, deadlocks and
+sandbox stalls. This explicit deadline is never scaled by CPU normalization.
+When it is omitted or zero, ordinary execution uses `time_ms` as its base wall
+allowance. Interactive execution, including Pipeline V1 interactive steps, uses
+`min(600000 ms, max(3 * time_ms, time_ms + 3000 ms))` as its base allowance.
+With CPU normalization enabled, either default is extended to cover the
+calibrated CPU allowance and scheduling slack if that is larger; this effective
+default can exceed 600000 ms on slower hosts. CPU accounting and CPU TLE
+classification continue to use `time_ms`.
+Communication mode uses runner-managed wall allowances and rejects nonzero
+`limits.wall_time_ms`. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
 server-side values when `0` or omitted, but values above the hard API caps are
 rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
@@ -356,7 +368,9 @@ file/sidecar output capture, and `ignore_tle`. `input`/`input_url` and the
 optional `answer`/`answer_url` pairs are mutually exclusive. `limits` applies
 to every participant. Manager and aggregate ceilings are runner policy: the
 manager currently receives 512 MiB and up to the participant time plus one
-second, within the public time cap.
+second, within the public time cap. Communication wall allowances are derived
+from the CPU limits and runner scheduling policy; an independent nonzero
+`limits.wall_time_ms` is rejected rather than silently ignored.
 
 Every participant receives its zero-based participant ID as the final command
 argument. The manager receives these arguments in order:
@@ -418,7 +432,14 @@ root. Self-hosted cgroup timing is unchanged.
   "status": "Accepted",                     // Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Workspace Limit Exceeded|Runtime Error|Container Initialization Failed
   "time_ms": 42,                            // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                       // wall-clock time from CLOCK_MONOTONIC (ms)
-  "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
+  "cpu_time_ms": 30,                        // authoritative CPU time; normalized by Cloud Run helpers (ms)
+  "raw_cpu_time_ms": 49,                    // scheduled host CPU time before normalization (ms)
+  "cpu_time_normalization": {               // present when normalization is active
+    "method": "go-fixed-int-v1",
+    "scale_ppm": 600000,
+    "reference_time_ns": 60000000,
+    "observed_time_ns": 100000000
+  },
   "memory_kb": 8192,                        // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                           // nullable; process exit code
   "stdout": "",                             // truncated stdout (up to capture_limits.stdout_bytes when set, on WA/RE only)
@@ -436,6 +457,7 @@ root. Self-hosted cgroup timing is unchanged.
       "status": "Accepted",
       "wall_time_ms": 12,
       "cpu_time_ms": 8,
+      "raw_cpu_time_ms": 13,
       "memory_kb": 4096,
       "handoff_bytes": 128
     },
@@ -445,6 +467,7 @@ root. Self-hosted cgroup timing is unchanged.
       "status": "Accepted",
       "wall_time_ms": 30,
       "cpu_time_ms": 22,
+      "raw_cpu_time_ms": 36,
       "memory_kb": 8192
     }
   ],
@@ -642,6 +665,11 @@ The interactor is invoked as:
 | WHITESPACE | `whitespace` | Structural validation (whitespace-only source) |
 | BF | `brainfuck` | Bracket-balance validation |
 | LOLCODE | `lolcode` | Pass-through artifacts (requires `.lol`) |
+| SHAKESPEARE, SPL | `shakespeare` | `shakespeare_run.py --check` parse check (requires `.spl`) |
+| PIET | `piet` | PNG/PPM signature validation (requires `.png` or `.ppm`) |
+| UNLAMBDA | `unlambda` | Single complete expression validation (requires `.unl`) |
+| LAZYK, LAZY_K | `lazyk` | Pass-through artifacts (requires `.lazy`) |
+| INTERCAL | `intercal` | `CC="gcc -std=gnu17" ick -b <target>.i` |
 | WASM | `wasm` | `wat2wasm` or `wasm-validate` |
 | AHEUI | `aheui` | Pass-through artifacts |
 | UHMLANG, TEXT | `none` | Pass-through |
@@ -725,6 +753,10 @@ The interactor is invoked as:
 | `befunge` | `python3 /usr/local/lib/aonohako/befunge.py <file>` |
 | `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |
 | `lolcode` | `lci <file>` |
+| `shakespeare` | `/opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py <file>` |
+| `piet` | `npiet -q <file>` |
+| `unlambda` | `python3 /usr/local/lib/aonohako/unlambda.py <file>` |
+| `lazyk` | `lazyk <file>` |
 | `wasm` | `wasmtime run --dir=. -O memory-reservation=... -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=... -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-wasm-stack=1048576 <file>` |
 | `aheui` | `python3 -c '<aheui entry_point wrapper>' <file>` |
 | `text` | `cat <file>` |
@@ -752,8 +784,15 @@ for the compile phase and toolchain smoke tests.
 ### Runtime Measurements
 
 - `wall_time_ms` uses `CLOCK_MONOTONIC`
-- `cpu_time_ms` samples the Linux process CPU clock while the submission is
+- target CPU time samples the Linux process CPU clock while the submission is
   running and uses cgroup `cpu.stat` when per-run cgroups are enabled
+- Cloud Run embedded helpers calibrate fixed single-thread integer work at
+  startup, publish the scheduled value as `raw_cpu_time_ms`, and translate the
+  verdict-authoritative `cpu_time_ms` to a 60 ms reference host; watchdogs and
+  `RLIMIT_CPU` use the inverse raw-host budget
+- `cpu_time_normalization` reports the versioned method, parts-per-million
+  scale, reference duration, and measured per-instance calibration duration;
+  remote control planes pass it through without applying a second scale
 - `time_ms` is retained as a compatibility alias for `wall_time_ms`
 - `verdict_source` is diagnostic and non-authoritative. Local helper runners
   may report values such as `stdout`, `file_output`, `spj`, `exit_code`,

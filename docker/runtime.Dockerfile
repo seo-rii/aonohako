@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-ARG GO_IMAGE=golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
+ARG GO_IMAGE=golang:1.26.10-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af
 ARG RUNTIME_BASE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS go-toolchain
 
@@ -127,9 +127,12 @@ COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako /usr/local/bin/aono
 COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
+COPY --chmod=0444 scripts/entry-runner.mjs scripts/entry-runtime.mjs scripts/entry-supported-blocks.json /usr/local/lib/aonohako/
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
 COPY --chmod=0644 scripts/befunge.py /usr/local/lib/aonohako/befunge.py
 COPY --chmod=0644 scripts/malbolge.py /usr/local/lib/aonohako/malbolge.py
+COPY --chmod=0644 scripts/unlambda.py /usr/local/lib/aonohako/unlambda.py
+COPY --chmod=0644 scripts/shakespeare_run.py /usr/local/lib/aonohako/shakespeare_run.py
 COPY --chmod=0755 scripts/apl_kanapl_runner.js /usr/local/bin/apl
 COPY --chmod=0755 scripts/acl2_check.sh /usr/local/bin/aonohako-acl2-check
 COPY --chmod=0755 scripts/alloy_check.py /usr/local/bin/aonohako-alloy-check
@@ -174,7 +177,7 @@ RUN if [[ ",${LANGUAGES}," == *",smlnj,"* ]]; then \
 
 RUN chmod 0755 /usr/local/lib/aonohako && \
     rm -f /usr/local/lib/aonohako/python/.empty && \
-    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py && \
+    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py /usr/local/lib/aonohako/unlambda.py /usr/local/lib/aonohako/shakespeare_run.py && \
     find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
     find /usr/local/lib/aonohako/python -type f -exec chmod 0644 {} + && \
     install -d -m 0700 /var/aonohako /var/aonohako/protected && \

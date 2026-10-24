@@ -9,6 +9,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/model"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/timing"
 )
 
 func TestStdoutLimitVerdictPreservesExecutionFailures(t *testing.T) {
@@ -62,7 +63,7 @@ func TestJudgingAndInteractiveStdoutLimitPrecedence(t *testing.T) {
 			res := tc.res
 			res.Stdout = []byte("prefix")
 			res.StdoutTruncated = true
-			status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, res.Stdout, "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "")
+			status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, res.Stdout, "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 			if status != tc.wantStatus || reason != tc.wantReason || source != tc.wantSource {
 				t.Fatalf("ordinary verdict = (%q, %q, %q), want (%q, %q, %q)", status, reason, source, tc.wantStatus, tc.wantReason, tc.wantSource)
 			}
@@ -83,7 +84,7 @@ func TestJudgingAndInteractiveStdoutLimitPrecedence(t *testing.T) {
 func TestIgnoredTLEWithStdoutOverflowScoresZero(t *testing.T) {
 	req := &model.RunRequest{ExpectedStdout: "prefix", IgnoreTLE: true, Limits: model.Limits{TimeMs: 100}}
 	res := execResult{Status: model.RunStatusTLE, Reason: "wall time limit exceeded", VerdictSource: "wall_time", StdoutTruncated: true}
-	status, score, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("prefix"), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "")
+	status, score, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("prefix"), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 	if status != model.RunStatusTLE || score == nil || *score != 0 || reason != res.Reason || source != res.VerdictSource {
 		t.Fatalf("ignored-TLE overflow = (%q, %v, %q, %q)", status, score, reason, source)
 	}
@@ -92,7 +93,7 @@ func TestIgnoredTLEWithStdoutOverflowScoresZero(t *testing.T) {
 func TestFileJudgingIgnoresDiagnosticStdoutOverflow(t *testing.T) {
 	req := &model.RunRequest{ExpectedStdout: "complete file", Limits: model.Limits{TimeMs: 100}}
 	res := execResult{Status: "OK", StdoutTruncated: true}
-	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte(req.ExpectedStdout), "file_output", "", nil, config.DefaultRuntimeTuningConfig(), "")
+	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte(req.ExpectedStdout), "file_output", "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 	if status != model.RunStatusAccepted || reason != "" || source != "file_output" {
 		t.Fatalf("file-output verdict changed with diagnostic stdout overflow: (%q, %q, %q)", status, reason, source)
 	}
