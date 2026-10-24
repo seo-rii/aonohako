@@ -2,7 +2,6 @@ package execute
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
