@@ -1469,7 +1469,7 @@ func TestPythonLikeCompilerCollectsPythonArtifacts(t *testing.T) {
 	if len(runner.commands) != 1 {
 		t.Fatalf("runner commands = %+v", runner.commands)
 	}
-	if want := []string{"-I", "-S", "-m", "compileall", "-q", "-b", "Main.py"}; !reflect.DeepEqual(runner.commands[0].args, want) {
+	if want := []string{"-I", "-S", "-m", "compileall", "-q", "-b", "--invalidation-mode", "checked-hash", "Main.py"}; !reflect.DeepEqual(runner.commands[0].args, want) {
 		t.Fatalf("runner args = %#v, want %#v", runner.commands[0].args, want)
 	}
 	if len(resp.Artifacts) != 2 {
