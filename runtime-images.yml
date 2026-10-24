@@ -2016,21 +2016,52 @@ languages:
             source (entry, "base");
             # Only successful completion captures figures still open here.
             figures = sort (findall (0, "type", "figure"));
+            if (isempty (figures))
+              return;
+            endif
             [created, message] = mkdir (output_dir);
             if (! created)
               warning ("aonohako:plot-capture", "Cannot create plot output: %s", message);
               return;
             endif
             log_path = fullfile (output_dir, "images.jsonl");
-            log_file = fopen (log_path, "w");
+            log_file = fopen (log_path, "a+");
             if (log_file < 0)
               warning ("aonohako:plot-capture", "Cannot open plot output");
               return;
             endif
-            total_bytes = 0;
+            capture_dir = "";
             unwind_protect
-              for index = 1:min (numel (figures), 20)
-                png_path = fullfile (output_dir, sprintf ("figure-%d.png", index));
+              fseek (log_file, 0, "bof");
+              existing = fread (log_file, 8388609, "*uint8");
+              total_bytes = numel (existing);
+              if (total_bytes >= 8388608)
+                warning ("aonohako:plot-capture", "Plot output exceeds image budget");
+                return;
+              endif
+              existing_events = 0;
+              for record = strsplit (char (existing(:).'), "\n")
+                if (! isempty (strtrim (record{1})))
+                  existing_events += 1;
+                endif
+              endfor
+              if (existing_events >= 20)
+                return;
+              endif
+              separator = "";
+              if (! isempty (existing) && existing(end) != 10)
+                separator = "\n";
+              endif
+              fseek (log_file, 0, "eof");
+              candidate_dir = tempname (output_dir, "octave-capture-");
+              [created, message] = mkdir (candidate_dir);
+              if (! created || ! isempty (message))
+                warning ("aonohako:plot-capture", "Cannot create plot temporary directory: %s", message);
+                return;
+              endif
+              capture_dir = candidate_dir;
+              for index = 1:min (numel (figures), 20 - existing_events)
+                png_path = fullfile (capture_dir, "figure.png");
                 image_file = -1;
                 unwind_protect
                   try
@@ -2052,7 +2083,7 @@ languages:
                     payload = struct ("mime", "image/png", ...
                                       "b64", matlab.net.base64encode (raw), ...
                                       "ts", floor (time () * 1000));
-                    line = [jsonencode(payload), "\n"];
+                    line = [separator, jsonencode(payload), "\n"];
                     if (numel (line) > 1048576 || total_bytes + numel (line) > 8388608)
                       warning ("aonohako:plot-capture", "Plot output exceeds image budget");
                       break;
@@ -2060,6 +2091,7 @@ languages:
                     fwrite (log_file, line);
                     fflush (log_file);
                     total_bytes += numel (line);
+                    separator = "";
                   catch capture_error
                     warning ("aonohako:plot-capture", "Could not capture a plot: %s", capture_error.message);
                   end_try_catch
@@ -2072,6 +2104,9 @@ languages:
               endfor
             unwind_protect_cleanup
               fclose (log_file);
+              if (! isempty (capture_dir))
+                [removed, message] = rmdir (capture_dir);
+              endif
             end_unwind_protect
           endfunction
           __aonohako_octave_run__ (getenv ("AONOHAKO_OCTAVE_ENTRY"));

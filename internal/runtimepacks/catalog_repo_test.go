@@ -24,7 +24,7 @@ func TestOctaveImageCaptureRuntime(t *testing.T) {
 	for _, contract := range []string{
 		"/usr/local/lib/aonohako/octave/plot_capture.m", `source (entry, "base")`,
 		`getenv ("IMG_CAPTURE")`, `getenv ("IMG_OUT_DIR")`, `"-S1280,720"`,
-		`min (numel (figures), 20)`, `total_bytes + numel (line) > 8388608`,
+		`min (numel (figures), 20 - existing_events)`, `total_bytes + numel (line) > 8388608`,
 	} {
 		if !strings.Contains(helper, contract) {
 			t.Fatalf("Octave capture install is missing %q", contract)

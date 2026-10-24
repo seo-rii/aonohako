@@ -8,14 +8,18 @@ can reveal input data from hidden tests.
 
 The image-enabled command loads an image-owned helper, selects headless
 gnuplot, and executes the original entry file in Octave's base workspace.
-After successful script completion it snapshots up to 20 remaining open
+After successful script completion it snapshots remaining open
 figures, ordered by figure handle, as 1280 × 720 PNG images. Console output
 and stdin keep their usual roles. Closed figures, intermediate animation
 frames, explicit `exit` calls, script errors, and killed executions are not
 captured. The helper does not inspect workspace variables.
 
-Each JSONL record retains the existing `{mime, b64, ts}` shape. Images larger
-than the 1 MiB event budget are skipped, and the total log is capped at 8 MiB.
+Each JSONL record retains the existing `{mime, b64, ts}` shape. The helper
+preserves records already written by the script and appends snapshots up to
+20 total nonempty records. Existing bytes count toward the 8 MiB log budget;
+images larger than the 1 MiB event budget are skipped. With no open figures,
+the helper leaves the sidecar untouched. Rendering uses a separate temporary
+directory so existing image files remain intact.
 Rendering is charged to the submission's time, memory, and workspace limits.
 Capture warnings go to stderr; they do not replace the program's stdout.
 
