@@ -110,7 +110,7 @@ error.
   "expected_stdout": "hello\n",              // expected output for built-in diff (max 64 MiB)
   "limits": {
     "time_ms": 2000,                         // CPU time limit, 1..600000 ms; basis for the default wall allowance
-    "wall_time_ms": 6000,                    // optional unscaled wall-clock deadline, 1..600000 ms; 0/omitted uses runner defaults
+    "wall_time_ms": 6000,                    // optional unscaled wall-clock time limit, 1..600000 ms; 0/omitted uses runner defaults
     "memory_mb": 256,                        // memory limit, 1..4096 MB
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..67108864
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
