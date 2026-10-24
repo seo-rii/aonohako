@@ -465,3 +465,20 @@ func TestValidateRejectsRequestWideBinaryFileOverflow(t *testing.T) {
 		t.Fatalf("Validate error = %v, want request-wide binary count rejection", err)
 	}
 }
+
+func TestValidateOptionalWallTimeLimit(t *testing.T) {
+	good := model.Limits{TimeMs: 1000, WallTimeMs: 30_000, MemoryMB: 128}
+	if err := ValidateRequiredLimits("limits", good); err != nil {
+		t.Fatalf("valid explicit wall timeout rejected: %v", err)
+	}
+	for _, wall := range []int{-1, MaxTimeMs + 1} {
+		bad := good
+		bad.WallTimeMs = wall
+		if err := ValidateRequiredLimits("limits", bad); err == nil || !strings.Contains(err.Error(), "wall_time_ms") {
+			t.Fatalf("wall timeout %d must be rejected, got %v", wall, err)
+		}
+	}
+	if LimitsAreZero(model.Limits{WallTimeMs: 5}) {
+		t.Fatal("wall_time_ms must count as a provided limit")
+	}
+}
