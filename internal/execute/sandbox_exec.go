@@ -48,6 +48,9 @@ type execResult struct {
 	ProcessCPUTimeMs int64
 	Reason           string
 	VerdictSource    string
+	// The typed stdout/stderr copy error from cmd.Wait, if any. Only interactive
+	// verdict reconciliation may discount an expected peer shutdown.
+	streamRelayErr error
 }
 
 func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (uint64, bool) {
@@ -117,6 +120,7 @@ type sandboxStreamConfig struct {
 	closeExtraFilesAfterStart bool
 	onTargetReady             func()
 	onTargetStarted           func()
+	startWallTimer            func() bool
 	targetRelease             <-chan struct{}
 	communicationRestricted   bool
 	cpuNormalizer             timing.CPUNormalizer
@@ -222,16 +226,39 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 }
 
 func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer) execResult {
-	limits := req.Limits
-	timeMs := max(1, cpuNormalizer.WallLimitMillis(limits.TimeMs))
-	ctx, cancel := context.WithTimeout(parent, time.Duration(timeMs)*time.Millisecond)
+	timeLimit := time.Duration(max(1, cpuNormalizer.WallLimitMillis(req.Limits.TimeMs))) * time.Millisecond
+	// Match the existing input-download budget, without shortening a longer
+	// execution limit that previously also bounded initialization.
+	startupLimit := max(stdinURLDownloadTimeout, timeLimit)
+	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, timeLimit)
 	defer cancel()
 
 	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
-		stdin:         stdinReader,
-		stdinMaxBytes: stdinMaxBytes,
-		cpuNormalizer: cpuNormalizer,
+		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer, cpuNormalizer: cpuNormalizer,
 	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
+}
+
+// Ordinary runs have separate initialization and target-execution budgets. The
+// same context owns the helper throughout, so parent cancellation is never
+// detached. A startup timer that has already fired cannot be revived at release.
+func sandboxExecutionContext(parent context.Context, startup, execution time.Duration) (context.Context, func() bool, context.CancelFunc) {
+	ctx, cancel := context.WithCancelCause(parent)
+	timer := time.AfterFunc(startup, func() { cancel(context.DeadlineExceeded) })
+	start := func() bool {
+		if !timer.Stop() {
+			cancel(context.DeadlineExceeded)
+			return false
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+		timer.Reset(execution)
+		return true
+	}
+	return ctx, start, func() {
+		timer.Stop()
+		cancel(context.Canceled)
+	}
 }
 
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
@@ -584,10 +611,17 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			if err := stdinTemp.Chmod(0o400); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
 			}
-			if _, err := stdinTemp.Seek(0, 0); err != nil {
+			// chmod does not revoke write access from the existing descriptor.
+			// Reopen after materialization so the target receives only read access.
+			if err := stdinTemp.Close(); err != nil {
 				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
 			}
-			cmd.Stdin = stdinTemp
+			readonlyStdin, err := os.Open(stdinTemp.Name())
+			if err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "stdin materialization failed: " + err.Error()}
+			}
+			defer readonlyStdin.Close()
+			cmd.Stdin = readonlyStdin
 		}
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -797,6 +831,15 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		targetExecCh <- err
 	}()
 	wallStart := timing.MonotonicNow()
+	if streams.startWallTimer != nil && !streams.startWallTimer() {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		<-waitCh
+		return execResult{
+			Status: model.RunStatusInitFail,
+			Reason: "sandbox initialization canceled before target release",
+			Stderr: stderrBuf.Bytes(),
+		}
+	}
 	if n, err := targetReleaseWrite.Write([]byte{1}); err != nil || n != 1 {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		<-waitCh
@@ -1027,7 +1070,7 @@ done:
 		}
 		select {
 		case <-stdinCopyDone:
-			if err := <-stdinCopyErr; err != nil {
+			if err := <-stdinCopyErr; err != nil && !isExpectedPostExitStdinRelayError(err) {
 				stdinRelayErr = err
 			}
 		case <-time.After(100 * time.Millisecond):
@@ -1138,7 +1181,7 @@ done:
 					result.Reason,
 					result.VerdictSource,
 					ws.Signal(),
-					ctx.Err(),
+					context.Cause(ctx),
 					parentKillReason,
 				)
 			}
@@ -1148,6 +1191,7 @@ done:
 			if streams.stdout != nil || streams.stderr != nil {
 				result.Reason = "sandbox stream relay failed: " + waitErr.Error()
 				result.VerdictSource = "stream_io"
+				result.streamRelayErr = waitErr
 			} else {
 				result.Reason = "sandbox process wait failed: " + waitErr.Error()
 				result.VerdictSource = "wait_status"
@@ -1197,12 +1241,21 @@ done:
 		}
 		result.VerdictSource = "sandbox_init"
 	}
-	if result.Status == "OK" && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if result.Status == "OK" && errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
 	}
 	normalizeExecResultCPU(&result, cpuNormalizer)
 	return result
+}
+
+// The sandbox deliberately closes live stdin after the target exits, waking
+// its copy goroutine with ErrClosedPipe or a write to the exited target with
+// EPIPE. These are shutdown signals, not contestant runtime errors. They must
+// not override the interactor's final verdict. Unexpected read/write errors
+// are still reported as stream_io failures.
+func isExpectedPostExitStdinRelayError(err error) bool {
+	return errors.Is(err, io.ErrClosedPipe) || errors.Is(err, os.ErrClosed) || errors.Is(err, syscall.EPIPE)
 }
 
 // waitErrorIsProcessExit reports whether cmd.Wait returned the target's normal
@@ -1305,6 +1358,16 @@ func outputLimitBytes(req *model.RunRequest) int {
 		return hardMaxOutputBytes
 	}
 	return req.Limits.OutputBytes
+}
+
+// effectiveStepLimits includes the capture space needed for a legacy handoff.
+// Both the local runner and remote transport must budget the same output.
+func effectiveStepLimits(step model.RunStep) model.Limits {
+	limits := step.Limits
+	if step.Handoff != nil && step.Handoff.MaxBytes > 0 {
+		limits.OutputBytes = max(limits.OutputBytes, int(min(step.Handoff.MaxBytes, int64(hardMaxOutputBytes))))
+	}
+	return limits
 }
 
 func responseOutputLimitBytes(req *model.RunRequest) int {

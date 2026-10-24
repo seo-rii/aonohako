@@ -28,6 +28,8 @@ import (
 
 type RemoteAuthMode string
 
+const DefaultMaxRetainedRequestBytes = 256 << 20
+
 const (
 	RemoteAuthNone            RemoteAuthMode = "none"
 	RemoteAuthBearer          RemoteAuthMode = "bearer"
@@ -79,6 +81,7 @@ type CgroupConfig struct {
 
 type RuntimeTuningConfig struct {
 	JVMHeapPercent             int
+	JavaStackSizeKB            int
 	GoMemoryReserveMB          int
 	GoGOGC                     int
 	ErlangSchedulers           int
@@ -107,6 +110,9 @@ const (
 	defaultJVMHeapPercent             = 50
 	minJVMHeapPercent                 = 25
 	maxJVMHeapPercent                 = 75
+	defaultJavaStackSizeKB            = 16 * 1024
+	minJavaStackSizeKB                = 1024
+	maxJavaStackSizeKB                = 64 * 1024
 	defaultGoMemoryReserveMB          = 32
 	minGoMemoryReserveMB              = 0
 	maxGoMemoryReserveMB              = 256
@@ -156,6 +162,7 @@ type Config struct {
 	MaxActiveStreams                     int
 	MaxActiveUploads                     int
 	MaxPrincipalUploads                  int
+	MaxRetainedRequestBytes              int64
 	PlatformBodyHashConcurrency          int
 	MaxPrincipalStreams                  int
 	MaxPrincipalRequestsPerMinute        int
@@ -211,6 +218,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	maxPrincipalUploads, err := parseNonNegativeIntEnv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", os.Getenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS"), defaultUploadLimit(runtimePlatform, defaultMaxPrincipalUploads))
+	if err != nil {
+		return Config{}, err
+	}
+	maxRetainedRequestBytes, err := parsePositiveIntEnv("AONOHAKO_MAX_RETAINED_REQUEST_BYTES", os.Getenv("AONOHAKO_MAX_RETAINED_REQUEST_BYTES"), DefaultMaxRetainedRequestBytes)
 	if err != nil {
 		return Config{}, err
 	}
@@ -398,6 +409,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	runtimeTuning.JavaStackSizeKB, err = parseBoundedIntEnv("AONOHAKO_JAVA_STACK_SIZE_KB", os.Getenv("AONOHAKO_JAVA_STACK_SIZE_KB"), runtimeTuning.JavaStackSizeKB, minJavaStackSizeKB, maxJavaStackSizeKB)
+	if err != nil {
+		return Config{}, err
+	}
 	goMemoryReserveRaw := os.Getenv("AONOHAKO_GO_MEMORY_RESERVE_MB")
 	runtimeTuning.GoMemoryReserveMB, err = parseBoundedIntEnv("AONOHAKO_GO_MEMORY_RESERVE_MB", goMemoryReserveRaw, runtimeTuning.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
 	if err != nil {
@@ -474,6 +489,8 @@ func Load() (Config, error) {
 				switch key {
 				case "jvm_heap_percent":
 					profileTuning.JVMHeapPercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
+				case "java_stack_size_kb":
+					profileTuning.JavaStackSizeKB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.JavaStackSizeKB, minJavaStackSizeKB, maxJavaStackSizeKB)
 				case "go_memory_reserve_mb":
 					profileTuning.GoMemoryReserveMB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
 					profileTuning.goMemoryReserveExplicitZero = value == 0
@@ -815,6 +832,7 @@ func Load() (Config, error) {
 		MaxActiveStreams:                     maxActiveStreams,
 		MaxActiveUploads:                     maxActiveUploads,
 		MaxPrincipalUploads:                  maxPrincipalUploads,
+		MaxRetainedRequestBytes:              int64(maxRetainedRequestBytes),
 		PlatformBodyHashConcurrency:          platformBodyHashConcurrency,
 		MaxPrincipalStreams:                  maxPrincipalStreams,
 		MaxPrincipalRequestsPerMinute:        maxPrincipalRequestsPerMinute,
@@ -1087,6 +1105,7 @@ func defaultCPUNormalization(opts platform.RuntimeOptions) bool {
 func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 	return RuntimeTuningConfig{
 		JVMHeapPercent:             defaultJVMHeapPercent,
+		JavaStackSizeKB:            defaultJavaStackSizeKB,
 		GoMemoryReserveMB:          defaultGoMemoryReserveMB,
 		GoGOGC:                     defaultGoGOGC,
 		ErlangSchedulers:           defaultErlangSchedulers,
@@ -1105,6 +1124,7 @@ func DefaultRuntimeTuningConfig() RuntimeTuningConfig {
 func (c RuntimeTuningConfig) WithSafeDefaults() RuntimeTuningConfig {
 	defaults := DefaultRuntimeTuningConfig()
 	c.JVMHeapPercent = clampWithDefault(c.JVMHeapPercent, defaults.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
+	c.JavaStackSizeKB = clampWithDefault(c.JavaStackSizeKB, defaults.JavaStackSizeKB, minJavaStackSizeKB, maxJavaStackSizeKB)
 	if c.GoMemoryReserveMB != 0 || !c.goMemoryReserveExplicitZero {
 		c.GoMemoryReserveMB = clampWithDefault(c.GoMemoryReserveMB, defaults.GoMemoryReserveMB, minGoMemoryReserveMB, maxGoMemoryReserveMB)
 	}

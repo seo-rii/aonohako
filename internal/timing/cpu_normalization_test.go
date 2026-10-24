@@ -237,6 +237,9 @@ func TestMaximumCPUWallLimitCoversSupportedCalibrations(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, limit := range []int{1, 25, 251, 1_000, 60_000, 600_000} {
+			if bound, actual := MaximumCPURawLimitMillis(limit), normalizer.RawLimitMillis(limit); bound < actual {
+				t.Errorf("limit=%d observed=%d: maximum raw allowance %d is below actual %d", limit, observed, bound, actual)
+			}
 			if bound, actual := MaximumCPUWallLimitMillis(limit), normalizer.WallLimitMillis(limit); bound < actual {
 				t.Errorf("limit=%d observed=%d: maximum wall allowance %d is below actual %d", limit, observed, bound, actual)
 			}

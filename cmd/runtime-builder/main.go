@@ -27,6 +27,11 @@ func main() {
 	var cacheFrom string
 	var cacheTo string
 	var cacheTarget string
+	var refresh bool
+	refreshDefault, err := parseRuntimeRefresh(os.Getenv("AONOHAKO_RUNTIME_REFRESH"))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	flag.StringVar(&catalogPath, "catalog", "runtime-images.yml", "path to runtime catalog")
 	flag.StringVar(&mode, "mode", "production", "build mode: production or ci")
@@ -39,6 +44,7 @@ func main() {
 	flag.StringVar(&cacheFrom, "cache-from", os.Getenv("AONOHAKO_DOCKER_CACHE_FROM"), "optional docker buildx cache source, for example type=gha,scope=aonohako-type-i")
 	flag.StringVar(&cacheTo, "cache-to", os.Getenv("AONOHAKO_DOCKER_CACHE_TO"), "optional docker buildx cache destination, for example type=gha,mode=max,scope=aonohako-type-i")
 	flag.StringVar(&cacheTarget, "cache-target", os.Getenv("AONOHAKO_DOCKER_CACHE_TARGET"), "optional Dockerfile target exported to cache before the final image build")
+	flag.BoolVar(&refresh, "refresh", refreshDefault, "refresh external runtime packages without reusing foundation/toolchain RUN caches")
 	flag.Parse()
 
 	catalog, err := runtimepacks.LoadCatalog(catalogPath)
@@ -113,7 +119,9 @@ func main() {
 		if runtimeBinariesContext != "" {
 			build.BuildContexts["aonohako-runtime-binaries"] = runtimeBinariesContext
 		}
-		buildOptions := []string{"-f", build.File, "-t", build.Tag}
+		// Both the cache-target export and final build must bypass package caches
+		// on an explicit refresh. Ordinary incremental builds keep their caches.
+		buildOptions := append(runtimeRefreshOptions(refresh), "-f", build.File, "-t", build.Tag)
 		contextKeys := make([]string, 0, len(build.BuildContexts))
 		for key := range build.BuildContexts {
 			contextKeys = append(contextKeys, key)

@@ -596,8 +596,8 @@ func TestEvaluateRunStatusRejectsTruncatedStdoutPrefix(t *testing.T) {
 		"",
 		timing.CPUNormalizer{},
 	)
-	if status != model.RunStatusWA {
-		t.Fatalf("status = %q, want %q", status, model.RunStatusWA)
+	if status != model.RunStatusRE {
+		t.Fatalf("status = %q, want %q", status, model.RunStatusRE)
 	}
 	if score != nil {
 		t.Fatalf("score = %v, want nil", score)

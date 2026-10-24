@@ -428,6 +428,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
 	t.Setenv("AONOHAKO_JVM_HEAP_PERCENT", "40")
+	t.Setenv("AONOHAKO_JAVA_STACK_SIZE_KB", "8192")
 	t.Setenv("AONOHAKO_GO_MEMORY_RESERVE_MB", "64")
 	t.Setenv("AONOHAKO_GO_GOGC", "80")
 	t.Setenv("AONOHAKO_ERLANG_SCHEDULERS", "2")
@@ -447,6 +448,7 @@ func TestLoadRuntimeTuningConfig(t *testing.T) {
 	}
 	want := RuntimeTuningConfig{
 		JVMHeapPercent:             40,
+		JavaStackSizeKB:            8192,
 		GoMemoryReserveMB:          64,
 		GoGOGC:                     80,
 		ErlangSchedulers:           2,
@@ -471,7 +473,7 @@ func TestLoadRuntimeTuningProfiles(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
 	t.Setenv("AONOHAKO_JVM_HEAP_PERCENT", "40")
-	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{"low-memory":{"jvm_heap_percent":35,"deno_old_space_percent":40,"node_old_space_percent":45,"node_max_semi_space_mb":2},"default-like":{}}`)
+	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{"low-memory":{"jvm_heap_percent":35,"java_stack_size_kb":8192,"deno_old_space_percent":40,"node_old_space_percent":45,"node_max_semi_space_mb":2},"default-like":{}}`)
 
 	cfg, err := Load()
 	if err != nil {
@@ -481,7 +483,7 @@ func TestLoadRuntimeTuningProfiles(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing low-memory profile in %+v", cfg.Execution.RuntimeTuningProfiles)
 	}
-	if low.JVMHeapPercent != 35 || low.DenoOldSpacePercent != 40 || low.NodeOldSpacePercent != 45 || low.NodeMaxSemiSpaceMB != 2 {
+	if low.JVMHeapPercent != 35 || low.JavaStackSizeKB != 8192 || low.DenoOldSpacePercent != 40 || low.NodeOldSpacePercent != 45 || low.NodeMaxSemiSpaceMB != 2 {
 		t.Fatalf("low-memory profile = %+v", low)
 	}
 	if low.GoGOGC != defaultGoGOGC {
@@ -635,6 +637,7 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 		value string
 	}{
 		{key: "AONOHAKO_JVM_HEAP_PERCENT", value: "90"},
+		{key: "AONOHAKO_JAVA_STACK_SIZE_KB", value: "512"},
 		{key: "AONOHAKO_GO_MEMORY_RESERVE_MB", value: "999"},
 		{key: "AONOHAKO_GO_GOGC", value: "5"},
 		{key: "AONOHAKO_ERLANG_SCHEDULERS", value: "8"},
@@ -668,6 +671,7 @@ func TestLoadRejectsUnsafeRuntimeTuningConfig(t *testing.T) {
 func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	got := (RuntimeTuningConfig{
 		JVMHeapPercent:             1,
+		JavaStackSizeKB:            1,
 		GoMemoryReserveMB:          999,
 		GoGOGC:                     1,
 		ErlangSchedulers:           99,
@@ -687,6 +691,9 @@ func TestRuntimeTuningWithSafeDefaultsClampsManualConfig(t *testing.T) {
 	}
 	if got.JVMHeapPercent != minJVMHeapPercent {
 		t.Fatalf("JVMHeapPercent = %d, want %d", got.JVMHeapPercent, minJVMHeapPercent)
+	}
+	if got.JavaStackSizeKB != minJavaStackSizeKB {
+		t.Fatalf("JavaStackSizeKB = %d, want %d", got.JavaStackSizeKB, minJavaStackSizeKB)
 	}
 	if got.GoMemoryReserveMB != maxGoMemoryReserveMB {
 		t.Fatalf("GoMemoryReserveMB = %d, want %d", got.GoMemoryReserveMB, maxGoMemoryReserveMB)
@@ -1219,6 +1226,7 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	t.Setenv("AONOHAKO_MAX_PENDING_QUEUE", "7")
 	t.Setenv("AONOHAKO_MAX_ACTIVE_STREAMS", "11")
 	t.Setenv("AONOHAKO_MAX_ACTIVE_UPLOADS", "4")
+	t.Setenv("AONOHAKO_MAX_RETAINED_REQUEST_BYTES", "123456789")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", "2")
 	t.Setenv("AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY", "6")
 	t.Setenv("AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS", "5")
@@ -1258,6 +1266,9 @@ func TestLoadUsesConfiguredNumericEnv(t *testing.T) {
 	}
 	if cfg.MaxActiveUploads != 4 {
 		t.Fatalf("max active uploads mismatch: %d", cfg.MaxActiveUploads)
+	}
+	if cfg.MaxRetainedRequestBytes != 123456789 {
+		t.Fatalf("max retained request bytes = %d", cfg.MaxRetainedRequestBytes)
 	}
 	if cfg.MaxPrincipalUploads != 2 {
 		t.Fatalf("max principal uploads mismatch: %d", cfg.MaxPrincipalUploads)
@@ -1358,6 +1369,9 @@ func TestLoadRejectsInvalidNumericEnv(t *testing.T) {
 		{name: "pending malformed", key: "AONOHAKO_MAX_PENDING_QUEUE", value: "many"},
 		{name: "streams negative", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "-1"},
 		{name: "streams malformed", key: "AONOHAKO_MAX_ACTIVE_STREAMS", value: "many"},
+		{name: "request bytes zero", key: "AONOHAKO_MAX_RETAINED_REQUEST_BYTES", value: "0"},
+		{name: "request bytes negative", key: "AONOHAKO_MAX_RETAINED_REQUEST_BYTES", value: "-1"},
+		{name: "request bytes malformed", key: "AONOHAKO_MAX_RETAINED_REQUEST_BYTES", value: "many"},
 		{name: "uploads negative", key: "AONOHAKO_MAX_ACTIVE_UPLOADS", value: "-1"},
 		{name: "uploads malformed", key: "AONOHAKO_MAX_ACTIVE_UPLOADS", value: "many"},
 		{name: "principal uploads negative", key: "AONOHAKO_MAX_PRINCIPAL_ACTIVE_UPLOADS", value: "-1"},

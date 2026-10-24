@@ -369,6 +369,17 @@ aonohako-selftest cgroup-preflight
   Base64 validation, or payload URL fetches. The slot is released only after
   the request enters the bounded run queue or terminates early. Both limits
   default to `0` in development; production targets reject `0`.
+- `AONOHAKO_MAX_RETAINED_REQUEST_BYTES` defaults to `268435456` (256 MiB)
+  and must be positive. It caps shared request data across upload, queueing,
+  and execution. Known-length bodies reserve their input bytes; unknown-length
+  bodies reserve the 64 MiB input cap. After decoding, every request-owned
+  string is charged, including URL-expanded Base64 resources and metadata.
+  URL downloads reserve the maximum permitted replacement field before fetching,
+  then shrink to the actual size. Insufficient capacity returns HTTP 429 with
+  `request_byte_budget_exceeded` before SSE starts. Reservations last until the
+  handler finishes, including cancellation and cleanup. This is a retained-data
+  budget, not an RSS limit: allow additional memory for decoder/download scratch,
+  responses, and sandbox execution.
 - `AONOHAKO_PLATFORM_BODY_HASH_CONCURRENCY` defaults to
   `min(4, AONOHAKO_MAX_ACTIVE_STREAMS)` when streams are bounded, otherwise
   `min(4, AONOHAKO_MAX_ACTIVE_RUNS)` and accepts values from `1` through `64`.
@@ -759,6 +770,10 @@ flags through requests:
   `-Xmx` share of the request memory limit. Java-family launchers also set
   direct-memory and metaspace/class-space caps from the request memory limit.
   Allowed range: `25..75`, default `50`.
+- `AONOHAKO_JAVA_STACK_SIZE_KB` controls the Java-only platform-thread stack
+  used for recursive solutions. Allowed range: `1024..65536`, default `16384`.
+  The stack remains subject to the request memory limit when pages are committed;
+  Kotlin-JVM, Clojure, Groovy, and Scala keep their existing stack settings.
 - `AONOHAKO_GO_MEMORY_RESERVE_MB` subtracts reserved host/runtime memory from
   Go-based interpreter `GOMEMLIMIT`. Allowed range: `0..256`, default `32`.
 - `AONOHAKO_GO_GOGC` controls Go GC aggressiveness for Go-based interpreters.
@@ -795,7 +810,7 @@ flags through requests:
 - `AONOHAKO_RUNTIME_TUNING_PROFILES` may define named, policy-owned runtime
   profiles as a JSON object. Each profile inherits the global tuning values and
   may override the same bounded numeric keys with snake_case names, for example
-  `{"low-memory":{"jvm_heap_percent":35,"node_old_space_percent":45}}`.
+  `{"low-memory":{"jvm_heap_percent":35,"node_old_space_percent":45},"java-deep":{"java_stack_size_kb":32768}}`.
   `/compile` and `/execute` may select one with `runtime_profile` only when
   `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`; policy-disabled, unknown, or
   syntactically invalid profile names are rejected.

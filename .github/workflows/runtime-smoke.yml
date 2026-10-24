@@ -6,6 +6,10 @@ on:
       image_name:
         required: true
         type: string
+      refresh_runtime:
+        required: false
+        type: boolean
+        default: false
       cache_ref:
         required: false
         type: string
@@ -17,6 +21,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  AONOHAKO_RUNTIME_REFRESH: ${{ inputs.refresh_runtime }}
 
 jobs:
   smoke:

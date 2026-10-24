@@ -62,7 +62,8 @@ Client                        aonohako
   "stderr": "",                          // compiler stderr, capped at 1 MiB
   "stdout_truncated": false,             // true when stdout exceeded the compile capture cap
   "stderr_truncated": false,             // true when stderr exceeded the compile capture cap
-  "reason": "",                          // human-readable failure reason
+  "reason": "",                          // human-readable failure reason, capped at 1 MiB
+  "reason_truncated": false,             // true when reason exceeded the compile diagnostic cap
   "reason_code": ""                      // optional machine-readable reason, e.g. "memory_limit_exceeded"
 }
 ```
@@ -71,6 +72,20 @@ Client                        aonohako
 `emit_logs=false`, those events are omitted while the final result retains its
 captured compiler diagnostics. Failed compilation still emits a structural
 `error` event without copying stdout/stderr into that event.
+
+Compile artifacts are limited to 512 files, 16 MiB decoded per file and 48 MiB
+decoded in total, with at most 4096 bytes per artifact name. Their Base64
+padding, names and JSON-escaped diagnostics fit the compile-specific 96 MiB
+SSE event budget; a `data:` line allows that payload plus its seven framing
+bytes. The complete stream is limited to 128 MiB, including duplicated logs,
+errors, progress and heartbeats. The producer reserves a full result frame
+before emitting auxiliary events and never truncates artifact data to fit.
+The final combined artifact list is checked again at the API boundary, including
+its encoded wire size. An invalid or over-budget list produces an `Internal Error`
+result with no artifacts and bounded diagnostics.
+Execute streams retain their separate 64 MiB line/event and 128 MiB stream
+limits. Update remote control planes before runners: older compile readers
+still reject results larger than their 64 MiB limit.
 
 ---
 
@@ -137,6 +152,7 @@ not duplicate stdout/stderr before `result`.
   "stdout_truncated": false,            // true when stdout exceeded the capture cap
   "stderr_truncated": false,            // true when stderr exceeded the capture cap
   "reason": "",                         // failure reason
+  "reason_truncated": false,           // true when the wire budget clipped this diagnostic
   "verdict_source": "stdout",           // diagnostic source that selected the final verdict, when known
   "score": null,                        // nullable float; SPJ, interactive, or communication score (0.0–1.0)
   "started_participants": 64,           // communication-v1 only; participant targets whose exec was confirmed
@@ -210,11 +226,55 @@ output fields above. An omitted object or member preserves the legacy
 stream. Each explicit member must be between `0` and `8 MiB`.
 These response limits do not alter output comparison, SPJ evaluation,
 `limits.output_bytes` OLE detection, or step handoff data.
+For legacy two-step requests, capture limits apply independently to each step.
+Remote log forwarding therefore uses the sum of the two per-step capture
+budgets for each stream, since legacy `log` events do not carry step IDs.
+The remote receiver keeps a separate per-event and cumulative protocol safety
+bound derived from the effective step output limits (including handoff space),
+capped at `8 MiB` per step and stream. Display clipping within that safety
+bound leaves the final verdict and score unchanged; exceeding the safety
+bound is a protocol failure.
 `limits.output_bytes` may be set up to `64 MiB` and remains the judging
 boundary. Truncation flags cover both execution-limit and response-capture
 clipping. A configured cap cannot expose bytes beyond the execution capture
 boundary. Output-derived interactive and sandbox-initialization reasons obey
 the stderr cap and fall back to a short structural reason when it is zero.
+
+The `/execute` SSE writer also budgets the encoded JSON bytes, including control
+character and HTML escaping. A complete final result frame fits within 64 MiB;
+top-level and step stdout, stderr, and reason fields share the remaining space
+after metadata and sidecars. Each clipped string retains a prefix at a UTF-8
+boundary and sets its corresponding `stdout_truncated`, `stderr_truncated`, or
+`reason_truncated` flag. Existing truncation flags remain set. Judging, scores,
+raw handoff data, and binary sidecars are unaffected.
+
+Non-result frames use at most 64 MiB of wire space, including at most 48 MiB
+for logs. Four MiB of that allowance is reserved for heartbeats, so escaped
+logs, images, or diagnostics cannot suppress liveness signals. Events beyond
+the display budgets are omitted; exhausting the heartbeat allowance returns
+an explicit stream error. The final result retains its own space within the
+128 MiB stream limit.
+This is a wire limit in addition to the per-stream capture limits; escaped logs
+may therefore stop earlier. No binary sidecar is shortened to meet this limit.
+
+Remote execution has a finite absolute deadline, independent of heartbeats.
+Its default allowance is the sum of:
+
+- request upload (30 seconds by default);
+- queue waiting and result transfer (30 seconds combined);
+- one cumulative streaming stdin download allowance (60 seconds), when used;
+- sandbox startup `max(60 seconds, execution limit)` plus execution, for each
+  sequential stage and the final SPJ;
+- for interactive stages, the longer of the two role limits, with startup
+  preceding their shared release barrier.
+
+Communication sessions instead reserve 60 seconds for preparation and the
+manager's wall allowance calculated for one runnable target CPU, including
+Cloud Run contention slack. The control plane does not assume remote CPU or
+cgroup capacity. Pipeline resource URLs are resolved before the remote call.
+An earlier caller deadline still wins, and heartbeats only reset the separate
+idle timer. For example, a one-second single run with streaming stdin has a
+181-second default absolute allowance, including upload and transfer.
 
 ### Status Codes
 
@@ -284,6 +344,15 @@ Both `/compile` and `/execute` share the same bounded queue:
   policy-disabled `python_library_mode` values, Python-library problem-policy
   conflicts, and disallowed `enable_network=true` before acquiring a stream or
   queue slot.
+- Remote `/compile` and `/execute` also check the complete JSON wire size after
+  payload URL expansion and policy normalization, before stream or queue
+  admission. The same `64 MiB` HTTP body limit includes base64 data, JSON field
+  overhead, and text escaping. An expanded request over that limit returns HTTP
+  `413` with `error=remote_request_too_large`; no SSE stream or remote operation
+  starts.
+  Embedded execution retains the existing per-field budgets. The size check
+  counts bytes without constructing a second JSON payload, and the remote
+  runner repeats it before encoding and uploading.
 - **Active slots**: `AONOHAKO_MAX_ACTIVE_RUNS` (default: `1` for
   `embedded + helper`, also `1` in `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`,
   otherwise `max(1, cpu−2)`). The `embedded + helper` backend rejects values
@@ -310,6 +379,10 @@ Both `/compile` and `/execute` share the same bounded queue:
   `AONOHAKO_MAX_PRINCIPAL_ACTIVE_STREAMS` (default: `0` in `dev`, `16` in
   `cloudrun` or `selfhosted`). This caps simultaneous streams for one bearer,
   platform, or anonymous remote principal.
+  Authenticated platform identities use a SHA-256 digest of the complete
+  principal as their bounded internal stream and request-rate key; long
+  identities with the same prefix keep separate limits. This does not change
+  the principal header or the value covered by the platform signature.
 - **Per-principal request rate**:
   `AONOHAKO_MAX_PRINCIPAL_REQUESTS_PER_MINUTE` (default: `0` in `dev`, `60` in
   `cloudrun` or `selfhosted`). This caps `/compile` and `/execute` requests per
@@ -394,8 +467,26 @@ omitted for terse policy errors:
 {"error": "invalid_json", "message": "invalid json: ..."}
 ```
 
-Pre-SSE failures include method mismatches (`method_not_allowed`), malformed or
-oversized JSON (`invalid_json` / `invalid_request_body`), auth failures
+Both endpoints use the same request-body errors, including signed platform
+body hashing and Bearer-authenticated JSON decoding:
+
+| HTTP status | `error` | Meaning |
+| --- | --- | --- |
+| 413 | `request_body_too_large` | Body exceeds the 64 MiB JSON limit, including trailing whitespace. |
+| 400 | `invalid_json` | Empty, incomplete, or syntactically invalid JSON. |
+| 400 | `invalid_json_type` | A JSON value has the wrong type for a request field. |
+| 400 | `unknown_json_field` | The request contains an unrecognized field. |
+| 400 | `unexpected_trailing_json` | A second JSON value follows the request. |
+| 400 | `invalid_request_body` | Reading or closing the request body failed. |
+
+Missing or invalid Bearer credentials and invalid platform signature metadata
+are rejected before reading the body. Signed platform requests apply the body
+size limit while computing the digest, before verifying the complete signature.
+These checks apply to both Content-Length and chunked request bodies.
+An over-limit Content-Length is rejected without reading or buffering the body;
+chunked bodies remain bounded while they are read.
+
+Pre-SSE failures also include method mismatches (`method_not_allowed`), auth failures
 (`unauthorized` / `server_auth_misconfigured`), request validation failures
 (`invalid_request`, `invalid_runtime_profile`, `network_not_allowed`,
 `invalid_go_module_mode`, `invalid_python_library_mode`,
@@ -403,6 +494,14 @@ oversized JSON (`invalid_json` / `invalid_request_body`), auth failures
 admission failures, and SSE initialization failure (`stream_init_failed`).
 After the SSE stream is admitted, terminal failures are reported as SSE
 `error` events before the final `result` event.
+
+Request data admission also shares `AONOHAKO_MAX_RETAINED_REQUEST_BYTES` across
+`/compile` and `/execute` (default 256 MiB). Its reservation persists while a
+request is queued and until its handler finishes. Exhaustion returns HTTP 429
+with `request_byte_budget_exceeded` before SSE initialization. URL fetches reserve
+their maximum permitted field size before downloading; known-length JSON bodies
+reserve their length, and unknown-length bodies reserve the 64 MiB input cap.
+The budget covers retained request strings, not total process RSS.
 
 Callers should implement exponential backoff on 429.
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"aonohako/internal/model"
 	"aonohako/internal/payloadurl"
@@ -19,6 +20,7 @@ const (
 	MaxTimeMs                       = 600_000
 	MaxMemoryMB                     = 4096
 	MaxOutputBytes                  = 64 << 20
+	MaxCommunicationOutputBytes     = 128 << 20
 	MaxCaptureBytes                 = 8 << 20
 	MaxWorkspaceBytes               = 1 << 30
 	MaxBinaryFiles                  = 512
@@ -50,6 +52,9 @@ var supportedRunLangs = func() map[string]struct{} {
 }()
 
 func Validate(req *model.RunRequest) error {
+	if err := ValidateTextEncoding(req); err != nil {
+		return err
+	}
 	if len(req.Stdin) > MaxTextFieldBytes {
 		return fmt.Errorf("stdin too large: max %d bytes", MaxTextFieldBytes)
 	}
@@ -107,8 +112,8 @@ func Validate(req *model.RunRequest) error {
 		if len(req.FileOutputs) > 1 {
 			return fmt.Errorf("at most one file output is supported")
 		}
-		if len(req.SidecarOutputs) > MaxSidecarOutputs {
-			return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+		if err := ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
+			return err
 		}
 		if err := ValidateRequiredLimits("limits", req.Limits); err != nil {
 			return err
@@ -126,6 +131,60 @@ func Validate(req *model.RunRequest) error {
 	}
 	if _, err := ValidateBinaryBudget(req); err != nil {
 		return err
+	}
+	return nil
+}
+
+// ValidateTextEncoding rejects text that encoding/json would silently replace
+// during remote forwarding. Base64 payloads and streamed URL bodies remain byte
+// preserving and are not subject to this text-only contract.
+func ValidateTextEncoding(req *model.RunRequest) error {
+	if req == nil {
+		return nil
+	}
+	if !utf8.ValidString(req.Stdin) {
+		return fmt.Errorf("stdin must contain valid UTF-8")
+	}
+	if !utf8.ValidString(req.ExpectedStdout) {
+		return fmt.Errorf("expected_stdout must contain valid UTF-8")
+	}
+	if req.Communication != nil {
+		if !utf8.ValidString(req.Communication.Input) {
+			return fmt.Errorf("communication.input must contain valid UTF-8")
+		}
+		if !utf8.ValidString(req.Communication.Answer) {
+			return fmt.Errorf("communication.answer must contain valid UTF-8")
+		}
+	}
+	for i, step := range req.Steps {
+		if !utf8.ValidString(step.Stdin) {
+			return fmt.Errorf("steps[%d].stdin must contain valid UTF-8", i)
+		}
+		for j, part := range step.StdinParts {
+			if !utf8.ValidString(part.Data) {
+				return fmt.Errorf("steps[%d].stdin_parts[%d].data must contain valid UTF-8", i, j)
+			}
+		}
+	}
+	return nil
+}
+
+// ValidateSidecarOutputs applies the same path normalization used by local
+// capture and remote result validation, so one file can only be requested once.
+func ValidateSidecarOutputs(specs []model.OutputFile) error {
+	if len(specs) > MaxSidecarOutputs {
+		return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+	}
+	seen := make(map[string]struct{}, len(specs))
+	for i, spec := range specs {
+		clean, err := util.ValidateRelativePath(spec.Path)
+		if err != nil {
+			return fmt.Errorf("sidecar_outputs[%d].path: %w", i, err)
+		}
+		if _, duplicate := seen[clean]; duplicate {
+			return fmt.Errorf("duplicate sidecar output path: %s", clean)
+		}
+		seen[clean] = struct{}{}
 	}
 	return nil
 }
@@ -173,7 +232,7 @@ func ValidateCommunication(req *model.RunRequest) error {
 	if spec.Answer != "" && strings.TrimSpace(spec.AnswerURL) != "" {
 		return fmt.Errorf("communication.answer cannot combine inline content with url")
 	}
-	if err := ValidateRequiredLimits("limits", req.Limits); err != nil {
+	if err := validateRequiredLimits("limits", req.Limits, MaxCommunicationOutputBytes); err != nil {
 		return err
 	}
 
@@ -590,8 +649,8 @@ func ValidateStepPipeline(req *model.RunRequest) error {
 	if len(req.FileOutputs) > 1 {
 		return fmt.Errorf("at most one file output is supported")
 	}
-	if len(req.SidecarOutputs) > MaxSidecarOutputs {
-		return fmt.Errorf("too many sidecar outputs: max %d", MaxSidecarOutputs)
+	if err := ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
+		return err
 	}
 
 	programs := make(map[string]struct{}, len(req.Programs))
@@ -890,24 +949,32 @@ func ValidateRunLang(label, raw string) error {
 }
 
 func ValidateRequiredLimits(name string, limits model.Limits) error {
+	return validateRequiredLimits(name, limits, MaxOutputBytes)
+}
+
+func validateRequiredLimits(name string, limits model.Limits, maxOutputBytes int) error {
 	if limits.TimeMs <= 0 || limits.TimeMs > MaxTimeMs {
 		return fmt.Errorf("%s.time_ms must be between 1 and %d", name, MaxTimeMs)
 	}
 	if limits.MemoryMB <= 0 || limits.MemoryMB > MaxMemoryMB {
 		return fmt.Errorf("%s.memory_mb must be between 1 and %d", name, MaxMemoryMB)
 	}
-	return ValidateOptionalLimits(name, limits)
+	return validateOptionalLimits(name, limits, maxOutputBytes)
 }
 
 func ValidateOptionalLimits(name string, limits model.Limits) error {
+	return validateOptionalLimits(name, limits, MaxOutputBytes)
+}
+
+func validateOptionalLimits(name string, limits model.Limits, maxOutputBytes int) error {
 	if limits.TimeMs < 0 || limits.TimeMs > MaxTimeMs {
 		return fmt.Errorf("%s.time_ms must be between 0 and %d", name, MaxTimeMs)
 	}
 	if limits.MemoryMB < 0 || limits.MemoryMB > MaxMemoryMB {
 		return fmt.Errorf("%s.memory_mb must be between 0 and %d", name, MaxMemoryMB)
 	}
-	if limits.OutputBytes < 0 || limits.OutputBytes > MaxOutputBytes {
-		return fmt.Errorf("%s.output_bytes must be between 0 and %d", name, MaxOutputBytes)
+	if limits.OutputBytes < 0 || limits.OutputBytes > maxOutputBytes {
+		return fmt.Errorf("%s.output_bytes must be between 0 and %d", name, maxOutputBytes)
 	}
 	if limits.WorkspaceBytes < 0 || limits.WorkspaceBytes > MaxWorkspaceBytes {
 		return fmt.Errorf("%s.workspace_bytes must be between 0 and %d", name, MaxWorkspaceBytes)

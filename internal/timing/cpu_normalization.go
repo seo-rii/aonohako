@@ -147,12 +147,21 @@ func (n CPUNormalizer) WallLimitMillis(normalizedLimitMs int) int {
 // calibration. Remote callers do not know the selected instance's scale until
 // its result arrives, so they must budget for the slowest supported host.
 func MaximumCPUWallLimitMillis(normalizedLimitMs int) int {
-	normalizer := CPUNormalizer{
+	return maximumSupportedCPUNormalizer().WallLimitMillis(normalizedLimitMs)
+}
+
+// MaximumCPURawLimitMillis bounds scheduled CPU before a mode-specific wall
+// policy, such as communication's scheduling waves, is applied remotely.
+func MaximumCPURawLimitMillis(normalizedLimitMs int) int {
+	return maximumSupportedCPUNormalizer().RawLimitMillis(normalizedLimitMs)
+}
+
+func maximumSupportedCPUNormalizer() CPUNormalizer {
+	return CPUNormalizer{
 		method:          CPUNormalizationMethod,
 		referenceTimeNs: 1,
 		observedTimeNs:  cpuNormalizationMaxRatio,
 	}
-	return normalizer.WallLimitMillis(normalizedLimitMs)
 }
 
 func (n CPUNormalizer) Info() (CPUNormalizationInfo, bool) {
