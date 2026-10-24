@@ -444,6 +444,7 @@ languages:
         - bash
         - -lc
         - |
+          set -euo pipefail
           node --input-type=module <<'JS'
           import { writeFileSync } from 'node:fs';
           const project = { scenes: [{id:'scene'}], objects: [{id:'sprite',objectType:'sprite',scene:'scene',entity:{x:0,y:0},script:[[{type:'when_run_button_click',params:[null]},{type:'dialog',params:[{type:'text',params:['ok']},'speak',null]}]]}] };
