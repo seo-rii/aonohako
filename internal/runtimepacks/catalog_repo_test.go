@@ -405,7 +405,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"malbolge":      {"python3 /usr/local/lib/aonohako/malbolge.py Main.mal", "Hello World!"},
 		"mercury":       {"dl.mercurylang.org/deb/ trixie main", "mercury-recommended", "mmc --make --grade hlc.gc main"},
 		"mojo":          {"mojo==1.0.0", "mojo build Main.mojo"},
-		"moonbit":       {"MOONBIT_VERSION=0.10.9+6e6c44045", "MOONBIT_ARCHIVE_SHA256=0e81deb35eca29e892415cf954ea42b48a43bcf277ad36a3ae1e97d2d1dfe732", "MOONBIT_CORE_SHA256=d92b84ea0bc11ec9a9fe57d313416a6694a5826f4307e8e65d5075079ee913ca", "sha256sum -c -", "bundle --warn-list -a --all --target native", "moon build --target-dir .aonohako-moonbit-build --target native --release --strip --frozen --jobs 1", "Broken"},
+		"moonbit":       {"MOONBIT_VERSION=0.10.17+d971670cd", "MOONBIT_ARCHIVE_SHA256=d0a96eaf91c77cfcdd7b7df75390c5a1a95d0b8a328b1a5ed6fee050cfbf8d50", "MOONBIT_CORE_SHA256=2d837ecbef5933c09726d63682a7695123d622e6aee13525fbc98c4b49433714", "sha256sum -c -", "bundle --warn-list -a --all --target native", "moon build --target-dir .aonohako-moonbit-build --target native --release --strip --frozen --jobs 1", "Broken"},
 		"nim":           {"nim c", "Broken.nim"},
 		"objective-c":   {"clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objective-cpp": {"clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
@@ -566,9 +566,11 @@ func TestRepositoryCatalogPinsMoonBitToolchainAndOfflineBuild(t *testing.T) {
 	}
 	install := strings.Join(spec.Install.Script, "\n")
 	for _, marker := range []string{
-		"MOONBIT_VERSION=0.10.9+6e6c44045",
-		"MOONBIT_ARCHIVE_SHA256=0e81deb35eca29e892415cf954ea42b48a43bcf277ad36a3ae1e97d2d1dfe732",
-		"MOONBIT_CORE_SHA256=d92b84ea0bc11ec9a9fe57d313416a6694a5826f4307e8e65d5075079ee913ca",
+		"MOONBIT_VERSION=0.10.17+d971670cd",
+		"MOONBIT_ARCHIVE_SHA256=d0a96eaf91c77cfcdd7b7df75390c5a1a95d0b8a328b1a5ed6fee050cfbf8d50",
+		"MOONBIT_CORE_SHA256=2d837ecbef5933c09726d63682a7695123d622e6aee13525fbc98c4b49433714",
+		`https://cli.moonbitlang.com/binaries/${MOONBIT_URL_VERSION}/moonbit-linux-x86_64.tar.gz`,
+		`https://cli.moonbitlang.com/cores/core-${MOONBIT_URL_VERSION}.tar.gz`,
 		"sha256sum -c -",
 		"bundle --warn-list -a --all --target native",
 	} {
@@ -576,7 +578,7 @@ func TestRepositoryCatalogPinsMoonBitToolchainAndOfflineBuild(t *testing.T) {
 			t.Fatalf("MoonBit install must contain %q:\n%s", marker, install)
 		}
 	}
-	if strings.Contains(install, "/latest/") || strings.Contains(install, "install/unix.sh") {
+	if strings.Contains(install, "/latest/") || strings.Contains(install, "core-latest") || strings.Contains(install, "install/unix.sh") {
 		t.Fatalf("MoonBit install must not use a drifting installer:\n%s", install)
 	}
 	if !slices.Contains(spec.Install.SandboxTools, "ar") || !strings.Contains(install, "ln -sfn /usr/bin/ar /usr/local/bin/ar") {
