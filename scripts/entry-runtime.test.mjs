@@ -74,6 +74,32 @@ test('rotation respects the exported object rotation method', () => {
   }
 });
 
+test('size sensors and updates use Entry scaled dimensions and minimum size', () => {
+  // Entry 4.0.23 Entity.getSize averages the scaled width and height, and
+  // Entity.setSize clamps the requested size to at least one.
+  const project = JSON.parse(readFileSync(new URL('../internal/entrypolicy/testdata/browser-project.json', import.meta.url)));
+  for (const [width, height, scaleX, scaleY] of [[96, 96, 1, 1], [80, 40, -2, 0.5]]) {
+    const program = submission([]);
+    program.project = structuredClone(project);
+    const object = program.project.objects[0];
+    Object.assign(object.entity, { width, height, scaleX, scaleY });
+    const size = (width * Math.abs(scaleX) + height * Math.abs(scaleY)) / 2;
+    const sensor = block('coordinate_object', [null, 'self', null, 'size']);
+    for (const [operations, expected] of [
+      [[], size],
+      [[block('change_scale_size', [number(10), null])], size + 10],
+      [[block('set_scale_size', [number(50), null]), block('change_scale_size', [number(7), null])], 57],
+      [[block('set_scale_size', [number(0), null])], 1],
+      [[block('change_scale_size', [number(-1000), null])], 1],
+    ]) {
+      object.script = [start(...operations, block('set_variable', ['goldSum', sensor, null]))];
+      const state = runProject(program, scenario({ ticks: 1 })).state;
+      assert.equal(state.objects[object.id].size, expected);
+      assert.equal(state.variables.goldSum, expected);
+    }
+  }
+});
+
 test('bounded state mode stops at configured ticks; stdio infinite loops fail', () => {
   const forever = submission([start(block('repeat_inf',[null],[[block('move_x',[number(1),null])]]))]);
   assert.equal(runProject(forever,scenario({ticks:5})).state.objects.sprite.x,5);

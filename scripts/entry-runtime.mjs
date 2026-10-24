@@ -108,9 +108,12 @@ export function validateSubmission(submission) {
     requireThat(object.rotateMethod === undefined || ['free', 'vertical', 'none'].includes(object.rotateMethod), 'Unsupported rotation method');
     requireThat(record(object.entity), 'Missing object entity');
     const entity = object.entity;
+    const width = entity.width ?? 100, height = entity.height ?? 100;
+    const scaleX = entity.scaleX ?? 1, scaleY = entity.scaleY ?? 1;
+    requireThat([width, height, scaleX, scaleY].every(finite), 'Invalid object dimensions');
     const state = { x: entity.x ?? 0, y: entity.y ?? 0, direction: entity.direction ?? 90,
       rotation: entity.rotation ?? 0, visible: entity.visible ?? true,
-      size: Math.abs(entity.scaleX ?? 1) * 100, say: '' };
+      size: (width * Math.abs(scaleX) + height * Math.abs(scaleY)) / 2, say: '' };
     requireThat([...numericState].every(key => finite(state[key])) && typeof state.visible === 'boolean', 'Invalid object state');
     if ((object.rotateMethod ?? 'free') !== 'free') state.rotation = 0;
     let scripts = object.script;
@@ -386,8 +389,8 @@ export function runProject(submission, input = '') {
         }
         case 'show': state.visible = true; break;
         case 'hide': state.visible = false; break;
-        case 'set_scale_size': state.size = Math.max(0, n(0)); break;
-        case 'change_scale_size': state.size = Math.max(0, cleanNumber(state.size + n(0))); break;
+        case 'set_scale_size': state.size = Math.max(1, n(0)); break;
+        case 'change_scale_size': state.size = Math.max(1, cleanNumber(state.size + n(0))); break;
         case 'message_cast': requireThat(pending.length < LIMITS.threads, 'Pending event limit exceeded'); pending.push({ tick: tick + 1, type: 'message', id: p[0] }); break;
         default: fail('Unsupported statement');
       }

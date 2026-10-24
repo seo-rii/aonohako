@@ -99,8 +99,11 @@ Expected output is a strict partial state predicate:
 }
 ```
 
-Object fields are `x`, `y`, `direction`, `rotation`, `visible`, `size` (percent),
-and `say`. At least one property, variable, or list must be checked. Lists match
+Object fields are `x`, `y`, `direction`, `rotation`, `visible`, `size`, and `say`.
+Size follows Entry: the mean of the absolute scaled width and height, also used
+by the size sensor. Minimal projects without dimension metadata default to
+100 for each dimension and 1 for each scale. Size-setting and size-changing
+blocks clamp the result to at least 1. At least one property, variable, or list must be checked. Lists match
 fully and in order, including an explicitly empty list. Numeric absolute
 tolerance defaults to `1e-6` and may be set to 0–1. Strings and Booleans match
 exactly, so `"01"` and `1` differ. Unknown keys, duplicate/unsafe keys, nulls,
