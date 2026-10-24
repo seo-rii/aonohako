@@ -73,6 +73,10 @@ func TestReadCommunicationMatchManagerResult(t *testing.T) {
 		t.Fatalf("valid result = %+v, %v", result, err)
 	}
 	for _, input := range []string{
+		`{"version":1,"wins":[null,20],"games":20}`,
+		`{"version":1,"wins":[20,null],"games":20}`,
+		`{"version":1,"wins":[null,null],"games":20}`,
+		`{"version":1,"wins":null,"games":20}`,
 		`{"version":1,"wins":[10,10,0],"games":20}`,
 		`{"version":1,"wins":[7,7],"games":20}`,
 		`{"version":1,"wins":[-1,21],"games":20}`,
@@ -257,6 +261,7 @@ func TestCompetitiveManagerCancellationRequiresInterruptedProtocolAndNoOwnDeadli
 		{"truncated closed before cancellation", `{"version":1,`, 1, 0, false},
 		{"malformed complete payload", `{"version":oops}`, 3, 0, false},
 		{"invalid completed counts", `{"version":1,"wins":[0,0],"games":20}`, 3, 0, false},
+		{"null completed count", `{"version":1,"wins":[null,20],"games":20}`, 3, 0, false},
 		{"trailing payload", `{"version":1,"wins":[0,20],"games":20}{`, 3, 0, false},
 		{"unknown field", `{"version":1,"wins":[0,20],"games":20,"score":1}`, 3, 0, false},
 		{"independent manager deadline", "", 3, 1, false},

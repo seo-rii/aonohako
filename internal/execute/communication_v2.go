@@ -79,7 +79,13 @@ func readCommunicationResult(reader io.Reader, version int) (communicationManage
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	var result communicationMatchManagerResult
+	// Preserve null elements during decoding: encoding/json otherwise accepts
+	// them as zero when decoding directly into []int.
+	var result struct {
+		Version int    `json:"version"`
+		Wins    []*int `json:"wins"`
+		Games   int    `json:"games"`
+	}
 	if err := decoder.Decode(&result); err != nil {
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			err = &communicationIncompleteMatchResultError{cause: err}
@@ -91,11 +97,14 @@ func readCommunicationResult(reader io.Reader, version int) (communicationManage
 		return communicationManagerResult{}, fmt.Errorf("manager result must contain exactly one JSON object")
 	}
 	if result.Version != 1 || result.Games != communicationMatchGames || len(result.Wins) != 2 ||
-		result.Wins[0] < 0 || result.Wins[1] < 0 || result.Wins[0] > result.Games ||
-		result.Wins[1] > result.Games || result.Wins[0]+result.Wins[1] != result.Games {
+		result.Wins[0] == nil || result.Wins[1] == nil ||
+		*result.Wins[0] < 0 || *result.Wins[1] < 0 || *result.Wins[0] > result.Games ||
+		*result.Wins[1] > result.Games || *result.Wins[0]+*result.Wins[1] != result.Games {
 		return communicationManagerResult{}, fmt.Errorf("match-result-v1 requires version 1, games 20, and two nonnegative win counts totaling 20")
 	}
-	return communicationManagerResult{match: &result}, nil
+	return communicationManagerResult{match: &communicationMatchManagerResult{
+		Version: result.Version, Wins: []int{*result.Wins[0], *result.Wins[1]}, Games: result.Games,
+	}}, nil
 }
 
 func communicationMatchFailure(req *model.RunRequest, message string) *model.MatchResult {
