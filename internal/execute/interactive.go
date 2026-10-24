@@ -168,10 +168,10 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	var contestantFinished atomic.Bool
 	var interactorFinished atomic.Bool
 	var contestantCanceledByInteractor atomic.Bool
-	// Protocol round trips may block on each peer and should not consume CPU
-	// time budget. Keep a separate, more generous bounded wall safety guard.
-	contestantLimitMs := interactiveWallTimeMs(req.Limits)
-	interactorLimitMs := interactiveWallTimeMs(interactorReq.Limits)
+	// Explicit walls remain hard deadlines; implicit walls cover both
+	// protocol waits and the CPU allowance on this calibrated host.
+	contestantLimitMs := executionWallTimeMs(req.Limits, true, s.cpuNormalizer.WallLimitMillis)
+	interactorLimitMs := executionWallTimeMs(interactorReq.Limits, true, s.cpuNormalizer.WallLimitMillis)
 	contestantLimit := time.Duration(contestantLimitMs) * time.Millisecond
 	interactorLimit := time.Duration(interactorLimitMs) * time.Millisecond
 	startupLimit := max(stdinURLDownloadTimeout, contestantLimit, interactorLimit)
@@ -206,12 +206,13 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			contestantArgs,
 			req,
 			sandboxStreamConfig{
-				stdinFile:     contestantInR,
+				stdinFile:      contestantInR,
 				stdout:         interactorIn,
 				onStdoutDone:   interactorIn.Close,
 				onTargetReady:  func() { timers.targetReady(0) },
 				targetRelease:  timers.release,
 				startWallTimer: func() bool { return contestantCtx.Err() == nil },
+				cpuNormalizer:  s.cpuNormalizer,
 			},
 			hooks,
 			outputLimitBytes(req),
@@ -229,7 +230,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			interactorArgs,
 			interactorReq,
 			sandboxStreamConfig{
-				stdinFile:     interactorInR,
+				stdinFile:      interactorInR,
 				stdout:         contestantIn,
 				onStdoutDone:   contestantIn.Close,
 				onTargetReady:  func() { timers.targetReady(1) },
@@ -239,6 +240,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 					uid: interactiveJudgeSandboxUID,
 					gid: interactiveJudgeSandboxGID,
 				},
+				cpuNormalizer: s.cpuNormalizer,
 			},
 			Hooks{},
 			outputLimitBytes(interactorReq),
@@ -579,6 +581,7 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		TimeMs:           wallMs,
 		WallTimeMs:       wallMs,
 		CPUTimeMs:        contestantRes.CPUTimeMs + interactorRes.CPUTimeMs,
+		RawCPUTimeMs:     sumRawCPUTime(contestantRes.RawCPUTimeMs, interactorRes.RawCPUTimeMs),
 		ProcessCPUTimeMs: contestantRes.ProcessCPUTimeMs + interactorRes.ProcessCPUTimeMs,
 		MemoryKB:         max(contestantRes.MemoryKB, interactorRes.MemoryKB),
 		ExitCode:         contestantRes.ExitCode,
@@ -641,6 +644,7 @@ func interactiveContestantStepResult(req *model.RunRequest, res execResult) mode
 		TimeMs:           res.WallTimeMs,
 		WallTimeMs:       res.WallTimeMs,
 		CPUTimeMs:        res.CPUTimeMs,
+		RawCPUTimeMs:     res.RawCPUTimeMs,
 		ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB:         res.MemoryKB,
 		ExitCode:         res.ExitCode,
@@ -666,6 +670,7 @@ func interactiveInteractorStepResult(req *model.RunRequest, res execResult) mode
 		TimeMs:           res.WallTimeMs,
 		WallTimeMs:       res.WallTimeMs,
 		CPUTimeMs:        res.CPUTimeMs,
+		RawCPUTimeMs:     res.RawCPUTimeMs,
 		ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB:         res.MemoryKB,
 		ExitCode:         res.ExitCode,

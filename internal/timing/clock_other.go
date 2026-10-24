@@ -20,6 +20,10 @@ func CurrentProcessCPUTimeNs() (uint64, error) {
 	return 0, nil
 }
 
+func CurrentThreadCPUTimeNs() (uint64, error) {
+	return 0, nil
+}
+
 func ProcessCPUTimeNs(pid int) (uint64, error) {
 	return 0, nil
 }

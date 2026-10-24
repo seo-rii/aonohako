@@ -10,6 +10,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/entrypolicy"
 	"aonohako/internal/model"
+	"aonohako/internal/timing"
 )
 
 func TestEntryCommandUsesImageOwnedRunner(t *testing.T) {
@@ -27,7 +28,7 @@ func TestEntryStateVerdictsAndBudgetExit(t *testing.T) {
 		{`{"version":1,"objects":{"sprite":{"x":31}}}`, model.RunStatusWA},
 		{`invalid private state`, model.RunStatusWA},
 	} {
-		status, _, _, source := evaluateRunStatus(context.Background(), Workspace{}, req, execResult{Status: "OK"}, []byte(tc.actual), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "")
+		status, _, _, source := evaluateRunStatus(context.Background(), Workspace{}, req, execResult{Status: "OK"}, []byte(tc.actual), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 		if status != tc.status || source != "entry_state" {
 			t.Fatalf("verdict=%s source=%s", status, source)
 		}
@@ -62,7 +63,7 @@ func TestEntryExecutionFailuresTakePriorityOverOutputJudging(t *testing.T) {
 		} {
 			t.Run(mode+"/"+tc.name, func(t *testing.T) {
 				req := &model.RunRequest{Lang: "entry", EntryMode: mode, ExpectedStdout: "invalid private state expectation", Limits: model.Limits{TimeMs: 3000, MemoryMB: 256}}
-				status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, tc.result, []byte("truncated private output"), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "")
+				status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, tc.result, []byte("truncated private output"), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 				if status != tc.wantStatus || source != tc.wantSource {
 					t.Fatalf("verdict=%s source=%s; want %s %s", status, source, tc.wantStatus, tc.wantSource)
 				}

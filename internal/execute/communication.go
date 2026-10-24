@@ -218,7 +218,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			s.cgroupParentDir,
 			req.Communication.ParticipantCount,
 			s.communicationCPUCount,
-			participantReq.Limits.TimeMs,
+			max(participantReq.Limits.TimeMs, s.cpuNormalizer.RawLimitMillis(participantReq.Limits.TimeMs)),
 		)
 		if !admitted || participantWallMs > int64(s.communicationWallBudgetMs) {
 			return communicationFailure("communication participant wall allowance exceeds runner budget", "communication:admission", 0)
@@ -228,7 +228,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			s.cgroupParentDir,
 			req.Communication.ParticipantCount,
 			s.communicationCPUCount,
-			managerReq.Limits.TimeMs,
+			max(managerReq.Limits.TimeMs, s.cpuNormalizer.RawLimitMillis(managerReq.Limits.TimeMs)),
 		)
 		if !admitted || managerWallMs > int64(s.communicationWallBudgetMs) {
 			return communicationFailure("communication manager wall allowance exceeds runner budget", "communication:admission", 0)
@@ -483,6 +483,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 					},
 					targetRelease:           releaseTargets,
 					communicationRestricted: true,
+					cpuNormalizer:           s.cpuNormalizer,
 				},
 				Hooks{},
 				communicationDiagnosticBytes,
@@ -527,6 +528,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				onTargetStarted:         onTargetStarted,
 				targetRelease:           releaseTargets,
 				communicationRestricted: true,
+				cpuNormalizer:           s.cpuNormalizer,
 			},
 			Hooks{},
 			communicationDiagnosticBytes,
@@ -1154,6 +1156,7 @@ func buildCommunicationResponse(processes []communicationProcessResult, managerR
 	for i := range processes {
 		process := processes[i]
 		response.CPUTimeMs += process.result.CPUTimeMs
+		response.RawCPUTimeMs = sumRawCPUTime(response.RawCPUTimeMs, process.result.RawCPUTimeMs)
 		response.ProcessCPUTimeMs += process.result.ProcessCPUTimeMs
 		response.MemoryKB += process.result.MemoryKB
 		if process.manager {

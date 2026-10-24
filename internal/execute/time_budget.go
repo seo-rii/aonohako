@@ -31,3 +31,19 @@ func interactiveWallTimeMs(limits model.Limits) int {
 	return int(min(int64(runvalidation.MaxTimeMs),
 		max(cpuMs*interactiveWallMultiplier, cpuMs+interactiveWallMinSlackMs)))
 }
+
+// executionWallTimeMs combines a mode's default liveness allowance with the
+// calibrated CPU guard. Explicit walls are never normalized or multiplied.
+// Remote callers supply the maximum supported CPU guard; local callers supply
+// their instance's calibrated guard. Clamp CPU input before either conversion.
+func executionWallTimeMs(limits model.Limits, interactive bool, cpuWallLimit func(int) int) int {
+	if limits.WallTimeMs > 0 {
+		return wallTimeLimitMs(limits)
+	}
+	wallMs := wallTimeLimitMs(limits)
+	if interactive {
+		wallMs = interactiveWallTimeMs(limits)
+	}
+	cpuMs := min(max(1, limits.TimeMs), runvalidation.MaxTimeMs)
+	return max(wallMs, cpuWallLimit(cpuMs))
+}
