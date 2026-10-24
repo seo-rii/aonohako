@@ -137,7 +137,7 @@ func writePythonBytecode(t *testing.T, executable, path, source string) {
 	}
 	// Match the compile service: compileall records a relative co_filename,
 	// whereas execution materializes these artifacts in a different directory.
-	cmd := exec.Command(executable, "-I", "-S", "-m", "compileall", "-q", "-b", filepath.Base(path))
+	cmd := exec.Command(executable, "-I", "-S", "-m", "compileall", "-q", "-b", "--invalidation-mode", "checked-hash", filepath.Base(path))
 	cmd.Dir = filepath.Dir(path)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("compile bytecode: %v\n%s", err, out)

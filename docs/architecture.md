@@ -90,6 +90,12 @@ as `/execute` when it runs as a root-backed embedded helper:
   environment hooks do not execute during bytecode compilation
 
 Python and PyPy compilation returns both source files and sibling `.pyc` files.
+Compilation explicitly uses `compileall --invalidation-mode checked-hash`, so
+bytecode headers contain a source-content hash instead of a file timestamp.
+Source paths passed to the compiler remain relative to the compile workspace.
+With the same interpreter/toolchain, source contents, and relative paths, the
+artifacts remain identical across workspace locations and source mtimes; this
+does not make bytecode interchangeable between Python/PyPy versions.
 When executing a `.py` entry point, the isolated launcher loads its compatible
 sibling bytecode first, avoiding repeated parsing and bytecode generation for
 each testcase. Source files remain available for local imports and tracebacks;
