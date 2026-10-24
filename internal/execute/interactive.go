@@ -33,7 +33,7 @@ type interactiveRunResult struct {
 }
 
 type interactivePipeWriter struct {
-	w      *io.PipeWriter
+	w      io.WriteCloser
 	closed atomic.Bool
 	errMu  sync.Mutex
 	err    error
@@ -141,8 +141,18 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	outputPath := filepath.Join(interactorWS.RootDir, ".tmp", "interactive-output")
 	interactorArgs = append(interactorArgs, inputPath, outputPath, answerPath)
 
-	contestantInR, contestantInW := io.Pipe()
-	interactorInR, interactorInW := io.Pipe()
+	// Retain bounded stdout capture but pass each peer's stdin as an OS pipe
+	// directly. Avoid the io.Pipe -> stdin copy goroutine on each exchange.
+	contestantInR, contestantInW, err := os.Pipe()
+	if err != nil {
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "contestant input pipe failed: " + err.Error()}}
+	}
+	interactorInR, interactorInW, err := os.Pipe()
+	if err != nil {
+		_ = contestantInR.Close()
+		_ = contestantInW.Close()
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor input pipe failed: " + err.Error()}}
+	}
 	contestantIn := &interactivePipeWriter{w: contestantInW}
 	interactorIn := &interactivePipeWriter{w: interactorInW}
 	defer contestantInR.Close()
@@ -195,8 +205,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			contestantArgs,
 			req,
 			sandboxStreamConfig{
-				stdin:          contestantInR,
-				liveStdin:      true,
+				stdinFile:     contestantInR,
 				stdout:         interactorIn,
 				onStdoutDone:   interactorIn.Close,
 				onTargetReady:  func() { timers.targetReady(0) },
@@ -219,8 +228,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			interactorArgs,
 			interactorReq,
 			sandboxStreamConfig{
-				stdin:          interactorInR,
-				liveStdin:      true,
+				stdinFile:     interactorInR,
 				stdout:         contestantIn,
 				onStdoutDone:   contestantIn.Close,
 				onTargetReady:  func() { timers.targetReady(1) },
@@ -330,20 +338,21 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 // when a terminal protocol reply arrives after the contestant has exited.
 // Go's exec.Cmd.Wait returns the stdout copy goroutine's io.ErrClosedPipe even
 // when the sender exited normally; that transport error is not a judge RE.
-// Only an actual closed pipe, a zero-exit contestant and a finished interactor
-// are sufficient to discount the relay failure. Other I/O errors, nonzero
-// contestant exits and timeouts retain their existing verdicts.
+// Only an expected peer-close error, a zero-exit contestant and a finished
+// interactor are sufficient to discount the relay failure. OS pipes can report
+// EPIPE or os.ErrClosed where io.Pipe previously reported io.ErrClosedPipe.
+// Other I/O errors, nonzero exits and timeouts retain their verdicts.
 func reconcileInteractiveRelayResults(contestant, interactor *execResult, toInteractorErr, toContestantErr error) {
 	finalVerdictAvailable := contestant.ExitCode != nil && *contestant.ExitCode == 0 && interactor.ExitCode != nil
 	apply := func(res *execResult, relayErr error, label string) {
 		if relayErr == nil {
 			return
 		}
-		if finalVerdictAvailable && errors.Is(relayErr, io.ErrClosedPipe) {
+		if finalVerdictAvailable && isExpectedPostExitStdinRelayError(relayErr) {
 			// Preserve the interactor's exit-code verdict instead of promoting
 			// a post-exit stdout copy error to RE. Do not hide unrelated errors.
 			if res.Status == model.RunStatusRE && res.VerdictSource == "stream_io" &&
-				errors.Is(res.streamRelayErr, io.ErrClosedPipe) {
+				isExpectedPostExitStdinRelayError(res.streamRelayErr) {
 				res.Status = "OK"
 				res.Reason = ""
 				res.VerdictSource = ""
