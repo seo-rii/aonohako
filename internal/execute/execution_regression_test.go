@@ -733,7 +733,9 @@ func TestRunInteractiveEnforcesInteractorWallLimit(t *testing.T) {
 		Interactor: &model.InteractorSpec{
 			Lang:     "python",
 			Binaries: []model.Binary{{Name: "interactor.py", DataB64: b64("import time\ntime.sleep(0.5)\n")}},
-			Limits:   &model.Limits{TimeMs: 50, MemoryMB: 128},
+			// Explicit wall limit preserves strict timeout tests despite
+			// the larger default allowance for interactive sessions.
+			Limits:   &model.Limits{TimeMs: 50, WallTimeMs: 50, MemoryMB: 128},
 		},
 		Limits: model.Limits{TimeMs: 3000, MemoryMB: 128},
 	}, Hooks{})
