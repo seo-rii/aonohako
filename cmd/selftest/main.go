@@ -1087,17 +1087,19 @@ printfn"%A"(getans(fac(a))0I)
 					expectedStdout: tc.expectedStdout,
 				}}
 			}
+			baseRequest := model.RunRequest{
+				Lang:              profile.RunLang,
+				EntryMode:         tc.entryMode,
+				Binaries:          binaries,
+				EntryPoint:        tc.entryPoint,
+				Limits:            limits,
+				PythonLibraryMode: tc.pythonLibraryMode,
+			}
 			for index, ioCase := range judgeIO {
-				runResp, err := postExecuteRequest(baseURL, model.RunRequest{
-					Lang:              profile.RunLang,
-					EntryMode:         tc.entryMode,
-					Binaries:          binaries,
-					EntryPoint:        tc.entryPoint,
-					Stdin:             ioCase.stdin,
-					ExpectedStdout:    ioCase.expectedStdout,
-					Limits:            limits,
-					PythonLibraryMode: tc.pythonLibraryMode,
-				})
+				request := baseRequest
+				request.Stdin = ioCase.stdin
+				request.ExpectedStdout = ioCase.expectedStdout
+				runResp, err := postExecuteRequest(baseURL, request)
 				if err != nil {
 					return fmt.Errorf("%s/%s execute case %d/%d request failed: %w", language, compileLanguage, index+1, len(judgeIO), err)
 				}
@@ -1105,15 +1107,9 @@ printfn"%A"(getans(fac(a))0I)
 					return fmt.Errorf("%s/%s execute case %d/%d failed: status=%s reason=%s stdout=%q stderr=%q", language, compileLanguage, index+1, len(judgeIO), runResp.Status, runResp.Reason, runResp.Stdout, runResp.Stderr)
 				}
 			}
-			control := model.RunRequest{
-				Lang:              profile.RunLang,
-				Binaries:          binaries,
-				EntryPoint:        tc.entryPoint,
-				Stdin:             judgeIO[0].stdin,
-				ExpectedStdout:    judgeIO[0].expectedStdout + "aonohako-wrong-answer-control\n",
-				Limits:            limits,
-				PythonLibraryMode: tc.pythonLibraryMode,
-			}
+			control := baseRequest
+			control.Stdin = judgeIO[0].stdin
+			control.ExpectedStdout = judgeIO[0].expectedStdout + "aonohako-wrong-answer-control\n"
 			controlResp, err := postExecuteRequest(baseURL, control)
 			if err != nil {
 				return fmt.Errorf("%s/%s wrong-answer control request failed: %w", language, compileLanguage, err)
@@ -1136,15 +1132,11 @@ printfn"%A"(getans(fac(a))0I)
 					attempts = 5
 				}
 				for attempt := 1; attempt <= attempts; attempt++ {
-					startupResp, err := postExecuteRequest(baseURL, model.RunRequest{
-						Lang:              profile.RunLang,
-						Binaries:          binaries,
-						EntryPoint:        tc.entryPoint,
-						Stdin:             judgeIO[0].stdin,
-						ExpectedStdout:    judgeIO[0].expectedStdout,
-						Limits:            startupLimits,
-						PythonLibraryMode: tc.pythonLibraryMode,
-					})
+					request := baseRequest
+					request.Stdin = judgeIO[0].stdin
+					request.ExpectedStdout = judgeIO[0].expectedStdout
+					request.Limits = startupLimits
+					startupResp, err := postExecuteRequest(baseURL, request)
 					if err != nil {
 						return fmt.Errorf("%s/%s constrained startup attempt %d failed: %w", language, compileLanguage, attempt, err)
 					}
