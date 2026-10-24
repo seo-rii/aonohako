@@ -63,6 +63,66 @@ func TestMaterializeBunSelectsJavaScriptAndTypeScriptEntryPoints(t *testing.T) {
 	}
 }
 
+func TestMaterializeFilesKeepsImageAssetsOutOfScriptSelection(t *testing.T) {
+	for _, tc := range []struct{ lang, source string }{
+		{"bash", "Main.sh"}, {"posix-sh", "Main.sh"}, {"zsh", "Main.zsh"},
+		{"fish", "Main.fish"}, {"powershell", "Main.ps1"},
+		{"bun", "Main.ts"}, {"deno", "Main.ts"}, {"quickjs", "Main.js"},
+		{"smlnj", "Main.sml"}, {"shakespeare", "Main.spl"},
+		{"unlambda", "Main.unl"}, {"lazyk", "Main.lazy"},
+	} {
+		t.Run(tc.lang, func(t *testing.T) {
+			ws, err := prepareWorkspaceDirs(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			primary, _, err := materializeFiles(ws, &model.RunRequest{
+				Lang: tc.lang,
+				Binaries: []model.Binary{
+					{Name: "assets/first.png", DataB64: b64("PNG asset")},
+					{Name: "assets/second.PPM", DataB64: b64("PPM asset")},
+					{Name: tc.source, DataB64: b64("source")},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := filepath.Join(ws.BoxDir, tc.source); primary != want {
+				t.Fatalf("selected %q, want script %q after image assets", primary, want)
+			}
+		})
+	}
+}
+
+func TestMaterializeFilesSelectsPietImagesAndExplicitEntryPoint(t *testing.T) {
+	for _, tc := range []struct{ source, entry, want string }{
+		{source: "Main.PNG", want: "Main.PNG"},
+		{source: "Main.ppm", want: "Main.ppm"},
+		{source: "Main.png", entry: "other.ppm", want: "other.ppm"},
+	} {
+		t.Run(tc.source+"/"+tc.entry, func(t *testing.T) {
+			ws, err := prepareWorkspaceDirs(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			primary, lang, err := materializeFiles(ws, &model.RunRequest{
+				Lang: "PIET", EntryPoint: tc.entry,
+				Binaries: []model.Binary{
+					{Name: "helper.sh", DataB64: b64("helper")},
+					{Name: tc.source, DataB64: b64("first image")},
+					{Name: "other.ppm", DataB64: b64("second image")},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if primary != filepath.Join(ws.BoxDir, tc.want) || lang != "piet" {
+				t.Fatalf("selected (%q, %q), want (%q, piet)", primary, lang, tc.want)
+			}
+		})
+	}
+}
+
 func TestPrepareWorkspaceDirsCreatesToolchainStateDirs(t *testing.T) {
 	workDir := t.TempDir()
 	_, err := prepareWorkspaceDirs(workDir)

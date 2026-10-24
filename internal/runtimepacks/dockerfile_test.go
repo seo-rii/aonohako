@@ -414,7 +414,12 @@ func TestRuntimeDockerfileCopiesSandboxSelftestBinary(t *testing.T) {
 	if !strings.Contains(body, "COPY --chmod=0644 scripts/malbolge.py /usr/local/lib/aonohako/malbolge.py") {
 		t.Fatalf("runtime.Dockerfile must copy the bundled Malbolge interpreter")
 	}
-	if !strings.Contains(body, "chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py") {
+	for _, helper := range []string{"unlambda.py", "shakespeare_run.py"} {
+		if !strings.Contains(body, "COPY --chmod=0644 scripts/"+helper+" /usr/local/lib/aonohako/"+helper) {
+			t.Fatalf("runtime.Dockerfile must copy the bundled %s helper", helper)
+		}
+	}
+	if !strings.Contains(body, "chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py /usr/local/lib/aonohako/unlambda.py /usr/local/lib/aonohako/shakespeare_run.py") {
 		t.Fatalf("runtime.Dockerfile must keep bundled helper scripts world-readable")
 	}
 	if !strings.Contains(body, "find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} +") {
