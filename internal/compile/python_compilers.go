@@ -17,7 +17,10 @@ func (c pythonLikeCompiler) Compile(ctx context.Context, job CompileJob) model.C
 	if runner == nil {
 		runner = sandboxCommandRunner{}
 	}
-	args := []string{"-I", "-S", "-m", "compileall", "-q", "-b"}
+	// Source mtimes change with each workspace; record a content hash instead
+	// so identical sources produce identical bytecode artifacts.
+	args := []string{"-I", "-S", "-m", "compileall", "-q", "-b", "--invalidation-mode", "checked-hash"}
+	var sources []string
 	if job.Request != nil {
 		for _, source := range job.Request.Sources {
 			clean, err := util.ValidateRelativePath(source.Name)
@@ -25,13 +28,14 @@ func (c pythonLikeCompiler) Compile(ctx context.Context, job CompileJob) model.C
 				return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 			}
 			if strings.HasSuffix(strings.ToLower(clean), ".py") {
-				args = append(args, clean)
+				sources = append(sources, clean)
 			}
 		}
 	}
-	if len(args) == 6 {
-		args = append(args, ".")
+	if len(sources) == 0 {
+		sources = append(sources, ".")
 	}
+	args = append(args, sources...)
 	result := runner.Run(ctx, job.WorkDir, c.interpreter, args, nil)
 	if result.Status != model.CompileStatusOK {
 		return model.CompileResponse{Status: result.Status, Stdout: result.Stdout, Stderr: result.Stderr, Reason: result.Reason}
