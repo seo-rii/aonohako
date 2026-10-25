@@ -8,12 +8,132 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"aonohako/internal/model"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/util"
 )
+
+func TestPythonBytecodeModeReturnsCanonicalArtifacts(t *testing.T) {
+	withPythonCompilers(t, func(t *testing.T, interpreter string) {
+		mtime := time.Unix(1_700_000_000, 0)
+		var baseline []model.Artifact
+		for i, comment := range []string{"# first", "# different comment"} {
+			sources := []model.Source{
+				{Name: "Main.py", DataB64: util.EncodeB64([]byte("import helper, pkg " + comment + "\nprint(helper.VALUE + pkg.VALUE)\n" + comment + "\n"))},
+				{Name: "helper.py", DataB64: util.EncodeB64([]byte("VALUE = 40 " + comment + "\n"))},
+				{Name: "pkg/__init__.py", DataB64: util.EncodeB64([]byte("from .value import VALUE " + comment + "\n"))},
+				{Name: "pkg/value.py", DataB64: util.EncodeB64([]byte("VALUE = 2 " + comment + "\n"))},
+			}
+			request := &model.CompileRequest{Sources: sources, PythonArtifactMode: pythonpolicy.ArtifactModeBytecodeV1}
+			artifacts := compilePythonArtifactsForTest(t, interpreter, t.TempDir(), sources, mtime.Add(time.Duration(i)*time.Hour), request)
+			if len(artifacts) != len(sources) {
+				t.Fatalf("got %d artifacts for %d modules", len(artifacts), len(sources))
+			}
+			original := compilePythonArtifactsForTest(t, interpreter, t.TempDir(), sources, mtime, &model.CompileRequest{Sources: sources})
+			for _, artifact := range artifacts {
+				if !strings.HasSuffix(artifact.Name, ".pyc") {
+					t.Fatalf("source included in bytecode bundle: %s", artifact.Name)
+				}
+				data := pythonArtifactBytes(t, artifacts, artifact.Name)
+				checked := pythonArtifactBytes(t, original, artifact.Name)
+				if len(data) <= 16 || !bytes.Equal(data[4:16], make([]byte, 12)) {
+					t.Fatalf("noncanonical header for %s", artifact.Name)
+				}
+				if !bytes.Equal(data[:4], checked[:4]) || !bytes.Equal(data[16:], checked[16:]) {
+					t.Fatalf("normalization changed interpreter magic or code body of %s", artifact.Name)
+				}
+			}
+			if i == 0 {
+				baseline = artifacts
+			} else if !reflect.DeepEqual(baseline, artifacts) {
+				t.Fatal("comment-only changes or different workspace/mtime changed canonical bytecode")
+			}
+			executionDir := t.TempDir()
+			for _, artifact := range artifacts {
+				path := filepath.Join(executionDir, artifact.Name)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, pythonArtifactBytes(t, artifacts, artifact.Name), 0o444); err != nil {
+					t.Fatal(err)
+				}
+			}
+			script := "import runpy, sys\nsys.path.insert(0, '.')\nrunpy.run_path('Main.pyc', run_name='__main__')\n"
+			result := (pythonExecCommandRunner{}).Run(context.Background(), executionDir, interpreter, []string{"-I", "-S", "-c", script}, nil)
+			if result.Status != model.CompileStatusOK || result.Stdout != "42\n" {
+				t.Fatalf("source-free module imports: %+v", result)
+			}
+		}
+	})
+}
+
+func TestPythonBytecodeModePreservesProgramAndLineDifferences(t *testing.T) {
+	withPythonCompilers(t, func(t *testing.T, interpreter string) {
+		var baseline []byte
+		for i, text := range []string{"print(1)\n", "print(2)\n", "\nprint(1)\n"} {
+			sources := []model.Source{{Name: "Main.py", DataB64: util.EncodeB64([]byte(text))}}
+			request := &model.CompileRequest{Sources: sources, PythonArtifactMode: pythonpolicy.ArtifactModeBytecodeV1}
+			artifacts := compilePythonArtifactsForTest(t, interpreter, t.TempDir(), sources, time.Unix(1_700_000_000, 0), request)
+			data := pythonArtifactBytes(t, artifacts, "Main.pyc")
+			if i == 0 {
+				baseline = data
+			} else if bytes.Equal(baseline, data) {
+				t.Fatalf("program or source-line change %d was lost", i)
+			}
+		}
+	})
+}
+
+func TestPythonBytecodeModeRejectsInvalidRequests(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		request model.CompileRequest
+	}{
+		{name: "unknown-mode", request: model.CompileRequest{Lang: "PYTHON3", PythonArtifactMode: "bytecode-v2", Sources: []model.Source{{Name: "Main.py", DataB64: b64String("print(1)\n")}}}},
+		{name: "other-language", request: model.CompileRequest{Lang: "C", PythonArtifactMode: pythonpolicy.ArtifactModeBytecodeV1, Sources: []model.Source{{Name: "Main.c", DataB64: b64String("int main() {}\n")}}}},
+		{name: "uploaded-bytecode", request: model.CompileRequest{Lang: "PYTHON3", PythonArtifactMode: pythonpolicy.ArtifactModeBytecodeV1, Sources: []model.Source{{Name: "Main.py", DataB64: b64String("print(1)\n")}, {Name: "Main.pyc", DataB64: b64String("uploaded bytecode")}}}},
+		{name: "no-python-source", request: model.CompileRequest{Lang: "PYTHON3", PythonArtifactMode: pythonpolicy.ArtifactModeBytecodeV1, Sources: []model.Source{{Name: "notes.txt", DataB64: b64String("text")}}}},
+		{name: "uppercase-extension", request: model.CompileRequest{Lang: "PYTHON3", PythonArtifactMode: pythonpolicy.ArtifactModeBytecodeV1, Sources: []model.Source{{Name: "Main.PY", DataB64: b64String("print(1)\n")}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := New().Run(context.Background(), &tc.request)
+			if response.Status != model.CompileStatusInvalid || !strings.Contains(response.Reason, "python_artifact_mode") {
+				t.Fatalf("got %+v", response)
+			}
+		})
+	}
+}
+
+func TestPythonBytecodeModeRejectsMissingOrUnexpectedCompilerOutputs(t *testing.T) {
+	for _, kind := range []string{"missing", "unexpected", "invalid-header"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			runner := &recordingCommandRunner{result: CommandResult{Status: model.CompileStatusOK}, hook: func(dir, _ string, args, _ []string) {
+				if !strings.Contains(strings.Join(args, " "), " -f ") {
+					t.Fatal("bytecode mode must force compilation")
+				}
+				if kind == "missing" {
+					return
+				}
+				name := "Main.pyc"
+				if kind == "unexpected" {
+					name = "injected.pyc"
+				}
+				if err := os.WriteFile(filepath.Join(dir, name), []byte("invalid"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}}
+			response := (pythonLikeCompiler{interpreter: "python3"}).Compile(context.Background(), CompileJob{WorkDir: dir, Request: &model.CompileRequest{Sources: []model.Source{{Name: "Main.py"}}, PythonArtifactMode: pythonpolicy.ArtifactModeBytecodeV1}, Runner: runner})
+			if response.Status != model.CompileStatusInternal || len(response.Artifacts) != 0 {
+				t.Fatalf("unsafe compiler output accepted: %+v", response)
+			}
+		})
+	}
+}
 
 func TestPythonLikeCompilerArtifactsAreReproducible(t *testing.T) {
 	withPythonCompilers(t, func(t *testing.T, interpreter string) {

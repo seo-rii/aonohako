@@ -290,6 +290,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_rust_crate_mode", err.Error())
 		return
 	}
+	if err := pythonpolicy.ValidateArtifactMode(req.PythonArtifactMode, req.Lang); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_python_artifact_mode", err.Error())
+		return
+	}
 	if len(req.Sources) == 0 {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "no_sources", "no sources")
 		return
