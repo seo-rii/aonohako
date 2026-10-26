@@ -60,9 +60,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tini pypy3 openjdk-21-jre-headless \
     ca-certificates curl bzip2 \
     && rm -rf /var/lib/apt/lists/*
+# Install patched filelock from PyPI before using the CPU PyTorch index.
 RUN python -m pip install --no-cache-dir --upgrade pip && \
     python -m pip install --no-cache-dir \
-      setuptools==84.1.0 \
+      setuptools==84.1.0 filelock==4.2.1 \
       numpy==2.4.4 pandas==3.0.2 seaborn==0.13.2 matplotlib==3.10.8 pillow==13.0.0 \
       six==1.17.0 qiskit==2.4.0 pyparsing==3.3.2 pylatexenc==2.10 jax[cpu]==0.10.0 && \
     python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \

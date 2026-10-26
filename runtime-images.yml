@@ -303,6 +303,8 @@ languages:
         - python3-pip
       pip:
         - setuptools==84.1.0
+        # Install the patched version from PyPI before using the CPU PyTorch index.
+        - filelock==4.2.1
         - numpy==2.4.4
         - pandas==3.0.2
         - seaborn==0.13.2
