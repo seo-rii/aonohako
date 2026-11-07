@@ -65,7 +65,8 @@ int main(int argc, char **argv) {
   fputs("20\n", in1); fflush(in1);
   int a = 0, b = 0;
   int seat0_failed = fscanf(out0, "%d", &a) != 1;
-  if (!seat0_failed && (fscanf(out1, "%d", &b) != 1 || a != 17 || b != 33)) return 33;
+  int seat1_failed = fscanf(out1, "%d", &b) != 1;
+  if (!seat0_failed && (seat1_failed || a != 17 || b != 33)) return 33;
   FILE *result = fopen(argv[3], "w");
   if (!result) return 34;
   fputs(seat0_failed ? "{\"version\":1,\"wins\":[0,20],\"games\":20}" : "{\"version\":1,\"wins\":[7,13],\"games\":20}", result);
