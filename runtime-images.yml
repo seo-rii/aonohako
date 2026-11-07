@@ -1656,9 +1656,10 @@ languages:
         - export SMLNJ_BUILD_ROOT=/tmp/smlnj-build
         - install -d -m 0755 "${SMLNJ_BUILD_ROOT}" /opt/smlnj
         - cd "${SMLNJ_BUILD_ROOT}"
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://smlnj.cs.uchicago.edu/dist/working/${SMLNJ_VERSION}/config.tgz" -o config.tgz
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://smlnj.cs.uchicago.edu/dist/working/${SMLNJ_VERSION}/runtime.tgz" -o runtime.tgz
-        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://smlnj.cs.uchicago.edu/dist/working/${SMLNJ_VERSION}/boot.amd64-unix.tgz" -o boot.amd64-unix.tgz
+        # MacPorts mirrors these pinned upstream archives byte-for-byte.
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://distfiles.macports.org/smlnj/${SMLNJ_VERSION}_0/config.tgz" -o config.tgz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://distfiles.macports.org/smlnj/${SMLNJ_VERSION}_0/runtime.tgz" -o runtime.tgz
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://distfiles.macports.org/smlnj/${SMLNJ_VERSION}_0/boot.amd64-unix.tgz" -o boot.amd64-unix.tgz
         - echo "${SMLNJ_CONFIG_SHA256}  config.tgz" | sha256sum -c -
         - echo "${SMLNJ_RUNTIME_SHA256}  runtime.tgz" | sha256sum -c -
         - echo "${SMLNJ_BOOT_SHA256}  boot.amd64-unix.tgz" | sha256sum -c -

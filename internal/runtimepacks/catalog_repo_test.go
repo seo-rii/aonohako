@@ -466,7 +466,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"sed":           {"sed -f Main.sed", `s/^\([0-9]*\) \([0-9]*\)$/\2 \1/`, `test "${output}" = $'22 20\n13 7'`},
 		"sml":           {"MLTON_VERSION=20241230", "mlton -output Main Main.sml"},
 		"mlton":         {"MLTON_VERSION=20241230", "mlton -output Main Main.sml", "20 22", "7 13", "Broken.sml"},
-		"smlnj":         {"SMLNJ_VERSION=110.99.9", "SMLNJ_CONFIG_SHA256=bf479ba518652fc193ac0954e46c72c5356a33c6980f9fcb6bcf6e55c7731418", "SMLNJ_RUNTIME_SHA256=216e0193a193ae2e59296d27c42e61a3aa7a16ddda936d3a06a2b9459276b792", "SMLNJ_BOOT_SHA256=2b4c23bb4e49be040043ab70a3df8e92c26ffe1cba652ed80348cd3fe2d19c63", "smlnj.cs.uchicago.edu/dist/working", "URLGETTER=/bin/false", "-default 64 -nolib", "/opt/smlnj/bin/.run/run.amd64-linux", "@SMLload=/usr/local/lib/aonohako/smlnj-run", "20 22", "7 13", "Broken.sml", "broken.stderr"},
+		"smlnj":         {"SMLNJ_VERSION=110.99.9", "SMLNJ_CONFIG_SHA256=bf479ba518652fc193ac0954e46c72c5356a33c6980f9fcb6bcf6e55c7731418", "SMLNJ_RUNTIME_SHA256=216e0193a193ae2e59296d27c42e61a3aa7a16ddda936d3a06a2b9459276b792", "SMLNJ_BOOT_SHA256=2b4c23bb4e49be040043ab70a3df8e92c26ffe1cba652ed80348cd3fe2d19c63", "distfiles.macports.org/smlnj/${SMLNJ_VERSION}_0", "URLGETTER=/bin/false", "-default 64 -nolib", "/opt/smlnj/bin/.run/run.amd64-linux", "@SMLload=/usr/local/lib/aonohako/smlnj-run", "20 22", "7 13", "Broken.sml", "broken.stderr"},
 		"smalltalk":     {"GST_VERSION=3.2.5", "mirrors.kernel.org/gnu/smalltalk", "sed -i 's/const char \\*inbuf;/char *inbuf;/'", "CC=/usr/bin/gcc-14 ./configure", "make -j1", "gst -q Main.st"},
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},
