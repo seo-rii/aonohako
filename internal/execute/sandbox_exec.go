@@ -265,6 +265,35 @@ func sandboxExecutionContext(parent context.Context, startup, execution time.Dur
 	}
 }
 
+// The helper may stop reading before a large request fits in its pipe. Closing
+// the write end interrupts that write; join it before the caller kills/reaps
+// the helper so no request goroutine outlives sandbox initialization.
+func writeSandboxRequest(ctx context.Context, writer *os.File, request []byte) error {
+	if ctx.Err() != nil {
+		_ = writer.Close()
+		return context.Cause(ctx)
+	}
+	done := make(chan error, 1)
+	go func() {
+		n, err := writer.Write(request)
+		if err == nil && n != len(request) {
+			err = io.ErrShortWrite
+		}
+		if closeErr := writer.Close(); err == nil {
+			err = closeErr
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		_ = writer.Close()
+		<-done
+		return context.Cause(ctx)
+	}
+}
+
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	return executeSandboxCommandWithStdinLimit(ctx, ws, command, req, stdinReader, 0, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
@@ -562,6 +591,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 
 	cmd := exec.CommandContext(ctx, helperPath)
+	// This supervisor owns process-group cancellation and its verdict source.
+	// CommandContext still checks cancellation before Start, but its default
+	// watcher would race our kill/wait paths and lose the shutdown reason.
+	cmd.Cancel = nil
 	cmd.Dir = ws.BoxDir
 	var stdinLiveReader io.Reader
 	var stdinLiveWrite *os.File
@@ -746,16 +779,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
 	_ = requestRead.Close()
-	if n, err := requestWrite.Write(rawReq); err != nil {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_ = cmd.Wait()
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
-	} else if n != len(rawReq) {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_ = cmd.Wait()
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: short write"}
-	}
-	if err := requestWrite.Close(); err != nil {
+	if err := writeSandboxRequest(ctx, requestWrite, rawReq); err != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		_ = cmd.Wait()
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
