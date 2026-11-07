@@ -4,9 +4,46 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"aonohako/internal/timing"
 )
+
+func TestLoadCPUNormalizationSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name, normalization, sampling, reference string
+		wantEnabled, wantSampling                bool
+		wantReference                            uint64
+	}{
+		{name: "unset", normalization: "unset"},
+		{name: "empty"},
+		{name: "whitespace", normalization: " \t"},
+		{name: "explicit disable", normalization: "false"},
+		{name: "explicit enable", normalization: "true", wantEnabled: true, wantSampling: true},
+		{name: "sampling override off", normalization: "true", sampling: "false", wantEnabled: true},
+		{name: "sampling override on", normalization: "false", sampling: "true", wantSampling: true},
+		{name: "custom reference", normalization: "true", reference: "75", wantEnabled: true, wantSampling: true, wantReference: uint64(75 * time.Millisecond)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setCPUNormalizationTestValue(t, tc.normalization)
+			t.Setenv("AONOHAKO_CPU_SHORT_CASE_SAMPLING", tc.sampling)
+			t.Setenv("AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS", tc.reference)
+			// Exercise Load's actual parser without requiring a root helper host.
+			cfg, err := loadCPUNormalization()
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantReference := tc.wantReference
+			if wantReference == 0 {
+				wantReference = timing.DefaultCPUReferenceTimeNs
+			}
+			want := CPUNormalizationConfig{Enabled: tc.wantEnabled, ReferenceTimeNs: wantReference, ShortCaseSampling: tc.wantSampling}
+			if cfg != want {
+				t.Fatalf("CPU normalization = %+v, want %+v", cfg, want)
+			}
+		})
+	}
+}
 
 func TestLoadCPUNormalizationDisabledByDefault(t *testing.T) {
 	for _, target := range []string{"dev", "selfhosted", "cloudrun"} {
