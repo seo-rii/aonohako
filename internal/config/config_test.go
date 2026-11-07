@@ -112,7 +112,7 @@ func TestDefaultMaxActiveRunsEmbeddedHelperIsOne(t *testing.T) {
 	}
 }
 
-func TestDefaultCPUNormalizationOnlyForCloudRunEmbeddedHelper(t *testing.T) {
+func TestSupportsCPUNormalizationOnlyForCloudRunEmbeddedHelper(t *testing.T) {
 	tests := []struct {
 		name string
 		opts platform.RuntimeOptions
@@ -146,8 +146,8 @@ func TestDefaultCPUNormalizationOnlyForCloudRunEmbeddedHelper(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := defaultCPUNormalization(tc.opts); got != tc.want {
-				t.Fatalf("defaultCPUNormalization(%+v) = %v, want %v", tc.opts, got, tc.want)
+			if got := supportsCPUNormalization(tc.opts); got != tc.want {
+				t.Fatalf("supportsCPUNormalization(%+v) = %v, want %v", tc.opts, got, tc.want)
 			}
 		})
 	}

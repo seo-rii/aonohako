@@ -409,20 +409,29 @@ aonohako-selftest cgroup-preflight
   `X-Aonohako-Protocol-Version`. It defaults to `true` outside `dev` and
   `false` in `dev`, so production remote fleets fail closed on unversioned
   runner responses while local compatibility testing can still accept them.
-- `AONOHAKO_CPU_NORMALIZATION` defaults to `true` only for
-  `cloudrun + embedded + helper`. Before accepting traffic, the runner measures
-  versioned fixed single-thread work and uses that immutable per-instance scale
-  for both authoritative `cpu_time_ms` reporting and CPU TLE enforcement.
+- `AONOHAKO_CPU_NORMALIZATION` defaults to `false` on every deployment target.
+  It is an experimental opt-in, not validated for production timing stability
+  or CPU TLE fairness. Explicit `true` is supported only for
+  `cloudrun + embedded + helper`. When enabled, before accepting traffic the
+  runner measures versioned fixed single-thread work and uses that immutable
+  per-instance scale for both authoritative `cpu_time_ms` reporting and CPU TLE
+  enforcement. With it disabled, the runner does not calibrate and reports
+  scheduled host CPU time without a performance scale.
   CPU accounting and limit comparisons retain nanosecond precision; only the
   reported `cpu_time_ms` is rounded up to whole milliseconds. `cpu_time_ns`,
   `raw_cpu_time_ns`, `raw_cpu_time_ms`, `cpu_accounting`, and
   `cpu_time_normalization` retain diagnostics. Without cgroups, process-clock
   polling subtracts a process-clock baseline and final wait usage subtracts a
   separate `getrusage` baseline captured by the helper before target release.
-  CPU usage is never clamped to wall time (multithreaded CPU can exceed it). Set this
-  variable to `false` to roll back to scheduled host CPU time.
+  CPU usage is never clamped to wall time (multithreaded CPU can exceed it).
+  Existing deployments explicitly setting `true` remain opted in; remove that
+  setting or set it to `false` to disable calibration. Switching an already
+  normalized fleet to raw timing changes reported time units and CPU TLE
+  budgets, so coordinate the rollout with the judging policy rather than mixing
+  normalized and raw runners under the same limits.
 - `AONOHAKO_CPU_SHORT_CASE_SAMPLING` defaults to the CPU-normalization setting
-  and takes effect only with an active calibration. An ordinary batch testcase
+  (therefore `false` unless normalization is explicitly enabled) and takes
+  effect only with an active calibration. An ordinary batch testcase
   whose first execution is AC and at most 100 ms of normalized CPU is executed
   twice more in fresh workspaces with identical input and limits. If all three
   are AC, the reported CPU is their nanosecond-precision median. Any repeated
@@ -711,7 +720,8 @@ For Cloud Run deployments, use this baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
-- `AONOHAKO_CPU_NORMALIZATION=true`
+- `AONOHAKO_CPU_NORMALIZATION=false` (keep the experimental calibration disabled)
+- `AONOHAKO_CPU_SHORT_CASE_SAMPLING=false`
 - `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS=60`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
   `AONOHAKO_INBOUND_AUTH=platform` only when an upstream layer enforces

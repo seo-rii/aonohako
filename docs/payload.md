@@ -432,7 +432,7 @@ root. Self-hosted cgroup timing is unchanged.
   "status": "Accepted",                     // Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Workspace Limit Exceeded|Runtime Error|Container Initialization Failed
   "time_ms": 42,                            // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                       // wall-clock time from CLOCK_MONOTONIC (ms)
-  "cpu_time_ms": 30,                        // authoritative CPU time; normalized by Cloud Run helpers (ms)
+  "cpu_time_ms": 30,                        // authoritative CPU time; normalized only when explicitly enabled (ms)
   "raw_cpu_time_ms": 49,                    // scheduled host CPU time before normalization (ms)
   "cpu_time_normalization": {               // present when normalization is active
     "method": "go-fixed-int-v1",
@@ -786,10 +786,14 @@ for the compile phase and toolchain smoke tests.
 - `wall_time_ms` uses `CLOCK_MONOTONIC`
 - target CPU time samples the Linux process CPU clock while the submission is
   running and uses cgroup `cpu.stat` when per-run cgroups are enabled
-- Cloud Run embedded helpers calibrate fixed single-thread integer work at
-  startup, publish the scheduled value as `raw_cpu_time_ms`, and translate the
-  verdict-authoritative `cpu_time_ms` to a 60 ms reference host; watchdogs and
-  `RLIMIT_CPU` use the inverse raw-host budget
+- performance normalization is disabled by default; `cpu_time_ms` reports
+  scheduled host CPU time without a performance scale. With the experimental
+  `AONOHAKO_CPU_NORMALIZATION=true` opt-in, Cloud Run embedded helpers calibrate
+  fixed single-thread integer work at startup, publish the scheduled value as
+  `raw_cpu_time_ms`, and scale the verdict-authoritative `cpu_time_ms` to a
+  fixed-work reference (60 ms by default); watchdogs and `RLIMIT_CPU` use the
+  inverse raw-host budget. The response example above illustrates this opt-in
+  mode, not the default
 - `cpu_time_normalization` reports the versioned method, parts-per-million
   scale, reference duration, and measured per-instance calibration duration;
   remote control planes pass it through without applying a second scale
