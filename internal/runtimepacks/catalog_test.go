@@ -2,6 +2,7 @@ package runtimepacks
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -923,6 +924,72 @@ func TestVerifyToolchainArtifactsScriptRequiresCompleteProfileArtifacts(t *testi
 	}
 	if !strings.Contains(string(out), "verified 1 toolchain profile artifact set(s)") {
 		t.Fatalf("verification output missing success line: %q", string(out))
+	}
+	// Docker's containerd store uses a manifest ID; Grype reports the config ID
+	// and retains the original repository-qualified manifest in repoDigests.
+	configID := "sha256:" + strings.Repeat("c", 64)
+	repoDigest := "aonohako-ci-prod@" + imageID
+	for _, tc := range []struct {
+		name                  string
+		configID, repoDigests any
+		os, architecture      string
+		wantSuccess           bool
+	}{
+		{name: "containerd manifest ID", configID: configID, repoDigests: []string{repoDigest}, os: "linux", architecture: "amd64", wantSuccess: true},
+		{name: "other repository", configID: configID, repoDigests: []string{"other-repository@" + imageID}, os: "linux", architecture: "amd64"},
+		{name: "repository suffix", configID: configID, repoDigests: []string{"prefix-" + repoDigest}, os: "linux", architecture: "amd64"},
+		{name: "wrong digest", configID: configID, repoDigests: []string{"aonohako-ci-prod@" + configID}, os: "linux", architecture: "amd64"},
+		{name: "digest only", configID: configID, repoDigests: []string{imageID}, os: "linux", architecture: "amd64"},
+		{name: "tag only", configID: configID, repoDigests: []string{imageRef}, os: "linux", architecture: "amd64"},
+		{name: "string instead of list", configID: configID, repoDigests: repoDigest, os: "linux", architecture: "amd64"},
+		{name: "non-string list member", configID: configID, repoDigests: []any{repoDigest, 1}, os: "linux", architecture: "amd64"},
+		{name: "missing digests", configID: configID, os: "linux", architecture: "amd64"},
+		{name: "malformed config ID", configID: "sha256:bad", repoDigests: []string{repoDigest}, os: "linux", architecture: "amd64"},
+		{name: "non-string config ID", configID: 1, repoDigests: []string{repoDigest}, os: "linux", architecture: "amd64"},
+		{name: "missing config ID", repoDigests: []string{repoDigest}, os: "linux", architecture: "amd64"},
+		{name: "wrong OS", configID: configID, repoDigests: []string{repoDigest}, os: "windows", architecture: "amd64"},
+		{name: "wrong architecture", configID: configID, repoDigests: []string{repoDigest}, os: "linux", architecture: "arm64"},
+		{name: "missing platform", configID: configID, repoDigests: []string{repoDigest}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var report map[string]any
+			if err := json.Unmarshal(validGrype, &report); err != nil {
+				t.Fatal(err)
+			}
+			report["source"].(map[string]any)["target"] = map[string]any{
+				"userInput": imageRef, "imageID": tc.configID, "repoDigests": tc.repoDigests,
+				"os": tc.os, "architecture": tc.architecture,
+			}
+			body, err := json.Marshal(report)
+			if err != nil {
+				t.Fatal(err)
+			}
+			provenance := []byte(fmt.Sprintf(`{"profile":%q,"image":%q,"image_id":%q,"artifacts":{"summary.md":"%x","sbom.spdx.json":"%x","grype.json":"%x"}}`, profile, imageRef, imageID, sha256.Sum256(validProfileSummary), sha256.Sum256(validSBOM), sha256.Sum256(body)))
+			for path, content := range map[string][]byte{
+				filepath.Join(dir, profile+".grype.json"):      body,
+				filepath.Join(dir, profile+".provenance.json"): provenance,
+			} {
+				if err := os.WriteFile(path, content, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out, err := exec.Command("python3", path, root, profileSpec).CombinedOutput()
+			if tc.wantSuccess {
+				if err != nil {
+					t.Fatalf("verifier rejected containerd identity: %v\n%s", err, out)
+				}
+			} else if err == nil || !strings.Contains(string(out), "image ID does not match") {
+				t.Fatalf("verifier did not reject invalid image binding: %v\n%s", err, out)
+			}
+		})
+	}
+	for path, content := range map[string][]byte{
+		filepath.Join(dir, profile+".grype.json"):      validGrype,
+		filepath.Join(dir, profile+".provenance.json"): validProvenance,
+	} {
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("restore image binding fixture: %v", err)
+		}
 	}
 	cmd = exec.Command("python3", path, root, profileSpec, "type-b=java")
 	out, err = cmd.CombinedOutput()
