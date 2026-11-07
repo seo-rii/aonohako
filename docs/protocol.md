@@ -136,7 +136,7 @@ not duplicate stdout/stderr before `result`.
   "status": "Accepted",                 // see Status Codes below
   "time_ms": 42,                        // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                   // wall-clock execution time (ms)
-  "cpu_time_ms": 30,                    // authoritative target CPU time; Cloud Run runners normalize it (ms)
+  "cpu_time_ms": 30,                    // authoritative target CPU time; normalized only when explicitly enabled (ms)
   "raw_cpu_time_ms": 49,                // scheduled host CPU time before Cloud Run normalization (ms)
   "process_cpu_time_ms": 55,            // diagnostic raw helper + target process CPU time (ms)
   "cpu_time_normalization": {           // present when this runner normalized CPU time
@@ -188,9 +188,12 @@ not duplicate stdout/stderr before `result`.
 
 For helper-backed runs, target CPU time is finalized from process wait usage
 after subtracting the CPU baseline captured before target release. This retains
-fast target CPU consumed after the last watchdog sample. Cloud Run embedded
-helpers then translate that scheduled host time through a startup fixed-work
-calibration. `cpu_time_ms` is the normalized, verdict-authoritative value;
+fast target CPU consumed after the last watchdog sample. By default,
+`cpu_time_ms` reports scheduled host CPU time without performance normalization.
+The example above illustrates experimental normalization explicitly enabled
+with `AONOHAKO_CPU_NORMALIZATION=true` on a Cloud Run embedded helper. In that
+mode, the helper translates scheduled host time through a startup fixed-work
+calibration. `cpu_time_ms` is then the normalized, verdict-authoritative value;
 `raw_cpu_time_ms` preserves the scheduled host value. The same calibration is
 inverted before process/cgroup watchdog and `RLIMIT_CPU` enforcement, so the
 reported value and the CPU TLE boundary use the same unit.
@@ -215,9 +218,10 @@ contribute their maximum, not their sum. This keeps the outer deadline from
 preempting a valid calibrated execution before its per-instance scale is known;
 a shorter caller deadline remains authoritative.
 
-Fixed-work calibration removes a large host-throughput component; it does not
-claim cycle-accurate equivalence across different instruction mixes, managed
-runtimes, memory systems, or later host contention.
+Fixed-work calibration attempts to compensate for host-throughput differences.
+Its effect on timing stability and TLE fairness remains experimental; different
+instruction mixes, managed runtimes, memory systems, or later host contention
+may respond differently and can become less stable after calibration.
 
 `capture_limits.stdout_bytes` and `capture_limits.stderr_bytes` optionally
 apply a separate, per-stream cap to `log` events and the top-level and step

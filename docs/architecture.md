@@ -475,7 +475,7 @@ reported as runtime failure instead of silently falling back to process stdout.
 | Metric | Source | Why |
 | --- | --- | --- |
 | `wall_time_ms` | `CLOCK_MONOTONIC` | stable wall clock, not affected by time jumps |
-| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec`; Cloud Run embedded helpers translate the finalized value through a startup fixed-work calibration | aggregates all target threads and removes the dominant host-throughput difference between heterogeneous Cloud Run instances; `raw_cpu_time_ms` preserves scheduled host time |
+| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec`; Cloud Run embedded helpers apply startup fixed-work calibration only when explicitly enabled | aggregates all target threads; experimental calibration attempts to compensate for host performance differences, while `raw_cpu_time_ms` preserves scheduled host time |
 | `memory_kb` | `/proc/<pid>/statm` sampled during execution and `/proc/<pid>/smaps_rollup` near the limit or when AS is disabled; cgroup runs additionally use aggregate `memory.peak` | captures target RSS without charging the API server or sandbox helper, and reports the kernel aggregate peak for cgroup process trees |
 
 Important consequence:
@@ -485,8 +485,11 @@ Important consequence:
 - because `fork`/`vfork`/`clone3` are denied and only thread-form `clone` is
   allowed, `cpu_time_ms` remains meaningful for the whole submission process
 
-Cloud Run does not guarantee a fixed processor model for a vCPU. An embedded
-Cloud Run helper therefore warms the calibration loop, then runs five samples
+Cloud Run does not guarantee a fixed processor model for a vCPU. CPU performance
+normalization is experimental and disabled by default on every deployment
+target. It has not been validated for production timing stability or CPU TLE
+fairness. An embedded Cloud Run helper explicitly opted in with
+`AONOHAKO_CPU_NORMALIZATION=true` warms the calibration loop, then runs five samples
 of versioned, fixed, single-thread integer work before accepting traffic,
 measures them with `CLOCK_THREAD_CPUTIME_ID`, and uses the median to build an
 immutable instance scale. The sorted samples' central-three span must be at
@@ -496,13 +499,18 @@ attempts. Each rejected pass logs all five samples, the median, and the measured
 spread. Only five consecutive unstable passes fail startup, so isolated noise
 does not discard an otherwise healthy Cloud Run instance. The default
 reference is 60 ms and may be changed with
-`AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS`; the scale is applied automatically
-only to `cloudrun + embedded + helper`. `AONOHAKO_CPU_NORMALIZATION=false` is
-the rollback switch. Calibration failure or a sample outside the supported
+`AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS`; opting in is supported only for
+`cloudrun + embedded + helper`. With normalization disabled, startup does not
+calibrate and target CPU accounting remains in scheduled host CPU time.
+An existing explicit `true` setting is not overridden by the new default:
+remove it or set `AONOHAKO_CPU_NORMALIZATION=false` to opt out. Switching an
+already normalized fleet to raw timing changes the reporting unit and CPU TLE
+budget, so coordinate that rollout with problem limits and judging policy.
+When opted in, calibration failure or a sample outside the supported
 duration/scale bounds fails startup rather than mixing raw and normalized
 semantics.
 
-The public CPU limit is converted back into raw host nanoseconds for process and
+With normalization enabled, the public CPU limit is converted back into raw host nanoseconds for process and
 cgroup watchdogs. Reporting scales the raw nanosecond value before rounding up
 to whole milliseconds; the inverse budget uses floor division at nanosecond
 precision, preserving the strict-over-limit boundary without a fractional-ms
@@ -510,9 +518,10 @@ loss. The helper's coarser `RLIMIT_CPU` input is rounded up separately. The wall
 deadline is separate: it is never shortened and receives
 10% or at least 100 ms of supervision slack above the larger of the public
 limit and the calibrated raw CPU allowance. Actual elapsed time remains in
-`wall_time_ms`. This calibration reduces hardware-model variance but cannot
-make instruction mixes, managed runtimes, memory performance, or later host
-contention identical.
+`wall_time_ms`. Calibration aims to reduce hardware-model variance, but a
+benchmark may not predict a submission's instruction mix, managed runtime,
+memory performance, or later host contention; applying its scale can also
+increase variance. Functional tests alone do not establish its effectiveness.
 
 A remote control plane does not know the selected runner instance's calibration
 before execution. Its absolute deadline therefore budgets for the maximum
@@ -830,8 +839,9 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_REMOTE_STRICT_PROTOCOL` is a strict boolean; it defaults to `true`
   outside `dev` so remote responses without `X-Aonohako-Protocol-Version` are
   rejected in production remote fleets
-- `AONOHAKO_CPU_NORMALIZATION` defaults to `true` only for
-  `cloudrun + embedded + helper`; enabling it for another execution shape is
+- `AONOHAKO_CPU_NORMALIZATION` defaults to `false` everywhere. Explicit
+  experimental opt-in is supported only for `cloudrun + embedded + helper`;
+  enabling it for another execution shape is
   rejected, and `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS` must be between 1
   and 5000
 - non-dev deployments also reject `0` for pending queue, global and
@@ -922,7 +932,8 @@ Recommended Cloud Run deployment baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
-- `AONOHAKO_CPU_NORMALIZATION=true`
+- `AONOHAKO_CPU_NORMALIZATION=false` (experimental calibration stays disabled)
+- `AONOHAKO_CPU_SHORT_CASE_SAMPLING=false`
 - `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS=60`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, unless
   `AONOHAKO_INBOUND_AUTH=platform` is set because Cloud Run IAM, mTLS, private

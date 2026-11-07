@@ -281,7 +281,8 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	cpuNormalizationEnabled, err := parseBoolEnv("AONOHAKO_CPU_NORMALIZATION", os.Getenv("AONOHAKO_CPU_NORMALIZATION"), defaultCPUNormalization(runtimePlatform))
+	// CPU normalization is experimental and must be explicitly enabled.
+	cpuNormalizationEnabled, err := parseBoolEnv("AONOHAKO_CPU_NORMALIZATION", os.Getenv("AONOHAKO_CPU_NORMALIZATION"), false)
 	if err != nil {
 		return Config{}, err
 	}
@@ -666,7 +667,7 @@ func Load() (Config, error) {
 	if platform.CloudRunMarkersPresent() && execution.Platform.DeploymentTarget != platform.DeploymentTargetCloudRun {
 		return Config{}, fmt.Errorf("AONOHAKO_DEPLOYMENT_TARGET=cloudrun is required when Cloud Run markers are present")
 	}
-	if execution.CPUNormalization.Enabled && !defaultCPUNormalization(execution.Platform) {
+	if execution.CPUNormalization.Enabled && !supportsCPUNormalization(execution.Platform) {
 		return Config{}, fmt.Errorf("AONOHAKO_CPU_NORMALIZATION=true requires cloudrun embedded helper execution")
 	}
 	contract, err := execution.Platform.SecurityContract()
@@ -1103,7 +1104,7 @@ func defaultRemoteStrictProtocol(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget != platform.DeploymentTargetDev
 }
 
-func defaultCPUNormalization(opts platform.RuntimeOptions) bool {
+func supportsCPUNormalization(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget == platform.DeploymentTargetCloudRun &&
 		opts.ExecutionTransport == platform.ExecutionTransportEmbedded &&
 		opts.SandboxBackend == platform.SandboxBackendHelper
