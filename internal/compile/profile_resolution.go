@@ -327,9 +327,13 @@ func applyRequestedVersion(profile profiles.Profile, raw string) (profiles.Profi
 			return profile, fmt.Errorf("unsupported Java version: %s", raw)
 		}
 		profile.JavaRelease = release
+		profile.RunLang = "java"
+		if release == "25" {
+			profile.RunLang = "java25"
+		}
 	case "kotlin-jvm":
 		release, ok := javaReleaseVersion(version)
-		if !ok {
+		if !ok || release == "25" {
 			return profile, fmt.Errorf("unsupported Kotlin/JVM target: %s", raw)
 		}
 		profile.JavaRelease = release
@@ -441,7 +445,7 @@ func javaReleaseVersion(version string) (string, bool) {
 	switch version {
 	case "1.8":
 		return "8", true
-	case "8", "11", "15", "17", "21":
+	case "8", "11", "15", "17", "21", "25":
 		return version, true
 	default:
 		return "", false

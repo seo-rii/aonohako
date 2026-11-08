@@ -275,6 +275,11 @@ if has_language "java" || has_language "groovy" || has_language "scala" || has_l
     report_once "Java runtime" java -version
 fi
 
+if has_language "java25"; then
+    report_once "Java 25 compiler" /usr/lib/jvm/aonohako-java25/bin/javac -version
+    report_once "Java 25 runtime" /usr/lib/jvm/aonohako-java25/bin/java -version
+fi
+
 if has_language "groovy"; then
     report_once "Groovy" groovy --version
 fi
@@ -715,6 +720,7 @@ report_compile_option "cpp" "g++ -O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -
 report_compile_option "python" "python3 -I -S -m compileall -q -b --invalidation-mode checked-hash ."
 report_compile_option "pypy" "pypy3 -I -S -m compileall -q -b --invalidation-mode checked-hash ."
 report_compile_option "java" "javac --release 11 -encoding UTF-8"
+report_compile_option "java25" "/usr/lib/jvm/aonohako-java25/bin/javac --release 25 -encoding UTF-8"
 report_compile_option "groovy" "groovyc -d <workdir>"
 report_compile_option "scala" "scalac -d <workdir>"
 report_compile_option "clojure" "clojure reader parse check"

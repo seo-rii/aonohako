@@ -3,6 +3,7 @@ package profiles
 import "strings"
 
 const (
+	Java25Home   = "/usr/lib/jvm/aonohako-java25"
 	asProfileKey = "ASSEMBLYSCRIPT"
 	denoJSKey    = "JAVASCRIPT_DENO"
 	denoTSKey    = "TYPESCRIPT_DENO"
@@ -68,6 +69,7 @@ var profiles = map[string]Profile{
 	"JAVA15":        {SourceLang: "JAVA15", Extension: "java", CompileKind: "java", JavaRelease: "15", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"JAVA17":        {SourceLang: "JAVA17", Extension: "java", CompileKind: "java", JavaRelease: "17", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"JAVA21":        {SourceLang: "JAVA21", Extension: "java", CompileKind: "java", JavaRelease: "21", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
+	"JAVA25":        {SourceLang: "JAVA25", Extension: "java", CompileKind: "java", JavaRelease: "25", RunLang: "java25", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"GROOVY":        {SourceLang: "GROOVY", Extension: "groovy", CompileKind: "groovy", RunLang: "groovy", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"KOTLIN":        {SourceLang: "KOTLIN", Extension: "kt", DefaultTarget: "Main", CompileKind: "kotlin", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"ASM":           {SourceLang: "ASM", Extension: "s", DefaultTarget: "Main", CompileKind: "asm", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},

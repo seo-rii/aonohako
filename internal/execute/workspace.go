@@ -66,7 +66,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	classFiles := make([]string, 0)
 	entryPointPath := ""
 	switch lang {
-	case "java", "scala", "groovy":
+	case "java", "java25", "scala", "groovy":
 		if _, err := normalizeJVMMainClass(req.EntryPoint, "Main"); err != nil {
 			return "", "", err
 		}
@@ -309,7 +309,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", fmt.Errorf("erlang requires .beam files")
 		}
 		return ws.BoxDir, lang, nil
-	case "java":
+	case "java", "java25":
 		if jarPath != "" {
 			return jarPath, lang, nil
 		}
