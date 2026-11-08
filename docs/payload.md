@@ -60,11 +60,19 @@ or the operator's explicit request policy must authorize `installed`.
 `version` is optional and currently applies to C, C++, Java, Kotlin/JVM, and
 Rust compile profiles. C/C++ values select the language standard (`"c99"`,
 `"c23"`, `"17"`, `"gnu++23"`), Java values select `javac --release` (`"8"`,
-`"11"`, `"17"`, `"21"`), Kotlin/JVM values select the matching
+`"11"`, `"17"`, `"21"`, `"25"`), Kotlin/JVM values select the matching
 `kotlinc -jvm-target` and Java-source `javac --release` (`"17"` or
 `"jvm-target=17"`), and Rust values select the edition (`"2018"`, `"2021"`,
 `"2024"`). Existing language aliases such as `C11`, `CPP20`, `JAVA17`,
 `KOTLIN_JVM17`, and `RUST2021` remain supported.
+
+`JAVA25` or a Java profile with `version: "25"` uses the separate JDK 25
+toolchain. Execute those artifacts with `lang: "java25"` (or `"JAVA25"`).
+The generated `type-b` and `type-i` runtime images include this toolchain, as
+does the isolated `ci-java25` smoke image. Java 25 supports compact source files
+and instance `main` methods without preview flags; the default main class is
+still `Main`. Existing Java selections keep their current release targets and
+the `java` runtime. Kotlin/JVM does not accept target 25.
 
 ## `POST /compile` — Response
 
@@ -561,6 +569,7 @@ The interactor is invoked as:
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |
 | NASM | `binary` | `nasm -felf64 -dONLINE_JUDGE=1` + `gcc -nostdlib -static -no-pie` |
 | JAVA, JAVA8–21 | `java` | `javac --release <v>` |
+| JAVA25 | `java25` | `/usr/lib/jvm/aonohako-java25/bin/javac --release 25 -encoding UTF-8` |
 | GROOVY | `groovy` | `groovyc -d <dir>` |
 | SCALA | `scala` | `scalac -d <dir>` |
 | CLOJURE | `clojure` | `clojure` reader parse loop |
@@ -695,6 +704,7 @@ The interactor is invoked as:
 | `groovy` | `java <JVM memory flags> -cp <classes:groovy jars> <MainClass>` |
 | `scala` | `java <JVM memory flags> -cp <classes:scala jars> <MainClass>` |
 | `java` | `java <JVM memory flags> -jar <file>` |
+| `java25` | `/usr/lib/jvm/aonohako-java25/bin/java <JVM memory flags> -jar <file>` |
 | `kotlin-jvm` | `java <JVM memory flags> -jar <file>` |
 | `erlang` | `env ERL_AFLAGS=... erlexec/erl +S ... +A ... -noshell -pa <dir> -s <module> <function> -s init stop` |
 | `prolog` | `swipl -q -f <file> -g main -t halt` |

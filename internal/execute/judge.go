@@ -549,7 +549,7 @@ func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
 
 func isJVMRunLang(runLang string) bool {
 	switch profiles.NormalizeRunLang(runLang) {
-	case "clojure", "groovy", "java", "kotlin-jvm", "scala":
+	case "clojure", "groovy", "java", "java25", "kotlin-jvm", "scala":
 		return true
 	default:
 		return false

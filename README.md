@@ -75,6 +75,14 @@ language-specific commands keep their declared order.
   submitters compile into binaries and should target the `plain` runtime image
   rather than dedicated native runtime images. Add new languages by extending
   the YAML file instead of editing shell loops or workflow matrices.
+- `JAVA25` selects the checksum-pinned Eclipse Temurin 25.0.5+8 JDK and the
+  `java25` execute runtime in the `type-b` and `type-i` images. It compiles with
+  `--release 25` and supports compact source files and instance `main` methods
+  without preview flags. `JAVA` with `version: "25"` selects the same toolchain;
+  execute the returned classes with `java25` or `JAVA25`. The JDK is installed
+  separately under `/usr/lib/jvm/aonohako-java25`, so existing Java profiles and
+  other JVM languages retain their toolchains. `JAVA` still defaults to release
+  11, and Kotlin/JVM targets remain limited to the existing releases through 21.
 - Zerolang is pinned to the official v0.3.4 Linux x64 release. Compilation
   imports canonical `.0` text into a graph and then builds a native executable
   with the `release-fast` profile. Its stable source projection does not yet

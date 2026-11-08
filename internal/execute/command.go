@@ -10,6 +10,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
 	"aonohako/internal/pythonpolicy"
 )
 
@@ -355,14 +356,22 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			strings.Join(scalaClasspath, string(os.PathListSeparator)),
 			mainClass,
 		}
-	case "java":
+	case "java", "java25":
 		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
 		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
 		metaspaceMB := jvmMetaspaceMB(req.Limits.MemoryMB)
+		java := "java"
+		classSpace := "-XX:-UseCompressedClassPointers"
+		if lang == "java25" {
+			java = filepath.Join(profiles.Java25Home, "bin", "java")
+			// JDK 25's CDS archive expects compressed class pointers. Bound
+			// their space instead of disabling them and warning on stdout.
+			classSpace = "-XX:CompressedClassSpaceSize=64m"
+		}
 		return []string{
-			"java",
+			java,
 			"-XX:ReservedCodeCacheSize=64m",
-			"-XX:-UseCompressedClassPointers",
+			classSpace,
 			fmt.Sprintf("-Xmx%dm", xmx),
 			fmt.Sprintf("-Xss%dk", tuning.JavaStackSizeKB),
 			fmt.Sprintf("-XX:MaxDirectMemorySize=%dm", directMB),

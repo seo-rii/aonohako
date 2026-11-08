@@ -1024,14 +1024,14 @@ Production profiles currently group languages like this:
 | Profile | Languages |
 | --- | --- |
 | `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace` |
-| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
+| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `java25`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
 | `type-f` | `uhmlang` |
 | `type-g` | `julia` |
 | `type-h` | `swift` |
-| `type-i` | `c`, `cpp`, `java`, `plain`, `pypy`, `python` |
+| `type-i` | `c`, `cpp`, `java`, `java25`, `plain`, `pypy`, `python` |
 | `type-j` | `agda`, `coq`, `rocq`, `tla`, `why3` |
 | `type-k` | `dart` |
 | `type-l` | `python` |

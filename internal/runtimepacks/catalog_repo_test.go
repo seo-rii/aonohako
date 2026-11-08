@@ -55,7 +55,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "unlambda", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "quickjs", "rescript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "java25", "javascript", "purescript", "quickjs", "rescript", "scala", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
 	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
@@ -76,7 +76,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[7].Name != "type-h" || !reflect.DeepEqual(production[7].Languages, []string{"swift"}) {
 		t.Fatalf("type-h production image = %+v", production[7])
 	}
-	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"c", "cpp", "java", "plain", "pypy", "python"}) {
+	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"c", "cpp", "java", "java25", "plain", "pypy", "python"}) {
 		t.Fatalf("type-i production image = %+v", production[8])
 	}
 	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"agda", "coq", "rocq", "tla", "why3"}) {
@@ -207,6 +207,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-j",
 		"ci-janet",
 		"ci-java",
+		"ci-java25",
 		"ci-javascript",
 		"ci-julia",
 		"ci-kframework",

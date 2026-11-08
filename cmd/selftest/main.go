@@ -294,6 +294,7 @@ func runtimeStartupMemoryMB() map[string]int {
 		"powershell": 192,
 		"zig":        160,
 		"java":       64,
+		"java25":     64,
 		"kotlin-jvm": 1536,
 		"erlang":     1088,
 		"julia":      1088,
@@ -1128,7 +1129,7 @@ printfn"%A"(getans(fac(a))0I)
 				startupLimits := limits
 				startupLimits.MemoryMB = memoryMB
 				attempts := 2
-				if language == "java" {
+				if language == "java" || language == "java25" {
 					attempts = 5
 				}
 				for attempt := 1; attempt <= attempts; attempt++ {
@@ -1146,7 +1147,7 @@ printfn"%A"(getans(fac(a))0I)
 				}
 			}
 
-			if language == "java" && variantIndex == 0 {
+			if (language == "java" || language == "java25") && variantIndex == 0 {
 				deepRecursionSource := model.Source{Name: "Main.java", DataB64: encodeScript(`public class Main {
   private static int[] next;
 
@@ -1883,9 +1884,13 @@ while True:
 				return fmt.Errorf("pypy memory stress status=%s reason=%q stdout=%q stderr=%q", resp.Status, resp.Reason, resp.Stdout, resp.Stderr)
 			}
 			covered++
-		case "java":
+		case "java", "java25":
+			compileLang := "JAVA"
+			if language == "java25" {
+				compileLang = "JAVA25"
+			}
 			compileResp, err := postCompileRequest(httpServer.URL, model.CompileRequest{
-				Lang: "JAVA",
+				Lang: compileLang,
 				Sources: []model.Source{{
 					Name: "Main.java",
 					DataB64: encodeScript(`import java.nio.ByteBuffer;
@@ -1914,7 +1919,7 @@ public class Main {
 				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
 			}
 			resp, err := postExecuteRequest(httpServer.URL, model.RunRequest{
-				Lang:     "java",
+				Lang:     language,
 				Binaries: binaries,
 				Limits:   model.Limits{TimeMs: 6000, MemoryMB: 64, OutputBytes: 1024},
 			})
@@ -1926,7 +1931,7 @@ public class Main {
 			}
 
 			compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
-				Lang: "JAVA",
+				Lang: compileLang,
 				Sources: []model.Source{{
 					Name: "Main.java",
 					DataB64: encodeScript(`import java.lang.reflect.Proxy;
@@ -1961,7 +1966,7 @@ public class Main {
 				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
 			}
 			resp, err = postExecuteRequest(httpServer.URL, model.RunRequest{
-				Lang:     "java",
+				Lang:     language,
 				Binaries: binaries,
 				Limits:   model.Limits{TimeMs: 6000, MemoryMB: 64, OutputBytes: 1024},
 			})
@@ -1973,7 +1978,7 @@ public class Main {
 			}
 
 			compileResp, err = postCompileRequest(httpServer.URL, model.CompileRequest{
-				Lang: "JAVA",
+				Lang: compileLang,
 				Sources: []model.Source{{
 					Name: "Main.java",
 					DataB64: encodeScript(`import java.util.ArrayList;
@@ -2013,7 +2018,7 @@ public class Main {
 				binaries = append(binaries, model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode})
 			}
 			resp, err = postExecuteRequest(httpServer.URL, model.RunRequest{
-				Lang:     "java",
+				Lang:     language,
 				Binaries: binaries,
 				Limits:   model.Limits{TimeMs: 6000, MemoryMB: 64, OutputBytes: 1024},
 			})
@@ -2473,7 +2478,7 @@ const socket = net.connect({ host: '127.0.0.1', port: %d }, () => {
 		"declare function setTimeout(fn: () => void, ms: number): unknown;\n\n" +
 		strings.ReplaceAll(nodeProcessNetwork, "function finish(label) {", "function finish(label: string) {")
 
-	return map[string][]languageSecurityCase{
+	cases := map[string][]languageSecurityCase{
 		"plain": {
 			{
 				name:           "native-syscall-denies",
@@ -3385,6 +3390,11 @@ if {[catch {socket 127.0.0.1 %d} s]} {
 			},
 		},
 	}
+	for _, tc := range cases["java"] {
+		tc.compileLang = "JAVA25"
+		cases["java25"] = append(cases["java25"], tc)
+	}
+	return cases
 }
 
 func entrySmokeSource(mode string) string {
@@ -4437,6 +4447,20 @@ public class Main {
     Files.write(path, Integer.toString(sum).getBytes(StandardCharsets.UTF_8));
     System.out.println(new String(Files.readAllBytes(path), StandardCharsets.UTF_8).trim());
   }
+}`),
+			},
+		},
+		"java25": {
+			compileLang: "JAVA25",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 768},
+			sources: []model.Source{
+				source("Main.java", `void main() throws Exception {
+  var in = new java.util.Scanner(System.in);
+  var sum = in.nextInt() + in.nextInt();
+  var path = java.nio.file.Path.of("same-folder.txt");
+  java.nio.file.Files.writeString(path, Integer.toString(sum));
+  IO.println(java.nio.file.Files.readString(path));
 }`),
 			},
 		},
