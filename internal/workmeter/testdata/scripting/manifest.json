@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "scope": "fixed compatibility fixtures; not timing/variance qualification",
+  "source_sha256": {
+    "Main.sh": "fb3b911ffe5453dcd11bf8b0a61a36b3d0d4bda0d70a4ec66d70fae4523eef44"
+  },
+  "cases": [
+    {
+      "id": "shell-fork",
+      "profile": "POSIX_SH",
+      "source": "Main.sh",
+      "compile": [],
+      "command": [
+        "/bin/dash",
+        "Main.sh"
+      ],
+      "stdin": "",
+      "expected_stdout": "645503657\nparent-done\n",
+      "required_exit": 0,
+      "purpose": "runtime compatibility and complete accounting only, not speed/determinism qualification",
+      "sandbox_process_permission": "existing dedicated shell sandbox policy"
+    }
+  ],
+  "notes": [
+    "Compile/run commands are relative to this directory; generated executables/classes are not checked in.",
+    "Run a direct control first and preserve output and exit status when launching under the pinned Workmeter client.",
+    "A successful selector test does not qualify an image runtime. Require complete external process-tree collection after every target has exited.",
+    "The shell child fixture requires an explicitly process-enabled diagnostic environment. It does not change ordinary sandbox permissions."
+  ]
+}
