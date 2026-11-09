@@ -14,9 +14,14 @@ func TestCPPFamilyRequiresSourceProvenance(t *testing.T) {
 			t.Fatalf("%s: %s %v", language, family, ok)
 		}
 	}
-	for _, language := range []string{"binary", "go-binary", "unknown"} {
+	for _, language := range []string{"binary", "unknown"} {
 		if family, ok := FamilyForLanguage(language); ok {
 			t.Fatalf("ambiguous language %s matched %s", language, family)
+		}
+	}
+	for _, language := range []string{"go-binary", "RUST", "PYTHON3", "PYPY3"} {
+		if family, ok := FamilyForLanguage(language); ok && family == "cpp" {
+			t.Fatalf("non-C/C++ language %s matched C/C++", language)
 		}
 	}
 }
