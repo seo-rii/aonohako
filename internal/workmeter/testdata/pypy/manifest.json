@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "scope": "fixed compatibility fixtures; not timing/variance qualification",
+  "source_sha256": {
+    "Main.py": "343b5415bc1d8001dbeb3955061d437f9c91d01e0fd2312dd61ebd7a752134e4"
+  },
+  "cases": [
+    {
+      "id": "pypy",
+      "profile": "PYPY3",
+      "source": "Main.py",
+      "compile": [],
+      "command": [
+        "pypy3",
+        "-I",
+        "-S",
+        "Main.py"
+      ],
+      "stdin": "250000\n",
+      "expected_stdout": "3265584401\n",
+      "required_exit": 0,
+      "purpose": "runtime compatibility and complete accounting only, not speed/determinism qualification",
+      "sandbox_process_permission": "unchanged"
+    }
+  ],
+  "notes": [
+    "Compile/run commands are relative to this directory; generated executables/classes are not checked in.",
+    "Run a direct control first and preserve output and exit status when launching under the pinned Workmeter client.",
+    "A successful selector test does not qualify an image runtime. Require complete external process-tree collection after every target has exited.",
+    "The shell child fixture requires an explicitly process-enabled diagnostic environment. It does not change ordinary sandbox permissions."
+  ]
+}
