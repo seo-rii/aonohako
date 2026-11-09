@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// EngineProfile identifies fixed engine reservations; requests cannot override them.
+const EngineProfile = "dynamorio-11.3-vm32m-v1"
+
 // This profile was qualified only as a C/C++ diagnostic control on glibc 2.41.
 // The host version does not attest the embedded libc of static submissions.
 const portableGLIBC241 = `glibc.cpu.hwcaps=-AVX,-AVX2,-AVX512F,-AVX512VL,-AVX512BW,-AVX512DQ,-AVX512CD,-AVX512ER,-AVX512PF,-SSSE3,-SSE4_1,-SSE4_2,-BMI1,-BMI2,-LZCNT,-MOVBE,-POPCNT,-RTM,-ERMS,-Prefer_ERMS,-Prefer_FSRM,-AVX_Fast_Unaligned_Load,-Fast_Unaligned_Load,-Fast_Unaligned_Copy,-Fast_Copy_Backward,-Fast_Rep_String,Avoid_Non_Temporal_Memset:glibc.cpu.x86_data_cache_size=32768:glibc.cpu.x86_shared_cache_size=8388608:glibc.cpu.x86_non_temporal_threshold=1073741824:glibc.cpu.x86_memset_non_temporal_threshold=1073741824:glibc.cpu.x86_rep_movsb_threshold=1073741824:glibc.cpu.x86_rep_stosb_threshold=1073741824`
@@ -96,7 +99,7 @@ func prepare(ctx context.Context, root string, cfg Config, language string, uid,
 }
 
 func (s *Session) Wrap(command []string) []string {
-	args := []string{s.config.Drrun, "-quiet", "-follow_children", "-c", s.config.Client, "-outdir", s.dir, "-rep_bytes", "--"}
+	args := []string{s.config.Drrun, "-quiet", "-follow_children", "-vm_size", "32M", "-vmheap_size", "32M", "-c", s.config.Client, "-outdir", s.dir, "-rep_bytes", "--"}
 	return append(args, command...)
 }
 
@@ -116,6 +119,7 @@ func (s *Session) Environment(env []string) []string {
 func (s *Session) Collect(rootPID int) *Report {
 	report := CollectDirectory(s.dir, rootPID)
 	report.Family = s.family
+	report.EngineProfile = EngineProfile
 	report.DispatchProfile = s.config.DispatchProfile
 	if report.DispatchProfile == "" {
 		report.DispatchProfile = DispatchDefault

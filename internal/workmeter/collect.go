@@ -286,7 +286,7 @@ func aggregate(streams map[int][]event, rootPID int) (Report, error) {
 	if totals[4] != 0 {
 		quality = "signals_observed"
 	}
-	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Complete: true, Quality: quality, Instructions: &totals[0], REPBytes: &totals[1], REPEntries: &totals[2], UnsupportedREPEntries: &totals[3], SignalsObserved: totals[4], Processes: len(processes), Images: images}, nil
+	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Scope: Scope, REPEnabled: repEnabled, Complete: true, Quality: quality, Instructions: &totals[0], REPBytes: &totals[1], REPEntries: &totals[2], UnsupportedREPEntries: &totals[3], SignalsObserved: totals[4], Processes: len(processes), Images: images}, nil
 }
 
 func CollectDirectory(directory string, rootPID int) Report {

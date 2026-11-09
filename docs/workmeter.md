@@ -27,6 +27,13 @@ It installs the new runner plus the engine/client under `/opt/workmeter`, withou
 modifying the existing language image build definitions. The current client
 supports Linux x86-64 only.
 
+The launcher fixes `-vm_size 32M -vmheap_size 32M` and reports engine profile
+`dynamorio-11.3-vm32m-v1`. Upstream's large default virtual reservations can fail
+before main under the ordinary C/C++ address-space bound. These options reduce
+the engine's reservation budgets; no student CPU, RSS or address-space limit is
+increased. Long-running code-cache and large-runtime behavior still need separate
+qualification, and request bodies cannot override these engine options.
+
 | Environment variable | Meaning |
 |---|---|
 | `AONOHAKO_WORKMETER_FAMILIES` | Comma-separated enabled family IDs; empty disables measurement. This PR registers `cpp`. |
@@ -69,6 +76,9 @@ A successful lifecycle aggregate resembles:
   "schema": 1,
   "client_version": 1,
   "metric": "bb_entry_app_instructions",
+  "scope": "process_tree_user_code",
+  "rep_bytes_enabled": true,
+  "engine_profile": "dynamorio-11.3-vm32m-v1",
   "authority": "diagnostic_only",
   "complete": true,
   "quality": "uninterrupted",

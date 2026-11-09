@@ -2,12 +2,16 @@ package workmeter
 
 const Metric = "bb_entry_app_instructions"
 const Authority = "diagnostic_only"
+const Scope = "process_tree_user_code"
 
 // Report deliberately keeps work units separate from CPU time and RSS. A
 // complete report verifies lifecycle consistency, not adversarial integrity.
 type Report struct {
 	Schema                int     `json:"schema"`
 	ClientVersion         int     `json:"client_version"`
+	Scope                 string  `json:"scope"`
+	REPEnabled            bool    `json:"rep_bytes_enabled"`
+	EngineProfile         string  `json:"engine_profile"`
 	Metric                string  `json:"metric"`
 	Authority             string  `json:"authority"`
 	Complete              bool    `json:"complete"`
@@ -27,5 +31,5 @@ type Report struct {
 }
 
 func incomplete(reason string) Report {
-	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Quality: "incomplete", Reason: reason}
+	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Scope: Scope, Quality: "incomplete", Reason: reason}
 }
