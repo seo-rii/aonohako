@@ -43,6 +43,7 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_WORKMETER_DRRUN` | Absolute trusted launcher path; default `/opt/workmeter/dynamorio/bin64/drrun`. |
 | `AONOHAKO_WORKMETER_CLIENT` | Absolute trusted client path; default `/opt/workmeter/lib/libworkmeter.so`. |
 | `AONOHAKO_WORKMETER_DISPATCH_PROFILE` | `default`, or the C/C++ diagnostic profile `glibc-2.41-sse2-v1`. |
+| `AONOHAKO_WORKMETER_RESOURCE_POLICY` | Optional strict JSON operator policy for separate raw CPU/wall/RSS diagnostic limits; disabled when absent. |
 
 For example, configure `AONOHAKO_WORKMETER_FAMILIES=cpp` and add
 `"work_measurement": true` to a normal run request with `"lang": "CPP20"`.
@@ -101,8 +102,9 @@ A successful lifecycle aggregate resembles:
 `instructions` is basic-block-entry application work, including loaded libraries
 and generated code. Engine/client instructions and kernel work are outside that
 count. REP MOVS/STOS requested bytes are a separate dimension; SIMD and ordinary
-memory operations have different costs. No weighted sum or virtual milliseconds
-are defined here.
+memory operations have different costs. The execution API does not convert these
+counts into credited milliseconds. A standalone, explicit reference-policy
+calculator is described below; it is not a judgement policy.
 
 `quality: signals_observed` records interrupted execution. Charging a whole block
 at its entry can include an unexecuted tail when a signal arrives. Lifecycle
@@ -157,3 +159,91 @@ workmeter-execute.test -test.v -test.run ^TestWorkmeterSandboxIntegration$ -test
 failure. Ordinary local unit runs explicitly skip this image-dependent test.
 The integration image includes its compiler-produced fixture; runtime images do
 not need a compiler or Python just to run the meter or collector.
+
+## Separate actual resource envelope
+
+The legacy request above retains its existing resource/verdict behavior. To
+experiment beyond nominal limits without treating instrumentation cost as student
+TLE/MLE, a dedicated diagnostic runner can additionally configure:
+
+```json
+{"max_limits":{"cpu_time_ms":5000,"wall_time_ms":20000,"memory_mb":512},"memory_budget_mb":4096,"reserved_memory_mb":512}
+```
+
+Set this JSON as `AONOHAKO_WORKMETER_RESOURCE_POLICY`. Values are illustrative,
+not inferred overhead multipliers. `memory_budget_mb` must match the container's
+actual allocation. Startup rejects a policy unless the maximum active run count
+multiplied by its maximum RSS, plus the rounded-up work-root size and explicit
+server reserve, fits that budget. This check covers envelope requests; use a
+dedicated diagnostic runner rather than sharing it with unrelated workloads or
+ordinary requests with larger allocations. RSS sampling can overshoot between
+polls; the reserve is headroom, not a guarantee against container OOM.
+
+An ordinary C/C++ request may then include:
+
+```json
+{
+  "work_measurement": true,
+  "limits": {"time_ms": 1000, "wall_time_ms": 2000, "memory_mb": 128},
+  "work_measurement_limits": {"cpu_time_ms": 4000, "wall_time_ms": 8000, "memory_mb": 512}
+}
+```
+
+All three actual limits are explicit, must cover the nominal limits, and must fit
+operator caps. CPU/wall are bounded to 600,000 ms and RSS to 4,096 MiB. Actual wall
+must be at least actual CPU. This first envelope supports ordinary C/C++ only.
+The original request's nominal limits remain immutable. A private execution copy
+supplies actual limits to the CPU watchdog, wall timer, RSS checks, final resource
+checks, runtime memory settings and derived address-space limit. Startup CPU
+normalization and short-run sampling are bypassed. Remote timeouts reserve the
+actual wall allowance. `ignore_tle` cannot enable partial scoring after an actual
+resource abort.
+
+CPU and wall ceilings include instrumentation. RLIMIT_CPU remains the existing
+coarse last-resort kernel guard; RSS is monitored rather than enforced atomically
+by a per-run kernel cap on Cloud Run. The existing derived RLIMIT_AS is an address
+space guard, not a physical-memory measurement. The container memory limit remains
+the final shared OOM boundary. No CPU or memory overhead is subtracted.
+
+Every envelope response has status `Container Initialization Failed`
+(the existing `RunStatusInitFail` constant) to prevent legacy consumers from
+mistaking diagnostic completion for an authorized student verdict. Its
+`work_measurement_execution` records `authority: diagnostic_only`, the nominal
+and actual limits, and one of `complete`, `incomplete`, `resource_exhausted`,
+`cancelled`, or `failed`. A complete, normally exited and uninterrupted run has
+`output_matches`; failed or killed runs do not. `termination_source` preserves
+which underlying resource check stopped execution. Raw CPU/RSS remain in the
+ordinary measurement fields, with no normalization metadata or score. This is an
+experimental wire contract, not a replacement production judge.
+
+A complete counter report is not sufficient to override a forced termination.
+The remote control plane rejects ordinary verdicts from an older downstream
+runner that ignores the envelope, as well as mismatched envelope metadata. No
+trusted credited-time or credited-memory policy is enabled by this change.
+
+## Explicit reference-time calculator
+
+`internal/workmeter.TimePolicy` is a standalone diagnostic calculator, with no
+API or service default. It requires a model ID/version, reference ID, exact
+runtime identity, family, engine/dispatch profile, and positive integer weights:
+
+```
+estimated_ns = ceil((instructions * instruction_ns_numerator
+                   + rep_bytes * rep_byte_ns_numerator) / ns_denominator)
+```
+
+The combined numerator uses exact wide arithmetic before rounding. Results that
+exceed signed 64-bit nanoseconds are rejected; milliseconds round upward.
+Incompatible runtime/profile, incomplete counts, signals, unsupported REP, or
+missing counters yield an error and no estimate. Successful results still have
+`authority: diagnostic_only`. Model/reference identities and weights are retained
+with the estimate for audit.
+
+There is deliberately no default coefficient based on the observed 3.1× CPU
+cost or the two-submission experiment. A representative reference workload set
+and held-out validation are needed before choosing production coefficients, and
+the application-writable counter's trust boundary must be resolved before using
+it to authorize AC/TLE. The fixed host glibc check does not attest target libc.
+
+For the memory experiments and the demonstrated limitation of native replay,
+see [Memory policy evidence](workmeter-memory-policy.md).
