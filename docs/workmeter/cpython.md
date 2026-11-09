@@ -31,6 +31,17 @@ Accepted unambiguous runtime forms: `python`.
 Canonical source profiles take precedence over runtime aliases. Generic `binary`
 remains rejected because it loses source-language provenance.
 
+## Relationship to the earlier Python experiment
+
+[PR #84](https://github.com/seo-rii/aonohako/pull/84) is a separate experiment
+using CPython LLVM IR counters and PyPy JIT counters. It remains independently
+reviewable. This family PR wraps the whole interpreter executable with the
+process-tree binary counter, so executed interpreter, JIT-generated native code
+and shared-library/native-extension code contribute to its diagnostic work.
+Kernel work is outside this counter. The two approaches have different coverage,
+cost and trust limits. Both retain diagnostic counters separate from production
+milliseconds and TLE policy.
+
 ## Qualification
 
 Selection/configuration tests check representative profiles, other-family
@@ -68,7 +79,7 @@ valid, complete accounting for one process/image. The sanitized receipt is
 The receipt did not record the interpreter version or resolved executable path.
 This interpreter smoke had REP telemetry disabled, while aonohako enables it.
 It validates a simple core invocation; the actual image-owned command, sandbox/API
-integration and PyPy JIT-loop coverage require separate checks. It does not
+integration and representative JIT workload coverage require separate checks. It does not
 resolve the child-process compatibility gap below or establish score stability.
 
 ## Child-process compatibility gap
