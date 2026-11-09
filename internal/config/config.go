@@ -25,6 +25,7 @@ import (
 	"aonohako/internal/rustpolicy"
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
+	"aonohako/internal/workmeter"
 )
 
 type RemoteAuthMode string
@@ -61,6 +62,7 @@ type InboundAuthConfig struct {
 }
 
 type ExecutionConfig struct {
+	WorkMeasurement        workmeter.Config
 	Platform               platform.RuntimeOptions
 	Remote                 RemoteExecutorConfig
 	CPUNormalization       CPUNormalizationConfig
@@ -620,8 +622,13 @@ func Load() (Config, error) {
 			problemRustCrateModes[problemID] = mode
 		}
 	}
+	workMeasurement, err := workmeter.ParseConfig(os.Getenv("AONOHAKO_WORKMETER_FAMILIES"), os.Getenv("AONOHAKO_WORKMETER_DRRUN"), os.Getenv("AONOHAKO_WORKMETER_CLIENT"), os.Getenv("AONOHAKO_WORKMETER_DISPATCH_PROFILE"))
+	if err != nil {
+		return Config{}, err
+	}
 	execution := ExecutionConfig{
-		Platform: runtimePlatform,
+		WorkMeasurement: workMeasurement,
+		Platform:        runtimePlatform,
 		Remote: RemoteExecutorConfig{
 			URL:            strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_URL")),
 			Auth:           parseRemoteAuth(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUTH")),

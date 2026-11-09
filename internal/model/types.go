@@ -4,6 +4,7 @@ import (
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/rustpolicy"
+	"aonohako/internal/workmeter"
 )
 
 type Source struct {
@@ -294,6 +295,7 @@ type SidecarError struct {
 }
 
 type RunRequest struct {
+	WorkMeasurement   bool                     `json:"work_measurement,omitempty"`
 	Lang              string                   `json:"lang"`
 	EntryMode         string                   `json:"entry_mode,omitempty"`
 	Binaries          []Binary                 `json:"binaries"`
@@ -321,6 +323,7 @@ type RunRequest struct {
 }
 
 type RunResponse struct {
+	WorkMeasurement      *workmeter.Report     `json:"work_measurement,omitempty"`
 	Status               string                `json:"status"`
 	TimeMs               int64                 `json:"time_ms"`
 	WallTimeMs           int64                 `json:"wall_time_ms"`

@@ -28,10 +28,13 @@ import (
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
 	"aonohako/internal/util"
+	"aonohako/internal/workmeter"
 	"aonohako/internal/workspacequota"
 )
 
 type execResult struct {
+	WorkMeasurement  *workmeter.Report
+	targetPID        int
 	Status           string
 	ExitCode         *int
 	Stdout           []byte
@@ -108,6 +111,7 @@ func ceilCPUMilliseconds(ns uint64) int64 {
 }
 
 type sandboxStreamConfig struct {
+	workMeasurement           *workmeter.Session
 	stdin                     io.Reader
 	stdinMaxBytes             int64
 	liveStdin                 bool
@@ -229,7 +233,7 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer, meters ...*workmeter.Session) execResult {
 	wallLimit := time.Duration(executionWallTimeMs(req.Limits, false, cpuNormalizer.WallLimitMillis)) * time.Millisecond
 	// Preparation stays separate from the wall-clock safety deadline. CPU
 	// limits continue to be enforced by the sandbox watchdog and RLIMIT_CPU.
@@ -237,9 +241,17 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, wallLimit)
 	defer cancel()
 
-	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
-		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer, cpuNormalizer: cpuNormalizer,
+	var meter *workmeter.Session
+	if len(meters) > 0 {
+		meter = meters[0]
+	}
+	result := executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
+		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer, cpuNormalizer: cpuNormalizer, workMeasurement: meter,
 	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	if meter != nil {
+		result.WorkMeasurement = meter.Collect(result.targetPID)
+	}
+	return result
 }
 
 // Ordinary runs have separate initialization and target-execution budgets. The
@@ -532,6 +544,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 
+	// Select every sandbox permission and resource limit from the original
+	// runtime before wrapping it. Instrumentation grants no extra capability.
+	if streams.workMeasurement != nil {
+		finalCommand = streams.workMeasurement.Wrap(finalCommand)
+		innerEnv = streams.workMeasurement.Environment(innerEnv)
+	}
 	helperReq := sandbox.ExecRequest{
 		Command:                  finalCommand,
 		Dir:                      ws.BoxDir,
@@ -1293,6 +1311,7 @@ done:
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
 	}
+	result.targetPID = cmd.Process.Pid
 	normalizeExecResultCPU(&result, cpuNormalizer)
 	return result
 }

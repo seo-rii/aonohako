@@ -19,6 +19,7 @@ import (
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/timing"
+	"aonohako/internal/workmeter"
 )
 
 const (
@@ -120,6 +121,7 @@ func sumRawCPUTime(values ...*int64) *int64 {
 }
 
 type Service struct {
+	workMeasurement              workmeter.Config
 	competitiveRuntimeIdentity   runtimeidentity.CompetitiveIdentity
 	deploymentTarget             platform.DeploymentTarget
 	cpuNormalizer                timing.CPUNormalizer
@@ -164,6 +166,7 @@ func NewWithConfig(cfg config.Config) *Service {
 	}
 	return &Service{
 		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
+		workMeasurement:              cfg.Execution.WorkMeasurement,
 		competitiveRuntimeIdentity:   competitiveIdentity,
 		shortCaseSampling:            cfg.Execution.CPUNormalization.ShortCaseSampling,
 		runtimeTuning:                cfg.Execution.RuntimeTuning.WithSafeDefaults(),
@@ -183,6 +186,14 @@ func NewWithConfig(cfg config.Config) *Service {
 func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
+	}
+	if req.WorkMeasurement {
+		if _, err := s.workMeasurement.Family(req.Lang); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+		if req.Communication != nil || req.Pipeline != nil || req.Interactor != nil || req.SPJ != nil || runvalidation.UsesSteps(req) || req.EntryMode != "" {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "work_measurement supports only an ordinary single-program run"}
+		}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -238,7 +249,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	case runvalidation.UsesSteps(req):
 		response = s.runStepPipeline(ctx, req, hooks, tuning)
 	default:
-		if s.shortCaseSampling && s.cpuNormalizer.Enabled() {
+		if s.shortCaseSampling && s.cpuNormalizer.Enabled() && !req.WorkMeasurement {
 			response = runShortCaseBatch(ctx, req, hooks, func(ctx context.Context, req *model.RunRequest, stdin io.Reader, maxBytes int64, hooks Hooks) model.RunResponse {
 				return s.runOneWithStdin(ctx, req, stdin, maxBytes, hooks, tuning, true, false).response
 			})
@@ -367,7 +378,14 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		stdin = &sandboxPreparedStdin{file: readonlyInput}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer)
+	var meter *workmeter.Session
+	if req.WorkMeasurement {
+		meter, err = workmeter.Prepare(ctx, ws.RootDir, s.workMeasurement, req.Lang, int(defaultSandboxUID), int(defaultSandboxGID))
+		if err != nil {
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "workmeter preparation failed: " + err.Error()}}
+		}
+	}
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer, meter)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
 		return sandboxRunResult{response: initializationFailureResponse(res, wallMs)}
@@ -433,6 +451,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			TimeMs:           res.WallTimeMs,
 			WallTimeMs:       res.WallTimeMs,
 			CPUTimeMs:        res.CPUTimeMs,
+			WorkMeasurement:  res.WorkMeasurement,
 			CPUTimeNs:        res.CPUTimeNs,
 			RawCPUTimeMs:     res.RawCPUTimeMs,
 			RawCPUTimeNs:     res.RawCPUTimeNs,
@@ -789,7 +808,8 @@ func initializationFailureResponse(res execResult, wallMs int64) model.RunRespon
 	return model.RunResponse{
 		Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs,
 		CPUTimeMs: res.CPUTimeMs, CPUTimeNs: res.CPUTimeNs,
-		RawCPUTimeMs: res.RawCPUTimeMs, RawCPUTimeNs: res.RawCPUTimeNs,
+		WorkMeasurement: res.WorkMeasurement,
+		RawCPUTimeMs:    res.RawCPUTimeMs, RawCPUTimeNs: res.RawCPUTimeNs,
 		CPUAccounting: res.CPUAccounting, ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB: res.MemoryKB, ExitCode: res.ExitCode,
 		Reason: res.Reason, VerdictSource: res.VerdictSource,
