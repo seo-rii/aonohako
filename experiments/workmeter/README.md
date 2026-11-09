@@ -5,6 +5,10 @@ It does not change Aonohako's production runtimes, response fields, time units o
 verdicts. Replacing the production interpreter with an instrumented interpreter
 under unchanged CPU limits would make those limits stricter.
 
+The [completed Cloud Run validation](results/2026-11-09.md) covers 2,496
+executions, measured overhead, exit boundaries and native-library coverage
+failures. Stable partial counts are not sufficient for production timing.
+
 CPython uses the [LLVM runtime](cpython/README.md), fixed nonzero hash seed 1 and
 the production `-I -S` runner prefix. Its score includes instrumented CPython
 core and built stdlib C code. PyPy uses compile hooks and JIT segment counters

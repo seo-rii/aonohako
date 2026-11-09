@@ -1,0 +1,4251 @@
+{
+  "schema": 1,
+  "date": "2026-11-09",
+  "source_commit": "6b161cd76ccbe11301eecf98353f2a98fa70f51b",
+  "model": "llvm-ir-v1",
+  "authority": "diagnostic_only",
+  "environment": {
+    "platform": "Cloud Run gen2",
+    "region": "asia-northeast3",
+    "instances": 4,
+    "vcpu_per_instance": 1,
+    "memory_gib": 4,
+    "request_concurrency": 1,
+    "startup_cpu_boost": false,
+    "cpu_models": [
+      "AMD EPYC 7B13",
+      "Intel(R) Xeon(R) CPU @ 2.20GHz",
+      "Intel(R) Xeon(R) Platinum 8481C CPU @ 2.70GHz",
+      "Intel(R) Xeon(R) CPU @ 2.20GHz"
+    ],
+    "kernel": "6.9.12",
+    "cpython": "3.13.5",
+    "pypy": "7.3.19 / Python 3.11.11",
+    "cpython_hash_seed": 1
+  },
+  "design": {
+    "public_workloads": 58,
+    "private_selected_cases": 5,
+    "serial_repeats_per_instance": 3,
+    "stress_repeats_per_instance": 3,
+    "stress_copies_per_batch": 2,
+    "serial_executions": 1512,
+    "stress_executions": 912,
+    "fanout_executions": 72,
+    "fanout_batches": 18,
+    "fanout_repeats": 3,
+    "full_submission_rejudges": false
+  },
+  "validation": {
+    "exit_code": 0,
+    "failures": [],
+    "expected_batches": 984,
+    "observed_batches": 984,
+    "observed_executions": 2424,
+    "validated_executions": 2424,
+    "metadata_files_verified": 271
+  },
+  "provenance": {
+    "analysis_sha256": "dcd2b50c1dfb8831e37443c6cd9cae8d06557d308deb443189ce8f2566c137e2",
+    "fixture_manifest_sha256": "5fe75cdbde93fa69fd12c1271a56c6a557eb6f081e3d406eb699fcf1ceab18ef",
+    "runtime_manifest_sha256": "0b1d9912b0493ee8b077701c3bddaa420d700fa5616f64e22f6e743bd5fa538e",
+    "native_image_digest": "sha256:eee25b676c94c433fb1e50a474d81bb7e86b785865b250452562569cebc3a891",
+    "metadata_manifest_sha256": "48c1e57fcb0046e5684d24a386904d2c3e70256046a62dd09282a2d747345798",
+    "raw_files": [
+      {
+        "sha256": "bd25a704928913e6a97d565814f985ec44ebd23b6d249728075183abff70e86a",
+        "bytes": 19540439,
+        "type": "main"
+      },
+      {
+        "sha256": "628a248efacd1d82e623b30534920b1b9c0cc697922fbf891440a3c722af21ba",
+        "bytes": 19540452,
+        "type": "main"
+      },
+      {
+        "sha256": "b19fa442a138fef7e1fbf6c84f9140317d67a1bdd5b8a59b3e2b99d71cd0d67c",
+        "bytes": 19540424,
+        "type": "main"
+      },
+      {
+        "sha256": "decd4ac83f031c38ae4ae05c81ac1d30224ca3e411f00e51dcfdbda9c4ab5512",
+        "bytes": 19539904,
+        "type": "main"
+      },
+      {
+        "sha256": "8559614f5d7337679a1d038e95e87ef9b674de38485abb21668b70c92effa772",
+        "bytes": 4657154,
+        "type": "fanout"
+      }
+    ]
+  },
+  "selected_case_submissions": {
+    "13519878": {
+      "1": {
+        "jit_mapped": {
+          "selected_cases": 2,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 12,
+            "mean": 697.55725,
+            "median": 701.9515,
+            "cv_pct": 11.601441403724492,
+            "min": 566.545,
+            "max": 818.814,
+            "max_over_min": 1.4452761916529138
+          },
+          "work_units": {
+            "n": 12,
+            "mean": 243405302,
+            "median": 243405302.0,
+            "cv_pct": 0.0,
+            "min": 243405302,
+            "max": 243405302,
+            "max_over_min": 1.0,
+            "total_observations": 12,
+            "unavailable": 0,
+            "complete_series": true
+          }
+        },
+        "direct": {
+          "selected_cases": 2,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 12,
+            "mean": 582.1086666666666,
+            "median": 574.241,
+            "cv_pct": 12.789756747052145,
+            "min": 488.29499999999996,
+            "max": 698.8359999999999,
+            "max_over_min": 1.4311758260887373
+          },
+          "work_units": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "cv_pct": null,
+            "min": null,
+            "max": null,
+            "max_over_min": null,
+            "total_observations": 12,
+            "unavailable": 12,
+            "complete_series": false
+          }
+        }
+      },
+      "2": {
+        "direct": {
+          "selected_cases": 2,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 24,
+            "mean": 643.4671666666667,
+            "median": 630.8965,
+            "cv_pct": 13.351236828058786,
+            "min": 520.749,
+            "max": 837.4939999999999,
+            "max_over_min": 1.6082488876598897
+          },
+          "work_units": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "cv_pct": null,
+            "min": null,
+            "max": null,
+            "max_over_min": null,
+            "total_observations": 24,
+            "unavailable": 24,
+            "complete_series": false
+          }
+        },
+        "jit_mapped": {
+          "selected_cases": 2,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 24,
+            "mean": 801.896125,
+            "median": 804.015,
+            "cv_pct": 10.369946679036152,
+            "min": 643.435,
+            "max": 922.5169999999999,
+            "max_over_min": 1.433737673580082
+          },
+          "work_units": {
+            "n": 24,
+            "mean": 243405302.66666666,
+            "median": 243405302.0,
+            "cv_pct": 1.3135379470020309e-06,
+            "min": 243405302,
+            "max": 243405318,
+            "max_over_min": 1.0000000657339831,
+            "total_observations": 24,
+            "unavailable": 0,
+            "complete_series": true
+          }
+        }
+      }
+    },
+    "13513656": {
+      "2": {
+        "ir_count": {
+          "selected_cases": 2,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 24,
+            "mean": 1100.5065,
+            "median": 1083.2675,
+            "cv_pct": 12.266636581269823,
+            "min": 967.957,
+            "max": 1501.131,
+            "max_over_min": 1.5508240552007992
+          },
+          "work_units": {
+            "n": 24,
+            "mean": 2713971826.0416665,
+            "median": 2715038379.5,
+            "cv_pct": 0.16718374654341903,
+            "min": 2704151481,
+            "max": 2722120855,
+            "max_over_min": 1.0066451062842658,
+            "total_observations": 24,
+            "unavailable": 0,
+            "complete_series": true
+          }
+        },
+        "source_plain": {
+          "selected_cases": 2,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 24,
+            "mean": 593.4951666666666,
+            "median": 584.9644999999999,
+            "cv_pct": 14.141182098622231,
+            "min": 478.65,
+            "max": 798.809,
+            "max_over_min": 1.6688791392457956
+          },
+          "work_units": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "cv_pct": null,
+            "min": null,
+            "max": null,
+            "max_over_min": null,
+            "total_observations": 24,
+            "unavailable": 24,
+            "complete_series": false
+          }
+        }
+      },
+      "1": {
+        "source_plain": {
+          "selected_cases": 2,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 12,
+            "mean": 549.8910833333333,
+            "median": 572.1895,
+            "cv_pct": 13.594855068133494,
+            "min": 427.043,
+            "max": 646.2119999999999,
+            "max_over_min": 1.5132246635584703
+          },
+          "work_units": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "cv_pct": null,
+            "min": null,
+            "max": null,
+            "max_over_min": null,
+            "total_observations": 12,
+            "unavailable": 12,
+            "complete_series": false
+          }
+        },
+        "ir_count": {
+          "selected_cases": 2,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 12,
+            "mean": 986.9675,
+            "median": 972.8294999999999,
+            "cv_pct": 9.924643871843196,
+            "min": 866.3989999999999,
+            "max": 1158.439,
+            "max_over_min": 1.3370733345721777
+          },
+          "work_units": {
+            "n": 12,
+            "mean": 2711096374.9166665,
+            "median": 2709555574.5,
+            "cv_pct": 0.1897003808359359,
+            "min": 2704252775,
+            "max": 2718068992,
+            "max_over_min": 1.0051090701016292,
+            "total_observations": 12,
+            "unavailable": 0,
+            "complete_series": true
+          }
+        }
+      }
+    },
+    "13660784": {
+      "2": {
+        "ir_count": {
+          "selected_cases": 1,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 24,
+            "mean": 1290.9457083333332,
+            "median": 1256.6615,
+            "cv_pct": 16.53448027315688,
+            "min": 966.3489999999999,
+            "max": 1750.11,
+            "max_over_min": 1.811053770428696
+          },
+          "work_units": {
+            "n": 24,
+            "mean": 4061260028.2083335,
+            "median": 4061184740.0,
+            "cv_pct": 0.005455147608727296,
+            "min": 4060978465,
+            "max": 4061789283,
+            "max_over_min": 1.0001996607485089,
+            "total_observations": 24,
+            "unavailable": 0,
+            "complete_series": true
+          }
+        },
+        "source_plain": {
+          "selected_cases": 1,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 24,
+            "mean": 609.8635,
+            "median": 627.6444999999999,
+            "cv_pct": 14.639236754551897,
+            "min": 457.709,
+            "max": 793.659,
+            "max_over_min": 1.733981634619376
+          },
+          "work_units": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "cv_pct": null,
+            "min": null,
+            "max": null,
+            "max_over_min": null,
+            "total_observations": 24,
+            "unavailable": 24,
+            "complete_series": false
+          }
+        }
+      },
+      "1": {
+        "ir_count": {
+          "selected_cases": 1,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 12,
+            "mean": 1124.9610833333334,
+            "median": 1170.0034999999998,
+            "cv_pct": 12.10582957122379,
+            "min": 886.6859999999999,
+            "max": 1261.1399999999999,
+            "max_over_min": 1.4223073331483749
+          },
+          "work_units": {
+            "n": 12,
+            "mean": 4061380067.4166665,
+            "median": 4061363892.0,
+            "cv_pct": 0.004362512826989995,
+            "min": 4060995806,
+            "max": 4061722526,
+            "max_over_min": 1.0001789511821033,
+            "total_observations": 12,
+            "unavailable": 0,
+            "complete_series": true
+          }
+        },
+        "source_plain": {
+          "selected_cases": 1,
+          "full_case_rejudge": false,
+          "cpu_ms": {
+            "n": 12,
+            "mean": 545.33375,
+            "median": 583.269,
+            "cv_pct": 17.34483081132637,
+            "min": 370.774,
+            "max": 657.588,
+            "max_over_min": 1.7735547800007552
+          },
+          "work_units": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "cv_pct": null,
+            "min": null,
+            "max": null,
+            "max_over_min": null,
+            "total_observations": 12,
+            "unavailable": 12,
+            "complete_series": false
+          }
+        }
+      }
+    }
+  },
+  "submission_paired_cost": {
+    "submission-13519878-case-1": {
+      "1": {
+        "ratio": {
+          "n": 12,
+          "mean": 1.2415989451591305,
+          "median": 1.2447688242005581,
+          "cv_pct": 6.8991298382442015,
+          "min": 1.0551598801512845,
+          "max": 1.3686683448823445,
+          "max_over_min": 1.2971193945377362
+        },
+        "added_cpu_ms": {
+          "n": 12,
+          "mean": 122.77766666666665,
+          "median": 127.89949999999993,
+          "cv_pct": 35.88315959507375,
+          "min": 26.951999999999998,
+          "max": 190.87,
+          "max_over_min": 7.081849213416445
+        },
+        "plain_cpu_ms": {
+          "n": 12,
+          "mean": 508.79699999999997,
+          "median": 517.5295,
+          "cv_pct": 12.593703239030367,
+          "min": 421.64599999999996,
+          "max": 619.198,
+          "max_over_min": 1.4685257301148358
+        },
+        "meter_cpu_ms": {
+          "n": 12,
+          "mean": 631.5746666666666,
+          "median": 639.0745,
+          "cv_pct": 14.085710709858967,
+          "min": 492.02299999999997,
+          "max": 755.7819999999999,
+          "max_over_min": 1.536070468250468
+        }
+      },
+      "2": {
+        "ratio": {
+          "n": 24,
+          "mean": 1.2635976837207825,
+          "median": 1.2315164202194064,
+          "cv_pct": 8.346728574401604,
+          "min": 1.1197152675354363,
+          "max": 1.4678727848002617,
+          "max_over_min": 1.3109339734476801
+        },
+        "added_cpu_ms": {
+          "n": 24,
+          "mean": 151.95674999999997,
+          "median": 135.07649999999992,
+          "cv_pct": 40.44767620542798,
+          "min": 67.56299999999987,
+          "max": 284.8019999999999,
+          "max_over_min": 4.2153545579681255
+        },
+        "plain_cpu_ms": {
+          "n": 24,
+          "mean": 580.760625,
+          "median": 563.9369999999999,
+          "cv_pct": 11.86872259063187,
+          "min": 494.433,
+          "max": 743.7739999999999,
+          "max_over_min": 1.5042968410280055
+        },
+        "meter_cpu_ms": {
+          "n": 24,
+          "mean": 732.717375,
+          "median": 737.963,
+          "cv_pct": 13.232882426115053,
+          "min": 588.3119999999999,
+          "max": 922.5169999999999,
+          "max_over_min": 1.5680744230952286
+        }
+      }
+    },
+    "submission-13513656-case-1": {
+      "2": {
+        "ratio": {
+          "n": 24,
+          "mean": 1.99426704720323,
+          "median": 1.9315253170149576,
+          "cv_pct": 10.706117654520883,
+          "min": 1.6782470902998743,
+          "max": 2.339577425119459,
+          "max_over_min": 1.3940601706637943
+        },
+        "added_cpu_ms": {
+          "n": 24,
+          "mean": 472.019125,
+          "median": 446.7925,
+          "cv_pct": 16.259986170846123,
+          "min": 321.443,
+          "max": 638.2459999999999,
+          "max_over_min": 1.985565092411407
+        },
+        "plain_cpu_ms": {
+          "n": 24,
+          "mean": 482.3929583333333,
+          "median": 484.7845,
+          "cv_pct": 11.478634984272242,
+          "min": 362.565,
+          "max": 586.8169999999999,
+          "max_over_min": 1.6185153007047008
+        },
+        "meter_cpu_ms": {
+          "n": 24,
+          "mean": 954.4120833333333,
+          "median": 958.256,
+          "cv_pct": 9.451489129445179,
+          "min": 795.375,
+          "max": 1121.9099999999999,
+          "max_over_min": 1.4105421970768504
+        }
+      },
+      "1": {
+        "ratio": {
+          "n": 12,
+          "mean": 1.9710610318061117,
+          "median": 1.8853029027975752,
+          "cv_pct": 8.874933143858552,
+          "min": 1.7998764200004675,
+          "max": 2.326877950863702,
+          "max_over_min": 1.292798730516786
+        },
+        "added_cpu_ms": {
+          "n": 12,
+          "mean": 403.8811666666666,
+          "median": 407.53600000000006,
+          "cv_pct": 6.602702770949209,
+          "min": 363.0139999999999,
+          "max": 448.5469999999999,
+          "max_over_min": 1.2356190119389336
+        },
+        "plain_cpu_ms": {
+          "n": 12,
+          "mean": 425.418,
+          "median": 433.7255,
+          "cv_pct": 13.740641457582026,
+          "min": 318.339,
+          "max": 513.028,
+          "max_over_min": 1.6115775949538071
+        },
+        "meter_cpu_ms": {
+          "n": 12,
+          "mean": 829.2991666666666,
+          "median": 817.7759999999998,
+          "cv_pct": 7.511231124301209,
+          "min": 740.736,
+          "max": 929.0189999999999,
+          "max_over_min": 1.2541836767755312
+        }
+      }
+    },
+    "submission-13660784-case-0": {
+      "2": {
+        "ratio": {
+          "n": 24,
+          "mean": 2.12533250614384,
+          "median": 2.0924946972598697,
+          "cv_pct": 11.129719262721164,
+          "min": 1.7536204502583574,
+          "max": 2.7137563131207934,
+          "max_over_min": 1.5475163469500945
+        },
+        "added_cpu_ms": {
+          "n": 24,
+          "mean": 681.0822083333333,
+          "median": 632.7909999999999,
+          "cv_pct": 23.19734840374402,
+          "min": 479.14399999999995,
+          "max": 1028.4919999999997,
+          "max_over_min": 2.146519626667557
+        },
+        "plain_cpu_ms": {
+          "n": 24,
+          "mean": 609.8635,
+          "median": 627.6444999999999,
+          "cv_pct": 14.639236754551897,
+          "min": 457.709,
+          "max": 793.659,
+          "max_over_min": 1.733981634619376
+        },
+        "meter_cpu_ms": {
+          "n": 24,
+          "mean": 1290.9457083333332,
+          "median": 1256.6615,
+          "cv_pct": 16.53448027315688,
+          "min": 966.3489999999999,
+          "max": 1750.11,
+          "max_over_min": 1.811053770428696
+        }
+      },
+      "1": {
+        "ratio": {
+          "n": 12,
+          "mean": 2.090973675217223,
+          "median": 2.095715219754113,
+          "cv_pct": 9.085766562279549,
+          "min": 1.772803031685493,
+          "max": 2.4734609222868915,
+          "max_over_min": 1.3952260223377708
+        },
+        "added_cpu_ms": {
+          "n": 12,
+          "mean": 579.6273333333332,
+          "median": 579.2749999999999,
+          "cv_pct": 11.396520682397952,
+          "min": 472.64099999999996,
+          "max": 669.729,
+          "max_over_min": 1.4169930243038587
+        },
+        "plain_cpu_ms": {
+          "n": 12,
+          "mean": 545.33375,
+          "median": 583.269,
+          "cv_pct": 17.34483081132637,
+          "min": 370.774,
+          "max": 657.588,
+          "max_over_min": 1.7735547800007552
+        },
+        "meter_cpu_ms": {
+          "n": 12,
+          "mean": 1124.9610833333334,
+          "median": 1170.0034999999998,
+          "cv_pct": 12.10582957122379,
+          "min": 886.6859999999999,
+          "max": 1261.1399999999999,
+          "max_over_min": 1.4223073331483749
+        }
+      }
+    },
+    "submission-13513656-case-2": {
+      "2": {
+        "ratio": {
+          "n": 24,
+          "mean": 1.8675203967571765,
+          "median": 1.828365855007195,
+          "cv_pct": 7.732806621216589,
+          "min": 1.64107948177403,
+          "max": 2.1733921588288383,
+          "max_over_min": 1.3243673953435642
+        },
+        "added_cpu_ms": {
+          "n": 24,
+          "mean": 507.776,
+          "median": 500.48050000000006,
+          "cv_pct": 14.756525907402846,
+          "min": 384.381,
+          "max": 702.3220000000001,
+          "max_over_min": 1.8271506656156267
+        },
+        "plain_cpu_ms": {
+          "n": 24,
+          "mean": 592.7305,
+          "median": 580.0584999999999,
+          "cv_pct": 14.183187636882787,
+          "min": 478.65,
+          "max": 798.809,
+          "max_over_min": 1.6688791392457956
+        },
+        "meter_cpu_ms": {
+          "n": 24,
+          "mean": 1100.5065,
+          "median": 1083.2675,
+          "cv_pct": 12.266636581269823,
+          "min": 967.957,
+          "max": 1501.131,
+          "max_over_min": 1.5508240552007992
+        }
+      },
+      "1": {
+        "ratio": {
+          "n": 12,
+          "mean": 1.8095335933315169,
+          "median": 1.7606626623109516,
+          "cv_pct": 8.119788056068248,
+          "min": 1.584922615373523,
+          "max": 2.135386834581061,
+          "max_over_min": 1.347312994254807
+        },
+        "added_cpu_ms": {
+          "n": 12,
+          "mean": 437.07641666666666,
+          "median": 441.78,
+          "cv_pct": 11.64937313697865,
+          "min": 332.61799999999994,
+          "max": 531.29,
+          "max_over_min": 1.5972978010811203
+        },
+        "plain_cpu_ms": {
+          "n": 12,
+          "mean": 549.8910833333333,
+          "median": 572.1895,
+          "cv_pct": 13.594855068133494,
+          "min": 427.043,
+          "max": 646.2119999999999,
+          "max_over_min": 1.5132246635584703
+        },
+        "meter_cpu_ms": {
+          "n": 12,
+          "mean": 986.9675,
+          "median": 972.8294999999999,
+          "cv_pct": 9.924643871843196,
+          "min": 866.3989999999999,
+          "max": 1158.439,
+          "max_over_min": 1.3370733345721777
+        }
+      }
+    },
+    "submission-13519878-case-2": {
+      "1": {
+        "ratio": {
+          "n": 12,
+          "mean": 1.2035279527668141,
+          "median": 1.210725086397082,
+          "cv_pct": 5.20537592941568,
+          "min": 1.061054413158104,
+          "max": 1.2806612841214917,
+          "max_over_min": 1.2069704138072936
+        },
+        "added_cpu_ms": {
+          "n": 12,
+          "mean": 116.49816666666668,
+          "median": 129.85900000000004,
+          "cv_pct": 29.522682230486957,
+          "min": 42.205999999999904,
+          "max": 154.65999999999997,
+          "max_over_min": 3.6644079040894737
+        },
+        "plain_cpu_ms": {
+          "n": 12,
+          "mean": 581.0590833333333,
+          "median": 567.9435,
+          "cv_pct": 12.736651571723444,
+          "min": 488.29499999999996,
+          "max": 698.8359999999999,
+          "max_over_min": 1.4311758260887373
+        },
+        "meter_cpu_ms": {
+          "n": 12,
+          "mean": 697.55725,
+          "median": 701.9515,
+          "cv_pct": 11.601441403724492,
+          "min": 566.545,
+          "max": 818.814,
+          "max_over_min": 1.4452761916529138
+        }
+      },
+      "2": {
+        "ratio": {
+          "n": 24,
+          "mean": 1.2272830344483816,
+          "median": 1.2116272134821937,
+          "cv_pct": 7.569379421888728,
+          "min": 1.0405522522457276,
+          "max": 1.4596667014343345,
+          "max_over_min": 1.4027807813438211
+        },
+        "added_cpu_ms": {
+          "n": 24,
+          "mean": 139.65429166666667,
+          "median": 127.60300000000001,
+          "cv_pct": 36.4046139642082,
+          "min": 33.596000000000004,
+          "max": 273.236,
+          "max_over_min": 8.132992022859863
+        },
+        "plain_cpu_ms": {
+          "n": 24,
+          "mean": 634.2412083333332,
+          "median": 627.3945,
+          "cv_pct": 12.90515131847788,
+          "min": 502.99899999999997,
+          "max": 837.4939999999999,
+          "max_over_min": 1.6650013220702227
+        },
+        "meter_cpu_ms": {
+          "n": 24,
+          "mean": 773.8955,
+          "median": 765.7875,
+          "cv_pct": 9.920289031399747,
+          "min": 639.5759999999999,
+          "max": 922.3059999999999,
+          "max_over_min": 1.4420584887487962
+        }
+      }
+    }
+  },
+  "scaling": [
+    {
+      "language": "pypy",
+      "family": "hashlib_native",
+      "arm": "jit_mapped",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 447.125,
+          "work_median": 282293.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 707.9805,
+          "work_median": 282293.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 1158.5555,
+          "work_median": 282293.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.5834062063181438,
+          "work_ratio": 1.0,
+          "flat_work_while_cpu_grows": true
+        },
+        "4": {
+          "cpu_ratio": 2.591122169415711,
+          "work_ratio": 1.0,
+          "flat_work_while_cpu_grows": true
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "pypy",
+      "family": "large_int",
+      "arm": "jit_mapped",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 230.457,
+          "work_median": 56253.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 408.2645,
+          "work_median": 56253.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 906.2055,
+          "work_median": 56253.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.7715430644328443,
+          "work_ratio": 1.0,
+          "flat_work_while_cpu_grows": true
+        },
+        "4": {
+          "cpu_ratio": 3.9322107811869462,
+          "work_ratio": 1.0,
+          "flat_work_while_cpu_grows": true
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "pypy",
+      "family": "pure_python",
+      "arm": "jit_mapped",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 107.64150000000001,
+          "work_median": 12732331.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 110.076,
+          "work_median": 25482331.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 113.58,
+          "work_median": 50982331.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.0226167416842016,
+          "work_ratio": 2.0013877270391416,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 1.055169242346121,
+          "work_ratio": 4.004163181117424,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "pypy",
+      "family": "regex_native",
+      "arm": "jit_mapped",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 236.74849999999998,
+          "work_median": 139147707.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 370.7065,
+          "work_median": 278346171.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 636.473,
+          "work_median": 556743099.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.56582407069105,
+          "work_ratio": 2.0003647706533894,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 2.6883929570831495,
+          "work_ratio": 4.001094311960167,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "pypy",
+      "family": "sorted_builtin",
+      "arm": "jit_mapped",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 142.6105,
+          "work_median": 2192878.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 183.764,
+          "work_median": 4421102.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 267.7185,
+          "work_median": 8877550.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.2885727208024655,
+          "work_ratio": 2.016118543758476,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 1.8772706077042014,
+          "work_ratio": 4.048355631275429,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "pypy",
+      "family": "string_native",
+      "arm": "jit_mapped",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 228.75349999999997,
+          "work_median": null,
+          "work_complete": false
+        },
+        "2": {
+          "cpu_median_ms": 354.26649999999995,
+          "work_median": null,
+          "work_complete": false
+        },
+        "4": {
+          "cpu_median_ms": 631.181,
+          "work_median": null,
+          "work_complete": false
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.548682315243264,
+          "work_ratio": null,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 2.759218984627558,
+          "work_ratio": null,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "pypy",
+      "family": "zlib_native",
+      "arm": "jit_mapped",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 341.116,
+          "work_median": 887.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 593.6179999999999,
+          "work_median": 887.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 1054.5155,
+          "work_median": 887.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.740223267158386,
+          "work_ratio": 1.0,
+          "flat_work_while_cpu_grows": true
+        },
+        "4": {
+          "cpu_ratio": 3.091369211646478,
+          "work_ratio": 1.0,
+          "flat_work_while_cpu_grows": true
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "python",
+      "family": "hashlib_native",
+      "arm": "ir_count",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 314.233,
+          "work_median": 101174218.5,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 539.7765,
+          "work_median": 101175785.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 1006.1709999999999,
+          "work_median": 101206125.5,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.7177587968163752,
+          "work_ratio": 1.0000154831934778,
+          "flat_work_while_cpu_grows": true
+        },
+        "4": {
+          "cpu_ratio": 3.201990242908924,
+          "work_ratio": 1.0003153669034766,
+          "flat_work_while_cpu_grows": true
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "python",
+      "family": "large_int",
+      "arm": "ir_count",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 311.03999999999996,
+          "work_median": 2051111744.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 811.8675000000001,
+          "work_median": 6518125723.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 2539.9665,
+          "work_median": 22888679346.5,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 2.610170717592593,
+          "work_ratio": 3.1778501303340008,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 8.166044560185187,
+          "work_ratio": 11.159157668252325,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "python",
+      "family": "pure_python",
+      "arm": "ir_count",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 455.7434999999999,
+          "work_median": 1448407220.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 867.1589999999999,
+          "work_median": 2820885471.5,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 1615.581,
+          "work_median": 5542459698.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.9027347619878288,
+          "work_ratio": 1.9475776097691642,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 3.544934815307295,
+          "work_ratio": 3.8265893883075233,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "python",
+      "family": "regex_native",
+      "arm": "ir_count",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 519.367,
+          "work_median": 1520619147.5,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 964.4585,
+          "work_median": 2941320480.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 1861.5659999999998,
+          "work_median": 5794242479.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.8569884108924903,
+          "work_ratio": 1.9342913607498158,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 3.5842978086786412,
+          "work_ratio": 3.8104495057333216,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "python",
+      "family": "sorted_builtin",
+      "arm": "ir_count",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 192.6045,
+          "work_median": 510944668.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 348.3565,
+          "work_median": 962573087.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 689.8634999999999,
+          "work_median": 1895201244.5,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.8086623105898356,
+          "work_ratio": 1.883908664254815,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 3.581762108361954,
+          "work_ratio": 3.7092103376250516,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "python",
+      "family": "string_native",
+      "arm": "ir_count",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 259.782,
+          "work_median": 853031256.0,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 427.62249999999995,
+          "work_median": 1606431064.0,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 790.796,
+          "work_median": 3113263459.0,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.646082099606593,
+          "work_ratio": 1.883203051120087,
+          "flat_work_while_cpu_grows": false
+        },
+        "4": {
+          "cpu_ratio": 3.0440754170804754,
+          "work_ratio": 3.6496475798537444,
+          "flat_work_while_cpu_grows": false
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    },
+    {
+      "language": "python",
+      "family": "zlib_native",
+      "arm": "ir_count",
+      "serial_medians": {
+        "1": {
+          "cpu_median_ms": 278.534,
+          "work_median": 100102823.5,
+          "work_complete": true
+        },
+        "2": {
+          "cpu_median_ms": 465.6385,
+          "work_median": 100124024.5,
+          "work_complete": true
+        },
+        "4": {
+          "cpu_median_ms": 877.2465,
+          "work_median": 100119038.5,
+          "work_complete": true
+        }
+      },
+      "ratios_to_scale1": {
+        "2": {
+          "cpu_ratio": 1.6717474347835455,
+          "work_ratio": 1.0002117922278186,
+          "flat_work_while_cpu_grows": true
+        },
+        "4": {
+          "cpu_ratio": 3.1495131653586275,
+          "work_ratio": 1.0001619834429545,
+          "flat_work_while_cpu_grows": true
+        }
+      },
+      "flatness_heuristic": "work ratio <=1.1 while CPU ratio >=1.5; descriptive coverage signal only"
+    }
+  ],
+  "public_serial_workloads": {
+    "public-pypy-large_int-2": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 418.26599999999996,
+          "median": 408.2645,
+          "cv_pct": 15.63321933054245,
+          "min": 342.5319999999999,
+          "max": 523.903,
+          "max_over_min": 1.5295008933471914
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 56110.5,
+          "median": 56253.0,
+          "cv_pct": 0.4398770997915987,
+          "min": 55683,
+          "max": 56253,
+          "max_over_min": 1.0102365174290178,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 403.59641666666664,
+          "median": 404.3325,
+          "cv_pct": 15.183258879472355,
+          "min": 331.60599999999994,
+          "max": 483.76699999999994,
+          "max_over_min": 1.458860816752411
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-large_int-4": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 2292.8378333333335,
+          "median": 2349.3860000000004,
+          "cv_pct": 9.06124946579641,
+          "min": 1966.9039999999998,
+          "max": 2566.371,
+          "max_over_min": 1.3047769489512453
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 2543.7741666666666,
+          "median": 2539.9665,
+          "cv_pct": 5.281300334061139,
+          "min": 2332.9179999999997,
+          "max": 2768.227,
+          "max_over_min": 1.1865942137700511
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 22888808682.583332,
+          "median": 22888679346.5,
+          "cv_pct": 0.0012072529122996336,
+          "min": 22888575173,
+          "max": 22889292905,
+          "max_over_min": 1.00003135765309,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-sorted_builtin-1": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 117.57991666666666,
+          "median": 118.036,
+          "cv_pct": 15.48761070406302,
+          "min": 79.77399999999999,
+          "max": 151.085,
+          "max_over_min": 1.8939128036703692
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 191.21016666666665,
+          "median": 192.6045,
+          "cv_pct": 13.52119565456326,
+          "min": 146.44,
+          "max": 237.79500000000002,
+          "max_over_min": 1.6238391149959028
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 510997211.5833333,
+          "median": 510944668.0,
+          "cv_pct": 0.06287083111128108,
+          "min": 510633753,
+          "max": 511573354,
+          "max_over_min": 1.0018400683356314,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-string_native-4": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 622.43725,
+          "median": 621.9264999999999,
+          "cv_pct": 9.183062909845992,
+          "min": 526.3589999999999,
+          "max": 701.608,
+          "max_over_min": 1.332945765152681
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 630.8377499999999,
+          "median": 631.181,
+          "cv_pct": 8.431815918100684,
+          "min": 547.071,
+          "max": 711.196,
+          "max_over_min": 1.3000067632903225
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-zlib_native-4": {
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 859.0424166666666,
+          "median": 877.2465,
+          "cv_pct": 23.775482641687475,
+          "min": 536.8729999999999,
+          "max": 1160.83,
+          "max_over_min": 2.1622059593237135
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 100117112.25,
+          "median": 100119038.5,
+          "cv_pct": 0.05926027699365052,
+          "min": 100019197,
+          "max": 100202536,
+          "max_over_min": 1.0018330381116738,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 833.3686666666666,
+          "median": 873.01,
+          "cv_pct": 25.05720319065639,
+          "min": 501.10999999999996,
+          "max": 1107.33,
+          "max_over_min": 2.2097543453533155
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-sorted_builtin-2": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 162.62716666666665,
+          "median": 166.291,
+          "cv_pct": 14.185574785316165,
+          "min": 124.232,
+          "max": 190.915,
+          "max_over_min": 1.5367618648979329
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 179.58625,
+          "median": 183.764,
+          "cv_pct": 12.334290960017952,
+          "min": 136.82699999999997,
+          "max": 211.903,
+          "max_over_min": 1.548692874944273
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 4421102,
+          "median": 4421102.0,
+          "cv_pct": 0.0,
+          "min": 4421102,
+          "max": 4421102,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-regex_native-4": {
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 1876.5404999999998,
+          "median": 1861.5659999999998,
+          "cv_pct": 13.065450776025395,
+          "min": 1558.8329999999999,
+          "max": 2284.88,
+          "max_over_min": 1.4657631702690412
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 5793843422,
+          "median": 5794242479.0,
+          "cv_pct": 0.020533889549584055,
+          "min": 5791466362,
+          "max": 5795027148,
+          "max_over_min": 1.0006148332352172,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 1151.0919166666665,
+          "median": 1174.828,
+          "cv_pct": 13.057600457204037,
+          "min": 902.3689999999999,
+          "max": 1331.1629999999998,
+          "max_over_min": 1.4751869800491815
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-pure_python-1": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 217.88125,
+          "median": 233.3775,
+          "cv_pct": 15.8132446838066,
+          "min": 154.723,
+          "max": 253.79799999999997,
+          "max_over_min": 1.6403378941721654
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 454.6621666666667,
+          "median": 455.7434999999999,
+          "cv_pct": 10.236313063117224,
+          "min": 388.438,
+          "max": 523.9670000000001,
+          "max_over_min": 1.3489076763859358
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 1453549218.25,
+          "median": 1448407220.0,
+          "cv_pct": 0.4470441221793283,
+          "min": 1448293013,
+          "max": 1463565666,
+          "max_over_min": 1.0105452783814541,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-hashlib_native-4": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 983.5104166666666,
+          "median": 974.0989999999999,
+          "cv_pct": 57.01385018132756,
+          "min": 396.17699999999996,
+          "max": 1593.443,
+          "max_over_min": 4.022048225919224
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 1048.8075,
+          "median": 1006.1709999999999,
+          "cv_pct": 58.26157005392241,
+          "min": 427.05199999999996,
+          "max": 2042.4679999999998,
+          "max_over_min": 4.782714985528695
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 101215169.33333333,
+          "median": 101206125.5,
+          "cv_pct": 0.04968282587785063,
+          "min": 101135077,
+          "max": 101289780,
+          "max_over_min": 1.001529667100565,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-pure_python-1": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 103.52758333333333,
+          "median": 107.64150000000001,
+          "cv_pct": 13.73635146299008,
+          "min": 78.982,
+          "max": 119.82799999999999,
+          "max_over_min": 1.5171558076523763
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 12732331,
+          "median": 12732331.0,
+          "cv_pct": 0.0,
+          "min": 12732331,
+          "max": 12732331,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 86.78166666666667,
+          "median": 90.608,
+          "cv_pct": 18.292562575299133,
+          "min": 61.559000000000005,
+          "max": 108.014,
+          "max_over_min": 1.7546418882697898
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-pure_python-2": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 390.87424999999996,
+          "median": 422.5915,
+          "cv_pct": 17.748244071547898,
+          "min": 259.397,
+          "max": 455.322,
+          "max_over_min": 1.7553094291761278
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 866.8890833333332,
+          "median": 867.1589999999999,
+          "cv_pct": 11.017593049000745,
+          "min": 734.279,
+          "max": 989.3929999999999,
+          "max_over_min": 1.3474346944417583
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 2816674439.4166665,
+          "median": 2820885471.5,
+          "cv_pct": 0.43930061821739663,
+          "min": 2797377051,
+          "max": 2827550091,
+          "max_over_min": 1.0107861898664015,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-string_native-1": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 214.21183333333332,
+          "median": 223.325,
+          "cv_pct": 10.271431317889256,
+          "min": 175.031,
+          "max": 237.44,
+          "max_over_min": 1.356559695139718
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 224.1365,
+          "median": 228.75349999999997,
+          "cv_pct": 10.68121611505855,
+          "min": 178.287,
+          "max": 257.432,
+          "max_over_min": 1.4439190743015475
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-pure_python-4": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 744.39625,
+          "median": 799.0394999999999,
+          "cv_pct": 19.048737283760037,
+          "min": 485.203,
+          "max": 928.418,
+          "max_over_min": 1.9134630247545874
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 1591.2985833333332,
+          "median": 1615.581,
+          "cv_pct": 11.72591597660908,
+          "min": 1351.57,
+          "max": 1859.857,
+          "max_over_min": 1.376071531626183
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 5539725046.083333,
+          "median": 5542459698.0,
+          "cv_pct": 0.7332517957178816,
+          "min": 5495491778,
+          "max": 5636671804,
+          "max_over_min": 1.0256901532571086,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-large_int-4": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 914.3289166666666,
+          "median": 934.0175,
+          "cv_pct": 15.66796401107648,
+          "min": 727.803,
+          "max": 1071.193,
+          "max_over_min": 1.4718172362576136
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 920.40575,
+          "median": 906.2055,
+          "cv_pct": 16.258513106514453,
+          "min": 756.094,
+          "max": 1111.691,
+          "max_over_min": 1.4703079246760322
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 56020.25,
+          "median": 56253.0,
+          "cv_pct": 0.7196233959356773,
+          "min": 55322,
+          "max": 56253,
+          "max_over_min": 1.016828748056831,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-sorted_builtin-4": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 260.0543333333333,
+          "median": 267.7185,
+          "cv_pct": 11.124191363316358,
+          "min": 210.59299999999996,
+          "max": 303.137,
+          "max_over_min": 1.439444805857745
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 8877550,
+          "median": 8877550.0,
+          "cv_pct": 0.0,
+          "min": 8877550,
+          "max": 8877550,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 241.5498333333333,
+          "median": 256.7485,
+          "cv_pct": 14.333578589599641,
+          "min": 182.25399999999996,
+          "max": 277.696,
+          "max_over_min": 1.5236757492290982
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-zlib_native-1": {
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 267.42825,
+          "median": 278.534,
+          "cv_pct": 19.887269380422982,
+          "min": 179.814,
+          "max": 337.57300000000004,
+          "max_over_min": 1.8773454792174138
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 100107782.75,
+          "median": 100102823.5,
+          "cv_pct": 0.06859188271629194,
+          "min": 100013900,
+          "max": 100235604,
+          "max_over_min": 1.0022167318742694,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 235.03191666666666,
+          "median": 243.56349999999998,
+          "cv_pct": 22.891525649052827,
+          "min": 144.40699999999998,
+          "max": 299.74100000000004,
+          "max_over_min": 2.0756680770322773
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-zlib_native-2": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 545.40175,
+          "median": 569.3985,
+          "cv_pct": 19.70299132553095,
+          "min": 357.923,
+          "max": 671.44,
+          "max_over_min": 1.8759342093131763
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 557.6228333333333,
+          "median": 593.6179999999999,
+          "cv_pct": 19.29554199605905,
+          "min": 369.49499999999995,
+          "max": 672.818,
+          "max_over_min": 1.8209123262831706
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 887,
+          "median": 887.0,
+          "cv_pct": 0.0,
+          "min": 887,
+          "max": 887,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-sorted_builtin-2": {
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 335.07966666666664,
+          "median": 348.3565,
+          "cv_pct": 15.750722582469859,
+          "min": 264.602,
+          "max": 429.513,
+          "max_over_min": 1.6232416988533722
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 962348793,
+          "median": 962573087.0,
+          "cv_pct": 0.05881938270066122,
+          "min": 961217873,
+          "max": 963037839,
+          "max_over_min": 1.0018933959210723,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 204.82899999999998,
+          "median": 197.745,
+          "cv_pct": 19.275724791372603,
+          "min": 151.515,
+          "max": 280.609,
+          "max_over_min": 1.852021252021252
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-hashlib_native-1": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 368.7484166666666,
+          "median": 367.2275,
+          "cv_pct": 41.013791042299275,
+          "min": 208.43499999999997,
+          "max": 551.4839999999999,
+          "max_over_min": 2.645832033967424
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 446.9950833333333,
+          "median": 447.125,
+          "cv_pct": 35.109869599034994,
+          "min": 274.603,
+          "max": 625.9419999999999,
+          "max_over_min": 2.279443414675003
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 282293,
+          "median": 282293.0,
+          "cv_pct": 0.0,
+          "min": 282293,
+          "max": 282293,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-sorted_builtin-1": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 147.38825,
+          "median": 142.6105,
+          "cv_pct": 19.367920361376477,
+          "min": 115.455,
+          "max": 208.65,
+          "max_over_min": 1.8071976094582305
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 2192878,
+          "median": 2192878.0,
+          "cv_pct": 0.0,
+          "min": 2192878,
+          "max": 2192878,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 122.329,
+          "median": 123.5575,
+          "cv_pct": 17.60200720694964,
+          "min": 90.25899999999999,
+          "max": 154.909,
+          "max_over_min": 1.7162720615118716
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-string_native-4": {
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 796.72,
+          "median": 790.796,
+          "cv_pct": 3.5236520486861305,
+          "min": 755.01,
+          "max": 844.024,
+          "max_over_min": 1.1178977761883948
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 3113260771.6666665,
+          "median": 3113263459.0,
+          "cv_pct": 0.0015729649888484582,
+          "min": 3113153713,
+          "max": 3113333502,
+          "max_over_min": 1.0000577514047087,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 438.73866666666663,
+          "median": 441.97299999999996,
+          "cv_pct": 3.9118096617581384,
+          "min": 406.6689999999999,
+          "max": 458.84999999999997,
+          "max_over_min": 1.1283131982029613
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-sorted_builtin-4": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 439.3380833333333,
+          "median": 414.25199999999995,
+          "cv_pct": 18.151019066184162,
+          "min": 344.87199999999996,
+          "max": 583.7620000000001,
+          "max_over_min": 1.6926917812985691
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 656.6284166666667,
+          "median": 689.8634999999999,
+          "cv_pct": 16.29708755287825,
+          "min": 506.78900000000004,
+          "max": 819.1429999999999,
+          "max_over_min": 1.6163393443819811
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 1895639572.1666667,
+          "median": 1895201244.5,
+          "cv_pct": 0.0617673291989278,
+          "min": 1894229003,
+          "max": 1897614180,
+          "max_over_min": 1.0017871001841059,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-zlib_native-1": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 327.6211666666667,
+          "median": 341.116,
+          "cv_pct": 18.673227415030517,
+          "min": 222.13199999999998,
+          "max": 414.881,
+          "max_over_min": 1.8677227954549547
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 887,
+          "median": 887.0,
+          "cv_pct": 0.0,
+          "min": 887,
+          "max": 887,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 312.83975,
+          "median": 326.1225,
+          "cv_pct": 19.31861849652508,
+          "min": 211.053,
+          "max": 408.198,
+          "max_over_min": 1.9341018606700686
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-regex_native-2": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 600.8868333333332,
+          "median": 630.7365,
+          "cv_pct": 14.51654409178562,
+          "min": 452.13399999999996,
+          "max": 691.4390000000001,
+          "max_over_min": 1.5292789305825267
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 963.5015833333333,
+          "median": 964.4585,
+          "cv_pct": 14.556113824579812,
+          "min": 758.2779999999999,
+          "max": 1144.3129999999999,
+          "max_over_min": 1.5090942899569815
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 2942203362.5833335,
+          "median": 2941320480.0,
+          "cv_pct": 0.0730493611811169,
+          "min": 2939663135,
+          "max": 2946183659,
+          "max_over_min": 1.002218119458099,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-pure_python-2": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 88.4575,
+          "median": 90.45049999999999,
+          "cv_pct": 17.103786816547238,
+          "min": 62.693,
+          "max": 110.261,
+          "max_over_min": 1.758744995454038
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 108.53625,
+          "median": 110.076,
+          "cv_pct": 10.73009388510882,
+          "min": 83.179,
+          "max": 128.81699999999998,
+          "max_over_min": 1.5486721408047701
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 25482331,
+          "median": 25482331.0,
+          "cv_pct": 0.0,
+          "min": 25482331,
+          "max": 25482331,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-hashlib_native-2": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 709.0234166666667,
+          "median": 707.9805,
+          "cv_pct": 43.848119996078765,
+          "min": 366.589,
+          "max": 1074.4289999999999,
+          "max_over_min": 2.930881723128626
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 282293,
+          "median": 282293.0,
+          "cv_pct": 0.0,
+          "min": 282293,
+          "max": 282293,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 629.2283333333334,
+          "median": 621.913,
+          "cv_pct": 49.55900428748176,
+          "min": 299.593,
+          "max": 983.501,
+          "max_over_min": 3.2827903188659278
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-regex_native-1": {
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 528.0419166666667,
+          "median": 519.367,
+          "cv_pct": 16.16890936674091,
+          "min": 403.86699999999996,
+          "max": 666.651,
+          "max_over_min": 1.6506696511475314
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 1520749007,
+          "median": 1520619147.5,
+          "cv_pct": 0.06882774644302474,
+          "min": 1518752320,
+          "max": 1522769042,
+          "max_over_min": 1.0026447511862895,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 318.17991666666666,
+          "median": 324.008,
+          "cv_pct": 16.80038454996586,
+          "min": 233.165,
+          "max": 436.91999999999996,
+          "max_over_min": 1.873866146291253
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-hashlib_native-4": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 1081.0388333333333,
+          "median": 1065.6834999999999,
+          "cv_pct": 54.065017043322165,
+          "min": 471.1569999999999,
+          "max": 1753.5629999999999,
+          "max_over_min": 3.7218230865719923
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 1147.1215,
+          "median": 1158.5555,
+          "cv_pct": 50.33328710665418,
+          "min": 535.6869999999999,
+          "max": 1761.8129999999999,
+          "max_over_min": 3.288885113881801
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 282293,
+          "median": 282293.0,
+          "cv_pct": 0.0,
+          "min": 282293,
+          "max": 282293,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-zlib_native-4": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 987.1301666666666,
+          "median": 1031.215,
+          "cv_pct": 21.31370136669206,
+          "min": 640.4479999999999,
+          "max": 1247.4450000000002,
+          "max_over_min": 1.9477693739382438
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 999.3676666666667,
+          "median": 1054.5155,
+          "cv_pct": 20.68622103787197,
+          "min": 658.776,
+          "max": 1248.3659999999998,
+          "max_over_min": 1.8949779591241938
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 887,
+          "median": 887.0,
+          "cv_pct": 0.0,
+          "min": 887,
+          "max": 887,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-pure_python-4": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 95.58266666666667,
+          "median": 97.419,
+          "cv_pct": 16.86485073343599,
+          "min": 69.115,
+          "max": 127.854,
+          "max_over_min": 1.849873399406786
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 114.323,
+          "median": 113.58,
+          "cv_pct": 15.905685723713429,
+          "min": 87.85799999999999,
+          "max": 163.57,
+          "max_over_min": 1.8617541942680236
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 50982331,
+          "median": 50982331.0,
+          "cv_pct": 0.0,
+          "min": 50982331,
+          "max": 50982331,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-regex_native-4": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 588.2716666666666,
+          "median": 583.2075,
+          "cv_pct": 15.928069394589821,
+          "min": 451.65199999999993,
+          "max": 705.159,
+          "max_over_min": 1.5612883370382509
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 634.8714166666666,
+          "median": 636.473,
+          "cv_pct": 15.426326378298429,
+          "min": 491.46,
+          "max": 794.8759999999999,
+          "max_over_min": 1.6173767956700442
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 556743099,
+          "median": 556743099.0,
+          "cv_pct": 0.0,
+          "min": 556743099,
+          "max": 556743099,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-large_int-1": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 236.37316666666666,
+          "median": 239.541,
+          "cv_pct": 7.199585821772295,
+          "min": 208.62199999999999,
+          "max": 272.11199999999997,
+          "max_over_min": 1.3043303199087344
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 316.40291666666667,
+          "median": 311.03999999999996,
+          "cv_pct": 5.28144338542809,
+          "min": 301.73,
+          "max": 365.447,
+          "max_over_min": 1.2111722400821927
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 2051047483.3333333,
+          "median": 2051111744.0,
+          "cv_pct": 0.00792325037151655,
+          "min": 2050796232,
+          "max": 2051240410,
+          "max_over_min": 1.0002165880710474,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-string_native-2": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 243.9255,
+          "median": 245.3605,
+          "cv_pct": 7.015460260669512,
+          "min": 206.82899999999998,
+          "max": 272.394,
+          "max_over_min": 1.31700100082677
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 437.7730833333333,
+          "median": 427.62249999999995,
+          "cv_pct": 6.778022185457831,
+          "min": 401.37600000000003,
+          "max": 517.423,
+          "max_over_min": 1.2891229171649525
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 1606445729.9166667,
+          "median": 1606431064.0,
+          "cv_pct": 0.003960281779536456,
+          "min": 1606336523,
+          "max": 1606536303,
+          "max_over_min": 1.0001243699543274,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-string_native-2": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 360.03866666666664,
+          "median": 354.26649999999995,
+          "cv_pct": 10.602866089659393,
+          "min": 299.95,
+          "max": 438.647,
+          "max_over_min": 1.4624004000666777
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 342.48658333333333,
+          "median": 345.12699999999995,
+          "cv_pct": 10.377844247290893,
+          "min": 289.75999999999993,
+          "max": 386.12899999999996,
+          "max_over_min": 1.3325821369409168
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-regex_native-1": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 244.87516666666664,
+          "median": 236.74849999999998,
+          "cv_pct": 12.441961385634617,
+          "min": 206.761,
+          "max": 293.99299999999994,
+          "max_over_min": 1.4218977466736955
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 139147707,
+          "median": 139147707.0,
+          "cv_pct": 0.0,
+          "min": 139147707,
+          "max": 139147707,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 215.45974999999999,
+          "median": 213.44,
+          "cv_pct": 15.47488098758488,
+          "min": 170.95,
+          "max": 274.914,
+          "max_over_min": 1.6081544311202107
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-hashlib_native-1": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 280.99441666666667,
+          "median": 277.743,
+          "cv_pct": 49.531118057968364,
+          "min": 136.155,
+          "max": 436.20599999999996,
+          "max_over_min": 3.2037457309683814
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 322.6218333333333,
+          "median": 314.233,
+          "cv_pct": 42.949085178476416,
+          "min": 169.69899999999998,
+          "max": 477.76399999999995,
+          "max_over_min": 2.8153613162128237
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 101176409.66666667,
+          "median": 101174218.5,
+          "cv_pct": 0.04926317549755193,
+          "min": 101103062,
+          "max": 101262779,
+          "max_over_min": 1.001579744439392,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-hashlib_native-2": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 530.7425,
+          "median": 510.3455,
+          "cv_pct": 55.06041600312316,
+          "min": 224.02,
+          "max": 882.06,
+          "max_over_min": 3.937416302115882
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 566.8248333333333,
+          "median": 539.7765,
+          "cv_pct": 52.43661665142018,
+          "min": 253.58700000000002,
+          "max": 937.948,
+          "max_over_min": 3.698722726322721
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 101188292.91666667,
+          "median": 101175785.0,
+          "cv_pct": 0.048037170199174875,
+          "min": 101123534,
+          "max": 101271896,
+          "max_over_min": 1.0014671362256782,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-large_int-2": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 687.7213333333333,
+          "median": 708.0185,
+          "cv_pct": 7.666601586469145,
+          "min": 594.527,
+          "max": 756.803,
+          "max_over_min": 1.272949756697341
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 813.473,
+          "median": 811.8675000000001,
+          "cv_pct": 3.420686646969967,
+          "min": 770.274,
+          "max": 860.077,
+          "max_over_min": 1.1165857863565432
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 6518161630.333333,
+          "median": 6518125723.0,
+          "cv_pct": 0.002010225369288541,
+          "min": 6518037852,
+          "max": 6518462623,
+          "max_over_min": 1.0000651685383921,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-zlib_native-2": {
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 434.4803333333333,
+          "median": 440.0925,
+          "cv_pct": 23.79462654661258,
+          "min": 271.027,
+          "max": 562.985,
+          "max_over_min": 2.0772284680124122
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      },
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 462.38874999999996,
+          "median": 465.6385,
+          "cv_pct": 20.91604745158317,
+          "min": 305.327,
+          "max": 588.221,
+          "max_over_min": 1.9265279519990044
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 100124436.58333333,
+          "median": 100124024.5,
+          "cv_pct": 0.06004927592253655,
+          "min": 100020545,
+          "max": 100246806,
+          "max_over_min": 1.00226214524226,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-regex_native-2": {
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 383.9058333333333,
+          "median": 370.7065,
+          "cv_pct": 18.317576310328764,
+          "min": 288.11499999999995,
+          "max": 495.931,
+          "max_over_min": 1.7212953161064162
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 278346171,
+          "median": 278346171.0,
+          "cv_pct": 0.0,
+          "min": 278346171,
+          "max": 278346171,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 347.46891666666664,
+          "median": 339.1445,
+          "cv_pct": 18.9773512275559,
+          "min": 253.739,
+          "max": 444.898,
+          "max_over_min": 1.7533686189352051
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-pypy-large_int-1": {
+      "direct": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 205.70575,
+          "median": 206.177,
+          "cv_pct": 16.14713262522855,
+          "min": 165.132,
+          "max": 250.55299999999997,
+          "max_over_min": 1.517289198943875
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_report": 12
+        },
+        "observations": 12
+      },
+      "jit_mapped": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 219.36974999999998,
+          "median": 230.457,
+          "cv_pct": 12.568474350094784,
+          "min": 180.932,
+          "max": 258.412,
+          "max_over_min": 1.4282271792717707
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 56253,
+          "median": 56253.0,
+          "cv_pct": 0.0,
+          "min": 56253,
+          "max": 56253,
+          "max_over_min": 1.0,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      }
+    },
+    "public-python-string_native-1": {
+      "ir_count": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 260.159,
+          "median": 259.782,
+          "cv_pct": 5.976399860477637,
+          "min": 236.833,
+          "max": 289.022,
+          "max_over_min": 1.2203620272512699
+        },
+        "work_units": {
+          "n": 12,
+          "mean": 853034911.4166666,
+          "median": 853031256.0,
+          "cv_pct": 0.005867624514975169,
+          "min": 852971638,
+          "max": 853135256,
+          "max_over_min": 1.000191821149392,
+          "total_observations": 12,
+          "unavailable": 0,
+          "complete_series": true
+        },
+        "metric_states": {
+          "available_partial": 12
+        },
+        "observations": 12
+      },
+      "source_plain": {
+        "cpu_ms": {
+          "n": 12,
+          "mean": 145.11508333333333,
+          "median": 144.885,
+          "cv_pct": 6.951630092281433,
+          "min": 121.434,
+          "max": 158.5,
+          "max_over_min": 1.3052357659304643
+        },
+        "work_units": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "cv_pct": null,
+          "min": null,
+          "max": null,
+          "max_over_min": null,
+          "total_observations": 12,
+          "unavailable": 12,
+          "complete_series": false
+        },
+        "metric_states": {
+          "no_positive_work": 12
+        },
+        "observations": 12
+      }
+    }
+  },
+  "boundaries": [
+    {
+      "language": "pypy",
+      "condition": "cpu_timeout",
+      "arm": "direct",
+      "termination": "cpu_limit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "cpu_timeout",
+      "arm": "jit_mapped",
+      "termination": "cpu_limit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "exception",
+      "arm": "direct",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "exception",
+      "arm": "jit_mapped",
+      "termination": "exit",
+      "metric_state": "invalid",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "immediate_exit",
+      "arm": "direct",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "immediate_exit",
+      "arm": "jit_mapped",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "normal",
+      "arm": "direct",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "normal",
+      "arm": "jit_mapped",
+      "termination": "exit",
+      "metric_state": "no_positive_work",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "system_exit_nonzero",
+      "arm": "direct",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "system_exit_nonzero",
+      "arm": "jit_mapped",
+      "termination": "exit",
+      "metric_state": "invalid",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "system_exit_zero",
+      "arm": "direct",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "system_exit_zero",
+      "arm": "jit_mapped",
+      "termination": "exit",
+      "metric_state": "no_positive_work",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "thread",
+      "arm": "direct",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "thread",
+      "arm": "jit_mapped",
+      "termination": "exit",
+      "metric_state": "no_positive_work",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "wall_timeout",
+      "arm": "direct",
+      "termination": "wall_limit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "pypy",
+      "condition": "wall_timeout",
+      "arm": "jit_mapped",
+      "termination": "wall_limit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "cpu_timeout",
+      "arm": "ir_count",
+      "termination": "cpu_limit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "cpu_timeout",
+      "arm": "source_plain",
+      "termination": "cpu_limit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "exception",
+      "arm": "ir_count",
+      "termination": "exit",
+      "metric_state": "available_partial",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "exception",
+      "arm": "source_plain",
+      "termination": "exit",
+      "metric_state": "no_positive_work",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "immediate_exit",
+      "arm": "ir_count",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "immediate_exit",
+      "arm": "source_plain",
+      "termination": "exit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "normal",
+      "arm": "ir_count",
+      "termination": "exit",
+      "metric_state": "available_partial",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "normal",
+      "arm": "source_plain",
+      "termination": "exit",
+      "metric_state": "no_positive_work",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "system_exit_nonzero",
+      "arm": "ir_count",
+      "termination": "exit",
+      "metric_state": "available_partial",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "system_exit_nonzero",
+      "arm": "source_plain",
+      "termination": "exit",
+      "metric_state": "no_positive_work",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "system_exit_zero",
+      "arm": "ir_count",
+      "termination": "exit",
+      "metric_state": "available_partial",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "system_exit_zero",
+      "arm": "source_plain",
+      "termination": "exit",
+      "metric_state": "no_positive_work",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "thread",
+      "arm": "ir_count",
+      "termination": "exit",
+      "metric_state": "invalid",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "thread",
+      "arm": "source_plain",
+      "termination": "exit",
+      "metric_state": "invalid",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "wall_timeout",
+      "arm": "ir_count",
+      "termination": "wall_limit",
+      "metric_state": "no_report",
+      "count": 12
+    },
+    {
+      "language": "python",
+      "condition": "wall_timeout",
+      "arm": "source_plain",
+      "termination": "wall_limit",
+      "metric_state": "no_report",
+      "count": 12
+    }
+  ],
+  "fanout": {
+    "expected_batches": 18,
+    "observed_batches": 18,
+    "observed_executions": 72,
+    "validated_batches": 18,
+    "scope": "Four-service concurrent dispatch including RPC and report handling; not production Eden latency.",
+    "included_in_main_cv": false,
+    "workloads": {
+      "submission-13660784-case-0": {
+        "ir_count": {
+          "batch_wall_ms": {
+            "n": 3,
+            "mean": 2238.4893386666668,
+            "median": 2216.363338,
+            "cv_pct": 2.102747676439047,
+            "min": 2195.181605,
+            "max": 2303.923073,
+            "max_over_min": 1.049536433683809
+          },
+          "sum_target_cpu_ms": {
+            "n": 3,
+            "mean": 4721.167333333333,
+            "median": 4691.503,
+            "cv_pct": 1.7210108464342484,
+            "min": 4639.86,
+            "max": 4832.139,
+            "max_over_min": 1.0414406900208197
+          },
+          "max_target_wall_ms": {
+            "n": 3,
+            "mean": 1440.7635143333334,
+            "median": 1409.914205,
+            "cv_pct": 3.6411513323913045,
+            "min": 1397.755496,
+            "max": 1514.620842,
+            "max_over_min": 1.0836092909914767
+          },
+          "max_request_wall_ms": {
+            "n": 3,
+            "mean": 2236.8872853333332,
+            "median": 2215.265888,
+            "cv_pct": 2.068584695994486,
+            "min": 2194.209475,
+            "max": 2301.186493,
+            "max_over_min": 1.048754241205708
+          }
+        },
+        "source_plain": {
+          "batch_wall_ms": {
+            "n": 3,
+            "mean": 1210.6111486666666,
+            "median": 1216.669059,
+            "cv_pct": 3.283974862385673,
+            "min": 1159.174494,
+            "max": 1255.989893,
+            "max_over_min": 1.0835209879971701
+          },
+          "sum_target_cpu_ms": {
+            "n": 3,
+            "mean": 2247.1116666666667,
+            "median": 2237.6279999999997,
+            "cv_pct": 1.4482865105030496,
+            "min": 2212.8500000000004,
+            "max": 2290.857,
+            "max_over_min": 1.0352518245701243
+          },
+          "max_target_wall_ms": {
+            "n": 3,
+            "mean": 661.7411963333334,
+            "median": 660.68411,
+            "cv_pct": 4.392149708336363,
+            "min": 626.684715,
+            "max": 697.854764,
+            "max_over_min": 1.113565956367709
+          },
+          "max_request_wall_ms": {
+            "n": 3,
+            "mean": 1209.3342783333335,
+            "median": 1215.309719,
+            "cv_pct": 3.2904362410901977,
+            "min": 1157.886574,
+            "max": 1254.806542,
+            "max_over_min": 1.083704198819046
+          }
+        }
+      },
+      "submission-13513656-case-1": {
+        "ir_count": {
+          "batch_wall_ms": {
+            "n": 3,
+            "mean": 1878.8418843333334,
+            "median": 1882.202739,
+            "cv_pct": 1.1404241173874128,
+            "min": 1851.081044,
+            "max": 1903.24187,
+            "max_over_min": 1.0281785749841
+          },
+          "sum_target_cpu_ms": {
+            "n": 3,
+            "mean": 3440.9919999999997,
+            "median": 3448.5579999999995,
+            "cv_pct": 0.8156274916158787,
+            "min": 3403.466,
+            "max": 3470.9519999999998,
+            "max_over_min": 1.0198286100110887
+          },
+          "max_target_wall_ms": {
+            "n": 3,
+            "mean": 1032.1403886666667,
+            "median": 1035.720008,
+            "cv_pct": 1.0761706888845564,
+            "min": 1017.104536,
+            "max": 1043.596622,
+            "max_over_min": 1.0260465714804363
+          },
+          "max_request_wall_ms": {
+            "n": 3,
+            "mean": 1877.6836446666666,
+            "median": 1881.079409,
+            "cv_pct": 1.139672149782916,
+            "min": 1849.942424,
+            "max": 1902.029101,
+            "max_over_min": 1.0281558368110595
+          }
+        },
+        "source_plain": {
+          "batch_wall_ms": {
+            "n": 3,
+            "mean": 1122.9249909999999,
+            "median": 1120.162028,
+            "cv_pct": 0.6068115141563593,
+            "min": 1116.311399,
+            "max": 1132.301546,
+            "max_over_min": 1.014324091838822
+          },
+          "sum_target_cpu_ms": {
+            "n": 3,
+            "mean": 1766.8539999999998,
+            "median": 1766.088,
+            "cv_pct": 0.740995053354852,
+            "min": 1751.216,
+            "max": 1783.2579999999998,
+            "max_over_min": 1.0182970004842349
+          },
+          "max_target_wall_ms": {
+            "n": 3,
+            "mean": 543.3217886666666,
+            "median": 537.139654,
+            "cv_pct": 1.7813099903561052,
+            "min": 535.837481,
+            "max": 556.988231,
+            "max_over_min": 1.0394723227657157
+          },
+          "max_request_wall_ms": {
+            "n": 3,
+            "mean": 1121.8949936666668,
+            "median": 1118.968438,
+            "cv_pct": 0.6171060804242581,
+            "min": 1115.266658,
+            "max": 1131.449885,
+            "max_over_min": 1.0145106346396306
+          }
+        }
+      },
+      "submission-13513656-case-2": {
+        "source_plain": {
+          "batch_wall_ms": {
+            "n": 3,
+            "mean": 1256.2058813333333,
+            "median": 1264.298756,
+            "cv_pct": 2.0732367946595756,
+            "min": 1221.041547,
+            "max": 1283.277341,
+            "max_over_min": 1.0509694319189287
+          },
+          "sum_target_cpu_ms": {
+            "n": 3,
+            "mean": 2244.884666666667,
+            "median": 2284.052,
+            "cv_pct": 2.8099009094439773,
+            "min": 2155.89,
+            "max": 2294.712,
+            "max_over_min": 1.064391968050318
+          },
+          "max_target_wall_ms": {
+            "n": 3,
+            "mean": 676.529089,
+            "median": 678.108241,
+            "cv_pct": 3.193006453287793,
+            "min": 649.318413,
+            "max": 702.160613,
+            "max_over_min": 1.0813810280781304
+          },
+          "max_request_wall_ms": {
+            "n": 3,
+            "mean": 1254.9680413333333,
+            "median": 1263.056406,
+            "cv_pct": 2.073614053008459,
+            "min": 1219.831357,
+            "max": 1282.016361,
+            "max_over_min": 1.0509783615933066
+          }
+        },
+        "ir_count": {
+          "batch_wall_ms": {
+            "n": 3,
+            "mean": 2046.6260056666667,
+            "median": 2045.407241,
+            "cv_pct": 2.4174342612153197,
+            "min": 1986.649302,
+            "max": 2107.821474,
+            "max_over_min": 1.0609932371445798
+          },
+          "sum_target_cpu_ms": {
+            "n": 3,
+            "mean": 4094.785,
+            "median": 4108.788,
+            "cv_pct": 1.538867625598125,
+            "min": 4011.567,
+            "max": 4164.0,
+            "max_over_min": 1.0379983682187035
+          },
+          "max_target_wall_ms": {
+            "n": 3,
+            "mean": 1232.8512983333333,
+            "median": 1236.038429,
+            "cv_pct": 1.4197018855091705,
+            "min": 1209.999691,
+            "max": 1252.515775,
+            "max_over_min": 1.0351372684772033
+          },
+          "max_request_wall_ms": {
+            "n": 3,
+            "mean": 2045.428276,
+            "median": 2044.261531,
+            "cv_pct": 2.4235520225305565,
+            "min": 1985.306982,
+            "max": 2106.716315,
+            "max_over_min": 1.061153934429673
+          }
+        }
+      }
+    },
+    "paired_cost": {
+      "submission-13660784-case-0": {
+        "batch_wall_ratio": {
+          "n": 3,
+          "mean": 1.8521483359038662,
+          "median": 1.8042553057149784,
+          "cv_pct": 5.242756899212354,
+          "min": 1.7646346920086244,
+          "max": 1.9875550099879955,
+          "max_over_min": 1.1263266096880529
+        },
+        "added_batch_wall_ms": {
+          "n": 3,
+          "mean": 1027.8781900000001,
+          "median": 978.5125460000002,
+          "cv_pct": 8.072062437724082,
+          "min": 960.3734450000002,
+          "max": 1144.7485789999998,
+          "max_over_min": 1.1919827489607437
+        },
+        "target_cpu_ratio": {
+          "n": 3,
+          "mean": 2.1017196241006193,
+          "median": 2.0735618252899948,
+          "cv_pct": 2.80183836542091,
+          "min": 2.0479248595612907,
+          "max": 2.1836721874505725,
+          "max_over_min": 1.0662853069317992
+        }
+      },
+      "submission-13513656-case-1": {
+        "batch_wall_ratio": {
+          "n": 3,
+          "mean": 1.6733427759673443,
+          "median": 1.6802950751335415,
+          "cv_pct": 1.7363254028191628,
+          "min": 1.6347951219700976,
+          "max": 1.704938130798394,
+          "max_over_min": 1.0429062993188816
+        },
+        "added_batch_wall_ms": {
+          "n": 3,
+          "mean": 755.9168933333334,
+          "median": 762.0407110000001,
+          "cv_pct": 3.724942490360257,
+          "min": 718.7794980000001,
+          "max": 786.9304710000001,
+          "max_over_min": 1.0948148537759212
+        },
+        "target_cpu_ratio": {
+          "n": 3,
+          "mean": 1.9477120051169476,
+          "median": 1.9653335507630423,
+          "cv_pct": 1.423519397741227,
+          "min": 1.9085662310220957,
+          "max": 1.969236233565705,
+          "max_over_min": 1.0317882615533434
+        }
+      },
+      "submission-13513656-case-2": {
+        "batch_wall_ratio": {
+          "n": 3,
+          "mean": 1.6291205153022625,
+          "median": 1.6270120430226442,
+          "cv_pct": 0.6259548539030654,
+          "min": 1.6178195472336605,
+          "max": 1.642529955650483,
+          "max_over_min": 1.015273896559771
+        },
+        "added_batch_wall_ms": {
+          "n": 3,
+          "mean": 790.4201243333333,
+          "median": 781.1084850000002,
+          "cv_pct": 3.1559581918806576,
+          "min": 765.607755,
+          "max": 824.5441329999999,
+          "max_over_min": 1.0769798602680036
+        },
+        "target_cpu_ratio": {
+          "n": 3,
+          "mean": 1.8247898766764268,
+          "median": 1.8230758318987483,
+          "cv_pct": 1.5719708301965236,
+          "min": 1.7905462646292867,
+          "max": 1.8607475335012456,
+          "max_over_min": 1.039206621051198
+        }
+      }
+    }
+  },
+  "public_image_preflight": {
+    "exit_code": 0,
+    "public_batches": 58,
+    "public_executions": 116,
+    "stress_executions": 4,
+    "pypy_mapped_executions": 29,
+    "pypy_uid": 65532
+  },
+  "limitations": [
+    "Selected cases only; submission statistics are not full-case rejudges.",
+    "Software work counts are diagnostic, partial coverage, and not milliseconds or TLE authority.",
+    "Missing/zero/invalid work is unavailable; it never establishes zero execution cost.",
+    "Same-instance parallelism=2 is interference stress, not production TC fanout.",
+    "Distinct Cloud Run instances may share physical hosts; this cohort is not cross-date validation.",
+    "CPU includes process startup, target, report serialization and teardown.",
+    "Any invalid observations remain failures and are excluded only from explicitly validated summaries.",
+    "CPython control is a matched experimental source build with fixed seed, not the live production runtime.",
+    "Four instance identities, one collection date, three serial repeats each; descriptive statistics only.",
+    "Private student sources, inputs and per-execution raw reports are not published."
+  ]
+}
