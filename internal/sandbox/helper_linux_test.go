@@ -90,7 +90,7 @@ func TestHelperWaitsForParentBaselineBeforeTargetExec(t *testing.T) {
 		t.Fatalf("read helper_linux.go: %v", err)
 	}
 	source := string(raw)
-	closeDescriptors := strings.Index(source, "unix.CloseRange(3")
+	closeDescriptors := strings.Index(source, "markInheritedFDsCloseOnExec(openFileLimit")
 	signalReady := strings.Index(source, "targetReadyFile.Write")
 	rusageBaseline := strings.Index(source, "unix.Getrusage(unix.RUSAGE_SELF, &usage)")
 	if rusageBaseline < 0 || rusageBaseline >= signalReady || !strings.Contains(source[rusageBaseline:signalReady], "binary.LittleEndian.PutUint64") {

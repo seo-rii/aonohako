@@ -606,10 +606,8 @@ func MaybeRunFromEnv() bool {
 		}
 		preservedFDs[fd] = struct{}{}
 	}
-	if err := unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil && err != unix.ENOSYS && err != unix.EINVAL {
-		for fd := 3; fd < 1024; fd++ {
-			unix.CloseOnExec(fd)
-		}
+	if err := markInheritedFDsCloseOnExec(openFileLimit, unix.CloseRange, unix.FcntlInt); err != nil {
+		fail("mark inherited descriptors close-on-exec: %v", err)
 	}
 	for fd := range preservedFDs {
 		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, 0); err != nil {
@@ -663,4 +661,19 @@ func MaybeRunFromEnv() bool {
 		fail("exec %s: %v", req.Command[0], errno)
 	}
 	return true
+}
+
+// markInheritedFDsCloseOnExec keeps the exec barrier and non-preserved files out
+// of the target even on kernels or outer seccomp profiles without close_range.
+func markInheritedFDsCloseOnExec(limit int, closeRange func(uint, uint, uint) error, fcntl func(uintptr, int, int) (int, error)) error {
+	if err := closeRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
+		// Retain the old sweep floor for already-open helper descriptors;
+		// runtimes with higher descriptor limits need the entire allowed range.
+		for fd := 3; fd < max(1024, limit); fd++ {
+			if _, err := fcntl(uintptr(fd), unix.F_SETFD, unix.FD_CLOEXEC); err != nil && err != unix.EBADF {
+				return fmt.Errorf("fd %d: %w", fd, err)
+			}
+		}
+	}
+	return nil
 }
