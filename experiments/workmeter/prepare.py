@@ -22,9 +22,14 @@ def prepare(output, runtime_manifest):
     for name in ('Dockerfile','server.py','runner.py','protocol.py','validate.py','preflight.py'):
         shutil.copyfile(ROOT/name,output/name)
     (output/'pypy').mkdir(mode=0o700)
-    for name in ('runner.py','meter.py','adapter.py'):shutil.copyfile(ROOT/'pypy'/name,output/'pypy'/name)
-    shutil.copyfile(runtime_manifest,output/'runtime-manifest.json')
+    for name in ('runner.py','meter.py','adapter.py'):
+        target=output/'pypy'/name
+        shutil.copyfile(ROOT/'pypy'/name,target)
+        target.chmod(0o444)
+    (output/'pypy').chmod(0o555)
     generate(output/'fixtures')
+    runtime['fixture_manifest_sha256']=hashlib.sha256((output/'fixtures/manifest.json').read_bytes()).hexdigest()
+    (output/'runtime-manifest.json').write_text(json.dumps(runtime,indent=2)+'\n')
     subprocess.run(['cc','-static','-O2','-Wall','-Wextra','-Werror',str(ROOT/'launch.c'),'-o',str(output/'launch')],check=True)
     hashes={str(p.relative_to(output)):hashlib.sha256(p.read_bytes()).hexdigest()
             for p in output.rglob('*') if p.is_file()}

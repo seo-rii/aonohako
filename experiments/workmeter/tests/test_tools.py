@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -17,13 +18,18 @@ class ToolTests(unittest.TestCase):
             root=Path(tmp);runtime=root/'runtime.json'
             runtime.write_text(json.dumps({'image':'test-image','metadata_manifest_sha256':'0'*64}))
             output=root/'context'
-            hashes=prepare.prepare(output,runtime)
+            previous=os.umask(0o077)
+            try:hashes=prepare.prepare(output,runtime)
+            finally:os.umask(previous)
             manifest=json.loads((output/'fixtures/manifest.json').read_bytes())
             self.assertEqual(len(manifest['workloads']),58)
             self.assertTrue(all(w.get('kind')!='submission' for w in manifest['workloads']))
             for name,digest in hashes.items():
                 self.assertEqual(hashlib.sha256((output/name).read_bytes()).hexdigest(),digest)
             self.assertTrue((output/'launch').stat().st_mode & 0o111)
+            self.assertEqual((output/'pypy').stat().st_mode & 0o777,0o555)
+            for name in ('runner.py','meter.py','adapter.py'):
+                self.assertEqual((output/'pypy'/name).stat().st_mode & 0o777,0o444)
             with self.assertRaises(ValueError):prepare.prepare(output,runtime)
 
     def test_transport_failure_is_persisted_without_retry(self):
