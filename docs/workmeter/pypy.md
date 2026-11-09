@@ -31,6 +31,17 @@ Accepted unambiguous runtime forms: `pypy`.
 Canonical source profiles take precedence over runtime aliases. Generic `binary`
 remains rejected because it loses source-language provenance.
 
+## Relationship to the earlier Python experiment
+
+[PR #84](https://github.com/seo-rii/aonohako/pull/84) is a separate experiment
+using CPython LLVM IR counters and PyPy JIT counters. It remains independently
+reviewable. This family PR wraps the whole interpreter executable with the
+process-tree binary counter, so executed interpreter, JIT-generated native code
+and shared-library/native-extension code contribute to its diagnostic work.
+Kernel work is outside this counter. The two approaches have different coverage,
+cost and trust limits. Both retain diagnostic counters separate from production
+milliseconds and TLE policy.
+
 ## Qualification
 
 Selection/configuration tests check representative profiles, other-family
@@ -60,8 +71,30 @@ valid, complete accounting for one process/image. The sanitized receipt is
 The receipt did not record the interpreter version or resolved executable path.
 This interpreter smoke had REP telemetry disabled, while aonohako enables it.
 It validates a simple core invocation; the actual image-owned command, sandbox/API
-integration and PyPy JIT-loop coverage require separate checks. It does not
+integration and representative JIT workload coverage require separate checks. It does not
 resolve the child-process compatibility gap below or establish score stability.
+
+## Remote PyPy CLI evidence and cost limit
+
+Two completed remote batches each ran the same new-process PyPy 7.3.19
+(Python 3.11.11) loop twice. All four instrumented calls printed `732157192`,
+exited 0 and returned valid, complete one-process accounting with REP telemetry
+enabled. The fixture performs 250,000 fixed loop iterations. Source, artifact
+hashes and every result are preserved in
+[pypy-remote-cli.json](pypy-remote-cli.json) and its checked-in fixture.
+
+| Batch | Native wall, two calls | Metered wall, two calls |
+| --- | --- | --- |
+| retry-03 | 94.4 ms, 33.3 ms | 1726.7 ms, 1705.2 ms |
+| retry-04 | 31.5 ms, 30.4 ms | 1571.1 ms, 1607.1 ms |
+
+These are external elapsed wall times, not CPU times. Paired wall ratios were
+18.3–52.9x on these small calls. Each call includes process/engine startup,
+runtime initialization, JIT and loop work; the experiment does not isolate those
+costs. This high startup-plus-execution cost leaves PyPy cost acceptance open.
+Four ordered comparisons also do not establish score stability or representative
+long-program overhead. These receipts qualify this small CLI fixture only; they
+do not exercise the actual aonohako sandbox/API or production submissions.
 
 ## Child-process compatibility gap
 

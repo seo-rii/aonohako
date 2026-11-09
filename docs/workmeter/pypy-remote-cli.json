@@ -1,0 +1,163 @@
+{
+  "schema": 1,
+  "scope": "small PyPy CLI loop in remote container, outside the aonohako sandbox/API",
+  "runtime_version": [
+    "Python 3.11.11 (7.3.19+dfsg-2, Apr 11 2025, 02:57:20)",
+    "[PyPy 7.3.19 with GCC 14.2.0]"
+  ],
+  "resolved_executable_path": null,
+  "client_sha256": "a8a842a920bb075c3cb5334a683e970b348eb42b600ed7e3af11cc55f913fb43",
+  "dynamorio_sha256": "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32a100bf48788c",
+  "engine_options": [
+    "-quiet",
+    "-follow_children",
+    "-vm_size",
+    "32M",
+    "-vmheap_size",
+    "32M"
+  ],
+  "client_options": [
+    "-outdir",
+    "<fresh absolute output directory>",
+    "-rep_bytes"
+  ],
+  "target_command_template": [
+    "<resolved PyPy interpreter>",
+    "<temporary Main.py>"
+  ],
+  "fixture": "internal/workmeter/testdata/pypy/remote-cli/Main.py",
+  "fixture_sha256": "937add7d278ba5edb934e0ac6e7c49ba5a2549983109e4105842f0a807a9b35a",
+  "harness_sha256": "2588cbb14eccf1c4ab1cce5506e1b2814563b1cdf0427bf90a2d203cce32c985",
+  "raw_receipt_hashes": [
+    {
+      "batch": "retry-03",
+      "receipt_sha256": "8fa13f854439fccb28cf225858ac7d4912b79a145e4e2dd03f82a5525e95b83d"
+    },
+    {
+      "batch": "retry-04",
+      "receipt_sha256": "dc1b957ad46f6ba7f43300cd8130fbd8ab62161a9a4429ed3e0b72ece2c12b96"
+    }
+  ],
+  "rows": [
+    {
+      "batch": "retry-03",
+      "repeat": 0,
+      "native_exit": 0,
+      "metered_exit": 0,
+      "stdout": "732157192\n",
+      "native_wall_ms": 94.382314,
+      "metered_wall_ms": 1726.713992,
+      "paired_wall_ratio": 18.294889358190563,
+      "collector_exit": 0,
+      "measurement": {
+        "schema": 1,
+        "authority": "diagnostic_only",
+        "metric": "bb_entry_app_instructions",
+        "scope": "process_tree_user_code",
+        "valid": true,
+        "complete": true,
+        "process_count": 1,
+        "image_count": 1,
+        "rep_bytes_enabled": true,
+        "quality": "uninterrupted",
+        "instructions": 63209655,
+        "rep_bytes": 14824,
+        "rep_entries": 84,
+        "unsupported_rep_entries": 0,
+        "signals_observed": 0
+      }
+    },
+    {
+      "batch": "retry-03",
+      "repeat": 1,
+      "native_exit": 0,
+      "metered_exit": 0,
+      "stdout": "732157192\n",
+      "native_wall_ms": 33.282787,
+      "metered_wall_ms": 1705.229852,
+      "paired_wall_ratio": 51.23458717564728,
+      "collector_exit": 0,
+      "measurement": {
+        "schema": 1,
+        "authority": "diagnostic_only",
+        "metric": "bb_entry_app_instructions",
+        "scope": "process_tree_user_code",
+        "valid": true,
+        "complete": true,
+        "process_count": 1,
+        "image_count": 1,
+        "rep_bytes_enabled": true,
+        "quality": "uninterrupted",
+        "instructions": 63246953,
+        "rep_bytes": 14824,
+        "rep_entries": 84,
+        "unsupported_rep_entries": 0,
+        "signals_observed": 0
+      }
+    },
+    {
+      "batch": "retry-04",
+      "repeat": 0,
+      "native_exit": 0,
+      "metered_exit": 0,
+      "stdout": "732157192\n",
+      "native_wall_ms": 31.463763,
+      "metered_wall_ms": 1571.084508,
+      "paired_wall_ratio": 49.93314080073639,
+      "collector_exit": 0,
+      "measurement": {
+        "schema": 1,
+        "authority": "diagnostic_only",
+        "metric": "bb_entry_app_instructions",
+        "scope": "process_tree_user_code",
+        "valid": true,
+        "complete": true,
+        "process_count": 1,
+        "image_count": 1,
+        "rep_bytes_enabled": true,
+        "quality": "uninterrupted",
+        "instructions": 63213689,
+        "rep_bytes": 14824,
+        "rep_entries": 84,
+        "unsupported_rep_entries": 0,
+        "signals_observed": 0
+      }
+    },
+    {
+      "batch": "retry-04",
+      "repeat": 1,
+      "native_exit": 0,
+      "metered_exit": 0,
+      "stdout": "732157192\n",
+      "native_wall_ms": 30.38039,
+      "metered_wall_ms": 1607.062912,
+      "paired_wall_ratio": 52.89803429119903,
+      "collector_exit": 0,
+      "measurement": {
+        "schema": 1,
+        "authority": "diagnostic_only",
+        "metric": "bb_entry_app_instructions",
+        "scope": "process_tree_user_code",
+        "valid": true,
+        "complete": true,
+        "process_count": 1,
+        "image_count": 1,
+        "rep_bytes_enabled": true,
+        "quality": "uninterrupted",
+        "instructions": 63279081,
+        "rep_bytes": 14824,
+        "rep_entries": 84,
+        "unsupported_rep_entries": 0,
+        "signals_observed": 0
+      }
+    }
+  ],
+  "limitations": [
+    "All durations are external monotonic wall time around process launch and collection of stdout/stderr, not CPU time.",
+    "Each native and metered call starts a new process; startup, engine initialization, JIT and loop work are not isolated.",
+    "The native call precedes its metered counterpart; four observations are insufficient for a controlled cost/variance study.",
+    "The 18.3\u201352.9x paired wall ratios on this tiny CLI call do not establish acceptable interpreter cost.",
+    "The actual aonohako sandbox/API path, limits and production submission workload remain unqualified by this receipt.",
+    "The known Python child-process compatibility gap is unchanged; this fixture creates no child."
+  ]
+}

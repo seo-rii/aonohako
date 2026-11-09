@@ -2,7 +2,8 @@
   "schema": 1,
   "scope": "fixed compatibility fixtures; not timing/variance qualification",
   "source_sha256": {
-    "Main.py": "343b5415bc1d8001dbeb3955061d437f9c91d01e0fd2312dd61ebd7a752134e4"
+    "Main.py": "343b5415bc1d8001dbeb3955061d437f9c91d01e0fd2312dd61ebd7a752134e4",
+    "remote-cli/Main.py": "937add7d278ba5edb934e0ac6e7c49ba5a2549983109e4105842f0a807a9b35a"
   },
   "cases": [
     {
@@ -28,5 +29,16 @@
     "Run a direct control first and preserve output and exit status when launching under the pinned Workmeter client.",
     "A successful selector test does not qualify an image runtime. Require complete external process-tree collection after every target has exited.",
     "The shell child fixture requires an explicitly process-enabled diagnostic environment. It does not change ordinary sandbox permissions."
-  ]
+  ],
+  "external_cli_receipt": {
+    "evidence": "../../../../docs/workmeter/pypy-remote-cli.json",
+    "fixture": "remote-cli/Main.py",
+    "stdin": "",
+    "expected_stdout": "732157192\n",
+    "command_template": [
+      "<resolved PyPy interpreter>",
+      "remote-cli/Main.py"
+    ],
+    "scope": "two remote batches, two fresh-process comparisons per batch; outside aonohako sandbox/API"
+  }
 }
