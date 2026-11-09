@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "scope": "fixed compatibility fixtures; not timing/variance qualification",
+  "source_sha256": {
+    "Main.go": "57c9fbdef459f573ce4bf1415e31e2c52b3864e4195f1bb9d24f6a1826369f73",
+    "Main.rs": "c08af5f3765e2b07f4705f0e2857e9c5dd6108a5a815a3884654c34246178950"
+  },
+  "cases": [
+    {
+      "id": "go",
+      "profile": "GO",
+      "source": "Main.go",
+      "compile": [
+        "go",
+        "build",
+        "-o",
+        "Main-go",
+        "Main.go"
+      ],
+      "command": [
+        "./Main-go"
+      ],
+      "stdin": "250000\n",
+      "expected_stdout": "3265584401\n",
+      "required_exit": 0,
+      "purpose": "runtime compatibility and complete accounting only, not speed/determinism qualification",
+      "sandbox_process_permission": "unchanged"
+    },
+    {
+      "id": "rust",
+      "profile": "RUST2024",
+      "source": "Main.rs",
+      "compile": [
+        "rustc",
+        "--edition=2024",
+        "-O",
+        "Main.rs",
+        "-o",
+        "Main-rust"
+      ],
+      "command": [
+        "./Main-rust"
+      ],
+      "stdin": "250000\n",
+      "expected_stdout": "3265584401\n",
+      "required_exit": 0,
+      "purpose": "runtime compatibility and complete accounting only, not speed/determinism qualification",
+      "sandbox_process_permission": "unchanged"
+    }
+  ],
+  "notes": [
+    "Compile/run commands are relative to this directory; generated executables/classes are not checked in.",
+    "Run a direct control first and preserve output and exit status when launching under the pinned Workmeter client.",
+    "A successful selector test does not qualify an image runtime. Require complete external process-tree collection after every target has exited.",
+    "The shell child fixture requires an explicitly process-enabled diagnostic environment. It does not change ordinary sandbox permissions."
+  ]
+}
