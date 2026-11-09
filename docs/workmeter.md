@@ -25,7 +25,10 @@ pinned by the vendored fetcher, and its license is retained in the runtime image
 image. Supply an immutable `RUNTIME_IMAGE` digest and select target `runtime`.
 It installs the new runner plus the engine/client under `/opt/workmeter`, without
 modifying the existing language image build definitions. The current client
-supports Linux x86-64 only.
+supports Linux x86-64 only. `third_party/workmeter/UPSTREAM.json` pins the private
+upstream commit and every vendored source hash; the overlay verifies that manifest
+before downloading the separately SHA-256-pinned engine SDK. CI needs no private
+cross-repository checkout token.
 
 The launcher fixes `-vm_size 32M -vmheap_size 32M` and reports engine profile
 `dynamorio-11.3-vm32m-v1`. Upstream's large default virtual reservations can fail
