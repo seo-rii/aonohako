@@ -1,0 +1,23 @@
+name: Experimental work meter
+on:
+  pull_request:
+    paths:
+      - 'experiments/workmeter/**'
+      - '.github/workflows/workmeter.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'experiments/workmeter/**'
+      - '.github/workflows/workmeter.yml'
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Corpus, integrity, analysis and lifecycle contracts
+        run: python3 -B -m unittest discover -s experiments/workmeter/tests -v
+      - name: Native counter failure modes
+        run: python3 -B experiments/workmeter/cpython/test_runtime.py -v
