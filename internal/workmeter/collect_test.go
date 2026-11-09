@@ -127,7 +127,7 @@ func TestCollectorReadsCompleteTree(t *testing.T) {
 	}
 }
 func TestCollectorRejectsUnsafeOrMalformedFiles(t *testing.T) {
-	for _, kind := range []string{"symlink", "hardlink", "truncated", "duplicate key", "null field", "extra entry", "oversized", "directory"} {
+	for _, kind := range []string{"symlink", "hardlink", "truncated", "duplicate key", "nested duplicate key", "invalid UTF-8", "null field", "extra entry", "oversized", "directory"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := t.TempDir()
 			writeTree(t, dir)
@@ -149,6 +149,14 @@ func TestCollectorRejectsUnsafeOrMalformedFiles(t *testing.T) {
 				data, _ := os.ReadFile(p)
 				data = []byte(strings.Replace(string(data), `"schema":1`, `"schema":1,"schema":1`, 1))
 				os.WriteFile(p, data, 0600)
+			case "nested duplicate key":
+				data, _ := os.ReadFile(p)
+				data = []byte(strings.Replace(string(data), `"schema":1`, `"extension":{"key":1,"key":2},"schema":1`, 1))
+				os.WriteFile(p, data, 0600)
+			case "invalid UTF-8":
+				data, _ := os.ReadFile(p)
+				data = []byte(strings.Replace(string(data), `"schema":1`, "\"extension\":\"\xff\",\"schema\":1", 1))
+				os.WriteFile(p, data, 0600)
 			case "null field":
 				data, _ := os.ReadFile(p)
 				data = []byte(strings.Replace(string(data), `"parent_pid":10`, `"parent_pid":null`, 1))
@@ -161,6 +169,74 @@ func TestCollectorRejectsUnsafeOrMalformedFiles(t *testing.T) {
 			r := CollectDirectory(dir, 10)
 			if r.Complete || r.Instructions != nil || r.Reason == "" {
 				t.Fatalf("unsafe report accepted: %+v", r)
+			}
+		})
+	}
+}
+
+// Shared vectors are pinned with the client source so the Go and reference
+// collectors must agree on lifecycle closure, child sums and strict field types.
+func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
+	data, err := os.ReadFile("../../third_party/workmeter/tests/protocol_vectors.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vectors struct {
+		Schema int `json:"schema"`
+		Cases  []struct {
+			Name     string                       `json:"name"`
+			RootPID  int                          `json:"root_pid"`
+			Files    map[string][]json.RawMessage `json:"files"`
+			Valid    bool                         `json:"valid"`
+			Expected struct {
+				Instructions uint64 `json:"instructions"`
+				Processes    int    `json:"process_count"`
+				Images       int    `json:"image_count"`
+				Signals      uint64 `json:"signals_observed"`
+				Quality      string `json:"quality"`
+			} `json:"expected"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &vectors); err != nil {
+		t.Fatal(err)
+	}
+	if vectors.Schema != 1 || len(vectors.Cases) == 0 {
+		t.Fatal("invalid protocol vectors")
+	}
+	for _, vector := range vectors.Cases {
+		t.Run(vector.Name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, rows := range vector.Files {
+				if filepath.Base(name) != name {
+					t.Fatal("invalid fixture filename")
+				}
+				var stream strings.Builder
+				for _, row := range rows {
+					// Decode and re-encode RawMessage to remove pretty-print newlines.
+					encoded, err := json.Marshal(row)
+					if err != nil {
+						t.Fatal(err)
+					}
+					stream.Write(encoded)
+					stream.WriteByte('\n')
+				}
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(stream.String()), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r := CollectDirectory(dir, vector.RootPID)
+			if r.Complete != vector.Valid {
+				t.Fatalf("completeness mismatch: %+v", r)
+			}
+			if !vector.Valid {
+				if r.Instructions != nil || r.REPBytes != nil || r.Reason == "" {
+					t.Fatalf("invalid report exposed totals: %+v", r)
+				}
+				return
+			}
+			e := vector.Expected
+			if r.Instructions == nil || *r.Instructions != e.Instructions || r.Processes != e.Processes || r.Images != e.Images || r.SignalsObserved != e.Signals || r.Quality != e.Quality {
+				t.Fatalf("aggregate differs from reference: %+v", r)
 			}
 		})
 	}

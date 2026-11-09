@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -57,6 +58,9 @@ type event struct {
 
 func decodeEvent(data []byte) (event, error) {
 	var row event
+	if !utf8.Valid(data) {
+		return row, errors.New("invalid report UTF-8")
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	token, err := decoder.Token()
 	if err != nil || token != json.Delim('{') {
@@ -75,6 +79,12 @@ func decodeEvent(data []byte) (event, error) {
 		var raw json.RawMessage
 		if err := decoder.Decode(&raw); err != nil {
 			return row, errors.New("invalid report value")
+		}
+		// Schema 1 fields are scalars. Reject nested structures instead of
+		// allowing unknown objects to conceal duplicate keys.
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) != 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+			return row, errors.New("non-scalar report field")
 		}
 		fields[key] = raw
 	}
