@@ -41,6 +41,6 @@ COPY --from=workmeter-go-test /out/workmeter-execute.test /opt/workmeter/workmet
 COPY --from=workmeter-build /workmeter-probe /opt/workmeter/probe
 ENV AONOHAKO_TEST_WORKMETER=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 AONOHAKO_WORKMETER_TEST_BINARY=/opt/workmeter/probe
 ENTRYPOINT ["/opt/workmeter/workmeter-execute.test"]
-CMD ["-test.v", "-test.run", "^TestWorkmeterSandboxIntegration$", "-test.timeout", "90s"]
+CMD ["-test.v", "-test.run", "^TestWorkmeter(Sandbox|ResourceEnvelope)Integration$", "-test.timeout", "90s"]
 
 FROM workmeter-runtime AS runtime

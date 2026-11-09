@@ -16,6 +16,7 @@ type Config struct {
 	Drrun           string
 	Client          string
 	DispatchProfile string
+	ResourcePolicy  *ResourcePolicy
 }
 
 func ParseConfig(familiesValue, drrun, client, dispatch string) (Config, error) {

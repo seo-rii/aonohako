@@ -122,6 +122,7 @@ func sumRawCPUTime(values ...*int64) *int64 {
 
 type Service struct {
 	workMeasurement              workmeter.Config
+	workMeasurementPolicyError   error
 	competitiveRuntimeIdentity   runtimeidentity.CompetitiveIdentity
 	deploymentTarget             platform.DeploymentTarget
 	cpuNormalizer                timing.CPUNormalizer
@@ -164,9 +165,18 @@ func NewWithConfig(cfg config.Config) *Service {
 	if communicationMaxParticipants <= 0 {
 		communicationMaxParticipants = runvalidation.MaxCommunicationParticipants
 	}
+	measurement := cfg.Execution.WorkMeasurement
+	measurement.Families = append([]string(nil), measurement.Families...)
+	var measurementPolicyError error
+	if measurement.ResourcePolicy != nil {
+		policy := *measurement.ResourcePolicy
+		measurement.ResourcePolicy = &policy
+		measurementPolicyError = policy.ValidateAdmission(cfg.MaxActiveRuns, cfg.WorkRootMaxBytes)
+	}
 	return &Service{
 		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
-		workMeasurement:              cfg.Execution.WorkMeasurement,
+		workMeasurement:              measurement,
+		workMeasurementPolicyError:   measurementPolicyError,
 		competitiveRuntimeIdentity:   competitiveIdentity,
 		shortCaseSampling:            cfg.Execution.CPUNormalization.ShortCaseSampling,
 		runtimeTuning:                cfg.Execution.RuntimeTuning.WithSafeDefaults(),
@@ -186,6 +196,17 @@ func NewWithConfig(cfg config.Config) *Service {
 func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
+	}
+	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if req.WorkMeasurementLimits != nil {
+		if s.workMeasurementPolicyError != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: s.workMeasurementPolicyError.Error()}
+		}
+		if err := s.workMeasurement.ResourcePolicy.ValidateRequest(*req.WorkMeasurementLimits); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
 	}
 	if req.WorkMeasurement {
 		if _, err := s.workMeasurement.Family(req.Lang); err != nil {
@@ -240,6 +261,8 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 	var response model.RunResponse
 	switch {
+	case req.WorkMeasurementLimits != nil:
+		return s.runWorkMeasurementDiagnostic(ctx, req, hooks, tuning)
 	case req.Communication != nil:
 		response = s.runCommunication(ctx, req, hooks, tuning)
 	case req.Pipeline != nil:

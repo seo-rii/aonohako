@@ -15,6 +15,7 @@ import (
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/util"
+	"aonohako/internal/workmeter"
 )
 
 const (
@@ -54,6 +55,9 @@ var supportedRunLangs = func() map[string]struct{} {
 }()
 
 func Validate(req *model.RunRequest) error {
+	if err := ValidateWorkMeasurementLimits(req); err != nil {
+		return err
+	}
 	if err := ValidateTextEncoding(req); err != nil {
 		return err
 	}
@@ -136,6 +140,34 @@ func Validate(req *model.RunRequest) error {
 	}
 	if _, err := ValidateBinaryBudget(req); err != nil {
 		return err
+	}
+	return nil
+}
+
+// ValidateWorkMeasurementLimits checks the opt-in envelope without changing
+// the nominal judge limits. Operator caps are enforced separately by the runner.
+func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
+	if req == nil || req.WorkMeasurementLimits == nil {
+		return nil
+	}
+	if !req.WorkMeasurement {
+		return fmt.Errorf("work_measurement_limits requires work_measurement=true")
+	}
+	family, ok := workmeter.FamilyForLanguage(req.Lang)
+	if !ok || family != "cpp" {
+		return fmt.Errorf("work_measurement_limits supports only C/C++ source-language profiles")
+	}
+	if req.Communication != nil || req.Pipeline != nil || req.Interactor != nil || req.SPJ != nil || len(req.Programs) != 0 || len(req.Steps) != 0 || req.EntryMode != "" {
+		return fmt.Errorf("work_measurement_limits supports only an ordinary single-program run")
+	}
+	if err := ValidateRequiredLimits("limits", req.Limits); err != nil {
+		return err
+	}
+	if err := req.WorkMeasurementLimits.Validate(); err != nil {
+		return fmt.Errorf("work_measurement_limits: %w", err)
+	}
+	if req.WorkMeasurementLimits.CPUTimeMs < req.Limits.TimeMs || req.WorkMeasurementLimits.MemoryMB < req.Limits.MemoryMB || req.WorkMeasurementLimits.WallTimeMs < req.Limits.WallTimeMs {
+		return fmt.Errorf("work_measurement_limits must not be smaller than nominal limits")
 	}
 	return nil
 }

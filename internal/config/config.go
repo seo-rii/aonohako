@@ -626,6 +626,18 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	workMeasurement.ResourcePolicy, err = workmeter.ParseResourcePolicy(os.Getenv("AONOHAKO_WORKMETER_RESOURCE_POLICY"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_WORKMETER_RESOURCE_POLICY: %w", err)
+	}
+	if workMeasurement.ResourcePolicy != nil {
+		if _, err := workMeasurement.Family("CPP20"); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_WORKMETER_RESOURCE_POLICY requires the cpp workmeter family: %w", err)
+		}
+		if err := workMeasurement.ResourcePolicy.ValidateAdmission(maxActive, workRootMaxBytes); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_WORKMETER_RESOURCE_POLICY: %w", err)
+		}
+	}
 	execution := ExecutionConfig{
 		WorkMeasurement: workMeasurement,
 		Platform:        runtimePlatform,

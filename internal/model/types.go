@@ -295,61 +295,76 @@ type SidecarError struct {
 }
 
 type RunRequest struct {
-	WorkMeasurement   bool                     `json:"work_measurement,omitempty"`
-	Lang              string                   `json:"lang"`
-	EntryMode         string                   `json:"entry_mode,omitempty"`
-	Binaries          []Binary                 `json:"binaries"`
-	Programs          []RunProgram             `json:"programs,omitempty"`
-	Steps             []RunStep                `json:"steps,omitempty"`
-	Stdin             string                   `json:"stdin"`
-	StdinURL          string                   `json:"stdin_url,omitempty"`
-	ExpectedStdout    string                   `json:"expected_stdout,omitempty"`
-	ExpectedStdoutURL string                   `json:"expected_stdout_url,omitempty"`
-	Limits            Limits                   `json:"limits"`
-	CaptureLimits     *CaptureLimits           `json:"capture_limits,omitempty"`
-	ProblemID         string                   `json:"problem_id,omitempty"`
-	RuntimeProfile    string                   `json:"runtime_profile,omitempty"`
-	PythonLibraryMode pythonpolicy.LibraryMode `json:"python_library_mode,omitempty"`
-	EnableNetwork     bool                     `json:"enable_network,omitempty"`
-	EntryPoint        string                   `json:"entry_point,omitempty"`
-	SPJ               *SPJSpec                 `json:"spj,omitempty"`
-	Interactor        *InteractorSpec          `json:"interactor,omitempty"`
-	Communication     *CommunicationSpec       `json:"communication,omitempty"`
-	FileOutputs       []OutputFile             `json:"file_outputs,omitempty"`
-	SidecarOutputs    []OutputFile             `json:"sidecar_outputs,omitempty"`
-	EmitLogs          *bool                    `json:"emit_logs,omitempty"`
-	IgnoreTLE         bool                     `json:"ignore_tle,omitempty"`
-	Pipeline          *PipelineV1              `json:"pipeline,omitempty"`
+	WorkMeasurement       bool                      `json:"work_measurement,omitempty"`
+	WorkMeasurementLimits *workmeter.ResourceLimits `json:"work_measurement_limits,omitempty"`
+	Lang                  string                    `json:"lang"`
+	EntryMode             string                    `json:"entry_mode,omitempty"`
+	Binaries              []Binary                  `json:"binaries"`
+	Programs              []RunProgram              `json:"programs,omitempty"`
+	Steps                 []RunStep                 `json:"steps,omitempty"`
+	Stdin                 string                    `json:"stdin"`
+	StdinURL              string                    `json:"stdin_url,omitempty"`
+	ExpectedStdout        string                    `json:"expected_stdout,omitempty"`
+	ExpectedStdoutURL     string                    `json:"expected_stdout_url,omitempty"`
+	Limits                Limits                    `json:"limits"`
+	CaptureLimits         *CaptureLimits            `json:"capture_limits,omitempty"`
+	ProblemID             string                    `json:"problem_id,omitempty"`
+	RuntimeProfile        string                    `json:"runtime_profile,omitempty"`
+	PythonLibraryMode     pythonpolicy.LibraryMode  `json:"python_library_mode,omitempty"`
+	EnableNetwork         bool                      `json:"enable_network,omitempty"`
+	EntryPoint            string                    `json:"entry_point,omitempty"`
+	SPJ                   *SPJSpec                  `json:"spj,omitempty"`
+	Interactor            *InteractorSpec           `json:"interactor,omitempty"`
+	Communication         *CommunicationSpec        `json:"communication,omitempty"`
+	FileOutputs           []OutputFile              `json:"file_outputs,omitempty"`
+	SidecarOutputs        []OutputFile              `json:"sidecar_outputs,omitempty"`
+	EmitLogs              *bool                     `json:"emit_logs,omitempty"`
+	IgnoreTLE             bool                      `json:"ignore_tle,omitempty"`
+	Pipeline              *PipelineV1               `json:"pipeline,omitempty"`
 }
 
 type RunResponse struct {
-	WorkMeasurement      *workmeter.Report     `json:"work_measurement,omitempty"`
-	Status               string                `json:"status"`
-	TimeMs               int64                 `json:"time_ms"`
-	WallTimeMs           int64                 `json:"wall_time_ms"`
-	CPUTimeMs            int64                 `json:"cpu_time_ms"`
-	CPUTimeNs            uint64                `json:"cpu_time_ns,omitempty"`
-	RawCPUTimeMs         *int64                `json:"raw_cpu_time_ms,omitempty"`
-	RawCPUTimeNs         *uint64               `json:"raw_cpu_time_ns,omitempty"`
-	CPUAccounting        *CPUAccounting        `json:"cpu_accounting,omitempty"`
-	CPUTimeSampling      *CPUTimeSampling      `json:"cpu_time_sampling,omitempty"`
-	ProcessCPUTimeMs     int64                 `json:"process_cpu_time_ms,omitempty"`
-	CPUTimeNormalization *CPUTimeNormalization `json:"cpu_time_normalization,omitempty"`
-	MemoryKB             int64                 `json:"memory_kb"`
-	ExitCode             *int                  `json:"exit_code,omitempty"`
-	Stdout               string                `json:"stdout,omitempty"`
-	Stderr               string                `json:"stderr,omitempty"`
-	StdoutTruncated      bool                  `json:"stdout_truncated,omitempty"`
-	StderrTruncated      bool                  `json:"stderr_truncated,omitempty"`
-	Reason               string                `json:"reason,omitempty"`
-	ReasonTruncated      bool                  `json:"reason_truncated,omitempty"`
-	VerdictSource        string                `json:"verdict_source,omitempty"`
-	Score                *float64              `json:"score,omitempty"`
-	StartedParticipants  int                   `json:"started_participants,omitempty"`
-	Match                *MatchResult          `json:"match,omitempty"`
-	Steps                []StepResult          `json:"steps,omitempty"`
-	SidecarOutputs       []SidecarOutput       `json:"sidecar_outputs,omitempty"`
-	SidecarErrors        []SidecarError        `json:"sidecar_errors,omitempty"`
+	WorkMeasurement          *workmeter.Report         `json:"work_measurement,omitempty"`
+	WorkMeasurementExecution *WorkMeasurementExecution `json:"work_measurement_execution,omitempty"`
+	Status                   string                    `json:"status"`
+	TimeMs                   int64                     `json:"time_ms"`
+	WallTimeMs               int64                     `json:"wall_time_ms"`
+	CPUTimeMs                int64                     `json:"cpu_time_ms"`
+	CPUTimeNs                uint64                    `json:"cpu_time_ns,omitempty"`
+	RawCPUTimeMs             *int64                    `json:"raw_cpu_time_ms,omitempty"`
+	RawCPUTimeNs             *uint64                   `json:"raw_cpu_time_ns,omitempty"`
+	CPUAccounting            *CPUAccounting            `json:"cpu_accounting,omitempty"`
+	CPUTimeSampling          *CPUTimeSampling          `json:"cpu_time_sampling,omitempty"`
+	ProcessCPUTimeMs         int64                     `json:"process_cpu_time_ms,omitempty"`
+	CPUTimeNormalization     *CPUTimeNormalization     `json:"cpu_time_normalization,omitempty"`
+	MemoryKB                 int64                     `json:"memory_kb"`
+	ExitCode                 *int                      `json:"exit_code,omitempty"`
+	Stdout                   string                    `json:"stdout,omitempty"`
+	Stderr                   string                    `json:"stderr,omitempty"`
+	StdoutTruncated          bool                      `json:"stdout_truncated,omitempty"`
+	StderrTruncated          bool                      `json:"stderr_truncated,omitempty"`
+	Reason                   string                    `json:"reason,omitempty"`
+	ReasonTruncated          bool                      `json:"reason_truncated,omitempty"`
+	VerdictSource            string                    `json:"verdict_source,omitempty"`
+	Score                    *float64                  `json:"score,omitempty"`
+	StartedParticipants      int                       `json:"started_participants,omitempty"`
+	Match                    *MatchResult              `json:"match,omitempty"`
+	Steps                    []StepResult              `json:"steps,omitempty"`
+	SidecarOutputs           []SidecarOutput           `json:"sidecar_outputs,omitempty"`
+	SidecarErrors            []SidecarError            `json:"sidecar_errors,omitempty"`
+}
+
+// WorkMeasurementExecution describes an opt-in diagnostic execution. Its
+// resource envelope is not a contestant's credited time or memory allowance.
+// The enclosing response is always InitFail until an authoritative judgement
+// policy exists, including when this diagnostic completed successfully.
+type WorkMeasurementExecution struct {
+	Authority         string                   `json:"authority"`
+	State             string                   `json:"state"`
+	NominalLimits     Limits                   `json:"nominal_limits"`
+	RawLimits         workmeter.ResourceLimits `json:"raw_limits"`
+	OutputMatches     *bool                    `json:"output_matches,omitempty"`
+	TerminationSource string                   `json:"termination_source,omitempty"`
 }
 
 const (

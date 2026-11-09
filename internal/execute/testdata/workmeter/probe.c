@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -33,6 +34,20 @@ int main(void) {
     if (!strcmp(mode, "burn")) {
         volatile unsigned long long x = 0;
         for (;;) ++x;
+    }
+    if (!strcmp(mode, "sleep")) {
+        sleep(2);
+        puts("slept"); return 0;
+    }
+    if (!strcmp(mode, "memory")) {
+        unsigned int mb = 0;
+        if (scanf("%u", &mb) != 1 || mb == 0 || mb > 256) return 9;
+        size_t size = (size_t)mb * 1024 * 1024;
+        volatile unsigned char *p = malloc(size);
+        if (p == NULL) return 10;
+        for (size_t i = 0; i < size; i += 4096) p[i] = 1;
+        usleep(100000);
+        puts("allocated"); free((void *)p); return 0;
     }
     return 8;
 }
