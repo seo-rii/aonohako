@@ -16,7 +16,7 @@ const runtimeSourceSHA256 = "e2b7d3f1917ff64e644b81efd96a610a3c622f4857c75593fef
 
 // Updated with the reviewed runtime patch. This is installation consistency,
 // not a signature or attestation against an adversarial image administrator.
-const runtimePatchSHA256 = "22e9b2edfd8f340e997faed5a8b9bcf72207cc0f4d715635c7eebca38bab569c"
+const runtimePatchSHA256 = "7b2fbaca84e259aeeafdfc4902ce7a330c48cec51e16804fe74ee3b99ea39f6d"
 const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32a100bf48788c"
 const releaseCore = "lib64/release/libdynamorio.so"
 
