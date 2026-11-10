@@ -1,10 +1,10 @@
 package model
 
 import (
+	"aonohako/internal/durante"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/rustpolicy"
-	"aonohako/internal/workmeter"
 )
 
 type Source struct {
@@ -295,36 +295,36 @@ type SidecarError struct {
 }
 
 type RunRequest struct {
-	WorkMeasurement       bool                      `json:"work_measurement,omitempty"`
-	WorkMeasurementLimits *workmeter.ResourceLimits `json:"work_measurement_limits,omitempty"`
-	Lang                  string                    `json:"lang"`
-	EntryMode             string                    `json:"entry_mode,omitempty"`
-	Binaries              []Binary                  `json:"binaries"`
-	Programs              []RunProgram              `json:"programs,omitempty"`
-	Steps                 []RunStep                 `json:"steps,omitempty"`
-	Stdin                 string                    `json:"stdin"`
-	StdinURL              string                    `json:"stdin_url,omitempty"`
-	ExpectedStdout        string                    `json:"expected_stdout,omitempty"`
-	ExpectedStdoutURL     string                    `json:"expected_stdout_url,omitempty"`
-	Limits                Limits                    `json:"limits"`
-	CaptureLimits         *CaptureLimits            `json:"capture_limits,omitempty"`
-	ProblemID             string                    `json:"problem_id,omitempty"`
-	RuntimeProfile        string                    `json:"runtime_profile,omitempty"`
-	PythonLibraryMode     pythonpolicy.LibraryMode  `json:"python_library_mode,omitempty"`
-	EnableNetwork         bool                      `json:"enable_network,omitempty"`
-	EntryPoint            string                    `json:"entry_point,omitempty"`
-	SPJ                   *SPJSpec                  `json:"spj,omitempty"`
-	Interactor            *InteractorSpec           `json:"interactor,omitempty"`
-	Communication         *CommunicationSpec        `json:"communication,omitempty"`
-	FileOutputs           []OutputFile              `json:"file_outputs,omitempty"`
-	SidecarOutputs        []OutputFile              `json:"sidecar_outputs,omitempty"`
-	EmitLogs              *bool                     `json:"emit_logs,omitempty"`
-	IgnoreTLE             bool                      `json:"ignore_tle,omitempty"`
-	Pipeline              *PipelineV1               `json:"pipeline,omitempty"`
+	WorkMeasurement       bool                     `json:"work_measurement,omitempty"`
+	WorkMeasurementLimits *durante.ResourceLimits  `json:"work_measurement_limits,omitempty"`
+	Lang                  string                   `json:"lang"`
+	EntryMode             string                   `json:"entry_mode,omitempty"`
+	Binaries              []Binary                 `json:"binaries"`
+	Programs              []RunProgram             `json:"programs,omitempty"`
+	Steps                 []RunStep                `json:"steps,omitempty"`
+	Stdin                 string                   `json:"stdin"`
+	StdinURL              string                   `json:"stdin_url,omitempty"`
+	ExpectedStdout        string                   `json:"expected_stdout,omitempty"`
+	ExpectedStdoutURL     string                   `json:"expected_stdout_url,omitempty"`
+	Limits                Limits                   `json:"limits"`
+	CaptureLimits         *CaptureLimits           `json:"capture_limits,omitempty"`
+	ProblemID             string                   `json:"problem_id,omitempty"`
+	RuntimeProfile        string                   `json:"runtime_profile,omitempty"`
+	PythonLibraryMode     pythonpolicy.LibraryMode `json:"python_library_mode,omitempty"`
+	EnableNetwork         bool                     `json:"enable_network,omitempty"`
+	EntryPoint            string                   `json:"entry_point,omitempty"`
+	SPJ                   *SPJSpec                 `json:"spj,omitempty"`
+	Interactor            *InteractorSpec          `json:"interactor,omitempty"`
+	Communication         *CommunicationSpec       `json:"communication,omitempty"`
+	FileOutputs           []OutputFile             `json:"file_outputs,omitempty"`
+	SidecarOutputs        []OutputFile             `json:"sidecar_outputs,omitempty"`
+	EmitLogs              *bool                    `json:"emit_logs,omitempty"`
+	IgnoreTLE             bool                     `json:"ignore_tle,omitempty"`
+	Pipeline              *PipelineV1              `json:"pipeline,omitempty"`
 }
 
 type RunResponse struct {
-	WorkMeasurement          *workmeter.Report         `json:"work_measurement,omitempty"`
+	WorkMeasurement          *durante.Report           `json:"work_measurement,omitempty"`
 	WorkMeasurementExecution *WorkMeasurementExecution `json:"work_measurement_execution,omitempty"`
 	Status                   string                    `json:"status"`
 	TimeMs                   int64                     `json:"time_ms"`
@@ -359,12 +359,12 @@ type RunResponse struct {
 // The enclosing response is always InitFail until an authoritative judgement
 // policy exists, including when this diagnostic completed successfully.
 type WorkMeasurementExecution struct {
-	Authority         string                   `json:"authority"`
-	State             string                   `json:"state"`
-	NominalLimits     Limits                   `json:"nominal_limits"`
-	RawLimits         workmeter.ResourceLimits `json:"raw_limits"`
-	OutputMatches     *bool                    `json:"output_matches,omitempty"`
-	TerminationSource string                   `json:"termination_source,omitempty"`
+	Authority         string                 `json:"authority"`
+	State             string                 `json:"state"`
+	NominalLimits     Limits                 `json:"nominal_limits"`
+	RawLimits         durante.ResourceLimits `json:"raw_limits"`
+	OutputMatches     *bool                  `json:"output_matches,omitempty"`
+	TerminationSource string                 `json:"termination_source,omitempty"`
 }
 
 const (
