@@ -1,6 +1,6 @@
 # Diagnostic software work measurement
 
-An explicitly requested ordinary C/C++ run can execute under Durante and return
+An explicitly requested ordinary supported-language run can execute under Durante and return
 `work_measurement` alongside its ordinary verdict, CPU, wall and memory values.
 The work metric counts application basic blocks across process images. It is a
 separate diagnostic unit, not a conversion to milliseconds or a new TLE rule.
@@ -39,7 +39,7 @@ qualification, and request bodies cannot override these engine options.
 
 | Environment variable | Meaning |
 |---|---|
-| `AONOHAKO_DURANTE_FAMILIES` | Comma-separated enabled family IDs; empty disables measurement. This PR registers `cpp`. |
+| `AONOHAKO_DURANTE_FAMILIES` | Comma-separated enabled family IDs; empty disables measurement. Registered IDs: `cpp`, `cpython`, `pypy`, `native`, `jvm`, `dotnet`, `javascript-wasm`, `beam`, `scripting`, `scientific-functional`, `specialized`. JVM execution is rejected pending startup compatibility. |
 | `AONOHAKO_DURANTE_DRRUN` | Absolute trusted launcher path; default `/opt/durante/dynamorio/bin64/drrun`. |
 | `AONOHAKO_DURANTE_CLIENT` | Absolute trusted client path; default `/opt/durante/lib/libdurante.so`. |
 | `AONOHAKO_DURANTE_DISPATCH_PROFILE` | `default`, or the C/C++ diagnostic profile `glibc-2.41-sse2-v1`. |
@@ -179,7 +179,7 @@ dedicated diagnostic runner rather than sharing it with unrelated workloads or
 ordinary requests with larger allocations. RSS sampling can overshoot between
 polls; the reserve is headroom, not a guarantee against container OOM.
 
-An ordinary C/C++ request may then include:
+An ordinary supported-language request may then include:
 
 ```json
 {
@@ -191,7 +191,7 @@ An ordinary C/C++ request may then include:
 
 All three actual limits are explicit, must cover the nominal limits, and must fit
 operator caps. CPU/wall are bounded to 600,000 ms and RSS to 4,096 MiB. Actual wall
-must be at least actual CPU. This first envelope supports ordinary C/C++ only.
+must be at least actual CPU. The envelope accepts registered compatible families, including stock CPython and PyPy; known-incompatible JVM startup is rejected. Family registration alone is not runtime qualification.
 The original request's nominal limits remain immutable. A private execution copy
 supplies actual limits to the CPU watchdog, wall timer, RSS checks, final resource
 checks, runtime memory settings and derived address-space limit. Startup CPU
@@ -247,3 +247,32 @@ it to authorize AC/TLE. The fixed host glibc check does not attest target libc.
 
 For the memory experiments and the demonstrated limitation of native replay,
 see [Memory policy evidence](durante-memory-policy.md).
+
+## Consolidated runtime integration
+
+The common integration now contains the runtime registrations, fixtures and
+historical evidence from the former family PRs #86–#95. Every family uses the
+same Durante native client and bounded collector. Configuration remains opt-in;
+no family is enabled automatically. See the family documents in
+[`durante/`](durante/) for recorded compatibility and coverage gaps.
+
+Python uses the installed stock CPython/PyPy executable, including its executed
+native extensions and shared libraries. The earlier PR #84 rebuilt CPython with
+LLVM-IR instrumentation and used separate PyPy JIT hooks; those partial counters
+are superseded by Durante for this integration. Historical results are not
+reinterpreted as Durante measurements. The reusable hashlib/zlib scaling corpus
+and fresh verification procedure are described in
+[Python qualification](durante/python-qualification.md).
+
+Resource envelopes use the same raw CPU/wall/RSS protection for all admitted
+families and bind complete reports to the request's exact runtime family. The
+C/C++ glibc dispatch profile remains C/C++ only. JVM metadata stays registered,
+but measurement is refused because instrumented JVM startup has a reproduced
+failure. Invalid, killed or incomplete accounting never yields a usable total.
+Other unqualified runtime paths remain documented and require their actual
+image/sandbox tests before operator enablement. Consolidation does not grant
+additional child-process or network permissions.
+
+All envelope responses retain diagnostic-only authority and never grant student
+AC/TLE or credited memory. Stable instruction counts cannot establish adversarial
+counter integrity, calibrated milliseconds, or an instrumentation-free RSS peak.

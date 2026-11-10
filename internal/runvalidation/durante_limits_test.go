@@ -29,10 +29,10 @@ func TestWorkMeasurementLimitsValidateWithoutMutatingNominalLimits(t *testing.T)
 	if string(before) != string(after) {
 		t.Fatal("validation modified request")
 	}
-	for _, language := range []string{"C", "C89", "CPP", "CPP98", "CPP26"} {
+	for _, language := range []string{"C", "C89", "CPP", "CPP98", "CPP26", "PYTHON3", "PYPY3", "RUST2024", "GO"} {
 		req.Lang = language
 		if err := Validate(req); err != nil {
-			t.Fatalf("valid C/C++ profile %s: %v", language, err)
+			t.Fatalf("valid Durante profile %s: %v", language, err)
 		}
 	}
 	var forwarded model.RunRequest
@@ -48,7 +48,7 @@ func TestWorkMeasurementLimitsRejectInvalidOrMixedRequests(t *testing.T) {
 	for name, edit := range map[string]func(*model.RunRequest){
 		"disabled measurement":  func(r *model.RunRequest) { r.WorkMeasurement = false },
 		"generic binary":        func(r *model.RunRequest) { r.Lang = "binary" },
-		"interpreter":           func(r *model.RunRequest) { r.Lang = "PYTHON3" },
+		"unsupported JVM":       func(r *model.RunRequest) { r.Lang = "JAVA17" },
 		"entry":                 func(r *model.RunRequest) { r.EntryMode = "state" },
 		"interactor":            func(r *model.RunRequest) { r.Interactor = &model.InteractorSpec{} },
 		"spj":                   func(r *model.RunRequest) { r.SPJ = &model.SPJSpec{} },

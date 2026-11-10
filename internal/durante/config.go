@@ -54,6 +54,9 @@ func (c Config) Family(language string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("work_measurement requires a registered source-language profile")
 	}
+	if err := ValidateMeasurementFamily(family); err != nil {
+		return "", err
+	}
 	enabled := false
 	for _, name := range c.Families {
 		enabled = enabled || name == family

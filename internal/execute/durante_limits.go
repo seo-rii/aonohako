@@ -49,7 +49,7 @@ func finishWorkMeasurementDiagnostic(ctx context.Context, req *model.RunRequest,
 	case response.Status == model.RunStatusTLE || response.Status == model.RunStatusMLE:
 		diagnostic.State = "resource_exhausted"
 	case response.Status == model.RunStatusAccepted || response.Status == model.RunStatusWA:
-		if validDiagnosticWorkReport(response.WorkMeasurement) && ordinaryMeasurementOutputSource(response.VerdictSource) && response.ExitCode != nil && *response.ExitCode == 0 {
+		if validDiagnosticWorkReport(req.Lang, response.WorkMeasurement) && ordinaryMeasurementOutputSource(response.VerdictSource) && response.ExitCode != nil && *response.ExitCode == 0 {
 			diagnostic.State = "complete"
 			matches := response.Status == model.RunStatusAccepted
 			diagnostic.OutputMatches = &matches
@@ -76,11 +76,15 @@ func ordinaryMeasurementOutputSource(source string) bool {
 	return source == "stdout" || source == "file_output"
 }
 
-func validDiagnosticWorkReport(report *durante.Report) bool {
+func validDiagnosticWorkReport(language string, report *durante.Report) bool {
+	family, ok := durante.FamilyForLanguage(language)
+	if !ok || durante.ValidateMeasurementFamily(family) != nil {
+		return false
+	}
 	return report != nil && report.Schema == 1 && report.ClientVersion == 1 &&
 		report.Complete && report.Reason == "" && report.Quality == "uninterrupted" && report.Authority == durante.Authority &&
-		report.EngineProfile == durante.EngineProfile && report.Family == "cpp" &&
-		(report.DispatchProfile == durante.DispatchDefault || (report.DispatchProfile == durante.DispatchGLIBC241 && report.HostLibc == "2.41")) &&
+		report.EngineProfile == durante.EngineProfile && report.Family == family &&
+		(report.DispatchProfile == durante.DispatchDefault || (family == "cpp" && report.DispatchProfile == durante.DispatchGLIBC241 && report.HostLibc == "2.41")) &&
 		report.Metric == durante.Metric && report.Scope == durante.Scope &&
 		report.Instructions != nil && *report.Instructions > 0 && report.REPBytes != nil && report.REPEntries != nil &&
 		(*report.REPEntries > 0 || *report.REPBytes == 0) &&
@@ -110,7 +114,7 @@ func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResp
 	}
 	switch d.State {
 	case "complete":
-		if d.OutputMatches == nil || !ordinaryMeasurementOutputSource(d.TerminationSource) || !validDiagnosticWorkReport(response.WorkMeasurement) || response.ExitCode == nil || *response.ExitCode != 0 {
+		if d.OutputMatches == nil || !ordinaryMeasurementOutputSource(d.TerminationSource) || !validDiagnosticWorkReport(req.Lang, response.WorkMeasurement) || response.ExitCode == nil || *response.ExitCode != 0 {
 			return fmt.Errorf("invalid remote result: incomplete work measurement marked complete")
 		}
 	case "failed", "incomplete", "cancelled", "resource_exhausted":

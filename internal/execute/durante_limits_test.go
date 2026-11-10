@@ -135,7 +135,7 @@ func TestWorkMeasurementRejectsMalformedCompleteReports(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := completeEnvelopeReport()
 			edit(r)
-			if validDiagnosticWorkReport(r) {
+			if validDiagnosticWorkReport("CPP20", r) {
 				t.Fatal("accepted malformed complete report")
 			}
 		})
@@ -164,5 +164,45 @@ func TestWorkMeasurementServiceFreezesOperatorAuthorization(t *testing.T) {
 	r = svc.Run(context.Background(), req, Hooks{})
 	if r.Reason != "work measurement failed: no binaries" || r.WorkMeasurementExecution == nil {
 		t.Fatalf("authorization changed after construction: %+v", r)
+	}
+}
+
+func TestWorkMeasurementEnvelopeBindsRuntimeFamily(t *testing.T) {
+	for _, tc := range []struct{ language, family string }{{"CPP20", "cpp"}, {"PYTHON3", "cpython"}, {"PYPY3", "pypy"}, {"RUST2024", "native"}, {"JAVASCRIPT", "javascript-wasm"}} {
+		t.Run(tc.family, func(t *testing.T) {
+			req := envelopeRequest()
+			req.Lang = tc.language
+			report := completeEnvelopeReport()
+			report.Family = tc.family
+			exit := 0
+			response := finishWorkMeasurementDiagnostic(context.Background(), req, model.RunResponse{Status: model.RunStatusAccepted, ExitCode: &exit, VerdictSource: "stdout", WorkMeasurement: report})
+			if response.WorkMeasurementExecution.State != "complete" || response.Status != model.RunStatusInitFail || response.Score != nil {
+				t.Fatalf("family diagnostic failed: %+v", response)
+			}
+			if err := validateRemoteWorkMeasurement(req, response); err != nil {
+				t.Fatal(err)
+			}
+			response.WorkMeasurement.Family = "cpp"
+			if tc.family == "cpp" {
+				response.WorkMeasurement.Family = "cpython"
+			}
+			if err := validateRemoteWorkMeasurement(req, response); err == nil {
+				t.Fatal("accepted another runtime family's counts")
+			}
+		})
+	}
+	for _, language := range []string{"PYTHON3", "PYPY3"} {
+		report := completeEnvelopeReport()
+		report.Family, _ = durante.FamilyForLanguage(language)
+		report.DispatchProfile = durante.DispatchGLIBC241
+		report.HostLibc = "2.41"
+		if validDiagnosticWorkReport(language, report) {
+			t.Fatal("accepted C/C++ dispatch for interpreter")
+		}
+	}
+	report := completeEnvelopeReport()
+	report.Family = "jvm"
+	if validDiagnosticWorkReport("JAVA17", report) {
+		t.Fatal("known incompatible JVM accepted")
 	}
 }

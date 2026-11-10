@@ -86,3 +86,82 @@ func TestDuranteResourceEnvelopeIntegration(t *testing.T) {
 		}
 	})
 }
+
+// The same interpreter binary, sandbox and envelope protect Python programs;
+// no instrumented interpreter build or alternate score protocol is involved.
+func TestDurantePythonResourceEnvelopeIntegration(t *testing.T) {
+	if os.Getenv("AONOHAKO_TEST_DURANTE") != "1" {
+		t.Skip("dedicated durante validation image required")
+	}
+	if os.Geteuid() != 0 {
+		t.Fatal("sandbox integration requires root")
+	}
+	forceDirectMode(t)
+	cfg, err := durante.ParseConfig("cpython,pypy", os.Getenv("AONOHAKO_DURANTE_DRRUN"), os.Getenv("AONOHAKO_DURANTE_CLIENT"), durante.DispatchDefault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ResourcePolicy, err = durante.ParseResourcePolicy(`{"max_limits":{"cpu_time_ms":10000,"wall_time_ms":30000,"memory_mb":1024},"memory_budget_mb":4096,"reserved_memory_mb":512}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewWithConfig(config.Config{MaxActiveRuns: 1, WorkRootMaxBytes: 128 << 20, Execution: config.ExecutionConfig{WorkMeasurement: cfg}})
+	languages := []string{"PYTHON3"}
+	// CI supplies PyPy explicitly; a missing interpreter is not a passing receipt.
+	if os.Getenv("AONOHAKO_TEST_DURANTE_PYPY") == "1" {
+		languages = append(languages, "PYPY3")
+	}
+	for _, language := range languages {
+		t.Run(language, func(t *testing.T) {
+			run := func(ctx context.Context, source, expected string, hard durante.ResourceLimits) model.RunResponse {
+				req := &model.RunRequest{Lang: language, WorkMeasurement: true, IgnoreTLE: true, Binaries: []model.Binary{{Name: "Main.py", DataB64: base64.StdEncoding.EncodeToString([]byte(source)), Mode: "text"}}, ExpectedStdout: expected, Limits: model.Limits{TimeMs: 1, WallTimeMs: 1, MemoryMB: 16}, WorkMeasurementLimits: &hard}
+				return svc.Run(ctx, req, Hooks{})
+			}
+			hard := durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: 512}
+			for _, tc := range []struct{ name, source, expected string }{
+				{"startup", "print(42)", "42"},
+				{"hashlib", "import hashlib\nprint(hashlib.sha256(b'abc').hexdigest())", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"},
+				{"zlib", "import zlib\nprint(len(zlib.decompress(zlib.compress(b'a'*100000))))", "100000"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					r := run(context.Background(), tc.source, tc.expected, hard)
+					if r.Status != model.RunStatusInitFail || r.WorkMeasurementExecution == nil || r.WorkMeasurementExecution.State != "complete" || r.WorkMeasurementExecution.OutputMatches == nil || !*r.WorkMeasurementExecution.OutputMatches || r.Score != nil || r.CPUTimeNormalization != nil {
+						t.Fatalf("interpreter diagnostic: %+v metadata=%+v", r, r.WorkMeasurementExecution)
+					}
+					if err := validateRemoteWorkMeasurement(&model.RunRequest{Lang: language, Limits: model.Limits{TimeMs: 1, WallTimeMs: 1, MemoryMB: 16}, WorkMeasurementLimits: &hard}, r); err != nil {
+						t.Fatal(err)
+					}
+				})
+			}
+			for _, tc := range []struct {
+				name, source, expectedSource string
+				limits                       durante.ResourceLimits
+			}{
+				{"cpu", "while True: pass", "cpu", durante.ResourceLimits{CPUTimeMs: 1000, WallTimeMs: 10000, MemoryMB: 512}},
+				{"wall", "import time\ntime.sleep(30)", "wall", durante.ResourceLimits{CPUTimeMs: 3000, WallTimeMs: 3000, MemoryMB: 512}},
+				{"rss", "a=bytearray(512*1024*1024)\nprint(len(a))", "memory", durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: 96}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					r := run(context.Background(), tc.source, "", tc.limits)
+					d := r.WorkMeasurementExecution
+					if r.Status != model.RunStatusInitFail || d == nil || d.State != "resource_exhausted" || d.OutputMatches != nil || r.Score != nil || !strings.Contains(d.TerminationSource, tc.expectedSource) {
+						t.Fatalf("interpreter hard stop: %+v metadata=%+v", r, d)
+					}
+					if r.WorkMeasurement != nil && r.WorkMeasurement.Instructions != nil {
+						t.Fatal("forced stop produced usable total")
+					}
+				})
+			}
+			t.Run("cancel", func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				timer := time.AfterFunc(500*time.Millisecond, cancel)
+				defer timer.Stop()
+				r := run(ctx, "while True: pass", "", hard)
+				if r.Status != model.RunStatusInitFail || r.WorkMeasurementExecution == nil || r.WorkMeasurementExecution.State != "cancelled" || r.Score != nil {
+					t.Fatalf("interpreter cancellation: %+v", r)
+				}
+			})
+		})
+	}
+}

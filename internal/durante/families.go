@@ -85,3 +85,16 @@ func ValidateFamilies(names []string) error {
 	}
 	return nil
 }
+
+// ValidateMeasurementFamily excludes known incompatible engines even when an
+// operator names the registered family. Registration documents source identity;
+// it does not override a reproduced startup failure.
+func ValidateMeasurementFamily(family string) error {
+	if err := ValidateFamilies([]string{family}); err != nil {
+		return err
+	}
+	if family == "jvm" {
+		return fmt.Errorf("durante JVM measurement is unavailable: instrumented JVM startup is unqualified")
+	}
+	return nil
+}

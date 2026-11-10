@@ -154,8 +154,11 @@ func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
 		return fmt.Errorf("work_measurement_limits requires work_measurement=true")
 	}
 	family, ok := durante.FamilyForLanguage(req.Lang)
-	if !ok || family != "cpp" {
-		return fmt.Errorf("work_measurement_limits supports only C/C++ source-language profiles")
+	if !ok {
+		return fmt.Errorf("work_measurement_limits requires a registered source-language profile")
+	}
+	if err := durante.ValidateMeasurementFamily(family); err != nil {
+		return err
 	}
 	if req.Communication != nil || req.Pipeline != nil || req.Interactor != nil || req.SPJ != nil || len(req.Programs) != 0 || len(req.Steps) != 0 || req.EntryMode != "" {
 		return fmt.Errorf("work_measurement_limits supports only an ordinary single-program run")
