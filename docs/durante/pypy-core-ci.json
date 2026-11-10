@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "scope": "core compact-VM interpreter compatibility smoke; not aonohako production image/API qualification",
+  "workflow_url": "https://github.com/seo-rii/durante/actions/runs/42613918219",
+  "workflow_commit": "e457570c516b7770ed338a142d25adcefc974238",
+  "core_source_sha256": "0dfef65180098eb02761a5f33f34cd4c41932ee33338fff9516a2b8f5cbcb645",
+  "harness_sha256": "6a42495a0ab7d59b7f1792cd2fdb2b8911b1cfc9fd284b7b42c68f0530433cf5",
+  "artifact": "process-tree-smoke/smoke-compact/results.json",
+  "artifact_sha256": "fedd4055e219a4111411b0affc9119b0239698f625fbfb13eb7c8329ac1a0b30",
+  "suite": {
+    "exit_code": 0,
+    "compact_vm": true,
+    "passed": 92,
+    "skipped": [],
+    "unsupported_coverage": []
+  },
+  "runtime_family": "pypy",
+  "runtime_version": null,
+  "runtime_executable_path": null,
+  "program_arguments": [
+    "-c",
+    "print(sum(range(100000)))"
+  ],
+  "engine_options": [
+    "-quiet",
+    "-follow_children",
+    "-vm_size",
+    "32M",
+    "-vmheap_size",
+    "32M"
+  ],
+  "rep_bytes_enabled": false,
+  "program_exit_code": 0,
+  "stdout": "4999950000\n",
+  "stderr": "",
+  "measurement": {
+    "schema": 1,
+    "authority": "diagnostic_only",
+    "metric": "bb_entry_app_instructions",
+    "scope": "process_tree_user_code",
+    "valid": true,
+    "complete": true,
+    "process_count": 1,
+    "image_count": 1,
+    "quality": "uninterrupted",
+    "instructions": 55984099,
+    "rep_bytes": 0,
+    "rep_entries": 0,
+    "unsupported_rep_entries": 0,
+    "signals_observed": 0
+  },
+  "limitations": [
+    "The artifact did not record interpreter versions or their resolved executable paths.",
+    "This is one simple sum smoke with REP telemetry disabled; aonohako enables REP telemetry.",
+    "The actual aonohako image-owned command, sandbox/API integration and PyPy JIT-loop gate require separate checks.",
+    "The known CPython default-close_fds child subprocess timeout remains unresolved; this smoke creates no child.",
+    "This does not establish performance overhead, repeated-run score stability or time-limit compatibility."
+  ]
+}

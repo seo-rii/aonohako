@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
@@ -19,7 +20,6 @@ import (
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/timing"
-	"aonohako/internal/workmeter"
 )
 
 const (
@@ -121,7 +121,7 @@ func sumRawCPUTime(values ...*int64) *int64 {
 }
 
 type Service struct {
-	workMeasurement              workmeter.Config
+	workMeasurement              durante.Config
 	workMeasurementPolicyError   error
 	competitiveRuntimeIdentity   runtimeidentity.CompetitiveIdentity
 	deploymentTarget             platform.DeploymentTarget
@@ -401,11 +401,11 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		stdin = &sandboxPreparedStdin{file: readonlyInput}
 	}
 
-	var meter *workmeter.Session
+	var meter *durante.Session
 	if req.WorkMeasurement {
-		meter, err = workmeter.Prepare(ctx, ws.RootDir, s.workMeasurement, req.Lang, int(defaultSandboxUID), int(defaultSandboxGID))
+		meter, err = durante.Prepare(ctx, ws.RootDir, s.workMeasurement, req.Lang, int(defaultSandboxUID), int(defaultSandboxGID))
 		if err != nil {
-			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "workmeter preparation failed: " + err.Error()}}
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "durante preparation failed: " + err.Error()}}
 		}
 	}
 	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer, meter)

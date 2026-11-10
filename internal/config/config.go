@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"aonohako/internal/durante"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/platform"
@@ -25,7 +26,6 @@ import (
 	"aonohako/internal/rustpolicy"
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
-	"aonohako/internal/workmeter"
 )
 
 type RemoteAuthMode string
@@ -62,7 +62,7 @@ type InboundAuthConfig struct {
 }
 
 type ExecutionConfig struct {
-	WorkMeasurement        workmeter.Config
+	WorkMeasurement        durante.Config
 	Platform               platform.RuntimeOptions
 	Remote                 RemoteExecutorConfig
 	CPUNormalization       CPUNormalizationConfig
@@ -622,20 +622,20 @@ func Load() (Config, error) {
 			problemRustCrateModes[problemID] = mode
 		}
 	}
-	workMeasurement, err := workmeter.ParseConfig(os.Getenv("AONOHAKO_WORKMETER_FAMILIES"), os.Getenv("AONOHAKO_WORKMETER_DRRUN"), os.Getenv("AONOHAKO_WORKMETER_CLIENT"), os.Getenv("AONOHAKO_WORKMETER_DISPATCH_PROFILE"))
+	workMeasurement, err := durante.ParseConfig(os.Getenv("AONOHAKO_DURANTE_FAMILIES"), os.Getenv("AONOHAKO_DURANTE_DRRUN"), os.Getenv("AONOHAKO_DURANTE_CLIENT"), os.Getenv("AONOHAKO_DURANTE_DISPATCH_PROFILE"))
 	if err != nil {
 		return Config{}, err
 	}
-	workMeasurement.ResourcePolicy, err = workmeter.ParseResourcePolicy(os.Getenv("AONOHAKO_WORKMETER_RESOURCE_POLICY"))
+	workMeasurement.ResourcePolicy, err = durante.ParseResourcePolicy(os.Getenv("AONOHAKO_DURANTE_RESOURCE_POLICY"))
 	if err != nil {
-		return Config{}, fmt.Errorf("AONOHAKO_WORKMETER_RESOURCE_POLICY: %w", err)
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
 	}
 	if workMeasurement.ResourcePolicy != nil {
 		if _, err := workMeasurement.Family("CPP20"); err != nil {
-			return Config{}, fmt.Errorf("AONOHAKO_WORKMETER_RESOURCE_POLICY requires the cpp workmeter family: %w", err)
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY requires the cpp durante family: %w", err)
 		}
 		if err := workMeasurement.ResourcePolicy.ValidateAdmission(maxActive, workRootMaxBytes); err != nil {
-			return Config{}, fmt.Errorf("AONOHAKO_WORKMETER_RESOURCE_POLICY: %w", err)
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
 		}
 	}
 	execution := ExecutionConfig{
