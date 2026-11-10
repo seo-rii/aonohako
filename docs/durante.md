@@ -20,6 +20,9 @@ source snapshot in `third_party/durante` is bound to an exact upstream commit
 and file hashes by `UPSTREAM.json`; no cross-repository credential is required at
 image build or runtime. The official DynamoRIO 11.3.0 SDK download is SHA-256
 pinned by the vendored fetcher, and its license is retained in the runtime image.
+The fetcher also builds the release/debug runtime cores from hash-pinned source
+with Durante's process-lifetime and descriptor-range fixes. The SDK supplies the
+matching headers, extensions and launcher; a stock core is not the v2 profile.
 
 `docker/durante.Dockerfile` is an explicit overlay on a reviewed execution
 image. Supply an immutable `RUNTIME_IMAGE` digest and select target `runtime`.
@@ -31,7 +34,12 @@ before downloading the separately SHA-256-pinned engine SDK. CI needs no private
 cross-repository checkout token.
 
 The launcher fixes `-vm_size 32M -vmheap_size 32M` and reports engine profile
-`dynamorio-11.3-vm32m-v1`. Upstream's large default virtual reservations can fail
+`dynamorio-11.3-durante-v2-vm32m`. Before launch, installation validation checks
+the runtime manifest's source/patch pins and the actual release-core digest.
+Missing or mismatched provenance refuses measurement. This is a trusted local
+installation check, not attestation against the host administrator or submission.
+Old v1 time models cannot be applied to v2 measurements.
+Upstream's large default virtual reservations can fail
 before main under the ordinary C/C++ address-space bound. These options reduce
 the engine's reservation budgets; no student CPU, RSS or address-space limit is
 increased. Long-running code-cache and large-runtime behavior still need separate
@@ -82,7 +90,7 @@ A successful lifecycle aggregate resembles:
   "metric": "bb_entry_app_instructions",
   "scope": "process_tree_user_code",
   "rep_bytes_enabled": true,
-  "engine_profile": "dynamorio-11.3-vm32m-v1",
+  "engine_profile": "dynamorio-11.3-durante-v2-vm32m",
   "authority": "diagnostic_only",
   "complete": true,
   "quality": "uninterrupted",
