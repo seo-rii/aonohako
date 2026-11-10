@@ -32,7 +32,11 @@ jobs:
         run: |
           python3 scripts/verify_durante_vendor.py
           python3 third_party/durante/toolkit/fetch_sdk.py
-          cmake -S third_party/durante/client -B /tmp/durante-build -DCMAKE_BUILD_TYPE=Release -DDynamoRIO_DIR="$PWD/third_party/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/cmake"
+          # The sandbox drops credentials. Runner home directories need not be
+          # traversable by that UID, so install exactly as in the runtime image.
+          sudo mkdir -p /opt/durante
+          sudo cp -a third_party/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1 /opt/durante/dynamorio
+          cmake -S third_party/durante/client -B /tmp/durante-build -DCMAKE_BUILD_TYPE=Release -DDynamoRIO_DIR=/opt/durante/dynamorio/cmake
           cmake --build /tmp/durante-build -j2
           gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/probe.c -o /tmp/durante-probe
       - name: Compile integration tests
@@ -40,7 +44,7 @@ jobs:
       - name: Validate real sandbox and diagnostic resource limits
         run: |
           sudo env AONOHAKO_TEST_DURANTE=1 AONOHAKO_TEST_DURANTE_PYPY=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
-            AONOHAKO_DURANTE_DRRUN="$PWD/third_party/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/bin64/drrun" \
+            AONOHAKO_DURANTE_DRRUN=/opt/durante/dynamorio/bin64/drrun \
             AONOHAKO_DURANTE_CLIENT=/tmp/durante-build/libdurante.so \
             AONOHAKO_DURANTE_TEST_BINARY=/tmp/durante-probe \
             /tmp/durante-execute.test -test.v -test.run '^TestDurante.*Integration$' -test.timeout 180s
