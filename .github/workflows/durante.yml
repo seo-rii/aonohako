@@ -1,0 +1,46 @@
+name: durante
+
+on:
+  pull_request:
+    paths:
+      - 'internal/**'
+      - 'third_party/durante/**'
+      - 'scripts/verify_durante_vendor.py'
+      - 'go.*'
+      - '.github/workflows/durante.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: durante-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Install native build and interpreter fixtures
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential cmake python3 pypy3
+      - name: Verify pinned engine and build instrumentation
+        run: |
+          python3 scripts/verify_durante_vendor.py
+          python3 third_party/durante/toolkit/fetch_sdk.py
+          cmake -S third_party/durante/client -B /tmp/durante-build -DCMAKE_BUILD_TYPE=Release -DDynamoRIO_DIR="$PWD/third_party/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/cmake"
+          cmake --build /tmp/durante-build -j2
+          gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/probe.c -o /tmp/durante-probe
+      - name: Compile integration tests
+        run: go test -c -o /tmp/durante-execute.test ./internal/execute
+      - name: Validate real sandbox and diagnostic resource limits
+        run: |
+          sudo env AONOHAKO_TEST_DURANTE=1 AONOHAKO_TEST_DURANTE_PYPY=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
+            AONOHAKO_DURANTE_DRRUN="$PWD/third_party/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/bin64/drrun" \
+            AONOHAKO_DURANTE_CLIENT=/tmp/durante-build/libdurante.so \
+            AONOHAKO_DURANTE_TEST_BINARY=/tmp/durante-probe \
+            /tmp/durante-execute.test -test.v -test.run '^TestDurante.*Integration$' -test.timeout 180s
