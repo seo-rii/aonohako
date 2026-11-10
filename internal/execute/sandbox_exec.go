@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
@@ -28,12 +29,11 @@ import (
 	"aonohako/internal/security"
 	"aonohako/internal/timing"
 	"aonohako/internal/util"
-	"aonohako/internal/workmeter"
 	"aonohako/internal/workspacequota"
 )
 
 type execResult struct {
-	WorkMeasurement  *workmeter.Report
+	WorkMeasurement  *durante.Report
 	targetPID        int
 	Status           string
 	ExitCode         *int
@@ -111,7 +111,7 @@ func ceilCPUMilliseconds(ns uint64) int64 {
 }
 
 type sandboxStreamConfig struct {
-	workMeasurement           *workmeter.Session
+	workMeasurement           *durante.Session
 	stdin                     io.Reader
 	stdinMaxBytes             int64
 	liveStdin                 bool
@@ -233,7 +233,7 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer, meters ...*workmeter.Session) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer, meters ...*durante.Session) execResult {
 	wallLimit := time.Duration(executionWallTimeMs(req.Limits, false, cpuNormalizer.WallLimitMillis)) * time.Millisecond
 	// Preparation stays separate from the wall-clock safety deadline. CPU
 	// limits continue to be enforced by the sandbox watchdog and RLIMIT_CPU.
@@ -241,7 +241,7 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, wallLimit)
 	defer cancel()
 
-	var meter *workmeter.Session
+	var meter *durante.Session
 	if len(meters) > 0 {
 		meter = meters[0]
 	}
