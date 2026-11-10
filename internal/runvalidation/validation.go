@@ -9,13 +9,13 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/payloadurl"
 	"aonohako/internal/profiles"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/util"
-	"aonohako/internal/workmeter"
 )
 
 const (
@@ -153,7 +153,7 @@ func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
 	if !req.WorkMeasurement {
 		return fmt.Errorf("work_measurement_limits requires work_measurement=true")
 	}
-	family, ok := workmeter.FamilyForLanguage(req.Lang)
+	family, ok := durante.FamilyForLanguage(req.Lang)
 	if !ok || family != "cpp" {
 		return fmt.Errorf("work_measurement_limits supports only C/C++ source-language profiles")
 	}
