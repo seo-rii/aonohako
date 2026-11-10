@@ -205,3 +205,17 @@ func TestTimeEstimateUsesEntireCollectedProcessTree(t *testing.T) {
 		t.Fatalf("expected combined parent and child work, got %+v, %v", got, err)
 	}
 }
+
+func TestTimePolicyRejectsPreStabilizationEngineProfile(t *testing.T) {
+	policy := timePolicyFixture()
+	policy.EngineProfile = "dynamorio-11.3-vm32m-v1"
+	if err := policy.Validate(); err == nil {
+		t.Fatal("old runtime calibration survived patched engine profile")
+	}
+	policy = timePolicyFixture()
+	report := timeReportFixture(100, 0)
+	report.EngineProfile = "dynamorio-11.3-vm32m-v1"
+	if _, err := policy.Estimate(policy.RuntimeID, report); err == nil {
+		t.Fatal("old runtime report accepted under patched calibration")
+	}
+}

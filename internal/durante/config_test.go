@@ -54,9 +54,8 @@ func TestDuranteConfigIsOptIn(t *testing.T) {
 }
 func TestSessionPinsEnvironmentAndPreservesArguments(t *testing.T) {
 	dir := t.TempDir()
-	launcher := filepath.Join(dir, "drrun")
+	launcher := runtimeInstallationFixture(t, dir)
 	client := filepath.Join(dir, "client.so")
-	os.WriteFile(launcher, []byte("x"), 0700)
 	os.WriteFile(client, []byte("x"), 0600)
 	cfg, _ := ParseConfig("cpp", launcher, client, DispatchGLIBC241)
 	s, err := prepare(context.Background(), dir, cfg, "CPP20", os.Geteuid(), os.Getegid(), func(context.Context) (string, error) { return "2.41", nil })

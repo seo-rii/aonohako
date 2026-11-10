@@ -11,8 +11,9 @@ import (
 	"time"
 )
 
-// EngineProfile identifies fixed engine reservations; requests cannot override them.
-const EngineProfile = "dynamorio-11.3-vm32m-v1"
+// EngineProfile identifies the reviewed patched engine and fixed reservations.
+// Prepare verifies installation provenance before any report claims this profile.
+const EngineProfile = "dynamorio-11.3-durante-v2-vm32m"
 
 // This profile was qualified only as a C/C++ diagnostic control on glibc 2.41.
 // The host version does not attest the embedded libc of static submissions.
@@ -77,6 +78,9 @@ func prepare(ctx context.Context, root string, cfg Config, language string, uid,
 	info, _ := os.Stat(cfg.Drrun)
 	if info.Mode().Perm()&0111 == 0 {
 		return nil, fmt.Errorf("durante launcher is not executable")
+	}
+	if err := verifyRuntimeInstallation(cfg.Drrun); err != nil {
+		return nil, fmt.Errorf("durante patched runtime verification failed: %w", err)
 	}
 	s := &Session{config: cfg, family: family}
 	if cfg.DispatchProfile == DispatchGLIBC241 {
