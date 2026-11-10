@@ -54,3 +54,25 @@ that independent compatibility gate must also pass before any permitted child
 path is enabled. Instrumentation changes resource consumption, so measured raw
 CPU/wall/RSS ceilings stay separate from nominal limits. Counters remain
 application-writable and diagnostic-only.
+
+## Patched v2 engine validation
+
+The source/patch-pinned v2 engine passed twelve fresh CLI corpus observations on
+stock CPython 3.13.5 and PyPy 7.3.19 (Python 3.11.11). Both hashlib and zlib
+instruction totals increased at every scale, with unchanged expected output,
+normal exit and complete accounting. Sanitized input/artifact hashes and counts
+are in [python-v2-qualification.json](python-v2-qualification.json). The container
+used a private writable `DYNAMORIO_CONFIGDIR`; arbitrary numeric container UIDs
+must not rely on an absent home directory or a pre-existing root-owned config.
+
+The same patched release engine also passed all 25 actual aonohako sandbox
+subcases across C/C++, CPython and PyPy: normal startup/native libraries, raw
+CPU/wall/RSS exhaustion, cancellation, unmetered behavior and unchanged C/C++
+fork/network restrictions. The installation manifest and release-core digest
+checks ran in these tests. The dedicated Durante CI job reruns these checks
+against the source-built pinned engine. Local execution used an existing runtime
+image; no service was deployed.
+
+These checks replace the earlier incomplete-engine attempt, which was discarded
+after patch-composition review. They do not qualify JVM startup, calibrate CPU
+milliseconds, or turn process-local counters into an adversarial boundary.

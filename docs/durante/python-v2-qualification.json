@@ -1,0 +1,212 @@
+{
+  "schema": 1,
+  "date": "2026-11-11",
+  "authority": "diagnostic_only",
+  "runtime_inputs": {
+    "source_commit": "6847bb210bea0ca11d1bf47704383d6a075da490",
+    "source_sha256": "e2b7d3f1917ff64e644b81efd96a610a3c622f4857c75593fef5d5e581c231f6",
+    "patch_sha256": "7b2fbaca84e259aeeafdfc4902ce7a330c48cec51e16804fe74ee3b99ea39f6d",
+    "recipe": 1,
+    "cmake_options": [
+      "-DCMAKE_POLICY_DEFAULT_CMP0067=NEW",
+      "-DCMAKE_C_STANDARD=17",
+      "-DCMAKE_C_STANDARD_REQUIRED=ON",
+      "-DVERSION_NUMBER=11.3.0",
+      "-DBUILD_NUMBER=1",
+      "-DBUILD_EXT=OFF",
+      "-DBUILD_TOOLS=OFF",
+      "-DBUILD_DOCS=OFF",
+      "-DBUILD_TESTS=OFF",
+      "-DBUILD_SAMPLES=OFF",
+      "-DBUILD_CLIENTS=OFF"
+    ],
+    "profiles": {
+      "release": "Release",
+      "debug": "Debug"
+    }
+  },
+  "release_core_sha256": "c3635514d9979e350a313a8256b66cf5bdb4f47ad2c7b6be19e6d24334e3ed06",
+  "observations": [
+    {
+      "version": "Python 3.13.5",
+      "passed": true,
+      "installation_sha256": {
+        "runner": "0ef0ad59f4852027819dc77c0080252877da1e0a542286ebb9a112bd87f8e18f",
+        "drrun": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+        "client": "6f9325a7629a2f56b70bf653ed3772e587f2ed13284f6dd5739cef62e992030f"
+      },
+      "scaling": {
+        "hashlib_native": true,
+        "zlib_native": true
+      },
+      "cases": [
+        {
+          "fixture": "hashlib_native",
+          "scale": 1,
+          "fixture_sha256": "c8d7579f918ab7fb29750b16c35b6a4997844373d84c34e9ada39f31f235b05c",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 376785938,
+          "rep_bytes": 50072,
+          "rep_entries": 828,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "hashlib_native",
+          "scale": 2,
+          "fixture_sha256": "c8d7579f918ab7fb29750b16c35b6a4997844373d84c34e9ada39f31f235b05c",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 716815984,
+          "rep_bytes": 50072,
+          "rep_entries": 828,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "hashlib_native",
+          "scale": 4,
+          "fixture_sha256": "c8d7579f918ab7fb29750b16c35b6a4997844373d84c34e9ada39f31f235b05c",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 1396929798,
+          "rep_bytes": 50072,
+          "rep_entries": 828,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "zlib_native",
+          "scale": 1,
+          "fixture_sha256": "92d232ef7685cd261a0d2e4bec65ec484feb5323744ee9290fd6f6f29660c5d4",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 1334229838,
+          "rep_bytes": 51328,
+          "rep_entries": 866,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "zlib_native",
+          "scale": 2,
+          "fixture_sha256": "92d232ef7685cd261a0d2e4bec65ec484feb5323744ee9290fd6f6f29660c5d4",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 2664494197,
+          "rep_bytes": 51328,
+          "rep_entries": 866,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "zlib_native",
+          "scale": 4,
+          "fixture_sha256": "92d232ef7685cd261a0d2e4bec65ec484feb5323744ee9290fd6f6f29660c5d4",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 5313716305,
+          "rep_bytes": 51328,
+          "rep_entries": 866,
+          "quality": "uninterrupted"
+        }
+      ]
+    },
+    {
+      "version": "Python 3.11.11 (7.3.19+dfsg-2, Apr 11 2025, 02:57:20)\n[PyPy 7.3.19 with GCC 14.2.0]",
+      "passed": true,
+      "installation_sha256": {
+        "runner": "0ef0ad59f4852027819dc77c0080252877da1e0a542286ebb9a112bd87f8e18f",
+        "drrun": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+        "client": "6f9325a7629a2f56b70bf653ed3772e587f2ed13284f6dd5739cef62e992030f"
+      },
+      "scaling": {
+        "hashlib_native": true,
+        "zlib_native": true
+      },
+      "cases": [
+        {
+          "fixture": "hashlib_native",
+          "scale": 1,
+          "fixture_sha256": "c8d7579f918ab7fb29750b16c35b6a4997844373d84c34e9ada39f31f235b05c",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 626486064,
+          "rep_bytes": 164584,
+          "rep_entries": 8268,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "hashlib_native",
+          "scale": 2,
+          "fixture_sha256": "c8d7579f918ab7fb29750b16c35b6a4997844373d84c34e9ada39f31f235b05c",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 966550036,
+          "rep_bytes": 165441,
+          "rep_entries": 8354,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "hashlib_native",
+          "scale": 4,
+          "fixture_sha256": "c8d7579f918ab7fb29750b16c35b6a4997844373d84c34e9ada39f31f235b05c",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 1646730882,
+          "rep_bytes": 164584,
+          "rep_entries": 8268,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "zlib_native",
+          "scale": 1,
+          "fixture_sha256": "92d232ef7685cd261a0d2e4bec65ec484feb5323744ee9290fd6f6f29660c5d4",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 1499227844,
+          "rep_bytes": 7440,
+          "rep_entries": 10,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "zlib_native",
+          "scale": 2,
+          "fixture_sha256": "92d232ef7685cd261a0d2e4bec65ec484feb5323744ee9290fd6f6f29660c5d4",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 2978855238,
+          "rep_bytes": 7440,
+          "rep_entries": 10,
+          "quality": "uninterrupted"
+        },
+        {
+          "fixture": "zlib_native",
+          "scale": 4,
+          "fixture_sha256": "92d232ef7685cd261a0d2e4bec65ec484feb5323744ee9290fd6f6f29660c5d4",
+          "passed": true,
+          "runner_exit": 0,
+          "instructions": 5927095282,
+          "rep_bytes": 8448,
+          "rep_entries": 12,
+          "quality": "uninterrupted"
+        }
+      ]
+    }
+  ],
+  "sandbox_checks": {
+    "source_commit": "5c4e6d7",
+    "subcases": 25,
+    "passed": 25,
+    "families": [
+      "cpp",
+      "cpython",
+      "pypy"
+    ],
+    "cases": [
+      "startup and native libraries",
+      "raw CPU ceiling",
+      "raw wall ceiling",
+      "raw RSS ceiling",
+      "cancellation",
+      "unmetered compatibility",
+      "fork/network policy"
+    ]
+  }
+}
