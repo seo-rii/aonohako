@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/seo-rii/durante",
+  "commit": "3fd6a73aa3b7200053ef451a8215c4df240bf497",
+  "files": {
+    "LICENSE": "11eac69fd9d6761dc41879298d5a6ad81cb8726a8dffafd79986ba4cca8d7d07",
+    "README.md": "6b1096914bfee7ebd0a4723174bc34579dd1e438b4a0f807aea3dbecc84e9133",
+    "client/.gitignore": "3daaedab6c734d94f59f49c386d73036235def367aa9e28bcc032f414cc79ff9",
+    "client/CMakeLists.txt": "002a8cac6202b6af54adc302d06ed67989981e0b047a86312007917d5ee9cb90",
+    "client/README.md": "4b29b9f96de2622a69babd46b088013cdd3b0558f99c0b034dad590343c92075",
+    "client/durante.c": "4e29f7495dd671b0a100efcdb7bd629e9a03592fdc25e4760dc47603bffcecbc",
+    "docs/PROTOCOL.md": "63b02f6fa97d2da6d33e58d56d62cc7f1cc767f68ecd3633f193cf0ce64fa614",
+    "tests/protocol_vectors.json": "0a268dc96a40d77ef65c07c399d12f2b6065408907c6d2ce001dff69e33e7c78",
+    "toolkit/.gitignore": "31085c6019d1701b65db0f964f5b16915ef8ac9235c549ec4cada702331814dc",
+    "toolkit/fetch_sdk.py": "b3f1fd8834268d7cfefe5f1fc412d4461053c3df759d12194506454f53cebd82",
+    "toolkit/sdk.lock.json": "476f0dd4a0b28db93d4eb4f9206d5765d2cb53313b179513339947fbddacdd66"
+  },
+  "scope": "Pinned source for opt-in Linux x86-64 diagnostic measurement; SDK fetched separately with its pinned SHA-256."
+}
