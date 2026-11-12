@@ -1,6 +1,7 @@
 package durante
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,55 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestSessionRecordsActualInstallationBeforeAndAfterObservation(t *testing.T) {
+	for _, changed := range []string{"", "launcher", "client", "core", "manifest"} {
+		t.Run("changed-"+changed, func(t *testing.T) {
+			root := t.TempDir()
+			launcher := runtimeInstallationFixture(t, root)
+			client := filepath.Join(root, "client.so")
+			if err := os.WriteFile(client, []byte("synthetic diagnostic client"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := ParseConfig("cpp", launcher, client, DispatchDefault)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s, err := Prepare(context.Background(), root, cfg, "CPP20", os.Geteuid(), os.Getegid())
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeTree(t, s.dir)
+			for path, expected := range map[string]string{launcher: s.installation.LauncherSHA256, client: s.installation.ClientSHA256, filepath.Join(root, releaseCore): s.installation.CoreSHA256} {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				digest := sha256.Sum256(data)
+				if expected != hex.EncodeToString(digest[:]) {
+					t.Fatal("identity does not hash selected artifact")
+				}
+			}
+			if changed != "" {
+				path := map[string]string{"launcher": launcher, "client": client, "core": filepath.Join(root, releaseCore), "manifest": filepath.Join(root, ".durante-runtime.json")}[changed]
+				if err := os.WriteFile(path, []byte("changed after prepare"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r := s.Collect(10)
+			if !r.ValidDiagnosticContract() || r.Family != "cpp" || r.EngineProfile != EngineProfile || r.Installation == nil {
+				t.Fatalf("missing observation identity: %+v", r)
+			}
+			if changed == "" {
+				if !r.Complete || !r.ValidInstallationIdentity() || *r.Instructions != 300 {
+					t.Fatalf("unchanged installation unavailable: %+v", r)
+				}
+			} else if r.Complete || r.ValidInstallationIdentity() || r.Instructions != nil || r.REPBytes != nil || r.REPTelemetryStatus != REPUnavailable || r.Reason != "durante installation changed during observation" {
+				t.Fatalf("changed installation produced accepted totals: %+v", r)
+			}
+		})
+	}
+}
 
 func runtimeInstallationFixture(t *testing.T, root string) string {
 	t.Helper()
@@ -40,14 +90,14 @@ func runtimeInstallationFixture(t *testing.T, root string) string {
 func TestRuntimeInstallationChecksReviewedInputsAndActualCore(t *testing.T) {
 	dir := t.TempDir()
 	launcher := runtimeInstallationFixture(t, dir)
-	if err := verifyRuntimeInstallation(launcher); err != nil {
+	if _, err := verifyRuntimeInstallation(launcher); err != nil {
 		t.Fatal(err)
 	}
 	// Optional debug profiles are irrelevant to this fixed release invocation.
 	if err := os.WriteFile(filepath.Join(dir, releaseCore), []byte("different engine"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyRuntimeInstallation(launcher); err == nil {
+	if _, err := verifyRuntimeInstallation(launcher); err == nil {
 		t.Fatal("changed release engine accepted")
 	}
 }
@@ -92,7 +142,7 @@ func TestRuntimeInstallationRejectsUnsafeOrUnknownProvenance(t *testing.T) {
 			r := t.TempDir()
 			launcher := runtimeInstallationFixture(t, r)
 			edit(t, r)
-			if err := verifyRuntimeInstallation(launcher); err == nil {
+			if _, err := verifyRuntimeInstallation(launcher); err == nil {
 				t.Fatal("unsafe installation accepted")
 			}
 		})

@@ -144,6 +144,9 @@ func terminalCounters(row event, isExec, repEnabled bool) ([5]uint64, error) {
 	if !repEnabled && (row.REPBytes != 0 || row.REPEntries != 0 || row.UnsupportedREPEntries != 0) {
 		return counts, errors.New("REP counters without REP mode")
 	}
+	if row.REPBytes != 0 && row.REPEntries == 0 {
+		return counts, errors.New("REP bytes without REP entries")
+	}
 	if row.ExitCode > 255 || (!isExec && !row.ExitSeen) {
 		return counts, errors.New("application exit unavailable")
 	}
@@ -296,7 +299,8 @@ func aggregate(streams map[int][]event, rootPID int) (Report, error) {
 	if totals[4] != 0 {
 		quality = "signals_observed"
 	}
-	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Scope: Scope, REPEnabled: repEnabled, Complete: true, Quality: quality, Instructions: &totals[0], REPBytes: &totals[1], REPEntries: &totals[2], UnsupportedREPEntries: &totals[3], SignalsObserved: totals[4], Processes: len(processes), Images: images}, nil
+	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Scope: Scope, REPEnabled: repEnabled, Complete: true, Quality: quality, Instructions: &totals[0], REPBytes: &totals[1], REPEntries: &totals[2], UnsupportedREPEntries: &totals[3], SignalsObserved: totals[4], Processes: len(processes), Images: images,
+		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3])}, nil
 }
 
 func CollectDirectory(directory string, rootPID int) Report {

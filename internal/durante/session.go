@@ -13,7 +13,7 @@ import (
 
 // EngineProfile identifies the reviewed patched engine and fixed reservations.
 // Prepare verifies installation provenance before any report claims this profile.
-const EngineProfile = "dynamorio-11.3-durante-v2-vm32m"
+const EngineProfile = "dynamorio-11.3-durante-v3-vm32m"
 
 // This profile was qualified only as a C/C++ diagnostic control on glibc 2.41.
 // The host version does not attest the embedded libc of static submissions.
@@ -51,10 +51,11 @@ func hostGLIBC(ctx context.Context) (string, error) {
 }
 
 type Session struct {
-	dir      string
-	config   Config
-	family   string
-	hostLibc string
+	dir          string
+	config       Config
+	family       string
+	hostLibc     string
+	installation InstallationIdentity
 }
 
 func Prepare(ctx context.Context, root string, cfg Config, language string, uid, gid int) (*Session, error) {
@@ -79,10 +80,11 @@ func prepare(ctx context.Context, root string, cfg Config, language string, uid,
 	if info.Mode().Perm()&0111 == 0 {
 		return nil, fmt.Errorf("durante launcher is not executable")
 	}
-	if err := verifyRuntimeInstallation(cfg.Drrun); err != nil {
+	identity, err := snapshotInstallation(cfg)
+	if err != nil {
 		return nil, fmt.Errorf("durante patched runtime verification failed: %w", err)
 	}
-	s := &Session{config: cfg, family: family}
+	s := &Session{config: cfg, family: family, installation: identity}
 	if cfg.DispatchProfile == DispatchGLIBC241 {
 		s.hostLibc, err = libc(ctx)
 		if err != nil || s.hostLibc != "2.41" {
@@ -122,6 +124,13 @@ func (s *Session) Environment(env []string) []string {
 
 func (s *Session) Collect(rootPID int) *Report {
 	report := CollectDirectory(s.dir, rootPID)
+	current, err := snapshotInstallation(s.config)
+	identity := s.installation
+	identity.Unchanged = err == nil && current == s.installation
+	if !identity.Unchanged {
+		report = incomplete("durante installation changed during observation")
+	}
+	report.Installation = &identity
 	report.Family = s.family
 	report.EngineProfile = EngineProfile
 	report.DispatchProfile = s.config.DispatchProfile

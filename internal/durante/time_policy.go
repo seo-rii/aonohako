@@ -102,7 +102,7 @@ func (p TimePolicy) Estimate(runtimeID string, report Report) (TimeEstimate, err
 	if runtimeID != p.RuntimeID || report.Family != p.Family || report.EngineProfile != p.EngineProfile || report.DispatchProfile != p.DispatchProfile {
 		return TimeEstimate{}, fmt.Errorf("durante time policy runtime or profile mismatch")
 	}
-	if report.Schema != 1 || report.ClientVersion != 1 || report.Metric != Metric || report.Scope != Scope || report.Authority != Authority {
+	if report.Schema != 1 || report.ClientVersion != 1 || report.Metric != Metric || report.Scope != Scope || report.Authority != Authority || !report.ValidDiagnosticContract() || !report.ValidREPTelemetry() {
 		return TimeEstimate{}, fmt.Errorf("durante time policy report contract mismatch")
 	}
 	if p.DispatchProfile == DispatchGLIBC241 && report.HostLibc != "2.41" {

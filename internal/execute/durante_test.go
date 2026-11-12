@@ -72,7 +72,7 @@ func TestDuranteSandboxIntegration(t *testing.T) {
 				t.Fatalf("instrumented run failed: %+v", resp)
 			}
 			m := resp.WorkMeasurement
-			if m == nil || !m.Complete || m.Instructions == nil || *m.Instructions == 0 || m.Processes != 1 || m.Authority != durante.Authority {
+			if m == nil || !m.Complete || m.Instructions == nil || *m.Instructions == 0 || m.Processes != 1 || m.Authority != durante.Authority || !m.ValidDiagnosticContract() || !m.ValidREPTelemetry() || !m.ValidInstallationIdentity() {
 				t.Fatalf("invalid work report: %+v", m)
 			}
 			if resp.CPUTimeNs == 0 || resp.MemoryKB == 0 {
@@ -91,7 +91,7 @@ func TestDuranteSandboxIntegration(t *testing.T) {
 		if resp.Status != model.RunStatusTLE {
 			t.Fatalf("limit not enforced: %+v", resp)
 		}
-		if resp.WorkMeasurement == nil || resp.WorkMeasurement.Complete || resp.WorkMeasurement.Instructions != nil {
+		if resp.WorkMeasurement == nil || resp.WorkMeasurement.Complete || resp.WorkMeasurement.Instructions != nil || !resp.WorkMeasurement.ValidUnavailableResult() || !resp.WorkMeasurement.ValidDiagnosticContract() {
 			t.Fatalf("forced stop produced valid total: %+v", resp.WorkMeasurement)
 		}
 	})

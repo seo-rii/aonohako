@@ -58,6 +58,9 @@ func finishWorkMeasurementDiagnostic(ctx context.Context, req *model.RunRequest,
 		}
 	}
 	response.WorkMeasurementExecution = diagnostic
+	if diagnostic.State != "complete" {
+		response.WorkMeasurement = response.WorkMeasurement.WithoutTotals("diagnostic execution " + diagnostic.State)
+	}
 	response.Score = nil
 	response.CPUTimeNormalization = nil
 	response.Status = model.RunStatusInitFail
@@ -82,18 +85,30 @@ func validDiagnosticWorkReport(language string, report *durante.Report) bool {
 		return false
 	}
 	return report != nil && report.Schema == 1 && report.ClientVersion == 1 &&
-		report.Complete && report.Reason == "" && report.Quality == "uninterrupted" && report.Authority == durante.Authority &&
+		report.Complete && report.Reason == "" && report.Authority == durante.Authority &&
+		report.ValidDiagnosticContract() && report.ValidREPTelemetry() && report.ValidInstallationIdentity() &&
+		((report.SignalsObserved == 0 && report.Quality == "uninterrupted") || (report.SignalsObserved > 0 && report.Quality == "signals_observed")) &&
 		report.EngineProfile == durante.EngineProfile && report.Family == family &&
 		(report.DispatchProfile == durante.DispatchDefault || (family == "cpp" && report.DispatchProfile == durante.DispatchGLIBC241 && report.HostLibc == "2.41")) &&
 		report.Metric == durante.Metric && report.Scope == durante.Scope &&
 		report.Instructions != nil && *report.Instructions > 0 && report.REPBytes != nil && report.REPEntries != nil &&
 		(*report.REPEntries > 0 || *report.REPBytes == 0) &&
-		report.UnsupportedREPEntries != nil && *report.UnsupportedREPEntries == 0 &&
-		report.SignalsObserved == 0 && report.REPEnabled && report.Processes > 0 && report.Images >= report.Processes
+		report.UnsupportedREPEntries != nil && report.REPEnabled && report.Processes > 0 && report.Images >= report.Processes
 }
 
 func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResponse) error {
 	d := response.WorkMeasurementExecution
+	if report := response.WorkMeasurement; report != nil {
+		if (!req.WorkMeasurement && req.WorkMeasurementLimits == nil) || report.Schema != 1 || report.ClientVersion != 1 || !report.ValidDiagnosticContract() || report.Authority != durante.Authority || report.Metric != durante.Metric || report.Scope != durante.Scope {
+			return fmt.Errorf("invalid remote result: absent or incompatible diagnostic contract")
+		}
+		if (report.Complete && !validDiagnosticWorkReport(req.Lang, report)) || (!report.Complete && !report.ValidUnavailableResult()) {
+			return fmt.Errorf("invalid remote result: inconsistent diagnostic observation")
+		}
+		if report.Complete && (response.Status == model.RunStatusTLE || response.Status == model.RunStatusMLE || response.Status == model.RunStatusWLE) {
+			return fmt.Errorf("invalid remote result: resource stop returned complete diagnostic totals")
+		}
+	}
 	if req.WorkMeasurementLimits == nil {
 		if d != nil {
 			return fmt.Errorf("invalid remote result: unsolicited work measurement execution")
@@ -118,7 +133,7 @@ func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResp
 			return fmt.Errorf("invalid remote result: incomplete work measurement marked complete")
 		}
 	case "failed", "incomplete", "cancelled", "resource_exhausted":
-		if d.OutputMatches != nil {
+		if d.OutputMatches != nil || (response.WorkMeasurement != nil && response.WorkMeasurement.Complete) {
 			return fmt.Errorf("invalid remote result: failed work measurement claims output match")
 		}
 	default:
