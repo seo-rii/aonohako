@@ -163,3 +163,76 @@ func replaceRuntimeMarker(t *testing.T, root, old, new string) {
 		t.Fatal(err)
 	}
 }
+
+func TestInstallationIdentityRejectsAmbiguousJSONAndDigestAliases(t *testing.T) {
+	identity := InstallationIdentity{SourceCommit: sourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
+		RuntimePatchSHA256: runtimePatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
+		ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
+	valid := Report{Installation: &identity}
+	if !valid.ValidInstallationIdentity() {
+		t.Fatal("valid identity rejected")
+	}
+	data, err := json.Marshal(identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range fields {
+		t.Run(key, func(t *testing.T) {
+			prefix := string(data[:len(data)-1])
+			for _, changed := range []string{
+				prefix + `,"` + key + `":` + string(value) + `}`,
+				prefix + `,"` + strings.ToUpper(key) + `":` + string(value) + `}`,
+				strings.Replace(string(data), `"`+key+`":`+string(value), `"`+strings.ToUpper(key)+`":`+string(value), 1),
+				strings.Replace(string(data), `"`+key+`":`+string(value), `"`+key+`":null`, 1),
+			} {
+				var decoded InstallationIdentity
+				if err := json.Unmarshal([]byte(changed), &decoded); err == nil {
+					t.Fatal("ambiguous or missing provenance field accepted", changed)
+				}
+			}
+		})
+	}
+	for name, edit := range map[string]func(*InstallationIdentity){
+		"uppercase launcher":   func(i *InstallationIdentity) { i.LauncherSHA256 = strings.ToUpper(i.LauncherSHA256) },
+		"uppercase client":     func(i *InstallationIdentity) { i.ClientSHA256 = strings.ToUpper(i.ClientSHA256) },
+		"uppercase core":       func(i *InstallationIdentity) { i.CoreSHA256 = strings.ToUpper(i.CoreSHA256) },
+		"uppercase stock core": func(i *InstallationIdentity) { i.CoreSHA256 = strings.ToUpper(stockReleaseSHA256) },
+		"stock core":           func(i *InstallationIdentity) { i.CoreSHA256 = stockReleaseSHA256 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			copy := identity
+			edit(&copy)
+			if (&Report{Installation: &copy}).ValidInstallationIdentity() {
+				t.Fatal("noncanonical or stock digest accepted")
+			}
+		})
+	}
+	var roundTrip InstallationIdentity
+	if err := json.Unmarshal(data, &roundTrip); err != nil || roundTrip != identity {
+		t.Fatal("valid identity did not round-trip", err)
+	}
+	wrapped := `{"installation":` + string(data) + `,"INSTALLATION":` + string(data) + `}`
+	var report Report
+	if err := json.Unmarshal([]byte(wrapped), &report); err == nil {
+		t.Fatal("top-level identity alias accepted")
+	}
+}
+
+func TestRuntimeManifestRejectsUppercaseActualCoreDigest(t *testing.T) {
+	root := t.TempDir()
+	launcher := runtimeInstallationFixture(t, root)
+	core, err := os.ReadFile(filepath.Join(root, releaseCore))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(core)
+	lower := hex.EncodeToString(digest[:])
+	replaceRuntimeMarker(t, root, lower, strings.ToUpper(lower))
+	if _, err := verifyRuntimeInstallation(launcher); err == nil {
+		t.Fatal("uppercase digest matching actual bytes bypassed canonical manifest contract")
+	}
+}

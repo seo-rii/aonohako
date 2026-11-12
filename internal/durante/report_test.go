@@ -21,6 +21,7 @@ func TestRemoteDiagnosticContractRequiresExplicitUnpromotedFields(t *testing.T) 
 		"missing integrity":        func(r map[string]any) { delete(r, "integrity_verified") },
 		"null integrity":           func(r map[string]any) { r["integrity_verified"] = nil },
 		"promoted integrity":       func(r map[string]any) { r["integrity_verified"] = true },
+		"claimed target libc":      func(r map[string]any) { r["target_libc_attested"] = true },
 		"missing contract":         func(r map[string]any) { delete(r, "measurement_contract") },
 		"unknown version":          func(r map[string]any) { r["measurement_contract"].(map[string]any)["version"] = 2 },
 		"claimed external backend": func(r map[string]any) { r["measurement_contract"].(map[string]any)["backend"] = "perf" },
@@ -110,12 +111,30 @@ func TestRemoteDiagnosticContractRejectsDuplicateClaims(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"integrity_verified", "trusted_verdict_eligible"} {
+	for _, field := range []string{"integrity_verified", "trusted_verdict_eligible", "target_libc_attested"} {
 		old := `"` + field + `":false`
 		mutated := strings.Replace(string(data), old, `"`+field+`":true,`+old, 1)
 		var decoded Report
 		if err := json.Unmarshal([]byte(mutated), &decoded); err == nil {
 			t.Fatal("duplicate contract claim accepted", field)
 		}
+	}
+}
+
+func TestUnavailableObservationCannotAttestTargetLibc(t *testing.T) {
+	r := incomplete("forced stop")
+	r.TargetLibcAttested = true
+	if !r.ValidUnavailableResult() || r.ValidDiagnosticContract() {
+		t.Fatal("unavailable observation accepted unsupported libc attestation")
+	}
+	r.TargetLibcAttested = false
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutated := strings.Replace(string(data), `"target_libc_attested":false`, `"TARGET_LIBC_ATTESTED":true,"target_libc_attested":false`, 1)
+	var decoded Report
+	if err := json.Unmarshal([]byte(mutated), &decoded); err == nil {
+		t.Fatal("case-alias attestation contradiction accepted")
 	}
 }

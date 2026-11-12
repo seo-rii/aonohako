@@ -250,10 +250,7 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 	if meter != nil {
 		result.WorkMeasurement = meter.Collect(result.targetPID)
-		if ctx.Err() != nil || result.ExitCode == nil || *result.ExitCode < 0 ||
-			result.Status == model.RunStatusTLE || result.Status == model.RunStatusMLE || result.Status == model.RunStatusWLE || result.Status == model.RunStatusInitFail {
-			result.WorkMeasurement = result.WorkMeasurement.WithoutTotals("measurement execution did not complete normally")
-		}
+		discardIncompleteWorkMeasurement(ctx, &result)
 	}
 	return result
 }

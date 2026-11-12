@@ -34,6 +34,15 @@ func workMeasurementRawRequest(req *model.RunRequest) model.RunRequest {
 	return raw
 }
 
+// A normal nonzero application exit is still OK at the sandbox layer: the
+// ordinary judge assigns its exit-code RE later. Any failure already present
+// here is an execution/infrastructure failure and cannot retain work totals.
+func discardIncompleteWorkMeasurement(ctx context.Context, result *execResult) {
+	if ctx.Err() != nil || result.Status != "OK" || result.ExitCode == nil || *result.ExitCode < 0 {
+		result.WorkMeasurement = result.WorkMeasurement.WithoutTotals("measurement execution did not complete normally")
+	}
+}
+
 func finishWorkMeasurementDiagnostic(ctx context.Context, req *model.RunRequest, response model.RunResponse) model.RunResponse {
 	diagnostic := &model.WorkMeasurementExecution{
 		Authority:         durante.Authority,
@@ -107,6 +116,12 @@ func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResp
 		}
 		if report.Complete && (response.Status == model.RunStatusTLE || response.Status == model.RunStatusMLE || response.Status == model.RunStatusWLE) {
 			return fmt.Errorf("invalid remote result: resource stop returned complete diagnostic totals")
+		}
+		if report.Complete && response.Status == model.RunStatusRE {
+			switch response.VerdictSource {
+			case "pids_cgroup", "pids_cgroup_final", "stream_io", "wait_status":
+				return fmt.Errorf("invalid remote result: incomplete execution returned complete diagnostic totals")
+			}
 		}
 	}
 	if req.WorkMeasurementLimits == nil {

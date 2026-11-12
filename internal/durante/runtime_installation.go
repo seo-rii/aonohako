@@ -35,6 +35,30 @@ type InstallationIdentity struct {
 	Unchanged           bool   `json:"unchanged_before_after"`
 }
 
+func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
+	fields, err := manifestObject(data)
+	if err != nil {
+		return err
+	}
+	keys := []string{"source_commit", "runtime_source_commit", "runtime_patch_sha256", "launcher_sha256", "client_sha256", "release_core_sha256", "unchanged_before_after"}
+	if len(fields) != len(keys) {
+		return fmt.Errorf("invalid installation identity fields")
+	}
+	for _, key := range keys {
+		value, ok := fields[key]
+		if !ok || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return fmt.Errorf("missing installation identity field")
+		}
+	}
+	type plain InstallationIdentity
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*i = InstallationIdentity(decoded)
+	return nil
+}
+
 func (r *Report) ValidInstallationIdentity() bool {
 	if r == nil || r.Installation == nil {
 		return false
@@ -45,7 +69,7 @@ func (r *Report) ValidInstallationIdentity() bool {
 	}
 	for _, digest := range []string{i.LauncherSHA256, i.ClientSHA256, i.CoreSHA256} {
 		decoded, err := hex.DecodeString(digest)
-		if err != nil || len(decoded) != sha256.Size {
+		if err != nil || len(decoded) != sha256.Size || hex.EncodeToString(decoded) != digest {
 			return false
 		}
 	}
@@ -177,7 +201,7 @@ func verifyRuntimeInstallation(drrun string) (string, error) {
 		return "", fmt.Errorf("durante requires a recorded patched release core")
 	}
 	digest, err := hex.DecodeString(expected)
-	if err != nil || len(digest) != sha256.Size {
+	if err != nil || len(digest) != sha256.Size || hex.EncodeToString(digest) != expected {
 		return "", fmt.Errorf("invalid runtime core digest")
 	}
 	corePath := filepath.Join(root, filepath.FromSlash(releaseCore))

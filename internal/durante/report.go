@@ -102,7 +102,7 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	// encoding/json accepts case-insensitive aliases. Do not let a second
 	// spelling override an explicit trust or coverage statement.
 	for key := range fields {
-		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status"} {
+		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation"} {
 			if key != protected && strings.EqualFold(key, protected) {
 				return fmt.Errorf("noncanonical diagnostic contract field")
 			}
@@ -144,7 +144,7 @@ func (r *Report) ValidUnavailableResult() bool {
 // ValidDiagnosticContract rejects old, absent or promoted remote contracts.
 // A successful check still does not make application-writable counters trusted.
 func (r *Report) ValidDiagnosticContract() bool {
-	if r == nil || r.IntegrityVerified == nil || *r.IntegrityVerified || r.MeasurementContract == nil {
+	if r == nil || r.TargetLibcAttested || r.IntegrityVerified == nil || *r.IntegrityVerified || r.MeasurementContract == nil {
 		return false
 	}
 	c := r.MeasurementContract
