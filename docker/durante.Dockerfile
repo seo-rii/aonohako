@@ -32,7 +32,7 @@ COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/lib64/de
 COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/lib32/release/libdynamorio.so /opt/durante/dynamorio/lib32/release/libdynamorio.so
 COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/lib32/debug/libdynamorio.so /opt/durante/dynamorio/lib32/debug/libdynamorio.so
 COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/.durante-runtime.json /opt/durante/dynamorio/.durante-runtime.json
-COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/ext/lib64/release/libdrmgr.so /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/ext/lib64/release/libdrreg.so /opt/durante/dynamorio/ext/lib64/release/
+COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/ext/lib64/release/libdrmgr.so /opt/durante/dynamorio/ext/lib64/release/
 COPY --from=durante-build /build/libdurante.so /opt/durante/lib/libdurante.so
 COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/License.txt /opt/durante/DynamoRIO-LICENSE.txt
 COPY third_party/durante/LICENSE third_party/durante/UPSTREAM.json /opt/durante/

@@ -3,7 +3,9 @@
 This change registers `jvm` as an explicit opt-in durante family. Set
 `AONOHAKO_DURANTE_FAMILIES=jvm` and request `work_measurement: true`
 for an ordinary single-program run. Registration does not enable measurement by
-default or certify every runtime in the family. The consolidated integration includes this family selection, boundary tests and qualification requirements.
+default or certify every runtime in the family. The consolidated integration
+includes family selection, boundary tests and qualification requirements, but
+currently refuses JVM measurement pending qualification in aonohako's sandbox.
 
 Java versions, Kotlin/JVM, Scala, Groovy and Clojure share the JVM family. JIT compilation, GC, helper threads and runtime signal handling need representative tests. Kotlin native belongs to the native-binary family, not this family. Dedicated Java 25 executable selection and each profile's heap/stack options remain unchanged.
 
@@ -45,7 +47,13 @@ the PR validation; untested profiles remain unqualified.
 
 ## Local compatibility evidence
 
-The frozen core `7039485` with `-vm_size 32M -vmheap_size 32M` still failed the OpenJDK 17.0.21 compatibility fixture before application output. The two earlier prototype runs also failed: JVM startup reported SIGSEGV in `StubCodeMark::StubCodeMark`, then aborted. The collector correctly returned invalid/incomplete. This family remains a draft integration candidate with a known runtime incompatibility; a selector test is not evidence of JVM support. Engine-only DynamoRIO succeeds with both the minimal fixture options and the existing aonohako option shape. Adding the counter crashes even with REP telemetry disabled. Rebuilding the previous single-process counter reproduces the same failure, so this is an inherited instrumentation incompatibility rather than proof of a new process-tree regression. No runtime flags were changed operationally. The final-core confirmation and retained prototype results are recorded in [jvm-local-smoke.json](jvm-local-smoke.json).
+The historical core `7039485` with `-vm_size 32M -vmheap_size 32M` failed the OpenJDK 17.0.21 compatibility fixture before application output. The two earlier prototype runs also failed: JVM startup reported SIGSEGV in `StubCodeMark::StubCodeMark`, then aborted. The collector correctly returned invalid/incomplete. At that pin, engine-only DynamoRIO succeeded with both the minimal fixture options and the existing aonohako option shape, but adding the counter crashed even with REP telemetry disabled. Rebuilding the previous single-process counter reproduced the same failure, identifying an inherited instrumentation incompatibility rather than a new process-tree regression. No runtime flags were changed operationally. Those retained results are recorded in [jvm-local-smoke.json](jvm-local-smoke.json); they describe the earlier client, not the v3 pin.
+
+The v3 vendor replaces the counter's inline register reservations with clean
+calls that preserve application register and flag state, including state read
+by JVM fault handlers. Upstream startup, interpreter and tiered-compilation
+checks exercise that repair. They do not qualify aonohako's image-owned Java
+commands, fixed reservation budgets or sandbox, and do not enable this family.
 
 The fixed compatibility sources, compile/run commands, stdin and expected output
 are checked in under [`internal/durante/testdata/jvm`](../../internal/durante/testdata/jvm/manifest.json). They require the indicated local runtimes; missing runtimes
@@ -55,4 +63,6 @@ These local checks used the external core collector after every process exited.
 They do not exercise aonohako sandbox integration; image-specific end-to-end
 validation remains a separate requirement.
 
-The consolidated integration rejects JVM measurement at runtime even when its family is configured. Registration preserves profile identity; it does not override the known startup failure.
+The consolidated integration rejects JVM measurement at runtime even when its
+family is configured. Registration preserves profile identity; it does not
+replace qualification of the actual sandbox.

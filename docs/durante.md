@@ -54,7 +54,7 @@ qualification, and request bodies cannot override these engine options.
 
 | Environment variable | Meaning |
 |---|---|
-| `AONOHAKO_DURANTE_FAMILIES` | Comma-separated enabled family IDs; empty disables measurement. Registered IDs: `cpp`, `cpython`, `pypy`, `native`, `jvm`, `dotnet`, `javascript-wasm`, `beam`, `scripting`, `scientific-functional`, `specialized`. JVM execution is rejected pending startup compatibility. |
+| `AONOHAKO_DURANTE_FAMILIES` | Comma-separated enabled family IDs; empty disables measurement. Registered IDs: `cpp`, `cpython`, `pypy`, `native`, `jvm`, `dotnet`, `javascript-wasm`, `beam`, `scripting`, `scientific-functional`, `specialized`. JVM execution is rejected pending qualification in aonohako's sandbox. |
 | `AONOHAKO_DURANTE_DRRUN` | Absolute trusted launcher path; default `/opt/durante/dynamorio/bin64/drrun`. |
 | `AONOHAKO_DURANTE_CLIENT` | Absolute trusted client path; default `/opt/durante/lib/libdurante.so`. |
 | `AONOHAKO_DURANTE_DISPATCH_PROFILE` | `default`, or the C/C++ diagnostic profile `glibc-2.41-sse2-v1`. |
@@ -235,7 +235,9 @@ An ordinary supported-language request may then include:
 
 All three actual limits are explicit, must cover the nominal limits, and must fit
 operator caps. CPU/wall are bounded to 600,000 ms and RSS to 4,096 MiB. Actual wall
-must be at least actual CPU. The envelope accepts registered compatible families, including stock CPython and PyPy; known-incompatible JVM startup is rejected. Family registration alone is not runtime qualification.
+must be at least actual CPU. The envelope accepts registered compatible families,
+including stock CPython and PyPy; JVM execution remains rejected pending
+qualification in aonohako's sandbox. Family registration alone is not runtime qualification.
 The original request's nominal limits remain immutable. A private execution copy
 supplies actual limits to the CPU watchdog, wall timer, RSS checks, final resource
 checks, runtime memory settings and derived address-space limit. Startup CPU
@@ -316,9 +318,12 @@ and fresh verification procedure are described in
 
 Resource envelopes use the same raw CPU/wall/RSS protection for all admitted
 families and bind complete reports to the request's exact runtime family. The
-C/C++ glibc dispatch profile remains C/C++ only. JVM metadata stays registered,
-but measurement is refused because instrumented JVM startup has a reproduced
-failure. Invalid, killed or incomplete accounting never yields a usable total.
+C/C++ glibc dispatch profile remains C/C++ only. The pinned client preserves full
+application state across counting calls, including the state needed by JVM fault
+handlers. Upstream JVM startup and runtime checks do not qualify aonohako's
+runtime image, fixed reservation budgets or sandbox: JVM metadata stays
+registered, but measurement remains refused until those checks pass here.
+Invalid, killed or incomplete accounting never yields a usable total.
 Other unqualified runtime paths remain documented and require their actual
 image/sandbox tests before operator enablement. Consolidation does not grant
 additional child-process or network permissions.

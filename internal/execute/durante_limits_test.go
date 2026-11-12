@@ -22,7 +22,7 @@ func completeEnvelopeReport() *durante.Report {
 	verified := false
 	return &durante.Report{Schema: 1, ClientVersion: 1, Complete: true, Quality: "uninterrupted", Authority: durante.Authority, Metric: durante.Metric, Scope: durante.Scope, REPEnabled: true, EngineProfile: durante.EngineProfile, Family: "cpp", DispatchProfile: durante.DispatchDefault, Instructions: &instructions, REPBytes: &zero, REPEntries: &zero, UnsupportedREPEntries: &zero, Processes: 1, Images: 1,
 		IntegrityVerified: &verified, MeasurementContract: durante.DiagnosticContract(), REPTelemetryStatus: durante.REPMovsStosOnly,
-		Installation: &durante.InstallationIdentity{SourceCommit: "1335c5883e6201623e9e37dd01317092477d5c53", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490", RuntimePatchSHA256: "7b2fbaca84e259aeeafdfc4902ce7a330c48cec51e16804fe74ee3b99ea39f6d", LauncherSHA256: strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}}
+		Installation: &durante.InstallationIdentity{SourceCommit: "21397969d18c74ceef816779aba026358f483250", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490", RuntimePatchSHA256: "7b2fbaca84e259aeeafdfc4902ce7a330c48cec51e16804fe74ee3b99ea39f6d", LauncherSHA256: strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}}
 }
 func TestWorkMeasurementRawRequestIsolated(t *testing.T) {
 	req := envelopeRequest()
