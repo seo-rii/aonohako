@@ -4,7 +4,8 @@ set -euo pipefail
 allowlist=/usr/local/lib/aonohako/shell_runtime_allowlist.txt
 test -s "${allowlist}"
 
-for root in /usr/bin /usr/sbin /usr/local/bin /usr/local/sbin /usr/local/go/bin /usr/local/go/pkg/tool /usr/local/lib/aonohako /usr/libexec; do
+# GLib ships standalone tools beside its multiarch shared libraries.
+for root in /usr/bin /usr/sbin /usr/local/bin /usr/local/sbin /usr/local/go/bin /usr/local/go/pkg/tool /usr/local/lib/aonohako /usr/libexec /usr/lib/*/glib-2.0; do
 	if [[ ! -d "${root}" ]]; then
 		continue
 	fi
