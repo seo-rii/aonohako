@@ -14,6 +14,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/cpupolicy"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 )
 
@@ -54,6 +55,16 @@ func TestServiceRejectsUnsupportedCPUFeaturePolicyBeforeSandbox(t *testing.T) {
 		{name: "unsupported runtime", req: model.RunRequest{Lang: "python", DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}}},
 		{name: "network", req: model.RunRequest{Lang: "binary", EnableNetwork: true, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}}},
 		{name: "communication", req: model.RunRequest{Communication: &model.CommunicationSpec{}, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}}},
+		{name: "Durante measurement", req: model.RunRequest{Lang: "CPP20", WorkMeasurement: true, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}}},
+		{name: "Durante resource envelope", req: model.RunRequest{
+			Lang: "CPP20", WorkMeasurement: true, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX},
+			Limits:                model.Limits{TimeMs: 1000, MemoryMB: 64},
+			WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128},
+		}},
+		{name: "Durante limits without measurement", req: model.RunRequest{
+			Lang: "CPP20", DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX},
+			WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128},
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := New().Run(context.Background(), &tc.req, Hooks{})
@@ -61,6 +72,15 @@ func TestServiceRejectsUnsupportedCPUFeaturePolicyBeforeSandbox(t *testing.T) {
 				t.Fatalf("response = %+v, want CPU policy rejection before sandbox setup", resp)
 			}
 		})
+	}
+}
+
+func TestSandboxRejectsCPUFeaturePolicyWithDuranteSessionBeforePreparation(t *testing.T) {
+	result := executeSandboxCommandWithStreams(context.Background(), Workspace{}, []string{"/not-started"},
+		&model.RunRequest{Lang: "CPP20", DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}},
+		sandboxStreamConfig{workMeasurement: &durante.Session{}}, Hooks{}, 0, config.RuntimeTuningConfig{}, "")
+	if result.Status != model.RunStatusInitFail || result.VerdictSource != "cpu_feature_policy" || !strings.Contains(result.Reason, "work_measurement") {
+		t.Fatalf("result = %+v, want rejection before sandbox or instrumentation preparation", result)
 	}
 }
 
@@ -106,19 +126,32 @@ func TestRemoteRunnerForwardsDisallowedCPUFeatures(t *testing.T) {
 }
 
 func TestRemoteRunnerRejectsCPUFeaturePolicyBeforeAuthOrUpload(t *testing.T) {
-	called := false
-	client := &http.Client{Transport: executeRoundTripFunc(func(*http.Request) (*http.Response, error) {
-		called = true
-		return nil, fmt.Errorf("unexpected auth or upload request")
-	})}
-	runner := &remoteRunner{
-		client: client, metadataClient: client, executeURL: "http://runner.example/execute",
-		auth: config.RemoteAuthCloudRunIDToken, metadataURL: "http://metadata.example/token",
-	}
-	resp := runner.Run(context.Background(), &model.RunRequest{
-		Lang: "python", DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX},
-	}, Hooks{})
-	if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "disallowed_cpu_features") || called {
-		t.Fatalf("response = %+v, HTTP called = %v", resp, called)
+	for name, req := range map[string]model.RunRequest{
+		"unsupported runtime": {Lang: "python"},
+		"Durante measurement": {Lang: "CPP20", WorkMeasurement: true},
+		"Durante resource envelope": {
+			Lang: "CPP20", WorkMeasurement: true, Limits: model.Limits{TimeMs: 1000, MemoryMB: 64},
+			WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128},
+		},
+		"Durante limits without measurement": {
+			Lang: "CPP20", WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			called := false
+			client := &http.Client{Transport: executeRoundTripFunc(func(*http.Request) (*http.Response, error) {
+				called = true
+				return nil, fmt.Errorf("unexpected auth or upload request")
+			})}
+			runner := &remoteRunner{
+				client: client, metadataClient: client, executeURL: "http://runner.example/execute",
+				auth: config.RemoteAuthCloudRunIDToken, metadataURL: "http://metadata.example/token",
+			}
+			req.DisallowedCPUFeatures = []cpupolicy.Feature{cpupolicy.AVX}
+			resp := runner.Run(context.Background(), &req, Hooks{})
+			if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "disallowed_cpu_features") || called {
+				t.Fatalf("response = %+v, HTTP called = %v", resp, called)
+			}
+		})
 	}
 }

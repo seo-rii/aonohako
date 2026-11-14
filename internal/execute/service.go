@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
@@ -121,6 +122,8 @@ func sumRawCPUTime(values ...*int64) *int64 {
 }
 
 type Service struct {
+	workMeasurement              durante.Config
+	workMeasurementPolicyError   error
 	competitiveRuntimeIdentity   runtimeidentity.CompetitiveIdentity
 	deploymentTarget             platform.DeploymentTarget
 	cpuNormalizer                timing.CPUNormalizer
@@ -163,8 +166,18 @@ func NewWithConfig(cfg config.Config) *Service {
 	if communicationMaxParticipants <= 0 {
 		communicationMaxParticipants = runvalidation.MaxCommunicationParticipants
 	}
+	measurement := cfg.Execution.WorkMeasurement
+	measurement.Families = append([]string(nil), measurement.Families...)
+	var measurementPolicyError error
+	if measurement.ResourcePolicy != nil {
+		policy := *measurement.ResourcePolicy
+		measurement.ResourcePolicy = &policy
+		measurementPolicyError = policy.ValidateAdmission(cfg.MaxActiveRuns, cfg.WorkRootMaxBytes)
+	}
 	return &Service{
 		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
+		workMeasurement:              measurement,
+		workMeasurementPolicyError:   measurementPolicyError,
 		competitiveRuntimeIdentity:   competitiveIdentity,
 		shortCaseSampling:            cfg.Execution.CPUNormalization.ShortCaseSampling,
 		runtimeTuning:                cfg.Execution.RuntimeTuning.WithSafeDefaults(),
@@ -187,6 +200,22 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if req.WorkMeasurementLimits != nil {
+		if s.workMeasurementPolicyError != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: s.workMeasurementPolicyError.Error()}
+		}
+		if err := s.workMeasurement.ResourcePolicy.ValidateRequest(*req.WorkMeasurementLimits); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	if req.WorkMeasurement {
+		if err := validateWorkMeasurementRequest(req, s.workMeasurement); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -233,6 +262,8 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 	var response model.RunResponse
 	switch {
+	case req.WorkMeasurementLimits != nil:
+		return s.runWorkMeasurementDiagnostic(ctx, req, hooks, tuning)
 	case req.Communication != nil:
 		response = s.runCommunication(ctx, req, hooks, tuning)
 	case req.Pipeline != nil:
@@ -242,7 +273,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	case runvalidation.UsesSteps(req):
 		response = s.runStepPipeline(ctx, req, hooks, tuning)
 	default:
-		if s.shortCaseSampling && s.cpuNormalizer.Enabled() {
+		if s.shortCaseSampling && s.cpuNormalizer.Enabled() && !req.WorkMeasurement {
 			response = runShortCaseBatch(ctx, req, hooks, func(ctx context.Context, req *model.RunRequest, stdin io.Reader, maxBytes int64, hooks Hooks) model.RunResponse {
 				return s.runOneWithStdin(ctx, req, stdin, maxBytes, hooks, tuning, true, false).response
 			})
@@ -371,7 +402,14 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		stdin = &sandboxPreparedStdin{file: readonlyInput}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer)
+	var meter *durante.Session
+	if req.WorkMeasurement {
+		meter, err = durante.Prepare(ctx, ws.RootDir, s.workMeasurement, req.Lang, int(defaultSandboxUID), int(defaultSandboxGID))
+		if err != nil {
+			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "durante preparation failed: " + err.Error()}}
+		}
+	}
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer, meter)
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
 		return sandboxRunResult{response: initializationFailureResponse(res, wallMs)}
@@ -437,6 +475,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			TimeMs:           res.WallTimeMs,
 			WallTimeMs:       res.WallTimeMs,
 			CPUTimeMs:        res.CPUTimeMs,
+			WorkMeasurement:  res.WorkMeasurement,
 			CPUTimeNs:        res.CPUTimeNs,
 			RawCPUTimeMs:     res.RawCPUTimeMs,
 			RawCPUTimeNs:     res.RawCPUTimeNs,
@@ -794,7 +833,8 @@ func initializationFailureResponse(res execResult, wallMs int64) model.RunRespon
 	return model.RunResponse{
 		Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs,
 		CPUTimeMs: res.CPUTimeMs, CPUTimeNs: res.CPUTimeNs,
-		RawCPUTimeMs: res.RawCPUTimeMs, RawCPUTimeNs: res.RawCPUTimeNs,
+		WorkMeasurement: res.WorkMeasurement,
+		RawCPUTimeMs:    res.RawCPUTimeMs, RawCPUTimeNs: res.RawCPUTimeNs,
 		CPUAccounting: res.CPUAccounting, ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB: res.MemoryKB, ExitCode: res.ExitCode,
 		Reason: res.Reason, VerdictSource: res.VerdictSource,

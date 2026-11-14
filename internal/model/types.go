@@ -2,6 +2,7 @@ package model
 
 import (
 	"aonohako/internal/cpupolicy"
+	"aonohako/internal/durante"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/rustpolicy"
@@ -296,6 +297,8 @@ type SidecarError struct {
 }
 
 type RunRequest struct {
+	WorkMeasurement       bool                     `json:"work_measurement,omitempty"`
+	WorkMeasurementLimits *durante.ResourceLimits  `json:"work_measurement_limits,omitempty"`
 	Lang                  string                   `json:"lang"`
 	EntryMode             string                   `json:"entry_mode,omitempty"`
 	Binaries              []Binary                 `json:"binaries"`
@@ -324,32 +327,61 @@ type RunRequest struct {
 }
 
 type RunResponse struct {
-	Status               string                `json:"status"`
-	TimeMs               int64                 `json:"time_ms"`
-	WallTimeMs           int64                 `json:"wall_time_ms"`
-	CPUTimeMs            int64                 `json:"cpu_time_ms"`
-	CPUTimeNs            uint64                `json:"cpu_time_ns,omitempty"`
-	RawCPUTimeMs         *int64                `json:"raw_cpu_time_ms,omitempty"`
-	RawCPUTimeNs         *uint64               `json:"raw_cpu_time_ns,omitempty"`
-	CPUAccounting        *CPUAccounting        `json:"cpu_accounting,omitempty"`
-	CPUTimeSampling      *CPUTimeSampling      `json:"cpu_time_sampling,omitempty"`
-	ProcessCPUTimeMs     int64                 `json:"process_cpu_time_ms,omitempty"`
-	CPUTimeNormalization *CPUTimeNormalization `json:"cpu_time_normalization,omitempty"`
-	MemoryKB             int64                 `json:"memory_kb"`
-	ExitCode             *int                  `json:"exit_code,omitempty"`
-	Stdout               string                `json:"stdout,omitempty"`
-	Stderr               string                `json:"stderr,omitempty"`
-	StdoutTruncated      bool                  `json:"stdout_truncated,omitempty"`
-	StderrTruncated      bool                  `json:"stderr_truncated,omitempty"`
-	Reason               string                `json:"reason,omitempty"`
-	ReasonTruncated      bool                  `json:"reason_truncated,omitempty"`
-	VerdictSource        string                `json:"verdict_source,omitempty"`
-	Score                *float64              `json:"score,omitempty"`
-	StartedParticipants  int                   `json:"started_participants,omitempty"`
-	Match                *MatchResult          `json:"match,omitempty"`
-	Steps                []StepResult          `json:"steps,omitempty"`
-	SidecarOutputs       []SidecarOutput       `json:"sidecar_outputs,omitempty"`
-	SidecarErrors        []SidecarError        `json:"sidecar_errors,omitempty"`
+	WorkMeasurement          *durante.Report           `json:"work_measurement,omitempty"`
+	WorkMeasurements         []WorkMeasurementProcess  `json:"work_measurements,omitempty"`
+	WorkMeasurementExecution *WorkMeasurementExecution `json:"work_measurement_execution,omitempty"`
+	Status                   string                    `json:"status"`
+	TimeMs                   int64                     `json:"time_ms"`
+	WallTimeMs               int64                     `json:"wall_time_ms"`
+	CPUTimeMs                int64                     `json:"cpu_time_ms"`
+	CPUTimeNs                uint64                    `json:"cpu_time_ns,omitempty"`
+	RawCPUTimeMs             *int64                    `json:"raw_cpu_time_ms,omitempty"`
+	RawCPUTimeNs             *uint64                   `json:"raw_cpu_time_ns,omitempty"`
+	CPUAccounting            *CPUAccounting            `json:"cpu_accounting,omitempty"`
+	CPUTimeSampling          *CPUTimeSampling          `json:"cpu_time_sampling,omitempty"`
+	ProcessCPUTimeMs         int64                     `json:"process_cpu_time_ms,omitempty"`
+	CPUTimeNormalization     *CPUTimeNormalization     `json:"cpu_time_normalization,omitempty"`
+	MemoryKB                 int64                     `json:"memory_kb"`
+	ExitCode                 *int                      `json:"exit_code,omitempty"`
+	Stdout                   string                    `json:"stdout,omitempty"`
+	Stderr                   string                    `json:"stderr,omitempty"`
+	StdoutTruncated          bool                      `json:"stdout_truncated,omitempty"`
+	StderrTruncated          bool                      `json:"stderr_truncated,omitempty"`
+	Reason                   string                    `json:"reason,omitempty"`
+	ReasonTruncated          bool                      `json:"reason_truncated,omitempty"`
+	VerdictSource            string                    `json:"verdict_source,omitempty"`
+	Score                    *float64                  `json:"score,omitempty"`
+	StartedParticipants      int                       `json:"started_participants,omitempty"`
+	Match                    *MatchResult              `json:"match,omitempty"`
+	Steps                    []StepResult              `json:"steps,omitempty"`
+	SidecarOutputs           []SidecarOutput           `json:"sidecar_outputs,omitempty"`
+	SidecarErrors            []SidecarError            `json:"sidecar_errors,omitempty"`
+}
+
+// WorkMeasurementProcess keeps each concurrent role's diagnostic observation
+// separate. ExecutionStatus and TerminationSource describe the actual execution
+// before interactive or match coordinator verdicts reinterpret a peer shutdown.
+type WorkMeasurementProcess struct {
+	Role              string          `json:"role"`
+	ProgramID         string          `json:"program_id"`
+	ParticipantIndex  *int            `json:"participant_index,omitempty"`
+	ExecutionStatus   string          `json:"execution_status"`
+	ExitCode          *int            `json:"exit_code,omitempty"`
+	TerminationSource string          `json:"termination_source,omitempty"`
+	Report            *durante.Report `json:"report,omitempty"`
+}
+
+// WorkMeasurementExecution describes an opt-in diagnostic execution. Its
+// resource envelope is not a contestant's credited time or memory allowance.
+// The enclosing response is always InitFail until an authoritative judgement
+// policy exists, including when this diagnostic completed successfully.
+type WorkMeasurementExecution struct {
+	Authority         string                 `json:"authority"`
+	State             string                 `json:"state"`
+	NominalLimits     Limits                 `json:"nominal_limits"`
+	RawLimits         durante.ResourceLimits `json:"raw_limits"`
+	OutputMatches     *bool                  `json:"output_matches,omitempty"`
+	TerminationSource string                 `json:"termination_source,omitempty"`
 }
 
 const (

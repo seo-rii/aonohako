@@ -120,6 +120,7 @@ error.
 ```jsonc
 {
   "lang": "binary",                          // runtime language key (see Supported Languages)
+  "work_measurement": false,                // optional Durante diagnostics; requires source-language profiles when true
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
@@ -199,7 +200,8 @@ The values and maximum of two entries match `/compile`; omitted, empty, or
 contestant programs in ordinary execution, interactive execution, legacy
 steps, and Pipeline V1. Trusted interactors and SPJs do not inherit it.
 `communication`, contestant `enable_network`, `file_outputs`,
-`sidecar_outputs`, file handoffs, and Pipeline V1 `participant_file` outputs
+`sidecar_outputs`, Durante `work_measurement`/`work_measurement_limits`, file
+handoffs, and Pipeline V1 `participant_file` outputs
 are unsupported and rejected before admission. Trusted interactor output files
 remain available to Pipeline V1. Additional submitted files are still
 materialized, but restricted guest programs cannot open them.
@@ -234,6 +236,14 @@ rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
 `interactor.limits` uses the same caps; omitted values inherit the contestant
 time/output policy and use safe memory/workspace defaults where needed.
+`work_measurement: true` enables configured Durante diagnostics for ordinary,
+interactive, and communication-v1/v2 execution. Every measured role must name an
+enabled source-language profile, such as `CPP20`; `binary` alone is ambiguous.
+Interactive requests name both `lang` and `interactor.lang`; communication names
+each `programs[].lang` and leaves top-level `lang` empty. SPJs, pipelines, entry
+modes, and legacy steps do not support this flag. The separate
+`work_measurement_limits` raw diagnostic envelope supports ordinary runs only.
+See [Durante diagnostics](durante.md) for operator configuration and result semantics.
 `capture_limits` is separate from `limits.output_bytes`. An omitted object or
 member retains the legacy response cap of `min(limits.output_bytes, 64 KiB)`;
 an explicit `0` returns no content for that stream. These limits clip
@@ -565,6 +575,15 @@ When `spj` is provided, the SPJ binary is invoked as:
 When `interactor` is provided, `aonohako` starts the contestant and interactor
 at the same time in separate sandbox workspaces. Contestant stdout is streamed
 to interactor stdin, and interactor stdout is streamed to contestant stdin.
+
+With `work_measurement: true`, `work_measurements` returns the contestant and
+interactor reports in that order, using matching `role` and `program_id` values.
+Each entry contains `execution_status`, optional `exit_code`/`termination_source`,
+and its diagnostic `report`. Communication uses the same array for participants
+in index order followed by the manager, with requested program IDs and a
+zero-based `participant_index` only for participants. These modes omit the
+ordinary singular `work_measurement`; the reports do not change verdicts or
+combine the peers' instruction counts. See [the per-role contract](durante.md#interactive-and-communication-observations).
 
 The interactor is invoked as:
 

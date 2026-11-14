@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"aonohako/internal/cpupolicy"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 )
 
@@ -48,6 +49,10 @@ func TestValidateDisallowedCPUFeaturesAllowsSupportedContestants(t *testing.T) {
 			req.DisallowedCPUFeatures = []cpupolicy.Feature{}
 			req.FileOutputs = []model.OutputFile{{Path: "answer.txt"}}
 		}},
+		{name: "omitted policy keeps Durante", make: validDuranteLimitsRequest},
+		{name: "empty policy keeps Durante", make: validDuranteLimitsRequest, edit: func(req *model.RunRequest) {
+			req.DisallowedCPUFeatures = []cpupolicy.Feature{}
+		}},
 		{name: "interactive trusted Python peer", make: cpuPolicyBatchRequest, edit: func(req *model.RunRequest) {
 			req.Interactor = &model.InteractorSpec{Lang: "python", Binaries: []model.Binary{{Name: "interactor.py", DataB64: "eA=="}}}
 		}},
@@ -88,6 +93,28 @@ func TestValidateDisallowedCPUFeaturesRejectsUnsupportedRequests(t *testing.T) {
 		{name: "too many options", make: cpuPolicyBatchRequest, edit: func(req *model.RunRequest) {
 			req.DisallowedCPUFeatures = []cpupolicy.Feature{cpupolicy.AVX, cpupolicy.SIMD, cpupolicy.AVX}
 		}, want: "invalid disallowed_cpu_features"},
+		{name: "Durante measurement", make: cpuPolicyBatchRequest, edit: func(req *model.RunRequest) {
+			req.Lang = "CPP20"
+			req.WorkMeasurement = true
+		}, want: "disallowed_cpu_features does not support work_measurement"},
+		{name: "Durante resource envelope", make: validDuranteLimitsRequest, edit: func(req *model.RunRequest) {
+			req.DisallowedCPUFeatures = []cpupolicy.Feature{cpupolicy.AVX}
+		}, want: "disallowed_cpu_features does not support work_measurement"},
+		{name: "Durante limits without measurement", make: cpuPolicyBatchRequest, edit: func(req *model.RunRequest) {
+			req.Lang = "CPP20"
+			req.WorkMeasurementLimits = &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128}
+		}, want: "disallowed_cpu_features does not support work_measurement"},
+		{name: "Durante interactive measurement", make: cpuPolicyBatchRequest, edit: func(req *model.RunRequest) {
+			req.Lang = "CPP20"
+			req.WorkMeasurement = true
+			req.Interactor = &model.InteractorSpec{Lang: "CPP20", Binaries: []model.Binary{{Name: "interactor", DataB64: "eA==", Mode: "exec"}}}
+		}, want: "disallowed_cpu_features does not support work_measurement"},
+		{name: "Durante legacy steps", make: cpuPolicyLegacyRequest, edit: func(req *model.RunRequest) {
+			req.WorkMeasurement = true
+		}, want: "disallowed_cpu_features does not support work_measurement"},
+		{name: "Durante pipeline", make: cpuPolicyPipelineRequest, edit: func(req *model.RunRequest) {
+			req.WorkMeasurement = true
+		}, want: "disallowed_cpu_features does not support work_measurement"},
 		{name: "managed contestant", make: cpuPolicyBatchRequest, edit: func(req *model.RunRequest) { req.Lang = "PYTHON3" }, want: "native binary contestant"},
 		{name: "different native runtime", make: cpuPolicyBatchRequest, edit: func(req *model.RunRequest) { req.Lang = "go-binary" }, want: "native binary contestant"},
 		{name: "network", make: cpuPolicyBatchRequest, edit: func(req *model.RunRequest) { req.EnableNetwork = true }, want: "enable_network"},

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"aonohako/internal/durante"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/platform"
@@ -61,6 +62,7 @@ type InboundAuthConfig struct {
 }
 
 type ExecutionConfig struct {
+	WorkMeasurement        durante.Config
 	Platform               platform.RuntimeOptions
 	Remote                 RemoteExecutorConfig
 	CPUNormalization       CPUNormalizationConfig
@@ -620,8 +622,38 @@ func Load() (Config, error) {
 			problemRustCrateModes[problemID] = mode
 		}
 	}
+	workMeasurement, err := durante.ParseConfig(os.Getenv("AONOHAKO_DURANTE_FAMILIES"), os.Getenv("AONOHAKO_DURANTE_DRRUN"), os.Getenv("AONOHAKO_DURANTE_CLIENT"), os.Getenv("AONOHAKO_DURANTE_DISPATCH_PROFILE"))
+	if err != nil {
+		return Config{}, err
+	}
+	workMeasurement.ResourcePolicy, err = durante.ParseResourcePolicy(os.Getenv("AONOHAKO_DURANTE_RESOURCE_POLICY"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
+	}
+	if workMeasurement.ResourcePolicy != nil {
+		// Raw envelopes apply to every compatible enabled family. Keep the
+		// runtime and dispatch exclusions used during request admission.
+		usableFamily := false
+		for _, family := range workMeasurement.Families {
+			if durante.ValidateMeasurementFamily(family) != nil {
+				continue
+			}
+			if workMeasurement.DispatchProfile == durante.DispatchGLIBC241 && family != "cpp" {
+				continue
+			}
+			usableFamily = true
+			break
+		}
+		if !usableFamily {
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY requires an enabled, supported family compatible with its dispatch profile")
+		}
+		if err := workMeasurement.ResourcePolicy.ValidateAdmission(maxActive, workRootMaxBytes); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
+		}
+	}
 	execution := ExecutionConfig{
-		Platform: runtimePlatform,
+		WorkMeasurement: workMeasurement,
+		Platform:        runtimePlatform,
 		Remote: RemoteExecutorConfig{
 			URL:            strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_URL")),
 			Auth:           parseRemoteAuth(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUTH")),

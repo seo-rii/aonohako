@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/runvalidation"
@@ -120,8 +121,20 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}}
 	}
 
-	var inputPath string
 	var err error
+	var contestantMeter, interactorMeter *durante.Session
+	if req.WorkMeasurement {
+		contestantMeter, err = durante.Prepare(ctx, contestantWS.RootDir, s.workMeasurement, req.Lang, int(defaultSandboxUID), int(defaultSandboxGID))
+		if err != nil {
+			return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "contestant durante preparation failed: " + err.Error()}}
+		}
+		interactorMeter, err = durante.Prepare(ctx, interactorWS.RootDir, s.workMeasurement, interactorReq.Lang, int(interactiveJudgeSandboxUID), int(interactiveJudgeSandboxGID))
+		if err != nil {
+			return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor durante preparation failed: " + err.Error()}}
+		}
+	}
+
+	var inputPath string
 	if stdin != nil {
 		if stdinMaxBytes <= 0 {
 			stdinMaxBytes = runvalidation.MaxTextFieldBytes
@@ -199,6 +212,9 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 
 	contestantCh := make(chan execResult, 1)
 	interactorCh := make(chan execResult, 1)
+	// Each channel synchronizes the corresponding completion flag. Capture
+	// cancellation before coordination cancels already-finished peers.
+	var contestantInterrupted, interactorInterrupted bool
 	go func() {
 		res := executeSandboxCommandWithStreams(
 			contestantCtx,
@@ -206,19 +222,21 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			contestantArgs,
 			req,
 			sandboxStreamConfig{
-				stdinFile:      contestantInR,
-				stdout:         interactorIn,
-				onStdoutDone:   interactorIn.Close,
-				onTargetReady:  func() { timers.targetReady(0) },
-				targetRelease:  timers.release,
-				startWallTimer: func() bool { return contestantCtx.Err() == nil },
-				cpuNormalizer:  s.cpuNormalizer,
+				stdinFile:       contestantInR,
+				stdout:          interactorIn,
+				onStdoutDone:    interactorIn.Close,
+				onTargetReady:   func() { timers.targetReady(0) },
+				targetRelease:   timers.release,
+				startWallTimer:  func() bool { return contestantCtx.Err() == nil },
+				cpuNormalizer:   s.cpuNormalizer,
+				workMeasurement: contestantMeter,
 			},
 			hooks,
 			outputLimitBytes(req),
 			tuning,
 			s.cgroupParentDir,
 		)
+		contestantInterrupted = contestantCtx.Err() != nil
 		contestantFinished.Store(true)
 		timers.finish(0)
 		contestantCh <- res
@@ -240,13 +258,15 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 					uid: interactiveJudgeSandboxUID,
 					gid: interactiveJudgeSandboxGID,
 				},
-				cpuNormalizer: s.cpuNormalizer,
+				cpuNormalizer:   s.cpuNormalizer,
+				workMeasurement: interactorMeter,
 			},
 			Hooks{},
 			outputLimitBytes(interactorReq),
 			tuning,
 			s.cgroupParentDir,
 		)
+		interactorInterrupted = interactorCtx.Err() != nil
 		interactorFinished.Store(true)
 		timers.finish(1)
 		interactorCh <- res
@@ -304,6 +324,14 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	)
 	resp.SidecarOutputs = sidecarOutputs
 	resp.SidecarErrors = sidecarErrors
+	if req.WorkMeasurement {
+		// Collect only after peer shutdown and benign final-reply relay errors
+		// have been reconciled. Diagnostic totals never select the verdict.
+		resp.WorkMeasurements = []model.WorkMeasurementProcess{
+			collectPeerWorkMeasurement(contestantMeter, contestantRes, contestantInterrupted, "contestant", "contestant", nil),
+			collectPeerWorkMeasurement(interactorMeter, interactorRes, interactorInterrupted, "interactor", "interactor", nil),
+		}
+	}
 	var participantFileOutput []byte
 	var participantFileErr error
 	if len(req.FileOutputs) > 0 {

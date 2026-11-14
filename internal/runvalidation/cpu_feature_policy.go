@@ -23,6 +23,11 @@ func ValidateDisallowedCPUFeatures(req *model.RunRequest) error {
 	if len(req.DisallowedCPUFeatures) == 0 {
 		return nil
 	}
+	// Durante instruments the native host process. Wrapping the CPU-policy
+	// emulator would measure QEMU's work instead of the submitted program.
+	if req.WorkMeasurement || req.WorkMeasurementLimits != nil {
+		return fmt.Errorf("disallowed_cpu_features does not support work_measurement or work_measurement_limits")
+	}
 	if req.Communication != nil {
 		return fmt.Errorf("disallowed_cpu_features does not support communication")
 	}

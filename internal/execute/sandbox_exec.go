@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
@@ -32,6 +33,8 @@ import (
 )
 
 type execResult struct {
+	WorkMeasurement  *durante.Report
+	targetPID        int
 	Status           string
 	ExitCode         *int
 	Stdout           []byte
@@ -108,6 +111,7 @@ func ceilCPUMilliseconds(ns uint64) int64 {
 }
 
 type sandboxStreamConfig struct {
+	workMeasurement           *durante.Session
 	stdin                     io.Reader
 	stdinMaxBytes             int64
 	liveStdin                 bool
@@ -229,7 +233,7 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer) execResult {
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer, meters ...*durante.Session) execResult {
 	wallLimit := time.Duration(executionWallTimeMs(req.Limits, false, cpuNormalizer.WallLimitMillis)) * time.Millisecond
 	// Preparation stays separate from the wall-clock safety deadline. CPU
 	// limits continue to be enforced by the sandbox watchdog and RLIMIT_CPU.
@@ -237,9 +241,17 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, wallLimit)
 	defer cancel()
 
-	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
-		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer, cpuNormalizer: cpuNormalizer,
+	var meter *durante.Session
+	if len(meters) > 0 {
+		meter = meters[0]
+	}
+	result := executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
+		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer, cpuNormalizer: cpuNormalizer, workMeasurement: meter,
 	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	if meter != nil {
+		result = collectCompletedSandboxWorkMeasurement(ctx, cancel, result, meter.Collect)
+	}
+	return result
 }
 
 // Ordinary runs have separate initialization and target-execution budgets. The
@@ -305,6 +317,13 @@ func executeSandboxCommandWithStdinLimit(ctx context.Context, ws Workspace, comm
 func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
+	}
+	if len(req.DisallowedCPUFeatures) > 0 && streams.workMeasurement != nil {
+		return execResult{
+			Status:        model.RunStatusInitFail,
+			Reason:        "disallowed_cpu_features does not support work_measurement or work_measurement_limits",
+			VerdictSource: "cpu_feature_policy",
+		}
 	}
 	tuning = tuning.WithSafeDefaults()
 	if os.Geteuid() != 0 {
@@ -549,6 +568,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 
+	// Select every sandbox permission and resource limit from the original
+	// runtime before wrapping it. Instrumentation grants no extra capability.
+	if streams.workMeasurement != nil {
+		finalCommand = streams.workMeasurement.Wrap(finalCommand)
+		innerEnv = streams.workMeasurement.Environment(innerEnv)
+	}
 	helperReq := sandbox.ExecRequest{
 		Command:                  finalCommand,
 		Dir:                      ws.BoxDir,
@@ -1311,6 +1336,7 @@ done:
 		result.VerdictSource = "wall_time"
 	}
 	cpuExecution.applyResult(&result)
+	result.targetPID = cmd.Process.Pid
 	normalizeExecResultCPU(&result, cpuNormalizer)
 	return result
 }

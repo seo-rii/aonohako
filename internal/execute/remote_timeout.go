@@ -68,6 +68,9 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 		budget += stdinURLDownloadTimeout + time.Duration(wallMs)*time.Millisecond
 	} else {
 		wallMs := executionWallTimeMs(req.Limits, req.Interactor != nil, timing.MaximumCPUWallLimitMillis)
+		if req.WorkMeasurementLimits != nil {
+			wallMs = min(max(req.WorkMeasurementLimits.WallTimeMs, 1), runvalidation.MaxTimeMs)
+		}
 		if req.Interactor != nil {
 			roleLimits := interactorRunRequest(req).Limits
 			wallMs = max(wallMs, executionWallTimeMs(roleLimits, true, timing.MaximumCPUWallLimitMillis))
@@ -84,7 +87,7 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 		for i := range repeatReq.Binaries {
 			repeatReq.Binaries[i].DataURL = ""
 		}
-		if shortCaseRepeatEligible(&repeatReq, Hooks{}) {
+		if req.WorkMeasurementLimits == nil && shortCaseRepeatEligible(&repeatReq, Hooks{}) {
 			addStage(wallMs)
 			addStage(wallMs)
 		}

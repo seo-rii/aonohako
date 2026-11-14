@@ -131,6 +131,8 @@ API rejects unsupported combinations before downloading binary URLs or
 admitting work:
 
 - `communication` mode and contestant `enable_network`;
+- Durante `work_measurement` and `work_measurement_limits`, whose native
+  instrumentation would measure the host emulator instead of guest work;
 - contestant `file_outputs` or `sidecar_outputs`;
 - legacy step file handoffs and Pipeline V1 `participant_file` outputs;
 - contestant runtime languages that do not normalize to `binary`.
