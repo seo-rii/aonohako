@@ -206,6 +206,30 @@ See [Durante diagnostics](durante.md#interactive-and-communication-observations)
 The `work_measurement_limits` envelope remains ordinary-only and is rejected for
 interactive and communication requests.
 
+An ordinary C/C++ envelope request can additionally opt into
+`work_measurement_time: true`. With a compatible operator model, the final
+`work_measurement_execution` includes `time_estimate` containing the model ID and
+version, reference/runtime identities, family, engine/dispatch profiles, exact
+integer coefficients, method, `diagnostic_only` authority, and estimated
+`nanoseconds`/rounded-up `milliseconds`. `nominal_time_exceeded` is present with
+the estimate and equals `nanoseconds > nominal_limits.time_ms * 1,000,000`;
+equality is false. This field does not change the verdict.
+
+If estimation is unavailable, both fields are absent and
+`time_estimate_unavailable` contains a reason such as `execution_cancelled`,
+`execution_resource_exhausted`, or `observation_not_convertible`. A complete raw
+observation with signals, partial REP coverage, or overflowing estimated time
+can remain complete while conversion is unavailable. An execution rejected before
+initialization may omit the diagnostic execution object. Without the explicit
+flag, no estimate, nominal comparison, or conversion-unavailable field is emitted.
+
+Local execution and remote forwarding require their own matching operator
+policy and downstream execution-image identity. Remote forwarding recomputes and
+verifies the estimate rather than adopting returned coefficients. Raw CPU/RSS
+and the envelope's initialization-failure status remain unchanged, with no score
+or CPU normalization. Production coefficients are not supplied by this API.
+See [reference-time configuration and examples](durante.md#explicit-reference-time-calculator).
+
 For helper-backed runs, target CPU time is finalized from process wait usage
 after subtracting the CPU baseline captured before target release. This retains
 fast target CPU consumed after the last watchdog sample. By default,

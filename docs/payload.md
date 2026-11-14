@@ -108,6 +108,7 @@ error.
 {
   "lang": "binary",                          // runtime language key (see Supported Languages)
   "work_measurement": false,                // optional Durante diagnostics; requires source-language profiles when true
+  "work_measurement_time": false,           // optional C/C++ reference-time estimate; also requires the raw envelope and an operator model
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
@@ -204,6 +205,15 @@ Interactive requests name both `lang` and `interactor.lang`; communication names
 each `programs[].lang` and leaves top-level `lang` empty. SPJs, pipelines, entry
 modes, and legacy steps do not support this flag. The separate
 `work_measurement_limits` raw diagnostic envelope supports ordinary runs only.
+`work_measurement_time: true` additionally requests an operator-configured
+reference-time estimate. It requires `work_measurement: true`, a valid
+`work_measurement_limits` envelope, and an ordinary C/C++ source profile.
+It is rejected for Python/PyPy, other runtime families, generic `binary`, peers,
+SPJs, pipelines, entry modes, and steps. Requests cannot select coefficients.
+The operator binds the model to the canonical source profile and actual immutable
+Durante execution image; a remote control plane uses the downstream image/model.
+Omitting the flag preserves existing measurement behavior. Estimated time remains
+diagnostic and does not change raw resource accounting or grant a student verdict.
 See [Durante diagnostics](durante.md) for operator configuration and result semantics.
 `capture_limits` is separate from `limits.output_bytes`. An omitted object or
 member retains the legacy response cap of `min(limits.output_bytes, 64 KiB)`;

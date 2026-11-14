@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runvalidation"
@@ -25,6 +26,7 @@ import (
 const cloudRunMetadataIdentityURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
 
 type remoteRunner struct {
+	workMeasurement  durante.Config
 	client           *http.Client
 	metadataClient   *http.Client
 	executeURL       string
@@ -45,6 +47,7 @@ func newRemoteRunner(cfg config.Config) Runner {
 		auth = config.RemoteAuthNone
 	}
 	return &remoteRunner{
+		workMeasurement:  snapshotWorkMeasurementConfig(cfg.Execution.WorkMeasurement),
 		client:           remoteio.NewHTTPClient(),
 		metadataClient:   remoteio.NewMetadataHTTPClient(),
 		executeURL:       normalizeRemoteExecuteURL(cfg.Execution.Remote.URL),
@@ -75,6 +78,11 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	}
 	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if req.WorkMeasurementTime {
+		if _, _, err := r.workMeasurement.TimePolicyFor(req.Lang); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -276,6 +284,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				remoteResult.Reason = remoteErrorReason
 			}
 			if err := validateRemoteWorkMeasurement(req, remoteResult); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
+			if err := validateRemoteWorkMeasurementTime(req, remoteResult, r.workMeasurement); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
 			switch remoteResult.Status {

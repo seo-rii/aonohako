@@ -4,8 +4,9 @@ An explicitly requested supported-language run can execute under Durante and ret
 `work_measurement` alongside its ordinary verdict, CPU, wall and memory values.
 Interactive and communication-v1/v2 runs return separate role observations in
 `work_measurements` instead.
-The work metric counts application basic blocks across process images. It is a
-separate diagnostic unit, not a conversion to milliseconds or a new TLE rule.
+The work metric counts application basic blocks across process images. Raw work
+units remain separate from scheduled CPU time. An optional reference-time
+estimate uses an explicit operator model and does not change TLE rules.
 The ordinary CPU and memory values of an instrumented run include instrumentation
 cost. Do not compare its verdict near a resource limit as if it were uninstrumented.
 
@@ -61,6 +62,8 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_DURANTE_CLIENT` | Absolute trusted client path; default `/opt/durante/lib/libdurante.so`. |
 | `AONOHAKO_DURANTE_DISPATCH_PROFILE` | `default`, or the C/C++ diagnostic profile `glibc-2.41-sse2-v1`. |
 | `AONOHAKO_DURANTE_RESOURCE_POLICY` | Optional strict JSON operator policy for separate raw CPU/wall/RSS diagnostic limits; disabled when absent. |
+| `AONOHAKO_DURANTE_TIME_POLICY` | Optional strict `TimePolicy` JSON with every model field and positive integer coefficient explicitly supplied. Enables requested C/C++ reference-time estimates with a resource policy. |
+| `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with a time policy. |
 
 For example, configure `AONOHAKO_DURANTE_FAMILIES=cpp` and add
 `"work_measurement": true` to a normal run request with `"lang": "CPP20"`.
@@ -140,15 +143,15 @@ means REP counting was off; `movs_stos_only` covers the requested MOVS/STOS byte
 extension; `partial` retains positive `unsupported_rep_entries`; `unavailable`
 exposes no totals. A complete observation may contain partial byte telemetry or
 explicit `signals_observed` quality. It remains diagnostic and cannot be used as
-a trusted time result. The standalone reference-policy calculator still rejects
+a trusted time result. The reference-time estimator rejects
 partial REP coverage and interrupted observations.
 
 `instructions` is basic-block-entry application work, including loaded libraries
 and generated code. Engine/client instructions and kernel work are outside that
 count. REP MOVS/STOS requested bytes are a separate dimension; SIMD and ordinary
 memory operations have different costs. The execution API does not convert these
-counts into credited milliseconds. A standalone, explicit reference-policy
-calculator is described below; it is not a judgement policy.
+counts into credited milliseconds. An explicit reference policy can produce a
+separate diagnostic time estimate, described below; it is not a judgement policy.
 
 `quality: signals_observed` records interrupted execution. Charging a whole block
 at its entry can include an unexecuted tail when a signal arrives. Lifecycle
@@ -263,7 +266,7 @@ Build the overlay target `durante-validation` from the same source as `runtime`,
 then run it as root with networking disabled. Its default entrypoint executes:
 
 ```text
-durante-execute.test -test.v -test.run ^TestDurante(Sandbox|ResourceEnvelope|Interactive|Communication)Integration$ -test.timeout 240s
+durante-execute.test -test.v -test.run ^TestDurante(Sandbox|ResourceEnvelope|TimeEstimate|Interactive|Communication)Integration$ -test.timeout 240s
 ```
 
 After tagging that build `aonohako-durante-validation:local`, pass its actual image
@@ -277,6 +280,7 @@ docker run --rm --user 0 --network none --read-only --memory 2g --pids-limit 256
   --tmpfs /work:rw,exec,mode=0755,size=268435456 \
   -e AONOHAKO_WORK_ROOT=/work \
   -e AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT="$validation_image_id" \
+  -e AONOHAKO_DURANTE_RUNTIME_IMAGE="$validation_image_id" \
   "$validation_image_id"
 ```
 
@@ -345,7 +349,7 @@ Every envelope response has status `Container Initialization Failed`
 mistaking diagnostic completion for an authorized student verdict. Its
 `work_measurement_execution` records `authority: diagnostic_only`, the nominal
 and actual limits, and one of `complete`, `incomplete`, `resource_exhausted`,
-`cancelled`, or `failed`. A complete, normally exited and uninterrupted run has
+`cancelled`, or `failed`. A complete, normally exited run has
 `output_matches`; failed or killed runs do not. `termination_source` preserves
 which underlying resource check stopped execution. Raw CPU/RSS remain in the
 ordinary measurement fields, with no normalization metadata or score. This is an
@@ -358,9 +362,65 @@ trusted credited-time or credited-memory policy is enabled by this change.
 
 ## Explicit reference-time calculator
 
-`internal/durante.TimePolicy` is a standalone diagnostic calculator, with no
-API or service default. It requires a model ID/version, reference ID, exact
-runtime identity, family, engine/dispatch profile, and positive integer weights:
+`work_measurement_time: true` asks the execution API to apply the operator's
+`internal/durante.TimePolicy` to a completed diagnostic observation. This option
+requires both `work_measurement: true` and `work_measurement_limits`, and accepts
+only ordinary C/C++ source profiles such as `C11` or `CPP20`. Python/PyPy, other
+runtime families, ambiguous `binary`, interactive/communication runs, SPJs,
+pipelines, entry modes, and steps do not support time conversion. Without this
+flag, the existing measurement admission rules remain unchanged.
+
+The operator must enable `cpp`, configure a valid resource policy, and supply
+both `AONOHAKO_DURANTE_TIME_POLICY` and `AONOHAKO_DURANTE_RUNTIME_IMAGE`. The time
+policy's engine and dispatch profiles must match the measurement configuration.
+Its `runtime_id` must exactly equal `<canonical source-language ID>@<image digest>`;
+for example, `CPP20@sha256:<64 lowercase hex digits>`. A model for `CPP20` does
+not also admit `C11` or `CPP17`. Source aliases resolve to their canonical profile
+before this comparison.
+
+Use the actual final Durante overlay image identity from deployment metadata.
+This value is an operator assertion; the service does not discover or attest its
+own container image. A remote control plane must configure the same downstream
+runner image and model. Its own frontend image is not the execution runtime.
+The control plane recomputes the estimate from the returned raw observation and
+its own configured policy and rejects mismatched model, coefficients, values,
+availability, or nominal-limit comparison.
+
+The following policy template illustrates the required fields. Replace the
+image placeholder with the same digest supplied in
+`AONOHAKO_DURANTE_RUNTIME_IMAGE`. **These coefficients are for arithmetic examples
+only; production coefficients have not been selected or calibrated.**
+
+```json
+{
+  "model_id": "arithmetic-example",
+  "model_version": 1,
+  "reference_id": "arithmetic-fixture-only",
+  "runtime_id": "CPP20@<actual-overlay-image-digest>",
+  "family": "cpp",
+  "engine_profile": "dynamorio-11.3-durante-v3-vm32m",
+  "dispatch_profile": "default",
+  "instruction_ns_numerator": 1,
+  "rep_byte_ns_numerator": 1,
+  "ns_denominator": 1
+}
+```
+
+All fields are explicit, and the integer weights and denominator must be
+positive. A request supplies the opt-in flag and execution limits, never model
+coefficients. For example, add these fields to a normal `CPP20` request:
+
+```json
+{
+  "lang": "CPP20",
+  "work_measurement": true,
+  "work_measurement_time": true,
+  "limits": {"time_ms": 1000, "wall_time_ms": 2000, "memory_mb": 128},
+  "work_measurement_limits": {"cpu_time_ms": 4000, "wall_time_ms": 8000, "memory_mb": 512}
+}
+```
+
+The policy computes:
 
 ```
 estimated_ns = ceil((instructions * instruction_ns_numerator
@@ -372,7 +432,59 @@ exceed signed 64-bit nanoseconds are rejected; milliseconds round upward.
 Incompatible runtime/profile, incomplete counts, signals, unsupported REP, or
 missing counters yield an error and no estimate. Successful results still have
 `authority: diagnostic_only`. Model/reference identities and weights are retained
-with the estimate for audit.
+with the estimate. For a report containing 123,456 instructions and 8,192 REP
+bytes, the example coefficients produce 131,648 ns and 1 rounded-up ms. Selected
+response fields would be:
+
+```json
+{
+  "status": "Container Initialization Failed",
+  "work_measurement_execution": {
+    "authority": "diagnostic_only",
+    "state": "complete",
+    "time_estimate": {
+      "instruction_ns_numerator": 1,
+      "rep_byte_ns_numerator": 1,
+      "ns_denominator": 1,
+      "method": "weighted-work-nanoseconds-v1",
+      "authority": "diagnostic_only",
+      "model_id": "arithmetic-example",
+      "model_version": 1,
+      "reference_id": "arithmetic-fixture-only",
+      "runtime_id": "CPP20@<actual-overlay-image-digest>",
+      "family": "cpp",
+      "engine_profile": "dynamorio-11.3-durante-v3-vm32m",
+      "dispatch_profile": "default",
+      "nanoseconds": 131648,
+      "milliseconds": 1
+    },
+    "nominal_time_exceeded": false
+  }
+}
+```
+
+`nominal_time_exceeded` compares estimated nanoseconds directly with
+`limits.time_ms * 1,000,000`, using strict `>`; equality is not an exceedance.
+It does not use the rounded `milliseconds` field and does not select AC/TLE.
+The response retains raw CPU/RSS, `diagnostic_only`, initialization-failure
+status, and no score or CPU normalization.
+
+When conversion is unavailable, `time_estimate` and `nominal_time_exceeded` are
+absent and `time_estimate_unavailable` explains why:
+
+| Value | Meaning |
+|---|---|
+| `execution_<state>` | The diagnostic execution did not complete; suffixes include `resource_exhausted`, `cancelled`, `failed`, and `incomplete`. |
+| `observation_not_convertible` | The raw observation completed but the estimator rejected it, for example because of signals, partial REP coverage, or numeric overflow. |
+| `incompatible_observation` | A complete execution lacks a compatible diagnostic report. |
+| `incompatible_time_configuration` | The configured model or runtime identity cannot apply to this observation. |
+
+A complete raw observation can therefore retain its counts and `output_matches`
+while its time estimate is unavailable. Admission or initialization failure
+before an envelope execution can omit `work_measurement_execution` entirely.
+Requesting a time estimate without an applicable operator policy is rejected
+before target execution. Omitting the flag preserves the previous response and
+does not automatically apply a configured model.
 
 There is deliberately no default coefficient based on the observed 3.1× CPU
 cost or the two-submission experiment. A representative reference workload set
