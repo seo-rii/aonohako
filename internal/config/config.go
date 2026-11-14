@@ -631,8 +631,21 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
 	}
 	if workMeasurement.ResourcePolicy != nil {
-		if _, err := workMeasurement.Family("CPP20"); err != nil {
-			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY requires the cpp durante family: %w", err)
+		// Raw envelopes apply to every compatible enabled family. Keep the
+		// runtime and dispatch exclusions used during request admission.
+		usableFamily := false
+		for _, family := range workMeasurement.Families {
+			if durante.ValidateMeasurementFamily(family) != nil {
+				continue
+			}
+			if workMeasurement.DispatchProfile == durante.DispatchGLIBC241 && family != "cpp" {
+				continue
+			}
+			usableFamily = true
+			break
+		}
+		if !usableFamily {
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY requires an enabled, supported family compatible with its dispatch profile")
 		}
 		if err := workMeasurement.ResourcePolicy.ValidateAdmission(maxActive, workRootMaxBytes); err != nil {
 			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
