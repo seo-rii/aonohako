@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
@@ -59,6 +60,8 @@ type communicationProcessResult struct {
 	completedAt      time.Time
 	wallDeadlineAt   time.Time
 	resultProtocolAt time.Time
+	meter            *durante.Session
+	interrupted      bool
 }
 
 type communicationManagerProtocol struct {
@@ -73,6 +76,7 @@ type communicationPreparedProcess struct {
 	ws         Workspace
 	args       []string
 	request    *model.RunRequest
+	meter      *durante.Session
 }
 
 type communicationOutputWriter struct {
@@ -128,6 +132,16 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	startedAt := timing.MonotonicNow()
 	competitive := req.Communication != nil && req.Communication.Version == 2
 	defer func() {
+		if req.WorkMeasurement && len(response.WorkMeasurements) == 0 && response.StartedParticipants == 0 {
+			if roles, err := workMeasurementRequestRoles(req); err == nil {
+				for _, role := range roles {
+					response.WorkMeasurements = append(response.WorkMeasurements, model.WorkMeasurementProcess{
+						Role: role.role, ProgramID: role.programID, ParticipantIndex: role.participantIndex,
+						ExecutionStatus: model.RunStatusInitFail, TerminationSource: response.VerdictSource,
+					})
+				}
+			}
+		}
 		if !competitive {
 			return
 		}
@@ -273,6 +287,21 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		return communicationFailure(managerInit.Reason, "communication:manager:init", 0)
 	}
 	prepared = append(prepared, manager)
+	if req.WorkMeasurement {
+		for i := range participants {
+			identity := communicationParticipantIdentity(i)
+			meter, err := durante.Prepare(ctx, participants[i].ws.RootDir, s.workMeasurement, participants[i].request.Lang, int(identity.uid), int(identity.gid))
+			if err != nil {
+				return communicationFailure("participant durante preparation failed: "+err.Error(), "communication:participant:durante", 0)
+			}
+			participants[i].meter = meter
+		}
+		meter, err := durante.Prepare(ctx, manager.ws.RootDir, s.workMeasurement, manager.request.Lang, int(security.CommunicationManagerUID), int(security.CommunicationManagerGID))
+		if err != nil {
+			return communicationFailure("manager durante preparation failed: "+err.Error(), "communication:manager:durante", 0)
+		}
+		manager.meter = meter
+	}
 
 	managerRemaining, err := communicationWorkspaceRemaining(manager.ws.RootDir, managerReq.Limits.WorkspaceBytes)
 	if err != nil {
@@ -469,12 +498,13 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				prepared.args,
 				prepared.request,
 				sandboxStreamConfig{
-					stdin:         pipe.stdinRead,
-					liveStdin:     true,
-					stdout:        participantOutput,
-					onStdoutDone:  func() { _ = pipe.stdoutWrite.Close() },
-					identity:      communicationParticipantIdentity(index),
-					onTargetReady: func() { readyCh <- false },
+					workMeasurement: prepared.meter,
+					stdin:           pipe.stdinRead,
+					liveStdin:       true,
+					stdout:          participantOutput,
+					onStdoutDone:    func() { _ = pipe.stdoutWrite.Close() },
+					identity:        communicationParticipantIdentity(index),
+					onTargetReady:   func() { readyCh <- false },
 					onTargetStarted: func() {
 						if startedParticipants.Add(1) == int32(len(participants)) {
 							close(allParticipantsStarted)
@@ -501,6 +531,8 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				request:     prepared.request,
 				result:      res,
 				completedAt: time.Now(),
+				meter:       prepared.meter,
+				interrupted: participantCtx.Err() != nil,
 			}
 			if deadlineAt := participantDeadlineNano[index].Load(); deadlineAt != 0 {
 				process.wallDeadlineAt = time.Unix(0, deadlineAt)
@@ -519,6 +551,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			manager.args,
 			manager.request,
 			sandboxStreamConfig{
+				workMeasurement: manager.meter,
 				identity: sandboxIdentity{
 					uid: security.CommunicationManagerUID,
 					gid: security.CommunicationManagerGID,
@@ -541,6 +574,8 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			participant: -1,
 			request:     manager.request,
 			result:      res,
+			meter:       manager.meter,
+			interrupted: managerCtx.Err() != nil,
 		}
 		if deadlineAt := managerDeadlineNano.Load(); deadlineAt != 0 {
 			process.wallDeadlineAt = time.Unix(0, deadlineAt)
@@ -745,6 +780,31 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			break
 		}
 	}
+	if req.WorkMeasurement {
+		// Collect only after every completion event and manager pipe close has
+		// reached the coordinator. Reading reports and hashing the runtime must
+		// not delay the timestamps or pipe shutdown used to decide a forfeit.
+		response.WorkMeasurements = make([]model.WorkMeasurementProcess, totalProcesses)
+		for _, process := range results {
+			role, programID, index := "manager", managerProgram.ID, len(participants)
+			var participantIndex *int
+			if !process.manager {
+				role, index = "participant", process.participant
+				programID = participantProgram.ID
+				if competitive {
+					programID = participantPrograms[index].ID
+				}
+				seat := index
+				participantIndex = &seat
+			}
+			interrupted := process.interrupted
+			status, _, _ := communicationFinalProcessStatus(process)
+			if status == model.RunStatusTLE || status == model.RunStatusMLE || status == model.RunStatusWLE {
+				interrupted = true
+			}
+			response.WorkMeasurements[index] = collectPeerWorkMeasurement(process.meter, process.result, interrupted, role, programID, participantIndex)
+		}
+	}
 	emitCapturedLog(hooks, "stderr", []byte(response.Stderr), responseStderrLimitBytes(req))
 	return response
 }
@@ -836,13 +896,14 @@ func communicationPrograms(req *model.RunRequest) (model.RunProgram, model.RunPr
 
 func communicationProgramRequest(req *model.RunRequest, program model.RunProgram, limits model.Limits) *model.RunRequest {
 	return &model.RunRequest{
-		Lang:           program.Lang,
-		Binaries:       program.Binaries,
-		EntryPoint:     program.EntryPoint,
-		Limits:         limits,
-		CaptureLimits:  req.CaptureLimits,
-		ProblemID:      req.ProblemID,
-		RuntimeProfile: req.RuntimeProfile,
+		WorkMeasurement: req.WorkMeasurement,
+		Lang:            program.Lang,
+		Binaries:        program.Binaries,
+		EntryPoint:      program.EntryPoint,
+		Limits:          limits,
+		CaptureLimits:   req.CaptureLimits,
+		ProblemID:       req.ProblemID,
+		RuntimeProfile:  req.RuntimeProfile,
 	}
 }
 

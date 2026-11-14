@@ -1,16 +1,18 @@
 # Diagnostic software work measurement
 
-An explicitly requested ordinary supported-language run can execute under Durante and return
+An explicitly requested supported-language run can execute under Durante and return
 `work_measurement` alongside its ordinary verdict, CPU, wall and memory values.
+Interactive and communication-v1/v2 runs return separate role observations in
+`work_measurements` instead.
 The work metric counts application basic blocks across process images. It is a
 separate diagnostic unit, not a conversion to milliseconds or a new TLE rule.
 The ordinary CPU and memory values of an instrumented run include instrumentation
 cost. Do not compare its verdict near a resource limit as if it were uninstrumented.
 
 Both operator configuration and an individual request are required. Default
-images and requests do not enable this path. Communication, interactive runs,
-SPJs, pipelines, Entry modes and multi-step requests are explicitly rejected for
-now. An instrumented request executes once; short-case repeat sampling is bypassed
+images and requests do not enable this path. SPJs, pipelines, Entry modes and
+multi-step requests are explicitly rejected. An instrumented request executes once;
+short-case repeat sampling is bypassed
 so one counter report does not silently stand in for several executions.
 
 ## Image and configuration
@@ -162,6 +164,68 @@ Trusted resource stops, cancellation and incomplete execution override a
 target-written complete stream: all instruction and REP totals become unavailable.
 Report files remain in the private per-run workspace and are removed with it.
 
+## Interactive and communication observations
+
+Set the top-level `work_measurement` flag to `true` to instrument both the
+contestant and interactor, or every communication participant and the manager.
+Each role uses its own Durante session and report directory. Interactive runs
+require enabled, compatible source-language profiles in both `lang` and
+`interactor.lang`. Communication retains its native-only execution contract and
+requires a source-language profile such as `CPP20` in every referenced
+`programs[].lang`; its top-level `lang` stays empty. Bare `binary` is rejected for
+any measured role. Each family must be enabled, and the existing JVM qualification
+gate and dispatch-profile restrictions still apply.
+
+The response's ordered `work_measurements` array uses these identities:
+
+| Mode | Role order | `program_id` | `participant_index` |
+|---|---|---|---|
+| Interactive | `contestant`, `interactor` | Same as the role | Absent |
+| Communication v1 | All `participant` entries, then `manager` | Requested participant/manager program ID | Zero-based participant index; absent for manager |
+| Communication v2 | Two `participant` entries, then `manager` | IDs in `participant_program_ids` order, then manager ID | Seat 0 or 1; absent for manager |
+
+For example, one communication role has this shape; `report` contains the full
+report contract described above:
+
+```jsonc
+{
+  "role": "participant",
+  "program_id": "solver",
+  "participant_index": 0,
+  "execution_status": "OK",
+  "exit_code": 0,
+  "report": { /* complete Durante report, including diagnostic contract */ }
+}
+```
+
+`execution_status` records the sandbox's actual `OK`, resource failure, runtime
+failure, or initialization failure before coordinator verdict attribution.
+`termination_source` is present when a resource check or interruption supplies
+one. A normal nonzero target exit can retain a complete diagnostic count; a
+resource stop, cancellation, signal, or incomplete stream cannot. A completed
+peer's report remains available when another peer fails. An accepted interactive
+or match result can therefore contain an unavailable participant report when the
+interactor or manager finished first and the coordinator stopped that participant.
+The outer verdict, score, and match outcome keep their existing meaning.
+
+These reports are separate observations, with no cross-role total. The singular
+`work_measurement` field is absent for these modes. Remote forwarding checks the
+role identities, source-language families, raw execution outcomes, and each
+diagnostic contract. A pre-execution initialization failure may omit the array;
+an executed composite request returns every role, including unavailable reports.
+An early communication rejection that retains its existing runtime-error verdict
+returns ordered unstarted roles with `execution_status: "Container Initialization Failed"`,
+no exit code, and no report. This preserves the original admission or setup reason
+without claiming that those programs ran.
+The counts remain `diagnostic_only` with `integrity_verified: false` and
+`trusted_verdict_eligible: false`.
+
+The bool option uses the existing per-role CPU, wall, and memory limits;
+instrumentation overhead is included. The separate `work_measurement_limits`
+raw envelope remains restricted to ordinary single-program requests and is
+rejected with interactive or communication requests. It does not silently expand
+every peer's resource allowance.
+
 ## Process trees and sandbox boundaries
 
 The engine follows supported children and exec images. Parent and child counters
@@ -188,20 +252,38 @@ instrumentation does not grant fork, exec-related exceptions or additional memor
 
 Focused tests cover configuration gates, exact parent/child and exec aggregation,
 failed-exec deduplication, signal quality, missing children, missing thread ends,
-overflow, malformed JSON and unsafe report files. The root integration test uses
-a precompiled trusted C fixture through the real sandbox and checks stdin/output,
-normal accounting, fork/network denial, unmetered execution and forced termination.
+overflow, malformed JSON and unsafe report files. Root integration tests use
+precompiled C fixtures through the real sandbox. They check ordinary accounting,
+interactive AC/WA and final-reply EOF, communication streams larger than pipe
+capacity, participant forfeits, manager failure, resource stops, cancellation,
+and per-role report retention. Unmetered behavior and remote verdict/accounting
+forwarding have separate regression coverage.
 
 Build the overlay target `durante-validation` from the same source as `runtime`,
 then run it as root with networking disabled. Its default entrypoint executes:
 
 ```text
-durante-execute.test -test.v -test.run ^TestDuranteSandboxIntegration$ -test.timeout 90s
+durante-execute.test -test.v -test.run ^TestDurante(Sandbox|ResourceEnvelope|Interactive|Communication)Integration$ -test.timeout 240s
+```
+
+After tagging that build `aonohako-durante-validation:local`, pass its actual image
+ID to the competitive fixture. Use the validation image's ID, not its base
+`RUNTIME_IMAGE` digest:
+
+```bash
+validation_image_id=$(docker image inspect --format '{{.Id}}' aonohako-durante-validation:local)
+docker run --rm --user 0 --network none --read-only --memory 2g --pids-limit 256 \
+  --tmpfs /tmp:rw,exec,mode=1777,size=268435456 \
+  --tmpfs /work:rw,exec,mode=0755,size=268435456 \
+  -e AONOHAKO_WORK_ROOT=/work \
+  -e AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT="$validation_image_id" \
+  "$validation_image_id"
 ```
 
 `AONOHAKO_TEST_DURANTE=1` makes missing root or missing installed artifacts a
-failure. Ordinary local unit runs explicitly skip this image-dependent test.
-The integration image includes its compiler-produced fixture; runtime images do
+failure. The communication fixture also requires the image fingerprint. Ordinary
+local unit runs explicitly skip these image-dependent tests.
+The integration image includes its compiler-produced fixtures; runtime images do
 not need a compiler or Python just to run the meter or collector.
 
 ## Separate actual resource envelope
@@ -223,7 +305,8 @@ dedicated diagnostic runner rather than sharing it with unrelated workloads or
 ordinary requests with larger allocations. RSS sampling can overshoot between
 polls; the reserve is headroom, not a guarantee against container OOM.
 
-An ordinary supported-language request may then include:
+Only an ordinary supported-language request may include this envelope;
+interactive and communication modes use the bool option described above:
 
 ```json
 {

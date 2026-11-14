@@ -325,6 +325,7 @@ type RunRequest struct {
 
 type RunResponse struct {
 	WorkMeasurement          *durante.Report           `json:"work_measurement,omitempty"`
+	WorkMeasurements         []WorkMeasurementProcess  `json:"work_measurements,omitempty"`
 	WorkMeasurementExecution *WorkMeasurementExecution `json:"work_measurement_execution,omitempty"`
 	Status                   string                    `json:"status"`
 	TimeMs                   int64                     `json:"time_ms"`
@@ -352,6 +353,19 @@ type RunResponse struct {
 	Steps                    []StepResult              `json:"steps,omitempty"`
 	SidecarOutputs           []SidecarOutput           `json:"sidecar_outputs,omitempty"`
 	SidecarErrors            []SidecarError            `json:"sidecar_errors,omitempty"`
+}
+
+// WorkMeasurementProcess keeps each concurrent role's diagnostic observation
+// separate. ExecutionStatus and TerminationSource describe the actual execution
+// before interactive or match coordinator verdicts reinterpret a peer shutdown.
+type WorkMeasurementProcess struct {
+	Role              string          `json:"role"`
+	ProgramID         string          `json:"program_id"`
+	ParticipantIndex  *int            `json:"participant_index,omitempty"`
+	ExecutionStatus   string          `json:"execution_status"`
+	ExitCode          *int            `json:"exit_code,omitempty"`
+	TerminationSource string          `json:"termination_source,omitempty"`
+	Report            *durante.Report `json:"report,omitempty"`
 }
 
 // WorkMeasurementExecution describes an opt-in diagnostic execution. Its

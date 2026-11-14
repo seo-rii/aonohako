@@ -30,7 +30,7 @@ func TestIncompleteSandboxExecutionDiscardsForgedCompleteObservation(t *testing.
 			}
 			result := execResult{Status: tc.status, VerdictSource: tc.source, ExitCode: &tc.exit,
 				CPUTimeNs: 100, WorkMeasurement: completeEnvelopeReport()}
-			discardIncompleteWorkMeasurement(ctx, &result)
+			discardIncompleteWorkMeasurement(ctx.Err() != nil, &result)
 			if result.Status != tc.status || result.VerdictSource != tc.source || *result.ExitCode != tc.exit || result.CPUTimeNs != 100 {
 				t.Fatal("observation finalization changed execution verdict or resources")
 			}

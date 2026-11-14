@@ -27,6 +27,12 @@ memory and workspace budget before starting any submitted program.
 As in V1, wall-clock allowances are derived from the CPU limits and runner
 scheduling policy. A nonzero `limits.wall_time_ms` is rejected.
 
+An enabled Durante runner also accepts top-level `work_measurement: true`.
+All three `programs[].lang` values must declare enabled native source-language
+profiles, such as `CPP20`, rather than ambiguous `binary`. Participants and the
+manager each receive a separate session. `work_measurement_limits` remains an
+ordinary-run-only raw envelope and is rejected for matches.
+
 ## Request
 
 Use `programs` for the three programs and this communication specification:
@@ -113,6 +119,17 @@ participant identities and artifact digests, per-seat execution statistics,
 the actual selected `entry_point` within each participant's artifact workspace,
 `outcome`, `retriable`, and optional `wins`. No scalar submission score is
 returned. The trusted tournament caller computes ratings and the cohort score.
+
+Metered matches additionally return top-level `work_measurements` for seat 0,
+seat 1, and manager, in that order. Each entry identifies `role`, requested
+`program_id`, and `participant_index` for seats, and includes the raw
+`execution_status`, optional `exit_code`/`termination_source`, and a Durante
+`report`. These observations are not merged into `match`, a score, or an aggregate
+instruction count. A participant stopped after a manager result or opponent
+forfeit has unavailable totals even if its match-facing status is later
+reclassified. A peer that completed normally can retain its diagnostic report.
+The `diagnostic_only` contract and ordinary CPU/RSS enforcement remain unchanged;
+see [the per-role contract](durante.md#interactive-and-communication-observations).
 
 - `completed`: a valid manager result; `wins` is the manager's result.
 - `forfeit`: one participant independently failed before a final manager
