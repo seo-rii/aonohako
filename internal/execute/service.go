@@ -209,11 +209,8 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		}
 	}
 	if req.WorkMeasurement {
-		if _, err := s.workMeasurement.Family(req.Lang); err != nil {
+		if err := validateWorkMeasurementRequest(req, s.workMeasurement); err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
-		}
-		if req.Communication != nil || req.Pipeline != nil || req.Interactor != nil || req.SPJ != nil || runvalidation.UsesSteps(req) || req.EntryMode != "" {
-			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "work_measurement supports only an ordinary single-program run"}
 		}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {

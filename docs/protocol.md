@@ -186,6 +186,26 @@ not duplicate stdout/stderr before `result`.
 }
 ```
 
+When `work_measurement: true` is requested from a Durante-enabled runner,
+ordinary runs add a singular `work_measurement` report. Interactive and
+communication-v1/v2 runs instead add `work_measurements`: an ordered array of
+`role`, `program_id`, optional `participant_index`, `execution_status`, optional
+`exit_code` and `termination_source`, and `report`. Interactive order is
+contestant then interactor; communication order is participants by zero-based
+index followed by manager. The execution status is the raw sandbox status,
+before a manager/interactor verdict reinterprets coordinator shutdown. Each
+report retains its `diagnostic_only` contract; instruction counts never replace
+CPU or memory fields or determine a verdict. A failed role exposes unavailable
+totals while already completed peers can retain theirs. A pre-execution
+initialization failure may omit the array. Forwarding rejects missing, repeated,
+misidentified, or incompatible role reports after execution.
+An early communication runtime-error response supplies unstarted role entries
+with initialization-failure execution status and no exit code or report, retaining
+the existing outer failure reason.
+See [Durante diagnostics](durante.md#interactive-and-communication-observations).
+The `work_measurement_limits` envelope remains ordinary-only and is rejected for
+interactive and communication requests.
+
 For helper-backed runs, target CPU time is finalized from process wait usage
 after subtracting the CPU baseline captured before target release. This retains
 fast target CPU consumed after the last watchdog sample. By default,

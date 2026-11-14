@@ -23,6 +23,9 @@ RUN python3 /durante/toolkit/fetch_sdk.py
 RUN cmake -S /durante/client -B /build -DCMAKE_BUILD_TYPE=Release -DDynamoRIO_DIR=/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/cmake && cmake --build /build --target durante -j2
 COPY internal/execute/testdata/durante/probe.c /probe.c
 RUN gcc -O2 -Wall -Wextra -Werror -static /probe.c -o /durante-probe
+COPY internal/execute/testdata/durante/interactive.c /interactive.c
+COPY internal/execute/testdata/durante/communication.c /communication.c
+RUN gcc -O2 -Wall -Wextra -Werror -static /interactive.c -o /durante-interactive && gcc -O2 -Wall -Wextra -Werror -static /communication.c -o /durante-communication
 
 FROM ${RUNTIME_IMAGE} AS durante-runtime
 COPY --from=durante-go /out/aonohako /usr/local/bin/aonohako
@@ -40,8 +43,10 @@ COPY third_party/durante/LICENSE third_party/durante/UPSTREAM.json /opt/durante/
 FROM durante-runtime AS durante-validation
 COPY --from=durante-go-test /out/durante-execute.test /opt/durante/durante-execute.test
 COPY --from=durante-build /durante-probe /opt/durante/probe
-ENV AONOHAKO_TEST_DURANTE=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 AONOHAKO_DURANTE_TEST_BINARY=/opt/durante/probe
+COPY --from=durante-build /durante-interactive /opt/durante/interactive
+COPY --from=durante-build /durante-communication /opt/durante/communication
+ENV AONOHAKO_TEST_DURANTE=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 AONOHAKO_DURANTE_TEST_BINARY=/opt/durante/probe AONOHAKO_TEST_DURANTE_INTERACTIVE=/opt/durante/interactive AONOHAKO_TEST_DURANTE_COMMUNICATION=/opt/durante/communication
 ENTRYPOINT ["/opt/durante/durante-execute.test"]
-CMD ["-test.v", "-test.run", "^TestDurante(Sandbox|ResourceEnvelope)Integration$", "-test.timeout", "90s"]
+CMD ["-test.v", "-test.run", "^TestDurante(Sandbox|ResourceEnvelope|Interactive|Communication)Integration$", "-test.timeout", "240s"]
 
 FROM durante-runtime AS runtime

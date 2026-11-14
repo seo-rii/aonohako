@@ -6,6 +6,7 @@ on:
       - 'internal/**'
       - 'third_party/durante/**'
       - 'scripts/verify_durante_vendor.py'
+      - 'docker/durante.Dockerfile'
       - 'go.*'
       - '.github/workflows/durante.yml'
   workflow_dispatch:
@@ -62,12 +63,38 @@ jobs:
           cmake -S third_party/durante/client -B /tmp/durante-build -DCMAKE_BUILD_TYPE=Release -DDynamoRIO_DIR=/opt/durante/dynamorio/cmake
           cmake --build /tmp/durante-build -j2
           gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/probe.c -o /tmp/durante-probe
+          gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/interactive.c -o /tmp/durante-interactive
+          gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/communication.c -o /tmp/durante-communication
       - name: Compile integration tests
-        run: go test -c -o /tmp/durante-execute.test ./internal/execute
-      - name: Validate real sandbox and diagnostic resource limits
+        run: CGO_ENABLED=0 go test -c -o /tmp/durante-execute.test ./internal/execute
+      - name: Validate ordinary sandbox and diagnostic resource limits
         run: |
           sudo env AONOHAKO_TEST_DURANTE=1 AONOHAKO_TEST_DURANTE_PYPY=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
             AONOHAKO_DURANTE_DRRUN=/opt/durante/dynamorio/bin64/drrun \
             AONOHAKO_DURANTE_CLIENT=/tmp/durante-build/libdurante.so \
             AONOHAKO_DURANTE_TEST_BINARY=/tmp/durante-probe \
-            /tmp/durante-execute.test -test.v -test.run '^TestDurante.*Integration$' -test.timeout 180s
+            /tmp/durante-execute.test -test.v -test.run '^TestDurante(Sandbox|ResourceEnvelope|PythonResourceEnvelope)Integration$' -test.timeout 180s
+      - name: Validate interactive and communication measurement in an immutable image
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Competitive fixtures bind to an actual container image identity.
+          # The separately verified engine, client and test fixtures are mounted read-only.
+          image=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
+          docker pull "$image"
+          image_id=$(docker image inspect --format '{{.Id}}' "$image")
+          docker run --rm --network none --read-only --memory 2g --pids-limit 256 --cpus 2 \
+            --tmpfs /tmp:rw,exec,mode=1777,size=268435456 \
+            --tmpfs /work:rw,exec,mode=0755,size=268435456 \
+            --mount type=bind,src=/opt/durante/dynamorio,dst=/opt/durante/dynamorio,readonly \
+            --mount type=bind,src=/tmp/durante-build/libdurante.so,dst=/opt/durante/lib/libdurante.so,readonly \
+            --mount type=bind,src=/tmp/durante-execute.test,dst=/validation/execute.test,readonly \
+            --mount type=bind,src=/tmp/durante-interactive,dst=/validation/interactive,readonly \
+            --mount type=bind,src=/tmp/durante-communication,dst=/validation/communication,readonly \
+            -e AONOHAKO_TEST_DURANTE=1 -e AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
+            -e AONOHAKO_WORK_ROOT=/work \
+            -e AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT="$image_id" \
+            -e AONOHAKO_TEST_DURANTE_INTERACTIVE=/validation/interactive \
+            -e AONOHAKO_TEST_DURANTE_COMMUNICATION=/validation/communication \
+            --entrypoint /validation/execute.test "$image_id" \
+            -test.v -test.run '^TestDurante(Interactive|Communication)Integration$' -test.timeout 240s

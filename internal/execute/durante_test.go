@@ -26,10 +26,10 @@ func TestWorkMeasurementRejectsDisabledAndAmbiguousRequests(t *testing.T) {
 	}{
 		{"disabled", New(), model.RunRequest{Lang: "CPP20", WorkMeasurement: true}, "not enabled"},
 		{"ambiguous", enabled, model.RunRequest{Lang: "binary", WorkMeasurement: true}, "source-language"},
-		{"interactive", enabled, model.RunRequest{Lang: "CPP20", WorkMeasurement: true, Interactor: &model.InteractorSpec{}}, "ordinary single-program"},
-		{"communication", enabled, model.RunRequest{Lang: "CPP20", WorkMeasurement: true, Communication: &model.CommunicationSpec{}}, "ordinary single-program"},
-		{"spj", enabled, model.RunRequest{Lang: "CPP20", WorkMeasurement: true, SPJ: &model.SPJSpec{}}, "ordinary single-program"},
-		{"pipeline", enabled, model.RunRequest{Lang: "CPP20", WorkMeasurement: true, Pipeline: &model.PipelineV1{}}, "ordinary single-program"},
+		{"ambiguous interactor", enabled, model.RunRequest{Lang: "CPP20", WorkMeasurement: true, Interactor: &model.InteractorSpec{Lang: "binary"}}, "source-language"},
+		{"invalid communication", enabled, model.RunRequest{WorkMeasurement: true, Communication: &model.CommunicationSpec{}}, "participant count"},
+		{"spj", enabled, model.RunRequest{Lang: "CPP20", WorkMeasurement: true, SPJ: &model.SPJSpec{}}, "does not support spj"},
+		{"pipeline", enabled, model.RunRequest{Lang: "CPP20", WorkMeasurement: true, Pipeline: &model.PipelineV1{}}, "does not support spj"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := tc.svc.Run(context.Background(), &tc.req, Hooks{})

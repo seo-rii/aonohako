@@ -106,6 +106,9 @@ func validDiagnosticWorkReport(language string, report *durante.Report) bool {
 }
 
 func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResponse) error {
+	if err := validateRemotePeerWorkMeasurements(req, response); err != nil {
+		return err
+	}
 	d := response.WorkMeasurementExecution
 	if report := response.WorkMeasurement; report != nil {
 		if (!req.WorkMeasurement && req.WorkMeasurementLimits == nil) || report.Schema != 1 || report.ClientVersion != 1 || !report.ValidDiagnosticContract() || report.Authority != durante.Authority || report.Metric != durante.Metric || report.Scope != durante.Scope {
