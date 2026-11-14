@@ -19,7 +19,10 @@ func envelopeRequest() *model.RunRequest {
 }
 func completeEnvelopeReport() *durante.Report {
 	instructions, zero := uint64(1234), uint64(0)
-	return &durante.Report{Schema: 1, ClientVersion: 1, Complete: true, Quality: "uninterrupted", Authority: durante.Authority, Metric: durante.Metric, Scope: durante.Scope, REPEnabled: true, EngineProfile: durante.EngineProfile, Family: "cpp", DispatchProfile: durante.DispatchDefault, Instructions: &instructions, REPBytes: &zero, REPEntries: &zero, UnsupportedREPEntries: &zero, Processes: 1, Images: 1}
+	verified := false
+	return &durante.Report{Schema: 1, ClientVersion: 1, Complete: true, Quality: "uninterrupted", Authority: durante.Authority, Metric: durante.Metric, Scope: durante.Scope, REPEnabled: true, EngineProfile: durante.EngineProfile, Family: "cpp", DispatchProfile: durante.DispatchDefault, Instructions: &instructions, REPBytes: &zero, REPEntries: &zero, UnsupportedREPEntries: &zero, Processes: 1, Images: 1,
+		IntegrityVerified: &verified, MeasurementContract: durante.DiagnosticContract(), REPTelemetryStatus: durante.REPMovsStosOnly,
+		Installation: &durante.InstallationIdentity{SourceCommit: "21397969d18c74ceef816779aba026358f483250", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490", RuntimePatchSHA256: "7b2fbaca84e259aeeafdfc4902ce7a330c48cec51e16804fe74ee3b99ea39f6d", LauncherSHA256: strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}}
 }
 func TestWorkMeasurementRawRequestIsolated(t *testing.T) {
 	req := envelopeRequest()
@@ -69,7 +72,44 @@ func TestWorkMeasurementFinishNeverGrantsVerdict(t *testing.T) {
 			if tc.state != "complete" && got.WorkMeasurementExecution.OutputMatches != nil {
 				t.Fatal("aborted run claims output match")
 			}
+			if tc.state != "complete" && got.WorkMeasurement != nil && (!got.WorkMeasurement.ValidUnavailableResult() || !got.WorkMeasurement.ValidDiagnosticContract()) {
+				t.Fatal("aborted diagnostic retained usable totals or promoted authority")
+			}
 		})
+	}
+}
+
+func TestOrdinaryRemoteObservationPreservesVerdictAndRejectsPromotedReports(t *testing.T) {
+	req := &model.RunRequest{Lang: "CPP20", WorkMeasurement: true}
+	good := model.RunResponse{Status: model.RunStatusAccepted, WorkMeasurement: completeEnvelopeReport()}
+	if err := validateRemoteWorkMeasurement(req, good); err != nil {
+		t.Fatal(err)
+	}
+	if good.Status != model.RunStatusAccepted {
+		t.Fatal("observation validation changed ordinary verdict")
+	}
+	for _, status := range []string{model.RunStatusTLE, model.RunStatusMLE, model.RunStatusWLE} {
+		bad := good
+		bad.Status = status
+		if validateRemoteWorkMeasurement(req, bad) == nil {
+			t.Fatal("resource abort retained complete diagnostic total")
+		}
+		bad.WorkMeasurement = bad.WorkMeasurement.WithoutTotals("forced resource stop")
+		if err := validateRemoteWorkMeasurement(req, bad); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bad := good
+	bad.WorkMeasurement = completeEnvelopeReport()
+	bad.WorkMeasurement.IntegrityVerified = nil
+	if validateRemoteWorkMeasurement(req, bad) == nil {
+		t.Fatal("ordinary observation accepted missing trust contract")
+	}
+	if validateRemoteWorkMeasurement(&model.RunRequest{Lang: "CPP20"}, good) == nil {
+		t.Fatal("accepted unsolicited observation")
+	}
+	if err := validateRemoteWorkMeasurement(&model.RunRequest{Lang: "CPP20"}, model.RunResponse{Status: model.RunStatusAccepted}); err != nil {
+		t.Fatal("ordinary unmetered result changed", err)
 	}
 }
 func TestWorkMeasurementRemoteRejectsLegacyAndInconsistentResults(t *testing.T) {
@@ -124,13 +164,23 @@ func TestWorkMeasurementRejectsResourcePolicyBeforeExecution(t *testing.T) {
 
 func TestWorkMeasurementRejectsMalformedCompleteReports(t *testing.T) {
 	for name, edit := range map[string]func(*durante.Report){
-		"zero":     func(r *durante.Report) { v := uint64(0); r.Instructions = &v },
-		"reason":   func(r *durante.Report) { r.Reason = "failed" },
-		"rep":      func(r *durante.Report) { v := uint64(1); r.REPBytes = &v },
-		"family":   func(r *durante.Report) { r.Family = "python" },
-		"engine":   func(r *durante.Report) { r.EngineProfile = "other" },
-		"dispatch": func(r *durante.Report) { r.DispatchProfile = "other" },
-		"signals":  func(r *durante.Report) { r.SignalsObserved = 1 },
+		"zero":                 func(r *durante.Report) { v := uint64(0); r.Instructions = &v },
+		"reason":               func(r *durante.Report) { r.Reason = "failed" },
+		"rep":                  func(r *durante.Report) { v := uint64(1); r.REPBytes = &v },
+		"family":               func(r *durante.Report) { r.Family = "python" },
+		"engine":               func(r *durante.Report) { r.EngineProfile = "other" },
+		"dispatch":             func(r *durante.Report) { r.DispatchProfile = "other" },
+		"signals":              func(r *durante.Report) { r.SignalsObserved = 1 },
+		"absent contract":      func(r *durante.Report) { r.MeasurementContract = nil },
+		"claimed integrity":    func(r *durante.Report) { v := true; r.IntegrityVerified = &v },
+		"absent integrity":     func(r *durante.Report) { r.IntegrityVerified = nil },
+		"unknown contract":     func(r *durante.Report) { r.MeasurementContract.Version++ },
+		"claimed eligibility":  func(r *durante.Report) { v := true; r.MeasurementContract.TrustedVerdictEligible = &v },
+		"missing coverage":     func(r *durante.Report) { r.REPTelemetryStatus = "" },
+		"false full coverage":  func(r *durante.Report) { v := uint64(1); r.UnsupportedREPEntries = &v },
+		"missing installation": func(r *durante.Report) { r.Installation = nil },
+		"changed installation": func(r *durante.Report) { r.Installation.Unchanged = false },
+		"unknown source":       func(r *durante.Report) { r.Installation.SourceCommit = "unknown" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := completeEnvelopeReport()
@@ -139,6 +189,27 @@ func TestWorkMeasurementRejectsMalformedCompleteReports(t *testing.T) {
 				t.Fatal("accepted malformed complete report")
 			}
 		})
+	}
+}
+
+func TestPartialREPAndObservedSignalsRemainDiagnosticOnly(t *testing.T) {
+	for _, signals := range []bool{false, true} {
+		report := completeEnvelopeReport()
+		unsupported := uint64(3)
+		report.UnsupportedREPEntries = &unsupported
+		report.REPTelemetryStatus = durante.REPPartial
+		if signals {
+			report.SignalsObserved = 1
+			report.Quality = "signals_observed"
+		}
+		exit := 0
+		got := finishWorkMeasurementDiagnostic(context.Background(), envelopeRequest(), model.RunResponse{Status: model.RunStatusAccepted, ExitCode: &exit, VerdictSource: "stdout", WorkMeasurement: report})
+		if got.WorkMeasurementExecution.State != "complete" || got.Status != model.RunStatusInitFail || got.Score != nil || got.CPUTimeNormalization != nil || *got.WorkMeasurement.IntegrityVerified {
+			t.Fatalf("partial observation changed verdict authority: %+v", got)
+		}
+		if err := validateRemoteWorkMeasurement(envelopeRequest(), got); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

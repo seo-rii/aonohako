@@ -23,6 +23,7 @@ func timeReportFixture(instructions, repBytes uint64) Report {
 		repEntries = 1
 	}
 	return Report{
+		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: REPMovsStosOnly,
 		Schema: 1, ClientVersion: 1, Metric: Metric, Scope: Scope, Authority: Authority,
 		Complete: true, Quality: "uninterrupted", REPEnabled: true,
 		Instructions: timeCounter(instructions), REPBytes: timeCounter(repBytes),
@@ -207,15 +208,17 @@ func TestTimeEstimateUsesEntireCollectedProcessTree(t *testing.T) {
 }
 
 func TestTimePolicyRejectsPreStabilizationEngineProfile(t *testing.T) {
-	policy := timePolicyFixture()
-	policy.EngineProfile = "dynamorio-11.3-vm32m-v1"
-	if err := policy.Validate(); err == nil {
-		t.Fatal("old runtime calibration survived patched engine profile")
-	}
-	policy = timePolicyFixture()
-	report := timeReportFixture(100, 0)
-	report.EngineProfile = "dynamorio-11.3-vm32m-v1"
-	if _, err := policy.Estimate(policy.RuntimeID, report); err == nil {
-		t.Fatal("old runtime report accepted under patched calibration")
+	for _, profile := range []string{"dynamorio-11.3-vm32m-v1", "dynamorio-11.3-durante-v2-vm32m"} {
+		policy := timePolicyFixture()
+		policy.EngineProfile = profile
+		if err := policy.Validate(); err == nil {
+			t.Fatal("old runtime calibration survived patched engine profile")
+		}
+		policy = timePolicyFixture()
+		report := timeReportFixture(100, 0)
+		report.EngineProfile = profile
+		if _, err := policy.Estimate(policy.RuntimeID, report); err == nil {
+			t.Fatal("old runtime report accepted under patched calibration")
+		}
 	}
 }

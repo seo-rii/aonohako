@@ -30,7 +30,6 @@
 
 #include "dr_api.h"
 #include "drmgr.h"
-#include "drreg.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
@@ -47,6 +46,7 @@
 #define CLONE_VFORK_FLAG UINT64_C(0x00004000)
 #define CLONE_FILES_FLAG UINT64_C(0x00000400)
 #define CLONE_CLEAR_SIGHAND_FLAG UINT64_C(0x100000000)
+#define X32_SYSCALL_BIT 0x40000000U
 #define MAX_STREAM_BYTES (1024 * 1024)
 #define MAX_EVENTS 4096
 
@@ -117,9 +117,13 @@ static int open_pid_file(process_id_t process, size_t *bytes) {
   dr_snprintf(name, sizeof(name), "process-%d.jsonl", (int)process);
   int fd = openat(
       dir, name,
-      O_WRONLY | O_CREAT | O_EXCL | O_APPEND | O_NOFOLLOW | O_CLOEXEC, 0600);
+      O_WRONLY | O_CREAT | O_EXCL | O_APPEND | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK,
+      0600);
   if (fd < 0 && errno == EEXIST)
-    fd = openat(dir, name, O_WRONLY | O_APPEND | O_NOFOLLOW | O_CLOEXEC);
+    /* Validate the opened inode, but do not block before reaching fstat when a
+     * target replaces its earlier image's stream pathname with a FIFO. */
+    fd = openat(dir, name,
+                O_WRONLY | O_APPEND | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK);
   close(dir);
   struct stat st;
   if (fd < 0 || fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) ||
@@ -350,6 +354,32 @@ static void observe_rep(int bytes, int count_reg) {
   ++data->rep_entries;
 }
 
+/* The client implements the Linux x86-64 syscall ABI only. In particular an
+ * int 0x80 fork can create a child without either the native spawn callback or
+ * the child's client running. Preserve the application instruction, but never
+ * publish a complete partial tree after a compatibility ABI is executed. */
+static void unsupported_syscall_abi(void) {
+  dr_mutex_lock(state_lock);
+  accounting_error = true;
+  dr_mutex_unlock(state_lock);
+}
+
+static bool x32_syscall(int number) {
+  return number >= 0 && (((unsigned int)number & X32_SYSCALL_BIT) != 0);
+}
+
+static void count_block(int instructions) {
+  thread_data_t *data = drmgr_get_tls_field(dr_get_current_drcontext(), tls_index);
+  if (data == NULL || instructions <= 0)
+    fail("instruction count without valid thread state");
+  if (UINT64_MAX - data->instructions < (uint64_t)instructions) {
+    /* Sticky invalidity: subsequent blocks cannot make an overflow usable. */
+    data->counter_overflows = 1;
+    return;
+  }
+  data->instructions += (uint64_t)instructions;
+}
+
 static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
                                         instrlist_t *bb, instr_t *where,
                                         bool for_trace, bool translating,
@@ -357,36 +387,19 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
   (void)tag;
   (void)for_trace;
   (void)translating;
+  if (instr_is_app(where) && instr_is_syscall(where) &&
+      (instr_get_opcode(where) != OP_syscall ||
+       instr_get_isa_mode(where) != DR_ISA_AMD64)) {
+    /* This is a runtime clean call at the actual instruction. Merely having
+     * unreachable compatibility bytes in a module must not taint a run. */
+    dr_insert_clean_call(drcontext, bb, where,
+                         (void *)unsupported_syscall_abi, false, 0);
+  }
   if (drmgr_is_first_instr(drcontext, where) && user_data != NULL) {
-    drmgr_disable_auto_predication(drcontext, bb);
-    reg_id_t reg;
-    if (drreg_reserve_aflags(drcontext, bb, where) != DRREG_SUCCESS ||
-        drreg_reserve_register(drcontext, bb, where, NULL, &reg) !=
-            DRREG_SUCCESS)
-      fail("cannot reserve instrumentation register/flags");
-    if (!drmgr_insert_read_tls_field(drcontext, tls_index, bb, where, reg))
-      fail("cannot load thread-local counter");
-    instrlist_meta_preinsert(
-        bb, where,
-        INSTR_CREATE_add(
-            drcontext,
-            opnd_create_base_disp(reg, DR_REG_NULL, 0,
-                                  (int)offsetof(thread_data_t, instructions),
-                                  OPSZ_8),
-            OPND_CREATE_INT32((int)(ptr_uint_t)user_data)));
-    /* Preserve carry before restoring application flags. This extra checked
-     * addition prevents a wrapped per-thread counter becoming a valid total. */
-    instrlist_meta_preinsert(
-        bb, where,
-        INSTR_CREATE_adc(drcontext,
-                         opnd_create_base_disp(
-                             reg, DR_REG_NULL, 0,
-                             (int)offsetof(thread_data_t, counter_overflows),
-                             OPSZ_8),
-                         OPND_CREATE_INT32(0)));
-    if (drreg_unreserve_register(drcontext, bb, where, reg) != DRREG_SUCCESS ||
-        drreg_unreserve_aflags(drcontext, bb, where) != DRREG_SUCCESS)
-      fail("cannot restore instrumentation register/flags");
+    /* Preserve complete application state even when a signal handler reads
+     * registers/flags that linear liveness analysis considers dead. */
+    dr_insert_clean_call(drcontext, bb, where, (void *)count_block, false, 1,
+                         OPND_CREATE_INT32((int)(ptr_uint_t)user_data));
   }
   if (rep_bytes_enabled && instr_is_app(where)) {
     const int op = instr_get_opcode(where);
@@ -424,7 +437,8 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
 
 static bool filter_syscall(void *ctx, int number) {
   (void)ctx;
-  return number == SYS_fork || number == SYS_vfork || number == SYS_clone ||
+  return x32_syscall(number) ||
+         number == SYS_fork || number == SYS_vfork || number == SYS_clone ||
          number == SYS_execve || number == SYS_exit || number == SYS_exit_group
 #ifdef SYS_clone3
          || number == SYS_clone3
@@ -438,6 +452,8 @@ static bool pre_syscall(void *ctx, int number) {
   thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
   if (!d)
     fail("syscall without TLS");
+  if (x32_syscall(number))
+    unsupported_syscall_abi();
   d->pending_spawn = false;
   d->pending_exec = false;
   d->pending_unsupported = false;
@@ -587,7 +603,6 @@ static void process_exit(void) {
   drmgr_unregister_post_syscall_event(post_syscall);
   drmgr_unregister_signal_event(signal_event);
   drmgr_unregister_tls_field(tls_index);
-  drreg_exit();
   drmgr_exit();
   dr_mutex_destroy(state_lock);
 }
@@ -604,10 +619,7 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
   memcpy(outdir, argv[2], strlen(argv[2]) + 1);
   rep_bytes_enabled = argc == 4;
   owner_pid = dr_get_process_id();
-  drreg_options_t options = {0};
-  options.struct_size = sizeof(options);
-  options.num_spill_slots = 3;
-  if (!drmgr_init() || drreg_init(&options) != DRREG_SUCCESS)
+  if (!drmgr_init())
     fail("extension initialization failed");
   state_lock = dr_mutex_create();
   tls_index = drmgr_register_tls_field();

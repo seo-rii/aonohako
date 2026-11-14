@@ -11,6 +11,18 @@ instructions, a memory limit, or a trusted security boundary. Its counters share
 the measured program's address space. A caller must retain its own sandbox,
 resource limits, output validation and complete-tree cleanup.
 
+See [SECURITY.md](SECURITY.md) for confirmed tampering limits, supervisor
+hardening, containment requirements and reproducible sanitizer fuzzing. A
+structurally valid result is still application-mutable and must not authorize
+trusted time, billing or security decisions.
+
+All collector and supervisor results carry a versioned `measurement_contract`
+with `trusted_verdict_eligible: false` and `integrity_verified: false`.
+`rep_telemetry_status` distinguishes disabled, MOVS/STOS-only, partial and
+unavailable byte telemetry independently of instruction validity. See the
+[result contract](docs/PROTOCOL.md#result-contract-and-consumers) before consuming
+reports; a valid count is not a trusted verdict or a CPU-time conversion.
+
 ## Build and test
 
 The pinned SDK is DynamoRIO 11.3.0-1 (source revision
@@ -66,7 +78,9 @@ target/release/durante run \
   -- /path/to/program args
 ```
 
-The target inherits stdin/stdout/stderr. The JSON report goes to a **new** file;
+The target inherits stdin/stdout/stderr. Other inherited descriptors are closed
+on exec, and `no_new_privs` prevents privilege gain through exec. The CLI requires
+Linux `close_range(CLOSE_RANGE_CLOEXEC)` support (Linux 5.11 or newer). The JSON report goes to a **new** file;
 an existing file or symlink is never overwritten. Each run creates a private
 record directory, removed after collection unless `--keep-records` is supplied.
 Alternatively, `--records-dir NEW_DIRECTORY` creates and retains a directory at
@@ -246,6 +260,11 @@ certification. In particular, Java 17 currently crashes during JVM startup with
 this counter while the engine-only control succeeds; JVM use is unqualified.
 Generated-code unit tests do not establish JVM compatibility.
 
+[SIMD and interpreter/JIT qualification](docs/QUALIFICATION.md) explains the
+additional native-control, output-preservation and exact-count tests. Per-run
+reports distinguish tested features, unsupported runtime paths and missing CPU
+features; a skipped ISA or a fail-closed crash is not a qualified pass.
+
 Instruction work and REP bytes have separate units. Kernel work is excluded;
 SIMD and scalar instructions have different costs, and CPU-specific library
 implementations can perform the same task with radically different counts. No
@@ -262,3 +281,10 @@ this exact build; earlier single-process overhead numbers do not qualify it.
 The counter is derived from DynamoRIO's BSD-licensed `inscount.cpp` and
 `countcalls.c` examples. Original notices are retained in the client source and
 [LICENSE](LICENSE). The SDK is distributed separately under its upstream license.
+
+## Optional execution isolation
+
+The experimental `durante isolate` command adds a pinned namespace supervisor,
+read-only inputs, seccomp and an outer deadline. It requires externally configured
+resource containment; counters remain application-mutable. See the
+[operator requirements and tested boundary](docs/ISOLATION.md).

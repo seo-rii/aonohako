@@ -250,6 +250,7 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 	if meter != nil {
 		result.WorkMeasurement = meter.Collect(result.targetPID)
+		discardIncompleteWorkMeasurement(ctx, &result)
 	}
 	return result
 }

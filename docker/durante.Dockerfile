@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # Explicit opt-in overlay. Supply a reviewed immutable execution-image digest.
 ARG RUNTIME_IMAGE
-ARG GO_IMAGE=golang:1.26.10-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af
+ARG GO_IMAGE=golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0
 ARG BUILD_IMAGE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS durante-go
@@ -32,7 +32,7 @@ COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/lib64/de
 COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/lib32/release/libdynamorio.so /opt/durante/dynamorio/lib32/release/libdynamorio.so
 COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/lib32/debug/libdynamorio.so /opt/durante/dynamorio/lib32/debug/libdynamorio.so
 COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/.durante-runtime.json /opt/durante/dynamorio/.durante-runtime.json
-COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/ext/lib64/release/libdrmgr.so /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/ext/lib64/release/libdrreg.so /opt/durante/dynamorio/ext/lib64/release/
+COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/ext/lib64/release/libdrmgr.so /opt/durante/dynamorio/ext/lib64/release/
 COPY --from=durante-build /build/libdurante.so /opt/durante/lib/libdurante.so
 COPY --from=durante-build /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/License.txt /opt/durante/DynamoRIO-LICENSE.txt
 COPY third_party/durante/LICENSE third_party/durante/UPSTREAM.json /opt/durante/

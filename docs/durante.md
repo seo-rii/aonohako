@@ -22,7 +22,7 @@ image build or runtime. The official DynamoRIO 11.3.0 SDK download is SHA-256
 pinned by the vendored fetcher, and its license is retained in the runtime image.
 The fetcher also builds the release/debug runtime cores from hash-pinned source
 with Durante's process-lifetime and descriptor-range fixes. The SDK supplies the
-matching headers, extensions and launcher; a stock core is not the v2 profile.
+matching headers, extensions and launcher; a stock core is not the v3 profile.
 
 `docker/durante.Dockerfile` is an explicit overlay on a reviewed execution
 image. Supply an immutable `RUNTIME_IMAGE` digest and select target `runtime`.
@@ -34,11 +34,18 @@ before downloading the separately SHA-256-pinned engine SDK. CI needs no private
 cross-repository checkout token.
 
 The launcher fixes `-vm_size 32M -vmheap_size 32M` and reports engine profile
-`dynamorio-11.3-durante-v2-vm32m`. Before launch, installation validation checks
+`dynamorio-11.3-durante-v3-vm32m`. Before launch, installation validation checks
 the runtime manifest's source/patch pins and the actual release-core digest.
 Missing or mismatched provenance refuses measurement. This is a trusted local
 installation check, not attestation against the host administrator or submission.
-Old v1 time models cannot be applied to v2 measurements.
+Reports record the source commit, pinned runtime source/patch identities and the
+actual SHA-256 digests of the launcher, client and release core in `installation`.
+The runner checks the installation again after the execution tree stops.
+`unchanged_before_after: true` means these observations matched; a changed or
+unavailable installation discards all totals. This does not prove that an
+administrator did not temporarily replace a file between the checks. Keep the
+installation immutable and operator-owned for the lifetime of the service.
+Old v1/v2 time models and reports cannot be applied to v3 observations.
 Upstream's large default virtual reservations can fail
 before main under the ordinary C/C++ address-space bound. These options reduce
 the engine's reservation budgets; no student CPU, RSS or address-space limit is
@@ -47,7 +54,7 @@ qualification, and request bodies cannot override these engine options.
 
 | Environment variable | Meaning |
 |---|---|
-| `AONOHAKO_DURANTE_FAMILIES` | Comma-separated enabled family IDs; empty disables measurement. Registered IDs: `cpp`, `cpython`, `pypy`, `native`, `jvm`, `dotnet`, `javascript-wasm`, `beam`, `scripting`, `scientific-functional`, `specialized`. JVM execution is rejected pending startup compatibility. |
+| `AONOHAKO_DURANTE_FAMILIES` | Comma-separated enabled family IDs; empty disables measurement. Registered IDs: `cpp`, `cpython`, `pypy`, `native`, `jvm`, `dotnet`, `javascript-wasm`, `beam`, `scripting`, `scientific-functional`, `specialized`. JVM execution is rejected pending qualification in aonohako's sandbox. |
 | `AONOHAKO_DURANTE_DRRUN` | Absolute trusted launcher path; default `/opt/durante/dynamorio/bin64/drrun`. |
 | `AONOHAKO_DURANTE_CLIENT` | Absolute trusted client path; default `/opt/durante/lib/libdurante.so`. |
 | `AONOHAKO_DURANTE_DISPATCH_PROFILE` | `default`, or the C/C++ diagnostic profile `glibc-2.41-sse2-v1`. |
@@ -81,7 +88,7 @@ controlled-environment diagnostic, not a universal instruction-cost model.
 
 ## Result contract
 
-A successful lifecycle aggregate resembles:
+Selected fields of a successful lifecycle aggregate resemble:
 
 ```json
 {
@@ -90,8 +97,19 @@ A successful lifecycle aggregate resembles:
   "metric": "bb_entry_app_instructions",
   "scope": "process_tree_user_code",
   "rep_bytes_enabled": true,
-  "engine_profile": "dynamorio-11.3-durante-v2-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v3-vm32m",
   "authority": "diagnostic_only",
+  "integrity_verified": false,
+  "measurement_contract": {
+    "version": 1,
+    "backend": "dynamorio",
+    "counter_integrity": "application_mutable",
+    "trusted_verdict_eligible": false,
+    "instruction_semantics": "basic_block_entry",
+    "simd_weighting": "one_per_instruction",
+    "cpu_time_conversion": null
+  },
+  "rep_telemetry_status": "movs_stos_only",
   "complete": true,
   "quality": "uninterrupted",
   "instructions": 123456,
@@ -106,6 +124,22 @@ A successful lifecycle aggregate resembles:
   "target_libc_attested": false
 }
 ```
+
+The full session report also includes the required `installation` identities.
+The Go collector constructs `measurement_contract` itself after reading raw
+Durante lifecycle events. It does not copy trust claims from the target. The
+contract is also present on unavailable results. Remote observations with missing,
+unknown, duplicate or promoted contracts are rejected; an absent false boolean
+is not an explicit false claim. Matching a contract establishes compatibility,
+not security or eligibility for a student verdict.
+
+`rep_telemetry_status` is independent of instruction completeness: `disabled`
+means REP counting was off; `movs_stos_only` covers the requested MOVS/STOS byte
+extension; `partial` retains positive `unsupported_rep_entries`; `unavailable`
+exposes no totals. A complete observation may contain partial byte telemetry or
+explicit `signals_observed` quality. It remains diagnostic and cannot be used as
+a trusted time result. The standalone reference-policy calculator still rejects
+partial REP coverage and interrupted observations.
 
 `instructions` is basic-block-entry application work, including loaded libraries
 and generated code. Engine/client instructions and kernel work are outside that
@@ -124,6 +158,8 @@ A missing, killed, truncated, unsupported or inconsistent process image produces
 `complete: false` with a bounded structural reason and **no aggregate instruction
 or REP total**. It never becomes a valid zero. Original execution status is
 preserved independently; a missing diagnostic report does not turn TLE into AC.
+Trusted resource stops, cancellation and incomplete execution override a
+target-written complete stream: all instruction and REP totals become unavailable.
 Report files remain in the private per-run workspace and are removed with it.
 
 ## Process trees and sandbox boundaries
@@ -199,13 +235,21 @@ An ordinary supported-language request may then include:
 
 All three actual limits are explicit, must cover the nominal limits, and must fit
 operator caps. CPU/wall are bounded to 600,000 ms and RSS to 4,096 MiB. Actual wall
-must be at least actual CPU. The envelope accepts registered compatible families, including stock CPython and PyPy; known-incompatible JVM startup is rejected. Family registration alone is not runtime qualification.
+must be at least actual CPU. The envelope accepts registered compatible families,
+including stock CPython and PyPy; JVM execution remains rejected pending
+qualification in aonohako's sandbox. Family registration alone is not runtime qualification.
 The original request's nominal limits remain immutable. A private execution copy
 supplies actual limits to the CPU watchdog, wall timer, RSS checks, final resource
 checks, runtime memory settings and derived address-space limit. Startup CPU
 normalization and short-run sampling are bypassed. Remote timeouts reserve the
 actual wall allowance. `ignore_tle` cannot enable partial scoring after an actual
 resource abort.
+
+An unsuccessful envelope execution also clears work totals while retaining
+installation/profile metadata. Its response remains `INIT_FAIL` with diagnostic
+execution state; even a completed observation does not return student AC/TLE or
+normalized CPU time. Ordinary requests with no measurement option retain their
+existing execution and verdict path.
 
 CPU and wall ceilings include instrumentation. RLIMIT_CPU remains the existing
 coarse last-resort kernel guard; RSS is monitored rather than enforced atomically
@@ -274,9 +318,12 @@ and fresh verification procedure are described in
 
 Resource envelopes use the same raw CPU/wall/RSS protection for all admitted
 families and bind complete reports to the request's exact runtime family. The
-C/C++ glibc dispatch profile remains C/C++ only. JVM metadata stays registered,
-but measurement is refused because instrumented JVM startup has a reproduced
-failure. Invalid, killed or incomplete accounting never yields a usable total.
+C/C++ glibc dispatch profile remains C/C++ only. The pinned client preserves full
+application state across counting calls, including the state needed by JVM fault
+handlers. Upstream JVM startup and runtime checks do not qualify aonohako's
+runtime image, fixed reservation budgets or sandbox: JVM metadata stays
+registered, but measurement remains refused until those checks pass here.
+Invalid, killed or incomplete accounting never yields a usable total.
 Other unqualified runtime paths remain documented and require their actual
 image/sandbox tests before operator enablement. Consolidation does not grant
 additional child-process or network permissions.
