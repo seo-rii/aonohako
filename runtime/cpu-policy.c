@@ -226,10 +226,16 @@ static enum decision classify(const char *disassembly)
 static void terminate(const char *message, char report)
 {
     /* No guest signal handler or atexit hook gets control after a violation. */
+    ssize_t written;
     if (report_ready) {
-        (void)write(report_fd, &report, 1);
+        do {
+            written = write(report_fd, &report, 1);
+        } while (written < 0 && errno == EINTR);
     }
-    (void)write(STDERR_FILENO, message, strlen(message));
+    do {
+        written = write(STDERR_FILENO, message, strlen(message));
+    } while (written < 0 && errno == EINTR);
+    /* Reporting is best effort; any other write failure still stops the guest. */
     _exit(126);
 }
 

@@ -4,10 +4,42 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestCPUFeaturePluginBuildWithFortifiedLibc(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("CPU policy plugin requires Linux")
+	}
+	cc, err := exec.LookPath("cc")
+	if err != nil {
+		t.Skip("C compiler unavailable")
+	}
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("POSIX shell unavailable")
+	}
+	root := t.TempDir()
+	wrapper := filepath.Join(root, "fortified-cc")
+	// Ubuntu enables libc's fortified declarations in its default toolchain.
+	// Exercise the actual packaging build with those warnings treated as errors.
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec \"$AONOHAKO_TEST_CC\" -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -Werror \"$@\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(root, "cpu-policy.so")
+	cmd := exec.Command(sh, filepath.Join("..", "..", "scripts", "build_cpu_policy_plugin.sh"), output)
+	cmd.Env = append(os.Environ(), "CC="+wrapper, "AONOHAKO_TEST_CC="+cc)
+	if data, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fortified CPU policy plugin build: %v\n%s", err, data)
+	}
+	info, err := os.Stat(output)
+	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+		t.Fatalf("plugin build did not produce a shared library: %v", err)
+	}
+}
 
 func TestCPUFeatureRuntimePackagesFollowDistributionDependencies(t *testing.T) {
 	sh, err := exec.LookPath("sh")
