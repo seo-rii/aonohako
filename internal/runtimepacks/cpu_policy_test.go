@@ -238,6 +238,7 @@ func TestCPUFeatureRuntimePackaging(t *testing.T) {
 			"/src/scripts/build_cpu_policy_plugin.sh /out/cpu-policy/cpu-policy.so",
 			"python3 /src/scripts/test_cpu_policy_runtime.py /out/cpu-policy",
 			"libc6-dev",
+			"python3-tomli",
 			"COPY --from=cpu-policy-builder /out/cpu-policy/ /usr/local/lib/aonohako/cpu-policy/",
 			"libcapstone-dev",
 			"scripts/cpu_policy_runtime_packages.sh",

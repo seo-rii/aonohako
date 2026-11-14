@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
 
 FROM ${RUNTIME_BASE} AS cpu-policy-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl xz-utils patch gcc libc6-dev make ninja-build python3 python3-venv \
+    ca-certificates curl xz-utils patch gcc libc6-dev make ninja-build python3 python3-venv python3-tomli \
     pkg-config libglib2.0-dev libcapstone-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
 COPY --chmod=0755 scripts/build_cpu_policy_qemu.sh scripts/build_cpu_policy_plugin.sh scripts/test_cpu_policy_runtime.py /src/scripts/
 COPY runtime/cpu-policy.c runtime/qemu-plugin-compat.h /src/runtime/
@@ -29,7 +29,7 @@ RUN /src/scripts/build_cpu_policy_qemu.sh /out/cpu-policy && \
 # PYTHON_IMAGE may use a different distribution or library ABI than RUNTIME_BASE.
 FROM ${PYTHON_IMAGE} AS cpu-policy-python-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl xz-utils patch gcc libc6-dev make ninja-build python3 python3-venv \
+    ca-certificates curl xz-utils patch gcc libc6-dev make ninja-build python3 python3-venv python3-tomli \
     pkg-config libglib2.0-dev libcapstone-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
 COPY --chmod=0755 scripts/build_cpu_policy_qemu.sh scripts/build_cpu_policy_plugin.sh scripts/test_cpu_policy_runtime.py /src/scripts/
 COPY runtime/cpu-policy.c runtime/qemu-plugin-compat.h /src/runtime/
