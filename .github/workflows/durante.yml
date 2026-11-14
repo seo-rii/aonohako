@@ -1,0 +1,73 @@
+name: durante
+
+on:
+  pull_request:
+    paths:
+      - 'internal/**'
+      - 'third_party/durante/**'
+      - 'scripts/verify_durante_vendor.py'
+      - 'go.*'
+      - '.github/workflows/durante.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: durante-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sandbox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Select cached PyPy
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        timeout-minutes: 5
+        with:
+          python-version: 'pypy3.10-v7.3.19'
+      - name: Select CPython for fixtures and SDK preparation
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        timeout-minutes: 5
+        with:
+          python-version: '3.12'
+      - name: Verify build tools and expose selected interpreters to the sandbox
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in gcc g++ cmake patch python3 pypy3; do command -v "$tool"; done
+          # Sandbox targets use a fixed PATH. Bind only these disposable runner
+          # aliases to the cached installations selected above, not a wrapper.
+          for interpreter in python3 pypy3; do
+            selected=$(command -v "$interpreter")
+            case "$selected" in /opt/hostedtoolcache/*) ;; *) exit 1 ;; esac
+            sudo ln -sfn "$selected" "/usr/local/bin/$interpreter"
+            sudo "/usr/local/bin/$interpreter" --version
+          done
+          gcc --version
+          cmake --version
+      - name: Verify pinned engine and build instrumentation
+        run: |
+          python3 scripts/verify_durante_vendor.py
+          python3 third_party/durante/toolkit/fetch_sdk.py
+          # The sandbox drops credentials. Runner home directories need not be
+          # traversable by that UID, so install exactly as in the runtime image.
+          sudo mkdir -p /opt/durante
+          sudo cp -a third_party/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1 /opt/durante/dynamorio
+          cmake -S third_party/durante/client -B /tmp/durante-build -DCMAKE_BUILD_TYPE=Release -DDynamoRIO_DIR=/opt/durante/dynamorio/cmake
+          cmake --build /tmp/durante-build -j2
+          gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/probe.c -o /tmp/durante-probe
+      - name: Compile integration tests
+        run: go test -c -o /tmp/durante-execute.test ./internal/execute
+      - name: Validate real sandbox and diagnostic resource limits
+        run: |
+          sudo env AONOHAKO_TEST_DURANTE=1 AONOHAKO_TEST_DURANTE_PYPY=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
+            AONOHAKO_DURANTE_DRRUN=/opt/durante/dynamorio/bin64/drrun \
+            AONOHAKO_DURANTE_CLIENT=/tmp/durante-build/libdurante.so \
+            AONOHAKO_DURANTE_TEST_BINARY=/tmp/durante-probe \
+            /tmp/durante-execute.test -test.v -test.run '^TestDurante.*Integration$' -test.timeout 180s

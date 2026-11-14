@@ -1,0 +1,136 @@
+{
+  "schema": 2,
+  "scope": "frozen core local compatibility only; not deployed-image or stable-score qualification",
+  "core_source_commit": "70394853313039be11ab564d8f147ce092afe20f",
+  "core_repository_commit": "48ab9e6c045d5458f5d2c268105a59dd17f0943b",
+  "engine_release": "DynamoRIO 11.3.0-1",
+  "engine_options": [
+    "-quiet",
+    "-follow_children",
+    "-vm_size",
+    "32M",
+    "-vmheap_size",
+    "32M"
+  ],
+  "client_options": [
+    "-outdir",
+    "<fresh absolute output directory>",
+    "-rep_bytes"
+  ],
+  "client_sha256": "21932078841170a50ab5d43b225694c882eba1c78b6dabf681e7cdcf07f1c8cb",
+  "collector_sha256": "a00762fccd07a6963b1f3e6c8ac846dc7236538322391558888cbde09d9321b3",
+  "core_source_sha256": "0f6e48e274d5af98f75023f24b398cc3349937409a164bf67146fe228d769441",
+  "fixtures_sha256": {
+    "Main.py": "343b5415bc1d8001dbeb3955061d437f9c91d01e0fd2312dd61ebd7a752134e4"
+  },
+  "rows": [
+    {
+      "fixture": "cpython",
+      "repeat": 0,
+      "runtime_version": [
+        "Python 3.11.2"
+      ],
+      "program_exit_code": 0,
+      "stdout_matches": true,
+      "complete": true,
+      "valid": true,
+      "quality": "uninterrupted",
+      "instructions": 372610320,
+      "rep_bytes": 33232,
+      "signals_observed": 0,
+      "process_count": 1,
+      "image_count": 1,
+      "failure_reason": null,
+      "cleanup_complete": true,
+      "cleanup_required_kill": false
+    },
+    {
+      "fixture": "cpython",
+      "repeat": 1,
+      "runtime_version": [
+        "Python 3.11.2"
+      ],
+      "program_exit_code": 0,
+      "stdout_matches": true,
+      "complete": true,
+      "valid": true,
+      "quality": "uninterrupted",
+      "instructions": 385323281,
+      "rep_bytes": 33232,
+      "signals_observed": 0,
+      "process_count": 1,
+      "image_count": 1,
+      "failure_reason": null,
+      "cleanup_complete": true,
+      "cleanup_required_kill": false
+    }
+  ],
+  "limitations": [
+    "Artifact changes require affected runtime checks to be repeated.",
+    "Signal-bearing runs retain basic-block-entry semantics; they are not exact retired instruction counts.",
+    "Two same-host runs cannot establish Cloud Run variance or all-language support.",
+    "This harness validates collection of trusted programs outside the aonohako sandbox; it does not grant child-process permissions or qualify sandbox integration."
+  ],
+  "historical_prototype": {
+    "schema": 1,
+    "scope": "prototype local compatibility only; not production runtime or stable-score qualification",
+    "client_sha256": "8f35d506f42d0272b2826beca15e8cdc44e1df4d0b68a92b7b6721a56b87e90e",
+    "collector_sha256": "37a41909a0b8699532680ab11d8a7d974b6aac7d36b36c1af9b2c98726bc0058",
+    "core_source_sha256": "97e8cf3425299b8daf0bec7fa163a04896c24aab8ff044bbc0ad60c58a20a66c",
+    "fixtures_sha256": {
+      "Main.py": "343b5415bc1d8001dbeb3955061d437f9c91d01e0fd2312dd61ebd7a752134e4",
+      "Main.go": "57c9fbdef459f573ce4bf1415e31e2c52b3864e4195f1bb9d24f6a1826369f73",
+      "Main.rs": "c08af5f3765e2b07f4705f0e2857e9c5dd6108a5a815a3884654c34246178950",
+      "Main.java": "e338e00068fa402a9c16354c5ad9e55a0c84bf0a4751afdd16fb7236c52c97cc",
+      "Main.js": "3836324480b3f25b88a7cf16c6789c8715fd5821fb9abd3a38fd8c97b71149d3",
+      "Main.sh": "fb3b911ffe5453dcd11bf8b0a61a36b3d0d4bda0d70a4ec66d70fae4523eef44"
+    },
+    "rows": [
+      {
+        "fixture": "cpython",
+        "repeat": 0,
+        "runtime_version": [
+          "Python 3.11.2"
+        ],
+        "program_exit_code": 0,
+        "stdout_matches": true,
+        "complete": true,
+        "valid": true,
+        "quality": "uninterrupted",
+        "instructions": 380930925,
+        "rep_bytes": 33232,
+        "signals_observed": 0,
+        "process_count": 1,
+        "image_count": 1,
+        "failure_reason": null,
+        "cleanup_complete": true,
+        "cleanup_required_kill": false
+      },
+      {
+        "fixture": "cpython",
+        "repeat": 1,
+        "runtime_version": [
+          "Python 3.11.2"
+        ],
+        "program_exit_code": 0,
+        "stdout_matches": true,
+        "complete": true,
+        "valid": true,
+        "quality": "uninterrupted",
+        "instructions": 372456268,
+        "rep_bytes": 33232,
+        "signals_observed": 0,
+        "process_count": 1,
+        "image_count": 1,
+        "failure_reason": null,
+        "cleanup_complete": true,
+        "cleanup_required_kill": false
+      }
+    ],
+    "limitations": [
+      "Final artifact changes require affected runtime checks to be repeated.",
+      "Signal-bearing runs retain basic-block-entry semantics; they are not exact retired instruction counts.",
+      "Two same-host runs cannot establish Cloud Run variance or all-language support."
+    ]
+  }
+}
