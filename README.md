@@ -4,6 +4,13 @@
 SSE. It is designed for online judge pipelines that want a small control plane
 binary, configurable runtime images, and testable build metadata.
 
+Python/PyPy `/compile` requests can set `python_artifact_mode: "bytecode-v1"`
+to receive only source-free `.pyc` files with canonical headers. Execute the
+returned `.pyc` entry point and hash those same artifact bytes for result reuse.
+Omitting the field keeps the source-preserving compile/execute behavior. The
+mode preserves code and source locations but changes source inspection and
+`__file__`; see the [Python execution contract](docs/architecture.md#compile).
+
 ## What is in this repository
 
 - `POST /compile`, `POST /execute`, `GET /capabilities`, `GET /livez`, and

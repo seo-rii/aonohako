@@ -89,7 +89,7 @@ as `/execute` when it runs as a root-backed embedded helper:
   submission-controlled `sitecustomize.py`, user site packages, and `PYTHON*`
   environment hooks do not execute during bytecode compilation
 
-Python and PyPy compilation returns both source files and sibling `.pyc` files.
+By default, Python and PyPy compilation returns both source files and sibling `.pyc` files.
 Compilation explicitly uses `compileall --invalidation-mode checked-hash`, so
 bytecode headers contain a source-content hash instead of a file timestamp.
 Source paths passed to the compiler remain relative to the compile workspace.
@@ -106,6 +106,30 @@ Source-only requests and missing, incompatible, or malformed bytecode fall back
 to source execution. Exceptions raised by the loaded program do not trigger a
 second execution through the fallback path. Explicit `.pyc` entry points remain
 supported through `runpy`.
+
+Compile requests may opt into `python_artifact_mode: "bytecode-v1"` for
+source-free judge execution. This mode forces recompilation of each submitted
+`.py` file and returns only its sibling `.pyc`; extensions must be lowercase
+`.py`, matching `compileall`'s supported filenames. Uploaded `.pyc` inputs, unknown
+modes, requests without `.py` sources, and use with other languages are rejected.
+Each returned file retains its interpreter magic and entire marshalled code
+object, but uses a canonical timestamp header: flags, mtime, and source size are
+all zero. The actual bytes sent to execution are normalized, so reading one's
+own `.pyc` cannot expose an unhashed source fingerprint. Clients must execute
+the returned `.pyc` entry point and include the complete returned bundle in
+their program identity. Ordinary sibling and package imports load the other
+source-free `.pyc` files.
+
+This is an explicit execution policy change: `__file__` and `sys.argv[0]` refer
+to `.pyc`, submitted source reads and `inspect.getsource()` are unavailable,
+and invalid or incompatible bytecode cannot fall back to the original source.
+Keep original submissions outside the execution workspace for source display.
+Function names, constants, docstrings, code filenames, and all line/column
+information are preserved. Comment edits that do not move code can therefore
+share an execution bundle, while added blank lines or changed column positions
+can still produce different bytecode. There is no AST normalization or claim of
+Python/PyPy version portability. Cache identities must separate the execution
+policy and pinned toolchain/environment versions.
 
 ### Execute
 

@@ -83,6 +83,15 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 				}},
 			},
 		},
+		{
+			name: "python-source-free-bytecode",
+			request: model.CompileRequest{
+				Lang:               "PYTHON3",
+				EntryPoint:         "Main.py",
+				PythonArtifactMode: "bytecode-v1",
+				Sources:            []model.Source{{Name: "Main.py", DataB64: "cHJpbnQoJ29rJykK"}},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -106,6 +115,9 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 				}
 				if req.RustCrateMode != tt.request.RustCrateMode {
 					t.Fatalf("rust_crate_mode = %q, want %q", req.RustCrateMode, tt.request.RustCrateMode)
+				}
+				if req.PythonArtifactMode != tt.request.PythonArtifactMode {
+					t.Fatalf("python_artifact_mode = %q, want %q", req.PythonArtifactMode, tt.request.PythonArtifactMode)
 				}
 				if len(req.Sources) != 1 || req.Sources[0].Name != tt.request.Sources[0].Name {
 					t.Fatalf("unexpected sources: %+v", req.Sources)
