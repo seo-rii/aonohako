@@ -393,7 +393,12 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if truncated {
 				remoteResult.StderrTruncated = true
 			}
-			remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
+			// Peer coordinators enforce CPU limits for each role. Their total
+			// also includes the judge and other participants, so comparing it
+			// with one contestant's allowance would change a valid verdict.
+			if req.Interactor == nil && req.Communication == nil {
+				remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
+			}
 			return remoteResult
 		}
 	}
