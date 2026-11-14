@@ -486,6 +486,11 @@ Requesting a time estimate without an applicable operator policy is rejected
 before target execution. Omitting the flag preserves the previous response and
 does not automatically apply a configured model.
 
+For actual API corpus collection, exact train-only fitting and held-out error
+gates, see [C++ reference-time qualification](durante-reference.md). The tool
+exports a candidate policy only after the entire full corpus passes; its CI
+smoke collection does not qualify production coefficients.
+
 There is deliberately no default coefficient based on the observed 3.1× CPU
 cost or the two-submission experiment. A representative reference workload set
 and held-out validation are needed before choosing production coefficients, and

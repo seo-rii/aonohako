@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'internal/**'
+      - 'cmd/durante-reference/**'
       - 'third_party/durante/**'
       - 'scripts/verify_durante_vendor.py'
       - 'docker/durante.Dockerfile'
@@ -67,7 +68,9 @@ jobs:
           gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/communication.c -o /tmp/durante-communication
           g++ -std=c++20 -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/reference.cpp -o /tmp/durante-reference
       - name: Compile integration tests
-        run: CGO_ENABLED=0 go test -c -o /tmp/durante-execute.test ./internal/execute
+        run: |
+          CGO_ENABLED=0 go test -c -o /tmp/durante-execute.test ./internal/execute
+          CGO_ENABLED=0 go build -o /tmp/durante-reference-tool ./cmd/durante-reference
       - name: Validate ordinary sandbox and diagnostic resource limits
         run: |
           sudo env AONOHAKO_TEST_DURANTE=1 AONOHAKO_TEST_DURANTE_PYPY=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
@@ -102,3 +105,48 @@ jobs:
             -e AONOHAKO_TEST_DURANTE_REFERENCE=/validation/reference \
             --entrypoint /validation/execute.test "$image_id" \
             -test.v -test.run '^TestDurante(TimeEstimate|Interactive|Communication)Integration$' -test.timeout 240s
+      - name: Collect fixed C++ corpus through actual compile and execute APIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -f docker/durante.Dockerfile --target reference-tools \
+            --build-arg RUNTIME_IMAGE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2 \
+            -t durante-reference-tools .
+          image_id=$(docker image inspect --format '{{.Id}}' durante-reference-tools)
+          output=$(mktemp -d)
+          echo "REFERENCE_OUTPUT=$output" >> "$GITHUB_ENV"
+          docker run --rm --network none --read-only --memory 2g --pids-limit 512 --cpus 2 \
+            --tmpfs /tmp:rw,exec,mode=1777,size=268435456 \
+            --tmpfs /work:rw,exec,mode=0755,size=268435456 \
+            --mount type=bind,src=/opt/durante/dynamorio,dst=/opt/durante/dynamorio,readonly \
+            --mount type=bind,src=/tmp/durante-build/libdurante.so,dst=/opt/durante/lib/libdurante.so,readonly \
+            --mount type=bind,src=/tmp/durante-reference-tool,dst=/validation/reference-tool,readonly \
+            --mount type=bind,src="$output",dst=/output \
+            -e AONOHAKO_DEPLOYMENT_TARGET=dev -e AONOHAKO_INBOUND_AUTH=none \
+            -e AONOHAKO_EXECUTION_TRANSPORT=embedded -e AONOHAKO_SANDBOX_BACKEND=helper \
+            -e AONOHAKO_MAX_ACTIVE_RUNS=1 -e AONOHAKO_WORK_ROOT=/work \
+            -e AONOHAKO_WORK_ROOT_MAX_BYTES=268435456 \
+            -e AONOHAKO_CPU_NORMALIZATION=false -e AONOHAKO_CPU_SHORT_CASE_SAMPLING=false \
+            -e AONOHAKO_DURANTE_FAMILIES=cpp -e AONOHAKO_DURANTE_DISPATCH_PROFILE=default \
+            -e AONOHAKO_DURANTE_RUNTIME_IMAGE="$image_id" \
+            -e 'AONOHAKO_DURANTE_RESOURCE_POLICY={"max_limits":{"cpu_time_ms":10000,"wall_time_ms":30000,"memory_mb":256},"memory_budget_mb":2048,"reserved_memory_mb":512}' \
+            --entrypoint /validation/reference-tool "$image_id" \
+            collect --smoke --repetitions 1 --timeout 240s --output /output/smoke
+          sudo chown -R "$(id -u):$(id -g)" "$output"
+          python3 - "$output/smoke/dataset.json" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1]))
+          assert data['complete'] and data['smoke'] and not data.get('failures')
+          assert len(data['samples']) == 5
+          assert {row['workload_id'] for row in data['samples']} == {'integer', 'rep_copy', 'branch', 'sort', 'rep_fill'}
+          PY
+      - name: Preserve reference collection receipt
+        if: always() && env.REFERENCE_OUTPUT != ''
+        run: sudo chown -R "$(id -u):$(id -g)" "$REFERENCE_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always() && env.REFERENCE_OUTPUT != ''
+        with:
+          name: durante-reference-smoke
+          path: ${{ env.REFERENCE_OUTPUT }}
+          if-no-files-found: warn
+          retention-days: 7
