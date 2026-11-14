@@ -249,8 +249,7 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer, cpuNormalizer: cpuNormalizer, workMeasurement: meter,
 	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 	if meter != nil {
-		result.WorkMeasurement = meter.Collect(result.targetPID)
-		discardIncompleteWorkMeasurement(ctx, &result)
+		result = collectCompletedSandboxWorkMeasurement(ctx, cancel, result, meter.Collect)
 	}
 	return result
 }

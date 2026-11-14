@@ -37,8 +37,8 @@ func workMeasurementRawRequest(req *model.RunRequest) model.RunRequest {
 // A normal nonzero application exit is still OK at the sandbox layer: the
 // ordinary judge assigns its exit-code RE later. Any failure already present
 // here is an execution/infrastructure failure and cannot retain work totals.
-func discardIncompleteWorkMeasurement(ctx context.Context, result *execResult) {
-	if ctx.Err() != nil || result.Status != "OK" || result.ExitCode == nil || *result.ExitCode < 0 {
+func discardIncompleteWorkMeasurement(interrupted bool, result *execResult) {
+	if interrupted || result.Status != "OK" || result.ExitCode == nil || *result.ExitCode < 0 {
 		result.WorkMeasurement = result.WorkMeasurement.WithoutTotals("measurement execution did not complete normally")
 	}
 }
