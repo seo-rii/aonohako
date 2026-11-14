@@ -54,6 +54,9 @@ var supportedRunLangs = func() map[string]struct{} {
 }()
 
 func Validate(req *model.RunRequest) error {
+	if err := ValidateDisallowedCPUFeatures(req); err != nil {
+		return err
+	}
 	if err := ValidateTextEncoding(req); err != nil {
 		return err
 	}

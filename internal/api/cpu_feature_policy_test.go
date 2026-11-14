@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -145,6 +146,125 @@ func TestCompileDisallowedCPUFeaturesReplacesEarlierArray(t *testing.T) {
 			status, response := postGoModulePolicyRequest(t, server.URL, []byte(body))
 			if status != http.StatusOK || calls.Load() != 1 {
 				t.Fatalf("status = %d, calls = %d, body = %s", status, calls.Load(), response)
+			}
+		})
+	}
+}
+
+func cpuFeatureExecutePayload(t *testing.T, lang, features string, extra map[string]any) []byte {
+	t.Helper()
+	payload := map[string]any{
+		"lang":     lang,
+		"binaries": []any{map[string]any{"name": "Main", "data_b64": "eA==", "mode": "exec"}},
+		"limits":   map[string]any{"time_ms": 1000, "memory_mb": 64},
+	}
+	if features != "" {
+		payload["disallowed_cpu_features"] = json.RawMessage(features)
+	}
+	for name, value := range extra {
+		payload[name] = value
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func TestExecuteForwardsDisallowedCPUFeatures(t *testing.T) {
+	for _, tc := range []struct {
+		name, lang, features string
+		want                 []cpupolicy.Feature
+	}{
+		{name: "omitted binary", lang: "binary"},
+		{name: "omitted other language", lang: "python"},
+		{name: "empty other language", lang: "python", features: `[]`},
+		{name: "null", lang: "binary", features: `null`},
+		{name: "AVX binary", lang: "binary", features: `["avx"]`, want: []cpupolicy.Feature{cpupolicy.AVX}},
+		{name: "SIMD native alias", lang: "CPP17", features: `["simd"]`, want: []cpupolicy.Feature{cpupolicy.SIMD}},
+		{name: "both", lang: "binary", features: `["simd","avx"]`, want: []cpupolicy.Feature{cpupolicy.SIMD, cpupolicy.AVX}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int64
+			s := NewWithServices(configForTest(t), compileRunnerStub{}, executeRunnerStub{run: func(_ context.Context, req *model.RunRequest, _ execute.Hooks) model.RunResponse {
+				calls.Add(1)
+				if !slices.Equal(req.DisallowedCPUFeatures, tc.want) {
+					t.Errorf("runner CPU features = %v, want %v", req.DisallowedCPUFeatures, tc.want)
+				}
+				return model.RunResponse{Status: model.RunStatusAccepted}
+			}})
+			server := httptest.NewServer(s.Handler())
+			defer server.Close()
+			response, err := http.Post(server.URL+"/execute", "application/json", bytes.NewReader(cpuFeatureExecutePayload(t, tc.lang, tc.features, nil)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != http.StatusOK || calls.Load() != 1 || !strings.Contains(string(body), "event: result") {
+				t.Fatalf("status = %d, calls = %d, body = %s", response.StatusCode, calls.Load(), body)
+			}
+		})
+	}
+}
+
+func TestExecuteRejectsCPUFeaturePolicyBeforeFetchOrAdmission(t *testing.T) {
+	var fetches atomic.Int64
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fetches.Add(1)
+		_, _ = io.WriteString(w, "binary payload")
+	}))
+	defer assetServer.Close()
+	setPayloadURLHTTPClientForTest(t, assetServer.URL)
+
+	for _, tc := range []struct {
+		name, lang, features string
+		extra                map[string]any
+		code                 string
+	}{
+		{name: "unknown", lang: "binary", features: `["avx2"]`},
+		{name: "uppercase", lang: "binary", features: `["AVX"]`},
+		{name: "duplicate", lang: "binary", features: `["simd","simd"]`},
+		{name: "too many", lang: "binary", features: `["avx","simd","avx"]`},
+		{name: "string instead of list", lang: "binary", features: `"avx"`, code: "invalid_json_type"},
+		{name: "unsupported language", lang: "python", features: `["avx"]`},
+		{name: "network", lang: "binary", features: `["avx"]`, extra: map[string]any{"enable_network": true}},
+		{name: "file output", lang: "binary", features: `["avx"]`, extra: map[string]any{"file_outputs": []any{map[string]any{"path": "answer"}}}},
+		{name: "sidecar", lang: "binary", features: `["simd"]`, extra: map[string]any{"sidecar_outputs": []any{map[string]any{"path": "image"}}}},
+		{name: "communication", lang: "binary", features: `["avx"]`, extra: map[string]any{"communication": map[string]any{}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int64
+			s := NewWithServices(configForTest(t), compileRunnerStub{}, executeRunnerStub{run: func(_ context.Context, _ *model.RunRequest, _ execute.Hooks) model.RunResponse {
+				calls.Add(1)
+				return model.RunResponse{Status: model.RunStatusAccepted}
+			}})
+			extra := map[string]any{"binaries": []any{map[string]any{"name": "Main", "data_url": "http://payload.example/Main", "mode": "exec"}}}
+			for name, value := range tc.extra {
+				extra[name] = value
+			}
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/execute", bytes.NewReader(cpuFeatureExecutePayload(t, tc.lang, tc.features, extra)))
+			s.Handler().ServeHTTP(recorder, request)
+			var envelope map[string]string
+			if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			code := tc.code
+			if code == "" {
+				code = "invalid_request"
+			}
+			if recorder.Code != http.StatusBadRequest || envelope["error"] != code {
+				t.Fatalf("status = %d, body = %s; want HTTP 400 %s", recorder.Code, recorder.Body.String(), code)
+			}
+			if fetches.Load() != 0 || calls.Load() != 0 {
+				t.Fatalf("rejected policy fetched or ran: fetches = %d, calls = %d", fetches.Load(), calls.Load())
+			}
+			if active, pending := s.queue.Snapshot(); active != 0 || pending != 0 || s.streams.Load() != 0 {
+				t.Fatalf("admission leaked: active = %d, pending = %d, streams = %d", active, pending, s.streams.Load())
 			}
 		})
 	}

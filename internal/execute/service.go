@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -183,6 +184,9 @@ func NewWithConfig(cfg config.Config) *Service {
 func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
+	}
+	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -504,15 +508,16 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			}, stepResults)
 		}
 		stepReq := &model.RunRequest{
-			Lang:              program.Lang,
-			Binaries:          program.Binaries,
-			Stdin:             stdin,
-			Limits:            effectiveStepLimits(step),
-			CaptureLimits:     req.CaptureLimits,
-			RuntimeProfile:    req.RuntimeProfile,
-			PythonLibraryMode: req.PythonLibraryMode,
-			EnableNetwork:     program.EnableNetwork,
-			EntryPoint:        program.EntryPoint,
+			Lang:                  program.Lang,
+			Binaries:              program.Binaries,
+			Stdin:                 stdin,
+			Limits:                effectiveStepLimits(step),
+			CaptureLimits:         req.CaptureLimits,
+			RuntimeProfile:        req.RuntimeProfile,
+			PythonLibraryMode:     req.PythonLibraryMode,
+			DisallowedCPUFeatures: slices.Clone(req.DisallowedCPUFeatures),
+			EnableNetwork:         program.EnableNetwork,
+			EntryPoint:            program.EntryPoint,
 		}
 		if step.Handoff != nil {
 			handoffFrom := strings.ToLower(strings.TrimSpace(step.Handoff.From))

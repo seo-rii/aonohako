@@ -1,9 +1,11 @@
 # CPU feature policy
 
-`POST /compile` accepts `disallowed_cpu_features` for C/C++ submissions on
-Linux x86-64 workers. A judge can use this field to reject selected instruction
-families in compiled submission code. Existing requests retain their current
-behavior when the field is omitted or empty.
+`POST /compile` and `POST /execute` accept `disallowed_cpu_features`.
+Compilation can reject selected instruction families in C/C++ objects;
+execution can enforce the policy on instructions reached by a static Linux
+x86-64 contestant binary. These are separate opt-ins: the judge supplies the
+field on each request that needs it. Omitting the field, using an empty array,
+or using `null` preserves the existing behavior.
 
 ```json
 {
@@ -21,16 +23,18 @@ Language aliases and `version` retain their existing meanings.
 | Value | Restriction |
 | --- | --- |
 | `avx` | Reject AVX-family instructions, including AVX2, AVX-512, and mask-register operations. Baseline SSE/SSE2 remain available. |
-| `simd` | Include the AVX restriction and reject packed SIMD arithmetic/logic and MMX operations. Disable automatic loop and SLP vectorization. |
+| `simd` | Include the AVX restriction and reject packed SIMD arithmetic/logic and MMX operations. During compilation, also disable automatic loop and SLP vectorization. |
 
 `simd` permits scalar SSE floating-point instructions, ordinary register/data
 moves, and same-register zeroing idioms used by the compiler and the x86-64
 calling convention. It is a restriction on vector computation rather than a
 ban on every use of an XMM register. Specifying both values is valid but
 redundant. The list accepts at most two values. Values are lowercase and exact;
-unknown values and duplicates are invalid. A nonempty policy on another
-language is rejected instead of silently ignored. The frontend may forward
-the policy to a remote x86-64 compiler worker.
+unknown values and duplicates are invalid. Compilation accepts the policy for
+C/C++ only. Execution accepts runtimes normalized to `binary`, including native
+language aliases, and verifies the actual executable before launch. Unsupported
+languages are rejected instead of silently ignoring the policy. A frontend
+can forward the policy to an appropriate remote worker.
 
 ## Compilation and diagnostics
 
@@ -62,7 +66,7 @@ object produce `cpu_feature_inspection_failed`. Inspector failures retain
 their failure status; an inspection timeout remains a timeout. Successful
 inspection output is not included in compiler diagnostics.
 
-## Scope and judge integration
+## Compile scope
 
 This is a conservative static compilation policy. A scalar expression that
 the compiler lowers to a packed bitwise instruction, such as some floating
@@ -72,15 +76,124 @@ submission object. Conversely, source code optimized away before object
 generation has no instructions to reject. Policy behavior is therefore tied
 to the compiler version as well as the source.
 
-Static disassembly does not establish a runtime instruction guarantee. It
-does not prove that embedded data, jumps into instruction bytes, or dynamically
-generated code cannot execute forbidden instructions. It also leaves linked
-libc/libstdc++ code outside the check. A runtime-wide prohibition would require
-a separate execution mechanism that enforces an instruction set.
+Static disassembly alone does not cover code reached through embedded data,
+jumps into instruction bytes, or runtime code generation. Linked
+libc/libstdc++ code is outside the compile check. Supply the execution policy
+as well when the problem requires checking the instructions actually reached.
 
-The judge must supply its chosen policy when compiling contestant code and
-include that policy in compilation cache keys. `problem_id` does not select a
-CPU feature policy automatically. Compile special judges and interactors with
-their own chosen policy. `/execute` accepts already-built artifacts and does
-not inherit or verify a prior compile policy; the judge must execute the
-artifacts returned by the corresponding successful compilation.
+## Execution and diagnostics
+
+Pass the compiled artifact back with the same policy:
+
+```json
+{
+  "lang": "binary",
+  "binaries": [
+    {"name": "Main", "data_b64": "<artifact data_b64>", "mode": "exec"}
+  ],
+  "stdin": "",
+  "expected_stdout": "",
+  "limits": {"time_ms": 2000, "memory_mb": 256},
+  "disallowed_cpu_features": ["avx"]
+}
+```
+
+The worker requires a static ELF64 x86-64 executable without an ELF interpreter
+(`PT_INTERP`). Scripts, other architectures, dynamically linked executables,
+and unsupported runtimes do not fall back to unrestricted execution.
+
+The worker runs the contestant through the packaged QEMU TCG backend with
+the CPU policy plugin and its `qemu64` baseline CPU model. Other CPU extensions
+may be unavailable even when they are not selected by this policy. TCG
+translates guest instructions to native host code; the plugin checks decoded
+instructions before their execution. This covers raw instruction bytes, code reached at a new instruction
+boundary, and dynamically generated or modified code as QEMU translates it.
+The runtime check also applies to binaries compiled elsewhere. The instruction
+classification is conservative; an instruction that cannot be inspected also
+stops execution.
+
+The packaged QEMU build includes the repository's guest-memory bounds patch.
+Executable load segments and the entry point must fit its checked 4 GiB guest
+address window. This bound is separate from the request's memory limit.
+
+The execution policy applies to the whole guest program, including statically
+linked libc and libstdc++. An otherwise scalar program can therefore pass the
+compile check and receive `Runtime Error` under `simd` when a library routine
+executes packed SIMD. Scalar SSE floating-point operations, permitted register
+moves, and zeroing idioms remain available. The host emulator and its own
+libraries run normally; they are not guest instructions.
+
+The supported interface is standard input, standard output, and standard error
+for a single guest thread. Guest file opens, process replacement, forks,
+additional threads, and network operations are denied. Additional submitted
+files may be materialized but cannot be opened by the restricted guest. The
+API rejects unsupported combinations before downloading binary URLs or
+admitting work:
+
+- `communication` mode and contestant `enable_network`;
+- contestant `file_outputs` or `sidecar_outputs`;
+- legacy step file handoffs and Pipeline V1 `participant_file` outputs;
+- contestant runtime languages that do not normalize to `binary`.
+
+Ordinary execution, an interactive contestant, legacy steps using stdout
+handoffs, and Pipeline V1 batch/interactive contestants are supported. Every
+contestant step inherits the policy. Trusted interactors and SPJs do not
+inherit it; Pipeline V1 can still use its interactor's output file as a private
+artifact. A program used as an interactor in one step and a contestant in
+another is restricted for the contestant invocation.
+
+Invalid values and unsupported request combinations return HTTP 400
+`invalid_request`. A missing or unusable enforcement backend, or an unsupported
+executable, returns `Container Initialization Failed`. An execution policy
+violation returns `Runtime Error` with `verdict_source: "cpu_feature_policy"`.
+Step failures add their usual `step:<id>:` prefix to the top-level source.
+Pipeline V1 retains its normal diagnostic redaction, so its public reason can
+be generic while the verdict source remains available.
+
+CPU time, wall time, and memory usage include emulation. These results
+are not native-performance measurements, and existing native time limits may
+need separate calibration for restricted execution. The existing helper,
+seccomp, resource limits, and configured cgroups continue to apply. The policy
+does not replace that isolation or provide a general-purpose emulator sandbox.
+
+## Operator packaging
+
+The repository's [Dockerfile](../Dockerfile) and
+[runtime Dockerfile](../docker/runtime.Dockerfile) build and package QEMU
+10.0.15 with native TCG, plugins, Capstone, and the checked guest-memory patch.
+The source archive is pinned by SHA-256 in
+[`build_cpu_policy_qemu.sh`](../scripts/build_cpu_policy_qemu.sh). The runner
+expects the protected installation at:
+
+```text
+/usr/local/lib/aonohako/cpu-policy/qemu-x86_64
+/usr/local/lib/aonohako/cpu-policy/cpu-policy.so
+```
+
+For a custom image or self-hosted installation, use the same pinned build
+script and [`build_cpu_policy_plugin.sh`](../scripts/build_cpu_policy_plugin.sh)
+with its default production plugin API version. Install their outputs at the
+paths above with the runtime libraries listed in the Dockerfiles; keep them
+owned by the operator and unwritable by sandbox users. An arbitrary system
+QEMU executable is not a substitute for the patched backend/plugin
+build. The QEMU builder accepts `AONOHAKO_QEMU_BUILD_JOBS` to bound build
+parallelism and `AONOHAKO_QEMU_SOURCE_ARCHIVE` for a locally cached archive;
+the same source hash is verified in either case. These are build settings,
+not request-controlled runtime options.
+
+Both image builders run the runtime regression suite against the binaries they
+package. To repeat it locally with a C compiler and static libc development
+files installed:
+
+```sh
+python3 scripts/test_cpu_policy_runtime.py /path/to/cpu-policy
+```
+
+## Judge integration
+
+The judge must supply its chosen policy separately when compiling and executing
+contestant code, and include it in compilation and execution cache keys.
+`problem_id` does not select a CPU feature policy automatically. Compile
+special judges and interactors with their own chosen policy. Execution does
+not trust prior compile metadata: it verifies the selected executable and
+applies the requested runtime policy independently.

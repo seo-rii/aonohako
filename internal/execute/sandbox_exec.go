@@ -429,6 +429,18 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	runtimeBase := sandboxCommandBase(finalCommand, ws.RootDir)
+	cpuExecution, err := prepareCPUFeatureExecution(ws, finalCommand, req.DisallowedCPUFeatures, 6+len(streams.extraFiles), cpuPolicyRuntimeDir)
+	if err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: err.Error(), VerdictSource: "cpu_feature_policy"}
+	}
+	defer cpuExecution.close()
+	if cpuExecution != nil {
+		finalCommand = cpuExecution.command
+		// Copy before appending: sibling interactive runs may share the backing
+		// array of their own inherited stream descriptors.
+		streams.extraFiles = append(append([]*os.File(nil), streams.extraFiles...), cpuExecution.report)
+		runtimeBase = "qemu-x86_64"
+	}
 	if streams.communicationRestricted {
 		// Communication-v1 accepts native binaries only. Never let a submitted
 		// basename select a managed-runtime exception or shared runtime state.
@@ -450,7 +462,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	isPowerShell := runLang == "powershell" && runtimeBase == "pwsh"
 	isFactor := runLang == "factor" && runtimeBase == "factor"
 	isTLA := runtimeBase == "aonohako-tla-run"
-	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
+	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime" || cpuExecution != nil
 	trustedShellRuntime := false
 	switch os.Getenv("AONOHAKO_IMAGE_NAME") {
 	case "type-x", "ci-bash", "ci-posix-sh", "ci-zsh", "ci-fish":
@@ -511,6 +523,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// The shared dotnet host also needs a high finite RLIMIT_FSIZE floor to start reliably.
 	disableAddressSpaceLimit := isDotnet || isPowerShell || isC3 || isGoBinary || isMojoBinary || isPonyBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
+	if cpuExecution != nil {
+		// The protected guest window reserves virtual addresses, not RSS. Keep
+		// a finite allowance for QEMU while retaining cgroup/RSS memory limits.
+		addressSpaceLimit = cpuPolicyGuestBytes + uint64(max(0, req.Limits.MemoryMB)+512)*1024*1024
+	}
 	if streams.communicationRestricted {
 		// Native C++ communication targets do not need the broad managed-runtime
 		// virtual-address allowance. Keep burst allocation close to the declared
@@ -1293,6 +1310,7 @@ done:
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
 	}
+	cpuExecution.applyResult(&result)
 	normalizeExecResultCPU(&result, cpuNormalizer)
 	return result
 }

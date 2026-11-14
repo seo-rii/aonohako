@@ -14,9 +14,22 @@ ARG TARGETOS TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako ./cmd/server
 
+FROM ${RUNTIME_BASE} AS cpu-policy-builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl xz-utils patch gcc libc6-dev make ninja-build python3 python3-venv \
+    pkg-config libglib2.0-dev libcapstone-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0755 scripts/build_cpu_policy_qemu.sh scripts/build_cpu_policy_plugin.sh scripts/test_cpu_policy_runtime.py /src/scripts/
+COPY runtime/cpu-policy.c runtime/qemu-plugin-compat.h /src/runtime/
+COPY runtime/qemu-10.0.15-guest-bounds.patch /src/runtime/
+RUN /src/scripts/build_cpu_policy_qemu.sh /out/cpu-policy && \
+    /src/scripts/build_cpu_policy_plugin.sh /out/cpu-policy/cpu-policy.so && \
+    python3 /src/scripts/test_cpu_policy_runtime.py /out/cpu-policy && \
+    chmod 0444 /out/cpu-policy/cpu-policy.so
+
 FROM ${RUNTIME_BASE} AS base
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tini && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tini libglib2.0-0t64 libcapstone5 zlib1g libatomic1 && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
+COPY --from=cpu-policy-builder /out/cpu-policy/ /usr/local/lib/aonohako/cpu-policy/
 ENV PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENTRYPOINT ["/usr/bin/tini","--"]
 CMD ["aonohako"]
@@ -58,7 +71,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM ${PYTHON_IMAGE} AS execute-python
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tini pypy3 openjdk-21-jre-headless \
-    ca-certificates curl bzip2 \
+    ca-certificates curl bzip2 libglib2.0-0t64 libcapstone5 zlib1g libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 # Install patched filelock from PyPI before using the CPU PyTorch index.
 RUN python -m pip install --no-cache-dir --upgrade pip && \
@@ -70,6 +83,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
       torch==2.13.0+cpu torchvision==0.28.0+cpu
 RUN install -d -m 0755 /usr/local/lib/aonohako/python
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
+COPY --from=cpu-policy-builder /out/cpu-policy/ /usr/local/lib/aonohako/cpu-policy/
 ENV PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/usr/local/lib/aonohako/python
 ENTRYPOINT ["/usr/bin/tini","--"]
 CMD ["aonohako"]

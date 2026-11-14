@@ -1,7 +1,8 @@
-// Package cpupolicy defines an opt-in policy for the machine code in submitted
-// C/C++ objects before linking. It does not restrict trusted runtime libraries,
-// dynamically generated code, or instructions reached by entering the middle
-// of another instruction. It is not a runtime CPU-feature sandbox.
+// Package cpupolicy defines the shared opt-in compile and execution CPU feature
+// options and inspects C/C++ objects before linking. Runtime instruction checks
+// are implemented separately by the QEMU plugin in runtime/cpu-policy.c; object
+// inspection alone does not constrain linked libraries or dynamically reached
+// code.
 package cpupolicy
 
 import (

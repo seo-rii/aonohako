@@ -65,9 +65,10 @@ while retaining scalar SSE operations, data movement, and register zeroing.
 Omitting the field or supplying an empty array preserves existing compilation.
 Unknown values, duplicates, and nonempty policies for other languages are
 rejected. The policy inspects submitted object code before linking; it does
-not constrain the CPU instructions executed by arbitrary binaries or linked
-libraries. See [CPU feature policy](cpu-feature-policy.md) for examples,
-diagnostics, and the exact scope.
+not automatically attach a policy to the resulting artifacts. To enforce the
+restriction while executing them, also supply `disallowed_cpu_features` in
+the `/execute` request. See [CPU feature policy](cpu-feature-policy.md) for
+examples, diagnostics, and the different compile and execution scopes.
 
 `version` is optional and currently applies to C, C++, Java, Kotlin/JVM, and
 Rust compile profiles. C/C++ values select the language standard (`"c99"`,
@@ -142,6 +143,7 @@ error.
   "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
   "python_library_mode": "stdlib",           // optional request-wide CPython/PyPy imports: "stdlib" | "installed"
+  "disallowed_cpu_features": [],             // optional native contestant execution policy: "avx" | "simd"
   "enable_network": false,                   // outbound network request flag; honored only when server policy allows request-controlled network
   "emit_logs": true,                         // optional contestant stdout/stderr log SSE events; defaults to true
   "entry_point": "src/main.py",              // optional submitted file path to run; some runtimes use a class/module/procedure/top-level name
@@ -189,6 +191,30 @@ level. These non-path values are validated before they reach generated
 manifests or command arguments. Because GDL sources are compiled through its
 interactive command channel, submitted GDL paths are limited to ASCII letters,
 digits, `.`, `_`, `-`, and `/`.
+
+A nonempty `disallowed_cpu_features` list selects instruction-checked execution
+for a static Linux x86-64 ELF contestant whose normalized runtime is `binary`.
+The values and maximum of two entries match `/compile`; omitted, empty, or
+`null` values preserve ordinary execution. The policy is request-wide for
+contestant programs in ordinary execution, interactive execution, legacy
+steps, and Pipeline V1. Trusted interactors and SPJs do not inherit it.
+`communication`, contestant `enable_network`, `file_outputs`,
+`sidecar_outputs`, file handoffs, and Pipeline V1 `participant_file` outputs
+are unsupported and rejected before admission. Trusted interactor output files
+remain available to Pipeline V1. Additional submitted files are still
+materialized, but restricted guest programs cannot open them.
+
+The packaged QEMU TCG backend checks instructions before they execute,
+including instructions in guest libraries and dynamically generated code.
+`simd` permits scalar SSE operations and ordinary data movement, but can reject
+packed libc instructions reached by otherwise scalar source. CPU, wall-time,
+and memory accounting include emulation costs. Executables must fit the
+backend's checked 4 GiB guest address window. A policy violation returns
+`Runtime Error` with `verdict_source: "cpu_feature_policy"`; unavailable backend
+or unsupported executable format returns `Container Initialization Failed`.
+Invalid policy values or unsupported request combinations return HTTP 400
+`invalid_request`. See [CPU feature policy](cpu-feature-policy.md) for the
+execution boundary, pipeline diagnostics, and operator packaging.
 
 `limits.time_ms` and `limits.memory_mb` are required and bounded at the API
 boundary. `limits.time_ms` is the CPU budget. An optional `limits.wall_time_ms`

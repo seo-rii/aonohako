@@ -25,6 +25,7 @@ var jsonCollectionLimits = map[jsonCollectionField]int{
 	{reflect.TypeFor[model.CompileRequest](), "Sources"}:                  maxCompileSourceFiles,
 	{reflect.TypeFor[model.CompileRequest](), "DisallowedCPUFeatures"}:    cpupolicy.MaxFeatures,
 	{reflect.TypeFor[model.RunRequest](), "Binaries"}:                     runvalidation.MaxBinaryFiles,
+	{reflect.TypeFor[model.RunRequest](), "DisallowedCPUFeatures"}:        cpupolicy.MaxFeatures,
 	{reflect.TypeFor[model.RunRequest](), "Programs"}:                     runvalidation.MaxPrograms,
 	{reflect.TypeFor[model.RunRequest](), "Steps"}:                        runvalidation.MaxSteps,
 	{reflect.TypeFor[model.RunRequest](), "FileOutputs"}:                  1,
