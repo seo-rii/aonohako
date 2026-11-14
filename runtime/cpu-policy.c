@@ -223,6 +223,45 @@ static enum decision classify(const char *disassembly)
     return ALLOW;
 }
 
+/* Capstone 4 does not decode RDSSPD/RDSSPQ, used by Ubuntu's static libc.
+ * These read only a scalar shadow-stack pointer and are NOPs without CET,
+ * including the fixed qemu64 CPU. Recognize only their exact register forms;
+ * unknown instructions, other opcode extensions, and extra prefixes stay
+ * uninspectable. Check QEMU's full instruction length before reading bytes. */
+static bool scalar_rdssp(const struct qemu_plugin_insn *insn)
+{
+    size_t size = qemu_plugin_insn_size(insn);
+    unsigned char bytes[5];
+    if (size != 4 && size != 5) {
+        return false;
+    }
+#if AONOHAKO_QEMU_PLUGIN_API_VERSION == 1
+    const void *data = qemu_plugin_insn_data(insn);
+    if (!data) {
+        return false;
+    }
+    memcpy(bytes, data, size);
+#else
+    if (qemu_plugin_insn_data(insn, bytes, size) != size) {
+        return false;
+    }
+#endif
+    if (bytes[0] != 0xf3) {
+        return false;
+    }
+    size_t opcode = 1;
+    if (size == 5) {
+        /* REX.B selects r8-r15; REX.W selects the 64-bit form. */
+        if (bytes[1] != 0x40 && bytes[1] != 0x41 &&
+            bytes[1] != 0x48 && bytes[1] != 0x49) {
+            return false;
+        }
+        opcode = 2;
+    }
+    return bytes[opcode] == 0x0f && bytes[opcode + 1] == 0x1e &&
+        (bytes[opcode + 2] & 0xf8) == 0xc8; /* ModRM: mod=11, /1. */
+}
+
 static void terminate(const char *message, char report)
 {
     /* No guest signal handler or atexit hook gets control after a violation. */
@@ -279,6 +318,9 @@ static void translated(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
         char *disassembly = qemu_plugin_insn_disas(insn);
         enum decision decision = classify(disassembly);
         g_free(disassembly);
+        if (decision == DENY_DECODE && scalar_rdssp(insn)) {
+            decision = ALLOW;
+        }
         if (decision != ALLOW) {
             qemu_plugin_register_vcpu_insn_exec_cb(insn, instruction_executed,
                 QEMU_PLUGIN_CB_NO_REGS, (void *)(uintptr_t)decision);
@@ -315,7 +357,13 @@ static bool syscall_allowed(int64_t number, uint64_t a1, uint64_t a2, uint64_t a
     case 25: /* mremap */
         return guest_range(a1, a2) && a3 <= GUEST_ADDRESS_LIMIT &&
             (!(a4 & 2) || guest_range(a5, a3));
-    case 158: /* arch_prctl: TLS bases and their queries only */
+    case 158: /* arch_prctl: TLS bases and their queries */
+        /* Older glibc probes ARCH_CET_STATUS during startup. Pinned QEMU
+         * returns EINVAL for this query without touching host CET state or
+         * its three-word guest output buffer. Other CET operations stay denied. */
+        if (a1 == 0x3001) {
+            return guest_range(a2, 24);
+        }
         return (a1 == 0x1001 || a1 == 0x1002 || a1 == 0x1003 || a1 == 0x1004) &&
             guest_range(a2, 8);
     case 202: /* futex: exclude obsolete FUTEX_FD */

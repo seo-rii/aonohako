@@ -90,6 +90,26 @@ def add(name, body, expected='fault', feature='avx', suffix='', cpu='qemu64', ob
 add('scalar_ok', 'xor %eax,%eax\n', 'pass')
 add('unreachable_avx', 'jmp skip\n.byte 0xc5,0xf8,0x77\nskip:\n', 'pass')
 add('scalar_sse_ok', 'pxor %xmm0,%xmm0\naddsd %xmm0,%xmm0\n', 'pass', 'simd')
+# Capstone 4 cannot decode RDSSP used by newer libc startup. These exact CET
+# instructions are NOPs under qemu64; exercise both widths and register banks
+# without depending on the build image's libc or assembler instruction names.
+for name, raw, register in [
+    ('rdsspd_eax', '0xf3,0x0f,0x1e,0xc8', '%rax'),
+    ('rdsspq_rax', '0xf3,0x48,0x0f,0x1e,0xc8', '%rax'),
+    ('rdsspd_r15d', '0xf3,0x41,0x0f,0x1e,0xcf', '%r15'),
+    ('rdsspq_r15', '0xf3,0x49,0x0f,0x1e,0xcf', '%r15'),
+]:
+    for feature in ('avx', 'simd'):
+        add(name + '_' + feature,
+            f'mov $17,{register}\n.byte {raw}\ncmp $17,{register}\njne setup_failed\n',
+            'pass', feature, suffix=setup_failed)
+# Nearby undecodable ModRM forms must not inherit the narrow RDSSP exception.
+for name, raw in [
+    ('rdssp_bad_modrm_c0', '0xf3,0x48,0x0f,0x1e,0xc0'),
+    ('rdssp_bad_modrm_d0', '0xf3,0x48,0x0f,0x1e,0xd0'),
+    ('unknown_opcode', '0x0f,0x0c'),
+]:
+    add(name, '.byte ' + raw + '\n', 'RV')
 add('raw_avx', '.byte 0xc5,0xf8,0x77\n', 'RV')
 add('packed_simd', 'addps %xmm0,%xmm0\n', 'RV', 'simd')
 add('unused_after_fault', 'xor %eax,%eax\nmov (%rax),%rax\n.byte 0xc5,0xf8,0x77\n')
@@ -118,6 +138,34 @@ add('futex_alias', 'mov $202,%eax\nmovabs $0x10000000000,%rdi\nmov $1,%esi\nmov 
 add('futex_second_alias', 'mov $202,%eax\nlea futex_word(%rip),%rdi\nmov $5,%esi\nmov $1,%edx\nxor %r10d,%r10d\nmovabs $0x10000000000,%r8\nxor %r9d,%r9d\nsyscall\n', suffix='.data\n.p2align 2\nfutex_word: .long 0\n')
 for segment, code in [('fs',0x1002),('gs',0x1001)]:
     add('alias_' + segment, f'mov $158,%eax\nmov ${code},%edi\nmov $4096,%esi\nsyscall\nmovabs $0xfffffff000,%rax\nmov %{segment}:(%rax),%rbx\n')
+# Older libc probes ARCH_CET_STATUS (0x3001). Pinned QEMU returns EINVAL
+# without touching its three-word buffer or forwarding a host arch_prctl.
+for name, setup in [
+    ('buffer', 'lea cet_status(%rip),%rsi\n'),
+    ('last24', mm_last_page + 'mov $0xffffffe8,%esi\n'),
+]:
+    add('arch_prctl_cet_status_' + name, setup + '''
+movq $11,(%rsi)
+movq $22,8(%rsi)
+movq $33,16(%rsi)
+mov $158,%eax
+mov $0x3001,%edi
+syscall
+cmp $-22,%rax
+jne setup_failed
+cmpq $11,(%rsi)
+jne setup_failed
+cmpq $22,8(%rsi)
+jne setup_failed
+cmpq $33,16(%rsi)
+jne setup_failed
+''', 'pass', suffix='.bss\n.p2align 3\ncet_status: .zero 24\n' + setup_failed)
+for name, code in [('cet_control', 0x3002), ('shstk_status', 0x5005), ('unknown', 0x7fffffff)]:
+    add('arch_prctl_denied_' + name,
+        f'mov $158,%eax\nmov ${code},%edi\nlea reached(%rip),%rsi\nsyscall\n', 'RS')
+for name, address in [('host_alias', 0x10000000000), ('short_boundary', 0xfffffff0)]:
+    add('arch_prctl_cet_status_' + name,
+        f'mov $158,%eax\nmov $0x3001,%edi\nmovabs ${address},%rsi\nsyscall\n', 'RS')
 for name, addr, op in [('last_byte',0xffffffff,'movb $123,(%rax)'),('last_qword',0xfffffff8,'movq $123,(%rax)')]:
     add('boundary_' + name, mm_last_page + f'movabs ${addr},%rax\n' + op + '\n', 'pass', suffix=setup_failed)
 for name, addr, op in [

@@ -190,7 +190,11 @@ the same source hash is verified in either case. These are build settings,
 not request-controlled runtime options.
 
 Both image builders run the runtime regression suite against the binaries they
-package. To repeat it locally with a C compiler and static libc development
+package. The suite also covers legacy libc CET status probes and the exact
+scalar `RDSSP` encodings that older Capstone versions cannot decode. With the
+pinned QEMU and `qemu64` model these return `EINVAL` and act as NOPs,
+respectively; other CET `arch_prctl` requests and unknown instruction encodings remain
+rejected. To repeat it locally with a C compiler and static libc development
 files installed:
 
 ```sh

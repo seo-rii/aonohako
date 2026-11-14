@@ -5,9 +5,9 @@
  * Copyright (C) 2019, Linaro
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Only the ABI shared by these versions is used. In particular, the versioned
- * qemu_plugin_insn_data API is deliberately absent. Production targets API 4;
- * API 1 is an explicit build-time option for the older local test emulator.
+ * Shared functions use the same declarations for both versions. The changed
+ * qemu_plugin_insn_data signature is selected at build time. Production targets
+ * API 4; API 1 is an explicit option for the older local test emulator.
  */
 #ifndef AONOHAKO_QEMU_PLUGIN_COMPAT_H
 #define AONOHAKO_QEMU_PLUGIN_COMPAT_H
@@ -48,6 +48,12 @@ void qemu_plugin_register_vcpu_tb_trans_cb(qemu_plugin_id_t, qemu_plugin_vcpu_tb
 size_t qemu_plugin_tb_n_insns(const struct qemu_plugin_tb *);
 struct qemu_plugin_insn *qemu_plugin_tb_get_insn(const struct qemu_plugin_tb *, size_t);
 char *qemu_plugin_insn_disas(const struct qemu_plugin_insn *);
+size_t qemu_plugin_insn_size(const struct qemu_plugin_insn *);
+#if AONOHAKO_QEMU_PLUGIN_API_VERSION == 1
+const void *qemu_plugin_insn_data(const struct qemu_plugin_insn *);
+#else
+size_t qemu_plugin_insn_data(const struct qemu_plugin_insn *, void *, size_t);
+#endif
 void qemu_plugin_register_vcpu_insn_exec_cb(struct qemu_plugin_insn *,
     qemu_plugin_vcpu_udata_cb_t, enum qemu_plugin_cb_flags, void *);
 void qemu_plugin_register_vcpu_tb_exec_cb(struct qemu_plugin_tb *,
