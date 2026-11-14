@@ -13,6 +13,8 @@ binary, configurable runtime images, and testable build metadata.
 - a `box` workspace layout that keeps submitted files immutable while allowing
   new files to be created in the same working directory
 - symlink-safe output capture for file outputs and sidecar artifacts
+- optional [C/C++ SIMD and AVX compile restrictions](docs/cpu-feature-policy.md)
+  that inspect submitted object code before linking
 - SPJ and interactive IO judging support for problems that need custom verdict
   logic or bidirectional contestant/interactor communication
 - [Entry block judging](docs/entry-judging.md) with selectable standard I/O or

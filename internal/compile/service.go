@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -89,6 +90,12 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	profile, ok := resolveProfile(req.Lang)
 	if !ok {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unsupported lang: " + req.Lang}
+	}
+	if err := ValidateDisallowedCPUFeatures(req.Lang, req.DisallowedCPUFeatures); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+	}
+	if len(req.DisallowedCPUFeatures) != 0 && (runtime.GOOS != "linux" || runtime.GOARCH != "amd64") {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "disallowed_cpu_features requires a Linux x86-64 compiler worker"}
 	}
 	if err := rustpolicy.ValidateOptionalCrateMode(req.RustCrateMode); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid rust_crate_mode: " + err.Error()}

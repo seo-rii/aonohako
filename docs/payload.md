@@ -21,6 +21,7 @@ The canonical numeric request and capture limits are generated from code in
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
   "go_module_mode": "stdlib",                // optional Go imports: "stdlib" | "installed"
   "rust_crate_mode": "stdlib",               // optional Rust imports: "stdlib" | "installed"
+  "disallowed_cpu_features": ["avx"],         // optional C/C++ object-code restrictions: "avx" | "simd"
   "emit_logs": true                          // optional compiler stdout/stderr log SSE events; defaults to true
 }
 ```
@@ -56,6 +57,17 @@ directory. For packages with multiple binary targets, `entry_point` selects a
 target by its Cargo name or submitted source path; otherwise `default-run` or a
 sole binary target is used. The server defaults to `stdlib`; a problem mapping
 or the operator's explicit request policy must authorize `installed`.
+
+`disallowed_cpu_features` selects an optional C/C++ compile policy on Linux
+x86-64 workers. `avx` rejects AVX-family instructions, including AVX2 and
+AVX-512; `simd` includes that restriction and rejects packed SIMD computation
+while retaining scalar SSE operations, data movement, and register zeroing.
+Omitting the field or supplying an empty array preserves existing compilation.
+Unknown values, duplicates, and nonempty policies for other languages are
+rejected. The policy inspects submitted object code before linking; it does
+not constrain the CPU instructions executed by arbitrary binaries or linked
+libraries. See [CPU feature policy](cpu-feature-policy.md) for examples,
+diagnostics, and the exact scope.
 
 `version` is optional and currently applies to C, C++, Java, Kotlin/JVM, and
 Rust compile profiles. C/C++ values select the language standard (`"c99"`,
