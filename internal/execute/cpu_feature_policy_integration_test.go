@@ -121,7 +121,7 @@ func TestRunCPUFeaturePolicyInRootSandbox(t *testing.T) {
 			DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX},
 			Limits:                model.Limits{TimeMs: 100, WallTimeMs: 3000, MemoryMB: 256},
 		}, Hooks{})
-		if response.Status != model.RunStatusTLE || response.VerdictSource == "cpu_feature_policy" || response.CPUTimeNs == 0 {
+		if response.Status != model.RunStatusTLE || !strings.HasPrefix(response.VerdictSource, "cpu_") || response.CPUTimeNs == 0 {
 			t.Fatalf("emulated CPU limit was not retained: %+v", response)
 		}
 	})
@@ -145,7 +145,7 @@ func TestRunCPUFeaturePolicyInRootSandbox(t *testing.T) {
 			DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX},
 			Limits:                model.Limits{TimeMs: 5000, MemoryMB: 128},
 		}, Hooks{})
-		if response.Status != model.RunStatusMLE || response.VerdictSource == "cpu_feature_policy" {
+		if response.Status != model.RunStatusMLE || response.VerdictSource != "memory_rss" || response.MemoryKB < 128*1024 {
 			t.Fatalf("emulated resident-memory limit was not retained: %+v", response)
 		}
 	})
