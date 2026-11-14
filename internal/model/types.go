@@ -1,6 +1,7 @@
 package model
 
 import (
+	"aonohako/internal/cpupolicy"
 	"aonohako/internal/durante"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/pythonpolicy"
@@ -20,16 +21,17 @@ type Artifact struct {
 }
 
 type CompileRequest struct {
-	Lang           string               `json:"lang"`
-	Version        string               `json:"version,omitempty"`
-	Sources        []Source             `json:"sources"`
-	Target         string               `json:"target,omitempty"`
-	EntryPoint     string               `json:"entry_point,omitempty"`
-	ProblemID      string               `json:"problem_id,omitempty"`
-	RuntimeProfile string               `json:"runtime_profile,omitempty"`
-	GoModuleMode   gomodulepolicy.Mode  `json:"go_module_mode,omitempty"`
-	RustCrateMode  rustpolicy.CrateMode `json:"rust_crate_mode,omitempty"`
-	EmitLogs       *bool                `json:"emit_logs,omitempty"`
+	Lang                  string               `json:"lang"`
+	Version               string               `json:"version,omitempty"`
+	Sources               []Source             `json:"sources"`
+	Target                string               `json:"target,omitempty"`
+	EntryPoint            string               `json:"entry_point,omitempty"`
+	ProblemID             string               `json:"problem_id,omitempty"`
+	RuntimeProfile        string               `json:"runtime_profile,omitempty"`
+	GoModuleMode          gomodulepolicy.Mode  `json:"go_module_mode,omitempty"`
+	RustCrateMode         rustpolicy.CrateMode `json:"rust_crate_mode,omitempty"`
+	DisallowedCPUFeatures []cpupolicy.Feature  `json:"disallowed_cpu_features,omitempty"`
+	EmitLogs              *bool                `json:"emit_logs,omitempty"`
 }
 
 type CompileResponse struct {
@@ -311,6 +313,7 @@ type RunRequest struct {
 	ProblemID             string                   `json:"problem_id,omitempty"`
 	RuntimeProfile        string                   `json:"runtime_profile,omitempty"`
 	PythonLibraryMode     pythonpolicy.LibraryMode `json:"python_library_mode,omitempty"`
+	DisallowedCPUFeatures []cpupolicy.Feature      `json:"disallowed_cpu_features,omitempty"`
 	EnableNetwork         bool                     `json:"enable_network,omitempty"`
 	EntryPoint            string                   `json:"entry_point,omitempty"`
 	SPJ                   *SPJSpec                 `json:"spj,omitempty"`

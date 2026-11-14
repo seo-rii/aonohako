@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 
 	"aonohako/internal/config"
@@ -509,15 +510,16 @@ func pipelinePublicReason(status, source string) string {
 
 func pipelineProgramRequest(req *model.RunRequest, program model.RunProgram, limits model.Limits) *model.RunRequest {
 	return &model.RunRequest{
-		Lang:              program.Lang,
-		Binaries:          program.Binaries,
-		Limits:            limits,
-		CaptureLimits:     req.CaptureLimits,
-		ProblemID:         req.ProblemID,
-		RuntimeProfile:    req.RuntimeProfile,
-		PythonLibraryMode: req.PythonLibraryMode,
-		EnableNetwork:     program.EnableNetwork,
-		EntryPoint:        program.EntryPoint,
+		Lang:                  program.Lang,
+		Binaries:              program.Binaries,
+		Limits:                limits,
+		CaptureLimits:         req.CaptureLimits,
+		ProblemID:             req.ProblemID,
+		RuntimeProfile:        req.RuntimeProfile,
+		PythonLibraryMode:     req.PythonLibraryMode,
+		DisallowedCPUFeatures: slices.Clone(req.DisallowedCPUFeatures),
+		EnableNetwork:         program.EnableNetwork,
+		EntryPoint:            program.EntryPoint,
 	}
 }
 

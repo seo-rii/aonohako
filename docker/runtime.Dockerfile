@@ -30,14 +30,33 @@ FROM scratch AS ci-runtime-artifacts
 COPY --from=aonohako-runtime-binaries / /
 COPY --chmod=0755 --from=ci-artifact-builder /out/aonohako-runtime-builder /aonohako-runtime-builder
 
+FROM ${RUNTIME_BASE} AS cpu-policy-builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl xz-utils patch gcc libc6-dev make ninja-build python3 python3-venv python3-tomli \
+    pkg-config libglib2.0-dev libcapstone-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0755 scripts/build_cpu_policy_qemu.sh scripts/build_cpu_policy_plugin.sh scripts/test_cpu_policy_runtime.py /src/scripts/
+COPY runtime/cpu-policy.c runtime/qemu-plugin-compat.h /src/runtime/
+COPY runtime/qemu-10.0.15-guest-bounds.patch /src/runtime/
+RUN /src/scripts/build_cpu_policy_qemu.sh /out/cpu-policy && \
+    /src/scripts/build_cpu_policy_plugin.sh /out/cpu-policy/cpu-policy.so && \
+    python3 /src/scripts/test_cpu_policy_runtime.py /out/cpu-policy && \
+    chmod 0444 /out/cpu-policy/cpu-policy.so
+
 FROM ${RUNTIME_BASE} AS runtime-foundation
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update && \
+RUN --mount=type=bind,source=scripts/cpu_policy_runtime_packages.sh,target=/tmp/cpu-policy-runtime-packages.sh,ro \
+    apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends && \
-    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux && \
+    runtime_packages="$(sh /tmp/cpu-policy-runtime-packages.sh)" && \
+    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux ${runtime_packages} && \
     rm -rf /var/lib/apt/lists/*
+
+COPY --from=cpu-policy-builder /out/cpu-policy/ /usr/local/lib/aonohako/cpu-policy/
+RUN /usr/local/lib/aonohako/cpu-policy/qemu-x86_64 --version && \
+    plugin_libraries="$(ldd /usr/local/lib/aonohako/cpu-policy/cpu-policy.so)" && \
+    case "$plugin_libraries" in *"not found"*) printf '%s\n' "$plugin_libraries" >&2; exit 1 ;; esac
 
 FROM runtime-foundation AS runtime-toolchain
 

@@ -14,10 +14,11 @@ fi
 search_fixed() {
   local pattern=$1
   if "${have_rg}"; then
-    rg -F -n --hidden --glob '!.git' --glob '!README.md' --glob '!docs/**' --glob '!scripts/check_repo_policy.sh' "${pattern}" .
+    rg -F -n --hidden --glob '!.git' --glob '!.cache' --glob '!README.md' --glob '!docs/**' --glob '!scripts/check_repo_policy.sh' "${pattern}" .
   else
     grep -R -F -n \
       --exclude-dir=.git \
+      --exclude-dir=.cache \
       --exclude-dir=docs \
       --exclude=README.md \
       --exclude=check_repo_policy.sh \
