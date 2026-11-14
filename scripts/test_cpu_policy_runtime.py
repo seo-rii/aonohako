@@ -99,9 +99,13 @@ for name, op in {
     'vector_load': 'movups (%rax),%xmm0',
     'vector_store': 'movups %xmm0,(%rax)',
     'atomic': 'lock addq $1,(%rax)',
+    'atomic128': ('mov %rax,%rdi\nxor %eax,%eax\nxor %edx,%edx\n'
+                  'xor %ebx,%ebx\nxor %ecx,%ecx\nlock cmpxchg16b (%rdi)'),
+    'rep_movsq': 'mov %rax,%rdi\nlea reached(%rip),%rsi\nmov $1,%ecx\nrep movsq',
     'x87_load': 'fldt (%rax)',
     'x87_store': 'fld1\nfstpt (%rax)',
     'fxsave': 'fxsave (%rax)',
+    'fxrstor': 'fxrstor (%rax)',
     'code_fetch': 'jmp *%rax',
 }.items():
     add('alias_above_' + name, 'movabs $0x10000000000,%rax\n' + op + '\n')
@@ -116,14 +120,50 @@ for segment, code in [('fs',0x1002),('gs',0x1001)]:
     add('alias_' + segment, f'mov $158,%eax\nmov ${code},%edi\nmov $4096,%esi\nsyscall\nmovabs $0xfffffff000,%rax\nmov %{segment}:(%rax),%rbx\n')
 for name, addr, op in [('last_byte',0xffffffff,'movb $123,(%rax)'),('last_qword',0xfffffff8,'movq $123,(%rax)')]:
     add('boundary_' + name, mm_last_page + f'movabs ${addr},%rax\n' + op + '\n', 'pass', suffix=setup_failed)
-for name, addr, op in [('scalar',0xfffffffc,'mov (%rax),%rbx'),('vector',0xfffffff8,'movups (%rax),%xmm0'),('store',0xffffffff,'movq $123,(%rax)'),('x87',0xfffffff8,'fldt (%rax)')]:
+for name, addr, op in [
+    ('scalar', 0xfffffffc, 'mov (%rax),%rbx'),
+    ('vector', 0xfffffff8, 'movups (%rax),%xmm0'),
+    ('store', 0xffffffff, 'movq $123,(%rax)'),
+    ('x87', 0xfffffff8, 'fldt (%rax)'),
+    ('fxsave', 0xfffffff0, 'fxsave (%rax)'),
+]:
     add('cross_boundary_' + name, mm_last_page + f'movabs ${addr},%rax\n' + op + '\n', suffix=setup_failed)
+# Stdio is allowed, but invalid syscall buffers must not alias emulator memory.
+# These calls return EFAULT and leave the host marker pages untouched.
+for name, num, fd in [('read', 0, 0), ('write', 1, 1)]:
+    add('syscall_' + name + '_alias', f'''
+mov ${num},%eax
+mov ${fd},%edi
+movabs $0x10000000000,%rsi
+mov $8,%edx
+syscall
+cmp $-14,%rax
+jne setup_failed
+''', 'pass', suffix=setup_failed)
+add('syscall_writev_alias', '''
+mov $20,%eax
+mov $1,%edi
+lea iov(%rip),%rsi
+mov $1,%edx
+syscall
+cmp $-14,%rax
+jne setup_failed
+''', 'pass', suffix='.data\n.p2align 3\niov: .quad 0x10000000000,8\n' + setup_failed)
 for name, num in [('open',2),('execve',59),('clone',56),('clone3',435),('dup',32),('sendfile',40)]:
     add('syscall_' + name, f'mov ${num},%eax\nxor %edi,%edi\nsyscall\n', 'RS')
 add('fd_write', 'mov $1,%eax\nmov $REPORT_FD,%edi\nlea reached(%rip),%rsi\nmov $1,%edx\nsyscall\n', 'RS')
 add('fd_close', 'mov $3,%eax\nmov $REPORT_FD,%edi\nsyscall\n', 'RS')
 add('fd_mmap', 'mov $9,%eax\nxor %edi,%edi\nmov $4096,%esi\nmov $3,%edx\nmov $1,%r10d\nmov $REPORT_FD,%r8d\nxor %r9d,%r9d\nsyscall\n', 'RS')
 add('guard_mprotect', 'mov $10,%eax\nmovabs $0x100000000,%rdi\nmov $4096,%esi\nmov $3,%edx\nsyscall\n', 'RS')
+add('guard_mremap', '''
+mov $25,%eax
+mov $0x20000000,%edi
+mov $4096,%esi
+mov $4096,%edx
+mov $3,%r10d
+movabs $0x100000000,%r8
+syscall
+''', 'RS')
 add('jit_avx', '''
 mov $9,%eax
 xor %edi,%edi
