@@ -173,8 +173,14 @@ expects the protected installation at:
 For a custom image or self-hosted installation, use the same pinned build
 script and [`build_cpu_policy_plugin.sh`](../scripts/build_cpu_policy_plugin.sh)
 with its default production plugin API version. Install their outputs at the
-paths above with the runtime libraries listed in the Dockerfiles; keep them
-owned by the operator and unwritable by sandbox users. An arbitrary system
+paths above with their required runtime libraries; keep them
+owned by the operator and unwritable by sandbox users. Debian and Ubuntu
+images resolve their GLib and Capstone runtime packages from the native
+development-package dependencies with
+[`cpu_policy_runtime_packages.sh`](../scripts/cpu_policy_runtime_packages.sh).
+Build the backend against the same base image as the final runtime; the legacy
+Python image uses its own builder for this reason. Image builds also check that
+the copied backend and plugin can resolve their shared libraries. An arbitrary system
 QEMU executable is not a substitute for the patched backend/plugin
 build. The QEMU builder accepts `AONOHAKO_QEMU_BUILD_JOBS` to bound build
 parallelism and `AONOHAKO_QEMU_SOURCE_ARCHIVE` for a locally cached archive;

@@ -46,12 +46,17 @@ FROM ${RUNTIME_BASE} AS runtime-foundation
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update && \
+RUN --mount=type=bind,source=scripts/cpu_policy_runtime_packages.sh,target=/tmp/cpu-policy-runtime-packages.sh,ro \
+    apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends && \
-    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux libglib2.0-0t64 libcapstone5 zlib1g libatomic1 && \
+    runtime_packages="$(sh /tmp/cpu-policy-runtime-packages.sh)" && \
+    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux ${runtime_packages} && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=cpu-policy-builder /out/cpu-policy/ /usr/local/lib/aonohako/cpu-policy/
+RUN /usr/local/lib/aonohako/cpu-policy/qemu-x86_64 --version && \
+    plugin_libraries="$(ldd /usr/local/lib/aonohako/cpu-policy/cpu-policy.so)" && \
+    case "$plugin_libraries" in *"not found"*) printf '%s\n' "$plugin_libraries" >&2; exit 1 ;; esac
 
 FROM runtime-foundation AS runtime-toolchain
 
