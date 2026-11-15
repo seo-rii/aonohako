@@ -155,6 +155,9 @@ default dispatch and recorded cohort. A different image, engine, source variant
 or materially different target population needs new qualification. Reproducible
 counts alone do not establish a general mapping from two work dimensions to
 CPU time, and this collection does not establish credited native memory.
+The optional shared-model registry can reuse coefficients across explicitly
+approved execution profiles, but this CPP20 corpus supplies no qualification for
+those additional profiles. Registry membership is not a successful corpus result.
 For API configuration and unchanged verdict semantics, see
 [Durante integration](durante.md#explicit-reference-time-calculator).
 

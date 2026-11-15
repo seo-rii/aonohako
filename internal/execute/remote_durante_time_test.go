@@ -32,7 +32,7 @@ func exchangeTimeMeasurementResult(t *testing.T, req *model.RunRequest, response
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		if forwarded.WorkMeasurementTime != req.WorkMeasurementTime || forwarded.WorkMeasurement != req.WorkMeasurement || forwarded.Limits != req.Limits || !reflect.DeepEqual(forwarded.WorkMeasurementLimits, req.WorkMeasurementLimits) {
+		if forwarded.Lang != req.Lang || forwarded.WorkMeasurementTime != req.WorkMeasurementTime || forwarded.WorkMeasurement != req.WorkMeasurement || forwarded.Limits != req.Limits || !reflect.DeepEqual(forwarded.WorkMeasurementLimits, req.WorkMeasurementLimits) {
 			t.Errorf("forwarding changed measurement flags or limits: %+v", forwarded)
 		}
 		w.Header().Set("Content-Type", "text/event-stream")

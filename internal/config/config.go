@@ -655,9 +655,13 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_POLICY: %w", err)
 	}
+	workMeasurement.TimeModels, err = durante.ParseTimeModels(os.Getenv("AONOHAKO_DURANTE_TIME_MODELS"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_MODELS: %w", err)
+	}
 	workMeasurement.RuntimeImage = os.Getenv("AONOHAKO_DURANTE_RUNTIME_IMAGE")
 	if err := workMeasurement.ValidateTimeConfiguration(); err != nil {
-		return Config{}, fmt.Errorf("durante time configuration (AONOHAKO_DURANTE_TIME_POLICY, AONOHAKO_DURANTE_RUNTIME_IMAGE): %w", err)
+		return Config{}, fmt.Errorf("durante time configuration (AONOHAKO_DURANTE_TIME_POLICY, AONOHAKO_DURANTE_TIME_MODELS, AONOHAKO_DURANTE_RUNTIME_IMAGE): %w", err)
 	}
 	execution := ExecutionConfig{
 		WorkMeasurement: workMeasurement,

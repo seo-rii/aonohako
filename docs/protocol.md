@@ -215,7 +215,7 @@ reports omit it. This extension keeps report schema 1 and the existing time
 formula. See [the result contract](durante.md#result-contract) for byte semantics
 and current installation/profile compatibility.
 
-An ordinary C/C++ envelope request can additionally opt into
+An ordinary envelope request with an explicitly approved source/runtime profile can opt into
 `work_measurement_time: true`. With a compatible operator model, the final
 `work_measurement_execution` includes `time_estimate` containing the model ID and
 version, reference/runtime identities, family, engine/dispatch profiles, exact
@@ -233,7 +233,7 @@ initialization may omit the diagnostic execution object. Without the explicit
 flag, no estimate, nominal comparison, or conversion-unavailable field is emitted.
 
 Local execution and remote forwarding require their own matching operator
-policy and downstream execution-image identity. Remote forwarding recomputes and
+policy (legacy or shared-model registry) and downstream execution-image identity. Remote forwarding recomputes and
 verifies the estimate rather than adopting returned coefficients. Raw CPU/RSS
 and the envelope's initialization-failure status remain unchanged, with no score
 or CPU normalization. Production coefficients are not supplied by this API.

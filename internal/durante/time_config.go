@@ -79,16 +79,20 @@ func ParseTimePolicy(raw string) (*TimePolicy, error) {
 	return &policy, nil
 }
 
-// TimeRuntimeID binds a canonical C/C++ source profile to the operator's
+// TimeRuntimeID binds a canonical supported source profile to the operator's
 // independently configured deployment image. The digest is metadata, not
 // runtime attestation.
 func TimeRuntimeID(language, imageDigest string) (string, error) {
 	profile, ok := profiles.Resolve(language)
 	if !ok {
-		return "", fmt.Errorf("durante time requires a registered C/C++ source-language profile")
+		return "", fmt.Errorf("durante time requires a registered source-language profile")
 	}
-	if family, ok := FamilyForLanguage(profile.SourceLang); !ok || family != "cpp" {
-		return "", fmt.Errorf("durante time is supported only for C/C++ source-language profiles")
+	family, ok := FamilyForLanguage(profile.SourceLang)
+	if !ok {
+		return "", fmt.Errorf("durante time requires a registered measurement family")
+	}
+	if err := ValidateMeasurementFamily(family); err != nil {
+		return "", err
 	}
 	if !runtimeidentity.ValidImageDigest(imageDigest) {
 		return "", fmt.Errorf("durante runtime image must be an immutable sha256 image digest")
@@ -99,6 +103,21 @@ func TimeRuntimeID(language, imageDigest string) (string, error) {
 func (c Config) ValidateTimeConfiguration() error {
 	if c.RuntimeImage != "" && !runtimeidentity.ValidImageDigest(c.RuntimeImage) {
 		return fmt.Errorf("durante runtime image must be an immutable sha256 image digest")
+	}
+	if c.TimePolicy != nil && c.TimeModels != nil {
+		return fmt.Errorf("durante time policy and time models cannot be configured together")
+	}
+	if c.TimeModels != nil {
+		if err := c.TimeModels.Validate(); err != nil {
+			return err
+		}
+		if !runtimeidentity.ValidImageDigest(c.RuntimeImage) {
+			return fmt.Errorf("durante time models requires an independently configured immutable runtime image")
+		}
+		if err := c.ResourcePolicy.validate(); err != nil {
+			return fmt.Errorf("durante time models requires a valid resource policy: %w", err)
+		}
+		return nil
 	}
 	if c.TimePolicy == nil {
 		return nil
@@ -126,18 +145,43 @@ func (c Config) ValidateTimeConfiguration() error {
 	if runtimeID != c.TimePolicy.RuntimeID {
 		return fmt.Errorf("durante time policy runtime ID does not match its canonical source and configured image digest")
 	}
-	if _, err := c.Family(source); err != nil {
+	family, err := c.Family(source)
+	if err != nil {
 		return fmt.Errorf("durante time policy: %w", err)
+	}
+	if family != c.TimePolicy.Family {
+		return fmt.Errorf("durante time policy family does not match its source-language profile")
 	}
 	return nil
 }
 
 // TimePolicyFor returns a value copy so callers cannot mutate the configured
-// policy through the result. A model for one source profile cannot admit a
-// different C/C++ profile merely because both belong to the cpp family.
+// policy through the result. Shared models require an explicit binding for each
+// source/image/engine/dispatch combination. Legacy policies keep their original
+// single C/C++ source binding.
 func (c Config) TimePolicyFor(language string) (TimePolicy, string, error) {
 	if err := c.ValidateTimeConfiguration(); err != nil {
 		return TimePolicy{}, "", err
+	}
+	if c.TimeModels != nil {
+		if _, err := c.Family(language); err != nil {
+			return TimePolicy{}, "", err
+		}
+		runtimeID, err := TimeRuntimeID(language, c.RuntimeImage)
+		if err != nil {
+			return TimePolicy{}, "", err
+		}
+		for _, binding := range c.TimeModels.Profiles {
+			if binding.SourceLanguage+"@"+binding.RuntimeImage != runtimeID || binding.EngineProfile != EngineProfile || binding.DispatchProfile != c.DispatchProfile {
+				continue
+			}
+			for _, model := range c.TimeModels.Models {
+				if model.ModelID == binding.ModelID && model.ModelVersion == binding.ModelVersion {
+					return model.resolve(binding), runtimeID, nil
+				}
+			}
+		}
+		return TimePolicy{}, "", fmt.Errorf("durante time has no approved profile for the requested source, runtime image and dispatch")
 	}
 	if c.TimePolicy == nil {
 		return TimePolicy{}, "", fmt.Errorf("durante time policy is not enabled")

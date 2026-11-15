@@ -71,7 +71,8 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_DURANTE_DISPATCH_PROFILE` | `default`, or the C/C++ diagnostic profile `glibc-2.41-sse2-v1`. |
 | `AONOHAKO_DURANTE_RESOURCE_POLICY` | Optional strict JSON operator policy for separate raw CPU/wall/RSS diagnostic limits; disabled when absent. |
 | `AONOHAKO_DURANTE_TIME_POLICY` | Optional strict `TimePolicy` JSON with every model field and positive integer coefficient explicitly supplied. Enables requested C/C++ reference-time estimates with a resource policy. |
-| `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with a time policy. |
+| `AONOHAKO_DURANTE_TIME_MODELS` | Optional strict schema-1 registry of shared coefficient models and explicitly approved execution profiles. Mutually exclusive with `AONOHAKO_DURANTE_TIME_POLICY`; family registration alone enables no profile. |
+| `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with either time setting, independently of the model's profile bindings. |
 
 For example, configure `AONOHAKO_DURANTE_FAMILIES=cpp` and add
 `"work_measurement": true` to a normal run request with `"lang": "CPP20"`.
@@ -407,18 +408,103 @@ trusted credited-time or credited-memory policy is enabled by this change.
 `work_measurement_time: true` asks the execution API to apply the operator's
 `internal/durante.TimePolicy` to a completed diagnostic observation. This option
 requires both `work_measurement: true` and `work_measurement_limits`, and accepts
-only ordinary C/C++ source profiles such as `C11` or `CPP20`. Python/PyPy, other
-runtime families, ambiguous `binary`, interactive/communication runs, SPJs,
-pipelines, entry modes, and steps do not support time conversion. Without this
-flag, the existing measurement admission rules remain unchanged.
+ordinary registered source profiles explicitly covered by the operator's time
+configuration. The legacy single policy retains its C/C++ scope. The shared-model
+registry below can approve compatible families such as CPython and PyPy. JVM
+execution remains unavailable pending sandbox qualification. Ambiguous `binary`,
+interactive/communication runs, SPJs, pipelines, entry modes, and steps do not
+support time conversion. Without this flag, the existing measurement admission
+rules remain unchanged.
 
-The operator must enable `cpp`, configure a valid resource policy, and supply
-both `AONOHAKO_DURANTE_TIME_POLICY` and `AONOHAKO_DURANTE_RUNTIME_IMAGE`. The time
+For the existing single-policy format, the operator must enable `cpp`, configure
+a valid resource policy, and supply both `AONOHAKO_DURANTE_TIME_POLICY` and
+`AONOHAKO_DURANTE_RUNTIME_IMAGE`. The time
 policy's engine and dispatch profiles must match the measurement configuration.
 Its `runtime_id` must exactly equal `<canonical source-language ID>@<image digest>`;
 for example, `CPP20@sha256:<64 lowercase hex digits>`. A model for `CPP20` does
 not also admit `C11` or `CPP17`. Source aliases resolve to their canonical profile
-before this comparison.
+before this comparison. Existing single-policy configuration and response JSON
+remain compatible.
+
+### Shared models and approved execution profiles
+
+Alternatively, set `AONOHAKO_DURANTE_TIME_MODELS` and leave
+`AONOHAKO_DURANTE_TIME_POLICY` empty. A model stores one set of exact coefficients;
+each profile selects a model ID/version and separately names its canonical source,
+family, image, engine and dispatch. Several source languages can use the same model
+without copying or fitting a separate set of coefficients for each language.
+
+The following registry illustrates the shape only. **Its coefficients and
+qualification IDs are synthetic, not a calibrated cross-language model.** Replace
+the image placeholders with immutable image digests and qualification IDs with
+records supporting each intended execution profile before configuring estimates.
+
+```json
+{
+  "schema": 1,
+  "models": [{
+    "model_id": "shared-arithmetic-example",
+    "model_version": 1,
+    "reference_id": "arithmetic-fixture-only",
+    "method": "weighted-work-nanoseconds-v1",
+    "coefficients": {
+      "instruction_ns_numerator": 1,
+      "rep_byte_ns_numerator": 1,
+      "ns_denominator": 1
+    }
+  }],
+  "profiles": [{
+    "source_language": "CPP20",
+    "family": "cpp",
+    "runtime_image": "<actual-overlay-image-digest>",
+    "engine_profile": "dynamorio-11.3-durante-v4-vm32m",
+    "dispatch_profile": "default",
+    "model_id": "shared-arithmetic-example",
+    "model_version": 1,
+    "qualification_id": "synthetic-cpp20-example"
+  }, {
+    "source_language": "PYTHON3",
+    "family": "cpython",
+    "runtime_image": "<actual-overlay-image-digest>",
+    "engine_profile": "dynamorio-11.3-durante-v4-vm32m",
+    "dispatch_profile": "default",
+    "model_id": "shared-arithmetic-example",
+    "model_version": 1,
+    "qualification_id": "synthetic-python3-example"
+  }]
+}
+```
+
+All fields are required except model `method`, whose absence or empty value means
+`weighted-work-nanoseconds-v1`. The registry accepts at most 32 models, 128 profiles
+and 64 KiB of JSON. Unknown fields, duplicates, nulls, noncanonical source IDs,
+unknown model versions and ambiguous profile bindings are rejected. Each model
+ID/version is unique; each source/image/engine/dispatch combination has one binding.
+The optional `glibc-2.41-sse2-v1` dispatch profile retains its C/C++ restriction.
+
+The source family must also be enabled in `AONOHAKO_DURANTE_FAMILIES`, and an
+independent `AONOHAKO_DURANTE_RUNTIME_IMAGE` plus a valid resource policy are still
+required. A registry may list other images or dispatch profiles, but only a binding
+matching this execution image and configured dispatch is selectable. `profiles: []`
+registers models without approving any execution. Adding a family or a model never
+creates missing bindings. A `qualification_id` records an operator's approval; the
+service does not verify that external record or infer CPU-time accuracy from it.
+Adding a JVM binding cannot bypass its existing execution gate.
+
+Selection resolves to the existing `TimePolicy` and `time_estimate` response shape,
+including the selected canonical `SOURCE@image` runtime ID. The runner and remote
+control plane each hold independent immutable configuration snapshots. Neither
+request payloads nor returned estimates choose the model or its coefficients.
+
+These shared coefficients express a common mapping from observed machine work.
+They do not require two implementations of the same algorithm to have identical
+counts: interpreter, runtime, library and generated-code work is included. A shared
+work-score definition is distinct from predicting actual CPU nanoseconds; CPU-time
+accuracy requires representative held-out validation. The existing CPP20 corpus
+does not qualify other language profiles, and this registry adds no production
+weights or credited-time verdict policy.
+
+### Single-policy example and result semantics
 
 Use the actual final Durante overlay image identity from deployment metadata.
 This value is an operator assertion; the service does not discover or attest its

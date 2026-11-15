@@ -18,8 +18,9 @@ type Config struct {
 	DispatchProfile string
 	ResourcePolicy  *ResourcePolicy
 	TimePolicy      *TimePolicy
+	TimeModels      *TimeModels
 	// RuntimeImage is operator-supplied deployment metadata, not an attestation
-	// of the executing image. It is configured independently of TimePolicy.
+	// of the executing image. It is configured independently of either time setting.
 	RuntimeImage string
 }
 

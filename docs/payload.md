@@ -121,7 +121,7 @@ error.
 {
   "lang": "binary",                          // runtime language key (see Supported Languages)
   "work_measurement": false,                // optional Durante diagnostics; requires source-language profiles when true
-  "work_measurement_time": false,           // optional C/C++ reference-time estimate; also requires the raw envelope and an operator model
+  "work_measurement_time": false,           // optional reference-time estimate; also requires the raw envelope and an approved operator execution profile
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
@@ -246,11 +246,15 @@ modes, and legacy steps do not support this flag. The separate
 `work_measurement_limits` raw diagnostic envelope supports ordinary runs only.
 `work_measurement_time: true` additionally requests an operator-configured
 reference-time estimate. It requires `work_measurement: true`, a valid
-`work_measurement_limits` envelope, and an ordinary C/C++ source profile.
-It is rejected for Python/PyPy, other runtime families, generic `binary`, peers,
-SPJs, pipelines, entry modes, and steps. Requests cannot select coefficients.
-The operator binds the model to the canonical source profile and actual immutable
-Durante execution image; a remote control plane uses the downstream image/model.
+`work_measurement_limits` envelope, and an ordinary registered source profile.
+The legacy operator policy supports one C/C++ source profile. The optional shared
+model registry can explicitly bind compatible source profiles, including CPython,
+PyPy and other supported families, to the same coefficients. Family registration
+alone never enables a time model; JVM remains unavailable pending qualification.
+Generic `binary`, peers, SPJs, pipelines, entry modes, and steps remain unsupported.
+Requests cannot select coefficients. The operator binds the model to the canonical
+source profile, engine/dispatch profile and actual immutable Durante execution
+image; a remote control plane uses the downstream image/model.
 Omitting the flag preserves existing measurement behavior. Estimated time remains
 diagnostic and does not change raw resource accounting or grant a student verdict.
 See [Durante diagnostics](durante.md) for operator configuration and result semantics.
