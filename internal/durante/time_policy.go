@@ -99,6 +99,10 @@ func (p TimePolicy) Validate() error {
 	default:
 		return fmt.Errorf("durante time policy requires a supported dispatch profile")
 	}
+	return p.validateWeights()
+}
+
+func (p TimePolicy) validateWeights() error {
 	if p.InstructionNSNumerator == 0 || p.NSDenominator == 0 {
 		return fmt.Errorf("durante time policy requires positive explicit weights and denominator")
 	}

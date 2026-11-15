@@ -47,6 +47,11 @@ The instruction count already includes the instrumented REP instruction entry.
 Byte counters describe requested REP work; they do not assert actual memory
 traffic or completed bytes after an interruption.
 
+In `AONOHAKO_DURANTE_TIME_MODELS`, put `method` on the shared model and the three
+weights plus denominator in its `coefficients` object. Runtime profile bindings
+are unchanged. One v2 model can be referenced by several explicitly qualified
+profiles, without duplicating its coefficients or implicitly enabling a language.
+
 V2 requires an observed version-1 `rep_breakdown` whose byte and entry totals
 match the aggregate counters. A legacy report without that field cannot be
 converted, including when its combined REP count is zero. An explicitly observed

@@ -68,6 +68,45 @@ func TestREPOperationTimeModelRequiresObservedUsableDetail(t *testing.T) {
 	}
 }
 
+func TestREPOperationSharedModelsKeepFormulaAndProfileBindings(t *testing.T) {
+	cfg := timeModelsFixture(t)
+	m := &cfg.TimeModels.Models[0]
+	m.Method = TimeMethodREPBreakdown
+	m.Coefficients = TimeCoefficients{InstructionNSNumerator: 1, MOVSByteNSNumerator: 2, STOSByteNSNumerator: 5, NSDenominator: 1}
+	raw := timeConfigurationJSON(t, cfg.TimeModels)
+	parsed, err := ParseTimeModels(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.TimeModels = parsed
+	for _, binding := range cfg.TimeModels.Profiles {
+		policy, runtimeID, err := cfg.TimePolicyFor(binding.SourceLanguage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		report := repTimeReport(3, 8, 4)
+		report.Family = binding.Family
+		estimate, err := policy.Estimate(runtimeID, report)
+		if err != nil || estimate.Nanoseconds != 39 || estimate.Method != TimeMethodREPBreakdown || estimate.RuntimeID != runtimeID {
+			t.Fatalf("shared v2 formula changed for %s: %+v %v", binding.SourceLanguage, estimate, err)
+		}
+	}
+	for name, candidate := range map[string]string{
+		"missing method":   strings.Replace(raw, `"method":"`+TimeMethodREPBreakdown+`",`, "", 1),
+		"empty method":     strings.Replace(raw, TimeMethodREPBreakdown, "", 1),
+		"v1 with split":    strings.Replace(raw, TimeMethodREPBreakdown, TimeMethod, 1),
+		"missing STOS":     strings.Replace(raw, `"stos_byte_ns_numerator":5,`, "", 1),
+		"mixed zero total": strings.Replace(raw, `"coefficients":{`, `"coefficients":{"rep_byte_ns_numerator":0,`, 1),
+		"null MOVS":        strings.Replace(raw, `"movs_byte_ns_numerator":2`, `"movs_byte_ns_numerator":null`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got, err := ParseTimeModels(candidate); err == nil || got != nil {
+				t.Fatalf("invalid shared v2 formula accepted: %+v %v", got, err)
+			}
+		})
+	}
+}
+
 func TestParseREPOperationTimeModelSelectsOneFormula(t *testing.T) {
 	p := repTimePolicyFixture()
 	raw, err := json.Marshal(p)
