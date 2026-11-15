@@ -475,8 +475,9 @@ records supporting each intended execution profile before configuring estimates.
 }
 ```
 
-All fields are required except model `method`, whose absence or empty value means
-`weighted-work-nanoseconds-v1`. The registry accepts at most 32 models, 128 profiles
+All fields are required except model `method`, whose absence means
+`weighted-work-nanoseconds-v1`. An explicitly empty method is rejected. The
+registry accepts at most 32 models, 128 profiles
 and 64 KiB of JSON. Unknown fields, duplicates, nulls, noncanonical source IDs,
 unknown model versions and ambiguous profile bindings are rejected. Each model
 ID/version is unique; each source/image/engine/dispatch combination has one binding.
