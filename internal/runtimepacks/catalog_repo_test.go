@@ -2,8 +2,10 @@ package runtimepacks
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -1283,6 +1285,71 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 	for _, marker := range []string{"scripts/harden_shell_runtime.sh", `"${IMAGE_NAME}" == "type-x"`, `"${IMAGE_NAME}" == "ci-bash"`, `"${IMAGE_NAME}" == "ci-posix-sh"`, `"${IMAGE_NAME}" == "ci-zsh"`, `"${IMAGE_NAME}" == "ci-fish"`, `",fish,"`, "/var/empty/.config/fish"} {
 		if !strings.Contains(dockerBody, marker) {
 			t.Fatalf("runtime Dockerfile must contain %q", marker)
+		}
+	}
+}
+
+func TestShellRuntimeHardenerRestrictsGLibHelpers(t *testing.T) {
+	for _, tool := range []string{"bash", "find", "chmod"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s is unavailable: %v", tool, err)
+		}
+	}
+	hardener, err := os.ReadFile(filepath.Join("..", "..", "scripts", "harden_shell_runtime.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loop := regexp.MustCompile(`(?ms)^for root in ([^\n]+); do\n(.*?)^done\n`).FindStringSubmatch(string(hardener))
+	if loop == nil {
+		t.Fatal("shell hardener executable permission loop is missing")
+	}
+	// Run only the permission loop, with every root mapped inside the fixture.
+	// Ownership changes require root and are independent of these permissions.
+	roots := strings.Fields(loop[1])
+	for i, root := range roots {
+		if !regexp.MustCompile(`^/usr/[a-zA-Z0-9_*/.-]+$`).MatchString(root) || strings.Contains(root, "..") {
+			t.Fatalf("unsafe hardener fixture root %q", root)
+		}
+		roots[i] = "." + root
+	}
+	body := strings.ReplaceAll(loop[2], "-exec chown root:root {} + ", "")
+	if strings.Contains(strings.ReplaceAll(body, "-perm /0111", ""), "/") {
+		t.Fatal("hardener permission loop contains an unmapped path")
+	}
+	root := t.TempDir()
+	permissions := map[string]os.FileMode{
+		"usr/lib/x86_64-linux-gnu/glib-2.0/gio-launch-desktop":   0o750,
+		"usr/lib/x86_64-linux-gnu/glib-2.0/gio-querymodules":     0o750,
+		"usr/lib/x86_64-linux-gnu/glib-2.0/glib-compile-schemas": 0o750,
+		"usr/lib/aarch64-linux-gnu/glib-2.0/gio-launch-desktop":  0o750,
+		"usr/lib/x86_64-linux-gnu/libglib-2.0.so.0":              0o755,
+		"usr/lib/x86_64-linux-gnu/libgio-2.0.so.0":               0o755,
+		"usr/lib/x86_64-linux-gnu/gio/modules/libgio-example.so": 0o755,
+	}
+	for path := range permissions {
+		path = filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("\x7fELFfixture"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command("bash", "-euo", "pipefail", "-c", "for root in "+strings.Join(roots, " ")+"; do\n"+body+"done\n")
+	cmd.Dir = root
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("shell hardener permission loop: %v\n%s", err, output)
+	}
+	for path, want := range permissions {
+		info, err := os.Stat(filepath.Join(root, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s permissions = %04o, want %04o", path, got, want)
 		}
 	}
 }

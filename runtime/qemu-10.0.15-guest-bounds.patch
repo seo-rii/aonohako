@@ -1,0 +1,104 @@
+--- a/include/user/guest-host.h
++++ b/include/user/guest-host.h
+@@ -51,6 +51,10 @@
+ /* All direct uses of g2h and h2g need to go away for usermode softmmu.  */
+ static inline void *g2h_untagged(abi_ptr x)
+ {
++    /* Aonohako's restricted x86-64 runtime never exposes emulator memory. */
++    if (unlikely(x > UINT32_MAX)) {
++        _exit(127);
++    }
+     return (void *)((uintptr_t)(x) + guest_base);
+ }
+
+--- a/linux-user/elfload.c
++++ b/linux-user/elfload.c
+@@ -231,8 +231,8 @@
+      */
+     if (reserved_va != 0 &&
+         TARGET_VSYSCALL_PAGE + TARGET_PAGE_SIZE - 1 > reserved_va) {
+-        error_report("Cannot allocate vsyscall page");
+-        exit(EXIT_FAILURE);
++        /* Restricted guests use normal syscalls, not the high vsyscall page. */
++        return true;
+     }
+     page_set_flags(TARGET_VSYSCALL_PAGE,
+                    TARGET_VSYSCALL_PAGE | ~TARGET_PAGE_MASK,
+@@ -2842,7 +2842,8 @@
+
+     if (reserved_va) {
+         ga->bounds[n][0] = try_identity ? mmap_min_addr : 0;
+-        ga->bounds[n][1] = reserved_va;
++        /* Keep a host-only inaccessible guard after the guest address space. */
++        ga->bounds[n][1] = reserved_va + 64 * KiB;
+         n++;
+         /* LO_COMMPAGE and NULL handled by reserving from 0. */
+     } else {
+@@ -3056,6 +3057,13 @@
+ {
+     /* In order to use host shmat, we must be able to honor SHMLBA.  */
+     uintptr_t align = MAX(SHMLBA, TARGET_PAGE_SIZE);
++
++    /* This build is intentionally usable only with the restricted layout. */
++    if (reserved_va != UINT32_MAX || guest_base != (UINT64_C(1) << 40) ||
++        !have_guest_base) {
++        error_report("aonohako requires -B 0x10000000000 -R 4G");
++        exit(EXIT_FAILURE);
++    }
+
+     /* Sanity check the guest binary. */
+     if (reserved_va) {
+--- a/accel/tcg/user-exec.c
++++ b/accel/tcg/user-exec.c
+@@ -972,6 +972,9 @@
+         cpu_loop_exit_sigbus(cpu, addr, type, ra);
+     }
+
++    if (unlikely(!guest_range_valid_untagged(addr, memop_size(mop)))) {
++        cpu_loop_exit_sigsegv(cpu, addr, type, true, ra);
++    }
+     ret = g2h(cpu, addr);
+     set_helper_retaddr(ra);
+     return ret;
+@@ -1338,6 +1341,9 @@
+         cpu_loop_exit_atomic(cpu, retaddr);
+     }
+
++    if (unlikely(!guest_range_valid_untagged(addr, size))) {
++        cpu_loop_exit_sigsegv(cpu, addr, MMU_DATA_STORE, true, retaddr);
++    }
+     ret = g2h(cpu, addr);
+     set_helper_retaddr(retaddr);
+     return ret;
+--- a/tcg/tcg-op-ldst.c
++++ b/tcg/tcg-op-ldst.c
+@@ -91,11 +91,29 @@
+ static void gen_ldst(TCGOpcode opc, TCGType type, TCGTemp *vl, TCGTemp *vh,
+                      TCGTemp *addr, MemOpIdx oi)
+ {
++    /*
++     * This x86-64 user-only build has a fixed 4 GiB guest window. Native TCG
++     * normally adds guest_base without a bounds check. Redirect any access
++     * outside the complete window to the permanently inaccessible guard page
++     * before emitting the host memory instruction. C/atomic helpers have the
++     * matching range check in user-exec.c and g2h_untagged.
++     */
++    TCGv_i64 checked = tcg_temp_ebb_new_i64();
++    TCGv_i64 original;
++    uint64_t end = UINT64_C(1) << 32;
++
++    g_assert(!tcg_use_softmmu && tcg_ctx->addr_type == TCG_TYPE_I64);
++    original = temp_tcgv_i64(addr);
++    tcg_gen_movcond_i64(TCG_COND_LEU, checked, original,
++                       tcg_constant_i64(end - memop_size(get_memop(oi))),
++                       original, tcg_constant_i64(end));
++    addr = tcgv_i64_temp(checked);
+     if (vh) {
+         tcg_gen_op4(opc, type, temp_arg(vl), temp_arg(vh), temp_arg(addr), oi);
+     } else {
+         tcg_gen_op3(opc, type, temp_arg(vl), temp_arg(addr), oi);
+     }
++    tcg_temp_free_i64(checked);
+ }
+
+ static void gen_ldst_i64(TCGOpcode opc, TCGv_i64 v, TCGTemp *addr, MemOpIdx oi)
