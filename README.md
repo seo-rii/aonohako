@@ -95,6 +95,11 @@ language-specific commands keep their declared order.
   Its project, standard-library, and shared-object caches stay in the request's
   workspace. Nimony compilation has a three-minute budget for cold macro and
   standard-library builds. Existing `NIM` submissions continue to use the Nim toolchain.
+- `PARI_GP` (also `pari-gp`, `pari/gp`, or `gp`) checks `.gp` source with
+  the parser from checksum-pinned PARI/GP 2.19.1 without evaluating it. Execute
+  with `pari-gp`. The judge driver disables startup configuration, exits after
+  the source, preserves stdin for input, and fails on unhandled errors. GP
+  backslash metacommands are outside the compile contract; use GP functions.
 - Zerolang is pinned to the official v0.3.4 Linux x64 release. Compilation
   imports canonical `.0` text into a graph and then builds a native executable
   with the `release-fast` profile. Its stable source projection does not yet

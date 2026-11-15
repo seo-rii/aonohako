@@ -48,6 +48,18 @@ except:
   quit(1)
 `)}},
 	}}
+	cases["pari-gp"] = []languageSemanticCase{
+		{
+			name:           "integer factorization",
+			expectedStdout: "[2, 3; 3, 2; 5, 1]\n",
+			sources:        []model.Source{{Name: "Main.gp", DataB64: encodeScript(`print(factor(360));`)}},
+		},
+		{
+			name:                  "invalid source rejected",
+			expectedCompileStatus: model.CompileStatusCompileError,
+			sources:               []model.Source{{Name: "Broken.gp", DataB64: encodeScript(`print(;`)}},
+		},
+	}
 	return cases
 }
 

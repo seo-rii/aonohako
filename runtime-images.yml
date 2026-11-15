@@ -2899,6 +2899,119 @@ languages:
           output="$(./Macro)"
           test "$output" = '42'
 
+  pari-gp:
+    install:
+      apt:
+        - curl
+        - gcc
+        - make
+        - perl
+        - patch
+        - libc6-dev
+        - libgmp-dev
+      sandbox_tools:
+        - aonohako-pari-gp
+      script:
+        - |
+          pari_work="$(mktemp -d /tmp/aonohako-pari.XXXXXX)"
+          curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://pari.math.u-bordeaux.fr/pub/pari/unix/pari-2.19.1.tar.gz -o "$pari_work/source.tar.gz"
+          printf '%s  %s\n' 419553b11ff8c3ecb8e9031b7d91d7cee003a5d721e685fcb499565c96fe2943 "$pari_work/source.tar.gz" | sha256sum -c -
+          mkdir "$pari_work/source"
+          tar -xzf "$pari_work/source.tar.gz" -C "$pari_work/source" --strip-components=1
+          # Use the upstream parser without evaluating submitted code during compilation.
+          # Runtime exits after the source file, with fail-fast errors and no stdin REPL.
+          (cd "$pari_work/source" && patch -p1 <<'PARI_PATCH'
+          --- a/src/gp/gp.c
+          +++ b/src/gp/gp.c
+          @@ -288,6 +288,8 @@
+             cb_pari_is_interactive = test_is_interactive;
+           }
+
+          +static int aonohako_check_only = 0;
+          +
+           static GEN
+           gp_main_loop(long ismain)
+           {
+          @@ -301,7 +303,7 @@
+             if ((er = sigsetjmp(env[s_env.n-1],0)))
+             { /* recover: jump from error [ > 0 ] or allocatemem [ -1 ] */
+               if (er > 0) { /* true error */
+          -      if (!(GP_DATA->recover)) exit(1);
+          +      exit(1); /* Judge errors must never recover into a successful REPL. */
+                 gp_context_restore(&rec);
+                 /* true error not from main instance, let caller sort it out */
+                 if (!ismain) { kill_buffers_upto_including(b); return NULL; }
+          @@ -330,6 +332,13 @@
+                 timer_start(GP_DATA->T);
+                 walltimer_start(GP_DATA->Tw);
+                 pari_set_last_newline(1);
+          +    }
+          +    if (aonohako_check_only)
+          +    {
+          +      (void)pari_compile_str(b->buf);
+          +      set_avma(av);
+          +      parivstack_reset();
+          +      continue;
+               }
+               if (gp_meta(b->buf,ismain)) continue;
+               z = pari_compile_str(b->buf);
+          @@ -544,6 +553,8 @@
+             cb_pari_break_loop = break_loop;
+             cb_pari_is_interactive = is_interactive;
+
+          +  if (argc > 1 && !strcmp(argv[1], "--aonohako-check"))
+          +  { aonohako_check_only = 1; argc--; argv++; }
+             read_opt(&s_A, argc,argv);
+             pari_init_primes(GP_DATA->primelimit, GP_DATA->factorlimit);
+           #ifdef SIGALRM
+          @@ -583,6 +594,7 @@
+               if (!pari_logfile) pari_logfile = l;
+             }
+             pari_stack_delete(&s_A);
+          +  gp_quit(0); /* Sources are files; stdin belongs exclusively to the submission. */
+             (void)gp_main_loop(1);
+             gp_quit(0);
+             return 0; /* LCOV_EXCL_LINE */
+          PARI_PATCH
+          )
+          (cd "$pari_work/source" && CFLAGS='-O2 -fPIC -march=x86-64 -mtune=generic' ./Configure --prefix=/opt/aonohako-pari --with-gmp --without-readline --graphic=none --mt=single --static && make -j2 gp)
+          pari_binary="$(find "$pari_work/source" -path '*/gp-sta' -type f -print -quit)"
+          test -n "$pari_binary"
+          install -m 0755 "$pari_binary" /usr/local/bin/aonohako-pari-gp
+          install -d /usr/local/share/licenses/pari-gp
+          install -m 0644 "$pari_work/source/COPYING" /usr/local/share/licenses/pari-gp/LICENSE
+          rm -rf "$pari_work"
+          aonohako-pari-gp --version-short
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.gp <<'GP'
+          v=Vecsmall(strjoin(readstr("/dev/stdin")," "));
+          n=0;sgn=1;values=List();active=0;
+          for(i=1,#v,c=v[i];if(c==45,sgn=-1,if(c>=48&&c<=57,n=n*10+c-48;active=1,if(active,listput(values,sgn*n);n=0;sgn=1;active=0))));
+          if(active,listput(values,sgn*n));
+          print(values[1]+values[2]);
+          GP
+          aonohako-pari-gp --aonohako-check -f -q Main.gp
+          output="$(printf '17 25\n' | aonohako-pari-gp -f -q Main.gp)"
+          test "$output" = '42'
+          output="$(printf -- '-8\t3\n' | aonohako-pari-gp -f -q Main.gp)"
+          test "$output" = '-5'
+          printf '%s\n' 'write("compile-ran", "bad"); print("must not run");' > Check.gp
+          output="$(aonohako-pari-gp --aonohako-check -f -q Check.gp)"
+          test -z "$output"
+          test ! -e compile-ran
+          printf '%s\n' 'print(;' > Broken.gp
+          if aonohako-pari-gp --aonohako-check -f -q Broken.gp; then exit 1; fi
+          printf '%s\n' 'default(recover,1); error("runtime failure");' > Error.gp
+          if aonohako-pari-gp -f -q Error.gp; then exit 1; fi
+          printf '%s\n' 'print(factor(360));' > Math.gp
+          output="$(aonohako-pari-gp -f -q Math.gp)"
+          test "$output" = '[2, 3; 3, 2; 5, 1]'
+
   clojure:
     install:
       apt:
@@ -5056,6 +5169,7 @@ profiles:
       - mercury
       - mlton
       - ocaml
+      - pari-gp
       - perl
       - php
       - picolisp

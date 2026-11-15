@@ -13,7 +13,8 @@ const (
 )
 
 var compileRegistry = map[string]Compiler{
-	"entry": entryCompiler{},
+	"pari-gp": pariGPCompiler{},
+	"entry":   entryCompiler{},
 	"c": nativeCompiler{exts: []string{".c", ".h"}, bin: "gcc", flags: func(job CompileJob) []string {
 		return []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + job.Profile.CompileStd}
 	}},

@@ -253,6 +253,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{
+		"pari-gp":       {compileKind: "pari-gp", runLang: "pari-gp"},
 		"asm":           {compileKind: "asm", runLang: "binary"},
 		"aheui":         {compileKind: "none", runLang: "aheui"},
 		"nasm":          {compileKind: "nasm", runLang: "binary"},

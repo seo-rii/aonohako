@@ -4,6 +4,7 @@ import "testing"
 
 func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 	languages := []string{
+		"PARI_GP",
 		"TEXT",
 		"C",
 		"C89",

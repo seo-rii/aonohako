@@ -199,7 +199,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		} else if strings.HasSuffix(lowerClean, ".mb") && malbolgePath == "" {
 			malbolgePath = dest
 		}
-		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".sml", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".spl", ".unl", ".lazy", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
+		for _, ext := range []string{".gp", ".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".sml", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".spl", ".unl", ".lazy", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -223,6 +223,19 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	switch lang {
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "chapel-binary", "chicken-scheme", "c3", "javascript", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "assemblyscript", "factor", "aheui", "apecode", "cuda-ocelot":
 		return primaryPath, lang, nil
+	case "pari-gp":
+		selected := ""
+		for _, binary := range req.Binaries {
+			if strings.EqualFold(filepath.Ext(binary.Name), ".gp") {
+				if selected == "" || filepath.Clean(binary.Name) == "Main.gp" {
+					selected = filepath.Clean(binary.Name)
+				}
+			}
+		}
+		if selected == "" {
+			return "", "", fmt.Errorf("pari-gp requires .gp sources")
+		}
+		return submittedPaths[selected], lang, nil
 	case "entry":
 		return primaryPath, lang, nil
 	case "smlnj":
