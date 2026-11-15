@@ -95,7 +95,7 @@ func collectionTestMetered(dataset Dataset) model.RunResponse {
 		REPEnabled: true, REPTelemetryStatus: durante.REPMovsStosOnly, Processes: 1, Images: 1,
 		IntegrityVerified: &verified, MeasurementContract: durante.DiagnosticContract(),
 		Installation: &durante.InstallationIdentity{
-			SourceCommit: "de574b2547c5b1f739420eab4cbd24d9dfb65dd9", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
+			SourceCommit: "845fee24f2ba26be8138e63f4097981617a8648e", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
 			RuntimePatchSHA256:           "b44627a42f4f0174e843158e3b3473cbcae26e489da55582008f043d0665716c",
 			RuntimeCodeReplayPatchSHA256: "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72",
 			LauncherSHA256:               strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true,

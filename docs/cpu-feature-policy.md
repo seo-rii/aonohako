@@ -118,7 +118,12 @@ moves, and zeroing idioms remain available. DynamoRIO and Durante's own
 instrumentation are outside the application instruction stream.
 
 Native filesystem, process and thread behavior remains subject to the existing
-sandbox. The API rejects these unsupported combinations before downloading
+sandbox. With a CPU policy enabled, Durante additionally rejects application
+`execve`/`execveat`, unsupported clone forms and x32 syscalls with `EPERM`.
+Compatibility syscall instructions stop before execution. These paths cannot
+be allowed to leave instrumentation and merely fail measurement afterward.
+The initially selected ELF program still launches normally. The API rejects
+these unsupported combinations before downloading
 binary URLs or admitting work:
 
 - `communication` mode and contestant `enable_network`;
