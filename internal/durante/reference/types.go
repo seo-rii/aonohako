@@ -28,6 +28,8 @@ type Workload struct {
 // Sample preserves all three independent executions. The middle execution's
 // counters are paired with native reference observations, not credited native
 // memory or a claim that the executions consumed identical resources.
+// Optional REP operation detail is retained as observed; an absent split is
+// unspecified and must not become an observed zero partition.
 type Sample struct {
 	WorkloadID     string            `json:"workload_id"`
 	Split          string            `json:"split"`

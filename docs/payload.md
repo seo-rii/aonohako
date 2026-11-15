@@ -593,7 +593,9 @@ and its diagnostic `report`. Communication uses the same array for participants
 in index order followed by the manager, with requested program IDs and a
 zero-based `participant_index` only for participants. These modes omit the
 ordinary singular `work_measurement`; the reports do not change verdicts or
-combine the peers' instruction counts. See [the per-role contract](durante.md#interactive-and-communication-observations).
+combine the peers' instruction counts. Each complete report may include optional
+`rep_breakdown` MOVS/STOS bytes and entries; absence means unspecified detail,
+and stopped roles omit all totals. See [the per-role contract](durante.md#interactive-and-communication-observations).
 
 The interactor is invoked as:
 

@@ -28,6 +28,9 @@ func TestSessionRecordsActualInstallationBeforeAndAfterObservation(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
+			if s.installation.SourceCommit != sourceCommit || s.installation.RuntimePatchSHA256 != runtimePatchSHA256 || s.installation.RuntimeCodeReplayPatchSHA256 != runtimeCodeReplayPatchSHA256 {
+				t.Fatal("installation does not identify all reviewed runtime inputs")
+			}
 			writeTree(t, s.dir)
 			for path, expected := range map[string]string{launcher: s.installation.LauncherSHA256, client: s.installation.ClientSHA256, filepath.Join(root, releaseCore): s.installation.CoreSHA256} {
 				data, err := os.ReadFile(path)
@@ -76,7 +79,7 @@ func runtimeInstallationFixture(t *testing.T, root string) string {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(core)
-	manifest := map[string]any{"schema": 1, "inputs": map[string]any{"source_commit": runtimeSourceCommit, "source_sha256": runtimeSourceSHA256, "patch_sha256": runtimePatchSHA256, "recipe": 1, "profiles": map[string]string{"release": "Release", "debug": "Debug"}, "cmake_options": []string{}}, "artifacts": map[string]any{releaseCore: hex.EncodeToString(digest[:]), "lib64/debug/libdynamorio.so": strings.Repeat("a", 64), "lib64/release/libdynamorio.so.debug": nil, "lib64/debug/libdynamorio.so.debug": nil}}
+	manifest := map[string]any{"schema": 1, "inputs": map[string]any{"source_commit": runtimeSourceCommit, "source_sha256": runtimeSourceSHA256, "patch_sha256": runtimePatchSHA256, "code_replay_patch_sha256": runtimeCodeReplayPatchSHA256, "recipe": 1, "profiles": map[string]string{"release": "Release", "debug": "Debug"}, "cmake_options": []string{}}, "artifacts": map[string]any{releaseCore: hex.EncodeToString(digest[:]), "lib64/debug/libdynamorio.so": strings.Repeat("a", 64), "lib64/release/libdynamorio.so.debug": nil, "lib64/debug/libdynamorio.so.debug": nil}}
 	data, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -111,9 +114,24 @@ func TestRuntimeInstallationRejectsUnsafeOrUnknownProvenance(t *testing.T) {
 		"oversize": func(t *testing.T, r string) {
 			os.WriteFile(filepath.Join(r, ".durante-runtime.json"), []byte(strings.Repeat(" ", 65537)), 0644)
 		},
-		"wrong source":     func(t *testing.T, r string) { replaceRuntimeMarker(t, r, runtimeSourceCommit, strings.Repeat("a", 40)) },
-		"wrong archive":    func(t *testing.T, r string) { replaceRuntimeMarker(t, r, runtimeSourceSHA256, strings.Repeat("b", 64)) },
-		"wrong patch":      func(t *testing.T, r string) { replaceRuntimeMarker(t, r, runtimePatchSHA256, strings.Repeat("c", 64)) },
+		"wrong source":  func(t *testing.T, r string) { replaceRuntimeMarker(t, r, runtimeSourceCommit, strings.Repeat("a", 40)) },
+		"wrong archive": func(t *testing.T, r string) { replaceRuntimeMarker(t, r, runtimeSourceSHA256, strings.Repeat("b", 64)) },
+		"wrong patch":   func(t *testing.T, r string) { replaceRuntimeMarker(t, r, runtimePatchSHA256, strings.Repeat("c", 64)) },
+		"missing replay patch": func(t *testing.T, r string) {
+			replaceRuntimeMarker(t, r, `"code_replay_patch_sha256":"`+runtimeCodeReplayPatchSHA256+`",`, "")
+		},
+		"wrong replay patch": func(t *testing.T, r string) {
+			replaceRuntimeMarker(t, r, runtimeCodeReplayPatchSHA256, strings.Repeat("d", 64))
+		},
+		"null replay patch": func(t *testing.T, r string) {
+			replaceRuntimeMarker(t, r, `"`+runtimeCodeReplayPatchSHA256+`"`, `null`)
+		},
+		"numeric replay patch": func(t *testing.T, r string) {
+			replaceRuntimeMarker(t, r, `"`+runtimeCodeReplayPatchSHA256+`"`, `1`)
+		},
+		"duplicate replay patch": func(t *testing.T, r string) {
+			replaceRuntimeMarker(t, r, `"code_replay_patch_sha256":"`+runtimeCodeReplayPatchSHA256+`"`, `"code_replay_patch_sha256":"old","code_replay_patch_sha256":"`+runtimeCodeReplayPatchSHA256+`"`)
+		},
 		"wrong schema":     func(t *testing.T, r string) { replaceRuntimeMarker(t, r, `"schema":1`, `"schema":2`) },
 		"duplicate schema": func(t *testing.T, r string) { replaceRuntimeMarker(t, r, `"schema":1`, `"schema":2,"schema":1`) },
 		"duplicate patch": func(t *testing.T, r string) {
@@ -166,7 +184,7 @@ func replaceRuntimeMarker(t *testing.T, root, old, new string) {
 
 func TestInstallationIdentityRejectsAmbiguousJSONAndDigestAliases(t *testing.T) {
 	identity := InstallationIdentity{SourceCommit: sourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
-		RuntimePatchSHA256: runtimePatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
+		RuntimePatchSHA256: runtimePatchSHA256, RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
 		ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
 	valid := Report{Installation: &identity}
 	if !valid.ValidInstallationIdentity() {
@@ -197,6 +215,15 @@ func TestInstallationIdentityRejectsAmbiguousJSONAndDigestAliases(t *testing.T) 
 		})
 	}
 	for name, edit := range map[string]func(*InstallationIdentity){
+		"old source": func(i *InstallationIdentity) { i.SourceCommit = "21397969d18c74ceef816779aba026358f483250" },
+		"old runtime patch": func(i *InstallationIdentity) {
+			i.RuntimePatchSHA256 = "7b2fbaca84e259aeeafdfc4902ce7a330c48cec51e16804fe74ee3b99ea39f6d"
+		},
+		"missing replay patch": func(i *InstallationIdentity) { i.RuntimeCodeReplayPatchSHA256 = "" },
+		"wrong replay patch":   func(i *InstallationIdentity) { i.RuntimeCodeReplayPatchSHA256 = strings.Repeat("d", 64) },
+		"uppercase replay patch": func(i *InstallationIdentity) {
+			i.RuntimeCodeReplayPatchSHA256 = strings.ToUpper(i.RuntimeCodeReplayPatchSHA256)
+		},
 		"uppercase launcher":   func(i *InstallationIdentity) { i.LauncherSHA256 = strings.ToUpper(i.LauncherSHA256) },
 		"uppercase client":     func(i *InstallationIdentity) { i.ClientSHA256 = strings.ToUpper(i.ClientSHA256) },
 		"uppercase core":       func(i *InstallationIdentity) { i.CoreSHA256 = strings.ToUpper(i.CoreSHA256) },
@@ -234,5 +261,71 @@ func TestRuntimeManifestRejectsUppercaseActualCoreDigest(t *testing.T) {
 	replaceRuntimeMarker(t, root, lower, strings.ToUpper(lower))
 	if _, err := verifyRuntimeInstallation(launcher); err == nil {
 		t.Fatal("uppercase digest matching actual bytes bypassed canonical manifest contract")
+	}
+}
+
+func TestInstallationIdentityReadsLegacyWithoutQualifyingCurrentRuntime(t *testing.T) {
+	legacy := InstallationIdentity{
+		SourceCommit: "21397969d18c74ceef816779aba026358f483250", RuntimeSourceCommit: runtimeSourceCommit,
+		RuntimePatchSHA256: "7b2fbaca84e259aeeafdfc4902ce7a330c48cec51e16804fe74ee3b99ea39f6d",
+		LauncherSHA256:     strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true,
+	}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded InstallationIdentity
+	if err := json.Unmarshal(data, &decoded); err != nil || decoded != legacy {
+		t.Fatal("historical installation identity did not round-trip", err)
+	}
+	if (&Report{Installation: &decoded}).ValidInstallationIdentity() {
+		t.Fatal("historical installation qualified as the current runtime")
+	}
+	roundTrip, err := json.Marshal(decoded)
+	if err != nil || string(roundTrip) != string(data) || strings.Contains(string(roundTrip), "runtime_code_replay_patch_sha256") {
+		t.Fatal("historical identity gained a replay patch claim", err)
+	}
+	prefix := string(data[:len(data)-1])
+	for _, value := range []string{`null`, `1`, `true`, `{}`, `[]`, `""`} {
+		var invalid InstallationIdentity
+		if err := json.Unmarshal([]byte(prefix+`,"runtime_code_replay_patch_sha256":`+value+`}`), &invalid); err == nil {
+			t.Fatal("invalid present replay patch field accepted", value)
+		}
+	}
+	if err := json.Unmarshal([]byte(prefix+`,"unknown":"value"}`), &decoded); err == nil {
+		t.Fatal("historical identity accepted an unknown field")
+	}
+	if err := json.Unmarshal([]byte(prefix+`,"runtime_code_replay_patch_sha256":"`+runtimeCodeReplayPatchSHA256+`"}`), &decoded); err != nil {
+		t.Fatal("explicit replay field could not be read", err)
+	}
+	if (&Report{Installation: &decoded}).ValidInstallationIdentity() {
+		t.Fatal("replay patch alone qualified a historical source/runtime pin")
+	}
+}
+
+func TestRuntimeInstallationPinsMatchVendoredSource(t *testing.T) {
+	vendor := filepath.Join("..", "..", "third_party", "durante")
+	data, err := os.ReadFile(filepath.Join(vendor, "UPSTREAM.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Commit string `json:"commit"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil || manifest.Commit != sourceCommit {
+		t.Fatal("installation source pin differs from vendor manifest", err)
+	}
+	for name, want := range map[string]string{
+		"dynamorio-vfork-lifetime.patch": runtimePatchSHA256,
+		"dynamorio-code-replay.patch":    runtimeCodeReplayPatchSHA256,
+	} {
+		data, err := os.ReadFile(filepath.Join(vendor, "toolkit", "patches", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256(data)
+		if hex.EncodeToString(digest[:]) != want {
+			t.Fatal("installation pin differs from vendored patch", name)
+		}
 	}
 }

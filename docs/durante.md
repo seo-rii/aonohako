@@ -24,8 +24,10 @@ and file hashes by `UPSTREAM.json`; no cross-repository credential is required a
 image build or runtime. The official DynamoRIO 11.3.0 SDK download is SHA-256
 pinned by the vendored fetcher, and its license is retained in the runtime image.
 The fetcher also builds the release/debug runtime cores from hash-pinned source
-with Durante's process-lifetime and descriptor-range fixes. The SDK supplies the
-matching headers, extensions and launcher; a stock core is not the v3 profile.
+with Durante's process-lifetime, descriptor-range and code-replay fixes. The SDK
+supplies the matching headers, extensions and launcher; a stock core is not the
+v4 profile. The client and patched runtime share a private replay callback ABI;
+update both from the pinned snapshot rather than reusing an older runtime core.
 
 `docker/durante.Dockerfile` is an explicit overlay on a reviewed execution
 image. Supply an immutable `RUNTIME_IMAGE` digest and select target `runtime`.
@@ -36,9 +38,10 @@ upstream commit and every vendored source hash; the overlay verifies that manife
 before downloading the separately SHA-256-pinned engine SDK. CI needs no private
 cross-repository checkout token.
 
-The launcher fixes `-vm_size 32M -vmheap_size 32M` and reports engine profile
-`dynamorio-11.3-durante-v3-vm32m`. Before launch, installation validation checks
-the runtime manifest's source/patch pins and the actual release-core digest.
+The launcher fixes `-disable_traces -vm_size 32M -vmheap_size 32M` and reports engine profile
+`dynamorio-11.3-durante-v4-vm32m`. Before launch, installation validation checks
+the runtime manifest's source, process-lifetime patch, code-replay patch and
+actual release-core digest.
 Missing or mismatched provenance refuses measurement. This is a trusted local
 installation check, not attestation against the host administrator or submission.
 Reports record the source commit, pinned runtime source/patch identities and the
@@ -48,7 +51,12 @@ The runner checks the installation again after the execution tree stops.
 unavailable installation discards all totals. This does not prove that an
 administrator did not temporarily replace a file between the checks. Keep the
 installation immutable and operator-owned for the lifetime of the service.
-Old v1/v2 time models and reports cannot be applied to v3 observations.
+The installation identity includes `runtime_code_replay_patch_sha256` in
+addition to `runtime_patch_sha256`. Old seven-field identities remain readable
+and retain their original values, but do not satisfy current installation
+validation. Old v1/v2/v3 time models and reports cannot be applied to v4
+observations. Rebuild the runtime overlay and collect a new reference dataset
+before qualifying a v4 model; never edit the identity of an old observation.
 Upstream's large default virtual reservations can fail
 before main under the ordinary C/C++ address-space bound. These options reduce
 the engine's reservation budgets; no student CPU, RSS or address-space limit is
@@ -102,7 +110,7 @@ Selected fields of a successful lifecycle aggregate resemble:
   "metric": "bb_entry_app_instructions",
   "scope": "process_tree_user_code",
   "rep_bytes_enabled": true,
-  "engine_profile": "dynamorio-11.3-durante-v3-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v4-vm32m",
   "authority": "diagnostic_only",
   "integrity_verified": false,
   "measurement_contract": {
@@ -120,6 +128,13 @@ Selected fields of a successful lifecycle aggregate resemble:
   "instructions": 123456,
   "rep_bytes": 8192,
   "rep_entries": 1,
+  "rep_breakdown": {
+    "version": 1,
+    "movs_bytes": 8192,
+    "stos_bytes": 0,
+    "movs_entries": 1,
+    "stos_entries": 0
+  },
   "unsupported_rep_entries": 0,
   "processes": 1,
   "images": 1,
@@ -145,6 +160,33 @@ exposes no totals. A complete observation may contain partial byte telemetry or
 explicit `signals_observed` quality. It remains diagnostic and cannot be used as
 a trusted time result. The reference-time estimator rejects
 partial REP coverage and interrupted observations.
+
+`rep_breakdown` is optional version-1 detail of the existing totals, with
+`movs_bytes`, `stos_bytes`, `movs_entries` and `stos_entries` as unsigned 64-bit
+integers. The two byte counts sum exactly to `rep_bytes`; the two entry counts
+sum exactly to `rep_entries`. Bytes are the selected repeat count (RCX or ECX)
+times the element width at REP entry, not necessarily completed memory traffic.
+Zero-count entries still add
+one entry of their kind. A positive kind's byte count needs a positive entry
+count. Unsupported REP instructions remain in `unsupported_rep_entries` and
+are not attributed to either kind.
+
+The current client advertises `rep_breakdown_version: 1` in each raw image start
+and supplies all four flat `rep_movs_*`/`rep_stos_*` terminal counters. The Go
+collector validates each selected end or successful exec checkpoint, then sums
+the image/process tree. Failed-exec checkpoints are provisional and discarded.
+Missing/mixed capabilities, incomplete selected counters, inconsistent sums or
+overflow make the observation unavailable. Legacy raw streams with no capability
+remain readable, with `rep_breakdown` absent rather than invented zero values.
+When detail is present, every field is required; unknown versions, nulls and
+noncanonical nested keys are rejected. REP-disabled observations have explicit
+zero detail if the client advertises the capability. Incomplete, cancelled or
+resource-stopped results omit the detail along with all other totals.
+
+Ordinary, interactor and communication-role reports use this same optional
+object. Forwarding and reference datasets preserve it without combining peers.
+The existing reference-time formula still uses aggregate `rep_bytes`; adding
+MOVS/STOS observations does not introduce new coefficients or qualify a model.
 
 `instructions` is basic-block-entry application work, including loaded libraries
 and generated code. Engine/client instructions and kernel work are outside that
@@ -398,7 +440,7 @@ only; production coefficients have not been selected or calibrated.**
   "reference_id": "arithmetic-fixture-only",
   "runtime_id": "CPP20@<actual-overlay-image-digest>",
   "family": "cpp",
-  "engine_profile": "dynamorio-11.3-durante-v3-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v4-vm32m",
   "dispatch_profile": "default",
   "instruction_ns_numerator": 1,
   "rep_byte_ns_numerator": 1,
@@ -453,7 +495,7 @@ response fields would be:
       "reference_id": "arithmetic-fixture-only",
       "runtime_id": "CPP20@<actual-overlay-image-digest>",
       "family": "cpp",
-      "engine_profile": "dynamorio-11.3-durante-v3-vm32m",
+      "engine_profile": "dynamorio-11.3-durante-v4-vm32m",
       "dispatch_profile": "default",
       "nanoseconds": 131648,
       "milliseconds": 1

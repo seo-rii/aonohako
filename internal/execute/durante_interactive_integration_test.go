@@ -51,7 +51,7 @@ func TestDuranteInteractiveIntegration(t *testing.T) {
 				t.Fatalf("invalid %s observation identity: %+v", role, process)
 			}
 			if complete[i] {
-				if process.ExecutionStatus != "OK" || process.ExitCode == nil || *process.ExitCode < 0 || !validDiagnosticWorkReport("CPP20", process.Report) {
+				if process.ExecutionStatus != "OK" || process.ExitCode == nil || *process.ExitCode < 0 || !validDiagnosticWorkReport("CPP20", process.Report) || process.Report.REPBreakdown == nil {
 					t.Fatalf("invalid completed %s observation: %+v; report=%+v", role, process, process.Report)
 				}
 			} else if process.Report.Complete || process.Report.Instructions != nil || !process.Report.ValidUnavailableResult() || !process.Report.ValidDiagnosticContract() {

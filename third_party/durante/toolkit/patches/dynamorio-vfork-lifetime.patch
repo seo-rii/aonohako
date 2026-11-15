@@ -4,8 +4,13 @@ Upstream copyright notices and BSD terms: LICENSE.DynamoRIO in this directory.
 Only a returning vfork parent may reclaim its own completed child's context.
 Restore interrupted syscalls before pending signal delivery can resume the app.
 Restore private signal state for clone3 shared-memory children with CLEAR_SIGHAND.
+Preserve matched indirect targets across code-cache removal (upstream issue #5061).
+Preserve the original x87 status when delayed signal frames need extra XSAVE fields.
 Backport decoder initialization fix from upstream commit c46d736f308e6e734bd0477f7b8a2dcbefb155d3.
 Upstream PR: https://github.com/DynamoRIO/dynamorio/pull/7321
+Backport thread synchronization signal-stack correction from upstream commit
+985af57d7c3d73e7a1100d98e412584968588258.
+Upstream PR: https://github.com/DynamoRIO/dynamorio/pull/7749
 
 --- a/core/dynamo.c
 +++ b/core/dynamo.c
@@ -654,3 +659,267 @@ index efc1bbb1cd..ad839efb02 100644
 +                              (ptr_uint_t)last + 1);
 +    TABLE_RWLOCK(sigfd_table, write, unlock);
 +}
+--- a/core/unix/signal_linux_x86.c
++++ b/core/unix/signal_linux_x86.c
+@@ -352,10 +352,6 @@
+         /* this is "unlazy_fpu" */
+         /* fxsaveq is only supported with gas >= 2.16 but we have that */
+         asm volatile("fxsaveq %0 ; fnclex" : "=m"(temp->fxsave));
+-        /* now convert into kernel_fpstate_t form */
+-        ASSERT(sizeof(kernel_fpstate_t) == sizeof(struct i387_fxsave_struct));
+-        memcpy(sc->fpstate, &temp->fxsave,
+-               offsetof(struct i387_fxsave_struct, xmm_space));
+ #else
+         /* this is "unlazy_fpu" */
+         asm volatile("fxsave %0 ; fnclex" : "=m"(temp->fxsave));
+@@ -373,6 +369,17 @@
+     }
+
+     save_xmm(dcontext, frame);
++#ifdef X64
++    /* save_xmm may execute x87-only XSAVE for a larger kernel xstate frame.
++     * FNCLEX above already cleared the live exception status, so that XSAVE
++     * must not replace the application's original x87 state. Copy the legacy
++     * prefix last, leaving the reconstructed SIMD registers and XSAVE header
++     * intact. Keep FNCLEX before the runtime work as in the original path.
++     */
++    ASSERT(sizeof(kernel_fpstate_t) == sizeof(struct i387_fxsave_struct));
++    memcpy(sc->fpstate, &temp->fxsave,
++           offsetof(struct i387_fxsave_struct, xmm_space));
++#endif
+ }
+
+ #ifdef DEBUG
+
+--- a/core/dynamo.c
++++ b/core/dynamo.c
+@@ -1252,7 +1252,8 @@
+ {
+     int num_threads;
+     thread_record_t **threads;
+-    DEBUG_DECLARE(bool ok;)
++    dcontext_t *dcontext = get_thread_private_dcontext();
++    int expected_exiting = dcontext != NULL && dcontext->is_exiting ? 1 : 0;
+     /* If we fail to suspend a thread (e.g., privilege
+      * problems) ignore it. XXX: retry instead?
+      */
+@@ -1284,14 +1285,20 @@
+      * loop to a stack-free loop (xref i#95).
+      */
+     IF_UNIX(dynamo_exiting = true;) /* include execve-exited vfork threads */
+-    DEBUG_DECLARE(ok =)
+-    synch_with_all_threads(synch_res, &threads, &num_threads,
+-                           /* Case 6821: other synch-all-thread uses that
+-                            * only care about threads carrying fcache
+-                            * state can ignore us
+-                            */
+-                           THREAD_SYNCH_NO_LOCKS_NO_XFER, flags);
+-    ASSERT(ok);
++    bool stopped = synch_with_all_threads(
++        synch_res, &threads, &num_threads,
++        /* Case 6821: other synch-all-thread uses that only care about threads
++         * carrying fcache state can ignore us. */
++        THREAD_SYNCH_NO_LOCKS_NO_XFER, flags);
++    /* A bounded synchronization attempt can exhaust its retries. Never run
++     * client exit callbacks or free TLS/cache state while a thread can still
++     * execute instrumented code. The helper holds thread_initexit_lock here;
++     * also require in-flight exits/initializations to have reached its barrier.
++     * Terminate without cleanup: retrying exit callbacks would be unsafe.
++     */
++    if (!stopped || exiting_thread_count != expected_exiting || uninit_thread_count != 0)
++        REPORT_FATAL_ERROR_AND_EXIT(FAILED_TO_SYNCHRONIZE_THREADS, 2,
++                                   get_application_name(), get_application_pid());
+     ASSERT(threads == NULL && num_threads == 0); /* We asked for CLEANED */
+     /* the synch_with_all_threads function grabbed the
+      * thread_initexit_lock for us! */
+
+--- a/core/dynamo.c
++++ b/core/dynamo.c
+@@ -1254,10 +1254,11 @@
+     thread_record_t **threads;
+     dcontext_t *dcontext = get_thread_private_dcontext();
+     int expected_exiting = dcontext != NULL && dcontext->is_exiting ? 1 : 0;
+-    /* If we fail to suspend a thread (e.g., privilege
+-     * problems) ignore it. XXX: retry instead?
+-     */
+-    uint flags = THREAD_SYNCH_SUSPEND_FAILURE_IGNORE;
++    /* An OS failure cannot be recovered here: earlier successful iterations may
++     * already have freed thread records. Terminate without cleanup, rather than
++     * entering the ABORT path that resumes/dereferences those records.
++     */
++    uint flags = THREAD_SYNCH_SUSPEND_FAILURE_IGNORE | THREAD_SYNCH_TERMINATE_ON_FAILURE;
+     if (pre_exit) {
+         /* i#297: we only synch client threads after process exit event. */
+         flags |= THREAD_SYNCH_SKIP_CLIENT_THREAD;
+--- a/core/synch.h
++++ b/core/synch.h
+@@ -117,6 +117,13 @@
+
+     /* specifies whether we should terminate client threads */
+     THREAD_SYNCH_SKIP_CLIENT_THREAD = 0x00000010,
++
++    /* Process-exit modifier: an OS suspend/context/resume failure terminates the
++     * entire process without cleanup. This overrides the failure policy above;
++     * the CLEANED exit path cannot safely unwind already-freed thread records.
++     * Ordinary suspension and detach callers must not set this modifier.
++     */
++    THREAD_SYNCH_TERMINATE_ON_FAILURE = 0x00000020,
+ };
+
+ /* convenience macros */
+--- a/core/synch.c
++++ b/core/synch.c
+@@ -914,6 +914,18 @@
+  * enter_couldbelinking state)
+  * NOTE - you can't call this with a thread that you've already suspended
+  */
++/* A process-exit synchronization may already have cleaned other threads.
++ * Fail before this thread is touched further, without resuming or walking the
++ * partially freed set and without invoking terminal client callbacks.
++ */
++static void
++terminate_on_synch_failure(uint flags)
++{
++    if (TEST(THREAD_SYNCH_TERMINATE_ON_FAILURE, flags))
++        REPORT_FATAL_ERROR_AND_EXIT(FAILED_TO_SYNCHRONIZE_THREADS, 2,
++                                   get_application_name(), get_application_pid());
++}
++
+ thread_synch_result_t
+ synch_with_thread(thread_id_t id, bool block, bool hold_initexit_lock,
+                   thread_synch_permission_t caller_state,
+@@ -1004,6 +1016,7 @@
+                 first_loop = false;
+             }
+             if (!os_thread_suspend(trec)) {
++                terminate_on_synch_failure(flags);
+                 /* FIXME : eventually should be a real assert once we figure out
+                  * how to handle threads with low privilege handles */
+                 /* For dr_api_exit, we may have missed a thread exit. */
+@@ -1018,6 +1031,7 @@
+                 break;
+             }
+             if (!thread_get_mcontext(trec, &mc)) {
++                terminate_on_synch_failure(flags);
+                 /* FIXME : eventually should be a real assert once we figure out
+                  * how to handle threads with low privilege handles */
+                 ASSERT_CURIOSITY_ONCE(false &&
+@@ -1047,6 +1061,7 @@
+                 RSTATS_INC(synchs_not_at_safe_spot);
+             }
+             if (!os_thread_resume(trec)) {
++                terminate_on_synch_failure(flags);
+                 ASSERT_NOT_REACHED();
+                 res = (TEST(THREAD_SYNCH_SUSPEND_FAILURE_IGNORE, flags)
+                            ? THREAD_SYNCH_RESULT_SUCCESS
+
+--- a/core/unix/tls.h
++++ b/core/unix/tls.h
+@@ -302,6 +302,13 @@
+         void *client_tls[MAX_NUM_CLIENT_TLS];
+     };
+ #endif
++#if defined(LINUX) && defined(X86) && defined(X64)
++    /* An IBL hit must retain its original target when another thread retires
++     * the table entry before the indirect jump.  Keep this after existing TLS
++     * fields so their offsets (including assembly and client slots) do not move.
++     */
++    app_pc ibl_pending_target;
++#endif
+ } os_local_state_t;
+
+ os_local_state_t *
+--- a/core/os_shared.h
++++ b/core/os_shared.h
+@@ -245,6 +245,12 @@
+
+ ushort
+ os_local_state_offset(ushort seg_offs);
++
++#if defined(LINUX) && defined(X86) && defined(X64)
++/* Local-state offset of the original target retained across an IBL hit. */
++ushort
++os_ibl_pending_target_offset(void);
++#endif
+
+ struct _local_state_t;          /* in arch_exports.h */
+ struct _local_state_extended_t; /* in arch_exports.h */
+--- a/core/unix/os.c
++++ b/core/unix/os.c
+@@ -1956,6 +1956,18 @@
+     ASSERT(TLS_LOCAL_STATE_OFFSET == 0);
+     return (TLS_LOCAL_STATE_OFFSET + tls_offs IF_X86(IF_MACOS64(+tls_get_dr_offs())));
+ }
++
++#if defined(LINUX) && defined(X86) && defined(X64)
++ushort
++os_ibl_pending_target_offset(void)
++{
++    size_t offset = offsetof(os_local_state_t, ibl_pending_target) -
++        offsetof(os_local_state_t, state);
++    ASSERT(offset <= USHRT_MAX);
++    ASSERT(offsetof(os_local_state_t, ibl_pending_target) + sizeof(app_pc) <= PAGE_SIZE);
++    return (ushort)offset;
++}
++#endif
+
+ /* converts a segment offset to a local_state_t offset */
+ ushort
+--- a/core/arch/emit_utils_shared.c
++++ b/core/arch/emit_utils_shared.c
+@@ -3151,6 +3151,16 @@
+         restore_eflags = true;
+     }
+
++#if defined(LINUX) && defined(X86) && defined(X64)
++    if (target_prefix) {
++        /* i#5061: the matched entry's tag can become FAKE_TAG before we
++         * jump through its start_pc.  Save the original target before hit
++         * statistics or register restoration can clobber SCRATCH_REG1.
++         */
++        APP(ilist, SAVE_TO_TLS(dcontext, SCRATCH_REG1, os_ibl_pending_target_offset()));
++    }
++#endif
++
+ #ifdef HASHTABLE_STATISTICS
+     if (INTERNAL_OPTION(hashtable_ibl_stats) ||
+         INTERNAL_OPTION(hashtable_ibl_entry_stats)) {
+--- a/core/arch/x86/emit_utils.c
++++ b/core/arch/x86/emit_utils.c
+@@ -2731,9 +2731,17 @@
+                                absolute _IF_X64(x86_to_x64_ibl_opt));
+         }
+     } else {
++#if defined(LINUX) && defined(X64)
++        /* i#5061: removal changes the entry tag to FAKE_TAG.  The hit path
++         * retained the original application target before restoring XBX.
++         */
++        APP(&ilist,
++            RESTORE_FROM_TLS(dcontext, SCRATCH_REG1, os_ibl_pending_target_offset()));
++#else
+         APP(&ilist,
+             XINST_CREATE_load(dcontext, opnd_create_reg(SCRATCH_REG1),
+                               OPND_CREATE_MEMPTR(SCRATCH_REG2, FRAGMENT_TAG_OFFS)));
++#endif
+     }
+
+     /* Add to the patch list right away; hashtable stats could be added
+
+--- a/core/unix/signal.c
++++ b/core/unix/signal.c
+@@ -8838,5 +8838,15 @@ handle_suspend_signal(dcontext_t *dcontext, kernel_siginfo_t *siginfo,
+     if (unblocked_sigs) {
+         /* re-block so our exit from main_signal_handler is not interrupted */
++        kernel_sigaddset(&prevmask, SUSPEND_SIGNAL);
+         sigprocmask_syscall(SIG_SETMASK, &prevmask, NULL, sizeof(prevmask));
++    } else {
++        /* Prevent another SUSPEND_SIGNAL interrupting main_signal_handler before we
++         * exit.
++         */
++        kernel_sigset_t mask;
++        kernel_sigemptyset(&mask);
++        kernel_sigaddset(&mask, SUSPEND_SIGNAL);
++
++        sigprocmask_syscall(SIG_BLOCK, &mask, NULL, sizeof(mask));
+     }
+     ostd->suspended_sigcxt = NULL;

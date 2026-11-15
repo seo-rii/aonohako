@@ -94,6 +94,9 @@ func TestDuranteTimeEstimateIntegration(t *testing.T) {
 			if *d.NominalTimeExceeded != tc.exceeds || *d.OutputMatches != tc.matches || d.TimeEstimate.RuntimeID != runtimeID || response.CPUTimeNs <= 1_000_000 {
 				t.Fatalf("reference/raw limits conflated: response=%+v execution=%+v", response, d)
 			}
+			if response.WorkMeasurement == nil || response.WorkMeasurement.REPBreakdown == nil || !response.WorkMeasurement.ValidREPTelemetry() {
+				t.Fatalf("time observation lost REP detail: %+v", response.WorkMeasurement)
+			}
 			if err := validateRemoteWorkMeasurement(req, response); err != nil {
 				t.Fatal(err)
 			}

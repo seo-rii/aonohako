@@ -11,6 +11,12 @@ instructions, a memory limit, or a trusted security boundary. Its counters share
 the measured program's address space. A caller must retain its own sandbox,
 resource limits, output validation and complete-tree cleanup.
 
+The optional isolation profile supports bounded stdout/stderr capture with
+`--output-dir NEW_DIR --output-limit-bytes N`. Exceeding the combined quota stops
+the owned tree and omits accepted diagnostic counts. See
+[bounded output capture](docs/ISOLATION.md#bounded-output-capture) for result
+states and the remaining external resource-owner requirements.
+
 See [SECURITY.md](SECURITY.md) for confirmed tampering limits, supervisor
 hardening, containment requirements and reproducible sanitizer fuzzing. A
 structurally valid result is still application-mutable and must not authorize
@@ -23,20 +29,43 @@ unavailable byte telemetry independently of instruction validity. See the
 [result contract](docs/PROTOCOL.md#result-contract-and-consumers) before consuming
 reports; a valid count is not a trusted verdict or a CPU-time conversion.
 
+New clients also report versioned `rep_breakdown` counters for MOVS and STOS
+requested bytes and entries separately, at image/process/tree level. This lets
+reference-model experiments distinguish copying from filling without changing
+the existing combined totals. Legacy records omit the breakdown instead of
+inventing zeros. See the [protocol](docs/PROTOCOL.md) for the optional capability,
+checked sums and actual lifecycle/replay qualification tests. No time weights
+are selected by these counters.
+
 ## Build and test
 
 The pinned SDK is DynamoRIO 11.3.0-1 (source revision
 `6847bb210bea0ca11d1bf47704383d6a075da490`). The fetcher verifies its release
 archive SHA-256 before extracting the required build/runtime subset.
 It then builds the 64-bit release and debug runtime cores from the same pinned
-source commit with the [concurrent process and signal patch](toolkit/patches/dynamorio-vfork-lifetime.patch).
-The source archive is also hash-pinned. CMake, a C/C++ compiler and `patch` are
-needed for this one-time build; this adds no compilation to measured runs.
-The SDK's `.durante-runtime.json` records the source, patch and installed core
+source commit with the [concurrent process and signal patch](toolkit/patches/dynamorio-vfork-lifetime.patch)
+and [code replay patch](toolkit/patches/dynamorio-code-replay.patch).
+The source archive is also hash-pinned. Python 3.11 or newer, CMake, a C/C++
+compiler and `patch` are needed for this one-time build; this adds no compilation
+to measured runs.
+The SDK's `.durante-runtime.json` records the source, both patches and installed core
 hashes. Cached cores are reused only when those hashes match. The patch also
 backports [DynamoRIO #7321](https://github.com/DynamoRIO/dynamorio/pull/7321),
 which preserves the decoder context during early thread initialization and
 avoids a debug-runtime startup assertion.
+It also backports [DynamoRIO #7749](https://github.com/DynamoRIO/dynamorio/pull/7749)
+([commit 985af57](https://github.com/DynamoRIO/dynamorio/commit/985af57d7c3d73e7a1100d98e412584968588258)),
+a thread-synchronization correction originally reported by the AArch64
+`api.detach_state` test. Durante's Java comparison is documented separately in
+[isolated runtime qualification](docs/ISOLATED_RUNTIMES.md#upstream-runtime-correction).
+
+The counter requires Durante's private replay ABI 1 in the prepared runtime.
+Rebuild the SDK, client and CLI together when updating: an old/stock core cannot
+load this client, and isolate rejects a missing or different replay-patch digest.
+For operator-owned deployment, the [versioned runtime bundle guide](docs/BUNDLE.md)
+packages matching components, verifies relocated installations and documents rollback.
+The [generated-code checks](docs/JIT_LIFECYCLE.md) cover exact RWX replacement,
+partial REP retries and application-register preservation during self-modification.
 
 ```sh
 python3 toolkit/fetch_sdk.py
@@ -56,11 +85,21 @@ python3 tests/smoke.py \
 -vmheap_size 32M`, a bounded reservation configuration for embedding applications. This setting
 reduces address-space reservations; it does not waive target limits.
 
-The build requires GCC or Clang, CMake and Linux x86-64. Tests additionally use
-Python 3 and GCC; PyPy is tested when installed, and absence is reported as a
-coverage gap. No SDK or generated executable is committed.
+Build and test on Linux x86-64. The client supports GCC or Clang; native test
+fixtures additionally require GCC. Development scripts use Python 3.11 or newer,
+including the SDK fetcher. PyPy is tested when installed, and absence is reported
+as a coverage gap. No SDK or generated executable is committed.
+
+The [fixed-fixture overhead experiment](docs/OVERHEAD.md) compares native execution,
+the engine alone, and the counter with REP telemetry off/on. It reports per-run
+wall time, CPU time and peak RSS with output/count oracles and input identities;
+its CI smoke checks correctness without a performance threshold.
 
 ## Rust command-line tool
+
+Use `durante doctor` for read-only installation/environment diagnostics. See the
+[operator guide](docs/OPERATIONS.md) for profile checks, result examples and
+failure/recovery decisions.
 
 The C client performs instrumentation inside DynamoRIO. The Rust executable
 launches it, supervises the process tree and validates its records; it does not
@@ -86,8 +125,10 @@ record directory, removed after collection unless `--keep-records` is supplied.
 Alternatively, `--records-dir NEW_DIRECTORY` creates and retains a directory at
 the specified path for later inspection.
 The launcher always follows children, enables REP-byte accounting and uses the
-compact 32 MiB code/heap reservation profile. The report keeps execution outcome
-and measurement validity separate.
+compact 32 MiB code/heap reservation profile. It disables DynamoRIO trace building
+to use the qualified basic-block execution profile; this preserves the counting
+definition while avoiding the unqualified trace optimizer's Java lifecycle path.
+The report keeps execution outcome and measurement validity separate.
 
 The supervisor waits for normal descendants even if the root exits first. On
 timeout or SIGINT/SIGTERM, it terminates and reaps owned children, including
@@ -141,7 +182,8 @@ launches the original executable with its existing arguments and environment:
 
 ```sh
 toolkit/sdk/DynamoRIO-Linux-11.3.0-1/bin64/drrun \
-  -quiet -follow_children -c "$PWD/build/libdurante.so" \
+  -quiet -follow_children -disable_traces -vm_size 32M -vmheap_size 32M \
+  -c "$PWD/build/libdurante.so" \
   -outdir /absolute/private/new-directory -rep_bytes -- /path/to/program args
 ```
 
@@ -201,6 +243,14 @@ Fork-style `clone3(CLONE_CLEAR_SIGHAND)` remains unqualified and its accounting
 is rejected. These tests do not establish arbitrary asynchronous-signal
 compatibility during runtime initialization.
 
+The patch also preserves x87 exception status in delayed and nested signal
+frames when the kernel includes extra XSAVE state. The original runtime could
+overwrite the saved precision flag after clearing live FPU exceptions.
+[Signal-state qualification](docs/SIGNAL_STATE.md) checks the saved frame,
+restored registers and arithmetic with native, engine-only and client controls.
+Updating this patch requires rebuilding the prepared SDK, client and CLI together;
+`isolate` checks the reviewed patch digest.
+
 Concurrent creation is tested with the patched runtime for successful exec,
 failed exec with default and `SA_RESTART` signal handlers, empty environments,
 and parents that finish all spawn operations
@@ -254,11 +304,22 @@ explicitly a basic-block-entry work metric. A killed process lacks a final recor
 and invalidates the tree. Nonzero **normal** exits can have complete work records;
 the caller still applies its original execution/verdict policy.
 
-CPython, native Go/Rust and selected Node/shell fixtures have separate compatibility
-checks in the embedding project's qualification. They are not universal language
-certification. In particular, Java 17 currently crashes during JVM startup with
-this counter while the engine-only control succeeds; JVM use is unqualified.
-Generated-code unit tests do not establish JVM compatibility.
+Confirmed internal code-cache re-entry receives a narrower correction: only the
+unexecuted suffix is removed before the new entry charge, and a restarted REP
+keeps its original requested bytes once. Ambiguous recovery invalidates counts;
+this does not make signal-interrupted work exact or application-mutable reports trusted.
+
+The repository's runtime checks cover CPython/PyPy arithmetic, native libraries
+and subprocesses, Node with JIT enabled and disabled, and OpenJDK 17 startup,
+tiered execution and `-Xint` fixtures. Clean-call state preservation fixes the
+reproduced OpenJDK 17.0.21 startup crash; CI now requires all Java fixtures to
+pass. These are fixture-specific results, not universal language certification
+or qualification of the separate `isolate` profile. Generated-code unit tests
+alone do not establish JVM compatibility.
+
+The [managed runtime workload suite](docs/RUNTIME_WORKLOADS.md) additionally
+requires Java 17/21, CPython and Node threading, allocation/GC and child-process
+fixtures through native/engine controls and the actual `durante run` path.
 
 [SIMD and interpreter/JIT qualification](docs/QUALIFICATION.md) explains the
 additional native-control, output-preservation and exact-count tests. Per-run
@@ -288,3 +349,7 @@ The experimental `durante isolate` command adds a pinned namespace supervisor,
 read-only inputs, seccomp and an outer deadline. It requires externally configured
 resource containment; counters remain application-mutable. See the
 [operator requirements and tested boundary](docs/ISOLATION.md).
+The [external execution-owner guide](docs/EXECUTION_OWNER.md) covers controller
+death, suspension, resource failures and independent whole-job teardown.
+The [isolated runtime checks](docs/ISOLATED_RUNTIMES.md) exercise explicit Java,
+Node and CPython profiles and relocated bundles through the real boundary.

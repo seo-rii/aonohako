@@ -163,7 +163,7 @@ func TestDuranteCommunicationIntegration(t *testing.T) {
 				t.Fatalf("observation %d has invalid diagnostic contract: %+v", i, process)
 			}
 			if process.Report.Complete {
-				if !validDiagnosticWorkReport("C11", process.Report) || process.Report.Processes != 1 {
+				if !validDiagnosticWorkReport("C11", process.Report) || process.Report.REPBreakdown == nil || process.Report.Processes != 1 {
 					t.Fatalf("observation %d is not a complete independent process: %+v", i, process)
 				}
 			} else if !process.Report.ValidUnavailableResult() {

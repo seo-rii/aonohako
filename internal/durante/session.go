@@ -11,9 +11,10 @@ import (
 	"time"
 )
 
-// EngineProfile identifies the reviewed patched engine and fixed reservations.
+// EngineProfile identifies the reviewed patched engine, basic-block execution
+// without trace construction, and fixed reservations.
 // Prepare verifies installation provenance before any report claims this profile.
-const EngineProfile = "dynamorio-11.3-durante-v3-vm32m"
+const EngineProfile = "dynamorio-11.3-durante-v4-vm32m"
 
 // This profile was qualified only as a C/C++ diagnostic control on glibc 2.41.
 // The host version does not attest the embedded libc of static submissions.
@@ -105,7 +106,7 @@ func prepare(ctx context.Context, root string, cfg Config, language string, uid,
 }
 
 func (s *Session) Wrap(command []string) []string {
-	args := []string{s.config.Drrun, "-quiet", "-follow_children", "-vm_size", "32M", "-vmheap_size", "32M", "-c", s.config.Client, "-outdir", s.dir, "-rep_bytes", "--"}
+	args := []string{s.config.Drrun, "-quiet", "-follow_children", "-disable_traces", "-vm_size", "32M", "-vmheap_size", "32M", "-c", s.config.Client, "-outdir", s.dir, "-rep_bytes", "--"}
 	return append(args, command...)
 }
 

@@ -36,6 +36,20 @@ wall time and Durante's instrumented CPU time are not regression targets.
 All raw responses and CPU-accounting metadata remain in the dataset. The tool
 does not discard slow repetitions or replace failed executions.
 
+Each `metered.work_measurement` retains the optional version-1 `rep_breakdown`
+(MOVS/STOS requested bytes and entries), including explicit zero values. Missing
+legacy detail means unspecified, not zero. Invalid partitions or counter
+overflow reject collection/fitting. Dataset schema and corpus ID remain 1 and
+`cpp-reference-v1`; the two-coefficient fitter continues to use `instructions`
+and aggregate `rep_bytes`, with the same train/validation split and gates.
+
+The current collector uses `dynamorio-11.3-durante-v4-vm32m` and pins both runtime
+patches. Older seven-field installation identities and v3 reports can be decoded
+for inspection, but the current fitter rejects their old installation/profile.
+Keep the original dataset and matching historical fitter for reproducing past
+results. A current-runtime model requires fresh collection; do not relabel old
+identities, fill absent detail with zeros, or reuse old coefficients as qualified.
+
 Both paths use CPU 10,000 ms, wall 30,000 ms, and memory 256 MiB limits.
 Collection requires root Linux amd64, embedded/helper execution, one active run,
 the `cpp` family, default dispatch, and an explicit resource policy and image
@@ -155,6 +169,9 @@ The full dataset SHA-256 is
 The reference host was AMD EPYC 7B12 with kernel `6.1.0-54-cloud-amd64`, g++
 14.2.0, and a two-CPU/2-GiB container allocation. The collector executable hash
 was `69bf86d3ec60112f1fbd16222c915dd50b9e209d2494f0f8f553e3056637d626`.
+
+This was a v3 collection without MOVS/STOS detail, before the v4 vendor update.
+It remains historical evidence; it has not been relabeled or requalified.
 
 The candidate **failed qualification** and no policy was exported:
 
