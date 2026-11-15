@@ -150,7 +150,18 @@ func Validate(req *model.RunRequest) error {
 // ValidateWorkMeasurementLimits checks the opt-in envelope without changing
 // the nominal judge limits. Operator caps are enforced separately by the runner.
 func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
-	if req == nil || req.WorkMeasurementLimits == nil {
+	if req == nil {
+		return nil
+	}
+	if req.WorkMeasurementTime {
+		if req.WorkMeasurementLimits == nil {
+			return fmt.Errorf("work_measurement_time requires work_measurement_limits")
+		}
+		if family, ok := durante.FamilyForLanguage(req.Lang); !ok || family != "cpp" {
+			return fmt.Errorf("work_measurement_time requires a C/C++ source-language profile")
+		}
+	}
+	if req.WorkMeasurementLimits == nil {
 		return nil
 	}
 	if !req.WorkMeasurement {

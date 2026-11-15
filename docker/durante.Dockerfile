@@ -26,6 +26,8 @@ RUN gcc -O2 -Wall -Wextra -Werror -static /probe.c -o /durante-probe
 COPY internal/execute/testdata/durante/interactive.c /interactive.c
 COPY internal/execute/testdata/durante/communication.c /communication.c
 RUN gcc -O2 -Wall -Wextra -Werror -static /interactive.c -o /durante-interactive && gcc -O2 -Wall -Wextra -Werror -static /communication.c -o /durante-communication
+COPY internal/execute/testdata/durante/reference.cpp /reference.cpp
+RUN g++ -std=c++20 -O2 -Wall -Wextra -Werror -static /reference.cpp -o /durante-reference
 
 FROM ${RUNTIME_IMAGE} AS durante-runtime
 COPY --from=durante-go /out/aonohako /usr/local/bin/aonohako
@@ -45,8 +47,9 @@ COPY --from=durante-go-test /out/durante-execute.test /opt/durante/durante-execu
 COPY --from=durante-build /durante-probe /opt/durante/probe
 COPY --from=durante-build /durante-interactive /opt/durante/interactive
 COPY --from=durante-build /durante-communication /opt/durante/communication
-ENV AONOHAKO_TEST_DURANTE=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 AONOHAKO_DURANTE_TEST_BINARY=/opt/durante/probe AONOHAKO_TEST_DURANTE_INTERACTIVE=/opt/durante/interactive AONOHAKO_TEST_DURANTE_COMMUNICATION=/opt/durante/communication
+COPY --from=durante-build /durante-reference /opt/durante/reference
+ENV AONOHAKO_TEST_DURANTE=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 AONOHAKO_DURANTE_TEST_BINARY=/opt/durante/probe AONOHAKO_TEST_DURANTE_INTERACTIVE=/opt/durante/interactive AONOHAKO_TEST_DURANTE_COMMUNICATION=/opt/durante/communication AONOHAKO_TEST_DURANTE_REFERENCE=/opt/durante/reference
 ENTRYPOINT ["/opt/durante/durante-execute.test"]
-CMD ["-test.v", "-test.run", "^TestDurante(Sandbox|ResourceEnvelope|Interactive|Communication)Integration$", "-test.timeout", "240s"]
+CMD ["-test.v", "-test.run", "^TestDurante(Sandbox|ResourceEnvelope|TimeEstimate|Interactive|Communication)Integration$", "-test.timeout", "240s"]
 
 FROM durante-runtime AS runtime

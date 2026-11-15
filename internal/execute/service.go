@@ -166,13 +166,10 @@ func NewWithConfig(cfg config.Config) *Service {
 	if communicationMaxParticipants <= 0 {
 		communicationMaxParticipants = runvalidation.MaxCommunicationParticipants
 	}
-	measurement := cfg.Execution.WorkMeasurement
-	measurement.Families = append([]string(nil), measurement.Families...)
+	measurement := snapshotWorkMeasurementConfig(cfg.Execution.WorkMeasurement)
 	var measurementPolicyError error
 	if measurement.ResourcePolicy != nil {
-		policy := *measurement.ResourcePolicy
-		measurement.ResourcePolicy = &policy
-		measurementPolicyError = policy.ValidateAdmission(cfg.MaxActiveRuns, cfg.WorkRootMaxBytes)
+		measurementPolicyError = measurement.ResourcePolicy.ValidateAdmission(cfg.MaxActiveRuns, cfg.WorkRootMaxBytes)
 	}
 	return &Service{
 		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
@@ -203,6 +200,11 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	}
 	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if req.WorkMeasurementTime {
+		if _, _, err := s.workMeasurement.TimePolicyFor(req.Lang); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
 	}
 	if req.WorkMeasurementLimits != nil {
 		if s.workMeasurementPolicyError != nil {

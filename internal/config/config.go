@@ -651,6 +651,14 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
 		}
 	}
+	workMeasurement.TimePolicy, err = durante.ParseTimePolicy(os.Getenv("AONOHAKO_DURANTE_TIME_POLICY"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_POLICY: %w", err)
+	}
+	workMeasurement.RuntimeImage = os.Getenv("AONOHAKO_DURANTE_RUNTIME_IMAGE")
+	if err := workMeasurement.ValidateTimeConfiguration(); err != nil {
+		return Config{}, fmt.Errorf("durante time configuration (AONOHAKO_DURANTE_TIME_POLICY, AONOHAKO_DURANTE_RUNTIME_IMAGE): %w", err)
+	}
 	execution := ExecutionConfig{
 		WorkMeasurement: workMeasurement,
 		Platform:        runtimePlatform,

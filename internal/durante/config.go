@@ -17,6 +17,10 @@ type Config struct {
 	Client          string
 	DispatchProfile string
 	ResourcePolicy  *ResourcePolicy
+	TimePolicy      *TimePolicy
+	// RuntimeImage is operator-supplied deployment metadata, not an attestation
+	// of the executing image. It is configured independently of TimePolicy.
+	RuntimeImage string
 }
 
 func ParseConfig(familiesValue, drrun, client, dispatch string) (Config, error) {

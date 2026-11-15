@@ -1,0 +1,153 @@
+package durante
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"unicode/utf8"
+
+	"aonohako/internal/profiles"
+	"aonohako/internal/runtimeidentity"
+)
+
+const maxTimePolicyBytes = 4096
+
+// ParseTimePolicy requires an explicit conversion contract, without supplying
+// any default weights or treating a reference ID as proof of calibration.
+func ParseTimePolicy(raw string) (*TimePolicy, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	if len(raw) > maxTimePolicyBytes || !utf8.ValidString(raw) {
+		return nil, fmt.Errorf("invalid durante time policy encoding or size")
+	}
+	var policy TimePolicy
+	fields := map[string]any{
+		"model_id":                 &policy.ModelID,
+		"model_version":            &policy.ModelVersion,
+		"reference_id":             &policy.ReferenceID,
+		"runtime_id":               &policy.RuntimeID,
+		"family":                   &policy.Family,
+		"engine_profile":           &policy.EngineProfile,
+		"dispatch_profile":         &policy.DispatchProfile,
+		"instruction_ns_numerator": &policy.InstructionNSNumerator,
+		"rep_byte_ns_numerator":    &policy.REPByteNSNumerator,
+		"ns_denominator":           &policy.NSDenominator,
+	}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return nil, fmt.Errorf("durante time policy must be an object")
+	}
+	seen := make(map[string]bool, len(fields))
+	for decoder.More() {
+		token, err = decoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok {
+			return nil, fmt.Errorf("invalid durante time policy key")
+		}
+		field, exists := fields[key]
+		if !exists || seen[key] {
+			return nil, fmt.Errorf("unknown or duplicate durante time policy field %q", key)
+		}
+		seen[key] = true
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, fmt.Errorf("invalid durante time policy field %q", key)
+		}
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return nil, fmt.Errorf("durante time policy field %q cannot be null", key)
+		}
+		if err := json.Unmarshal(value, field); err != nil {
+			return nil, fmt.Errorf("invalid durante time policy field %q", key)
+		}
+	}
+	if token, err = decoder.Token(); err != nil || token != json.Delim('}') {
+		return nil, fmt.Errorf("invalid durante time policy object end")
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return nil, fmt.Errorf("trailing durante time policy data")
+	}
+	if len(seen) != len(fields) {
+		return nil, fmt.Errorf("durante time policy requires all fields explicitly")
+	}
+	if err := policy.Validate(); err != nil {
+		return nil, err
+	}
+	return &policy, nil
+}
+
+// TimeRuntimeID binds a canonical C/C++ source profile to the operator's
+// independently configured deployment image. The digest is metadata, not
+// runtime attestation.
+func TimeRuntimeID(language, imageDigest string) (string, error) {
+	profile, ok := profiles.Resolve(language)
+	if !ok {
+		return "", fmt.Errorf("durante time requires a registered C/C++ source-language profile")
+	}
+	if family, ok := FamilyForLanguage(profile.SourceLang); !ok || family != "cpp" {
+		return "", fmt.Errorf("durante time is supported only for C/C++ source-language profiles")
+	}
+	if !runtimeidentity.ValidImageDigest(imageDigest) {
+		return "", fmt.Errorf("durante runtime image must be an immutable sha256 image digest")
+	}
+	return profile.SourceLang + "@" + imageDigest, nil
+}
+
+func (c Config) ValidateTimeConfiguration() error {
+	if c.RuntimeImage != "" && !runtimeidentity.ValidImageDigest(c.RuntimeImage) {
+		return fmt.Errorf("durante runtime image must be an immutable sha256 image digest")
+	}
+	if c.TimePolicy == nil {
+		return nil
+	}
+	if err := c.TimePolicy.Validate(); err != nil {
+		return err
+	}
+	if c.TimePolicy.Family != "cpp" {
+		return fmt.Errorf("durante time policy requires the cpp family")
+	}
+	if err := c.ResourcePolicy.validate(); err != nil {
+		return fmt.Errorf("durante time policy requires a valid resource policy: %w", err)
+	}
+	if c.TimePolicy.DispatchProfile != c.DispatchProfile {
+		return fmt.Errorf("durante time policy dispatch profile does not match the configured dispatch profile")
+	}
+	source, _, hasImage := strings.Cut(c.TimePolicy.RuntimeID, "@")
+	if !hasImage {
+		return fmt.Errorf("durante time policy runtime ID requires a canonical source and image digest")
+	}
+	runtimeID, err := TimeRuntimeID(source, c.RuntimeImage)
+	if err != nil {
+		return err
+	}
+	if runtimeID != c.TimePolicy.RuntimeID {
+		return fmt.Errorf("durante time policy runtime ID does not match its canonical source and configured image digest")
+	}
+	if _, err := c.Family(source); err != nil {
+		return fmt.Errorf("durante time policy: %w", err)
+	}
+	return nil
+}
+
+// TimePolicyFor returns a value copy so callers cannot mutate the configured
+// policy through the result. A model for one source profile cannot admit a
+// different C/C++ profile merely because both belong to the cpp family.
+func (c Config) TimePolicyFor(language string) (TimePolicy, string, error) {
+	if err := c.ValidateTimeConfiguration(); err != nil {
+		return TimePolicy{}, "", err
+	}
+	if c.TimePolicy == nil {
+		return TimePolicy{}, "", fmt.Errorf("durante time policy is not enabled")
+	}
+	runtimeID, err := TimeRuntimeID(language, c.RuntimeImage)
+	if err != nil {
+		return TimePolicy{}, "", err
+	}
+	if runtimeID != c.TimePolicy.RuntimeID {
+		return TimePolicy{}, "", fmt.Errorf("durante time policy does not match the requested source-language profile")
+	}
+	return *c.TimePolicy, runtimeID, nil
+}
