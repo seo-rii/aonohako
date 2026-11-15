@@ -492,6 +492,14 @@ creates missing bindings. A `qualification_id` records an operator's approval; t
 service does not verify that external record or infer CPU-time accuracy from it.
 Adding a JVM binding cannot bypass its existing execution gate.
 
+Bindings currently match source, image, engine and dispatch only. They do not
+identify the effective `runtime_profile`, operator tuning defaults, Python library
+mode, or heap/GC options derived from memory limits. A binding must not be read as
+qualification of every configuration within one image. Keep those settings fixed
+to the evidence used for the model; the service does not currently verify their
+agreement with that evidence. Binding effective options is required before a
+future configuration-specific time or live-budget policy can rely on this registry.
+
 Selection resolves to the existing `TimePolicy` and `time_estimate` response shape,
 including the selected canonical `SOURCE@image` runtime ID. The runner and remote
 control plane each hold independent immutable configuration snapshots. Neither
