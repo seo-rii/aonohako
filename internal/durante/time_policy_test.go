@@ -208,7 +208,7 @@ func TestTimeEstimateUsesEntireCollectedProcessTree(t *testing.T) {
 }
 
 func TestTimePolicyRejectsPreStabilizationEngineProfile(t *testing.T) {
-	for _, profile := range []string{"dynamorio-11.3-vm32m-v1", "dynamorio-11.3-durante-v2-vm32m"} {
+	for _, profile := range []string{"dynamorio-11.3-vm32m-v1", "dynamorio-11.3-durante-v2-vm32m", "dynamorio-11.3-durante-v3-vm32m"} {
 		policy := timePolicyFixture()
 		policy.EngineProfile = profile
 		if err := policy.Validate(); err == nil {

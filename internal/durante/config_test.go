@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -64,8 +65,9 @@ func TestSessionPinsEnvironmentAndPreservesArguments(t *testing.T) {
 	}
 	command := []string{"/tmp/target", "one two", "--flag"}
 	wrapped := s.Wrap(command)
-	if !strings.Contains(strings.Join(wrapped, " "), "-vm_size 32M -vmheap_size 32M -c") {
-		t.Fatal("missing bounded engine reservation profile")
+	want := []string{launcher, "-quiet", "-follow_children", "-disable_traces", "-vm_size", "32M", "-vmheap_size", "32M", "-c", client, "-outdir", s.dir, "-rep_bytes", "--", "/tmp/target", "one two", "--flag"}
+	if !slices.Equal(wrapped, want) {
+		t.Fatalf("unexpected fixed engine invocation: %q", wrapped)
 	}
 	if strings.Join(wrapped[len(wrapped)-3:], "|") != strings.Join(command, "|") {
 		t.Fatal("target arguments changed")

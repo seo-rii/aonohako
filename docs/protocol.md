@@ -206,6 +206,15 @@ See [Durante diagnostics](durante.md#interactive-and-communication-observations)
 The `work_measurement_limits` envelope remains ordinary-only and is rejected for
 interactive and communication requests.
 
+A complete report can include `rep_breakdown` with `version: 1`, `movs_bytes`,
+`stos_bytes`, `movs_entries` and `stos_entries`. It partitions the existing
+`rep_bytes`/`rep_entries` totals using unsigned 64-bit counters and survives
+SSE forwarding for each role. An absent object means legacy unspecified detail;
+explicit zeros remain zeros. Malformed detail is rejected, and unavailable
+reports omit it. This extension keeps report schema 1 and the existing time
+formula. See [the result contract](durante.md#result-contract) for byte semantics
+and current installation/profile compatibility.
+
 An ordinary C/C++ envelope request can additionally opt into
 `work_measurement_time: true`. With a compatible operator model, the final
 `work_measurement_execution` includes `time_estimate` containing the model ID and

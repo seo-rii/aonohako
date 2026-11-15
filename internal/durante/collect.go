@@ -24,36 +24,41 @@ var reportName = regexp.MustCompile(`^process-([1-9][0-9]*)\.jsonl$`)
 var segmentSuffix = regexp.MustCompile(`^[0-9]+$`)
 
 type event struct {
-	Schema                int    `json:"schema"`
-	ClientVersion         int    `json:"client_version"`
-	Authority             string `json:"authority"`
-	Metric                string `json:"metric"`
-	PID                   int    `json:"pid"`
-	Segment               string `json:"segment"`
-	Seq                   uint64 `json:"seq"`
-	Event                 string `json:"event"`
-	SDKVersion            string `json:"sdk_version"`
-	Origin                string `json:"origin"`
-	ParentPID             int    `json:"parent_pid"`
-	ParentSegment         string `json:"parent_segment"`
-	REPEnabled            bool   `json:"rep_bytes_enabled"`
-	ChildPID              int    `json:"child_pid"`
-	Syscall               int    `json:"syscall"`
-	Supported             bool   `json:"supported"`
-	Result                int64  `json:"result"`
-	Instructions          uint64 `json:"instructions"`
-	REPBytes              uint64 `json:"rep_bytes"`
-	REPEntries            uint64 `json:"rep_entries"`
-	UnsupportedREPEntries uint64 `json:"unsupported_rep_entries"`
-	Signals               uint64 `json:"signals_observed"`
-	Valid                 bool   `json:"valid"`
-	AccountingError       bool   `json:"accounting_error"`
-	ThreadsStarted        uint64 `json:"threads_started"`
-	ThreadsFinished       uint64 `json:"threads_finished"`
-	ThreadsComplete       bool   `json:"threads_complete"`
-	Quality               string `json:"quality"`
-	ExitSeen              bool   `json:"app_exit_seen"`
-	ExitCode              uint64 `json:"app_exit_code"`
+	Schema                int     `json:"schema"`
+	ClientVersion         int     `json:"client_version"`
+	Authority             string  `json:"authority"`
+	Metric                string  `json:"metric"`
+	PID                   int     `json:"pid"`
+	Segment               string  `json:"segment"`
+	Seq                   uint64  `json:"seq"`
+	Event                 string  `json:"event"`
+	SDKVersion            string  `json:"sdk_version"`
+	Origin                string  `json:"origin"`
+	ParentPID             int     `json:"parent_pid"`
+	ParentSegment         string  `json:"parent_segment"`
+	REPEnabled            bool    `json:"rep_bytes_enabled"`
+	ChildPID              int     `json:"child_pid"`
+	Syscall               int     `json:"syscall"`
+	Supported             bool    `json:"supported"`
+	Result                int64   `json:"result"`
+	Instructions          uint64  `json:"instructions"`
+	REPBytes              uint64  `json:"rep_bytes"`
+	REPEntries            uint64  `json:"rep_entries"`
+	UnsupportedREPEntries uint64  `json:"unsupported_rep_entries"`
+	Signals               uint64  `json:"signals_observed"`
+	Valid                 bool    `json:"valid"`
+	AccountingError       bool    `json:"accounting_error"`
+	ThreadsStarted        uint64  `json:"threads_started"`
+	ThreadsFinished       uint64  `json:"threads_finished"`
+	ThreadsComplete       bool    `json:"threads_complete"`
+	Quality               string  `json:"quality"`
+	ExitSeen              bool    `json:"app_exit_seen"`
+	ExitCode              uint64  `json:"app_exit_code"`
+	REPBreakdownVersion   *uint64 `json:"rep_breakdown_version,omitempty"`
+	REPMOVSBytes          *uint64 `json:"rep_movs_bytes,omitempty"`
+	REPSTOSBytes          *uint64 `json:"rep_stos_bytes,omitempty"`
+	REPMOVSEntries        *uint64 `json:"rep_movs_entries,omitempty"`
+	REPSTOSEntries        *uint64 `json:"rep_stos_entries,omitempty"`
 }
 
 func decodeEvent(data []byte) (event, error) {
@@ -94,8 +99,35 @@ func decodeEvent(data []byte) (event, error) {
 	if _, err = decoder.Token(); err != io.EOF {
 		return row, errors.New("trailing report data")
 	}
-	if err := json.Unmarshal(data, &row); err != nil {
+	// Shadow the new fields while decoding the old record. Their exact keys
+	// are decoded below; encoding/json's case-folded aliases must not advertise
+	// or populate detail that the upstream scalar-key collectors would ignore.
+	legacy := struct {
+		*event
+		REPBreakdownVersion json.RawMessage `json:"rep_breakdown_version"`
+		REPMOVSBytes        json.RawMessage `json:"rep_movs_bytes"`
+		REPSTOSBytes        json.RawMessage `json:"rep_stos_bytes"`
+		REPMOVSEntries      json.RawMessage `json:"rep_movs_entries"`
+		REPSTOSEntries      json.RawMessage `json:"rep_stos_entries"`
+	}{event: &row}
+	if err := json.Unmarshal(data, &legacy); err != nil {
 		return row, errors.New("invalid report field type")
+	}
+	for key, target := range map[string]**uint64{
+		"rep_breakdown_version": &row.REPBreakdownVersion,
+		"rep_movs_bytes":        &row.REPMOVSBytes, "rep_stos_bytes": &row.REPSTOSBytes,
+		"rep_movs_entries": &row.REPMOVSEntries, "rep_stos_entries": &row.REPSTOSEntries,
+	} {
+		if raw, present := fields[key]; present {
+			var value uint64
+			if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, &value) != nil {
+				return row, errors.New("invalid REP breakdown field type")
+			}
+			*target = &value
+		}
+	}
+	if row.REPBreakdownVersion != nil && *row.REPBreakdownVersion != 1 {
+		return row, errors.New("unsupported REP breakdown version")
 	}
 	required := []string{"schema", "client_version", "authority", "metric", "pid", "segment", "seq", "event"}
 	switch row.Event {
@@ -153,6 +185,23 @@ func terminalCounters(row event, isExec, repEnabled bool) ([5]uint64, error) {
 	return counts, nil
 }
 
+func terminalREPBreakdown(row event, enabled, advertised bool) (*REPBreakdown, error) {
+	fields := [4]*uint64{row.REPMOVSBytes, row.REPSTOSBytes, row.REPMOVSEntries, row.REPSTOSEntries}
+	for _, field := range fields {
+		if (field != nil) != advertised {
+			return nil, errors.New("REP breakdown fields do not match advertised capability")
+		}
+	}
+	if !advertised {
+		return nil, nil
+	}
+	breakdown := REPBreakdown{Version: 1, MOVSBytes: *fields[0], STOSBytes: *fields[1], MOVSEntries: *fields[2], STOSEntries: *fields[3]}
+	if !breakdown.validFor(row.REPBytes, row.REPEntries, enabled) {
+		return nil, errors.New("REP breakdown partition mismatch")
+	}
+	return &breakdown, nil
+}
+
 func aggregate(streams map[int][]event, rootPID int) (Report, error) {
 	if !validPID(rootPID) || len(streams) == 0 || len(streams) > maxProcesses {
 		return Report{}, errors.New("root PID or process count invalid")
@@ -164,12 +213,23 @@ func aggregate(streams map[int][]event, rootPID int) (Report, error) {
 	processes := map[int]lineage{}
 	edges := map[int]lineage{}
 	var totals [5]uint64
+	breakdownTotals := REPBreakdown{Version: 1}
 	images := 0
-	repKnown, repEnabled := false, false
+	repKnown, repEnabled, breakdownEnabled := false, false, false
 	sum := func(row event, isExec bool) error {
 		counts, err := terminalCounters(row, isExec, repEnabled)
 		if err != nil {
 			return err
+		}
+		breakdown, err := terminalREPBreakdown(row, repEnabled, breakdownEnabled)
+		if err != nil {
+			return err
+		}
+		if breakdown != nil {
+			breakdownTotals, err = breakdownTotals.checkedAdd(*breakdown)
+			if err != nil {
+				return err
+			}
 		}
 		for i, value := range counts {
 			if totals[i] > math.MaxUint64-value {
@@ -193,6 +253,9 @@ func aggregate(streams map[int][]event, rootPID int) (Report, error) {
 			if row.Schema != 1 || row.ClientVersion != 1 || row.Metric != Metric || row.Authority != Authority || row.PID != pid {
 				return Report{}, errors.New("record version or identity mismatch")
 			}
+			if row.REPBreakdownVersion != nil && *row.REPBreakdownVersion != 1 {
+				return Report{}, errors.New("unsupported REP breakdown version")
+			}
 			prefix := strconv.Itoa(pid) + "-"
 			if !strings.HasPrefix(row.Segment, prefix) || !segmentSuffix.MatchString(strings.TrimPrefix(row.Segment, prefix)) {
 				return Report{}, errors.New("invalid image segment")
@@ -204,8 +267,12 @@ func aggregate(streams map[int][]event, rootPID int) (Report, error) {
 				if repKnown && repEnabled != row.REPEnabled {
 					return Report{}, errors.New("mixed REP modes")
 				}
+				if repKnown && breakdownEnabled != (row.REPBreakdownVersion != nil) {
+					return Report{}, errors.New("mixed REP breakdown capabilities")
+				}
 				repKnown = true
 				repEnabled = row.REPEnabled
+				breakdownEnabled = row.REPBreakdownVersion != nil
 				if live == "" {
 					if pid == rootPID {
 						if row.Origin != "initial" || row.ParentPID != 0 || row.ParentSegment != "" {
@@ -299,8 +366,12 @@ func aggregate(streams map[int][]event, rootPID int) (Report, error) {
 	if totals[4] != 0 {
 		quality = "signals_observed"
 	}
+	var breakdown *REPBreakdown
+	if breakdownEnabled {
+		breakdown = &breakdownTotals
+	}
 	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Scope: Scope, REPEnabled: repEnabled, Complete: true, Quality: quality, Instructions: &totals[0], REPBytes: &totals[1], REPEntries: &totals[2], UnsupportedREPEntries: &totals[3], SignalsObserved: totals[4], Processes: len(processes), Images: images,
-		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3])}, nil
+		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3]), REPBreakdown: breakdown}, nil
 }
 
 func CollectDirectory(directory string, rootPID int) Report {

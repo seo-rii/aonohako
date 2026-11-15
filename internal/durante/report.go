@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -17,6 +18,69 @@ const (
 	REPPartial      = "partial"
 	REPUnavailable  = "unavailable"
 )
+
+// REPBreakdown partitions supported REP work by instruction kind. A missing
+// breakdown is legacy, unspecified detail, not four observed zero counters.
+type REPBreakdown struct {
+	Version     uint64 `json:"version"`
+	MOVSBytes   uint64 `json:"movs_bytes"`
+	STOSBytes   uint64 `json:"stos_bytes"`
+	MOVSEntries uint64 `json:"movs_entries"`
+	STOSEntries uint64 `json:"stos_entries"`
+}
+
+func (b *REPBreakdown) UnmarshalJSON(data []byte) error {
+	fields, err := manifestObject(data)
+	if err != nil {
+		return err
+	}
+	var decoded REPBreakdown
+	targets := map[string]*uint64{
+		"version": &decoded.Version, "movs_bytes": &decoded.MOVSBytes,
+		"stos_bytes": &decoded.STOSBytes, "movs_entries": &decoded.MOVSEntries,
+		"stos_entries": &decoded.STOSEntries,
+	}
+	if len(fields) != len(targets) {
+		return fmt.Errorf("invalid REP breakdown fields")
+	}
+	for key, target := range targets {
+		value, exists := fields[key]
+		if !exists || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return fmt.Errorf("missing or null REP breakdown field %q", key)
+		}
+		if err := json.Unmarshal(value, target); err != nil {
+			return fmt.Errorf("invalid REP breakdown field %q", key)
+		}
+	}
+	if decoded.Version != 1 {
+		return fmt.Errorf("unsupported REP breakdown version")
+	}
+	*b = decoded
+	return nil
+}
+
+func (b REPBreakdown) validFor(bytes, entries uint64, enabled bool) bool {
+	return b.Version == 1 &&
+		(b.MOVSBytes == 0 || b.MOVSEntries > 0) && (b.STOSBytes == 0 || b.STOSEntries > 0) &&
+		b.MOVSBytes <= math.MaxUint64-b.STOSBytes && b.MOVSBytes+b.STOSBytes == bytes &&
+		b.MOVSEntries <= math.MaxUint64-b.STOSEntries && b.MOVSEntries+b.STOSEntries == entries &&
+		(enabled || (b == REPBreakdown{Version: 1}))
+}
+
+func (b REPBreakdown) checkedAdd(other REPBreakdown) (REPBreakdown, error) {
+	if b.Version != 1 || other.Version != 1 {
+		return REPBreakdown{}, fmt.Errorf("unsupported REP breakdown version")
+	}
+	totals := [4]uint64{b.MOVSBytes, b.STOSBytes, b.MOVSEntries, b.STOSEntries}
+	values := [4]uint64{other.MOVSBytes, other.STOSBytes, other.MOVSEntries, other.STOSEntries}
+	for i, value := range values {
+		if totals[i] > math.MaxUint64-value {
+			return REPBreakdown{}, fmt.Errorf("tree REP breakdown overflow")
+		}
+		totals[i] += value
+	}
+	return REPBreakdown{Version: 1, MOVSBytes: totals[0], STOSBytes: totals[1], MOVSEntries: totals[2], STOSEntries: totals[3]}, nil
+}
 
 // MeasurementContract describes semantics, never attestation. Pointer booleans
 // and RawMessage preserve missing/null fields when remote JSON is decoded.
@@ -81,6 +145,7 @@ type Report struct {
 	REPBytes              *uint64               `json:"rep_bytes,omitempty"`
 	REPEntries            *uint64               `json:"rep_entries,omitempty"`
 	UnsupportedREPEntries *uint64               `json:"unsupported_rep_entries,omitempty"`
+	REPBreakdown          *REPBreakdown         `json:"rep_breakdown,omitempty"`
 	Processes             int                   `json:"processes"`
 	Images                int                   `json:"images"`
 	SignalsObserved       uint64                `json:"signals_observed"`
@@ -102,11 +167,14 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	// encoding/json accepts case-insensitive aliases. Do not let a second
 	// spelling override an explicit trust or coverage statement.
 	for key := range fields {
-		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation"} {
+		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown"} {
 			if key != protected && strings.EqualFold(key, protected) {
 				return fmt.Errorf("noncanonical diagnostic contract field")
 			}
 		}
+	}
+	if value, exists := fields["rep_breakdown"]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return fmt.Errorf("REP breakdown cannot be null")
 	}
 	type plain Report
 	var decoded plain
@@ -137,7 +205,7 @@ func (r *Report) WithoutTotals(reason string) *Report {
 
 func (r *Report) ValidUnavailableResult() bool {
 	return r != nil && !r.Complete && r.Reason != "" && r.Quality == "incomplete" && r.REPTelemetryStatus == REPUnavailable &&
-		r.Instructions == nil && r.REPBytes == nil && r.REPEntries == nil && r.UnsupportedREPEntries == nil &&
+		r.Instructions == nil && r.REPBytes == nil && r.REPEntries == nil && r.UnsupportedREPEntries == nil && r.REPBreakdown == nil &&
 		r.SignalsObserved == 0 && r.Processes == 0 && r.Images == 0
 }
 
@@ -170,6 +238,9 @@ func (r *Report) ValidREPTelemetry() bool {
 		return false
 	}
 	if (*r.REPEntries == 0 && *r.REPBytes != 0) || (!r.REPEnabled && (*r.REPBytes != 0 || *r.REPEntries != 0 || *r.UnsupportedREPEntries != 0)) {
+		return false
+	}
+	if r.REPBreakdown != nil && !r.REPBreakdown.validFor(*r.REPBytes, *r.REPEntries, r.REPEnabled) {
 		return false
 	}
 	return r.REPTelemetryStatus == repTelemetryStatus(r.REPEnabled, *r.UnsupportedREPEntries)

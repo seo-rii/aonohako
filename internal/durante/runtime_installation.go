@@ -16,12 +16,13 @@ const runtimeSourceSHA256 = "e2b7d3f1917ff64e644b81efd96a610a3c622f4857c75593fef
 
 // Updated with the reviewed runtime patch. This is installation consistency,
 // not a signature or attestation against an adversarial image administrator.
-const runtimePatchSHA256 = "7b2fbaca84e259aeeafdfc4902ce7a330c48cec51e16804fe74ee3b99ea39f6d"
+const runtimePatchSHA256 = "b44627a42f4f0174e843158e3b3473cbcae26e489da55582008f043d0665716c"
+const runtimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32a100bf48788c"
 const releaseCore = "lib64/release/libdynamorio.so"
 
 // Updated together with the complete third_party/durante snapshot.
-const sourceCommit = "21397969d18c74ceef816779aba026358f483250"
+const sourceCommit = "016a5339f25e143643de285377b8b7b5ee52499e"
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
 // Matching hashes do not attest application counters or an adversarial host.
@@ -29,10 +30,13 @@ type InstallationIdentity struct {
 	SourceCommit        string `json:"source_commit"`
 	RuntimeSourceCommit string `json:"runtime_source_commit"`
 	RuntimePatchSHA256  string `json:"runtime_patch_sha256"`
-	LauncherSHA256      string `json:"launcher_sha256"`
-	ClientSHA256        string `json:"client_sha256"`
-	CoreSHA256          string `json:"release_core_sha256"`
-	Unchanged           bool   `json:"unchanged_before_after"`
+	// Absent only in historical identities. Reading those records does not
+	// qualify their installation for the current execution profile.
+	RuntimeCodeReplayPatchSHA256 string `json:"runtime_code_replay_patch_sha256,omitempty"`
+	LauncherSHA256               string `json:"launcher_sha256"`
+	ClientSHA256                 string `json:"client_sha256"`
+	CoreSHA256                   string `json:"release_core_sha256"`
+	Unchanged                    bool   `json:"unchanged_before_after"`
 }
 
 func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
@@ -41,6 +45,10 @@ func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	keys := []string{"source_commit", "runtime_source_commit", "runtime_patch_sha256", "launcher_sha256", "client_sha256", "release_core_sha256", "unchanged_before_after"}
+	_, hasReplayPatch := fields["runtime_code_replay_patch_sha256"]
+	if hasReplayPatch {
+		keys = append(keys, "runtime_code_replay_patch_sha256")
+	}
 	if len(fields) != len(keys) {
 		return fmt.Errorf("invalid installation identity fields")
 	}
@@ -55,6 +63,9 @@ func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
 	}
+	if hasReplayPatch && decoded.RuntimeCodeReplayPatchSHA256 == "" {
+		return fmt.Errorf("empty installation replay patch field")
+	}
 	*i = InstallationIdentity(decoded)
 	return nil
 }
@@ -64,7 +75,7 @@ func (r *Report) ValidInstallationIdentity() bool {
 		return false
 	}
 	i := r.Installation
-	if !i.Unchanged || i.SourceCommit != sourceCommit || i.RuntimeSourceCommit != runtimeSourceCommit || i.RuntimePatchSHA256 != runtimePatchSHA256 {
+	if !i.Unchanged || i.SourceCommit != sourceCommit || i.RuntimeSourceCommit != runtimeSourceCommit || i.RuntimePatchSHA256 != runtimePatchSHA256 || i.RuntimeCodeReplayPatchSHA256 != runtimeCodeReplayPatchSHA256 {
 		return false
 	}
 	for _, digest := range []string{i.LauncherSHA256, i.ClientSHA256, i.CoreSHA256} {
@@ -82,7 +93,7 @@ func snapshotInstallation(cfg Config) (InstallationIdentity, error) {
 		return InstallationIdentity{}, err
 	}
 	identity := InstallationIdentity{SourceCommit: sourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
-		RuntimePatchSHA256: runtimePatchSHA256, CoreSHA256: core}
+		RuntimePatchSHA256: runtimePatchSHA256, RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, CoreSHA256: core}
 	for _, item := range []struct {
 		path        string
 		destination *string
@@ -182,7 +193,7 @@ func verifyRuntimeInstallation(drrun string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for key, want := range map[string]string{"source_commit": runtimeSourceCommit, "source_sha256": runtimeSourceSHA256, "patch_sha256": runtimePatchSHA256} {
+	for key, want := range map[string]string{"source_commit": runtimeSourceCommit, "source_sha256": runtimeSourceSHA256, "patch_sha256": runtimePatchSHA256, "code_replay_patch_sha256": runtimeCodeReplayPatchSHA256} {
 		var got string
 		if json.Unmarshal(inputs[key], &got) != nil || got != want {
 			return "", fmt.Errorf("durante runtime input %s does not match the reviewed pin", key)

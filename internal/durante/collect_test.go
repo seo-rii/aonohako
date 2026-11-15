@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -189,11 +190,13 @@ func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 			Files    map[string][]json.RawMessage `json:"files"`
 			Valid    bool                         `json:"valid"`
 			Expected struct {
-				Instructions uint64 `json:"instructions"`
-				Processes    int    `json:"process_count"`
-				Images       int    `json:"image_count"`
-				Signals      uint64 `json:"signals_observed"`
-				Quality      string `json:"quality"`
+				Instructions       uint64        `json:"instructions"`
+				Processes          int           `json:"process_count"`
+				Images             int           `json:"image_count"`
+				Signals            uint64        `json:"signals_observed"`
+				Quality            string        `json:"quality"`
+				REPBreakdown       *REPBreakdown `json:"rep_breakdown"`
+				REPTelemetryStatus string        `json:"rep_telemetry_status"`
 			} `json:"expected"`
 		} `json:"cases"`
 	}
@@ -229,7 +232,7 @@ func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 				t.Fatalf("completeness mismatch: %+v", r)
 			}
 			if !vector.Valid {
-				if r.Instructions != nil || r.REPBytes != nil || r.Reason == "" {
+				if r.Instructions != nil || r.REPBytes != nil || r.REPBreakdown != nil || r.Reason == "" {
 					t.Fatalf("invalid report exposed totals: %+v", r)
 				}
 				return
@@ -237,6 +240,9 @@ func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 			e := vector.Expected
 			if r.Instructions == nil || *r.Instructions != e.Instructions || r.Processes != e.Processes || r.Images != e.Images || r.SignalsObserved != e.Signals || r.Quality != e.Quality {
 				t.Fatalf("aggregate differs from reference: %+v", r)
+			}
+			if !reflect.DeepEqual(r.REPBreakdown, e.REPBreakdown) || !r.ValidREPTelemetry() || (e.REPTelemetryStatus != "" && r.REPTelemetryStatus != e.REPTelemetryStatus) {
+				t.Fatalf("REP detail differs from reference: report=%+v breakdown=%+v want=%+v", r, r.REPBreakdown, e.REPBreakdown)
 			}
 		})
 	}

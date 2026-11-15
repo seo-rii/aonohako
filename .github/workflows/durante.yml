@@ -67,6 +67,7 @@ jobs:
           gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/interactive.c -o /tmp/durante-interactive
           gcc -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/communication.c -o /tmp/durante-communication
           g++ -std=c++20 -O2 -Wall -Wextra -Werror -static internal/execute/testdata/durante/reference.cpp -o /tmp/durante-reference
+          gcc -nostdlib -static -no-pie internal/execute/testdata/durante/rep_breakdown.S -o /tmp/durante-rep-breakdown
       - name: Compile integration tests
         run: |
           CGO_ENABLED=0 go test -c -o /tmp/durante-execute.test ./internal/execute
@@ -96,6 +97,7 @@ jobs:
             --mount type=bind,src=/tmp/durante-interactive,dst=/validation/interactive,readonly \
             --mount type=bind,src=/tmp/durante-communication,dst=/validation/communication,readonly \
             --mount type=bind,src=/tmp/durante-reference,dst=/validation/reference,readonly \
+            --mount type=bind,src=/tmp/durante-rep-breakdown,dst=/validation/rep-breakdown,readonly \
             -e AONOHAKO_TEST_DURANTE=1 -e AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
             -e AONOHAKO_WORK_ROOT=/work \
             -e AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT="$image_id" \
@@ -103,8 +105,9 @@ jobs:
             -e AONOHAKO_TEST_DURANTE_INTERACTIVE=/validation/interactive \
             -e AONOHAKO_TEST_DURANTE_COMMUNICATION=/validation/communication \
             -e AONOHAKO_TEST_DURANTE_REFERENCE=/validation/reference \
+            -e AONOHAKO_TEST_DURANTE_REP_BREAKDOWN=/validation/rep-breakdown \
             --entrypoint /validation/execute.test "$image_id" \
-            -test.v -test.run '^TestDurante(TimeEstimate|Interactive|Communication)Integration$' -test.timeout 240s
+            -test.v -test.run '^TestDurante(REPBreakdown|TimeEstimate|Interactive|Communication)Integration$' -test.timeout 240s
       - name: Collect fixed C++ corpus through actual compile and execute APIs
         shell: bash
         run: |
@@ -139,6 +142,13 @@ jobs:
           assert data['complete'] and data['smoke'] and not data.get('failures')
           assert len(data['samples']) == 5
           assert {row['workload_id'] for row in data['samples']} == {'integer', 'rep_copy', 'branch', 'sort', 'rep_fill'}
+          for row in data['samples']:
+              report = row['metered']['work_measurement']
+              detail = report['rep_breakdown']
+              assert detail['version'] == 1
+              assert detail['movs_bytes'] + detail['stos_bytes'] == report['rep_bytes']
+              assert detail['movs_entries'] + detail['stos_entries'] == report['rep_entries']
+              assert report['engine_profile'] == 'dynamorio-11.3-durante-v4-vm32m'
           PY
       - name: Preserve reference collection receipt
         if: always() && env.REFERENCE_OUTPUT != ''

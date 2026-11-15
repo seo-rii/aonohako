@@ -73,7 +73,7 @@ func TestDuranteSandboxIntegration(t *testing.T) {
 				t.Fatalf("instrumented run failed: %+v", resp)
 			}
 			m := resp.WorkMeasurement
-			if m == nil || !m.Complete || m.Instructions == nil || *m.Instructions == 0 || m.Processes != 1 || m.Authority != durante.Authority || !m.ValidDiagnosticContract() || !m.ValidREPTelemetry() || !m.ValidInstallationIdentity() {
+			if m == nil || !m.Complete || m.Instructions == nil || *m.Instructions == 0 || m.Processes != 1 || m.Authority != durante.Authority || !m.ValidDiagnosticContract() || !m.ValidREPTelemetry() || !m.ValidInstallationIdentity() || m.REPBreakdown == nil {
 				t.Fatalf("invalid work report: %+v", m)
 			}
 			if resp.CPUTimeNs == 0 || resp.MemoryKB == 0 {
