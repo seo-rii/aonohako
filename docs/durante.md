@@ -599,7 +599,8 @@ response fields would be:
       "nanoseconds": 131648,
       "milliseconds": 1
     },
-    "nominal_time_exceeded": false
+    "nominal_time_exceeded": false,
+    "time_estimate_eligibility": {"version": 1, "eligible": true, "reason_codes": []}
   }
 }
 ```
@@ -626,6 +627,85 @@ before an envelope execution can omit `work_measurement_execution` entirely.
 Requesting a time estimate without an applicable operator policy is rejected
 before target execution. Omitting the flag preserves the previous response and
 does not automatically apply a configured model.
+
+### Structured conversion eligibility
+
+When `work_measurement_time` is requested and an execution envelope exists,
+`time_estimate_eligibility` provides an additional versioned explanation. The
+existing `time_estimate_unavailable` values above remain unchanged. For example,
+a complete report with signals and unsupported REP work, evaluated with a v2
+model but lacking operation detail, keeps its raw counts and reports:
+
+```json
+{
+  "time_estimate_unavailable": "observation_not_convertible",
+  "time_estimate_eligibility": {
+    "version": 1,
+    "eligible": false,
+    "reason_codes": ["signals_observed", "unsupported_rep_entries", "rep_breakdown_missing"]
+  }
+}
+```
+
+Successful conversion has `eligible: true` and an explicit empty reason array.
+Ineligible conversion has `eligible: false` and at least one code; it never
+returns an estimate or nominal-limit comparison. This explains eligibility for
+the selected diagnostic model, not measurement trust or a student verdict.
+Signal/partial-REP exclusions remain strict. A missing legacy REP breakdown
+blocks v2 even when combined bytes are zero; an explicitly observed, consistent
+zero breakdown passes that requirement. V1 retains its legacy-detail behavior.
+
+Version 1 evaluates stages in this order:
+
+1. Execution completion. A stopped execution returns its execution code alone;
+   discarded or nonexistent counters are not analyzed as if still observed.
+2. The execution API's ordinary diagnostic-report validation, then model
+   selection. Failure returns `incompatible_observation` or
+   `incompatible_time_configuration` alone.
+3. The estimator's policy validity, runtime/family/engine/dispatch binding, then
+   controlled-dispatch host libc. Each failed stage stops before later checks.
+4. Raw report eligibility. All applicable report codes are emitted, once each,
+   in the table order below. Missing fields are not guessed as zero.
+5. Exact arithmetic. Only otherwise eligible observations reach calculation;
+   final int64 overflow returns `numeric_overflow` alone.
+
+| Code, in canonical order | Meaning |
+|---|---|
+| `execution_cancelled` | The execution context was cancelled. |
+| `execution_resource_exhausted` | A raw resource limit stopped execution. |
+| `execution_failed` | Execution failed before a convertible completed result. |
+| `execution_incomplete` | Execution did not provide a completed diagnostic observation. |
+| `execution_not_complete` | Defensive fallback for another noncomplete internal state; remote envelope validation still rejects unknown states. |
+| `incompatible_observation` | The API's complete-report contract is not satisfied. |
+| `incompatible_time_configuration` | No valid selected policy applies. |
+| `runtime_profile_mismatch` | Runtime ID, family, engine or dispatch differs from the selected policy. |
+| `host_libc_mismatch` | The controlled dispatch does not report the required host libc. |
+| `report_contract_mismatch` | Schema, metric, scope, authority or diagnostic contract is incompatible. |
+| `incomplete_accounting` | The report is incomplete or carries an incompleteness reason. |
+| `signals_observed` | At least one signal was observed; handler work is not silently treated as uninterrupted work. |
+| `invalid_accounting_quality` | The quality label contradicts the signal count. |
+| `incomplete_process_tree` | Process/image counts do not describe a complete tree. |
+| `rep_disabled` | REP collection was disabled. |
+| `counters_missing` | At least one required instruction/REP counter is absent. |
+| `invalid_counters` | Instructions are zero or positive REP bytes have no REP entry. |
+| `unsupported_rep_entries` | Unsupported REP work is present, so full REP coverage is unavailable. |
+| `rep_telemetry_mismatch` | REP status, enabled mode or optional breakdown contradicts its totals. |
+| `rep_breakdown_missing` | V2 lacks an observed operation breakdown. |
+| `numeric_overflow` | The final rounded time cannot fit int64 nanoseconds. |
+
+The object has exactly `version`, `eligible` and `reason_codes`; all three are
+required when present. Nulls, unknown codes, duplicates, reordered codes,
+contradictory eligible/reason states and noncanonical field spellings are rejected.
+Older remote runners may omit the whole object. Absence stays absent and means
+the explanation was not supplied; it is not successful qualification. The remote
+control plane still recomputes the estimate and legacy unavailable string with
+its own model. If eligibility is present, its complete ordered contents must also
+match recomputation. Removing it cannot bypass the previous validation.
+
+No eligibility is emitted without the explicit time request, and raw corpus
+collection/fitting rejects unsolicited conversion metadata. `TimePolicy.Estimate`
+and `EstimateWithEligibility` share one gate and exact-arithmetic implementation;
+reference collection reuses the raw `Report.TimeConversionEligibility` checks.
 
 For actual API corpus collection, exact train-only fitting and held-out error
 gates, see [C++ reference-time qualification](durante-reference.md). The tool
