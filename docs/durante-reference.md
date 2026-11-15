@@ -240,10 +240,14 @@ zero observed signals.
 The first Rust attempt stopped after compilation because its normal executable
 exceeded the collector's previous 8 MiB cap. Its incomplete receipt was retained;
 a separate rerun passed after aligning the Rust artifact and HTTP budgets with
-the API's 16 MiB artifact limit. The three other profile receipts precede that
-Rust-specific correction; their artifact/HTTP limits and fixtures are unchanged.
-CI runs all four profiles against one final collector build. These smoke results
-do not test full-cohort repeatability gates, fit coefficients or qualify a model.
+the API's 16 MiB artifact limit. A subsequent campaign ran all four profiles
+with the same final collector, SHA-256
+`eda175a4168f0ee1159ac42f79711965e7da5ce8e789eb23777fe7e6570c5fcb`.
+All sixty executions passed in 91.538 seconds, with unchanged source/runtime
+inputs and complete container cleanup. The original incomplete Rust receipt
+remains preserved. CI also runs all four profiles against one collector build.
+These smoke results do not test full-cohort repeatability gates, fit coefficients
+or qualify a model.
 
 ## Local qualification result
 
