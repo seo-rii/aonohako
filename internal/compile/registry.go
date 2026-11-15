@@ -1,5 +1,7 @@
 package compile
 
+import "path/filepath"
+
 const (
 	asCompileKind            = "assemblyscript"
 	chezSchemeCompileKind    = "chez-scheme"
@@ -30,6 +32,9 @@ var compileRegistry = map[string]Compiler{
 	}},
 	"nim": singleSourceExecutableCompiler{exts: []string{".nim"}, preferredBases: []string{"Main.nim"}, noSourceReason: "no nim sources", bin: "nim", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--out:" + outputPath(job), sourcePath}
+	}},
+	"nimony": singleSourceExecutableCompiler{exts: []string{".nim"}, preferredBases: []string{"Main.nim", "main.nim"}, noSourceReason: "no nimony sources", bin: "nimony", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--parallelBuild:1", "--nimcache:" + filepath.Join(job.WorkDir, ".cache", "nimony"), "--out:" + outputPath(job), sourcePath}
 	}},
 	"zig": singleSourceExecutableCompiler{exts: []string{".zig"}, preferredBases: []string{"Main.zig"}, noSourceReason: "no zig sources", bin: "zig", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"build-exe", sourcePath, "-O", "ReleaseSafe", "-mcpu=baseline", "-femit-bin=" + outputPath(job)}

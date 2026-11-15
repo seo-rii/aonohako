@@ -79,6 +79,7 @@ var profiles = map[string]Profile{
 	"DELPHI":        {SourceLang: "DELPHI", Extension: "dpr", DefaultTarget: "Main", CompileKind: "delphi", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"OBJECTPASCAL":  {SourceLang: "OBJECTPASCAL", Extension: "pas", DefaultTarget: "Main", CompileKind: "objectpascal", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"NIM":           {SourceLang: "NIM", Extension: "nim", DefaultTarget: "Main", CompileKind: "nim", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"NIMONY":        {SourceLang: "NIMONY", Extension: "nim", DefaultTarget: "Main", CompileKind: "nimony", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"CLOJURE":       {SourceLang: "CLOJURE", Extension: "clj", CompileKind: "clojure", RunLang: "clojure", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"RACKET":        {SourceLang: "RACKET", Extension: "rkt", CompileKind: "racket", RunLang: "racket", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"SCHEME":        {SourceLang: "SCHEME", Extension: "scm", CompileKind: "scheme", RunLang: "scheme", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},

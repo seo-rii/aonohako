@@ -493,6 +493,7 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "PyPy" pypy3 --version`,
 		`report_once "Free Pascal" fpc -iV`,
 		`report_once "Nim" nim --version`,
+		`report_once "Nimony" nimony --version`,
 		`report_once "Clojure" clojure -e "(println (clojure-version))"`,
 		`report_once "Racket" racket --version`,
 		`report_once "Dart" dart --version`,
