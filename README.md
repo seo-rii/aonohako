@@ -14,7 +14,7 @@ binary, configurable runtime images, and testable build metadata.
   new files to be created in the same working directory
 - symlink-safe output capture for file outputs and sidecar artifacts
 - optional [SIMD and AVX restrictions](docs/cpu-feature-policy.md) for C/C++
-  compilation and instruction-checked execution of static x86-64 binaries
+  compilation and instruction-checked execution of native x86-64 binaries
 - SPJ and interactive IO judging support for problems that need custom verdict
   logic or bidirectional contestant/interactor communication
 - [Entry block judging](docs/entry-judging.md) with selectable standard I/O or
@@ -664,13 +664,15 @@ contract:
 - `disallowed_cpu_features`
   An optional `"avx"` / `"simd"` list on both `/compile` and `/execute`.
   Compilation checks C/C++ objects before linking. Execution uses the packaged
-  QEMU TCG emulation and a policy plugin for static Linux x86-64 contestant binaries;
-  it checks executed instructions, including guest library code. Execution
+  Durante/DynamoRIO native instrumentation for Linux x86-64 contestant binaries;
+  it checks executed instructions, including application library code. Execution
   currently supports standard I/O, ordinary and interactive contestants, and
   stdin/stdout pipelines. Network, communication mode, and contestant file
   outputs are rejected. Trusted interactors and SPJs keep their existing
-  execution path. Emulation costs count toward limits, and `simd` can reject
-  packed instructions in libc even for scalar source. See
+  execution path. The policy can share one run with diagnostic work measurement.
+  Instrumentation costs count toward limits, and `simd` can reject packed
+  instructions in libc even for scalar source. This retains Durante's
+  application-mutable trust level. See
   [CPU feature policy](docs/cpu-feature-policy.md) for scope and packaging.
 
 ## Security notes

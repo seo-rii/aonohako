@@ -123,11 +123,11 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 
 	var err error
 	var contestantMeter, interactorMeter *durante.Session
+	contestantMeter, err = s.prepareContestantDurante(ctx, contestantWS, req)
+	if err != nil {
+		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "contestant durante preparation failed: " + err.Error()}}
+	}
 	if req.WorkMeasurement {
-		contestantMeter, err = durante.Prepare(ctx, contestantWS.RootDir, s.workMeasurement, req.Lang, int(defaultSandboxUID), int(defaultSandboxGID))
-		if err != nil {
-			return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "contestant durante preparation failed: " + err.Error()}}
-		}
 		interactorMeter, err = durante.Prepare(ctx, interactorWS.RootDir, s.workMeasurement, interactorReq.Lang, int(interactiveJudgeSandboxUID), int(interactiveJudgeSandboxGID))
 		if err != nil {
 			return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor durante preparation failed: " + err.Error()}}
@@ -311,6 +311,12 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	contestantIn.Close()
 	interactorIn.Close()
 	reconcileInteractiveRelayResults(&contestantRes, &interactorRes, interactorIn.Err(), contestantIn.Err())
+	// Peer timers and cancellation have already stopped. Native policy parsing
+	// cannot delay peer teardown or consume an execution budget.
+	policyReport := collectCPUFeatureResult(req.DisallowedCPUFeatures, &contestantRes, contestantMeter)
+	if req.WorkMeasurement {
+		contestantRes.WorkMeasurement = policyReport
+	}
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(contestantWS, req.SidecarOutputs)
 	resp := interactiveResponse(

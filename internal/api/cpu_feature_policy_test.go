@@ -176,6 +176,7 @@ func TestExecuteForwardsDisallowedCPUFeatures(t *testing.T) {
 		name, lang, features string
 		want                 []cpupolicy.Feature
 		measurement          bool
+		measurementLimits    bool
 	}{
 		{name: "omitted binary", lang: "binary"},
 		{name: "omitted other language", lang: "python"},
@@ -187,6 +188,8 @@ func TestExecuteForwardsDisallowedCPUFeatures(t *testing.T) {
 		{name: "measurement with omitted policy", lang: "CPP20", measurement: true},
 		{name: "measurement with empty policy", lang: "CPP20", features: `[]`, measurement: true},
 		{name: "measurement with null policy", lang: "CPP20", features: `null`, measurement: true},
+		{name: "measurement with AVX policy", lang: "CPP20", features: `["avx"]`, measurement: true, want: []cpupolicy.Feature{cpupolicy.AVX}},
+		{name: "measurement limits with SIMD policy", lang: "CPP20", features: `["simd"]`, measurement: true, measurementLimits: true, want: []cpupolicy.Feature{cpupolicy.SIMD}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var calls atomic.Int64
@@ -198,11 +201,18 @@ func TestExecuteForwardsDisallowedCPUFeatures(t *testing.T) {
 				if req.WorkMeasurement != tc.measurement {
 					t.Errorf("runner work measurement = %v, want %v", req.WorkMeasurement, tc.measurement)
 				}
+				if (req.WorkMeasurementLimits != nil) != tc.measurementLimits {
+					t.Errorf("runner work measurement limits = %v, enabled = %v", req.WorkMeasurementLimits, tc.measurementLimits)
+				}
 				return model.RunResponse{Status: model.RunStatusAccepted}
 			}})
 			server := httptest.NewServer(s.Handler())
 			defer server.Close()
-			response, err := http.Post(server.URL+"/execute", "application/json", bytes.NewReader(cpuFeatureExecutePayload(t, tc.lang, tc.features, map[string]any{"work_measurement": tc.measurement})))
+			extra := map[string]any{"work_measurement": tc.measurement}
+			if tc.measurementLimits {
+				extra["work_measurement_limits"] = map[string]any{"cpu_time_ms": 2000, "wall_time_ms": 3000, "memory_mb": 128}
+			}
+			response, err := http.Post(server.URL+"/execute", "application/json", bytes.NewReader(cpuFeatureExecutePayload(t, tc.lang, tc.features, extra)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -242,8 +252,6 @@ func TestExecuteRejectsCPUFeaturePolicyBeforeFetchOrAdmission(t *testing.T) {
 		{name: "file output", lang: "binary", features: `["avx"]`, extra: map[string]any{"file_outputs": []any{map[string]any{"path": "answer"}}}},
 		{name: "sidecar", lang: "binary", features: `["simd"]`, extra: map[string]any{"sidecar_outputs": []any{map[string]any{"path": "image"}}}},
 		{name: "communication", lang: "binary", features: `["avx"]`, extra: map[string]any{"communication": map[string]any{}}},
-		{name: "work measurement", lang: "CPP20", features: `["avx"]`, extra: map[string]any{"work_measurement": true}},
-		{name: "work measurement limits", lang: "CPP20", features: `["simd"]`, extra: map[string]any{"work_measurement": true, "work_measurement_limits": map[string]any{"cpu_time_ms": 2000, "wall_time_ms": 3000, "memory_mb": 128}}},
 		{name: "work limits without measurement", lang: "CPP20", features: `["avx"]`, extra: map[string]any{"work_measurement_limits": map[string]any{"cpu_time_ms": 2000, "wall_time_ms": 3000, "memory_mb": 128}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

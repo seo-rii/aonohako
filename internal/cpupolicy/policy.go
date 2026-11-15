@@ -1,6 +1,6 @@
 // Package cpupolicy defines the shared opt-in compile and execution CPU feature
 // options and inspects C/C++ objects before linking. Runtime instruction checks
-// are implemented separately by the QEMU plugin in runtime/cpu-policy.c; object
+// are implemented by the vendored Durante native instrumentation client; object
 // inspection alone does not constrain linked libraries or dynamically reached
 // code.
 package cpupolicy

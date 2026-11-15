@@ -6,9 +6,12 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"aonohako/internal/cpupolicy"
 )
 
 // EngineProfile identifies the reviewed patched engine, basic-block execution
@@ -57,19 +60,35 @@ type Session struct {
 	family       string
 	hostLibc     string
 	installation InstallationIdentity
+	cpuFeatures  []cpupolicy.Feature
 }
 
 func Prepare(ctx context.Context, root string, cfg Config, language string, uid, gid int) (*Session, error) {
 	return prepare(ctx, root, cfg, language, uid, gid, hostGLIBC)
 }
 
-func prepare(ctx context.Context, root string, cfg Config, language string, uid, gid int, libc func(context.Context) (string, error)) (*Session, error) {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		return nil, fmt.Errorf("durante requires Linux x86-64")
+// PrepareCPUFeaturePolicy uses the native client without opting the caller into
+// a work-measurement family. Policy-only runs retain the ordinary dispatch
+// environment and do not publish a measurement report.
+func PrepareCPUFeaturePolicy(ctx context.Context, root string, cfg Config, uid, gid int) (*Session, error) {
+	policyConfig, err := ParseConfig("", cfg.Drrun, cfg.Client, DispatchDefault)
+	if err != nil {
+		return nil, err
 	}
+	return prepareSession(ctx, root, policyConfig, "", uid, gid, hostGLIBC)
+}
+
+func prepare(ctx context.Context, root string, cfg Config, language string, uid, gid int, libc func(context.Context) (string, error)) (*Session, error) {
 	family, err := cfg.Family(language)
 	if err != nil {
 		return nil, err
+	}
+	return prepareSession(ctx, root, cfg, family, uid, gid, libc)
+}
+
+func prepareSession(ctx context.Context, root string, cfg Config, family string, uid, gid int, libc func(context.Context) (string, error)) (*Session, error) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		return nil, fmt.Errorf("durante requires Linux x86-64")
 	}
 	for _, path := range []string{cfg.Drrun, cfg.Client} {
 		info, err := os.Stat(path)
@@ -105,8 +124,24 @@ func prepare(ctx context.Context, root string, cfg Config, language string, uid,
 	return s, nil
 }
 
+func (s *Session) SetDisallowedCPUFeatures(features []cpupolicy.Feature) error {
+	if err := cpupolicy.Validate(features); err != nil {
+		return err
+	}
+	if s == nil || s.dir == "" {
+		return fmt.Errorf("CPU feature enforcement requires a prepared Durante session")
+	}
+	s.cpuFeatures = slices.Clone(features)
+	slices.Sort(s.cpuFeatures)
+	return nil
+}
+
 func (s *Session) Wrap(command []string) []string {
-	args := []string{s.config.Drrun, "-quiet", "-follow_children", "-disable_traces", "-vm_size", "32M", "-vmheap_size", "32M", "-c", s.config.Client, "-outdir", s.dir, "-rep_bytes", "--"}
+	args := []string{s.config.Drrun, "-quiet", "-follow_children", "-disable_traces", "-vm_size", "32M", "-vmheap_size", "32M", "-c", s.config.Client, "-outdir", s.dir, "-rep_bytes"}
+	for _, feature := range s.cpuFeatures {
+		args = append(args, "-disallow_cpu_feature", string(feature))
+	}
+	args = append(args, "--")
 	return append(args, command...)
 }
 
