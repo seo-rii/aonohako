@@ -71,7 +71,7 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_DURANTE_DISPATCH_PROFILE` | `default`, or the C/C++ diagnostic profile `glibc-2.41-sse2-v1`. |
 | `AONOHAKO_DURANTE_RESOURCE_POLICY` | Optional strict JSON operator policy for separate raw CPU/wall/RSS diagnostic limits; disabled when absent. |
 | `AONOHAKO_DURANTE_TIME_POLICY` | Optional strict `TimePolicy` JSON with every model field and positive integer coefficient explicitly supplied. Enables requested C/C++ reference-time estimates with a resource policy. |
-| `AONOHAKO_DURANTE_TIME_MODELS` | Optional strict schema-1 registry of shared coefficient models and explicitly approved execution profiles. Mutually exclusive with `AONOHAKO_DURANTE_TIME_POLICY`; family registration alone enables no profile. |
+| `AONOHAKO_DURANTE_TIME_MODELS` | Optional strict schema-1 (legacy) or schema-2 (effective runtime options) registry of shared coefficient models and explicit execution profiles. Mutually exclusive with `AONOHAKO_DURANTE_TIME_POLICY`; family registration alone enables no profile. |
 | `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with either time setting, independently of the model's profile bindings. |
 
 For example, configure `AONOHAKO_DURANTE_FAMILIES=cpp` and add
@@ -560,7 +560,8 @@ All fields are required except model `method`, whose absence means
 registry accepts at most 32 models, 128 profiles
 and 64 KiB of JSON. Unknown fields, duplicates, nulls, noncanonical source IDs,
 unknown model versions and ambiguous profile bindings are rejected. Each model
-ID/version is unique; each source/image/engine/dispatch combination has one binding.
+ID/version is unique; each source/image/engine/dispatch combination has one binding
+in schema 1. Schema 2 also includes the effective runtime-options ID in this key.
 The optional `glibc-2.41-sse2-v1` dispatch profile retains its C/C++ restriction.
 
 The source family must also be enabled in `AONOHAKO_DURANTE_FAMILIES`, and an
@@ -572,13 +573,16 @@ creates missing bindings. A `qualification_id` records an operator's approval; t
 service does not verify that external record or infer CPU-time accuracy from it.
 Adding a JVM binding cannot bypass its existing execution gate.
 
-Bindings currently match source, image, engine and dispatch only. They do not
-identify the effective `runtime_profile`, operator tuning defaults, Python library
-mode, or heap/GC options derived from memory limits. A binding must not be read as
-qualification of every configuration within one image. Keep those settings fixed
-to the evidence used for the model; the service does not currently verify their
-agreement with that evidence. Binding effective options is required before a
-future configuration-specific time or live-budget policy can rely on this registry.
+Schema 1 bindings match source, image, engine and dispatch only. They remain
+unbound with respect to effective runtime options and must not be read as
+qualification of every configuration within one image. Keep their runtime
+profile, operator tuning, Python library mode and memory-derived heap settings
+fixed to their evidence. Schema 2 additionally requires an exact generated
+runtime-options descriptor for its explicitly supported launchers; mismatches
+are rejected before local execution or remote upload, without fallback. See
+[effective runtime options](durante-runtime-options.md) for migration, supported
+launchers, operator inspection and the boundary of this configuration identity.
+Neither format supplies qualification evidence or an enforceable live budget.
 
 Selection resolves to the existing `TimePolicy` and `time_estimate` response shape,
 including the selected canonical `SOURCE@image` runtime ID. The runner and remote

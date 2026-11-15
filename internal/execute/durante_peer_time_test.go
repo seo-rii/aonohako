@@ -359,6 +359,13 @@ func assertPeerTimeIntegrationBudgets(t *testing.T, req *model.RunRequest, respo
 			t.Fatalf("role %d has an incorrect estimate or budget comparison: %+v", i, result)
 		}
 	}
+	if cfg.TimeModels != nil && cfg.TimeModels.Schema == 2 {
+		estimates := make([]durante.TimeEstimate, len(response.WorkMeasurements))
+		for i, process := range response.WorkMeasurements {
+			estimates[i] = *process.TimeBudget.Estimate
+		}
+		assertIntegrationRuntimeOptions(t, cfg, req, estimates)
+	}
 	if err := validateRemoteWorkMeasurementPeerTime(req, response, cfg); err != nil {
 		t.Fatalf("actual role estimates violate the forwarding contract: %v", err)
 	}

@@ -3,6 +3,7 @@ package execute
 import (
 	"fmt"
 
+	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 )
@@ -24,7 +25,7 @@ func snapshotWorkMeasurementConfig(cfg durante.Config) durante.Config {
 
 // Conversion is attached after the execution state has been finalized. It does
 // not change the diagnostic report, raw resource values, or outer verdict.
-func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config) model.RunResponse {
+func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config, runtimeTuning ...config.RuntimeTuningConfig) model.RunResponse {
 	if !req.WorkMeasurementTime || response.WorkMeasurementExecution == nil {
 		return response
 	}
@@ -39,7 +40,7 @@ func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse
 		d.TimeEstimateUnavailable = "incompatible_observation"
 		return response
 	}
-	policy, runtimeID, err := cfg.TimePolicyFor(req.Lang)
+	policy, runtimeID, err := ordinaryTimePolicy(req, cfg, optionalRuntimeTuning(runtimeTuning))
 	if err != nil {
 		d.TimeEstimateUnavailable = "incompatible_time_configuration"
 		return response
@@ -56,7 +57,7 @@ func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse
 	return response
 }
 
-func validateRemoteWorkMeasurementTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config) error {
+func validateRemoteWorkMeasurementTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config, runtimeTuning ...config.RuntimeTuningConfig) error {
 	d := response.WorkMeasurementExecution
 	if d == nil { // Admission/initialization failed before an envelope execution.
 		return nil
@@ -67,12 +68,12 @@ func validateRemoteWorkMeasurementTime(req *model.RunRequest, response model.Run
 		}
 		return nil
 	}
-	if _, _, err := cfg.TimePolicyFor(req.Lang); err != nil {
+	if _, _, err := ordinaryTimePolicy(req, cfg, optionalRuntimeTuning(runtimeTuning)); err != nil {
 		return fmt.Errorf("invalid remote result: incompatible work measurement time configuration")
 	}
 	// Recompute from the complete raw observation and the control plane's own
 	// configured downstream image/model, never from returned weights or time.
-	expected := finishWorkMeasurementTime(req, response, cfg).WorkMeasurementExecution
+	expected := finishWorkMeasurementTime(req, response, cfg, runtimeTuning...).WorkMeasurementExecution
 	if (d.TimeEstimate == nil) != (expected.TimeEstimate == nil) ||
 		(d.NominalTimeExceeded == nil) != (expected.NominalTimeExceeded == nil) ||
 		d.TimeEstimateUnavailable != expected.TimeEstimateUnavailable {

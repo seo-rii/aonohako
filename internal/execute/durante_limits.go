@@ -20,7 +20,7 @@ func (s *Service) runWorkMeasurementDiagnostic(ctx context.Context, req *model.R
 	rawService.shortCaseSampling = false
 	response := rawService.runOne(ctx, &rawReq, hooks, tuning, true).response
 	response = finishWorkMeasurementDiagnostic(ctx, req, response)
-	return finishWorkMeasurementTime(req, response, s.workMeasurement)
+	return finishWorkMeasurementTime(req, response, s.workMeasurement, tuning)
 }
 
 func workMeasurementRawRequest(req *model.RunRequest) model.RunRequest {

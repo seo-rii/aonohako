@@ -28,6 +28,7 @@ const TimeMethodREPBreakdown = "weighted-rep-operations-nanoseconds-v2"
 // Family alone is insufficient to identify a compatible runtime. Report does
 // not attest RuntimeID or the target's libc, so this policy cannot do so either.
 type TimePolicy struct {
+	runtimeOptionsID       string // Set only by a validated schema 2 registry binding.
 	Method                 string `json:"method,omitempty"`
 	ModelID                string `json:"model_id"`
 	ModelVersion           uint64 `json:"model_version"`
@@ -48,6 +49,7 @@ type TimePolicy struct {
 // Nanoseconds is rounded up once after summing all exact rational terms;
 // Milliseconds is the same total rounded up to whole milliseconds.
 type TimeEstimate struct {
+	RuntimeOptionsID       string `json:"runtime_options_id,omitempty"`
 	InstructionNSNumerator uint64 `json:"instruction_ns_numerator"`
 	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator,omitempty"`
 	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
@@ -179,6 +181,7 @@ func (p TimePolicy) Estimate(runtimeID string, report Report) (TimeEstimate, err
 		milliseconds++
 	}
 	return TimeEstimate{
+		RuntimeOptionsID:       p.runtimeOptionsID,
 		InstructionNSNumerator: p.InstructionNSNumerator,
 		REPByteNSNumerator:     p.REPByteNSNumerator, NSDenominator: p.NSDenominator,
 		MOVSByteNSNumerator: p.MOVSByteNSNumerator, STOSByteNSNumerator: p.STOSByteNSNumerator,

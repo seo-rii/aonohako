@@ -111,13 +111,19 @@ func (s *Session) Wrap(command []string) []string {
 }
 
 func (s *Session) Environment(env []string) []string {
+	return s.config.RuntimeEnvironment(env)
+}
+
+// RuntimeEnvironment applies the same dispatch environment to execution and
+// effective runtime-options descriptors without opening a measurement session.
+func (c Config) RuntimeEnvironment(env []string) []string {
 	out := make([]string, 0, len(env)+1)
 	for _, value := range env {
 		if !strings.HasPrefix(value, "GLIBC_TUNABLES=") {
 			out = append(out, value)
 		}
 	}
-	if s.config.DispatchProfile == DispatchGLIBC241 {
+	if c.DispatchProfile == DispatchGLIBC241 {
 		out = append(out, "GLIBC_TUNABLES="+portableGLIBC241)
 	}
 	return out

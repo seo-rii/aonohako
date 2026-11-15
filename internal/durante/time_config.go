@@ -183,10 +183,31 @@ func (c Config) ValidateTimeConfiguration() error {
 // source/image/engine/dispatch combination. Legacy policies keep their original
 // single C/C++ source binding.
 func (c Config) TimePolicyFor(language string) (TimePolicy, string, error) {
+	return c.timePolicyForOptions(language, nil)
+}
+
+// TimePolicyForOptions requires exact effective options for schema 2. A failed
+// lookup never falls back to a different descriptor or to an unbound policy.
+func (c Config) TimePolicyForOptions(language string, options RuntimeOptions) (TimePolicy, string, error) {
+	return c.timePolicyForOptions(language, &options)
+}
+
+func (c Config) timePolicyForOptions(language string, options *RuntimeOptions) (TimePolicy, string, error) {
 	if err := c.ValidateTimeConfiguration(); err != nil {
 		return TimePolicy{}, "", err
 	}
 	if c.TimeModels != nil {
+		optionsID := ""
+		if c.TimeModels.Schema == 2 {
+			if options == nil {
+				return TimePolicy{}, "", fmt.Errorf("durante schema 2 time requires effective runtime options")
+			}
+			var err error
+			optionsID, err = options.ID()
+			if err != nil {
+				return TimePolicy{}, "", err
+			}
+		}
 		if _, err := c.Family(language); err != nil {
 			return TimePolicy{}, "", err
 		}
@@ -198,13 +219,19 @@ func (c Config) TimePolicyFor(language string) (TimePolicy, string, error) {
 			if binding.SourceLanguage+"@"+binding.RuntimeImage != runtimeID || binding.EngineProfile != EngineProfile || binding.DispatchProfile != c.DispatchProfile {
 				continue
 			}
+			if c.TimeModels.Schema == 2 {
+				boundID, _ := binding.RuntimeOptions.ID()
+				if boundID != optionsID {
+					continue
+				}
+			}
 			for _, model := range c.TimeModels.Models {
 				if model.ModelID == binding.ModelID && model.ModelVersion == binding.ModelVersion {
 					return model.resolve(binding), runtimeID, nil
 				}
 			}
 		}
-		return TimePolicy{}, "", fmt.Errorf("durante time has no approved profile for the requested source, runtime image and dispatch")
+		return TimePolicy{}, "", fmt.Errorf("durante time has no approved profile for the requested source, runtime image, dispatch and effective runtime options")
 	}
 	if c.TimePolicy == nil {
 		return TimePolicy{}, "", fmt.Errorf("durante time policy is not enabled")
