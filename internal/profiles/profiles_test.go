@@ -126,6 +126,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"ERLANG",
 		"MERCURY",
 		"PROLOG",
+		"PICAT",
 		"GNU_PROLOG",
 		"SCALA",
 		"FSHARP",

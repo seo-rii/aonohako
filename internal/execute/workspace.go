@@ -63,6 +63,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var verilogPath string
 	var sourcePath string
 	var malbolgePath string
+	var picatPath string
 	classFiles := make([]string, 0)
 	entryPointPath := ""
 	switch lang {
@@ -162,6 +163,13 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			clojurePath = dest
 		}
 		lowerClean := strings.ToLower(clean)
+		if lang == "picat" && strings.HasSuffix(lowerClean, ".pi") {
+			isMain := strings.EqualFold(filepath.Base(clean), "Main.pi")
+			wasMain := strings.EqualFold(filepath.Base(picatPath), "Main.pi")
+			if picatPath == "" || isMain && !wasMain || isMain == wasMain && dest < picatPath {
+				picatPath = dest
+			}
+		}
 		if strings.HasSuffix(lowerClean, ".v") && rocqPath == "" {
 			rocqPath = dest
 		}
@@ -221,6 +229,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
+	case "picat":
+		if picatPath == "" {
+			return "", "", fmt.Errorf("Picat requires a .pi source")
+		}
+		return picatPath, lang, nil
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "chapel-binary", "chicken-scheme", "c3", "javascript", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "assemblyscript", "factor", "aheui", "apecode", "cuda-ocelot":
 		return primaryPath, lang, nil
 	case "entry":

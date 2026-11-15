@@ -1267,6 +1267,58 @@ languages:
           ERL
           if erlc Broken.erl >/dev/null 2>&1; then exit 1; fi
 
+  picat:
+    install:
+      apt:
+        - curl
+        - libstdc++6
+      sandbox_tools:
+        - picat
+      script:
+        - export PICAT_VERSION=39_12
+        - export PICAT_SHA256=f053b11cccabfb69a3ccd779f2dc1c24cdf889805799bc8c779e6c56da703e4a
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://picat-lang.org/download/picat${PICAT_VERSION}_linux64.tar.gz" -o /tmp/picat.tar.gz
+        - echo "${PICAT_SHA256}  /tmp/picat.tar.gz" | sha256sum -c -
+        - mkdir -p /tmp/aonohako-picat /opt/picat /usr/local/share/licenses/picat
+        - tar -xzf /tmp/picat.tar.gz -C /tmp/aonohako-picat --strip-components=1
+        - install -m 0755 /tmp/aonohako-picat/picat /opt/picat/picat
+        - cp -a /tmp/aonohako-picat/lib /opt/picat/
+        - install -m 0644 /tmp/aonohako-picat/LICENSE /usr/local/share/licenses/picat/LICENSE
+        - ln -sfn /opt/picat/picat /usr/local/bin/picat
+        - rm -rf /tmp/picat.tar.gz /tmp/aonohako-picat
+        - picat --version | grep -F 'Picat version 3.9#12'
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.pi <<'PICAT'
+          main =>
+              A = read_int(), B = read_int(),
+              Writer = open("same-folder.txt",write),
+              println(Writer,A+B), close(Writer),
+              Reader = open("same-folder.txt"),
+              println(read_line(Reader)), close(Reader).
+          PICAT
+          picat /usr/local/lib/aonohako/picat_compile.pi "$PWD/Main.pi"
+          test -s Main.qi
+          rm Main.qi
+          chmod 0444 Main.pi
+          output="$(printf '17 25\n' | picat Main.pi)"
+          test "$output" = '42'
+          output="$(printf '7 13\n' | picat Main.pi)"
+          test "$output" = '20'
+          cat > CompileOnly.pi <<'PICAT'
+          main => println("COMPILE LEAK").
+          PICAT
+          output="$(picat /usr/local/lib/aonohako/picat_compile.pi "$PWD/CompileOnly.pi")"
+          test -z "$output"
+          cat > Broken.pi <<'PICAT'
+          main => this is invalid.
+          PICAT
+          if picat /usr/local/lib/aonohako/picat_compile.pi "$PWD/Broken.pi" >/dev/null 2>&1; then exit 1; fi
+
   prolog:
     install:
       apt:
@@ -5058,6 +5110,7 @@ profiles:
       - ocaml
       - perl
       - php
+      - picat
       - picolisp
       - piet
       - plain

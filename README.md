@@ -70,7 +70,7 @@ language-specific commands keep their declared order.
   Node/Deno/Bun/QuickJS/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Nimony, Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog,
+  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog, Picat,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, Shakespeare, Piet, Unlambda, Lazy K, INTERCAL, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
@@ -85,6 +85,12 @@ language-specific commands keep their declared order.
   separately under `/usr/lib/jvm/aonohako-java25`, so existing Java profiles and
   other JVM languages retain their toolchains. `JAVA` still defaults to release
   11, and Kotlin/JVM targets remain limited to the existing releases through 21.
+- `PICAT` accepts `.pi` sources using Picat 3.9#12 in `type-a`. A trusted
+  compile helper checks all submitted Picat sources without loading bytecode or
+  invoking `main`. Only immutable submitted sources/data are returned; execution
+  compiles source in memory and invokes `main/0`. Submitted `.qi` bytecode is
+  rejected. Core tabling, list comprehensions, and the bundled constraint modules
+  are available; external solver programs are not installed.
 - `NIMONY` compiles `.nim` sources with the C backend of
   [Nimony](https://github.com/nim-lang/nimony), pinned to source commit
   `d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development). Compile in

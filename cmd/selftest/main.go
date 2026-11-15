@@ -4747,6 +4747,18 @@ file_put_contents('same-folder.txt', ((int)$values[0] + (int)$values[1]) . "\n")
 echo file_get_contents('same-folder.txt');`),
 			},
 		},
+		"picat": {
+			compileLang: "PICAT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{source("Main.pi", `import addition.
+main =>
+    A = read_int(), B = read_int(),
+    println(add(A,B)).
+`), source("addition.pi", `module addition.
+add(A,B) = A+B.
+`)},
+		},
 		"prolog": {
 			compileLang: "PROLOG",
 			judgeIO:     standardABJudgeIO,
