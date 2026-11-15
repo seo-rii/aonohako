@@ -206,6 +206,9 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
+	if _, err := workMeasurementPeerTimePlans(req, s.workMeasurement); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 	if req.WorkMeasurementLimits != nil {
 		if s.workMeasurementPolicyError != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: s.workMeasurementPolicyError.Error()}
@@ -283,6 +286,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 			response = s.runOne(ctx, req, hooks, tuning, true).response
 		}
 	}
+	response = finishWorkMeasurementPeerTime(req, response, s.workMeasurement)
 	return s.decorateCPUTimeNormalization(response)
 }
 

@@ -33,6 +33,7 @@ var jsonCollectionLimits = map[jsonCollectionField]int{
 	{reflect.TypeFor[model.RunProgram](), "Binaries"}:                     runvalidation.MaxBinaryFiles,
 	{reflect.TypeFor[model.RunStep](), "StdinParts"}:                      runvalidation.MaxStdinParts,
 	{reflect.TypeFor[model.InteractorSpec](), "Binaries"}:                 runvalidation.MaxBinaryFiles,
+	{reflect.TypeFor[model.PeerTimeRequest](), "Budgets"}:                 runvalidation.MaxCommunicationParticipants + 1,
 	{reflect.TypeFor[model.CommunicationSpec](), "ParticipantProgramIDs"}: 2,
 	{reflect.TypeFor[model.SPJSpec](), "SidecarOutputs"}:                  runvalidation.MaxSidecarOutputs,
 	{reflect.TypeFor[model.PipelineV1](), "Resources"}:                    runvalidation.MaxPipelineResources,

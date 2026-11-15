@@ -215,6 +215,27 @@ reports omit it. This extension keeps report schema 1 and the existing time
 formula. See [the result contract](durante.md#result-contract) for byte semantics
 and current installation/profile compatibility.
 
+With explicit `work_measurement_peer_time` budgets, interactive and communication
+v1/v2 results additionally attach `time_budget` to each role. It contains
+`version: 1`, `authority: "diagnostic_only"`, the matched `budget_ms`, and either
+`estimate` (the full time-estimate model and coefficients) plus `exceeded`, or an
+`unavailable` reason with both estimate/comparison fields absent. The comparison
+is strictly `estimate.nanoseconds > budget_ms * 1000000`, including false at
+equality. Results stay in canonical role order even when request budgets are
+reordered; seats using the same program remain separate.
+
+Only normally exited complete convertible roles receive estimates. Coordinator
+stops and unstarted roles return `execution_not_complete`; missing/incompatible
+observations or signals/partial REP/missing detail/overflow remain unavailable.
+One role's failure does not discard another completed role's estimate. Status,
+score, match outcome, raw counters, CPU, and RSS remain unchanged. These are
+post-execution diagnostics, not online stopping or expanded raw-resource limits.
+The option cannot use the ordinary time flag or resource envelope. Without the
+option, `time_budget` is absent. Remote forwarding requires every requested role's
+budget result and recomputes it from the independently configured operator model;
+unsolicited `time_budget` results, mismatches, and old runners ignoring the option are rejected.
+See [per-role budget configuration](durante.md#per-role-diagnostic-time-budgets).
+
 An ordinary envelope request with an explicitly approved source/runtime profile can opt into
 `work_measurement_time: true`. With a compatible operator model, the final
 `work_measurement_execution` includes `time_estimate` containing the model ID and

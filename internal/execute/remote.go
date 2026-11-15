@@ -87,6 +87,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
+	if _, err := workMeasurementPeerTimePlans(req, r.workMeasurement); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
@@ -290,6 +293,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
 			if err := validateRemoteWorkMeasurementTime(req, remoteResult, r.workMeasurement); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
+			if err := validateRemoteWorkMeasurementPeerTime(req, remoteResult, r.workMeasurement); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
 			switch remoteResult.Status {

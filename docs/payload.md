@@ -122,6 +122,7 @@ error.
   "lang": "binary",                          // runtime language key (see Supported Languages)
   "work_measurement": false,                // optional Durante diagnostics; requires source-language profiles when true
   "work_measurement_time": false,           // optional reference-time estimate; also requires the raw envelope and an approved operator execution profile
+  "work_measurement_peer_time": null,       // optional version-1 per-role diagnostic budgets for interactor/communication; cannot use the ordinary time flag/envelope
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
@@ -251,7 +252,8 @@ The legacy operator policy supports one C/C++ source profile. The optional share
 model registry can explicitly bind compatible source profiles, including CPython,
 PyPy and other supported families, to the same coefficients. Family registration
 alone never enables a time model; JVM remains unavailable pending qualification.
-Generic `binary`, peers, SPJs, pipelines, entry modes, and steps remain unsupported.
+Generic `binary`, SPJs, pipelines, entry modes, and steps remain unsupported.
+Peers use the separate `work_measurement_peer_time` object described below.
 Requests cannot select coefficients. The operator binds the model to the canonical
 source profile, engine/dispatch profile and actual immutable Durante execution
 image; a remote control plane uses the downstream image/model.
@@ -600,6 +602,36 @@ ordinary singular `work_measurement`; the reports do not change verdicts or
 combine the peers' instruction counts. Each complete report may include optional
 `rep_breakdown` MOVS/STOS bytes and entries; absence means unspecified detail,
 and stopped roles omit all totals. See [the per-role contract](durante.md#interactive-and-communication-observations).
+
+To compare each role's completed estimate with an explicit diagnostic budget,
+also set `work_measurement_peer_time`. The object has `version: 1` and `budgets`,
+with one `{role, program_id, participant_index?, time_ms}` entry for every actual
+role. `time_ms` is an integer from 1 through 600000; `participant_index` is required
+only for participants. Request order is irrelevant, and repeated uses of one
+program need distinct seat entries. For example, interactive budgets are:
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 1,
+    "budgets": [
+      {"role": "contestant", "program_id": "contestant", "time_ms": 1000},
+      {"role": "interactor", "program_id": "interactor", "time_ms": 2000}
+    ]
+  }
+}
+```
+
+All roles need an operator-approved source/image/dispatch time profile before
+execution or remote upload. This object supplies no model coefficients and
+cannot be mixed with `work_measurement_time`, `work_measurement_limits`, or an
+ordinary/SPJ/pipeline/steps request. The result adds `time_budget` to each role,
+with either the complete `estimate` and strict nanosecond `exceeded` comparison,
+or an `unavailable` reason. It is diagnostic after execution: it does not stop
+peers, expand their resource limits, or alter score/match/verdict/CPU/RSS.
+Omitting the object preserves existing behavior. See
+[per-role budgets and configuration](durante.md#per-role-diagnostic-time-budgets).
 
 The interactor is invoked as:
 

@@ -153,6 +153,9 @@ func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
 	if req == nil {
 		return nil
 	}
+	if err := ValidateWorkMeasurementPeerTime(req); err != nil {
+		return err
+	}
 	if req.WorkMeasurementTime {
 		if req.WorkMeasurementLimits == nil {
 			return fmt.Errorf("work_measurement_time requires work_measurement_limits")
