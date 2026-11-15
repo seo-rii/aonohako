@@ -1,4 +1,4 @@
-// Package reference collects fixed C++ workloads and evaluates explicit
+// Package reference collects fixed runtime workloads and evaluates explicit
 // reference-time candidates. Its results retain diagnostic authority.
 package reference
 
@@ -9,6 +9,7 @@ import (
 
 const Schema = 1
 const CorpusID = "cpp-reference-v1"
+const RuntimeCorpusID = "runtime-reference-v1"
 const SplitTrain = "train"
 const SplitValidation = "validation"
 
@@ -63,6 +64,7 @@ type Dataset struct {
 }
 
 type FitOptions struct {
+	Method             string `json:"method,omitempty"`
 	ModelID            string `json:"model_id"`
 	ModelVersion       uint64 `json:"model_version"`
 	ReferenceID        string `json:"reference_id"`

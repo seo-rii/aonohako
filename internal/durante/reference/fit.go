@@ -31,11 +31,18 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 		evaluation.Failures = append(evaluation.Failures, err.Error())
 		return evaluation, err
 	}
+	if options.Method != "" && options.Method != durante.TimeMethod {
+		return invalid(fmt.Errorf("reference fitting supports only %s", durante.TimeMethod))
+	}
 	if options.MinRepetitions < 3 || options.MinRepetitions > 9 || options.MinNativeNs == 0 {
 		return invalid(fmt.Errorf("fit requires min_repetitions between 3 and 9 and positive min_native_ns"))
 	}
-	if dataset.Schema != Schema || dataset.CorpusID != CorpusID || !dataset.Complete || len(dataset.Failures) != 0 {
+	if dataset.Schema != Schema || !dataset.Complete || len(dataset.Failures) != 0 {
 		return invalid(fmt.Errorf("reference dataset is incomplete, failed, or has an incompatible schema/corpus"))
+	}
+	profile, err := referenceDatasetProfile(dataset)
+	if err != nil {
+		return invalid(err)
 	}
 	if dataset.Smoke {
 		return invalid(fmt.Errorf("smoke observations cannot qualify a reference-time policy"))
@@ -43,8 +50,8 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 	if dataset.Repetitions < options.MinRepetitions || dataset.Repetitions > 9 {
 		return invalid(fmt.Errorf("dataset repetitions %d must be between required minimum %d and 9", dataset.Repetitions, options.MinRepetitions))
 	}
-	if dataset.SourceLanguage != "CPP20" || dataset.DispatchProfile != durante.DispatchDefault || !referenceSHA256(dataset.RunnerSHA256) {
-		return invalid(fmt.Errorf("reference dataset requires CPP20, default dispatch, and a canonical runner SHA256"))
+	if dataset.DispatchProfile != durante.DispatchDefault || !referenceSHA256(dataset.RunnerSHA256) {
+		return invalid(fmt.Errorf("reference dataset requires default dispatch and a canonical runner SHA256"))
 	}
 	runtimeID, err := durante.TimeRuntimeID(dataset.SourceLanguage, dataset.RuntimeImage)
 	if err != nil {
@@ -55,7 +62,7 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 	// maximum uint64 counters. They never become a fitted candidate.
 	contract := durante.TimePolicy{
 		ModelID: options.ModelID, ModelVersion: options.ModelVersion, ReferenceID: options.ReferenceID,
-		RuntimeID: runtimeID, Family: "cpp", EngineProfile: durante.EngineProfile,
+		RuntimeID: runtimeID, Family: profile.Family, EngineProfile: durante.EngineProfile,
 		DispatchProfile: durante.DispatchDefault, InstructionNSNumerator: 1,
 		REPByteNSNumerator: 1, NSDenominator: math.MaxUint64,
 	}
@@ -155,7 +162,11 @@ func referenceCases(dataset Dataset, contract durante.TimePolicy) ([]*referenceC
 	}
 	cases := []*referenceCase{}
 	byKey := map[key]*referenceCase{}
-	for _, workload := range Corpus(false) {
+	corpus, err := CorpusForLanguage(dataset.SourceLanguage, false)
+	if err != nil {
+		return nil, err
+	}
+	for _, workload := range corpus {
 		for _, fixture := range workload.Cases {
 			item := &referenceCase{workload: workload, fixture: fixture}
 			cases = append(cases, item)
