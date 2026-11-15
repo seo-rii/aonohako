@@ -474,6 +474,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{primaryPath}
 	case "smalltalk":
 		return []string{"gst", "-q", primaryPath}
+	case "squirrel":
+		return []string{"aonohako-squirrel", primaryPath}
 	case "golfscript":
 		// GolfScript string literals must not interpolate arbitrary Ruby code.
 		return []string{"ruby", "/usr/local/lib/aonohako/golfscript.rb", "-n", primaryPath}

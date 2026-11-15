@@ -253,6 +253,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{
+		"squirrel":      {compileKind: "squirrel", runLang: "squirrel"},
 		"asm":           {compileKind: "asm", runLang: "binary"},
 		"aheui":         {compileKind: "none", runLang: "aheui"},
 		"nasm":          {compileKind: "nasm", runLang: "binary"},

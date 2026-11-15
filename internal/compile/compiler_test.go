@@ -44,6 +44,7 @@ func (r *recordingCommandRunner) Run(_ context.Context, workDir, bin string, arg
 
 func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 	for _, kind := range []string{
+		"squirrel",
 		"c", "cpp", "asm", "fortran", "objective-c", "objective-cpp",
 		"pascal", "delphi", "objectpascal", "nim", "nimony", "zig", "sml", "smlnj", "idris2", "ada", "d",
 		"rust", "go", "java", "groovy", "clojure",
