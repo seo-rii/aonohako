@@ -165,6 +165,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"QBASIC",
 		"SMALLTALK",
 		"GST",
+		"WREN",
 		"GOLFSCRIPT",
 		"MOJO",
 		"DENO",

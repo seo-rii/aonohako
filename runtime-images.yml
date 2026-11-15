@@ -2899,6 +2899,65 @@ languages:
           output="$(./Macro)"
           test "$output" = '42'
 
+  wren:
+    install:
+      apt:
+        - curl
+        - gcc
+        - libc6-dev
+        - libuv1-dev
+      sandbox_tools:
+        - wren_cli
+      script:
+        - export WREN_CLI_COMMIT=18553636618a4d33f10af9b5ab92da6431784a8c
+        - export WREN_CLI_SHA256=4fdbb52bd5a3a5ecbedf20352378618755d2740e184aa441bc109cdd64c8f894
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://codeload.github.com/wren-lang/wren-cli/tar.gz/${WREN_CLI_COMMIT}" -o /tmp/wren-cli.tar.gz
+        - echo "${WREN_CLI_SHA256}  /tmp/wren-cli.tar.gz" | sha256sum -c -
+        - mkdir /tmp/aonohako-wren-cli
+        - tar -xzf /tmp/wren-cli.tar.gz -C /tmp/aonohako-wren-cli --strip-components=1
+        - |
+          # Link the bundled Wren VM/CLI to the distribution's maintained libuv.
+          # The old libuv source bundled in this archive is deliberately not built.
+          (
+            cd /tmp/aonohako-wren-cli
+            gcc -O2 -DNDEBUG -D_GNU_SOURCE -std=c99 \
+              -Isrc/cli -Isrc/module -Ideps/wren/include -Ideps/wren/src/vm -Ideps/wren/src/optional \
+              src/cli/*.c src/module/*.c deps/wren/src/vm/*.c deps/wren/src/optional/*.c \
+              -luv -lpthread -ldl -lm -o /usr/local/bin/wren_cli
+          )
+        - chmod 0755 /usr/local/bin/wren_cli
+        - install -D -m 0644 /tmp/aonohako-wren-cli/LICENSE /usr/local/share/licenses/wren-cli/LICENSE
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://raw.githubusercontent.com/wren-lang/wren/0.4.0/LICENSE -o /tmp/wren.LICENSE
+        - echo 'ee3c38d9dc66cfda45018fc828a895efed1dc61cbec4baff4b9a40ad617d03b1  /tmp/wren.LICENSE' | sha256sum -c -
+        - install -m 0644 /tmp/wren.LICENSE /usr/local/share/licenses/wren-cli/Wren.LICENSE
+        - rm -rf /tmp/aonohako-wren-cli /tmp/wren-cli.tar.gz /tmp/wren.LICENSE
+        - wren_cli --version
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.wren <<'WREN'
+          import "io" for Stdin
+          import "./addition" for Addition
+          var words = Stdin.readLine().split(" ")
+          System.print(Addition.add(Num.fromString(words[0]), Num.fromString(words[1])))
+          WREN
+          cat > addition.wren <<'WREN'
+          class Addition {
+            static add(a, b) { a + b }
+          }
+          WREN
+          output="$(printf '17 25\n' | wren_cli Main.wren)"
+          test "$output" = '42'
+          output="$(printf '7 13\n' | wren_cli Main.wren)"
+          test "$output" = '20'
+          printf '%s\n' 'var broken =' > Broken.wren
+          if wren_cli Broken.wren >broken.stdout 2>broken.stderr; then exit 1; fi
+          test ! -s broken.stdout
+          grep -F 'Error' broken.stderr
+
   clojure:
     install:
       apt:
@@ -5079,6 +5138,7 @@ profiles:
       - unlambda
       - wasm
       - whitespace
+      - wren
   type-b:
     base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
     install: *gcc16_profile

@@ -54,7 +54,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "unlambda", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "unlambda", "wasm", "whitespace", "wren"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "java25", "javascript", "purescript", "quickjs", "rescript", "scala", "typescript"}) {
@@ -283,6 +283,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-wasm",
 		"ci-whitespace",
 		"ci-why3",
+		"ci-wren",
 		"ci-zerolang",
 		"ci-zig",
 		"ci-zsh",

@@ -4618,6 +4618,22 @@ writeFile("same-folder.txt", $(parseInt(values[0]) + parseInt(values[1])))
 echo readFile("same-folder.txt").strip()`),
 			},
 		},
+		"wren": {
+			compileLang: "WREN",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 256},
+			sources: []model.Source{
+				source("Main.wren", `import "io" for Stdin
+import "./addition" for Addition
+var words = Stdin.readLine().split(" ")
+System.print(Addition.add(Num.fromString(words[0]), Num.fromString(words[1])))
+`),
+				source("addition.wren", `class Addition {
+  static add(a, b) { a + b }
+}
+`),
+			},
+		},
 		"nimony": {
 			compileLang: "NIMONY",
 			judgeIO:     standardABJudgeIO,

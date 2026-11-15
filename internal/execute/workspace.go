@@ -62,6 +62,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var pietPath string
 	var verilogPath string
 	var sourcePath string
+	var wrenPath string
 	var malbolgePath string
 	classFiles := make([]string, 0)
 	entryPointPath := ""
@@ -162,6 +163,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			clojurePath = dest
 		}
 		lowerClean := strings.ToLower(clean)
+		if strings.HasSuffix(lowerClean, ".wren") && (wrenPath == "" || lowerClean == "main.wren") {
+			wrenPath = dest
+		}
 		if strings.HasSuffix(lowerClean, ".v") && rocqPath == "" {
 			rocqPath = dest
 		}
@@ -221,6 +225,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
+	case "wren":
+		if wrenPath == "" {
+			return "", "", fmt.Errorf("Wren requires a .wren source")
+		}
+		return wrenPath, lang, nil
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "chapel-binary", "chicken-scheme", "c3", "javascript", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "assemblyscript", "factor", "aheui", "apecode", "cuda-ocelot":
 		return primaryPath, lang, nil
 	case "entry":

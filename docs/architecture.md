@@ -1023,7 +1023,7 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace` |
+| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace`, `wren` |
 | `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `java25`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `nimony`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
@@ -1046,6 +1046,16 @@ Production profiles currently group languages like this:
 | `type-w` | `pony` |
 | `type-x` | `bash`, `fish`, `posix-sh`, `zsh` |
 | `type-y` | `factor` |
+
+The `WREN` profile preserves `.wren` sources during compilation and runs the
+selected source with the official `wren_cli` in type-a. The checksum-pinned CLI
+archive includes Wren 0.4.0; only its VM/CLI sources are compiled, linking to
+system libuv instead of the archive's old bundled libuv. Relative source imports
+stay available in the submission workspace. Bounded cached stdin is delivered
+through a pipe because the CLI libuv reader does not support regular-file stdin.
+There is no compile-only CLI mode,
+so syntax and import errors become execution errors. Wren numbers are IEEE-754
+doubles, and exact integer arithmetic is limited to the corresponding safe range.
 
 The `NIMONY` profile builds the C backend from checksum-verified Nimony commit
 `d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development) in type-c.

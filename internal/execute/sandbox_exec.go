@@ -716,6 +716,19 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			cmd.Stdin = readonlyStdin
 		}
 	}
+	if runLang == "wren" && runtimeBase == "wren_cli" {
+		if file, ok := cmd.Stdin.(*os.File); ok {
+			info, err := file.Stat()
+			if err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "inspect Wren stdin failed: " + err.Error()}
+			}
+			if info.Mode().IsRegular() {
+				// Wren CLI's libuv reader handles pipes and TTYs, not regular files.
+				// Preserve the bounded, immutable input while os/exec feeds a pipe.
+				cmd.Stdin = struct{ io.Reader }{file}
+			}
+		}
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid:   true,
 		Pdeathsig: syscall.SIGKILL,

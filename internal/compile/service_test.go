@@ -345,6 +345,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"classic-basic": {compileKind: "classic-basic", runLang: "binary"},
 		"qbasic":        {compileKind: "classic-basic", runLang: "binary"},
 		"smalltalk":     {compileKind: "smalltalk", runLang: "smalltalk"},
+		"wren":          {compileKind: "wren", runLang: "wren"},
 		"golfscript":    {compileKind: "golfscript", runLang: "golfscript"},
 		"mojo":          {compileKind: "mojo", runLang: "mojo-binary"},
 		"moonbit":       {compileKind: "moonbit", runLang: "binary"},

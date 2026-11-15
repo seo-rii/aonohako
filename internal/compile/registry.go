@@ -168,6 +168,7 @@ var compileRegistry = map[string]Compiler{
 	"erlang":        erlangCompiler{},
 	"vb6":           passThroughCompiler{exts: []string{".bas", ".frm", ".cls"}, noSourceReason: "no vb6 sources"},
 	"smalltalk":     passThroughCompiler{exts: []string{".st"}, noSourceReason: "no smalltalk sources"},
+	"wren":          passThroughCompiler{exts: []string{".wren"}, noSourceReason: "no Wren sources"},
 	"golfscript":    passThroughCompiler{exts: []string{".gs"}, noSourceReason: "no golfscript sources"},
 	"duckdb":        passThroughCompiler{exts: []string{".sql"}, noSourceReason: "no duckdb sources"},
 	"bqn":           passThroughCompiler{exts: []string{".bqn"}, noSourceReason: "no bqn sources"},
