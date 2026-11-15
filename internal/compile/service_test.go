@@ -325,6 +325,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"zig":           {compileKind: "zig", runLang: "binary"},
 		"lisp":          {compileKind: "lisp", runLang: "lisp"},
 		"picolisp":      {compileKind: "picolisp", runLang: "picolisp"},
+		"scala3":        {compileKind: "scala3", runLang: "scala3"},
 		"scala":         {compileKind: "scala", runLang: "scala"},
 		"fsharp":        {compileKind: "fsharp", runLang: "fsharp"},
 		"whitespace":    {compileKind: "whitespace", runLang: "whitespace"},

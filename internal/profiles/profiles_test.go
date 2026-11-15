@@ -128,6 +128,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"PROLOG",
 		"GNU_PROLOG",
 		"SCALA",
+		"SCALA3",
 		"FSHARP",
 		"WHITESPACE",
 		"BEFUNGE",

@@ -4871,6 +4871,20 @@ fn main() {
 }`),
 			},
 		},
+		"scala3": {
+			compileLang: "SCALA3",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.scala", `object Main:
+  def main(args: Array[String]): Unit =
+    val values = scala.io.Source.stdin.mkString.trim.split("\\s+").map(_.toInt)
+    println(Addition.sum(values(0), values(1)))`),
+				source("Addition.scala", `object Addition:
+  def sum(a: Int, b: Int): Int = a + b`),
+			},
+		},
+
 		"scala": {
 			compileLang: "SCALA",
 			judgeIO:     standardABJudgeIO,

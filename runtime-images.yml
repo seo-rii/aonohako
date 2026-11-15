@@ -477,6 +477,59 @@ languages:
           output="$(java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp "${scala_cp}" Main)"
           test "${output}" = 'ok'
 
+  scala3:
+    install:
+      apt:
+        - curl
+        - default-jdk-headless
+      script:
+        - export SCALA3_VERSION=3.3.9
+        - export SCALA3_SHA256=ba96214801ea01b0d0aee45f00c94d3f61ed40d0f2aa748aff11c7f136737d7c
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "https://github.com/scala/scala3/releases/download/${SCALA3_VERSION}/scala3-${SCALA3_VERSION}.tar.gz" -o /tmp/scala3.tar.gz
+        - echo "${SCALA3_SHA256}  /tmp/scala3.tar.gz" | sha256sum -c -
+        - install -d /tmp/aonohako-scala3 /opt/aonohako/scala3/lib
+        - tar -xzf /tmp/scala3.tar.gz -C /tmp/aonohako-scala3 --strip-components=1
+        - |
+          for jar in scala3-compiler_3-3.3.9 scala3-interfaces-3.3.9 tasty-core_3-3.3.9 scala-asm-9.9.0-scala-1 compiler-interface-1.12.0 util-interface-1.11.5; do
+            install -m 0644 "/tmp/aonohako-scala3/lib/${jar}.jar" "/opt/aonohako/scala3/lib/${jar}.jar"
+          done
+        - install -m 0644 /tmp/aonohako-scala3/lib/scala3-library_3-3.3.9.jar /opt/aonohako/scala3/lib/scala3-library.jar
+        - install -m 0644 /tmp/aonohako-scala3/lib/scala-library-2.13.18.jar /opt/aonohako/scala3/lib/scala-library.jar
+        - install -d /usr/local/share/licenses/scala3
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://raw.githubusercontent.com/scala/scala3/3cf4e3776b652dafebf21fa35e1c7659e8af932b/LICENSE -o /tmp/aonohako-scala3/LICENSE
+        - curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://raw.githubusercontent.com/scala/scala3/3cf4e3776b652dafebf21fa35e1c7659e8af932b/NOTICE.md -o /tmp/aonohako-scala3/NOTICE.md
+        - echo "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4  /tmp/aonohako-scala3/LICENSE" | sha256sum -c -
+        - echo "9c8404faff38eaedeeab5839fd98ac4d883eb0117a8dd53b878336f4cfa06d70  /tmp/aonohako-scala3/NOTICE.md" | sha256sum -c -
+        - install -m 0644 /tmp/aonohako-scala3/LICENSE /tmp/aonohako-scala3/NOTICE.md /usr/local/share/licenses/scala3/
+        - rm -rf /tmp/scala3.tar.gz /tmp/aonohako-scala3
+        - java -cp '/opt/aonohako/scala3/lib/*' dotty.tools.dotc.Main -version
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          scala3_cp='/opt/aonohako/scala3/lib/scala3-library.jar:/opt/aonohako/scala3/lib/scala-library.jar'
+          cat > Main.scala <<'SCALA'
+          enum Operation:
+            case Add
+          object Main:
+            def main(args: Array[String]): Unit =
+              val values = scala.io.Source.stdin.mkString.trim.split("\\s+").map(_.toInt)
+              val result = Operation.Add match
+                case Operation.Add => values(0) + values(1)
+              java.nio.file.Files.writeString(java.nio.file.Path.of("same-folder.txt"), result.toString)
+              println(java.nio.file.Files.readString(java.nio.file.Path.of("same-folder.txt")))
+          SCALA
+          java -Xmx768m -XX:+UseSerialGC -cp '/opt/aonohako/scala3/lib/*' dotty.tools.dotc.Main -classpath "$scala3_cp" -release 17 -encoding UTF-8 -color:never -d . Main.scala
+          output="$(printf '17 25\n' | java -Xmx128m -XX:+UseSerialGC -cp ".:$scala3_cp" Main)"
+          test "$output" = '42'
+          output="$(printf '7 13\n' | java -Xmx128m -XX:+UseSerialGC -cp ".:$scala3_cp" Main)"
+          test "$output" = '20'
+          printf '%s\n' 'object Broken:' '  val x: Int = "not an int"' > Broken.scala
+          if java -Xmx768m -XX:+UseSerialGC -cp '/opt/aonohako/scala3/lib/*' dotty.tools.dotc.Main -classpath "$scala3_cp" -release 17 -color:never -d . Broken.scala >/dev/null 2>&1; then exit 1; fi
+          test ! -e Broken.class
+
   entry:
     install:
       shared:
@@ -5100,6 +5153,7 @@ profiles:
       - quickjs
       - rescript
       - scala
+      - scala3
       - typescript
   type-c:
     base_image: debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
