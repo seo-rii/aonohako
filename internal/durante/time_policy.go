@@ -9,6 +9,7 @@ import (
 // TimeMethod identifies this conversion formula, not a calibrated machine or
 // a claim that the counters are trusted hardware-retired instructions.
 const TimeMethod = "weighted-work-nanoseconds-v1"
+const TimeMethodREPBreakdown = "weighted-rep-operations-nanoseconds-v2"
 
 // TimePolicy is an operator-supplied, versioned diagnostic conversion. There is
 // deliberately no default policy or default weight. ReferenceID identifies the
@@ -16,17 +17,18 @@ const TimeMethod = "weighted-work-nanoseconds-v1"
 // calibration. A change to weights or their applicable environment requires a
 // new model version.
 //
-// The formula is ceil((instructions * InstructionNSNumerator +
-// rep_bytes * REPByteNSNumerator) / NSDenominator). Both weights must be positive
-// so a configured model cannot silently discard either measured work dimension.
-// REP byte cost is additive to the instruction count, which already includes
-// each instrumented REP instruction entry.
+// V1 computes ceil((instructions * InstructionNSNumerator + rep_bytes *
+// REPByteNSNumerator) / NSDenominator). V2 replaces the combined REP term with
+// movs_bytes * MOVSByteNSNumerator + stos_bytes * STOSByteNSNumerator. Every
+// selected weight must be positive. REP costs are additive to the instruction
+// count, which already includes each instrumented REP instruction entry.
 //
 // RuntimeID is an exact, case-sensitive identity supplied by the caller from
 // trusted execution metadata, ideally including its immutable runtime build.
 // Family alone is insufficient to identify a compatible runtime. Report does
 // not attest RuntimeID or the target's libc, so this policy cannot do so either.
 type TimePolicy struct {
+	Method                 string `json:"method,omitempty"`
 	ModelID                string `json:"model_id"`
 	ModelVersion           uint64 `json:"model_version"`
 	ReferenceID            string `json:"reference_id"`
@@ -35,17 +37,21 @@ type TimePolicy struct {
 	EngineProfile          string `json:"engine_profile"`
 	DispatchProfile        string `json:"dispatch_profile"`
 	InstructionNSNumerator uint64 `json:"instruction_ns_numerator"`
-	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator"`
+	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator,omitempty"`
+	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
+	STOSByteNSNumerator    uint64 `json:"stos_byte_ns_numerator,omitempty"`
 	NSDenominator          uint64 `json:"ns_denominator"`
 }
 
 // TimeEstimate is a candidate reference-time value, never a verdict or an
 // enforceable CPU limit. Its diagnostic authority is unchanged by conversion.
-// Nanoseconds is rounded up once after summing both exact rational terms;
+// Nanoseconds is rounded up once after summing all exact rational terms;
 // Milliseconds is the same total rounded up to whole milliseconds.
 type TimeEstimate struct {
 	InstructionNSNumerator uint64 `json:"instruction_ns_numerator"`
-	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator"`
+	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator,omitempty"`
+	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
+	STOSByteNSNumerator    uint64 `json:"stos_byte_ns_numerator,omitempty"`
 	NSDenominator          uint64 `json:"ns_denominator"`
 	Method                 string `json:"method"`
 	Authority              string `json:"authority"`
@@ -58,6 +64,15 @@ type TimeEstimate struct {
 	DispatchProfile        string `json:"dispatch_profile"`
 	Nanoseconds            int64  `json:"nanoseconds"`
 	Milliseconds           int64  `json:"milliseconds"`
+}
+
+// Formula preserves the original meaning of policies written before method
+// selection existed. Adding operation-specific fields never selects v2 implicitly.
+func (p TimePolicy) Formula() string {
+	if p.Method == "" {
+		return TimeMethod
+	}
+	return p.Method
 }
 
 func (p TimePolicy) Validate() error {
@@ -84,8 +99,20 @@ func (p TimePolicy) Validate() error {
 	default:
 		return fmt.Errorf("durante time policy requires a supported dispatch profile")
 	}
-	if p.InstructionNSNumerator == 0 || p.REPByteNSNumerator == 0 || p.NSDenominator == 0 {
+	if p.InstructionNSNumerator == 0 || p.NSDenominator == 0 {
 		return fmt.Errorf("durante time policy requires positive explicit weights and denominator")
+	}
+	switch p.Formula() {
+	case TimeMethod:
+		if p.REPByteNSNumerator == 0 || p.MOVSByteNSNumerator != 0 || p.STOSByteNSNumerator != 0 {
+			return fmt.Errorf("v1 time policy requires only the combined REP weight")
+		}
+	case TimeMethodREPBreakdown:
+		if p.REPByteNSNumerator != 0 || p.MOVSByteNSNumerator == 0 || p.STOSByteNSNumerator == 0 {
+			return fmt.Errorf("v2 time policy requires separate positive MOVS and STOS weights")
+		}
+	default:
+		return fmt.Errorf("unsupported durante time method")
 	}
 	return nil
 }
@@ -118,14 +145,23 @@ func (p TimePolicy) Estimate(runtimeID string, report Report) (TimeEstimate, err
 		return TimeEstimate{}, fmt.Errorf("durante time policy has invalid or unsupported counters")
 	}
 
-	// Each input is uint64, so the sum needs at most 129 bits. Exact bounded
-	// integer arithmetic avoids overflow and loss above float64's 53-bit range.
+	if p.Formula() == TimeMethodREPBreakdown && report.REPBreakdown == nil {
+		return TimeEstimate{}, fmt.Errorf("v2 time policy requires observed REP operation detail")
+	}
+	// Sum the exact products before rounding. A v2 model partitions REP bytes
+	// instead of charging both the old total and its operation-specific parts.
 	var total, rep, weight, denominator, remainder big.Int
 	total.SetUint64(*report.Instructions)
 	total.Mul(&total, weight.SetUint64(p.InstructionNSNumerator))
-	rep.SetUint64(*report.REPBytes)
-	rep.Mul(&rep, weight.SetUint64(p.REPByteNSNumerator))
-	total.Add(&total, &rep)
+	terms := [][2]uint64{{*report.REPBytes, p.REPByteNSNumerator}}
+	if p.Formula() == TimeMethodREPBreakdown {
+		terms = [][2]uint64{{report.REPBreakdown.MOVSBytes, p.MOVSByteNSNumerator}, {report.REPBreakdown.STOSBytes, p.STOSByteNSNumerator}}
+	}
+	for _, term := range terms {
+		rep.SetUint64(term[0])
+		rep.Mul(&rep, weight.SetUint64(term[1]))
+		total.Add(&total, &rep)
+	}
 	total.QuoRem(&total, denominator.SetUint64(p.NSDenominator), &remainder)
 	if remainder.Sign() != 0 {
 		total.Add(&total, big.NewInt(1))
@@ -141,7 +177,8 @@ func (p TimePolicy) Estimate(runtimeID string, report Report) (TimeEstimate, err
 	return TimeEstimate{
 		InstructionNSNumerator: p.InstructionNSNumerator,
 		REPByteNSNumerator:     p.REPByteNSNumerator, NSDenominator: p.NSDenominator,
-		Method: TimeMethod, Authority: Authority,
+		MOVSByteNSNumerator: p.MOVSByteNSNumerator, STOSByteNSNumerator: p.STOSByteNSNumerator,
+		Method: p.Formula(), Authority: Authority,
 		ModelID: p.ModelID, ModelVersion: p.ModelVersion, ReferenceID: p.ReferenceID,
 		RuntimeID: p.RuntimeID, Family: p.Family,
 		EngineProfile: p.EngineProfile, DispatchProfile: p.DispatchProfile,

@@ -557,6 +557,10 @@ estimated_ns = ceil((instructions * instruction_ns_numerator
 
 The combined numerator uses exact wide arithmetic before rounding. Results that
 exceed signed 64-bit nanoseconds are rejected; milliseconds round upward.
+An explicit `method: weighted-rep-operations-nanoseconds-v2` instead uses
+separate positive MOVS and STOS byte weights and requires observed REP detail;
+see [separate MOVS and STOS costs](durante-rep-model.md) for configuration and
+compatibility. Omitting `method` preserves the formula above.
 Incompatible runtime/profile, incomplete counts, signals, unsupported REP, or
 missing counters yield an error and no estimate. Successful results still have
 `authority: diagnostic_only`. Model/reference identities and weights are retained
