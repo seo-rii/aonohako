@@ -260,6 +260,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"delphi":        {compileKind: "delphi", runLang: "binary"},
 		"objectpascal":  {compileKind: "objectpascal", runLang: "binary"},
 		"nim":           {compileKind: "nim", runLang: "binary"},
+		"nimony":        {compileKind: "nimony", runLang: "binary"},
 		"clojure":       {compileKind: "clojure", runLang: "clojure"},
 		"racket":        {compileKind: "racket", runLang: "racket"},
 		"scheme":        {compileKind: "scheme", runLang: "scheme"},

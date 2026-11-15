@@ -4618,6 +4618,24 @@ writeFile("same-folder.txt", $(parseInt(values[0]) + parseInt(values[1])))
 echo readFile("same-folder.txt").strip()`),
 			},
 		},
+		"nimony": {
+			compileLang: "NIMONY",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.nim", `import std/[syncio, strutils]
+import addition
+
+try:
+  let values = stdin.readAll().splitWhitespace()
+  echo addValues(parseInt(values[0]), parseInt(values[1]))
+except:
+  quit(1)`),
+				source("addition.nim", `proc addValues*(a, b: int): int =
+  a + b
+`),
+			},
+		},
 		"ocaml": {
 			compileLang: "OCAML",
 			judgeIO:     standardABJudgeIO,

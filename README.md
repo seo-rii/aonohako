@@ -69,7 +69,7 @@ language-specific commands keep their declared order.
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
   Node/Deno/Bun/QuickJS/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
-  Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
+  Nimony, Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog,
   Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, Shakespeare, Piet, Unlambda, Lazy K, INTERCAL, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
@@ -85,6 +85,16 @@ language-specific commands keep their declared order.
   separately under `/usr/lib/jvm/aonohako-java25`, so existing Java profiles and
   other JVM languages retain their toolchains. `JAVA` still defaults to release
   11, and Kotlin/JVM targets remain limited to the existing releases through 21.
+- `NIMONY` compiles `.nim` sources with the C backend of
+  [Nimony](https://github.com/nim-lang/nimony), pinned to source commit
+  `d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development). Compile in
+  `type-c` and execute the returned native artifact with `binary` in `plain`.
+  This compiler is still under development and has its own language and standard
+  library contracts; for example, `echo` requires `import std/syncio`, and
+  raising input-parsing and file-I/O calls require explicit error handling.
+  Its project, standard-library, and shared-object caches stay in the request's
+  workspace. Nimony compilation has a three-minute budget for cold macro and
+  standard-library builds. Existing `NIM` submissions continue to use the Nim toolchain.
 - Zerolang is pinned to the official v0.3.4 Linux x64 release. Compilation
   imports canonical `.0` text into a graph and then builds a native executable
   with the `release-fast` profile. Its stable source projection does not yet

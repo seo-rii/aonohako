@@ -35,6 +35,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"JAVASCRIPT_BUN",
 		"TYPESCRIPT_BUN",
 		"GO",
+		"NIMONY",
 		"ZIG",
 		"SCHEME",
 		"CHEZ_SCHEME",

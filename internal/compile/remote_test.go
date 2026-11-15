@@ -355,30 +355,45 @@ func TestRemoteRunnerCompileAbsoluteDeadlineCannotBeExtendedByHeartbeats(t *test
 }
 
 func TestRemoteRunnerCompileAbsoluteDeadlineIncludesBuildLimitAndOverhead(t *testing.T) {
-	var remaining time.Duration
-	runner := &remoteRunner{
-		client: &http.Client{Transport: compileRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-			deadline, ok := req.Context().Deadline()
-			if !ok {
-				t.Fatal("remote request context has no deadline")
+	for _, tc := range []struct {
+		name, language string
+		override, want time.Duration
+	}{
+		{name: "normal compiler", language: "PYTHON3", want: buildTimeout + remoteio.DefaultOperationOverhead},
+		{name: "unknown compiler", language: "UNKNOWN", want: buildTimeout + remoteio.DefaultOperationOverhead},
+		{name: "Nimony", language: "NIMONY", want: 3*time.Minute + remoteio.DefaultOperationOverhead},
+		{name: "lowercase Nimony", language: "nimony", want: 3*time.Minute + remoteio.DefaultOperationOverhead},
+		{name: "mixed case Nimony", language: " Nimony ", want: 3*time.Minute + remoteio.DefaultOperationOverhead},
+		{name: "normal compiler override", language: "PYTHON3", override: 12 * time.Second, want: 12 * time.Second},
+		{name: "Nimony override", language: "NIMONY", override: 12 * time.Second, want: 12 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var remaining time.Duration
+			runner := &remoteRunner{
+				client: &http.Client{Transport: compileRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+					deadline, ok := req.Context().Deadline()
+					if !ok {
+						t.Fatal("remote request context has no deadline")
+					}
+					remaining = time.Until(deadline)
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Status:     "200 OK",
+						Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+						Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"OK\"}\n\n")),
+					}, nil
+				})},
+				compileURL:      "http://remote.example/compile",
+				absoluteTimeout: tc.override,
 			}
-			remaining = time.Until(deadline)
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Status:     "200 OK",
-				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"OK\"}\n\n")),
-			}, nil
-		})},
-		compileURL: "http://remote.example/compile",
-	}
-	resp := runner.Run(context.Background(), &model.CompileRequest{Lang: "PYTHON3"})
-	if resp.Status != model.CompileStatusOK {
-		t.Fatalf("response = %+v", resp)
-	}
-	want := buildTimeout + remoteio.DefaultOperationOverhead
-	if remaining < want-time.Second || remaining > want+time.Second {
-		t.Fatalf("remote deadline remaining = %s, want about %s", remaining, want)
+			resp := runner.Run(context.Background(), &model.CompileRequest{Lang: tc.language})
+			if resp.Status != model.CompileStatusOK {
+				t.Fatalf("response = %+v", resp)
+			}
+			if remaining < tc.want-time.Second || remaining > tc.want+time.Second {
+				t.Fatalf("remote deadline remaining = %s, want about %s", remaining, tc.want)
+			}
+		})
 	}
 }
 

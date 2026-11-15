@@ -2772,6 +2772,133 @@ languages:
           NIM
           if nim c -d:release --opt:speed --out:Broken Broken.nim >/dev/null 2>&1; then exit 1; fi
 
+  nimony:
+    install:
+      apt:
+        - curl
+        - gcc
+        - libc6-dev
+        - xz-utils
+      sandbox_tools:
+        - nimony
+        - nimsem
+        - nifler
+        - shoggoth
+        - lengc
+        - niflink
+        - nifmake
+        - validator
+      script:
+        - |
+          # Bootstrap privately: the production profile also contains Nim 2.2.8.
+          nimony_work="$(mktemp -d /tmp/aonohako-nimony.XXXXXX)"
+          fetch_nimony_input() {
+            curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL "$1" -o "$3"
+            printf '%s  %s\n' "$2" "$3" | sha256sum -c -
+          }
+          fetch_nimony_input https://nim-lang.org/download/nim-2.2.10-linux_x64.tar.xz \
+            0a3a38752e97e9d44aa479b3a7b37336dfe0176daf22ee5b5218ad0991ecd211 "$nimony_work/nim.tar.xz"
+          mkdir "$nimony_work/bootstrap"
+          tar -xJf "$nimony_work/nim.tar.xz" -C "$nimony_work/bootstrap" --strip-components=1
+          fetch_nimony_input https://codeload.github.com/nim-lang/nimony/tar.gz/d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca \
+            62b75e7dabe548ff4f14641330fc75c9cbccb811d8826a45e54745f23a79e07e "$nimony_work/nimony.tar.gz"
+          mkdir "$nimony_work/nimony"
+          tar -xzf "$nimony_work/nimony.tar.gz" -C "$nimony_work/nimony" --strip-components=1
+          fetch_nimony_input https://codeload.github.com/nim-lang/mimalloc/tar.gz/a2b9ee6a3261fd357b83a70712a577da57f926ae \
+            7058625c97801766a51b8f0bea318acd4d1cc1e8fe61b3c68d28749e58a62329 "$nimony_work/mimalloc.tar.gz"
+          tar -xzf "$nimony_work/mimalloc.tar.gz" -C "$nimony_work/nimony/vendor/mimalloc" --strip-components=1
+          # Supply every file hastur would download; stamp the checked source pins
+          # so the build never substitutes unverified network or host sources.
+          fetch_nimony_input https://raw.githubusercontent.com/nim-lang/Nim/7171e6f01f846a511a5fad8d1ab24baaee66e308/compiler/parser.nim \
+            aa8284f2cf16d806102f17c727038e5b194e98b03650eca12b5607b15f78bf53 "$nimony_work/nimony/src/nifler/nimparser/parser.nim"
+          printf '%s\n' 7171e6f01f846a511a5fad8d1ab24baaee66e308 > "$nimony_work/nimony/src/nifler/nimparser/parser.fetched"
+          mkdir "$nimony_work/nimony/lib/std/system/upstream"
+          fetch_nimony_input https://raw.githubusercontent.com/nim-lang/Nim/ed97a27b5303523a39b42d52a52ed98e53ce99ae/lib/system/orc.nim \
+            397d6be69193d078de5a0bf4c625ccfdc90443c6e02650ffc3904372efb935e4 "$nimony_work/nimony/lib/std/system/upstream/orc.nim"
+          fetch_nimony_input https://raw.githubusercontent.com/nim-lang/Nim/ed97a27b5303523a39b42d52a52ed98e53ce99ae/lib/system/yrc.nim \
+            b31d543255ca109e272c23661b94f5fbaf9160c0fe1254208e3e75e47c18e0c4 "$nimony_work/nimony/lib/std/system/upstream/yrc.nim"
+          fetch_nimony_input https://raw.githubusercontent.com/nim-lang/Nim/ed97a27b5303523a39b42d52a52ed98e53ce99ae/lib/system/cellseqs_v2.nim \
+            5ebd1c26b7c000eb2495362a3b501c057a36953266c4953f52c9a995c0b9b418 "$nimony_work/nimony/lib/std/system/upstream/cellseqs_v2.nim"
+          printf '%s\n' ed97a27b5303523a39b42d52a52ed98e53ce99ae > "$nimony_work/nimony/lib/std/system/upstream/upstream.fetched"
+          # The upstream stdlib cache is otherwise inside the read-only toolchain.
+          # Bind it to --nimcache so separate submissions never share mutable IR.
+          sed -i \
+            -e 's/let (root, bin) = splitPath(normalizedPath(getAppDir()))/let (_, bin) = splitPath(normalizedPath(getAppDir()))/' \
+            -e 's/result = root \/ "stdcache" \/ bin \/ uhashBase36(b.extract())/result = config.nifcachePath \/ "stdcache" \/ bin \/ uhashBase36(b.extract())/' \
+            "$nimony_work/nimony/src/nimony/deps.nim"
+          grep -F 'result = config.nifcachePath / "stdcache" / bin / uhashBase36(b.extract())' "$nimony_work/nimony/src/nimony/deps.nim"
+          (
+            cd "$nimony_work/nimony"
+            export PATH="$nimony_work/bootstrap/bin:$PATH"
+            nim c -d:release src/hastur/hastur.nim
+            for tool in nifler nimony lengc niflink nifmake validator; do
+              bin/hastur --parallelBuild:2 build "$tool"
+            done
+          )
+          install -d /opt/nimony/bin /opt/nimony/doc /opt/nimony/vendor/mimalloc /usr/local/share/licenses/nimony
+          # Several standard-library modules and macro plugins import src/lib.
+          cp -a "$nimony_work/nimony/lib" "$nimony_work/nimony/src" /opt/nimony/
+          cp -a "$nimony_work/nimony/vendor/mimalloc/src" "$nimony_work/nimony/vendor/mimalloc/include" /opt/nimony/vendor/mimalloc/
+          install -m 0644 "$nimony_work/nimony/doc/version.md" "$nimony_work/nimony/doc/tags.md" /opt/nimony/doc/
+          install -m 0644 "$nimony_work/nimony/license.txt" /usr/local/share/licenses/nimony/LICENSE
+          install -m 0644 "$nimony_work/bootstrap/copying.txt" /usr/local/share/licenses/nimony/Nim.LICENSE
+          install -m 0644 "$nimony_work/nimony/vendor/mimalloc/LICENSE" /usr/local/share/licenses/nimony/mimalloc.LICENSE
+          for tool in nimony nimsem nifler shoggoth lengc niflink nifmake validator; do
+            install -m 0755 "$nimony_work/nimony/bin/$tool" "/opt/nimony/bin/$tool"
+            ln -sfn "/opt/nimony/bin/$tool" "/usr/local/bin/$tool"
+          done
+          rm -rf "$nimony_work"
+          nimony --version
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          export XDG_CACHE_HOME="$PWD/.cache"
+          cat > Main.nim <<'NIM'
+          import std/[syncio, strutils]
+          try:
+            writeFile("same-folder.txt", "ok")
+            let words = stdin.readAll().splitWhitespace()
+            echo readFile("same-folder.txt")
+            echo parseInt(words[0]) + parseInt(words[1])
+          except:
+            quit(1)
+          NIM
+          nimony c -d:release -d:ONLINE_JUDGE --opt:speed --parallelBuild:1 --nimcache:"$PWD/.cache/nimony" --out:Main Main.nim >/dev/null
+          output="$(printf '17 25\n' | ./Main)"
+          test "$output" = $'ok\n42'
+          output="$(printf '7 13\n' | ./Main)"
+          test "$output" = $'ok\n20'
+          cat > Broken.nim <<'NIM'
+          this is invalid
+          NIM
+          if nimony c -d:release --opt:speed --parallelBuild:1 --nimcache:"$PWD/.cache/nimony-broken" --out:Broken Broken.nim >/dev/null 2>&1; then exit 1; fi
+          test ! -e Broken
+          cat > JSON.nim <<'NIM'
+          import std/[json, syncio]
+          try:
+            var tree = parseJson("""{"answer":42}""")
+            echo getInt(tree{"answer"})
+          except:
+            quit(1)
+          NIM
+          nimony c -d:release --opt:speed --parallelBuild:1 --nimcache:"$PWD/.cache/nimony-json" --out:JSON JSON.nim >/dev/null
+          output="$(./JSON)"
+          test "$output" = '42'
+          cat > Macro.nim <<'NIM'
+          import std/[macros, syncio]
+          macro traced(p: untyped): untyped =
+            result = p
+          proc work(x: int): int {.traced.} =
+            x * 2
+          echo work(21)
+          NIM
+          nimony c -d:release --opt:speed --parallelBuild:1 --nimcache:"$PWD/.cache/nimony-macro" --out:Macro Macro.nim >/dev/null
+          output="$(./Macro)"
+          test "$output" = '42'
+
   clojure:
     install:
       apt:
@@ -4997,6 +5124,7 @@ profiles:
       - moonbit
       - nasm
       - nim
+      - nimony
       - objective-c
       - objective-cpp
       - objectpascal

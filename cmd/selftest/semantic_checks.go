@@ -29,6 +29,25 @@ func languageSemanticCases() map[string][]languageSemanticCase {
 			sources:           []model.Source{{Name: "Main.gs", DataB64: encodeScript("+")}},
 		},
 	}
+	cases["nimony"] = []languageSemanticCase{{
+		name:           "JSON values and a procedure annotation macro",
+		expectedStdout: "42\n42\n",
+		sources: []model.Source{{Name: "Main.nim", DataB64: encodeScript(`import std/[json, macros, syncio]
+
+macro traced(p: untyped): untyped =
+  result = p
+
+proc work(x: int): int {.traced.} =
+  x * 2
+
+try:
+  var tree = parseJson("""{"answer":42}""")
+  echo getInt(tree{"answer"})
+  echo work(21)
+except:
+  quit(1)
+`)}},
+	}}
 	return cases
 }
 

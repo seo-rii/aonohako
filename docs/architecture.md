@@ -1025,7 +1025,7 @@ Production profiles currently group languages like this:
 | --- | --- |
 | `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace` |
 | `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `java25`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
-| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
+| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `nimony`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
 | `type-f` | `uhmlang` |
@@ -1046,6 +1046,22 @@ Production profiles currently group languages like this:
 | `type-w` | `pony` |
 | `type-x` | `bash`, `fish`, `posix-sh`, `zsh` |
 | `type-y` | `factor` |
+
+The `NIMONY` profile builds the C backend from checksum-verified Nimony commit
+`d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development) in type-c.
+Its private Nim 2.2.10 bootstrap and pinned parser/runtime dependencies are
+verified before building, and the bootstrap is removed after installation.
+Compilation selects a `.nim` entry point, preferring `Main.nim`, and returns
+only the native executable for the `binary` runtime in `plain`. A source patch
+redirects upstream's installation-local standard-library cache below the
+request's `--nimcache`; shared objects use the workspace's `XDG_CACHE_HOME`.
+The installed toolchain stays read-only and concurrent submissions keep
+separate caches. Its compile sandbox permits chmod on generated macro plugins,
+and a three-minute compile budget covers cold macro and standard-library builds.
+Nimony is under development; its language
+and standard library support differ from Nim's. `echo` requires
+`import std/syncio`; raising input and file-I/O operations require explicit
+error handling such as `try`/`except`.
 
 The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
