@@ -55,16 +55,6 @@ func TestServiceRejectsUnsupportedCPUFeaturePolicyBeforeSandbox(t *testing.T) {
 		{name: "unsupported runtime", req: model.RunRequest{Lang: "python", DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}}},
 		{name: "network", req: model.RunRequest{Lang: "binary", EnableNetwork: true, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}}},
 		{name: "communication", req: model.RunRequest{Communication: &model.CommunicationSpec{}, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}}},
-		{name: "Durante measurement", req: model.RunRequest{Lang: "CPP20", WorkMeasurement: true, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}}},
-		{name: "Durante resource envelope", req: model.RunRequest{
-			Lang: "CPP20", WorkMeasurement: true, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX},
-			Limits:                model.Limits{TimeMs: 1000, MemoryMB: 64},
-			WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128},
-		}},
-		{name: "Durante limits without measurement", req: model.RunRequest{
-			Lang: "CPP20", DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX},
-			WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128},
-		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := New().Run(context.Background(), &tc.req, Hooks{})
@@ -75,11 +65,11 @@ func TestServiceRejectsUnsupportedCPUFeaturePolicyBeforeSandbox(t *testing.T) {
 	}
 }
 
-func TestSandboxRejectsCPUFeaturePolicyWithDuranteSessionBeforePreparation(t *testing.T) {
+func TestSandboxRejectsCPUFeaturePolicyWithoutDuranteSessionBeforePreparation(t *testing.T) {
 	result := executeSandboxCommandWithStreams(context.Background(), Workspace{}, []string{"/not-started"},
 		&model.RunRequest{Lang: "CPP20", DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX}},
-		sandboxStreamConfig{workMeasurement: &durante.Session{}}, Hooks{}, 0, config.RuntimeTuningConfig{}, "")
-	if result.Status != model.RunStatusInitFail || result.VerdictSource != "cpu_feature_policy" || !strings.Contains(result.Reason, "work_measurement") {
+		sandboxStreamConfig{}, Hooks{}, 0, config.RuntimeTuningConfig{}, "")
+	if result.Status != model.RunStatusInitFail || result.VerdictSource != "cpu_feature_policy" || !strings.Contains(result.Reason, "prepared Durante session") {
 		t.Fatalf("result = %+v, want rejection before sandbox or instrumentation preparation", result)
 	}
 }
@@ -128,14 +118,7 @@ func TestRemoteRunnerForwardsDisallowedCPUFeatures(t *testing.T) {
 func TestRemoteRunnerRejectsCPUFeaturePolicyBeforeAuthOrUpload(t *testing.T) {
 	for name, req := range map[string]model.RunRequest{
 		"unsupported runtime": {Lang: "python"},
-		"Durante measurement": {Lang: "CPP20", WorkMeasurement: true},
-		"Durante resource envelope": {
-			Lang: "CPP20", WorkMeasurement: true, Limits: model.Limits{TimeMs: 1000, MemoryMB: 64},
-			WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128},
-		},
-		"Durante limits without measurement": {
-			Lang: "CPP20", WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128},
-		},
+		"network":             {Lang: "binary", EnableNetwork: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			called := false
@@ -151,6 +134,45 @@ func TestRemoteRunnerRejectsCPUFeaturePolicyBeforeAuthOrUpload(t *testing.T) {
 			resp := runner.Run(context.Background(), &req, Hooks{})
 			if resp.Status != model.RunStatusInitFail || !strings.Contains(resp.Reason, "disallowed_cpu_features") || called {
 				t.Fatalf("response = %+v, HTTP called = %v", resp, called)
+			}
+		})
+	}
+}
+
+func TestRemoteRunnerForwardsCPUFeaturePolicyWithDurante(t *testing.T) {
+	for _, withLimits := range []bool{false, true} {
+		t.Run(fmt.Sprint(withLimits), func(t *testing.T) {
+			var calls atomic.Int64
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				var decoded model.RunRequest
+				if err := json.NewDecoder(r.Body).Decode(&decoded); err != nil {
+					t.Error(err)
+				}
+				if !decoded.WorkMeasurement || !slices.Equal(decoded.DisallowedCPUFeatures, []cpupolicy.Feature{cpupolicy.AVX}) || (decoded.WorkMeasurementLimits != nil) != withLimits {
+					t.Errorf("lost combined native policy: %+v", decoded)
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, "event: result\ndata: {\"status\":\"InitFail\",\"reason\":\"fixture stops before execution\"}\n\n")
+			}))
+			defer remote.Close()
+			req := &model.RunRequest{Lang: "CPP20", WorkMeasurement: true, DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX},
+				Binaries: []model.Binary{{Name: "Main", DataB64: "eA==", Mode: "exec"}}, Limits: model.Limits{TimeMs: 1000, MemoryMB: 64}}
+			cfg, err := durante.ParseConfig("cpp", "", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if withLimits {
+				req.WorkMeasurementLimits = &durante.ResourceLimits{CPUTimeMs: 2000, WallTimeMs: 4000, MemoryMB: 128}
+				cfg.ResourcePolicy, err = durante.ParseResourcePolicy(`{"max_limits":{"cpu_time_ms":3000,"wall_time_ms":10000,"memory_mb":512},"memory_budget_mb":4096,"reserved_memory_mb":512}`)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			runner := newRemoteRunner(config.Config{Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{URL: remote.URL}, WorkMeasurement: cfg}})
+			response := runner.Run(context.Background(), req, Hooks{})
+			if calls.Load() != 1 {
+				t.Fatalf("combined request was rejected before forwarding: %+v", response)
 			}
 		})
 	}

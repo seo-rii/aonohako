@@ -1,10 +1,12 @@
 package durante
 
 import (
+	"aonohako/internal/cpupolicy"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -157,6 +159,20 @@ type Report struct {
 	MeasurementContract   *MeasurementContract  `json:"measurement_contract"`
 	REPTelemetryStatus    string                `json:"rep_telemetry_status"`
 	Installation          *InstallationIdentity `json:"installation,omitempty"`
+	DisallowedCPUFeatures []cpupolicy.Feature   `json:"disallowed_cpu_features,omitempty"`
+	nativeCPUFeatures     []cpupolicy.Feature
+}
+
+// HasCPUFeaturePolicy checks a locally collected, globally consistent policy
+// receipt from a valid root start. It can remain available after an ordinary
+// guest fault, but is never restored from public JSON or treated as attestation.
+func (r *Report) HasCPUFeaturePolicy(features []cpupolicy.Feature) bool {
+	if r == nil || len(features) == 0 || cpupolicy.Validate(features) != nil {
+		return false
+	}
+	canonical := slices.Clone(features)
+	slices.Sort(canonical)
+	return slices.Equal(r.nativeCPUFeatures, canonical)
 }
 
 func (r *Report) UnmarshalJSON(data []byte) error {
@@ -167,7 +183,7 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	// encoding/json accepts case-insensitive aliases. Do not let a second
 	// spelling override an explicit trust or coverage statement.
 	for key := range fields {
-		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown"} {
+		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown", "disallowed_cpu_features"} {
 			if key != protected && strings.EqualFold(key, protected) {
 				return fmt.Errorf("noncanonical diagnostic contract field")
 			}
@@ -180,6 +196,12 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	var decoded plain
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
+	}
+	if _, exists := fields["disallowed_cpu_features"]; exists {
+		if len(decoded.DisallowedCPUFeatures) == 0 || cpupolicy.Validate(decoded.DisallowedCPUFeatures) != nil ||
+			(len(decoded.DisallowedCPUFeatures) == 2 && decoded.DisallowedCPUFeatures[0] != cpupolicy.AVX) {
+			return fmt.Errorf("invalid or noncanonical disallowed CPU features")
+		}
 	}
 	*r = Report(decoded)
 	return nil
@@ -206,7 +228,7 @@ func (r *Report) WithoutTotals(reason string) *Report {
 func (r *Report) ValidUnavailableResult() bool {
 	return r != nil && !r.Complete && r.Reason != "" && r.Quality == "incomplete" && r.REPTelemetryStatus == REPUnavailable &&
 		r.Instructions == nil && r.REPBytes == nil && r.REPEntries == nil && r.UnsupportedREPEntries == nil && r.REPBreakdown == nil &&
-		r.SignalsObserved == 0 && r.Processes == 0 && r.Images == 0
+		r.SignalsObserved == 0 && r.Processes == 0 && r.Images == 0 && len(r.DisallowedCPUFeatures) == 0
 }
 
 // ValidDiagnosticContract rejects old, absent or promoted remote contracts.

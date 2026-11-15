@@ -195,24 +195,28 @@ interactive command channel, submitted GDL paths are limited to ASCII letters,
 digits, `.`, `_`, `-`, and `/`.
 
 A nonempty `disallowed_cpu_features` list selects instruction-checked execution
-for a static Linux x86-64 ELF contestant whose normalized runtime is `binary`.
+for a native Linux x86-64 ELF contestant whose normalized runtime is `binary`.
 The values and maximum of two entries match `/compile`; omitted, empty, or
 `null` values preserve ordinary execution. The policy is request-wide for
 contestant programs in ordinary execution, interactive execution, legacy
 steps, and Pipeline V1. Trusted interactors and SPJs do not inherit it.
 `communication`, contestant `enable_network`, `file_outputs`,
-`sidecar_outputs`, Durante `work_measurement`/`work_measurement_limits`, file
+`sidecar_outputs`, file
 handoffs, and Pipeline V1 `participant_file` outputs
 are unsupported and rejected before admission. Trusted interactor output files
-remain available to Pipeline V1. Additional submitted files are still
-materialized, but restricted guest programs cannot open them.
+remain available to Pipeline V1. Native file, process and thread operations
+remain subject to the existing sandbox.
 
-The packaged QEMU TCG backend checks instructions before they execute,
-including instructions in guest libraries and dynamically generated code.
+The packaged Durante/DynamoRIO runtime checks instructions before they execute,
+including application libraries and dynamically generated code. Static and
+dynamic ELF executables are accepted. The policy can share one native run with
+`work_measurement` and its diagnostic limits; policy-only requests do not expose
+work measurements or require measurement opt-in.
 `simd` permits scalar SSE operations and ordinary data movement, but can reject
 packed libc instructions reached by otherwise scalar source. CPU, wall-time,
-and memory accounting include emulation costs. Executables must fit the
-backend's checked 4 GiB guest address window. A policy violation returns
+and memory accounting include instrumentation costs. Durante's existing
+application-mutable trust level applies: application code may tamper with its
+in-process instrumentation or reporting. A recorded policy violation returns
 `Runtime Error` with `verdict_source: "cpu_feature_policy"`; unavailable backend
 or unsupported executable format returns `Container Initialization Failed`.
 Invalid policy values or unsupported request combinations return HTTP 400
