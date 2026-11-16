@@ -494,6 +494,7 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "Free Pascal" fpc -iV`,
 		`report_once "Scala 3" java -cp '/opt/aonohako/scala3/lib/*' dotty.tools.dotc.Main -version`,
 		`report_once "Nim" nim --version`,
+		`report_once "Picat" picat --version`,
 		`report_once "Nimony" nimony --version`,
 		`report_once "Clojure" clojure -e "(println (clojure-version))"`,
 		`report_once "Racket" racket --version`,

@@ -71,6 +71,35 @@ object Main:
 		},
 	}
 
+	cases["picat"] = []languageSemanticCase{
+		{
+			name:              "failed main produces runtime error",
+			expectedRunStatus: model.RunStatusRE,
+			sources:           []model.Source{{Name: "Main.pi", DataB64: encodeScript("main => fail.\n")}},
+		},
+		{
+			name:           "external command execution stays denied",
+			expectedStdout: "blocked\n",
+			sources: []model.Source{{Name: "Main.pi", DataB64: encodeScript(`main =>
+    if command("true") == 0 then println("leaked") else println("blocked") end.
+`)}},
+		},
+		{
+			name:           "tabling and list comprehension",
+			expectedStdout: "55\n[1,4,9,16]\n",
+			sources: []model.Source{{Name: "Main.pi", DataB64: encodeScript(`table
+fib(0) = 0.
+fib(1) = 1.
+fib(N) = F, N > 1 => F = fib(N-1)+fib(N-2).
+main => println(fib(10)), println([X*X : X in 1..4]).
+`)}},
+		},
+		{
+			name:                  "reject invalid syntax before execution",
+			expectedCompileStatus: model.CompileStatusCompileError,
+			sources:               []model.Source{{Name: "Main.pi", DataB64: encodeScript("main => this is invalid.\n")}},
+		},
+	}
 	return cases
 }
 

@@ -290,6 +290,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"erlang":        {compileKind: "erlang", runLang: "erlang"},
 		"mercury":       {compileKind: "mercury", runLang: "binary"},
 		"prolog":        {compileKind: "prolog", runLang: "prolog"},
+		"picat":         {compileKind: "picat", runLang: "picat"},
 		"gnu-prolog":    {compileKind: "gnu-prolog", runLang: "binary"},
 		"r":             {compileKind: "r", runLang: "r"},
 		"groovy":        {compileKind: "groovy", runLang: "groovy"},

@@ -263,6 +263,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{erlangRuntime, "+S", schedulerArg, "+A", asyncThreadsArg, "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
 	case "prolog":
 		return []string{"swipl", "-q", "-f", primaryPath, "-g", "main", "-t", "halt"}
+	case "picat":
+		return []string{"env", "PICATPATH=", "picat", primaryPath}
 	case "lisp":
 		dynamicSpaceMB := max(64, req.Limits.MemoryMB/2)
 		if dynamicSpaceMB > 512 {

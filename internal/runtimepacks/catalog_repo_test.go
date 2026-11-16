@@ -54,7 +54,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "unlambda", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picat", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "unlambda", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
 	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "java25", "javascript", "purescript", "quickjs", "rescript", "scala", "scala3", "typescript"}) {
@@ -239,6 +239,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-pascal",
 		"ci-perl",
 		"ci-php",
+		"ci-picat",
 		"ci-picolisp",
 		"ci-piet",
 		"ci-plain",
@@ -491,6 +492,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"rescript":      {"rescript@12.3.0", "rescript build", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 lib/js/Main.js"},
 		"fortran":       {"Broken.f90", "gfortran"},
 		"d":             {"Broken.d", "ldc2"},
+		"picat":         {"PICAT_VERSION=39_12", "PICAT_SHA256=f053b11cccabfb69a3ccd779f2dc1c24cdf889805799bc8c779e6c56da703e4a", "sha256sum -c -", "picat_compile.pi", "17 25", "7 13", "COMPILE LEAK", "Broken.pi"},
 		"prolog":        {"Broken.pl", "swipl"},
 		"gnu-prolog":    {"gprolog=1.4.5.0-3", "GNU Prolog.*1\\.4\\.5", "gplc --no-top-level --no-debugger -o Main Main.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl", "20 22", "7 13", "CompileOnly.pl", "aonohako-gnu-prolog-compile-leak", "Broken.pl", "Failure.pl", "if ./Failure"},
 		"scala3":        {"SCALA3_VERSION=3.3.9", "SCALA3_SHA256=ba96214801ea01b0d0aee45f00c94d3f61ed40d0f2aa748aff11c7f136737d7c", "sha256sum -c -", "dotty.tools.dotc.Main", "enum Operation:", "17 25", "7 13", "test ! -e Broken.class"},

@@ -555,6 +555,10 @@ if has_language "idris2"; then
     report_once "Idris2" idris2 --version
 fi
 
+if has_language "picat"; then
+    report_once "Picat" picat --version
+fi
+
 if has_language "prolog"; then
     report_once "Prolog" swipl --version
 fi
@@ -842,6 +846,7 @@ report_compile_option "r" "/usr/lib/R/bin/exec/R --vanilla --slave -e parse(file
 report_compile_option "raku" "raku -c"
 report_compile_option "erlang" "erlc"
 report_compile_option "mercury" "mmc --make --grade hlc.gc <module>"
+report_compile_option "picat" "picat /usr/local/lib/aonohako/picat_compile.pi <source.pi>; publish sources only; execute picat <source.pi>"
 report_compile_option "prolog" "swipl syntax check"
 report_compile_option "gnu-prolog" "gplc --no-top-level --no-debugger -o <target> <source> /usr/local/lib/aonohako/gnu_prolog_entry.pl"
 report_compile_option "ocaml" "ocamlopt"
