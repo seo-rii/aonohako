@@ -497,6 +497,8 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "Wren CLI" wren_cli --version`,
 
 		`report_once "Squirrel" aonohako-squirrel -v`,
+
+		`report_once "PARI/GP" aonohako-pari-gp --version-short`,
 		`report_once "Nim" nim --version`,
 		`report_once "Picat" picat --version`,
 		`report_once "Nimony" nimony --version`,

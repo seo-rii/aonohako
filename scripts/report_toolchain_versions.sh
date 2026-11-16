@@ -437,6 +437,10 @@ if has_language "squirrel"; then
     report_once "Squirrel" aonohako-squirrel -v
 fi
 
+if has_language "pari-gp"; then
+    report_once "PARI/GP" aonohako-pari-gp --version-short
+fi
+
 if has_language "clojure"; then
     report_once "Clojure" clojure -e "(println (clojure-version))"
 fi
@@ -775,6 +779,8 @@ report_compile_option "pascal" "fpc -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "delphi" "fpc -Mdelphi -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "objectpascal" "fpc -Mobjfpc -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "squirrel" "aonohako-squirrel -c -o Main.cnut Main.nut"
+
+report_compile_option "pari-gp" "aonohako-pari-gp --aonohako-check -f -q Main.gp"
 report_compile_option "nim" "nim c -d:release -d:ONLINE_JUDGE --opt:speed"
 report_compile_option "wren" "Source pass-through; execute with wren_cli <source.wren>; syntax errors are reported at execution"
 report_compile_option "nimony" "nimony c -d:release -d:ONLINE_JUDGE --opt:speed --parallelBuild:1 --nimcache:.cache/nimony --out:Main Main.nim"

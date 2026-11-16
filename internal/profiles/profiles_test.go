@@ -5,6 +5,8 @@ import "testing"
 func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 	languages := []string{
 		"SQUIRREL",
+
+		"PARI_GP",
 		"TEXT",
 		"C",
 		"C89",

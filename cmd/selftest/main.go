@@ -4643,6 +4643,16 @@ try { for (local i=0; i<1048576; i++) bytes += stdin.readn('b').tochar(); } catc
 local values = split(bytes, " \t\r\n");
 print((values[0].tointeger() + values[1].tointeger()).tostring() + "\n");`)},
 		},
+		"pari-gp": {
+			compileLang: "PARI_GP",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{source("Main.gp", `v=Vecsmall(strjoin(readstr("/dev/stdin")," "));
+n=0;sgn=1;values=List();active=0;
+for(i=1,#v,c=v[i];if(c==45,sgn=-1,if(c>=48&&c<=57,n=n*10+c-48;active=1,if(active,listput(values,sgn*n);n=0;sgn=1;active=0))));
+if(active,listput(values,sgn*n));
+print(values[1]+values[2]);`)},
+		},
 		"nimony": {
 			compileLang: "NIMONY",
 			judgeIO:     standardABJudgeIO,
