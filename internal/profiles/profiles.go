@@ -198,6 +198,7 @@ var profiles = map[string]Profile{
 	"QBASIC":        {SourceLang: "QBASIC", Extension: "bas", DefaultTarget: "Main", CompileKind: "classic-basic", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"SMALLTALK":     {SourceLang: "SMALLTALK", Extension: "st", CompileKind: "smalltalk", RunLang: "smalltalk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"GST":           {SourceLang: "GST", Extension: "st", CompileKind: "smalltalk", RunLang: "smalltalk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"WREN":          {SourceLang: "WREN", Extension: "wren", DefaultTarget: "Main.wren", CompileKind: "wren", RunLang: "wren", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"GOLFSCRIPT":    {SourceLang: "GOLFSCRIPT", Extension: "gs", CompileKind: "golfscript", RunLang: "golfscript", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"MOJO":          {SourceLang: "MOJO", Extension: "mojo", DefaultTarget: "Main", CompileKind: "mojo", RunLang: "mojo-binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"DENO":          {SourceLang: "DENO", Extension: "ts", CompileKind: "deno", RunLang: "deno", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},

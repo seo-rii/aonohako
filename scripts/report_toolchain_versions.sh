@@ -425,6 +425,10 @@ if has_language "nim"; then
     report_once "Nim" nim --version
 fi
 
+if has_language "wren"; then
+    report_once "Wren CLI" wren_cli --version
+fi
+
 if has_language "nimony"; then
     report_once "Nimony" nimony --version
 fi
@@ -767,6 +771,7 @@ report_compile_option "pascal" "fpc -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "delphi" "fpc -Mdelphi -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "objectpascal" "fpc -Mobjfpc -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "nim" "nim c -d:release -d:ONLINE_JUDGE --opt:speed"
+report_compile_option "wren" "Source pass-through; execute with wren_cli <source.wren>; syntax errors are reported at execution"
 report_compile_option "nimony" "nimony c -d:release -d:ONLINE_JUDGE --opt:speed --parallelBuild:1 --nimcache:.cache/nimony --out:Main Main.nim"
 report_compile_option "ada" "gnatmake -O2"
 report_compile_option "cobol" "cobc -x -free -O2"

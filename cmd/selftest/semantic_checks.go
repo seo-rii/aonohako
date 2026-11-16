@@ -29,6 +29,36 @@ func languageSemanticCases() map[string][]languageSemanticCase {
 			sources:           []model.Source{{Name: "Main.gs", DataB64: encodeScript("+")}},
 		},
 	}
+	cases["wren"] = []languageSemanticCase{
+		{
+			name: "workspace files are writable while submitted sources stay immutable",
+			sources: []model.Source{{Name: "Main.wren", DataB64: encodeScript(`import "io" for File
+File.create("same-folder.txt") {|file| file.writeBytes("ok") }
+System.print(File.read("same-folder.txt"))
+var overwrite = Fiber.new {
+  File.create("Main.wren") {|file| file.writeBytes("changed") }
+}
+overwrite.try()
+System.print(overwrite.error != null ? "blocked" : "modified")
+`)}},
+			expectedStdout: "ok\nblocked\n",
+		},
+		{
+			name:              "syntax errors are rejected at execution",
+			sources:           []model.Source{{Name: "Main.wren", DataB64: encodeScript("var broken =\n")}},
+			expectedRunStatus: model.RunStatusRE,
+		},
+		{
+			name: "fibers yield and resume",
+			sources: []model.Source{{Name: "Main.wren", DataB64: encodeScript(`var fiber = Fiber.new {
+  Fiber.yield(20)
+  return 22
+}
+System.print(fiber.call() + fiber.call())
+`)}},
+			expectedStdout: "42\n",
+		},
+	}
 	cases["nimony"] = []languageSemanticCase{{
 		name:           "JSON values and a procedure annotation macro",
 		expectedStdout: "42\n42\n",

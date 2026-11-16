@@ -51,7 +51,7 @@ func TestCompileRegistryIncludesSimpleCompilers(t *testing.T) {
 		"vhdl", "verilog", "crystal", "vala", "vlang", "odin", "c3", "hare", "vbnet", "gleam", "cuda-ocelot", "rocq", "isabelle",
 		"python", "pypy",
 		"racket", "javascript", "ruby", "php", "lua", "luajit", "perl",
-		"raku", "r", "mercury", "prolog", "gnu-prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
+		"raku", "r", "mercury", "prolog", "gnu-prolog", "lisp", "picolisp", "nasm", "erlang", "vb6", "smalltalk", "golfscript", "wren", "duckdb", "bqn", "apl", "j", "uiua", "janet", "sed", "bc", "forth",
 		"typescript", "kotlin", "cobol", "cython", "haskell", "elm", "haxe", "swift", "sqlite", "julia", "scala", "scala3", "fsharp",
 		"freebasic", "classic-basic", "mojo", "moonbit", "fennel", "chapel", "algol68", "koka", "pony", "shell", "powershell", "zerolang", "bun", "deno", "quickjs", "kotlin-jvm", "coffeescript", "rescript", "purescript", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "shakespeare", "piet", "unlambda", "lazyk", "intercal", "apecode", "wasm", "assemblyscript", "factor",
 		"ocaml", "elixir", "csharp", "dart", "none",

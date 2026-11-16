@@ -71,7 +71,7 @@ language-specific commands keep their declared order.
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Nimony, Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog, Picat,
-  Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, Shakespeare, Piet, Unlambda, Lazy K, INTERCAL, WASM, Coq/Rocq, Lean, Agda,
+  Lisp/PicoLisp/Smalltalk/GolfScript/Wren, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, Shakespeare, Piet, Unlambda, Lazy K, INTERCAL, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
   submitters compile into binaries and should target the `plain` runtime image
@@ -99,6 +99,14 @@ language-specific commands keep their declared order.
   compiles source in memory and invokes `main/0`. Submitted `.qi` bytecode is
   rejected. Core tabling, list comprehensions, and the bundled constraint modules
   are available; external solver programs are not installed.
+
+- `WREN` uses the official Wren CLI source pinned to
+  `18553636618a4d33f10af9b5ab92da6431784a8c` (Wren 0.4.0), linked against
+  Debian's system libuv. Compile and execute in `type-a`, or use `ci-wren` for
+  an isolated smoke image. Compilation preserves submitted sources without
+  evaluating them; syntax and import errors are reported during execution.
+  Use `import "io" for Stdin` for input and relative imports such as
+  `import "./addition" for Addition` for submitted helper modules.
 - `NIMONY` compiles `.nim` sources with the C backend of
   [Nimony](https://github.com/nim-lang/nimony), pinned to source commit
   `d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development). Compile in
