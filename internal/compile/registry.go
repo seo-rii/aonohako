@@ -15,6 +15,7 @@ const (
 var compileRegistry = map[string]Compiler{
 	"entry": entryCompiler{},
 	"picat": picatCompiler{},
+	"squirrel": squirrelCompiler{},
 	"c": nativeCompiler{exts: []string{".c", ".h"}, bin: "gcc", flags: func(job CompileJob) []string {
 		return []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + job.Profile.CompileStd}
 	}},

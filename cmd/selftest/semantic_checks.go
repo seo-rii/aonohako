@@ -130,6 +130,18 @@ main => println(fib(10)), println([X*X : X in 1..4]).
 			sources:               []model.Source{{Name: "Main.pi", DataB64: encodeScript("main => this is invalid.\n")}},
 		},
 	}
+	cases["squirrel"] = []languageSemanticCase{
+		{
+			name:           "array iteration and arithmetic",
+			expectedStdout: "30\n",
+			sources:        []model.Source{{Name: "Main.nut", DataB64: encodeScript(`local values = [1,2,3,4]; local total=0; foreach(v in values) total+=v*v; print(total.tostring()+"\n");`)}},
+		},
+		{
+			name:                  "invalid source rejected",
+			expectedCompileStatus: model.CompileStatusCompileError,
+			sources:               []model.Source{{Name: "Broken.nut", DataB64: encodeScript(`local value = ;`)}},
+		},
+	}
 	return cases
 }
 

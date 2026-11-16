@@ -117,6 +117,9 @@ language-specific commands keep their declared order.
   Its project, standard-library, and shared-object caches stay in the request's
   workspace. Nimony compilation has a three-minute budget for cold macro and
   standard-library builds. Existing `NIM` submissions continue to use the Nim toolchain.
+- `SQUIRREL` compiles `.nut` files to Squirrel 3.2 bytecode (`Main.cnut`).
+  Execute with `squirrel`. The pinned CLI uses a dedicated `aonohako-squirrel`
+  command to avoid system `sq` collisions, and propagates runtime errors as failures.
 - Zerolang is pinned to the official v0.3.4 Linux x64 release. Compilation
   imports canonical `.0` text into a graph and then builds a native executable
   with the `release-fast` profile. Its stable source projection does not yet

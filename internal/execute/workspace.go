@@ -246,6 +246,8 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		return wrenPath, lang, nil
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "chapel-binary", "chicken-scheme", "c3", "javascript", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "assemblyscript", "factor", "aheui", "apecode", "cuda-ocelot":
 		return primaryPath, lang, nil
+	case "squirrel":
+		return primaryPath, lang, nil
 	case "entry":
 		return primaryPath, lang, nil
 	case "smlnj":

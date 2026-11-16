@@ -3063,6 +3063,55 @@ languages:
           test ! -s broken.stdout
           grep -F 'Error' broken.stderr
 
+  squirrel:
+    install:
+      apt:
+        - curl
+        - gcc
+        - g++
+        - make
+        - libc6-dev
+      sandbox_tools:
+        - aonohako-squirrel
+      script:
+        - |
+          squirrel_work="$(mktemp -d /tmp/aonohako-squirrel.XXXXXX)"
+          curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://codeload.github.com/albertodemichelis/squirrel/tar.gz/f92bc298784ceea459b12e2de33bdff672bfeb83 -o "$squirrel_work/source.tar.gz"
+          printf '%s  %s\n' 722f1a5f271dfb7ac90a42d3789a861b381b4741499de29ce06d238384645f2d "$squirrel_work/source.tar.gz" | sha256sum -c -
+          mkdir "$squirrel_work/source"
+          tar -xzf "$squirrel_work/source.tar.gz" -C "$squirrel_work/source" --strip-components=1
+          # Upstream leaves retval at zero for some runtime errors. Preserve failure.
+          sed -i -e '/    case _DONE:/a\        break;' -e '/    case _ERROR:/a\        if (retval == 0) retval = 1;' "$squirrel_work/source/sq/sq.c"
+          grep -F 'if (retval == 0) retval = 1;' "$squirrel_work/source/sq/sq.c"
+          (cd "$squirrel_work/source" && make sq64 CC=gcc)
+          install -m 0755 "$squirrel_work/source/bin/sq" /usr/local/bin/aonohako-squirrel
+          install -d /usr/local/share/licenses/squirrel
+          install -m 0644 "$squirrel_work/source/COPYRIGHT" /usr/local/share/licenses/squirrel/LICENSE
+          rm -rf "$squirrel_work"
+          aonohako-squirrel -v
+    smoke:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          cat > Main.nut <<'NUT'
+          local bytes = "";
+          try { for (local i=0; i<1048576; i++) bytes += stdin.readn('b').tochar(); } catch (e) {}
+          local values = split(bytes, " \t\r\n");
+          print((values[0].tointeger() + values[1].tointeger()).tostring() + "\n");
+          NUT
+          aonohako-squirrel -c -o Main.cnut Main.nut
+          output="$(printf '17 25\n' | aonohako-squirrel Main.cnut)"
+          test "$output" = '42'
+          output="$(printf -- '-8\t3\n' | aonohako-squirrel Main.cnut)"
+          test "$output" = '-5'
+          printf '%s\n' 'local value = ;' > Broken.nut
+          if aonohako-squirrel -c -o Broken.cnut Broken.nut; then exit 1; fi
+          test ! -e Broken.cnut
+          printf '%s\n' 'throw "runtime failure";' > Error.nut
+          if aonohako-squirrel Error.nut; then exit 1; fi
+
   clojure:
     install:
       apt:
@@ -5239,6 +5288,7 @@ profiles:
       - smlnj
       - smalltalk
       - sqlite
+      - squirrel
       - tcl
       - uiua
       - unlambda

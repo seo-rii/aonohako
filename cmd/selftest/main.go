@@ -4634,6 +4634,15 @@ System.print(Addition.add(Num.fromString(words[0]), Num.fromString(words[1])))
 `),
 			},
 		},
+		"squirrel": {
+			compileLang: "SQUIRREL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{source("Main.nut", `local bytes = "";
+try { for (local i=0; i<1048576; i++) bytes += stdin.readn('b').tochar(); } catch (e) {}
+local values = split(bytes, " \t\r\n");
+print((values[0].tointeger() + values[1].tointeger()).tostring() + "\n");`)},
+		},
 		"nimony": {
 			compileLang: "NIMONY",
 			judgeIO:     standardABJudgeIO,
