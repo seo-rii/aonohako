@@ -267,11 +267,11 @@ if has_language "graphql"; then
     report_python_pkg_once "GraphQL Core" "graphql-core"
 fi
 
-if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure" || has_language "kotlin-jvm"; then
+if has_language "java" || has_language "groovy" || has_language "scala" || has_language "scala3" || has_language "clojure" || has_language "kotlin-jvm"; then
     report_once "Java compiler" javac -version
 fi
 
-if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure" || has_language "kotlin-jvm" || has_language "tla"; then
+if has_language "java" || has_language "groovy" || has_language "scala" || has_language "scala3" || has_language "clojure" || has_language "kotlin-jvm" || has_language "tla"; then
     report_once "Java runtime" java -version
 fi
 
@@ -282,6 +282,10 @@ fi
 
 if has_language "groovy"; then
     report_once "Groovy" groovy --version
+fi
+
+if has_language "scala3"; then
+    report_once "Scala 3" java -cp '/opt/aonohako/scala3/lib/*' dotty.tools.dotc.Main -version
 fi
 
 if has_language "scala"; then
@@ -727,6 +731,7 @@ report_compile_option "java" "javac --release 11 -encoding UTF-8"
 report_compile_option "java25" "/usr/lib/jvm/aonohako-java25/bin/javac --release 25 -encoding UTF-8"
 report_compile_option "groovy" "groovyc -d <workdir>"
 report_compile_option "scala" "scalac -d <workdir>"
+report_compile_option "scala3" "dotty.tools.dotc.Main -classpath <trusted Scala 3 libraries> -release 17 -encoding UTF-8 -color:never -d <workdir>"
 report_compile_option "clojure" "clojure reader parse check"
 report_compile_option "chez-scheme" "/usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm <source.scm>; run with /usr/bin/chezscheme --quiet --script <source.scm>"
 report_compile_option "guile" "GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm <source.scm>; run with auto-compilation disabled"

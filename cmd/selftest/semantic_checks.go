@@ -48,6 +48,29 @@ except:
   quit(1)
 `)}},
 	}}
+	cases["scala3"] = []languageSemanticCase{
+		{
+			name:           "Scala 3 enum and extension syntax",
+			expectedStdout: "42\n",
+			sources: []model.Source{{Name: "Main.scala", DataB64: encodeScript(`enum Answer:
+  case Value(value: Int)
+extension (a: Answer)
+  def number: Int = a match
+    case Answer.Value(n) => n
+object Main:
+  def main(args: Array[String]): Unit =
+    println(Answer.Value(42).number)
+`)}},
+		},
+		{
+			name:                  "Scala 3 type mismatch is rejected",
+			expectedCompileStatus: model.CompileStatusCompileError,
+			sources: []model.Source{{Name: "Main.scala", DataB64: encodeScript(`object Main:
+  val incorrect: Int = "not an integer"
+`)}},
+		},
+	}
+
 	return cases
 }
 

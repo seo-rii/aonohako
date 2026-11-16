@@ -189,6 +189,7 @@ var compileRegistry = map[string]Compiler{
 	"sqlite":        sqliteCompiler{},
 	"julia":         juliaCompiler{},
 	"scala":         scalaCompiler{},
+	"scala3":        scala3Compiler{},
 	"fsharp":        fsharpCompiler{},
 	"freebasic":     freeBasicCompiler{noSourceReason: "no freebasic sources"},
 	"classic-basic": freeBasicCompiler{dialectArgs: []string{"-lang", "qb"}, noSourceReason: "no classic-basic sources"},

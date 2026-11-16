@@ -57,7 +57,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "unlambda", "wasm", "whitespace"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "java25", "javascript", "purescript", "quickjs", "rescript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "java25", "javascript", "purescript", "quickjs", "rescript", "scala", "scala3", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
 	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "nimony", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
@@ -259,6 +259,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-ruby",
 		"ci-rust",
 		"ci-scala",
+		"ci-scala3",
 		"ci-scheme",
 		"ci-sed",
 		"ci-shakespeare",
@@ -492,6 +493,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"d":             {"Broken.d", "ldc2"},
 		"prolog":        {"Broken.pl", "swipl"},
 		"gnu-prolog":    {"gprolog=1.4.5.0-3", "GNU Prolog.*1\\.4\\.5", "gplc --no-top-level --no-debugger -o Main Main.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl", "20 22", "7 13", "CompileOnly.pl", "aonohako-gnu-prolog-compile-leak", "Broken.pl", "Failure.pl", "if ./Failure"},
+		"scala3":        {"SCALA3_VERSION=3.3.9", "SCALA3_SHA256=ba96214801ea01b0d0aee45f00c94d3f61ed40d0f2aa748aff11c7f136737d7c", "sha256sum -c -", "dotty.tools.dotc.Main", "enum Operation:", "17 25", "7 13", "test ! -e Broken.class"},
 		"scala":         {"scalac Main.scala", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp \"${scala_cp}\" Main"},
 		"lisp":          {"Broken.lisp", "sbcl"},
 		"nasm":          {"Main.asm", "Broken.asm", "nasm -felf64"},

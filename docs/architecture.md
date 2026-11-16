@@ -1024,7 +1024,7 @@ Production profiles currently group languages like this:
 | Profile | Languages |
 | --- | --- |
 | `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace` |
-| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `java25`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
+| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `java25`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `scala3`, `typescript` |
 | `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `nimony`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
@@ -1046,6 +1046,18 @@ Production profiles currently group languages like this:
 | `type-w` | `pony` |
 | `type-x` | `bash`, `fish`, `posix-sh`, `zsh` |
 | `type-y` | `factor` |
+
+The `SCALA3` profile pins the official Scala 3.3.9 LTS distribution by SHA256
+and installs only the noninteractive compiler and runtime JAR closure under
+`/opt/aonohako/scala3`. Compilation invokes `dotty.tools.dotc.Main` directly
+with the trusted compiler JAR directory and a separate fixed library classpath,
+UTF-8 source encoding, and Java 17 bytecode target. It publishes only `.class`
+artifacts. Execution uses `java` with the submitted class directory and the
+trusted Scala 3 / Scala 2.13 runtime libraries; it never includes compiler,
+Scala CLI, dependency resolution, or the legacy Scala 2 installation. Entry
+classes use the same validated JVM entry-point contract and bounded JVM memory
+settings as the existing Scala runner. Scala 3 `@main` methods can be selected
+with their generated class name in `entry_point`.
 
 The `NIMONY` profile builds the C backend from checksum-verified Nimony commit
 `d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development) in type-c.

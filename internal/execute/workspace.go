@@ -66,7 +66,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	classFiles := make([]string, 0)
 	entryPointPath := ""
 	switch lang {
-	case "java", "java25", "scala", "groovy":
+	case "java", "java25", "scala", "scala3", "groovy":
 		if _, err := normalizeJVMMainClass(req.EntryPoint, "Main"); err != nil {
 			return "", "", err
 		}
@@ -318,9 +318,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", err
 		}
 		return jar, lang, nil
-	case "scala":
+	case "scala", "scala3":
 		if len(classFiles) == 0 {
-			return "", "", fmt.Errorf("scala requires .class files")
+			return "", "", fmt.Errorf("%s requires .class files", lang)
 		}
 		return ws.BoxDir, lang, nil
 	case "groovy":

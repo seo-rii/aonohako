@@ -67,7 +67,7 @@ language-specific commands keep their declared order.
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
-  Node/Deno/Bun/QuickJS/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
+  Scala 3, Node/Deno/Bun/QuickJS/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
   Nimony, Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
   Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog,
@@ -85,6 +85,13 @@ language-specific commands keep their declared order.
   separately under `/usr/lib/jvm/aonohako-java25`, so existing Java profiles and
   other JVM languages retain their toolchains. `JAVA` still defaults to release
   11, and Kotlin/JVM targets remain limited to the existing releases through 21.
+- `SCALA3` selects checksum-pinned Scala 3.3.9 LTS in `type-b`. Compilation
+  calls the compiler directly on a fixed, image-installed classpath and emits
+  JVM classes targeting Java 17. Execute with `scala3` or `SCALA3`; the default
+  main class is `Main`, and `entry_point` can select another class, including
+  a top-level `@main` method's generated class. Both compilation and execution
+  are offline; Scala CLI directives do not fetch dependencies. Existing `SCALA`
+  continues to use its separate Scala toolchain and runtime libraries.
 - `NIMONY` compiles `.nim` sources with the C backend of
   [Nimony](https://github.com/nim-lang/nimony), pinned to source commit
   `d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development). Compile in

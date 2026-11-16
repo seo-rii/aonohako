@@ -3,11 +3,13 @@ package profiles
 import "strings"
 
 const (
-	Java25Home   = "/usr/lib/jvm/aonohako-java25"
-	asProfileKey = "ASSEMBLYSCRIPT"
-	denoJSKey    = "JAVASCRIPT_DENO"
-	denoTSKey    = "TYPESCRIPT_DENO"
-	quickJSKey   = "JAVASCRIPT_QUICKJS"
+	Scala3Home             = "/opt/aonohako/scala3"
+	Scala3RuntimeClasspath = Scala3Home + "/lib/scala3-library.jar:" + Scala3Home + "/lib/scala-library.jar"
+	Java25Home             = "/usr/lib/jvm/aonohako-java25"
+	asProfileKey           = "ASSEMBLYSCRIPT"
+	denoJSKey              = "JAVASCRIPT_DENO"
+	denoTSKey              = "TYPESCRIPT_DENO"
+	quickJSKey             = "JAVASCRIPT_QUICKJS"
 )
 
 type Profile struct {
@@ -152,6 +154,7 @@ var profiles = map[string]Profile{
 	"MERCURY":       {SourceLang: "MERCURY", Extension: "m", DefaultTarget: "Main", CompileKind: "mercury", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"PROLOG":        {SourceLang: "PROLOG", Extension: "pl", CompileKind: "prolog", RunLang: "prolog", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"GNU_PROLOG":    {SourceLang: "GNU_PROLOG", Extension: "pl", DefaultTarget: "Main", CompileKind: "gnu-prolog", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"SCALA3":        {SourceLang: "SCALA3", Extension: "scala", CompileKind: "scala3", RunLang: "scala3", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"SCALA":         {SourceLang: "SCALA", Extension: "scala", CompileKind: "scala", RunLang: "scala", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"FSHARP":        {SourceLang: "FSHARP", Extension: "fs", CompileKind: "fsharp", RunLang: "fsharp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"WHITESPACE":    {SourceLang: "WHITESPACE", Extension: "ws", CompileKind: "whitespace", RunLang: "whitespace", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
@@ -254,7 +257,7 @@ func NormalizeRunLang(language string) string {
 	switch key {
 	case "entry":
 		return key
-	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "bun", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "shakespeare", "piet", "unlambda", "lazyk", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
+	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "bun", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "scala3", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "shakespeare", "piet", "unlambda", "lazyk", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
 		return key
 	case "chez", "chezscheme", "chez_scheme":
 		return "chez-scheme"

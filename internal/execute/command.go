@@ -327,13 +327,15 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			strings.Join(groovyClasspath, string(os.PathListSeparator)),
 			mainClass,
 		}
-	case "scala":
+	case "scala", "scala3":
 		mainClass, err := normalizeJVMMainClass(req.EntryPoint, "Main")
 		if err != nil {
 			return nil
 		}
 		scalaClasspath := []string{primaryPath}
-		if matches, err := filepath.Glob("/usr/share/java/scala*.jar"); err == nil {
+		if lang == "scala3" {
+			scalaClasspath = append(scalaClasspath, profiles.Scala3RuntimeClasspath)
+		} else if matches, err := filepath.Glob("/usr/share/java/scala*.jar"); err == nil {
 			scalaClasspath = append(scalaClasspath, matches...)
 		}
 		if len(scalaClasspath) == 1 {
