@@ -16,12 +16,14 @@ import (
 //     PYTHONHASHSEED, so -I is replaced by its other two parts, -s and -P, and
 //     every PYTHON* variable except PYTHONHASHSEED=0 is removed, which keeps
 //     the environment-ignoring effect of -E for everything else.
+//   - PyPy (run language "pypy"): hash seed 0. PyPy randomizes string hashes
+//     per process even though sys.flags.hash_randomization reports 0, and
+//     reads PYTHONHASHSEED even under -I, so only PYTHONHASHSEED=0 is added.
 //
 // Program-visible randomness (Math.random, random, os.urandom) is not pinned,
-// and other launchers are unchanged: PyPy does not randomize hashes and its
-// JIT and GC run in the main thread, and native targets have no runtime
-// scheduling of their own. The options change the amount of work, so a time
-// model applies only to observations made with the same option set.
+// and other launchers, including native targets, are unchanged. The options
+// change the amount of work, so a time model applies only to observations
+// made with the same option set.
 const RuntimeDeterminismV1 = "v1"
 
 // ParseRuntimeDeterminism accepts "", "off" (no options) or a known option set.
@@ -37,7 +39,7 @@ func ParseRuntimeDeterminism(raw string) (string, error) {
 }
 
 func determinismLauncher(runLang string) bool {
-	return runLang == "python" || runLang == "javascript"
+	return runLang == "python" || runLang == "pypy" || runLang == "javascript"
 }
 
 // RuntimeDeterminismFor names the option set a measured execution of the
@@ -82,6 +84,16 @@ func (c Config) MeasuredRuntime(runLang string, argv, env []string) ([]string, [
 			}
 		}
 		return argv, append(pinned, "PYTHONHASHSEED=0"), nil
+	case "pypy":
+		if len(argv) < 2 || filepath.Base(argv[0]) != "pypy3" || argv[1] != "-I" {
+			return nil, nil, fmt.Errorf("durante runtime determinism does not recognize the pypy launcher")
+		}
+		for _, entry := range env {
+			if strings.HasPrefix(entry, "PYTHONHASHSEED=") {
+				return nil, nil, fmt.Errorf("durante runtime determinism found an existing PyPy hash seed")
+			}
+		}
+		return argv, append(env, "PYTHONHASHSEED=0"), nil
 	}
 	return nil, nil, fmt.Errorf("durante runtime determinism has no options for %q", runLang)
 }

@@ -161,11 +161,13 @@ func TestRuntimeFitRequiresRecordedRuntimeDeterminism(t *testing.T) {
 		return dataset
 	}
 	v1 := durante.RuntimeDeterminismV1
-	if result, err := Fit(pinned("PYTHON3", v1, v1), syntheticFitOptions()); err != nil || !result.Passed || result.CandidatePolicy == nil {
-		t.Fatalf("pinned CPython fit: %+v %v", result, err)
+	for _, language := range []string{"PYTHON3", "PYPY3"} {
+		if result, err := Fit(pinned(language, v1, v1), syntheticFitOptions()); err != nil || !result.Passed || result.CandidatePolicy == nil {
+			t.Fatalf("pinned %s fit: %+v %v", language, result, err)
+		}
 	}
 	for _, tc := range []struct{ language, recorded, observed string }{
-		{"PYTHON3", v1, ""}, {"PYTHON3", "", v1}, {"PYPY3", v1, v1}, {"RUST2024", v1, v1},
+		{"PYTHON3", v1, ""}, {"PYTHON3", "", v1}, {"PYPY3", v1, ""}, {"RUST2024", v1, v1},
 	} {
 		if result, err := Fit(pinned(tc.language, tc.recorded, tc.observed), syntheticFitOptions()); err == nil && result.Passed {
 			t.Fatalf("%s recorded %q observed %q fitted", tc.language, tc.recorded, tc.observed)

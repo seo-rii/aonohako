@@ -40,12 +40,14 @@ func TestMeasuredRuntimePinsOnlyQualifiedLaunchers(t *testing.T) {
 			t.Fatalf("%s changed without runtime determinism: %q %q %v", tc.runLang, argv, env, err)
 		}
 	}
-	for _, runLang := range []string{"pypy", "binary"} {
-		argv := map[string][]string{"pypy": pypy, "binary": native}[runLang]
-		got, env, err := on.MeasuredRuntime(runLang, argv, baseEnv)
-		if err != nil || !slices.Equal(got, argv) || !slices.Equal(env, on.RuntimeEnvironment(baseEnv)) || on.RuntimeDeterminismFor(runLang) != "" {
-			t.Fatalf("%s has no qualified options but changed: %q %q %v", runLang, got, env, err)
-		}
+	got, env, err := on.MeasuredRuntime("binary", native, baseEnv)
+	if err != nil || !slices.Equal(got, native) || !slices.Equal(env, on.RuntimeEnvironment(baseEnv)) || on.RuntimeDeterminismFor("binary") != "" {
+		t.Fatalf("native target has no qualified options but changed: %q %q %v", got, env, err)
+	}
+	// PyPy reads PYTHONHASHSEED even under -I, so only the seed is added.
+	got, env, err = on.MeasuredRuntime("pypy", pypy, baseEnv)
+	if err != nil || !slices.Equal(got, pypy) || !slices.Equal(env, append(on.RuntimeEnvironment(baseEnv), "PYTHONHASHSEED=0")) || on.RuntimeDeterminismFor("pypy") != RuntimeDeterminismV1 {
+		t.Fatalf("pypy %q %q %v", got, env, err)
 	}
 	pythonBefore, envBefore := slices.Clone(python), slices.Clone(baseEnv)
 	argv, env, err := on.MeasuredRuntime("python", python, baseEnv)
@@ -73,10 +75,15 @@ func TestMeasuredRuntimePinsOnlyQualifiedLaunchers(t *testing.T) {
 		{"javascript", []string{"/usr/bin/deno", "run", "/w/main.js"}},
 		{"javascript", []string{"node", "--predictable", "/w/main.js"}},
 		{"javascript", []string{"node"}},
+		{"pypy", []string{"/usr/bin/pypy3", "-S", "/w/Main.py"}},
+		{"pypy", []string{"/usr/bin/python3", "-I", "/w/Main.py"}},
 	} {
 		if _, _, err := on.MeasuredRuntime(tc.runLang, tc.argv, baseEnv); err == nil {
 			t.Fatalf("pinned an unrecognized launcher %q", tc.argv)
 		}
+	}
+	if _, _, err := on.MeasuredRuntime("pypy", pypy, append(slices.Clone(baseEnv), "PYTHONHASHSEED=7")); err == nil {
+		t.Fatal("pinned PyPy over an existing seed")
 	}
 	unknown := Config{DispatchProfile: DispatchDefault, RuntimeDeterminism: "v9"}
 	if _, _, err := unknown.MeasuredRuntime("python", python, baseEnv); err == nil {
@@ -111,7 +118,7 @@ func TestReportRuntimeDeterminismDecoding(t *testing.T) {
 
 func TestJudgeRequiresRuntimeDeterminismForJITAndInterpreterFamilies(t *testing.T) {
 	cfg := judgeConfig()
-	for _, family := range []string{"cpython", "javascript-wasm"} {
+	for _, family := range []string{"cpython", "pypy", "javascript-wasm"} {
 		cfg.Families = append(cfg.Families, family)
 		cfg.Judge = JudgePolicy{Enabled: true, Families: []string{family}, Integrity: JudgeIntegrityOff}
 		cfg.RuntimeDeterminism = ""

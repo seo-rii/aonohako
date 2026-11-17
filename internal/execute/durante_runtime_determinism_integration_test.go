@@ -18,7 +18,7 @@ import (
 // and patched runtime, that measured executions receive exactly the pinned
 // options: CPython's string hash equals the same interpreter's hash under
 // PYTHONHASHSEED=0 with every other PYTHON* variable absent, and Node runs with
-// --predictable. PyPy is unchanged; its hash must not vary between processes.
+// --predictable, and PyPy's string hash equals its hash under PYTHONHASHSEED=0.
 func TestDuranteRuntimeDeterminismIntegration(t *testing.T) {
 	if os.Getenv("AONOHAKO_TEST_DURANTE") != "1" {
 		t.Skip("dedicated durante validation image required")
@@ -67,7 +67,8 @@ func TestDuranteRuntimeDeterminismIntegration(t *testing.T) {
 	// CI supplies these interpreters explicitly; a missing one is not a pass.
 	if os.Getenv("AONOHAKO_TEST_DURANTE_PYPY") == "1" {
 		probes = append(probes, probe{"PYPY3", "Main.py", "print(hash('aonohako-durante'))",
-			host("pypy3", []string{"PATH=/usr/bin:/bin"}, "-c", "print(hash('aonohako-durante'))"), ""})
+			host("pypy3", []string{"PATH=/usr/bin:/bin", "PYTHONHASHSEED=0"}, "-c", "print(hash('aonohako-durante'))"),
+			durante.RuntimeDeterminismV1})
 	}
 	if os.Getenv("AONOHAKO_TEST_DURANTE_NODE") == "1" {
 		probes = append(probes, probe{"JAVASCRIPT", "main.js", "console.log(process.execArgv.includes('--predictable'))", "true", durante.RuntimeDeterminismV1})

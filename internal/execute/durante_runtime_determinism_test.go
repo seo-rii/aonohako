@@ -20,7 +20,7 @@ func TestRuntimeDeterminismPinsDescriptorAndChangesIdentity(t *testing.T) {
 		pinned     bool
 	}{
 		{"JAVASCRIPT", "", true}, {"PYTHON3", "", true}, {"PYTHON3", "installed", true},
-		{"PYPY3", "", false}, {"CPP20", "", false},
+		{"PYPY3", "", true}, {"CPP20", "", false},
 	} {
 		req := &model.RunRequest{Lang: tc.lang, PythonLibraryMode: pythonpolicy.LibraryMode(tc.mode), Limits: model.Limits{MemoryMB: 256}}
 		before, err := effectiveRuntimeOptions(req, off, config.DefaultRuntimeTuningConfig())
@@ -58,6 +58,10 @@ func TestRuntimeDeterminismPinsDescriptorAndChangesIdentity(t *testing.T) {
 			}
 			if !slices.Contains(after.Env, "PYTHONHASHSEED=0") {
 				t.Fatalf("python descriptor env %q", after.Env)
+			}
+		case "PYPY3":
+			if !slices.Equal(after.Argv, before.Argv) || !slices.Contains(after.Env, "PYTHONHASHSEED=0") || len(after.Env) != len(before.Env)+1 {
+				t.Fatalf("pypy descriptor %q %q", after.Argv, after.Env)
 			}
 		}
 	}
@@ -113,11 +117,11 @@ func TestRuntimeDeterminismRejectsSchemaOneBindingsForPinnedLaunchers(t *testing
 	cfg := sharedTimeMeasurementConfig()
 	cfg.RuntimeDeterminism = durante.RuntimeDeterminismV1
 	if err := cfg.ValidateTimeConfiguration(); err == nil || !strings.Contains(err.Error(), "schema 2") {
-		t.Fatalf("schema 1 PYTHON3 binding accepted under runtime determinism: %v", err)
+		t.Fatalf("schema 1 Python bindings accepted under runtime determinism: %v", err)
 	}
 	var kept []durante.TimeProfileBinding
 	for _, binding := range cfg.TimeModels.Profiles {
-		if binding.SourceLanguage != "PYTHON3" {
+		if binding.SourceLanguage != "PYTHON3" && binding.SourceLanguage != "PYPY3" {
 			kept = append(kept, binding)
 		}
 	}
