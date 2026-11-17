@@ -53,6 +53,10 @@ func attachShadow(primary model.RunResponse, shadow *model.RunResponse, unavaila
 		Version: 1, Authority: durante.Authority,
 		PrimaryStatus: primary.Status, PrimaryCPUTimeMs: primary.CPUTimeMs,
 	}
+	if shadow != nil {
+		block.ShadowStatus = shadow.Status
+		block.Response = trimShadowResponse(*shadow)
+	}
 	switch {
 	case unavailable != "":
 		block.Agreement, block.Unavailable = model.ShadowUnavailable, unavailable
@@ -61,11 +65,9 @@ func attachShadow(primary model.RunResponse, shadow *model.RunResponse, unavaila
 	case shadow.WorkMeasurementJudgment == nil:
 		block.Agreement = model.ShadowUnavailable
 		block.Unavailable = "shadow execution produced no judgment: " + shadow.Reason
-		block.ShadowStatus = shadow.Status
-		block.Response = trimShadowResponse(*shadow)
+	case shadow.WorkMeasurementJudgment.State == "cancelled":
+		block.Agreement, block.Unavailable = model.ShadowUnavailable, "shadow execution was cancelled"
 	default:
-		block.ShadowStatus = shadow.Status
-		block.Response = trimShadowResponse(*shadow)
 		block.Agreement = model.ShadowDisagree
 		if shadow.Status == primary.Status {
 			block.Agreement = model.ShadowAgree
@@ -127,7 +129,9 @@ func validateRemoteShadow(req *model.RunRequest, response model.RunResponse, cfg
 		return nil
 	}
 	shadow := *block.Response
-	if shadow.WorkMeasurementShadow != nil || shadow.Stdout != "" || shadow.Stderr != "" {
+	if shadow.WorkMeasurementShadow != nil || shadow.Stdout != "" || shadow.Stderr != "" ||
+		shadow.StdoutTruncated || shadow.StderrTruncated || len(shadow.SidecarOutputs) != 0 || len(shadow.SidecarErrors) != 0 ||
+		len(shadow.Steps) != 0 || shadow.Match != nil {
 		return fmt.Errorf("invalid remote result: shadow observation is not trimmed")
 	}
 	_, shadowReq := runvalidation.ShadowRequests(req)
@@ -137,13 +141,11 @@ func validateRemoteShadow(req *model.RunRequest, response model.RunResponse, cfg
 	if err := validateRemoteWorkMeasurementTime(&shadowReq, shadow, cfg, tuning); err != nil {
 		return fmt.Errorf("shadow %w", err)
 	}
-	if shadow.WorkMeasurementJudgment != nil || block.Agreement != model.ShadowUnavailable {
-		if err := validateRemoteWorkMeasurementJudge(&shadowReq, shadow, cfg); err != nil {
-			return fmt.Errorf("shadow %w", err)
-		}
+	if err := validateRemoteWorkMeasurementJudge(&shadowReq, shadow, cfg); err != nil {
+		return fmt.Errorf("shadow %w", err)
 	}
 	expected := attachShadow(response, &shadow, "").WorkMeasurementShadow
-	if block.Agreement != expected.Agreement || block.ShadowStatus != expected.ShadowStatus {
+	if block.Agreement != expected.Agreement || block.ShadowStatus != expected.ShadowStatus || block.Unavailable != expected.Unavailable {
 		return fmt.Errorf("invalid remote result: shadow agreement mismatch")
 	}
 	return nil

@@ -681,6 +681,22 @@ func TestExecuteRejectsRequestControlledNetworkWhenPolicyDisabled(t *testing.T) 
 	}
 }
 
+func TestExecuteAdmitsWorkMeasurementShadow(t *testing.T) {
+	s := NewWithServices(configForTest(t), compile.New(), executeRunnerStub{run: func(_ context.Context, req *model.RunRequest, _ execute.Hooks) model.RunResponse {
+		if !req.WorkMeasurementShadow || req.WorkMeasurement || req.WorkMeasurementLimits == nil {
+			t.Errorf("shadow request lost its shape at admission: %+v", req)
+		}
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	body := `{"lang":"CPP20","binaries":[{"name":"main","data_b64":"YQ=="}],"limits":{"time_ms":100,"memory_mb":64},
+		"work_measurement_shadow":true,"work_measurement_limits":{"cpu_time_ms":500,"wall_time_ms":1000,"memory_mb":256}}`
+	result := &deadlineResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+	s.Handler().ServeHTTP(result, httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader(body)))
+	if result.Code != http.StatusOK || !strings.Contains(result.Body.String(), `"status":"Accepted"`) {
+		t.Fatalf("shadow /execute response = %d %s", result.Code, result.Body.String())
+	}
+}
+
 func TestExecuteAcceptsTwoStepPipelineShape(t *testing.T) {
 	cfg := configForTest(t)
 	called := false

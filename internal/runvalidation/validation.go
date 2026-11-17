@@ -147,8 +147,6 @@ func Validate(req *model.RunRequest) error {
 	return nil
 }
 
-// ValidateWorkMeasurementLimits checks the opt-in envelope without changing
-// the nominal judge limits. Operator caps are enforced separately by the runner.
 // ShadowRequests splits a work_measurement_shadow request into the authoritative
 // ordinary request (no measurement fields) and the judge-mode shadow request
 // that reuses the supplied raw envelope. Both are independent copies.
@@ -188,9 +186,14 @@ func ValidateWorkMeasurementShadow(req *model.RunRequest) error {
 	return nil
 }
 
+// ValidateWorkMeasurementLimits checks the opt-in envelope without changing
+// the nominal judge limits. Operator caps are enforced separately by the runner.
 func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
 	if req == nil {
 		return nil
+	}
+	if req.WorkMeasurementShadow {
+		return ValidateWorkMeasurementShadow(req)
 	}
 	if err := ValidateWorkMeasurementPeerTime(req); err != nil {
 		return err

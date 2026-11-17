@@ -2,7 +2,12 @@ package execute
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -142,6 +147,17 @@ func TestValidateRemoteShadow(t *testing.T) {
 		"shadow status":   mutate(func(b *model.WorkMeasurementShadow) { b.ShadowStatus = model.RunStatusAccepted }),
 		"primary status":  mutate(func(b *model.WorkMeasurementShadow) { b.PrimaryStatus = model.RunStatusWA }),
 		"untrimmed":       mutate(func(b *model.WorkMeasurementShadow) { b.Response.Stdout = "leak" }),
+		"sidecar output": mutate(func(b *model.WorkMeasurementShadow) {
+			b.Response.SidecarOutputs = []model.SidecarOutput{{Path: "output"}}
+		}),
+		"sidecar error": mutate(func(b *model.WorkMeasurementShadow) {
+			b.Response.SidecarErrors = []model.SidecarError{{Path: "output"}}
+		}),
+		"nested steps": mutate(func(b *model.WorkMeasurementShadow) { b.Response.Steps = []model.StepResult{{ID: "step"}} }),
+		"unavailable despite execution": mutate(func(b *model.WorkMeasurementShadow) {
+			b.Response.WorkMeasurementJudgment = nil
+			b.Agreement, b.Unavailable = model.ShadowUnavailable, "missing judgment"
+		}),
 		"forged verdict": mutate(func(b *model.WorkMeasurementShadow) {
 			b.Response.Status = model.RunStatusAccepted
 			b.ShadowStatus = model.RunStatusAccepted
@@ -211,5 +227,55 @@ func TestRemoteShadowRoundTripKeepsPrimary(t *testing.T) {
 	dropped := exchangeTimeMeasurementResult(t, req, forged, cfg)
 	if dropped.Status != model.RunStatusAccepted || dropped.WorkMeasurementShadow == nil || dropped.WorkMeasurementShadow.Agreement != model.ShadowUnavailable || dropped.WorkMeasurementShadow.Response != nil {
 		t.Fatalf("forged shadow was not dropped: %+v", dropped.WorkMeasurementShadow)
+	}
+}
+
+func TestRemoteShadowRetriesOnlyKnownLegacyAdmissionError(t *testing.T) {
+	for _, tc := range []struct {
+		name, code, message string
+		status, requests    int
+	}{
+		{"old API", "unknown_json_field", `invalid json: json: unknown field "work_measurement_shadow"`, http.StatusBadRequest, 2},
+		{"different field", "unknown_json_field", `invalid json: json: unknown field "lang"`, http.StatusBadRequest, 1},
+		{"server failure", "unknown_json_field", `invalid json: json: unknown field "work_measurement_shadow"`, http.StatusInternalServerError, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req model.RunRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Error(err)
+					return
+				}
+				if requests.Add(1) == 1 {
+					if !req.WorkMeasurementShadow {
+						t.Error("first request lost shadow flag")
+					}
+					w.WriteHeader(tc.status)
+					_ = json.NewEncoder(w).Encode(map[string]string{"error": tc.code, "message": tc.message})
+					return
+				}
+				if req.WorkMeasurementShadow || req.WorkMeasurementLimits != nil || req.WorkMeasurement {
+					t.Error("ordinary retry still requests measurement")
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(w, "event: result\ndata: {\"status\":\"Accepted\"}\n\n")
+			}))
+			defer server.Close()
+			runner := newRemoteRunner(config.Config{Execution: config.ExecutionConfig{
+				WorkMeasurement: judgeMeasurementConfig(), Remote: config.RemoteExecutorConfig{URL: server.URL},
+			}})
+			result := runner.Run(context.Background(), shadowRequest(), Hooks{})
+			if int(requests.Load()) != tc.requests {
+				t.Fatalf("requests = %d, want %d", requests.Load(), tc.requests)
+			}
+			if tc.requests == 2 {
+				if result.Status != model.RunStatusAccepted || result.WorkMeasurementShadow == nil || result.WorkMeasurementShadow.Agreement != model.ShadowUnavailable {
+					t.Fatalf("ordinary retry returned %+v", result)
+				}
+			} else if result.Status != model.RunStatusInitFail {
+				t.Fatalf("remote error returned %+v", result)
+			}
+		})
 	}
 }

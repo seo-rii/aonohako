@@ -89,6 +89,11 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	checked := shadowPrimaryRequest(req)
+	if req.WorkMeasurementShadow {
+		if reason := shadowGateUnavailable(req, r.workMeasurement); reason != "" {
+			return attachShadow(r.run(ctx, checked, hooks), nil, reason)
+		}
+	}
 	if err := runvalidation.ValidateWorkMeasurementLimits(checked); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
@@ -177,6 +182,14 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		}
 		var payload map[string]any
 		if err := json.Unmarshal(raw, &payload); err == nil {
+			// Legacy runners reject unknown JSON fields before queueing. Send the
+			// ordinary request once under the original deadline only for that
+			// explicit admission error; execution and transport errors are final.
+			if req.WorkMeasurementShadow && resp.StatusCode == http.StatusBadRequest &&
+				payload["error"] == "unknown_json_field" && payload["message"] == `invalid json: json: unknown field "work_measurement_shadow"` {
+				primary := r.run(streamCtx, checked, hooks)
+				return attachShadow(primary, nil, "remote runner does not support work_measurement_shadow")
+			}
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
 				reason = msg
 			} else if msg, ok := payload["error"].(string); ok && strings.TrimSpace(msg) != "" {
