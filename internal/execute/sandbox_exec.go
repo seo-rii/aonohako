@@ -561,8 +561,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// Select every sandbox permission and resource limit from the original
 	// runtime before wrapping it. Instrumentation grants no extra capability.
 	if streams.workMeasurement != nil {
+		var err error
+		finalCommand, innerEnv, err = streams.workMeasurement.Runtime(runLang, finalCommand, innerEnv)
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "durante runtime options: " + err.Error()}
+		}
 		finalCommand = streams.workMeasurement.Wrap(finalCommand)
-		innerEnv = streams.workMeasurement.Environment(innerEnv)
 	}
 	helperReq := sandbox.ExecRequest{
 		Command:                  finalCommand,

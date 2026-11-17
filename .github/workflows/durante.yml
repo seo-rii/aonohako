@@ -46,6 +46,8 @@ jobs:
         run: |
           set -euo pipefail
           for tool in gcc g++ cmake patch python3 pypy3; do command -v "$tool"; done
+          # The runner's Node is already on the sandbox's fixed PATH.
+          case "$(command -v node)" in /usr/local/bin/node|/usr/bin/node) node --version ;; *) exit 1 ;; esac
           # Sandbox targets use a fixed PATH. Bind only these disposable runner
           # aliases to the cached installations selected above, not a wrapper.
           for interpreter in python3 pypy3; do
@@ -76,11 +78,11 @@ jobs:
           CGO_ENABLED=0 go build -o /tmp/durante-reference-tool ./cmd/durante-reference
       - name: Validate ordinary sandbox and diagnostic resource limits
         run: |
-          sudo env AONOHAKO_TEST_DURANTE=1 AONOHAKO_TEST_DURANTE_PYPY=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
+          sudo env AONOHAKO_TEST_DURANTE=1 AONOHAKO_TEST_DURANTE_PYPY=1 AONOHAKO_TEST_DURANTE_NODE=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 \
             AONOHAKO_DURANTE_DRRUN=/opt/durante/dynamorio/bin64/drrun \
             AONOHAKO_DURANTE_CLIENT=/opt/durante/lib/libdurante.so \
             AONOHAKO_DURANTE_TEST_BINARY=/tmp/durante-probe \
-            /tmp/durante-execute.test -test.v -test.run '^(TestDurante(Sandbox|ResourceEnvelope|PythonResourceEnvelope)Integration|TestRunCPUFeaturePolicyInRootSandbox)$' -test.timeout 180s
+            /tmp/durante-execute.test -test.v -test.run '^(TestDurante(Sandbox|ResourceEnvelope|PythonResourceEnvelope|RuntimeDeterminism)Integration|TestRunCPUFeaturePolicyInRootSandbox)$' -test.timeout 300s
       - name: Validate reference time and peer measurement in an immutable image
         shell: bash
         run: |

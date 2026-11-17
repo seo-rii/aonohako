@@ -10,6 +10,7 @@ import (
 
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
 	"aonohako/internal/runvalidation"
 )
 
@@ -69,6 +70,11 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 	if err := contract.Validate(); err != nil {
 		return invalid(fmt.Errorf("fit options: %w", err))
 	}
+	pinned := durante.Config{RuntimeDeterminism: dataset.RuntimeDeterminism}
+	if dataset.RuntimeDeterminism != "" && pinned.RuntimeDeterminismFor(profiles.NormalizeRunLang(dataset.SourceLanguage)) != dataset.RuntimeDeterminism {
+		return invalid(fmt.Errorf("reference dataset records runtime determinism the source launcher does not have"))
+	}
+	contract = contract.WithRuntimeDeterminism(dataset.RuntimeDeterminism)
 	if err := runvalidation.ValidateWorkMeasurementLimits(&model.RunRequest{
 		Lang: dataset.SourceLanguage, WorkMeasurement: true,
 		Limits: dataset.NativeLimits, WorkMeasurementLimits: &dataset.MeteredLimits,

@@ -62,6 +62,9 @@ type Dataset struct {
 	MeteredLimits   durante.ResourceLimits `json:"metered_limits"`
 	Samples         []Sample               `json:"samples"`
 	Failures        []string               `json:"failures,omitempty"`
+	// RuntimeDeterminism is the option set the collection applied to this
+	// source's measured launcher (empty: none).
+	RuntimeDeterminism string `json:"runtime_determinism,omitempty"`
 }
 
 type FitOptions struct {

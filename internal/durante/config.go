@@ -26,6 +26,10 @@ type Config struct {
 	// application CPUID/XGETBV, so library and runtime dispatch, and therefore
 	// counts, do not follow the host processor. Empty exposes host CPUID.
 	CPUIDProfile string
+	// RuntimeDeterminism selects the option set that pins runtime-internal
+	// nondeterminism of measured executions (see RuntimeDeterminismV1). Empty
+	// leaves every launcher unchanged.
+	RuntimeDeterminism string
 	// Judge turns qualified diagnostic observations into actual verdicts. It is
 	// disabled unless explicitly configured; see docs/durante-judging.md.
 	Judge JudgePolicy

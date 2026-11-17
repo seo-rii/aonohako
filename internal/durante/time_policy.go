@@ -45,6 +45,9 @@ type TimePolicy struct {
 	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
 	STOSByteNSNumerator    uint64 `json:"stos_byte_ns_numerator,omitempty"`
 	NSDenominator          uint64 `json:"ns_denominator"`
+	// runtimeDeterminism is the option set the configuration applies to the
+	// requested launcher; an observation must report the same one.
+	runtimeDeterminism string
 }
 
 // TimeEstimate is a candidate reference-time value, never a verdict or an
@@ -68,8 +71,18 @@ type TimeEstimate struct {
 	EngineProfile          string `json:"engine_profile"`
 	DispatchProfile        string `json:"dispatch_profile"`
 	CPUIDProfile           string `json:"cpuid_profile,omitempty"`
+	RuntimeDeterminism     string `json:"runtime_determinism,omitempty"`
 	Nanoseconds            int64  `json:"nanoseconds"`
 	Milliseconds           int64  `json:"milliseconds"`
+}
+
+// WithRuntimeDeterminism returns a copy that expects observations made with
+// the named runtime determinism option set (empty: none). Configuration
+// resolution sets it from Config.RuntimeDeterminismFor; reference fitting sets
+// it from the dataset's recorded value.
+func (p TimePolicy) WithRuntimeDeterminism(value string) TimePolicy {
+	p.runtimeDeterminism = value
+	return p
 }
 
 // Formula preserves the original meaning of policies written before method
@@ -146,7 +159,8 @@ func (p TimePolicy) EstimateWithEligibility(runtimeID string, report Report) (Ti
 	if err := p.Validate(); err != nil {
 		return TimeEstimate{}, timeEligibility(TimeIncompatibleConfiguration), err
 	}
-	if runtimeID != p.RuntimeID || report.Family != p.Family || report.EngineProfile != p.EngineProfile || report.DispatchProfile != p.DispatchProfile || report.CPUIDProfile != p.CPUIDProfile {
+	if runtimeID != p.RuntimeID || report.Family != p.Family || report.EngineProfile != p.EngineProfile || report.DispatchProfile != p.DispatchProfile || report.CPUIDProfile != p.CPUIDProfile ||
+		report.RuntimeDeterminism != p.runtimeDeterminism {
 		return TimeEstimate{}, timeEligibility(TimeRuntimeProfileMismatch), fmt.Errorf("durante time policy runtime or profile mismatch")
 	}
 	if p.DispatchProfile == DispatchGLIBC241 && report.HostLibc != "2.41" {
@@ -191,7 +205,7 @@ func (p TimePolicy) EstimateWithEligibility(runtimeID string, report Report) (Ti
 		ModelID: p.ModelID, ModelVersion: p.ModelVersion, ReferenceID: p.ReferenceID,
 		RuntimeID: p.RuntimeID, Family: p.Family,
 		EngineProfile: p.EngineProfile, DispatchProfile: p.DispatchProfile,
-		CPUIDProfile: p.CPUIDProfile,
-		Nanoseconds:  nanoseconds, Milliseconds: milliseconds,
+		CPUIDProfile: p.CPUIDProfile, RuntimeDeterminism: p.runtimeDeterminism,
+		Nanoseconds: nanoseconds, Milliseconds: milliseconds,
 	}, eligibility, nil
 }

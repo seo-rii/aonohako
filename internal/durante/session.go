@@ -61,6 +61,8 @@ type Session struct {
 	hostLibc     string
 	installation InstallationIdentity
 	cpuFeatures  []cpupolicy.Feature
+	// runtimeDeterminism is the option set Runtime applied to this execution.
+	runtimeDeterminism string
 }
 
 func Prepare(ctx context.Context, root string, cfg Config, language string, uid, gid int) (*Session, error) {
@@ -148,8 +150,16 @@ func (s *Session) Wrap(command []string) []string {
 	return append(args, command...)
 }
 
-func (s *Session) Environment(env []string) []string {
-	return s.config.RuntimeEnvironment(env)
+// Runtime applies the measured-execution argv and environment (see
+// Config.MeasuredRuntime) and records the applied option set for the report.
+// Call it once, with the normalized run language, before Wrap.
+func (s *Session) Runtime(runLang string, command, env []string) ([]string, []string, error) {
+	command, env, err := s.config.MeasuredRuntime(runLang, command, env)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.runtimeDeterminism = s.config.RuntimeDeterminismFor(runLang)
+	return command, env, nil
 }
 
 // RuntimeEnvironment applies the same dispatch environment to execution and
@@ -187,5 +197,8 @@ func (s *Session) Collect(rootPID int) *Report {
 		report.DispatchProfile = DispatchDefault
 	}
 	report.HostLibc = s.hostLibc
+	if report.Complete {
+		report.RuntimeDeterminism = s.runtimeDeterminism
+	}
 	return &report
 }

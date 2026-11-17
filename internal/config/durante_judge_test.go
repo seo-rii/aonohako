@@ -114,3 +114,41 @@ func TestLoadDuranteJudgeModeRequiresTimeModel(t *testing.T) {
 		t.Fatal("expected rejection when judge mode has no time model")
 	}
 }
+
+func TestLoadDuranteRuntimeDeterminism(t *testing.T) {
+	configureDuranteProfiledTimeLoadTest(t, "x86-64-v2")
+	for raw, want := range map[string]string{"": "", "off": "", "v1": durante.RuntimeDeterminismV1} {
+		t.Setenv("AONOHAKO_DURANTE_RUNTIME_DETERMINISM", raw)
+		cfg, err := Load()
+		if err != nil || cfg.Execution.WorkMeasurement.RuntimeDeterminism != want {
+			t.Fatalf("%q loaded as %+v: %v", raw, cfg.Execution.WorkMeasurement.RuntimeDeterminism, err)
+		}
+	}
+	t.Setenv("AONOHAKO_DURANTE_RUNTIME_DETERMINISM", "v2")
+	if _, err := Load(); err == nil {
+		t.Fatal("accepted an unknown runtime determinism")
+	}
+	// Judging CPython requires the pinned options.
+	t.Setenv("AONOHAKO_DURANTE_FAMILIES", "cpp,cpython")
+	t.Setenv("AONOHAKO_DURANTE_JUDGE_MODE", "on")
+	t.Setenv("AONOHAKO_DURANTE_JUDGE_FAMILIES", "cpython")
+	t.Setenv("AONOHAKO_DURANTE_RUNTIME_DETERMINISM", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("judged CPython without runtime determinism")
+	}
+	t.Setenv("AONOHAKO_DURANTE_RUNTIME_DETERMINISM", "v1")
+	if _, err := Load(); err != nil {
+		t.Fatalf("pinned CPython judge rejected: %v", err)
+	}
+	configureDuranteResourceLoadTest(t)
+	t.Setenv("AONOHAKO_DURANTE_JUDGE_MODE", "")
+	t.Setenv("AONOHAKO_DURANTE_JUDGE_FAMILIES", "")
+	t.Setenv("AONOHAKO_DURANTE_RESOURCE_POLICY", "")
+	t.Setenv("AONOHAKO_DURANTE_FAMILIES", "")
+	t.Setenv("AONOHAKO_DURANTE_TIME_POLICY", "")
+	t.Setenv("AONOHAKO_DURANTE_CPUID_PROFILE", "")
+	t.Setenv("AONOHAKO_DURANTE_RUNTIME_DETERMINISM", "v1")
+	if _, err := Load(); err == nil {
+		t.Fatal("accepted runtime determinism without an enabled measurement family")
+	}
+}

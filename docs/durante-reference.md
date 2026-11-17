@@ -78,7 +78,11 @@ The current collector uses `dynamorio-11.3-durante-v5-vm32m` and pins both runti
 patches. A collection made with `AONOHAKO_DURANTE_CPUID_PROFILE` records that
 profile as the dataset's `cpuid_profile`, requires every metered receipt to match
 it, and the fitted candidate policy carries the same `cpuid_profile`, so it
-applies only to identically profiled runs. Older seven-field installation identities and v3/v4 reports can be decoded
+applies only to identically profiled runs. Likewise, a collection made with
+`AONOHAKO_DURANTE_RUNTIME_DETERMINISM=v1` records `runtime_determinism` for a
+pinned source (CPython, Node), requires every metered report to carry it, and
+fits only such reports; bind the resulting coefficients through a schema 2
+descriptor generated with the same setting. Older seven-field installation identities and v3/v4 reports can be decoded
 for inspection, but the current fitter rejects their old installation/profile.
 Keep the original dataset and matching historical fitter for reproducing past
 results. A current-runtime model requires fresh collection; do not relabel old

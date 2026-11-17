@@ -148,3 +148,27 @@ func TestRuntimeFitReportsUnidentifiableREPWeight(t *testing.T) {
 		t.Fatalf("missing REP variation was hidden: %+v %v", result, err)
 	}
 }
+
+// A pinned collection fits only pinned observations, and the dataset cannot
+// claim options its source launcher does not have.
+func TestRuntimeFitRequiresRecordedRuntimeDeterminism(t *testing.T) {
+	pinned := func(language, recorded, observed string) Dataset {
+		dataset := syntheticRuntimeDataset(language)
+		dataset.RuntimeDeterminism = recorded
+		for i := range dataset.Samples {
+			dataset.Samples[i].Metered.WorkMeasurement.RuntimeDeterminism = observed
+		}
+		return dataset
+	}
+	v1 := durante.RuntimeDeterminismV1
+	if result, err := Fit(pinned("PYTHON3", v1, v1), syntheticFitOptions()); err != nil || !result.Passed || result.CandidatePolicy == nil {
+		t.Fatalf("pinned CPython fit: %+v %v", result, err)
+	}
+	for _, tc := range []struct{ language, recorded, observed string }{
+		{"PYTHON3", v1, ""}, {"PYTHON3", "", v1}, {"PYPY3", v1, v1}, {"RUST2024", v1, v1},
+	} {
+		if result, err := Fit(pinned(tc.language, tc.recorded, tc.observed), syntheticFitOptions()); err == nil && result.Passed {
+			t.Fatalf("%s recorded %q observed %q fitted", tc.language, tc.recorded, tc.observed)
+		}
+	}
+}

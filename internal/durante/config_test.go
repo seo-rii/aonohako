@@ -74,8 +74,8 @@ func TestSessionPinsEnvironmentAndPreservesArguments(t *testing.T) {
 	if strings.Join(wrapped[len(wrapped)-3:], "|") != strings.Join(command, "|") {
 		t.Fatal("target arguments changed")
 	}
-	env := s.Environment([]string{"PATH=/bin", "GLIBC_TUNABLES=unreviewed"})
-	if len(env) != 2 || env[1] != "GLIBC_TUNABLES="+portableGLIBC241 {
+	argv, env, err := s.Runtime("binary", command, []string{"PATH=/bin", "GLIBC_TUNABLES=unreviewed"})
+	if err != nil || !slices.Equal(argv, command) || len(env) != 2 || env[1] != "GLIBC_TUNABLES="+portableGLIBC241 {
 		t.Fatal("wrong fixed environment")
 	}
 	_, err = prepare(context.Background(), dir, cfg, "CPP20", os.Geteuid(), os.Getegid(), func(context.Context) (string, error) { return "2.36", nil })

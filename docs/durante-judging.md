@@ -44,6 +44,13 @@ fields as the reference-time path:
   `cpuid_profile` binding), and the observation must carry the matching
   receipt; otherwise the estimate is unavailable and the verdict is
   `Runtime Error`.
+- Judging `cpython` or `javascript-wasm` also requires
+  `AONOHAKO_DURANTE_RUNTIME_DETERMINISM=v1`. Without it, CPython's per-process
+  hash seed and V8's background compilation move counts between identical
+  runs (measured below), so startup rejects those judged families. The model
+  must be a schema 2 binding of the pinned descriptor, and the observation
+  must carry `runtime_determinism`; otherwise the estimate is unavailable and
+  the verdict is `Runtime Error`.
 - Judge mode reuses the raw resource envelope. Only an ordinary single-program
   request is accepted; SPJ, interactive, communication, pipeline, entry and
   multi-step requests are rejected, as the envelope already requires.
@@ -242,7 +249,9 @@ with reference-time conversion.
    rather than miscounting) and collect the qualification corpus with it, so the model and
    the judged counts see the same virtual processor
    ([CPUID profiles](https://github.com/seo-rii/durante/blob/main/docs/CPUID_PROFILE.md)).
-   Fix per-CPU runtime options (hash seed, GC/JIT thread counts) as well.
+   For CPython and Node, set `AONOHAKO_DURANTE_RUNTIME_DETERMINISM=v1` before
+   collecting, so the qualified descriptor is the pinned one
+   ([Runtime determinism](durante-runtime-options.md#runtime-determinism)).
 3. Run judge mode in shadow (`AONOHAKO_DURANTE_JUDGE_MODE=shadow` and
    `work_measurement_shadow` on a sample of real submissions; see
    [Shadow comparison](#shadow-comparison)), and measure the disagreement rate

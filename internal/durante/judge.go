@@ -183,6 +183,13 @@ func (p JudgePolicy) Validate(cfg Config) error {
 	if cfg.CPUIDProfile == "" {
 		return fmt.Errorf("judge mode requires a configured CPUID profile")
 	}
+	// Node and CPython count differently across identical runs unless their
+	// background compilation and per-process hash seed are pinned.
+	for _, family := range p.Families {
+		if (family == "cpython" || family == "javascript-wasm") && cfg.RuntimeDeterminism == "" {
+			return fmt.Errorf("judge mode family %q requires runtime determinism", family)
+		}
+	}
 	// Judge mode needs a resource envelope and a time model to produce a
 	// virtual-millisecond verdict at all.
 	if cfg.ResourcePolicy == nil {

@@ -134,9 +134,21 @@ func (c Config) ValidateTimeConfiguration() error {
 	if c.TimePolicy != nil && c.TimeModels != nil {
 		return fmt.Errorf("durante time policy and time models cannot be configured together")
 	}
+	if c.RuntimeDeterminism != "" && c.RuntimeDeterminism != RuntimeDeterminismV1 {
+		return fmt.Errorf("unknown durante runtime determinism %q", c.RuntimeDeterminism)
+	}
 	if c.TimeModels != nil {
 		if err := c.TimeModels.Validate(); err != nil {
 			return err
+		}
+		// Schema 1 bindings carry no runtime-options identity, so nothing would
+		// distinguish a qualification made without the pinned options.
+		if c.TimeModels.Schema != 2 {
+			for _, binding := range c.TimeModels.Profiles {
+				if c.RuntimeDeterminismFor(profiles.NormalizeRunLang(binding.SourceLanguage)) != "" {
+					return fmt.Errorf("durante runtime determinism requires schema 2 time models for %s", binding.SourceLanguage)
+				}
+			}
 		}
 		if !runtimeidentity.ValidImageDigest(c.RuntimeImage) {
 			return fmt.Errorf("durante time models requires an independently configured immutable runtime image")
@@ -234,7 +246,9 @@ func (c Config) timePolicyForOptions(language string, options *RuntimeOptions) (
 			}
 			for _, model := range c.TimeModels.Models {
 				if model.ModelID == binding.ModelID && model.ModelVersion == binding.ModelVersion {
-					return model.resolve(binding), runtimeID, nil
+					policy := model.resolve(binding)
+					policy.runtimeDeterminism = c.RuntimeDeterminismFor(profiles.NormalizeRunLang(language))
+					return policy, runtimeID, nil
 				}
 			}
 		}
@@ -250,5 +264,7 @@ func (c Config) timePolicyForOptions(language string, options *RuntimeOptions) (
 	if runtimeID != c.TimePolicy.RuntimeID {
 		return TimePolicy{}, "", fmt.Errorf("durante time policy does not match the requested source-language profile")
 	}
-	return *c.TimePolicy, runtimeID, nil
+	policy := *c.TimePolicy
+	policy.runtimeDeterminism = c.RuntimeDeterminismFor(profiles.NormalizeRunLang(language))
+	return policy, runtimeID, nil
 }

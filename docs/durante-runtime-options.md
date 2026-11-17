@@ -146,3 +146,57 @@ The ID is not an attestation that the returned observation was produced with
 those settings. Raw observations and diagnostic authority retain their existing
 limitations. Both sides must explicitly migrate to schema 2; a legacy frontend
 and legacy registry continue their legacy behavior.
+
+## Runtime determinism
+
+Some runtimes count differently across identical runs of the same program,
+because their own threads or seeds vary per process. A fixed CPUID profile does
+not remove that. `AONOHAKO_DURANTE_RUNTIME_DETERMINISM=v1` pins it for measured
+executions only (ordinary unmeasured runs, including the primary of a shadow
+comparison, are unchanged):
+
+| Launcher | `v1` change | Removes |
+| --- | --- | --- |
+| `javascript` (Node) | `--predictable` inserted after `node` | concurrent compilation, background GC and other V8 background tasks |
+| `python` (CPython) | `-I` becomes `-s -P`; every `PYTHON*` variable is removed and `PYTHONHASHSEED=0` added | per-process string/bytes hash seed |
+
+`-I` implies `-E`, which also ignores `PYTHONHASHSEED`, so the seed cannot be
+set while `-I` stays. `-s -P` keeps the rest of isolated mode, and removing the
+other `PYTHON*` variables keeps `-E`'s effect for them; a program can still see
+`sys.flags.isolated == 0` and `sys.flags.ignore_environment == 0`. Program
+randomness (`Math.random`, `random`, `os.urandom`) is not pinned. PyPy is
+unchanged: PyPy does not randomize hashes and its JIT and GC run on the main
+thread; the CI integration test checks that its hash does not change between
+processes. Native targets, JVM (unavailable for measurement), Deno, Bun,
+Wasmtime and other launchers are unchanged.
+
+The executor and the descriptor apply the same function after the command
+builder and dispatch environment, so a pinned descriptor (and its ID) differs
+from the unpinned one and names exactly what runs. An unexpected launcher shape
+fails the measured execution instead of running unpinned. Complete reports of a
+pinned launcher carry `runtime_determinism: "v1"` (runner configuration, not a
+client receipt), estimates record it, and a report whose value differs from the
+configuration for that launcher is `runtime_profile_mismatch`. Schema 1
+bindings have no runtime-options identity, so startup rejects a schema 1
+binding for a pinned launcher while `v1` is set. Judge mode requires `v1` for
+the `cpython` and `javascript-wasm` families.
+
+Evidence (2026-11-17, one host, Durante's stock-core CPUID test client with
+`x86-64-v2`, ASLR disabled with `setarch -R`, five fresh processes per row; the
+workloads are Durante's `tests/cpuid_runtimes/work.py` and `work.js`):
+
+| Runtime and options | Instructions (min-max) | Spread |
+| --- | --- | ---: |
+| CPython 3.13.18 `-I` | 300,009,682-300,068,443 | 195 ppm |
+| CPython 3.13.18 `-s -P`, `PYTHONHASHSEED=0` | 300,175,815 (4 runs), 300,175,843 | 0.09 ppm |
+| Node 22.23.4 `--predictable` | 259,172,715-259,224,250 | 198 ppm |
+| `--predictable --random-seed=1` | 262,330,069-262,378,136 | 183 ppm |
+| `--predictable --hash-seed=1` | 305,171,874-305,224,269 | 171 ppm |
+| `--predictable --predictable-gc-schedule` | 306,757,446-306,792,413 | 113 ppm |
+
+The hash seed accounts for CPython's variation. For Node, none of the extra
+flags removes the remaining 0.01-0.02%, and two add 18% work, so `v1` uses only
+`--predictable` (without it, the same workload varied by 20% in Durante's
+runtime observations). The sandbox does not disable ASLR, so production spread
+can be larger than these rows; the CI integration test logs the counts of two
+pinned runs per launcher but does not assert them.

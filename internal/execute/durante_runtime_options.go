@@ -70,8 +70,12 @@ func effectiveRuntimeOptions(req *model.RunRequest, cfg durante.Config, tuning c
 	// occur only as the program operand and do not select runtime flags. The
 	// submitted program, stdin and communication protocol arguments are inputs,
 	// not runtime configuration, and are deliberately outside this identity.
-	argv := buildCommandWithRuntimeTuning(runtimeOptionsProgram, profiles.NormalizeRunLang(req.Lang), req, tuning)
-	env := cfg.RuntimeEnvironment(sandboxBaseEnvironment(Workspace{RootDir: runtimeOptionsWorkspace}, req))
+	runLang := profiles.NormalizeRunLang(req.Lang)
+	argv, env, err := cfg.MeasuredRuntime(runLang, buildCommandWithRuntimeTuning(runtimeOptionsProgram, runLang, req, tuning),
+		sandboxBaseEnvironment(Workspace{RootDir: runtimeOptionsWorkspace}, req))
+	if err != nil {
+		return durante.RuntimeOptions{}, err
+	}
 	// The sandbox passes this array directly to execve. Do not invent last- or
 	// first-wins semantics for duplicate keys: supported descriptors require a
 	// unique environment, preserving every actual value before sorting.

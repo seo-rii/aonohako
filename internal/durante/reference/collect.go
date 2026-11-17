@@ -31,6 +31,7 @@ import (
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/profiles"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimeidentity"
@@ -76,6 +77,7 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 		NativeLimits:    model.Limits{TimeMs: 10000, WallTimeMs: 30000, MemoryMB: memoryMB},
 		MeteredLimits:   durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: memoryMB},
 	}
+	dataset.RuntimeDeterminism = cfg.Execution.WorkMeasurement.RuntimeDeterminismFor(profiles.NormalizeRunLang(profile.SourceLanguage))
 	defer func() { recordCollectionFailure(&dataset, err) }()
 	if profileErr != nil {
 		return dataset, profileErr
@@ -433,7 +435,8 @@ func validateCollectedMetered(response model.RunResponse, dataset Dataset) error
 		return fmt.Errorf("raw corpus collection returned unsolicited converted time or peer metadata")
 	}
 	r := response.WorkMeasurement
-	if r == nil || r.Family != profile.Family || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile || r.CPUIDProfile != dataset.CPUIDProfile {
+	if r == nil || r.Family != profile.Family || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile || r.CPUIDProfile != dataset.CPUIDProfile ||
+		r.RuntimeDeterminism != dataset.RuntimeDeterminism {
 		return fmt.Errorf("metered observation is absent, incomplete, or incompatible")
 	}
 	if !r.ValidInstallationIdentity() {
