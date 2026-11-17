@@ -48,6 +48,9 @@ type TimeProfileBinding struct {
 	ModelVersion    uint64          `json:"model_version"`
 	QualificationID string          `json:"qualification_id"`
 	RuntimeOptions  *RuntimeOptions `json:"runtime_options,omitempty"`
+	// CPUIDProfile is the virtual processor the qualification evidence used.
+	// Empty means host CPUID; it matches only an unprofiled configuration.
+	CPUIDProfile string `json:"cpuid_profile,omitempty"`
 }
 
 // TimeModels may contain bindings for more than one deployment. The executing
@@ -139,8 +142,16 @@ func (p *TimeProfileBinding) UnmarshalJSON(data []byte) error {
 		"dispatch_profile": &decoded.DispatchProfile, "model_id": &decoded.ModelID,
 		"model_version": &decoded.ModelVersion, "qualification_id": &decoded.QualificationID,
 		"runtime_options": &decoded.RuntimeOptions,
-	}, "runtime_options"); err != nil {
+		"cpuid_profile":   &decoded.CPUIDProfile,
+	}, "runtime_options", "cpuid_profile"); err != nil {
 		return err
+	}
+	fields, err := manifestObject(data)
+	if err != nil {
+		return err
+	}
+	if _, present := fields["cpuid_profile"]; present && !ValidCPUIDProfile(decoded.CPUIDProfile) {
+		return fmt.Errorf("durante time profile CPUID profile must be a supported profile")
 	}
 	*p = decoded
 	return nil
@@ -194,6 +205,7 @@ func (m TimeModel) resolve(binding TimeProfileBinding) TimePolicy {
 		ModelID:          m.ModelID, ModelVersion: m.ModelVersion, ReferenceID: m.ReferenceID,
 		RuntimeID: binding.SourceLanguage + "@" + binding.RuntimeImage,
 		Family:    binding.Family, EngineProfile: binding.EngineProfile, DispatchProfile: binding.DispatchProfile,
+		CPUIDProfile:           binding.CPUIDProfile,
 		InstructionNSNumerator: m.Coefficients.InstructionNSNumerator,
 		REPByteNSNumerator:     m.Coefficients.REPByteNSNumerator, NSDenominator: m.Coefficients.NSDenominator,
 		MOVSByteNSNumerator: m.Coefficients.MOVSByteNSNumerator, STOSByteNSNumerator: m.Coefficients.STOSByteNSNumerator,
@@ -218,7 +230,7 @@ func (r TimeModels) Validate() error {
 		}
 		models[key] = model
 	}
-	type profileKey struct{ runtimeID, engine, dispatch, options string }
+	type profileKey struct{ runtimeID, engine, dispatch, options, cpuid string }
 	seen := make(map[profileKey]bool, len(r.Profiles))
 	for _, binding := range r.Profiles {
 		profile, ok := profiles.Resolve(binding.SourceLanguage)
@@ -257,7 +269,7 @@ func (r TimeModels) Validate() error {
 				return err
 			}
 		}
-		key := profileKey{runtimeID, binding.EngineProfile, binding.DispatchProfile, optionsID}
+		key := profileKey{runtimeID, binding.EngineProfile, binding.DispatchProfile, optionsID, binding.CPUIDProfile}
 		if seen[key] {
 			return fmt.Errorf("duplicate durante time profile for %q", runtimeID)
 		}

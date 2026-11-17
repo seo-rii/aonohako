@@ -54,6 +54,7 @@ type Dataset struct {
 	RuntimeImage    string                 `json:"runtime_image"`
 	SourceLanguage  string                 `json:"source_language"`
 	DispatchProfile string                 `json:"dispatch_profile"`
+	CPUIDProfile    string                 `json:"cpuid_profile,omitempty"`
 	RunnerSHA256    string                 `json:"runner_sha256"`
 	Environment     map[string]string      `json:"environment"`
 	Repetitions     int                    `json:"repetitions"`

@@ -660,6 +660,13 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_MODELS: %w", err)
 	}
 	workMeasurement.RuntimeImage = os.Getenv("AONOHAKO_DURANTE_RUNTIME_IMAGE")
+	workMeasurement.CPUIDProfile, err = durante.ParseCPUIDProfile(os.Getenv("AONOHAKO_DURANTE_CPUID_PROFILE"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_CPUID_PROFILE: %w", err)
+	}
+	if workMeasurement.CPUIDProfile != "" && len(workMeasurement.Families) == 0 {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_CPUID_PROFILE requires an enabled measurement family")
+	}
 	if err := workMeasurement.ValidateTimeConfiguration(); err != nil {
 		return Config{}, fmt.Errorf("durante time configuration (AONOHAKO_DURANTE_TIME_POLICY, AONOHAKO_DURANTE_TIME_MODELS, AONOHAKO_DURANTE_RUNTIME_IMAGE): %w", err)
 	}

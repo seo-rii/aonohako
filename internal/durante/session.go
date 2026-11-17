@@ -141,6 +141,9 @@ func (s *Session) Wrap(command []string) []string {
 	for _, feature := range s.cpuFeatures {
 		args = append(args, "-disallow_cpu_feature", string(feature))
 	}
+	if s.config.CPUIDProfile != "" {
+		args = append(args, "-cpuid_profile", s.config.CPUIDProfile)
+	}
 	args = append(args, "--")
 	return append(args, command...)
 }
@@ -171,6 +174,10 @@ func (s *Session) Collect(rootPID int) *Report {
 	identity.Unchanged = err == nil && current == s.installation
 	if !identity.Unchanged {
 		report = incomplete("durante installation changed during observation")
+	} else if report.Complete && report.CPUIDProfile != s.config.CPUIDProfile {
+		// A legacy client, host CPUID or another profile cannot satisfy the
+		// configured virtual processor; never publish those totals.
+		report = incomplete("durante CPUID profile receipt does not match the configuration")
 	}
 	report.Installation = &identity
 	report.Family = s.family
