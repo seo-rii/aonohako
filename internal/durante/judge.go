@@ -3,6 +3,7 @@ package durante
 import (
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 )
 
@@ -92,37 +93,15 @@ func ParseJudgePolicy(mode, families, integrity, ratio string) (JudgePolicy, err
 		return JudgePolicy{}, fmt.Errorf("judge integrity must be \"off\" or \"plausibility\"")
 	}
 	if policy.Integrity == JudgeIntegrityPlausibility {
-		parsed, err := parsePositiveUint(ratio)
-		if err != nil {
-			return JudgePolicy{}, fmt.Errorf("judge integrity ratio: %w", err)
+		parsed, err := strconv.ParseUint(strings.TrimSpace(ratio), 10, 64)
+		if err != nil || parsed == 0 {
+			return JudgePolicy{}, fmt.Errorf("judge integrity ratio must be a positive uint64 decimal integer")
 		}
 		policy.IntegrityRatio = parsed
 	} else if strings.TrimSpace(ratio) != "" {
 		return JudgePolicy{}, fmt.Errorf("judge integrity ratio requires the plausibility mode")
 	}
 	return policy, nil
-}
-
-func parsePositiveUint(raw string) (uint64, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return 0, fmt.Errorf("a positive integer is required")
-	}
-	var value uint64
-	for _, r := range trimmed {
-		if r < '0' || r > '9' {
-			return 0, fmt.Errorf("must be a positive integer")
-		}
-		next := value*10 + uint64(r-'0')
-		if next < value {
-			return 0, fmt.Errorf("value is too large")
-		}
-		value = next
-	}
-	if value == 0 {
-		return 0, fmt.Errorf("must be greater than zero")
-	}
-	return value, nil
 }
 
 // JudgesFamily reports whether this policy admits a verdict for the family.

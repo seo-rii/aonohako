@@ -37,6 +37,10 @@ func TestParseJudgePolicy(t *testing.T) {
 	if err != nil || !on.Enabled || !on.VerdictsAllowed || len(on.Families) != 2 || on.Integrity != JudgeIntegrityPlausibility || on.IntegrityRatio != 50 {
 		t.Fatalf("on: %+v %v", on, err)
 	}
+	maxRatio, err := ParseJudgePolicy("on", "cpp", "plausibility", "18446744073709551615")
+	if err != nil || maxRatio.IntegrityRatio != math.MaxUint64 {
+		t.Fatalf("maximum integrity ratio: %+v %v", maxRatio, err)
+	}
 	shadow, err := ParseJudgePolicy("shadow", "cpp", "", "")
 	if err != nil || !shadow.Enabled || shadow.VerdictsAllowed || !shadow.JudgesFamily("cpp") {
 		t.Fatalf("shadow: %+v %v", shadow, err)
@@ -50,6 +54,8 @@ func TestParseJudgePolicy(t *testing.T) {
 		{"on", "cpp", "plausibility", ""},
 		{"on", "cpp", "plausibility", "0"},
 		{"on", "cpp", "plausibility", "-3"},
+		{"on", "cpp", "plausibility", "18446744073709551616"},
+		{"on", "cpp", "plausibility", "30000000000000000000"},
 		{"on", "cpp", "off", "50"},
 	} {
 		if _, err := ParseJudgePolicy(tc.mode, tc.families, tc.integrity, tc.ratio); err == nil {
