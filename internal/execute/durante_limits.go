@@ -20,7 +20,8 @@ func (s *Service) runWorkMeasurementDiagnostic(ctx context.Context, req *model.R
 	rawService.shortCaseSampling = false
 	response := rawService.runOne(ctx, &rawReq, hooks, tuning, true).response
 	response = finishWorkMeasurementDiagnostic(ctx, req, response)
-	return finishWorkMeasurementTime(req, response, s.workMeasurement, tuning)
+	response = finishWorkMeasurementTime(req, response, s.workMeasurement, tuning)
+	return finishWorkMeasurementJudge(req, response, s.workMeasurement)
 }
 
 func workMeasurementRawRequest(req *model.RunRequest) model.RunRequest {
@@ -118,13 +119,18 @@ func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResp
 		if (report.Complete && !validDiagnosticWorkReport(req.Lang, report)) || (!report.Complete && !report.ValidUnavailableResult()) {
 			return fmt.Errorf("invalid remote result: inconsistent diagnostic observation")
 		}
-		if report.Complete && (response.Status == model.RunStatusTLE || response.Status == model.RunStatusMLE || response.Status == model.RunStatusWLE) {
-			return fmt.Errorf("invalid remote result: resource stop returned complete diagnostic totals")
-		}
-		if report.Complete && response.Status == model.RunStatusRE {
-			switch response.VerdictSource {
-			case "pids_cgroup", "pids_cgroup_final", "stream_io", "wait_status":
-				return fmt.Errorf("invalid remote result: incomplete execution returned complete diagnostic totals")
+		// In judge mode a verdict (TLE from excess work, RE from an unconvertible
+		// count) legitimately accompanies a complete report, so these raw-stop
+		// consistency checks apply only to the pure diagnostic envelope.
+		if !req.WorkMeasurementJudge {
+			if report.Complete && (response.Status == model.RunStatusTLE || response.Status == model.RunStatusMLE || response.Status == model.RunStatusWLE) {
+				return fmt.Errorf("invalid remote result: resource stop returned complete diagnostic totals")
+			}
+			if report.Complete && response.Status == model.RunStatusRE {
+				switch response.VerdictSource {
+				case "pids_cgroup", "pids_cgroup_final", "stream_io", "wait_status":
+					return fmt.Errorf("invalid remote result: incomplete execution returned complete diagnostic totals")
+				}
 			}
 		}
 	}
@@ -134,8 +140,16 @@ func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResp
 		}
 		return nil
 	}
-	if response.Status != model.RunStatusInitFail || response.Score != nil || response.CPUTimeNormalization != nil {
-		return fmt.Errorf("invalid remote result: work measurement envelope cannot return a student verdict or normalized CPU")
+	// Judge mode deliberately returns a real verdict and score instead of the
+	// diagnostic InitFail envelope; its status/score/source are recomputed and
+	// checked by validateRemoteWorkMeasurementJudge. The pure diagnostic
+	// envelope never returns a student verdict or normalized CPU.
+	if !req.WorkMeasurementJudge {
+		if response.Status != model.RunStatusInitFail || response.Score != nil || response.CPUTimeNormalization != nil {
+			return fmt.Errorf("invalid remote result: work measurement envelope cannot return a student verdict or normalized CPU")
+		}
+	} else if response.CPUTimeNormalization != nil {
+		return fmt.Errorf("invalid remote result: work measurement judge cannot return normalized CPU")
 	}
 	if d == nil { // Pre-execution validation/initialization failure.
 		return nil
@@ -143,7 +157,7 @@ func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResp
 	if d.Authority != durante.Authority || d.RawLimits != *req.WorkMeasurementLimits || d.NominalLimits != req.Limits {
 		return fmt.Errorf("invalid remote result: work measurement envelope mismatch")
 	}
-	if response.VerdictSource != "durante_"+d.State {
+	if !req.WorkMeasurementJudge && response.VerdictSource != "durante_"+d.State {
 		return fmt.Errorf("invalid remote result: work measurement source mismatch")
 	}
 	switch d.State {

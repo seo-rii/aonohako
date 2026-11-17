@@ -22,6 +22,9 @@ type Config struct {
 	// RuntimeImage is operator-supplied deployment metadata, not an attestation
 	// of the executing image. It is configured independently of either time setting.
 	RuntimeImage string
+	// Judge turns qualified diagnostic observations into actual verdicts. It is
+	// disabled unless explicitly configured; see docs/durante-judging.md.
+	Judge JudgePolicy
 }
 
 func ParseConfig(familiesValue, drrun, client, dispatch string) (Config, error) {

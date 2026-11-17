@@ -300,6 +300,7 @@ type RunRequest struct {
 	WorkMeasurement         bool                     `json:"work_measurement,omitempty"`
 	WorkMeasurementLimits   *durante.ResourceLimits  `json:"work_measurement_limits,omitempty"`
 	WorkMeasurementTime     bool                     `json:"work_measurement_time,omitempty"`
+	WorkMeasurementJudge    bool                     `json:"work_measurement_judge,omitempty"`
 	WorkMeasurementPeerTime *PeerTimeRequest         `json:"work_measurement_peer_time,omitempty"`
 	Lang                    string                   `json:"lang"`
 	EntryMode               string                   `json:"entry_mode,omitempty"`
@@ -332,6 +333,7 @@ type RunResponse struct {
 	WorkMeasurement          *durante.Report           `json:"work_measurement,omitempty"`
 	WorkMeasurements         []WorkMeasurementProcess  `json:"work_measurements,omitempty"`
 	WorkMeasurementExecution *WorkMeasurementExecution `json:"work_measurement_execution,omitempty"`
+	WorkMeasurementJudgment  *WorkMeasurementJudgment  `json:"work_measurement_judgment,omitempty"`
 	Status                   string                    `json:"status"`
 	TimeMs                   int64                     `json:"time_ms"`
 	WallTimeMs               int64                     `json:"wall_time_ms"`
@@ -412,6 +414,23 @@ type WorkMeasurementExecution struct {
 	NominalTimeExceeded     *bool                    `json:"nominal_time_exceeded,omitempty"`
 	TimeEstimateUnavailable string                   `json:"time_estimate_unavailable,omitempty"`
 	TimeEstimateEligibility *durante.TimeEligibility `json:"time_estimate_eligibility,omitempty"`
+}
+
+// WorkMeasurementJudgment is judge mode's verdict over a diagnostic execution.
+// Unlike the pure envelope, judge mode sets the response Status to this Verdict.
+// The counts remain diagnostic_only and application-mutable; the verdict is an
+// operator policy over them, not a trusted measurement. See docs/durante-judging.md.
+type WorkMeasurementJudgment struct {
+	Authority         string `json:"authority"`
+	Verdict           string `json:"verdict"`
+	Reason            string `json:"reason,omitempty"`
+	State             string `json:"state"`
+	NominalTimeMs     int64  `json:"nominal_time_ms"`
+	EstimatedTimeMs   *int64 `json:"estimated_time_ms,omitempty"`
+	EstimatedTimeNs   *int64 `json:"estimated_time_ns,omitempty"`
+	IntegrityMode     string `json:"integrity_mode"`
+	IntegrityFlagged  bool   `json:"integrity_flagged,omitempty"`
+	TerminationSource string `json:"termination_source,omitempty"`
 }
 
 const (
