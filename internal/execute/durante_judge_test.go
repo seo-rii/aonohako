@@ -208,6 +208,20 @@ func TestValidateRemoteJudgeRecompute(t *testing.T) {
 	}
 }
 
+func TestRemoteJudgeRequiresExecutionForStudentVerdict(t *testing.T) {
+	cfg, req := judgeMeasurementConfig(), judgeRequest()
+	for _, status := range []string{model.RunStatusAccepted, model.RunStatusTLE, model.RunStatusWA, model.RunStatusRE} {
+		got := exchangeTimeMeasurementResult(t, req, model.RunResponse{Status: status}, cfg)
+		if got.Status != model.RunStatusInitFail || !strings.Contains(got.Reason, "unverifiable work measurement judgment") {
+			t.Errorf("unmeasured %s returned %+v", status, got)
+		}
+	}
+	failure := model.RunResponse{Status: model.RunStatusInitFail, Reason: "admission failed"}
+	if got := exchangeTimeMeasurementResult(t, req, failure, cfg); got.Status != failure.Status || got.Reason != failure.Reason {
+		t.Errorf("legitimate pre-execution failure returned %+v", got)
+	}
+}
+
 func TestJudgeConfigParsesFromEnv(t *testing.T) {
 	image := "sha256:" + strings.Repeat("a", 64)
 	_ = image

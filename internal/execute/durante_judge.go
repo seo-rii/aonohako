@@ -120,7 +120,8 @@ func validateRemoteWorkMeasurementJudge(req *model.RunRequest, response model.Ru
 	if !applicable {
 		// Judge was requested but this control plane cannot judge it (no envelope
 		// execution, or family/policy mismatch). A judgment would be unverifiable.
-		if j != nil {
+		if j != nil || response.WorkMeasurementExecution != nil || response.WorkMeasurement != nil ||
+			response.Status != model.RunStatusInitFail || response.Score != nil || response.VerdictSource == "durante_judge" {
 			return fmt.Errorf("invalid remote result: unverifiable work measurement judgment")
 		}
 		return nil
