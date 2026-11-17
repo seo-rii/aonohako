@@ -164,8 +164,10 @@ comparison, are unchanged):
 `-I` implies `-E`, which also ignores `PYTHONHASHSEED`, so the seed cannot be
 set while `-I` stays. `-s -P` keeps the rest of isolated mode, and removing the
 other `PYTHON*` variables keeps `-E`'s effect for them; a program can still see
-`sys.flags.isolated == 0` and `sys.flags.ignore_environment == 0`. Program
-randomness (`Math.random`, `random`, `os.urandom`) is not pinned. PyPy also
+`sys.flags.isolated == 0` and `sys.flags.ignore_environment == 0`. V8's
+`--predictable` gives `Math.random()` a repeatable sequence across fresh Node
+processes. Python's `random` module and `os.urandom` retain their usual sources
+of randomness when the hash seed is fixed. PyPy also
 randomizes string hashes per process, although `sys.flags.hash_randomization`
 reports `0`, and it reads `PYTHONHASHSEED` even under `-I` (observed with PyPy
 7.3.15; the CI integration test checks the runner's PyPy), so its launcher
@@ -214,6 +216,7 @@ was unavailable: the prepared runtime aborted at its process-exit thread
 synchronization barrier ("Failed to synchronize with all threads when
 detaching"). The same program without the option failed identically, so
 Node measurement in aonohako's sandbox is currently unavailable independently
-of runtime determinism. The integration test checks the option through the
-program's output in that case, runs the unpinned control, and fails if only
-the pinned run is unavailable.
+of runtime determinism. The integration test requires two complete CPython
+and PyPy measurements when those interpreters are exercised. For Node it also
+accepts the observed detach error if the program's output confirms the flag
+and an unpinned control reports the same error.

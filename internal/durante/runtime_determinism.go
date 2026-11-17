@@ -11,7 +11,8 @@ import (
 // executions, which otherwise moves counts between identical runs:
 //
 //   - Node (run language "javascript"): V8 --predictable, which disables
-//     concurrent compilation, background GC and other background tasks.
+//     concurrent compilation, background GC and other background tasks and
+//     gives Math.random a repeatable sequence across fresh processes.
 //   - CPython (run language "python"): hash seed 0. Isolated mode (-I) ignores
 //     PYTHONHASHSEED, so -I is replaced by its other two parts, -s and -P, and
 //     every PYTHON* variable except PYTHONHASHSEED=0 is removed, which keeps
@@ -20,10 +21,10 @@ import (
 //     per process even though sys.flags.hash_randomization reports 0, and
 //     reads PYTHONHASHSEED even under -I, so only PYTHONHASHSEED=0 is added.
 //
-// Program-visible randomness (Math.random, random, os.urandom) is not pinned,
-// and other launchers, including native targets, are unchanged. The options
-// change the amount of work, so a time model applies only to observations
-// made with the same option set.
+// The Python hash seed affects string and bytes hashes. Python's random module
+// and os.urandom retain their usual sources of randomness. The options change
+// the amount of work, so a time model applies only to observations made with
+// the same option set.
 const RuntimeDeterminismV1 = "v1"
 
 // ParseRuntimeDeterminism accepts "", "off" (no options) or a known option set.

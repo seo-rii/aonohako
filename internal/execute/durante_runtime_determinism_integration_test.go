@@ -76,6 +76,10 @@ func TestDuranteRuntimeDeterminismIntegration(t *testing.T) {
 	unpinnedCfg := cfg
 	unpinnedCfg.RuntimeDeterminism = ""
 	unpinned := NewWithConfig(config.Config{MaxActiveRuns: 1, WorkRootMaxBytes: 128 << 20, Execution: config.ExecutionConfig{WorkMeasurement: unpinnedCfg}})
+	nodeDetachFailed := func(r model.RunResponse) bool {
+		return r.WorkMeasurementExecution != nil && r.WorkMeasurementExecution.State == "failed" &&
+			strings.Contains(r.Stderr, "Failed to synchronize with all threads when detaching.")
+	}
 	for _, p := range probes {
 		t.Run(p.lang, func(t *testing.T) {
 			request := func() *model.RunRequest {
@@ -89,16 +93,17 @@ func TestDuranteRuntimeDeterminismIntegration(t *testing.T) {
 				r := svc.Run(context.Background(), request(), Hooks{})
 				d, report := r.WorkMeasurementExecution, r.WorkMeasurement
 				if d == nil || d.State != "complete" {
+					if p.lang != "JAVASCRIPT" || !nodeDetachFailed(r) {
+						t.Fatalf("%s measurement did not complete: %+v metadata=%+v", p.lang, r, d)
+					}
 					// The program's own output shows the options it ran with; a
 					// failed diagnostic returns it, a complete one only compares it.
 					if strings.TrimSpace(r.Stdout) != p.expected {
 						t.Fatalf("%s did not observe the pinned runtime (want %q): %+v metadata=%+v", p.lang, p.expected, r, d)
 					}
-					// Only acceptable when the same program also fails unpinned:
-					// then the failure is not caused by the pinned options.
 					control := unpinned.Run(context.Background(), request(), Hooks{})
-					if control.WorkMeasurementExecution != nil && control.WorkMeasurementExecution.State == "complete" {
-						t.Fatalf("%s measurement fails only when pinned: %+v metadata=%+v", p.lang, r, d)
+					if !nodeDetachFailed(control) {
+						t.Fatalf("unpinned Node did not reproduce the detach failure: %+v", control)
 					}
 					t.Logf("%s measurement unavailable with and without the pinned options: pinned %q / %q, unpinned %q / %q",
 						p.lang, r.Reason, r.Stderr, control.Reason, control.Stderr)
