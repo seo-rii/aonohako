@@ -129,30 +129,25 @@ func (p TimePolicy) validateWeights() error {
 // Even a complete report can be forged by the measured process: validation here
 // establishes structural compatibility, not adversarial integrity.
 func (p TimePolicy) Estimate(runtimeID string, report Report) (TimeEstimate, error) {
+	estimate, _, err := p.EstimateWithEligibility(runtimeID, report)
+	return estimate, err
+}
+
+// EstimateWithEligibility shares every admission check and the exact arithmetic
+// with Estimate. A failed assessment always returns a zero estimate and an error.
+func (p TimePolicy) EstimateWithEligibility(runtimeID string, report Report) (TimeEstimate, TimeEligibility, error) {
 	if err := p.Validate(); err != nil {
-		return TimeEstimate{}, err
+		return TimeEstimate{}, timeEligibility(TimeIncompatibleConfiguration), err
 	}
 	if runtimeID != p.RuntimeID || report.Family != p.Family || report.EngineProfile != p.EngineProfile || report.DispatchProfile != p.DispatchProfile {
-		return TimeEstimate{}, fmt.Errorf("durante time policy runtime or profile mismatch")
-	}
-	if report.Schema != 1 || report.ClientVersion != 1 || report.Metric != Metric || report.Scope != Scope || report.Authority != Authority || !report.ValidDiagnosticContract() || !report.ValidREPTelemetry() {
-		return TimeEstimate{}, fmt.Errorf("durante time policy report contract mismatch")
+		return TimeEstimate{}, timeEligibility(TimeRuntimeProfileMismatch), fmt.Errorf("durante time policy runtime or profile mismatch")
 	}
 	if p.DispatchProfile == DispatchGLIBC241 && report.HostLibc != "2.41" {
-		return TimeEstimate{}, fmt.Errorf("durante time policy host libc mismatch")
+		return TimeEstimate{}, timeEligibility(TimeHostLibcMismatch), fmt.Errorf("durante time policy host libc mismatch")
 	}
-	if !report.Complete || report.Reason != "" || report.Quality != "uninterrupted" || report.SignalsObserved != 0 {
-		return TimeEstimate{}, fmt.Errorf("durante time policy requires complete uninterrupted accounting")
-	}
-	if report.Processes <= 0 || report.Images < report.Processes || !report.REPEnabled || report.Instructions == nil || report.REPBytes == nil || report.REPEntries == nil || report.UnsupportedREPEntries == nil {
-		return TimeEstimate{}, fmt.Errorf("durante time policy requires complete process and REP counters")
-	}
-	if *report.Instructions == 0 || *report.UnsupportedREPEntries != 0 || (*report.REPEntries == 0 && *report.REPBytes != 0) {
-		return TimeEstimate{}, fmt.Errorf("durante time policy has invalid or unsupported counters")
-	}
-
-	if p.Formula() == TimeMethodREPBreakdown && report.REPBreakdown == nil {
-		return TimeEstimate{}, fmt.Errorf("v2 time policy requires observed REP operation detail")
+	eligibility := report.TimeConversionEligibility(p.Formula())
+	if !eligibility.Eligible {
+		return TimeEstimate{}, eligibility, fmt.Errorf("durante time policy observation is not convertible: %s", strings.Join(eligibility.ReasonCodes, ", "))
 	}
 	// Sum the exact products before rounding. A v2 model partitions REP bytes
 	// instead of charging both the old total and its operation-specific parts.
@@ -173,7 +168,7 @@ func (p TimePolicy) Estimate(runtimeID string, report Report) (TimeEstimate, err
 		total.Add(&total, big.NewInt(1))
 	}
 	if !total.IsInt64() {
-		return TimeEstimate{}, fmt.Errorf("durante time estimate exceeds int64 nanoseconds")
+		return TimeEstimate{}, timeEligibility(TimeNumericOverflow), fmt.Errorf("durante time estimate exceeds int64 nanoseconds")
 	}
 	nanoseconds := total.Int64()
 	milliseconds := nanoseconds / 1_000_000
@@ -190,5 +185,5 @@ func (p TimePolicy) Estimate(runtimeID string, report Report) (TimeEstimate, err
 		RuntimeID: p.RuntimeID, Family: p.Family,
 		EngineProfile: p.EngineProfile, DispatchProfile: p.DispatchProfile,
 		Nanoseconds: nanoseconds, Milliseconds: milliseconds,
-	}, nil
+	}, eligibility, nil
 }

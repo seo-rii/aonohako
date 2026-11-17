@@ -263,6 +263,9 @@ source profile, engine/dispatch profile and actual immutable Durante execution
 image; a remote control plane uses the downstream image/model.
 Omitting the flag preserves existing measurement behavior. Estimated time remains
 diagnostic and does not change raw resource accounting or grant a student verdict.
+Requested conversion also reports versioned `time_estimate_eligibility` when an
+execution envelope exists, identifying exclusions while preserving the existing
+`time_estimate_unavailable` strings. It does not relax signal or REP coverage checks.
 See [Durante diagnostics](durante.md) for operator configuration and result semantics.
 `capture_limits` is separate from `limits.output_bytes`. An omitted object or
 member retains the legacy response cap of `min(limits.output_bytes, 64 KiB)`;

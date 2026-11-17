@@ -91,6 +91,7 @@ func TestWorkMeasurementTimeBoundaryPreservesDiagnosticResult(t *testing.T) {
 			}
 			withoutTime := *d
 			withoutTime.TimeEstimate, withoutTime.NominalTimeExceeded, withoutTime.TimeEstimateUnavailable = nil, nil, ""
+			withoutTime.TimeEstimateEligibility = nil
 			got.WorkMeasurementExecution = &withoutTime
 			if !reflect.DeepEqual(got, before) {
 				t.Fatalf("conversion changed execution state, raw observations, output, or verdict:\nbefore=%+v\nafter=%+v", before, got)

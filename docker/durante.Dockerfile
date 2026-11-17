@@ -7,7 +7,7 @@ ARG BUILD_IMAGE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573
 # Lightweight CI compiler image. This stage does not rebuild the pinned SDK;
 # collection mounts the same verified SDK/client used by the sandbox tests.
 FROM ${BUILD_IMAGE} AS reference-tools
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates python3 pypy3 rustc && rm -rf /var/lib/apt/lists/*
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS durante-go
 WORKDIR /src

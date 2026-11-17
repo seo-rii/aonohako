@@ -402,15 +402,16 @@ type PeerTimeBudgetResult struct {
 // The enclosing response is always InitFail until an authoritative judgement
 // policy exists, including when this diagnostic completed successfully.
 type WorkMeasurementExecution struct {
-	Authority               string                 `json:"authority"`
-	State                   string                 `json:"state"`
-	NominalLimits           Limits                 `json:"nominal_limits"`
-	RawLimits               durante.ResourceLimits `json:"raw_limits"`
-	OutputMatches           *bool                  `json:"output_matches,omitempty"`
-	TerminationSource       string                 `json:"termination_source,omitempty"`
-	TimeEstimate            *durante.TimeEstimate  `json:"time_estimate,omitempty"`
-	NominalTimeExceeded     *bool                  `json:"nominal_time_exceeded,omitempty"`
-	TimeEstimateUnavailable string                 `json:"time_estimate_unavailable,omitempty"`
+	Authority               string                   `json:"authority"`
+	State                   string                   `json:"state"`
+	NominalLimits           Limits                   `json:"nominal_limits"`
+	RawLimits               durante.ResourceLimits   `json:"raw_limits"`
+	OutputMatches           *bool                    `json:"output_matches,omitempty"`
+	TerminationSource       string                   `json:"termination_source,omitempty"`
+	TimeEstimate            *durante.TimeEstimate    `json:"time_estimate,omitempty"`
+	NominalTimeExceeded     *bool                    `json:"nominal_time_exceeded,omitempty"`
+	TimeEstimateUnavailable string                   `json:"time_estimate_unavailable,omitempty"`
+	TimeEstimateEligibility *durante.TimeEligibility `json:"time_estimate_eligibility,omitempty"`
 }
 
 const (

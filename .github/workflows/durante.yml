@@ -110,7 +110,7 @@ jobs:
             -e AONOHAKO_TEST_DURANTE_REP_BREAKDOWN=/validation/rep-breakdown \
             --entrypoint /validation/execute.test "$image_id" \
             -test.v -test.run '^TestDurante(REPBreakdown|TimeEstimate|Interactive|Communication)Integration$' -test.timeout 240s
-      - name: Collect fixed C++ corpus through actual compile and execute APIs
+      - name: Collect fixed runtime corpora through actual compile and execute APIs
         shell: bash
         run: |
           set -euo pipefail
@@ -120,37 +120,70 @@ jobs:
           image_id=$(docker image inspect --format '{{.Id}}' durante-reference-tools)
           output=$(mktemp -d)
           echo "REFERENCE_OUTPUT=$output" >> "$GITHUB_ENV"
-          docker run --rm --network none --read-only --memory 2g --pids-limit 512 --cpus 2 \
-            --tmpfs /tmp:rw,exec,mode=1777,size=268435456 \
-            --tmpfs /work:rw,exec,mode=0755,size=268435456 \
-            --mount type=bind,src=/opt/durante/dynamorio,dst=/opt/durante/dynamorio,readonly \
-            --mount type=bind,src=/tmp/durante-build/libdurante.so,dst=/opt/durante/lib/libdurante.so,readonly \
-            --mount type=bind,src=/tmp/durante-reference-tool,dst=/validation/reference-tool,readonly \
-            --mount type=bind,src="$output",dst=/output \
-            -e AONOHAKO_DEPLOYMENT_TARGET=dev -e AONOHAKO_INBOUND_AUTH=none \
-            -e AONOHAKO_EXECUTION_TRANSPORT=embedded -e AONOHAKO_SANDBOX_BACKEND=helper \
-            -e AONOHAKO_MAX_ACTIVE_RUNS=1 -e AONOHAKO_WORK_ROOT=/work \
-            -e AONOHAKO_WORK_ROOT_MAX_BYTES=268435456 \
-            -e AONOHAKO_CPU_NORMALIZATION=false -e AONOHAKO_CPU_SHORT_CASE_SAMPLING=false \
-            -e AONOHAKO_DURANTE_FAMILIES=cpp -e AONOHAKO_DURANTE_DISPATCH_PROFILE=default \
-            -e AONOHAKO_DURANTE_RUNTIME_IMAGE="$image_id" \
-            -e 'AONOHAKO_DURANTE_RESOURCE_POLICY={"max_limits":{"cpu_time_ms":10000,"wall_time_ms":30000,"memory_mb":256},"memory_budget_mb":2048,"reserved_memory_mb":512}' \
-            --entrypoint /validation/reference-tool "$image_id" \
-            collect --smoke --repetitions 1 --timeout 240s --output /output/smoke
+          for language in CPP20 PYTHON3 PYPY3 RUST2024; do
+            memory_mb=512
+            if [ "$language" = CPP20 ]; then memory_mb=256; fi
+            if docker run --rm --network none --read-only --memory 2g --pids-limit 512 --cpus 2 \
+              --tmpfs /tmp:rw,exec,mode=1777,size=268435456 \
+              --tmpfs /work:rw,exec,mode=0755,size=268435456 \
+              --mount type=bind,src=/opt/durante/dynamorio,dst=/opt/durante/dynamorio,readonly \
+              --mount type=bind,src=/tmp/durante-build/libdurante.so,dst=/opt/durante/lib/libdurante.so,readonly \
+              --mount type=bind,src=/tmp/durante-reference-tool,dst=/validation/reference-tool,readonly \
+              --mount type=bind,src="$output",dst=/output \
+              -e AONOHAKO_DEPLOYMENT_TARGET=dev -e AONOHAKO_INBOUND_AUTH=none \
+              -e AONOHAKO_EXECUTION_TRANSPORT=embedded -e AONOHAKO_SANDBOX_BACKEND=helper \
+              -e AONOHAKO_MAX_ACTIVE_RUNS=1 -e AONOHAKO_WORK_ROOT=/work \
+              -e AONOHAKO_WORK_ROOT_MAX_BYTES=268435456 \
+              -e AONOHAKO_CPU_NORMALIZATION=false -e AONOHAKO_CPU_SHORT_CASE_SAMPLING=false \
+              -e AONOHAKO_DURANTE_FAMILIES=cpp,cpython,pypy,native -e AONOHAKO_DURANTE_DISPATCH_PROFILE=default \
+              -e AONOHAKO_DURANTE_RUNTIME_IMAGE="$image_id" \
+              -e 'AONOHAKO_DURANTE_RESOURCE_POLICY={"max_limits":{"cpu_time_ms":10000,"wall_time_ms":30000,"memory_mb":512},"memory_budget_mb":2048,"reserved_memory_mb":512}' \
+              --entrypoint /validation/reference-tool "$image_id" \
+              collect --language "$language" --memory-mb "$memory_mb" --smoke --repetitions 1 --timeout 240s --output "/output/$language"; then
+              collect_status=0
+            else
+              collect_status=$?
+            fi
+            printf '%s\n' "$collect_status" > "$output/$language.exit-status"
+          done
           sudo chown -R "$(id -u):$(id -g)" "$output"
-          python3 - "$output/smoke/dataset.json" <<'PY'
-          import json, sys
-          data = json.load(open(sys.argv[1]))
-          assert data['complete'] and data['smoke'] and not data.get('failures')
-          assert len(data['samples']) == 5
-          assert {row['workload_id'] for row in data['samples']} == {'integer', 'rep_copy', 'branch', 'sort', 'rep_fill'}
-          for row in data['samples']:
-              report = row['metered']['work_measurement']
-              detail = report['rep_breakdown']
-              assert detail['version'] == 1
-              assert detail['movs_bytes'] + detail['stos_bytes'] == report['rep_bytes']
-              assert detail['movs_entries'] + detail['stos_entries'] == report['rep_entries']
-              assert report['engine_profile'] == 'dynamorio-11.3-durante-v4-vm32m'
+          python3 - "$output" <<'PY'
+          import json, pathlib, sys
+          output = pathlib.Path(sys.argv[1])
+          results = []
+          for language, family in [('CPP20', 'cpp'), ('PYTHON3', 'cpython'), ('PYPY3', 'pypy'), ('RUST2024', 'native')]:
+              result = {'language': language, 'failures': []}
+              def require(condition, message):
+                  if not condition:
+                      result['failures'].append(message)
+              try:
+                  result['exit_code'] = int((output / (language + '.exit-status')).read_text())
+                  require(result['exit_code'] == 0, 'collector returned nonzero status')
+                  data = json.loads((output / language / 'dataset.json').read_text())
+                  require(data['complete'] and data['smoke'] and not data.get('failures'), 'dataset is not a complete successful smoke collection')
+                  result['collection_failures'] = data.get('failures', [])
+                  require(data['source_language'] == language, 'source language mismatch')
+                  require(data['corpus_id'] == ('cpp-reference-v1' if language == 'CPP20' else 'runtime-reference-v1'), 'corpus identity mismatch')
+                  require(data['metered_limits']['memory_mb'] == (256 if language == 'CPP20' else 512), 'raw memory limit mismatch')
+                  require(len(data['samples']) == 5, 'expected five completed triplets')
+                  expected = {'integer', 'rep_copy', 'branch', 'sort', 'rep_fill'} if language == 'CPP20' else {'integer', 'copy', 'branch', 'sort', 'fill'}
+                  require({row['workload_id'] for row in data['samples']} == expected, 'workload coverage mismatch')
+                  for row in data['samples']:
+                      report = row['metered']['work_measurement']
+                      detail = report['rep_breakdown']
+                      require(report['family'] == family, 'report family mismatch')
+                      require(detail['version'] == 1, 'REP breakdown version mismatch')
+                      require(detail['movs_bytes'] + detail['stos_bytes'] == report['rep_bytes'], 'REP byte partition mismatch')
+                      require(detail['movs_entries'] + detail['stos_entries'] == report['rep_entries'], 'REP entry partition mismatch')
+                      require(report['engine_profile'] == 'dynamorio-11.3-durante-v4-vm32m', 'engine profile mismatch')
+              except (OSError, ValueError, KeyError, TypeError) as error:
+                  result['failures'].append(str(error))
+              results.append(result)
+          passed = all(not result['failures'] for result in results)
+          summary = {'passed': passed, 'profiles': results}
+          (output / 'collection-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print(json.dumps(summary, indent=2))
+          sys.exit(0 if passed else 1)
           PY
       - name: Preserve reference collection receipt
         if: always() && env.REFERENCE_OUTPUT != ''
