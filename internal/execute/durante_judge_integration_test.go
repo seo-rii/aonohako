@@ -76,7 +76,7 @@ func TestDuranteJudgeIntegration(t *testing.T) {
 			cfg.TimePolicy.InstructionNSNumerator, cfg.TimePolicy.NSDenominator = tc.numerator, tc.denominator
 			cfg.CPUIDProfile = durante.CPUIDProfileX8664V2
 			cfg.TimePolicy.CPUIDProfile = durante.CPUIDProfileX8664V2
-			cfg.Judge = durante.JudgePolicy{Enabled: true, Families: []string{"cpp"}, Integrity: tc.integrity, IntegrityRatio: tc.ratio}
+			cfg.Judge = durante.JudgePolicy{Enabled: true, VerdictsAllowed: true, Families: []string{"cpp"}, Integrity: tc.integrity, IntegrityRatio: tc.ratio}
 			req := &model.RunRequest{
 				Lang: "CPP20", WorkMeasurement: true, WorkMeasurementTime: true, WorkMeasurementJudge: true,
 				Binaries: []model.Binary{{Name: "Main", DataB64: base64.StdEncoding.EncodeToString(data), Mode: "exec"}},
@@ -113,6 +113,53 @@ func TestDuranteJudgeIntegration(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := validateRemoteWorkMeasurementJudge(req, resp, cfg); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	// Shadow mode: the ordinary CPU-time verdict stays authoritative and a
+	// separate judge-mode execution of the same input is only compared.
+	for _, tc := range []struct {
+		name                   string
+		numerator, denominator uint64
+		agreement, shadow      string
+	}{
+		{"shadow agrees", 1, math.MaxUint64, model.ShadowAgree, model.RunStatusAccepted},
+		{"shadow disagrees", 1_000_001, 1, model.ShadowDisagree, model.RunStatusTLE},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := timeMeasurementConfig()
+			cfg.Drrun, cfg.Client = os.Getenv("AONOHAKO_DURANTE_DRRUN"), os.Getenv("AONOHAKO_DURANTE_CLIENT")
+			if cfg.Drrun == "" {
+				cfg.Drrun = durante.DefaultDrrun
+			}
+			if cfg.Client == "" {
+				cfg.Client = durante.DefaultClient
+			}
+			cfg.RuntimeImage, cfg.TimePolicy.RuntimeID = image, runtimeID
+			cfg.TimePolicy.InstructionNSNumerator, cfg.TimePolicy.NSDenominator = tc.numerator, tc.denominator
+			cfg.CPUIDProfile, cfg.TimePolicy.CPUIDProfile = durante.CPUIDProfileX8664V2, durante.CPUIDProfileX8664V2
+			cfg.Judge = durante.JudgePolicy{Enabled: true, Families: []string{"cpp"}, Integrity: durante.JudgeIntegrityOff}
+			req := &model.RunRequest{
+				Lang: "CPP20", WorkMeasurementShadow: true,
+				Binaries: []model.Binary{{Name: "Main", DataB64: base64.StdEncoding.EncodeToString(data), Mode: "exec"}},
+				Stdin:    "4096", ExpectedStdout: expected,
+				Limits:                model.Limits{TimeMs: 2000, WallTimeMs: 5000, MemoryMB: 64},
+				WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 3000, WallTimeMs: 10000, MemoryMB: 128},
+			}
+			svc := NewWithConfig(config.Config{MaxActiveRuns: 1, WorkRootMaxBytes: 128 << 20, Execution: config.ExecutionConfig{WorkMeasurement: cfg}})
+			resp := svc.Run(context.Background(), req, Hooks{})
+			b := resp.WorkMeasurementShadow
+			if resp.Status != model.RunStatusAccepted || resp.WorkMeasurement != nil || resp.WorkMeasurementJudgment != nil || b == nil {
+				t.Fatalf("primary verdict was not the ordinary result: %+v", resp)
+			}
+			if b.Agreement != tc.agreement || b.ShadowStatus != tc.shadow || b.PrimaryStatus != model.RunStatusAccepted || b.Response == nil {
+				t.Fatalf("shadow comparison: %+v", b)
+			}
+			if r := b.Response.WorkMeasurement; r == nil || !r.Complete || r.CPUIDProfile != durante.CPUIDProfileX8664V2 {
+				t.Fatalf("shadow lacks a complete profiled observation: %+v", r)
+			}
+			if err := validateRemoteShadow(req, resp, cfg, config.RuntimeTuningConfig{}); err != nil {
 				t.Fatal(err)
 			}
 		})

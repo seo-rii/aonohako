@@ -83,26 +83,33 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
+	// A shadow request's authoritative portion is an ordinary request; validate
+	// it and its result as such, and the shadow block separately below.
+	if err := runvalidation.ValidateWorkMeasurementShadow(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	checked := shadowPrimaryRequest(req)
+	if err := runvalidation.ValidateWorkMeasurementLimits(checked); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	tuning := r.runtimeTuning.WithSafeDefaults()
-	if (req.WorkMeasurementTime || req.WorkMeasurementPeerTime != nil) && r.workMeasurement.TimeModels != nil && r.workMeasurement.TimeModels.Schema == 2 {
+	schema2 := r.workMeasurement.TimeModels != nil && r.workMeasurement.TimeModels.Schema == 2
+	if (checked.WorkMeasurementTime || checked.WorkMeasurementPeerTime != nil || req.WorkMeasurementShadow) && schema2 {
 		var err error
-		tuning, err = resolveRuntimeTuning(req, r.runtimeTuning, r.runtimeTuningProfiles)
+		tuning, err = resolveRuntimeTuning(checked, r.runtimeTuning, r.runtimeTuningProfiles)
 		if err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
-	if req.WorkMeasurementTime {
-		if _, _, err := ordinaryTimePolicy(req, r.workMeasurement, tuning); err != nil {
+	if checked.WorkMeasurementTime {
+		if _, _, err := ordinaryTimePolicy(checked, r.workMeasurement, tuning); err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
-	if _, err := workMeasurementPeerTimePlans(req, r.workMeasurement, tuning); err != nil {
+	if _, err := workMeasurementPeerTimePlans(checked, r.workMeasurement, tuning); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	if err := validateJudgeRequest(req, r.workMeasurement); err != nil {
+	if err := validateJudgeRequest(ctx, checked, r.workMeasurement); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
@@ -304,17 +311,31 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if strings.TrimSpace(remoteResult.Reason) == "" {
 				remoteResult.Reason = remoteErrorReason
 			}
-			if err := validateRemoteWorkMeasurement(req, remoteResult); err != nil {
+			shadowBlock := remoteResult.WorkMeasurementShadow
+			if req.WorkMeasurementShadow {
+				remoteResult.WorkMeasurementShadow = nil // primary validators see an ordinary result
+			}
+			if err := validateRemoteWorkMeasurement(checked, remoteResult); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
-			if err := validateRemoteWorkMeasurementTime(req, remoteResult, r.workMeasurement, tuning); err != nil {
+			if err := validateRemoteWorkMeasurementTime(checked, remoteResult, r.workMeasurement, tuning); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
-			if err := validateRemoteWorkMeasurementPeerTime(req, remoteResult, r.workMeasurement, tuning); err != nil {
+			if err := validateRemoteWorkMeasurementPeerTime(checked, remoteResult, r.workMeasurement, tuning); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
-			if err := validateRemoteWorkMeasurementJudge(req, remoteResult, r.workMeasurement); err != nil {
+			if err := validateRemoteWorkMeasurementJudge(checked, remoteResult, r.workMeasurement); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
+			remoteResult.WorkMeasurementShadow = shadowBlock
+			if err := validateRemoteShadow(req, remoteResult, r.workMeasurement, tuning); err != nil {
+				if !req.WorkMeasurementShadow {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+				}
+				// The shadow never decides: an old runner or an unverifiable
+				// comparison leaves the validated primary verdict intact.
+				remoteResult.WorkMeasurementShadow = nil
+				remoteResult = attachShadow(remoteResult, nil, "remote shadow result rejected: "+err.Error())
 			}
 			switch remoteResult.Status {
 			case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusMLE, model.RunStatusWLE, model.RunStatusRE, model.RunStatusInitFail:

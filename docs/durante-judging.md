@@ -167,6 +167,61 @@ Adversarial, prize-bearing grading still needs an out-of-process counting
 backend, which does not exist yet. `plausibility` only raises the cost of the
 one profitable attack (under-counting) by requiring the CPU trace to agree.
 
+## Shadow comparison
+
+Before judge mode decides anything, run it in shadow on real submissions.
+`AONOHAKO_DURANTE_JUDGE_MODE=shadow` configures the judge machinery (families,
+integrity, CPUID profile, time model) but rejects `work_measurement_judge`
+requests, so no client can obtain a deciding work verdict yet. `on` allows both.
+
+A request opts in per testcase:
+
+```json
+{
+  "lang": "CPP20",
+  "work_measurement_shadow": true,
+  "limits": {"time_ms": 1000, "wall_time_ms": 2000, "memory_mb": 128},
+  "work_measurement_limits": {"cpu_time_ms": 8000, "wall_time_ms": 16000, "memory_mb": 512}
+}
+```
+
+The service first runs the request exactly as an ordinary request: CPU-time
+TLE, normalization and short-case sampling, memory, output judging,
+stream events and hooks are unchanged. That result is the response's `status`,
+`score` and resource values. It then runs a separate judge-mode execution of the
+same input under `work_measurement_limits` (no logs or images are emitted) and
+adds only `work_measurement_shadow`:
+
+| Field | Meaning |
+|---|---|
+| `agreement` | `agree`, `disagree`, or `unavailable` |
+| `primary_status`, `primary_cpu_time_ms` | The authoritative verdict and its CPU time |
+| `shadow_status` | The judge-mode verdict for the same input |
+| `unavailable` | Why no comparison exists (mode off, family not judged, cancelled, remote result rejected) |
+| `response` | The shadow execution's judgment, envelope, time estimate and Durante report, without stdout/stderr/sidecars |
+
+The request must be an ordinary single-program request; `work_measurement`,
+`work_measurement_time`, `work_measurement_judge` and peer budgets are rejected
+with it, because the primary must stay unmetered. Operator-side gates (mode
+`off`, a family not in `AONOHAKO_DURANTE_JUDGE_FAMILIES`) never reject the
+request: the primary runs and the shadow is `unavailable`. The shadow costs one
+extra instrumented execution (about 3x CPU) per opted-in testcase, sequentially
+after the primary; sample submissions rather than shadowing everything. Inputs
+from `stdin_url` are fetched once per execution.
+
+A remote control plane validates the primary as an ordinary result and
+recomputes the shadow comparison from the returned raw observation with its own
+time model and judge policy. A downstream runner that ignores the option, or a
+shadow block that fails recomputation, does not fail the response: the shadow
+becomes `unavailable` with the reason and the validated primary verdict is
+returned.
+
+Count disagreements by class (primary AC / shadow TLE, primary TLE / shadow AC,
+anything involving RE) and by problem. Primary AC with shadow TLE near the limit
+measures how often the model is stricter than the reference machine; the
+opposite measures leniency. Both are needed before switching a problem set to
+`on`.
+
 ## Remote control plane
 
 A judge-mode request forwarded to a downstream runner is independently
@@ -188,9 +243,10 @@ with reference-time conversion.
    the judged counts see the same virtual processor
    ([CPUID profiles](https://github.com/seo-rii/durante/blob/main/docs/CPUID_PROFILE.md)).
    Fix per-CPU runtime options (hash seed, GC/JIT thread counts) as well.
-3. Run judge mode in shadow: enable it on a mirror of real submissions, compare
-   its verdict with the existing CPU-time verdict, and measure the
-   disagreement rate before it decides anything.
+3. Run judge mode in shadow (`AONOHAKO_DURANTE_JUDGE_MODE=shadow` and
+   `work_measurement_shadow` on a sample of real submissions; see
+   [Shadow comparison](#shadow-comparison)), and measure the disagreement rate
+   against the existing CPU-time verdict before it decides anything.
 4. Enable it per problem set, starting with C/C++, `integrity_mode: off` for
    cooperative settings and `plausibility` where submissions may be adversarial.
 5. Keep raw CPU/wall/memory limits active as independent safety nets; a work

@@ -1,6 +1,7 @@
 package execute
 
 import (
+	"context"
 	"fmt"
 
 	"aonohako/internal/durante"
@@ -164,12 +165,17 @@ func judgmentsEqual(a, b *model.WorkMeasurementJudgment) bool {
 // validateJudgeRequest gates a judge-mode request against the operator policy.
 // Request-shape rules (time, limits, single program) are enforced earlier by
 // ValidateWorkMeasurementLimits; this adds the operator and family gate.
-func validateJudgeRequest(req *model.RunRequest, cfg durante.Config) error {
+func validateJudgeRequest(ctx context.Context, req *model.RunRequest, cfg durante.Config) error {
 	if !req.WorkMeasurementJudge {
 		return nil
 	}
 	if !cfg.Judge.Enabled {
 		return fmt.Errorf("work_measurement_judge is not enabled on this deployment")
+	}
+	// Mode "shadow" configures the machinery for comparisons only; a client
+	// cannot obtain a deciding verdict until the operator selects "on".
+	if !cfg.Judge.VerdictsAllowed && !isShadowJudge(ctx) {
+		return fmt.Errorf("work_measurement_judge verdicts are not enabled on this deployment (shadow mode only)")
 	}
 	if !req.WorkMeasurementTime || req.WorkMeasurementLimits == nil {
 		return fmt.Errorf("work_measurement_judge requires work_measurement_time and work_measurement_limits")

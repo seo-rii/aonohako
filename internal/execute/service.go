@@ -194,6 +194,9 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if req.WorkMeasurementShadow {
+		return s.runWithShadow(ctx, req, hooks)
+	}
 	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
@@ -225,7 +228,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
-	if err := validateJudgeRequest(req, s.workMeasurement); err != nil {
+	if err := validateJudgeRequest(ctx, req, s.workMeasurement); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {

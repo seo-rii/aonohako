@@ -15,6 +15,13 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 	if uploadTimeout <= 0 {
 		uploadTimeout = remoteio.DefaultRequestUploadTimeout
 	}
+	if req.WorkMeasurementShadow && req.WorkMeasurementLimits != nil {
+		// The authoritative run keeps its own budget (including short-case
+		// repeats); the sequential shadow adds one raw-envelope stage.
+		primary, _ := runvalidation.ShadowRequests(req)
+		wall := time.Duration(min(max(req.WorkMeasurementLimits.WallTimeMs, 1), runvalidation.MaxTimeMs)) * time.Millisecond
+		return remoteExecutionTimeout(&primary, uploadTimeout) + max(stdinURLDownloadTimeout, wall) + wall
+	}
 	// Upload and queue/result transfer have independent bounded allowances.
 	budget := uploadTimeout + remoteio.DefaultOperationOverhead
 	addStage := func(wallMs int) {
