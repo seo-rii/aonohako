@@ -212,5 +212,8 @@ pinned runs differed by 60,797 instructions (559 ppm) for CPython and 124,511
 the same CI run, Node printed `true` for `--predictable` but its measurement
 was unavailable: the prepared runtime aborted at its process-exit thread
 synchronization barrier ("Failed to synchronize with all threads when
-detaching"). The integration test now runs an unpinned control in that case
-and fails only if the control completes.
+detaching"). The same program without the option failed identically, so
+Node measurement in aonohako's sandbox is currently unavailable independently
+of runtime determinism. The integration test checks the option through the
+program's output in that case, runs the unpinned control, and fails if only
+the pinned run is unavailable.

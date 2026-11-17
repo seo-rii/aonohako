@@ -88,12 +88,12 @@ func TestDuranteRuntimeDeterminismIntegration(t *testing.T) {
 			for range 2 {
 				r := svc.Run(context.Background(), request(), Hooks{})
 				d, report := r.WorkMeasurementExecution, r.WorkMeasurement
-				// The program's own output shows the options it ran with, even if
-				// the instrumented process could not complete its accounting.
-				if strings.TrimSpace(r.Stdout) != p.expected {
-					t.Fatalf("%s did not observe the pinned runtime (want %q): %+v metadata=%+v", p.lang, p.expected, r, d)
-				}
 				if d == nil || d.State != "complete" {
+					// The program's own output shows the options it ran with; a
+					// failed diagnostic returns it, a complete one only compares it.
+					if strings.TrimSpace(r.Stdout) != p.expected {
+						t.Fatalf("%s did not observe the pinned runtime (want %q): %+v metadata=%+v", p.lang, p.expected, r, d)
+					}
 					// Only acceptable when the same program also fails unpinned:
 					// then the failure is not caused by the pinned options.
 					control := unpinned.Run(context.Background(), request(), Hooks{})
@@ -105,7 +105,7 @@ func TestDuranteRuntimeDeterminismIntegration(t *testing.T) {
 					return
 				}
 				if d.OutputMatches == nil || !*d.OutputMatches {
-					t.Fatalf("%s output did not match: %+v", p.lang, d)
+					t.Fatalf("%s did not observe the pinned runtime (want %q): %+v metadata=%+v", p.lang, p.expected, r, d)
 				}
 				if report == nil || !report.Complete || report.RuntimeDeterminism != p.determinism || report.Instructions == nil {
 					t.Fatalf("%s receipt %+v", p.lang, report)
