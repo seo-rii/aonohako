@@ -267,11 +267,11 @@ if has_language "graphql"; then
     report_python_pkg_once "GraphQL Core" "graphql-core"
 fi
 
-if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure" || has_language "kotlin-jvm"; then
+if has_language "java" || has_language "groovy" || has_language "scala" || has_language "scala3" || has_language "clojure" || has_language "kotlin-jvm"; then
     report_once "Java compiler" javac -version
 fi
 
-if has_language "java" || has_language "groovy" || has_language "scala" || has_language "clojure" || has_language "kotlin-jvm" || has_language "tla"; then
+if has_language "java" || has_language "groovy" || has_language "scala" || has_language "scala3" || has_language "clojure" || has_language "kotlin-jvm" || has_language "tla"; then
     report_once "Java runtime" java -version
 fi
 
@@ -282,6 +282,10 @@ fi
 
 if has_language "groovy"; then
     report_once "Groovy" groovy --version
+fi
+
+if has_language "scala3"; then
+    report_once "Scala 3" java -cp '/opt/aonohako/scala3/lib/*' dotty.tools.dotc.Main -version
 fi
 
 if has_language "scala"; then
@@ -421,6 +425,22 @@ if has_language "nim"; then
     report_once "Nim" nim --version
 fi
 
+if has_language "wren"; then
+    report_once "Wren CLI" wren_cli --version
+fi
+
+if has_language "nimony"; then
+    report_once "Nimony" nimony --version
+fi
+
+if has_language "squirrel"; then
+    report_once "Squirrel" aonohako-squirrel -v
+fi
+
+if has_language "pari-gp"; then
+    report_once "PARI/GP" aonohako-pari-gp --version-short
+fi
+
 if has_language "clojure"; then
     report_once "Clojure" clojure -e "(println (clojure-version))"
 fi
@@ -545,6 +565,10 @@ fi
 
 if has_language "idris2"; then
     report_once "Idris2" idris2 --version
+fi
+
+if has_language "picat"; then
+    report_once "Picat" picat --version
 fi
 
 if has_language "prolog"; then
@@ -723,6 +747,7 @@ report_compile_option "java" "javac --release 11 -encoding UTF-8"
 report_compile_option "java25" "/usr/lib/jvm/aonohako-java25/bin/javac --release 25 -encoding UTF-8"
 report_compile_option "groovy" "groovyc -d <workdir>"
 report_compile_option "scala" "scalac -d <workdir>"
+report_compile_option "scala3" "dotty.tools.dotc.Main -classpath <trusted Scala 3 libraries> -release 17 -encoding UTF-8 -color:never -d <workdir>"
 report_compile_option "clojure" "clojure reader parse check"
 report_compile_option "chez-scheme" "/usr/bin/chezscheme --quiet --script /usr/local/lib/aonohako/chez_scheme_check.scm <source.scm>; run with /usr/bin/chezscheme --quiet --script <source.scm>"
 report_compile_option "guile" "GUILE_AUTO_COMPILE=0 /usr/bin/guile-3.0 --no-auto-compile --no-debug -q -s /usr/local/lib/aonohako/guile_check.scm <source.scm>; run with auto-compilation disabled"
@@ -753,7 +778,12 @@ report_compile_option "zig" "zig build-exe -O ReleaseSafe -femit-bin=<target>"
 report_compile_option "pascal" "fpc -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "delphi" "fpc -Mdelphi -O2 -Xs -dONLINE_JUDGE"
 report_compile_option "objectpascal" "fpc -Mobjfpc -O2 -Xs -dONLINE_JUDGE"
+report_compile_option "squirrel" "aonohako-squirrel -c -o Main.cnut Main.nut"
+
+report_compile_option "pari-gp" "aonohako-pari-gp --aonohako-check -f -q Main.gp"
 report_compile_option "nim" "nim c -d:release -d:ONLINE_JUDGE --opt:speed"
+report_compile_option "wren" "Source pass-through; execute with wren_cli <source.wren>; syntax errors are reported at execution"
+report_compile_option "nimony" "nimony c -d:release -d:ONLINE_JUDGE --opt:speed --parallelBuild:1 --nimcache:.cache/nimony --out:Main Main.nim"
 report_compile_option "ada" "gnatmake -O2"
 report_compile_option "cobol" "cobc -x -free -O2"
 report_compile_option "gnucobol" "cobc -x -free -O2"
@@ -832,6 +862,7 @@ report_compile_option "r" "/usr/lib/R/bin/exec/R --vanilla --slave -e parse(file
 report_compile_option "raku" "raku -c"
 report_compile_option "erlang" "erlc"
 report_compile_option "mercury" "mmc --make --grade hlc.gc <module>"
+report_compile_option "picat" "picat /usr/local/lib/aonohako/picat_compile.pi <source.pi>; publish sources only; execute picat <source.pi>"
 report_compile_option "prolog" "swipl syntax check"
 report_compile_option "gnu-prolog" "gplc --no-top-level --no-debugger -o <target> <source> /usr/local/lib/aonohako/gnu_prolog_entry.pl"
 report_compile_option "ocaml" "ocamlopt"

@@ -54,13 +54,13 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "unlambda", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "pari-gp", "perl", "php", "picat", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "squirrel", "tcl", "uiua", "unlambda", "wasm", "whitespace", "wren"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "java25", "javascript", "purescript", "quickjs", "rescript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "java25", "javascript", "purescript", "quickjs", "rescript", "scala", "scala3", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "nimony", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
@@ -229,15 +229,18 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-moonbit",
 		"ci-nasm",
 		"ci-nim",
+		"ci-nimony",
 		"ci-objective-c",
 		"ci-objective-cpp",
 		"ci-objectpascal",
 		"ci-ocaml",
 		"ci-octave",
 		"ci-odin",
+		"ci-pari-gp",
 		"ci-pascal",
 		"ci-perl",
 		"ci-php",
+		"ci-picat",
 		"ci-picolisp",
 		"ci-piet",
 		"ci-plain",
@@ -258,6 +261,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-ruby",
 		"ci-rust",
 		"ci-scala",
+		"ci-scala3",
 		"ci-scheme",
 		"ci-sed",
 		"ci-shakespeare",
@@ -265,6 +269,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-sml",
 		"ci-smlnj",
 		"ci-sqlite",
+		"ci-squirrel",
 		"ci-swift",
 		"ci-systemverilog",
 		"ci-tcl",
@@ -282,6 +287,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-wasm",
 		"ci-whitespace",
 		"ci-why3",
+		"ci-wren",
 		"ci-zerolang",
 		"ci-zig",
 		"ci-zsh",
@@ -449,6 +455,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"mojo":          {"mojo==1.0.0", "mojo build Main.mojo"},
 		"moonbit":       {"MOONBIT_VERSION=0.10.17+d971670cd", "MOONBIT_ARCHIVE_SHA256=d0a96eaf91c77cfcdd7b7df75390c5a1a95d0b8a328b1a5ed6fee050cfbf8d50", "MOONBIT_CORE_SHA256=2d837ecbef5933c09726d63682a7695123d622e6aee13525fbc98c4b49433714", "sha256sum -c -", "bundle --warn-list -a --all --target native", "moon build --target-dir .aonohako-moonbit-build --target native --release --strip --frozen --jobs 1", "Broken"},
 		"nim":           {"nim c", "Broken.nim"},
+		"nimony":        {"nim-lang/nimony/tar.gz/d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca", "62b75e7dabe548ff4f14641330fc75c9cbccb811d8826a45e54745f23a79e07e", "sha256sum -c -", "nimony c", "XDG_CACHE_HOME=", "--parallelBuild:1", "--nimcache:", "17 25", "7 13", "Broken.nim", "test ! -e Broken"},
 		"objective-c":   {"clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objective-cpp": {"clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objectpascal":  {"fpc -Mobjfpc -O2 -Xs -oMain Main.pas", "TOk = class", "Broken.pas"},
@@ -488,8 +495,10 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"rescript":      {"rescript@12.3.0", "rescript build", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 lib/js/Main.js"},
 		"fortran":       {"Broken.f90", "gfortran"},
 		"d":             {"Broken.d", "ldc2"},
+		"picat":         {"PICAT_VERSION=39_12", "PICAT_SHA256=f053b11cccabfb69a3ccd779f2dc1c24cdf889805799bc8c779e6c56da703e4a", "sha256sum -c -", "picat_compile.pi", "17 25", "7 13", "COMPILE LEAK", "Broken.pi"},
 		"prolog":        {"Broken.pl", "swipl"},
 		"gnu-prolog":    {"gprolog=1.4.5.0-3", "GNU Prolog.*1\\.4\\.5", "gplc --no-top-level --no-debugger -o Main Main.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl", "20 22", "7 13", "CompileOnly.pl", "aonohako-gnu-prolog-compile-leak", "Broken.pl", "Failure.pl", "if ./Failure"},
+		"scala3":        {"SCALA3_VERSION=3.3.9", "SCALA3_SHA256=ba96214801ea01b0d0aee45f00c94d3f61ed40d0f2aa748aff11c7f136737d7c", "sha256sum -c -", "dotty.tools.dotc.Main", "enum Operation:", "17 25", "7 13", "test ! -e Broken.class"},
 		"scala":         {"scalac Main.scala", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp \"${scala_cp}\" Main"},
 		"lisp":          {"Broken.lisp", "sbcl"},
 		"nasm":          {"Main.asm", "Broken.asm", "nasm -felf64"},

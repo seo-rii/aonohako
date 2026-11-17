@@ -2,7 +2,7 @@
 
 `POST /compile` and `POST /execute` accept `disallowed_cpu_features`.
 Compilation can reject selected instruction families in C/C++ objects;
-execution can enforce the policy on instructions reached by a static Linux
+execution can check and stop instructions reached by a native Linux
 x86-64 contestant binary. These are separate opt-ins: the judge supplies the
 field on each request that needs it. Omitting the field, using an empty array,
 or using `null` preserves the existing behavior.
@@ -98,41 +98,35 @@ Pass the compiled artifact back with the same policy:
 }
 ```
 
-The worker requires a static ELF64 x86-64 executable without an ELF interpreter
-(`PT_INTERP`). Scripts, other architectures, dynamically linked executables,
-and unsupported runtimes do not fall back to unrestricted execution.
+The worker requires an ELF64 x86-64 executable with a loadable entry point.
+Both static and dynamic ELF executables are accepted. Scripts, other
+architectures and unsupported runtimes do not fall back to unrestricted
+execution.
 
-The worker runs the contestant through the packaged QEMU TCG backend with
-the CPU policy plugin and its `qemu64` baseline CPU model. Other CPU extensions
-may be unavailable even when they are not selected by this policy. TCG
-translates guest instructions to native host code; the plugin checks decoded
-instructions before their execution. This covers raw instruction bytes, code reached at a new instruction
-boundary, and dynamically generated or modified code as QEMU translates it.
-The runtime check also applies to binaries compiled elsewhere. The instruction
-classification is conservative; an instruction that cannot be inspected also
-stops execution.
+The worker runs the contestant through Durante's pinned DynamoRIO runtime.
+Durante inserts a check immediately before each decoded forbidden application
+instruction. This covers raw instruction bytes, code reached at a new
+instruction boundary, generated or modified code, and followed process/thread
+lifetimes. Translating an unreachable instruction does not itself cause a
+violation. Binaries compiled elsewhere receive the same runtime policy.
 
-The packaged QEMU build includes the repository's guest-memory bounds patch.
-Executable load segments and the entry point must fit its checked 4 GiB guest
-address window. This bound is separate from the request's memory limit.
-
-The execution policy applies to the whole guest program, including statically
-linked libc and libstdc++. An otherwise scalar program can therefore pass the
+The execution policy applies to the whole application, including dynamically
+or statically linked libraries. An otherwise scalar program can pass the
 compile check and receive `Runtime Error` under `simd` when a library routine
 executes packed SIMD. Scalar SSE floating-point operations, permitted register
-moves, and zeroing idioms remain available. The host emulator and its own
-libraries run normally; they are not guest instructions.
+moves, and zeroing idioms remain available. DynamoRIO and Durante's own
+instrumentation are outside the application instruction stream.
 
-The supported interface is standard input, standard output, and standard error
-for a single guest thread. Guest file opens, process replacement, forks,
-additional threads, and network operations are denied. Additional submitted
-files may be materialized but cannot be opened by the restricted guest. The
-API rejects unsupported combinations before downloading binary URLs or
-admitting work:
+Native filesystem, process and thread behavior remains subject to the existing
+sandbox. With a CPU policy enabled, Durante additionally rejects application
+`execve`/`execveat`, unsupported clone forms and x32 syscalls with `EPERM`.
+Compatibility syscall instructions stop before execution. These paths cannot
+be allowed to leave instrumentation and merely fail measurement afterward.
+The initially selected ELF program still launches normally. The API rejects
+these unsupported combinations before downloading
+binary URLs or admitting work:
 
 - `communication` mode and contestant `enable_network`;
-- Durante `work_measurement` and `work_measurement_limits`, whose native
-  instrumentation would measure the host emulator instead of guest work;
 - contestant `file_outputs` or `sidecar_outputs`;
 - legacy step file handoffs and Pipeline V1 `participant_file` outputs;
 - contestant runtime languages that do not normalize to `binary`.
@@ -152,53 +146,58 @@ Step failures add their usual `step:<id>:` prefix to the top-level source.
 Pipeline V1 retains its normal diagnostic redaction, so its public reason can
 be generic while the verdict source remains available.
 
-CPU time, wall time, and memory usage include emulation. These results
-are not native-performance measurements, and existing native time limits may
-need separate calibration for restricted execution. The existing helper,
-seccomp, resource limits, and configured cgroups continue to apply. The policy
-does not replace that isolation or provide a general-purpose emulator sandbox.
+The policy can be combined with `work_measurement` and its existing diagnostic
+limits. Both use one Durante execution and the native
+`bb_entry_app_instructions` metric, with unchanged REP accounting. Measurement
+still requires its normal operator opt-in and runtime configuration. A
+policy-only request uses the packaged runtime without that measurement opt-in
+and does not add a work-measurement field to the response. A policy violation
+has no partial work totals. Exit code 126 alone is not a violation; the worker
+requires a matching policy record. An ordinary crash after a verified policy
+startup remains a normal runtime error. Existing time, memory and work-limit
+verdicts retain priority.
+
+CPU time, wall time and memory usage include native instrumentation overhead.
+The existing helper, seccomp, bounded address-space reservations, resource
+limits and configured cgroups continue to apply.
+
+This uses Durante's existing `application_mutable` trust model. Application
+code and the instrumentation share an address space, so a hostile application
+may tamper with instrumentation or reporting. The policy is not an authenticated
+security boundary. Work measurements remain diagnostic, with
+`integrity_verified: false` and `trusted_verdict_eligible: false`.
 
 ## Operator packaging
 
 The repository's [Dockerfile](../Dockerfile) and
-[runtime Dockerfile](../docker/runtime.Dockerfile) build and package QEMU
-10.0.15 with native TCG, plugins, Capstone, and the checked guest-memory patch.
-The source archive is pinned by SHA-256 in
-[`build_cpu_policy_qemu.sh`](../scripts/build_cpu_policy_qemu.sh). The runner
-expects the protected installation at:
+[runtime Dockerfile](../docker/runtime.Dockerfile) build and package Durante
+from the checked-in [source manifest](../third_party/durante/UPSTREAM.json).
+The SDK and corrected runtime source are hash-pinned. The runner expects the
+protected installation at:
 
 ```text
-/usr/local/lib/aonohako/cpu-policy/qemu-x86_64
-/usr/local/lib/aonohako/cpu-policy/cpu-policy.so
+/opt/durante/dynamorio/bin64/drrun
+/opt/durante/lib/libdurante.so
 ```
 
-For a custom image or self-hosted installation, use the same pinned build
-script and [`build_cpu_policy_plugin.sh`](../scripts/build_cpu_policy_plugin.sh)
-with its default production plugin API version. Install their outputs at the
-paths above with their required runtime libraries; keep them
-owned by the operator and unwritable by sandbox users. Debian and Ubuntu
-images resolve their GLib and Capstone runtime packages from the native
-development-package dependencies with
-[`cpu_policy_runtime_packages.sh`](../scripts/cpu_policy_runtime_packages.sh).
-Build the backend against the same base image as the final runtime; the legacy
-Python image uses its own builder for this reason. Image builds also check that
-the copied backend and plugin can resolve their shared libraries. An arbitrary system
-QEMU executable is not a substitute for the patched backend/plugin
-build. The QEMU builder accepts `AONOHAKO_QEMU_BUILD_JOBS` to bound build
-parallelism and `AONOHAKO_QEMU_SOURCE_ARCHIVE` for a locally cached archive;
-the same source hash is verified in either case. These are build settings,
-not request-controlled runtime options.
+For a custom image, verify the vendored source, prepare the pinned SDK, build
+the client and use [`install_durante_runtime.sh`](../scripts/install_durante_runtime.sh)
+to copy the required libraries, runtime manifest and licenses. Keep the whole
+installation operator-owned and unwritable by sandbox users. The worker
+verifies the prepared release core and requires matching native policy
+metadata, so an old client cannot silently ignore an enabled policy. The
+existing `AONOHAKO_DURANTE_DRRUN` and `AONOHAKO_DURANTE_CLIENT` settings can select
+another installation of the same reviewed runtime.
 
-Both image builders run the runtime regression suite against the binaries they
-package. The suite also covers legacy libc CET status probes and the exact
-scalar `RDSSP` encodings that older Capstone versions cannot decode. With the
-pinned QEMU and `qemu64` model these return `EINVAL` and act as NOPs,
-respectively; other CET `arch_prctl` requests and unknown instruction encodings remain
-rejected. To repeat it locally with a C compiler and static libc development
-files installed:
+Build against the final runtime's base image; the legacy Python image uses its
+own builder. SDK preparation supports Python 3.10 or newer. The Durante
+integration workflow exercises the real root sandbox, policy-only execution,
+combined measurement, guest faults and resource limits. With a prepared native
+installation and root privileges, the policy suite can also be run directly:
 
 ```sh
-python3 scripts/test_cpu_policy_runtime.py /path/to/cpu-policy
+AONOHAKO_ENFORCE_SANDBOX_TESTS=1 go test ./internal/execute \
+  -run '^TestRunCPUFeaturePolicyInRootSandbox$' -count=1
 ```
 
 ## Judge integration

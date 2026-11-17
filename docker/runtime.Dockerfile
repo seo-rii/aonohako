@@ -30,33 +30,31 @@ FROM scratch AS ci-runtime-artifacts
 COPY --from=aonohako-runtime-binaries / /
 COPY --chmod=0755 --from=ci-artifact-builder /out/aonohako-runtime-builder /aonohako-runtime-builder
 
-FROM ${RUNTIME_BASE} AS cpu-policy-builder
+FROM ${RUNTIME_BASE} AS durante-build
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl xz-utils patch gcc libc6-dev make ninja-build python3 python3-venv python3-tomli \
-    pkg-config libglib2.0-dev libcapstone-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
-COPY --chmod=0755 scripts/build_cpu_policy_qemu.sh scripts/build_cpu_policy_plugin.sh scripts/test_cpu_policy_runtime.py /src/scripts/
-COPY runtime/cpu-policy.c runtime/qemu-plugin-compat.h /src/runtime/
-COPY runtime/qemu-10.0.15-guest-bounds.patch /src/runtime/
-RUN /src/scripts/build_cpu_policy_qemu.sh /out/cpu-policy && \
-    /src/scripts/build_cpu_policy_plugin.sh /out/cpu-policy/cpu-policy.so && \
-    python3 /src/scripts/test_cpu_policy_runtime.py /out/cpu-policy && \
-    chmod 0444 /out/cpu-policy/cpu-policy.so
+    ca-certificates gcc g++ libc6-dev make cmake patch python3 && rm -rf /var/lib/apt/lists/*
+COPY third_party/durante/ /durante/
+COPY scripts/verify_durante_vendor.py /verify_durante_vendor.py
+COPY --chmod=0755 scripts/install_durante_runtime.sh /install_durante_runtime.sh
+RUN python3 /verify_durante_vendor.py --root /durante && \
+    python3 /durante/toolkit/fetch_sdk.py && \
+    cmake -S /durante/client -B /build -DCMAKE_BUILD_TYPE=Release \
+      -DDynamoRIO_DIR=/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/cmake && \
+    cmake --build /build --target durante -j2 && \
+    /install_durante_runtime.sh /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1 \
+      /build/libdurante.so /durante /out/durante
 
 FROM ${RUNTIME_BASE} AS runtime-foundation
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN --mount=type=bind,source=scripts/cpu_policy_runtime_packages.sh,target=/tmp/cpu-policy-runtime-packages.sh,ro \
-    apt-get update && \
+RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends && \
-    runtime_packages="$(sh /tmp/cpu-policy-runtime-packages.sh)" && \
-    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux ${runtime_packages} && \
+    apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=cpu-policy-builder /out/cpu-policy/ /usr/local/lib/aonohako/cpu-policy/
-RUN /usr/local/lib/aonohako/cpu-policy/qemu-x86_64 --version && \
-    plugin_libraries="$(ldd /usr/local/lib/aonohako/cpu-policy/cpu-policy.so)" && \
-    case "$plugin_libraries" in *"not found"*) printf '%s\n' "$plugin_libraries" >&2; exit 1 ;; esac
+COPY --from=durante-build /out/durante/ /opt/durante/
+RUN /opt/durante/dynamorio/bin64/drrun -version
 
 FROM runtime-foundation AS runtime-toolchain
 
@@ -174,6 +172,7 @@ COPY --chmod=0644 scripts/chez_scheme_check.scm /usr/local/lib/aonohako/chez_sch
 COPY --chmod=0644 scripts/guile_check.scm /usr/local/lib/aonohako/guile_check.scm
 COPY --chmod=0644 scripts/smlnj_runner.sml /usr/local/lib/aonohako/smlnj_runner.sml
 COPY --chmod=0444 scripts/gnu_prolog_entry.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl
+COPY --chmod=0444 scripts/picat_compile.pi /usr/local/lib/aonohako/picat_compile.pi
 COPY --chmod=0755 scripts/fennel_compile.sh /usr/local/bin/aonohako-fennel-compile
 COPY --chmod=0644 scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_writer.fnl
 COPY --chmod=0700 scripts/harden_shell_runtime.sh /usr/local/lib/aonohako/harden_shell_runtime.sh

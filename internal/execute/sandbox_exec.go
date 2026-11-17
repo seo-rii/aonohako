@@ -249,7 +249,19 @@ func runCommandWithSandbox(parent context.Context, ws Workspace, command []strin
 		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer, cpuNormalizer: cpuNormalizer, workMeasurement: meter,
 	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 	if meter != nil {
-		result = collectCompletedSandboxWorkMeasurement(ctx, cancel, result, meter.Collect)
+		if len(req.DisallowedCPUFeatures) == 0 {
+			result = collectCompletedSandboxWorkMeasurement(ctx, cancel, result, meter.Collect)
+		} else {
+			// Stop the completed target's budget before bounded report parsing
+			// and installation hashing. Policy-only runs publish no work totals.
+			interrupted := ctx.Err() != nil
+			cancel()
+			report := collectCPUFeatureResult(req.DisallowedCPUFeatures, &result, meter)
+			if req.WorkMeasurement {
+				result.WorkMeasurement = report
+				discardIncompleteWorkMeasurement(interrupted, &result)
+			}
+		}
 	}
 	return result
 }
@@ -318,10 +330,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
-	if len(req.DisallowedCPUFeatures) > 0 && streams.workMeasurement != nil {
+	if len(req.DisallowedCPUFeatures) > 0 && streams.workMeasurement == nil {
 		return execResult{
 			Status:        model.RunStatusInitFail,
-			Reason:        "disallowed_cpu_features does not support work_measurement or work_measurement_limits",
+			Reason:        "CPU feature enforcement requires a prepared Durante session",
 			VerdictSource: "cpu_feature_policy",
 		}
 	}
@@ -440,17 +452,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	runtimeBase := sandboxCommandBase(finalCommand, ws.RootDir)
-	cpuExecution, err := prepareCPUFeatureExecution(ws, finalCommand, req.DisallowedCPUFeatures, 6+len(streams.extraFiles), cpuPolicyRuntimeDir)
-	if err != nil {
+	if err := prepareCPUFeatureExecution(ws, finalCommand, req.DisallowedCPUFeatures, streams.workMeasurement); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: err.Error(), VerdictSource: "cpu_feature_policy"}
-	}
-	defer cpuExecution.close()
-	if cpuExecution != nil {
-		finalCommand = cpuExecution.command
-		// Copy before appending: sibling interactive runs may share the backing
-		// array of their own inherited stream descriptors.
-		streams.extraFiles = append(append([]*os.File(nil), streams.extraFiles...), cpuExecution.report)
-		runtimeBase = "qemu-x86_64"
 	}
 	if streams.communicationRestricted {
 		// Communication-v1 accepts native binaries only. Never let a submitted
@@ -473,7 +476,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	isPowerShell := runLang == "powershell" && runtimeBase == "pwsh"
 	isFactor := runLang == "factor" && runtimeBase == "factor"
 	isTLA := runtimeBase == "aonohako-tla-run"
-	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime" || cpuExecution != nil
+	allowMemfdCreate := isDotnet || isTLA || runtimeBase == "wasmtime"
 	trustedShellRuntime := false
 	switch os.Getenv("AONOHAKO_IMAGE_NAME") {
 	case "type-x", "ci-bash", "ci-posix-sh", "ci-zsh", "ci-fish":
@@ -534,11 +537,6 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// The shared dotnet host also needs a high finite RLIMIT_FSIZE floor to start reliably.
 	disableAddressSpaceLimit := isDotnet || isPowerShell || isC3 || isGoBinary || isMojoBinary || isPonyBinary || isTrustedJVMRuntime(runLang, runtimeBase) || runtimeBase == "java" || runtimeBase == "aonohako-tla-run"
 	addressSpaceLimit := addressSpaceLimitBytes(runtimeBase, req.Limits.MemoryMB)
-	if cpuExecution != nil {
-		// The protected guest window reserves virtual addresses, not RSS. Keep
-		// a finite allowance for QEMU while retaining cgroup/RSS memory limits.
-		addressSpaceLimit = cpuPolicyGuestBytes + uint64(max(0, req.Limits.MemoryMB)+512)*1024*1024
-	}
 	if streams.communicationRestricted {
 		// Native C++ communication targets do not need the broad managed-runtime
 		// virtual-address allowance. Keep burst allocation close to the declared
@@ -708,6 +706,19 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			}
 			defer readonlyStdin.Close()
 			cmd.Stdin = readonlyStdin
+		}
+	}
+	if runLang == "wren" && runtimeBase == "wren_cli" {
+		if file, ok := cmd.Stdin.(*os.File); ok {
+			info, err := file.Stat()
+			if err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "inspect Wren stdin failed: " + err.Error()}
+			}
+			if info.Mode().IsRegular() {
+				// Wren CLI's libuv reader handles pipes and TTYs, not regular files.
+				// Preserve the bounded, immutable input while os/exec feeds a pipe.
+				cmd.Stdin = struct{ io.Reader }{file}
+			}
 		}
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -1327,7 +1338,6 @@ done:
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
 	}
-	cpuExecution.applyResult(&result)
 	result.targetPID = cmd.Process.Pid
 	normalizeExecResultCPU(&result, cpuNormalizer)
 	return result

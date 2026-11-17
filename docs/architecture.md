@@ -1023,9 +1023,9 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace` |
-| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `java25`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
-| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
+| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `pari-gp`, `perl`, `php`, `picat`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `squirrel`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace`, `wren` |
+| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `java25`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `scala3`, `typescript` |
+| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `nimony`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
 | `type-f` | `uhmlang` |
@@ -1046,6 +1046,53 @@ Production profiles currently group languages like this:
 | `type-w` | `pony` |
 | `type-x` | `bash`, `fish`, `posix-sh`, `zsh` |
 | `type-y` | `factor` |
+
+The `SCALA3` profile pins the official Scala 3.3.9 LTS distribution by SHA256
+and installs only the noninteractive compiler and runtime JAR closure under
+`/opt/aonohako/scala3`. Compilation invokes `dotty.tools.dotc.Main` directly
+with the trusted compiler JAR directory and a separate fixed library classpath,
+UTF-8 source encoding, and Java 17 bytecode target. It publishes only `.class`
+artifacts. Execution uses `java` with the submitted class directory and the
+trusted Scala 3 / Scala 2.13 runtime libraries; it never includes compiler,
+Scala CLI, dependency resolution, or the legacy Scala 2 installation. Entry
+classes use the same validated JVM entry-point contract and bounded JVM memory
+settings as the existing Scala runner. Scala 3 `@main` methods can be selected
+with their generated class name in `entry_point`.
+
+The `PICAT` profile uses the checksum-pinned official Picat 3.9#12 Linux x64
+runtime in type-a. Compilation calls an immutable Picat helper with source paths
+passed as arguments to `compile/1`; this emits temporary bytecode without loading
+it or running `main`. Only submitted sources and data are published, preferring
+`Main.pi` as the entry point, and user-supplied `.qi` bytecode is rejected.
+Execution clears `PICATPATH`, compiles source in memory, and invokes `main/0`.
+Tabling and built-in constraint modules use the ordinary process/network-denying
+sandbox; integrations requiring external solver executables are not installed.
+
+The `WREN` profile preserves `.wren` sources during compilation and runs the
+selected source with the official `wren_cli` in type-a. The checksum-pinned CLI
+archive includes Wren 0.4.0; only its VM/CLI sources are compiled, linking to
+system libuv instead of the archive's old bundled libuv. Relative source imports
+stay available in the submission workspace. Bounded cached stdin is delivered
+through a pipe because the CLI libuv reader does not support regular-file stdin.
+There is no compile-only CLI mode,
+so syntax and import errors become execution errors. Wren numbers are IEEE-754
+doubles, and exact integer arithmetic is limited to the corresponding safe range.
+
+The `NIMONY` profile builds the C backend from checksum-verified Nimony commit
+`d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development) in type-c.
+Its private Nim 2.2.10 bootstrap and pinned parser/runtime dependencies are
+verified before building, and the bootstrap is removed after installation.
+Compilation selects a `.nim` entry point, preferring `Main.nim`, and returns
+only the native executable for the `binary` runtime in `plain`. A source patch
+redirects upstream's installation-local standard-library cache below the
+request's `--nimcache`; shared objects use the workspace's `XDG_CACHE_HOME`.
+The installed toolchain stays read-only and concurrent submissions keep
+separate caches. Its compile sandbox permits chmod on generated macro plugins,
+and a three-minute compile budget covers cold macro and standard-library builds.
+Nimony is under development; its language
+and standard library support differ from Nim's. `echo` requires
+`import std/syncio`; raising input and file-I/O operations require explicit
+error handling such as `try`/`except`.
 
 The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
@@ -1422,3 +1469,13 @@ The repository verifies the design through:
 For operational use, keep architecture and security decisions aligned with the
 actual code in `internal/execute`, `internal/sandbox`, and
 `docker/runtime.Dockerfile`.
+
+`SQUIRREL` compiles `.nut` files to Squirrel 3.2 bytecode (`Main.cnut`).
+Execute with `squirrel`. The pinned CLI uses a dedicated `aonohako-squirrel`
+command to avoid system `sq` collisions, and propagates runtime errors as failures.
+
+`PARI_GP` (also `pari-gp`, `pari/gp`, or `gp`) checks `.gp` source with
+the parser from checksum-pinned PARI/GP 2.19.1 without evaluating it. Execute
+with `pari-gp`. The judge driver disables startup configuration, exits after
+the source, preserves stdin for input, and fails on unhandled errors. GP
+backslash metacommands are outside the compile contract; use GP functions.

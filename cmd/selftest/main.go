@@ -4618,6 +4618,59 @@ writeFile("same-folder.txt", $(parseInt(values[0]) + parseInt(values[1])))
 echo readFile("same-folder.txt").strip()`),
 			},
 		},
+		"wren": {
+			compileLang: "WREN",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 256},
+			sources: []model.Source{
+				source("Main.wren", `import "io" for Stdin
+import "./addition" for Addition
+var words = Stdin.readLine().split(" ")
+System.print(Addition.add(Num.fromString(words[0]), Num.fromString(words[1])))
+`),
+				source("addition.wren", `class Addition {
+  static add(a, b) { a + b }
+}
+`),
+			},
+		},
+		"squirrel": {
+			compileLang: "SQUIRREL",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{source("Main.nut", `local bytes = "";
+try { for (local i=0; i<1048576; i++) bytes += stdin.readn('b').tochar(); } catch (e) {}
+local values = split(bytes, " \t\r\n");
+print((values[0].tointeger() + values[1].tointeger()).tostring() + "\n");`)},
+		},
+		"pari-gp": {
+			compileLang: "PARI_GP",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{source("Main.gp", `v=Vecsmall(strjoin(readstr("/dev/stdin")," "));
+n=0;sgn=1;values=List();active=0;
+for(i=1,#v,c=v[i];if(c==45,sgn=-1,if(c>=48&&c<=57,n=n*10+c-48;active=1,if(active,listput(values,sgn*n);n=0;sgn=1;active=0))));
+if(active,listput(values,sgn*n));
+print(values[1]+values[2]);`)},
+		},
+		"nimony": {
+			compileLang: "NIMONY",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1024},
+			sources: []model.Source{
+				source("Main.nim", `import std/[syncio, strutils]
+import addition
+
+try:
+  let values = stdin.readAll().splitWhitespace()
+  echo addValues(parseInt(values[0]), parseInt(values[1]))
+except:
+  quit(1)`),
+				source("addition.nim", `proc addValues*(a, b: int): int =
+  a + b
+`),
+			},
+		},
 		"ocaml": {
 			compileLang: "OCAML",
 			judgeIO:     standardABJudgeIO,
@@ -4728,6 +4781,18 @@ $values = preg_split('/\s+/', trim(stream_get_contents(STDIN)));
 file_put_contents('same-folder.txt', ((int)$values[0] + (int)$values[1]) . "\n");
 echo file_get_contents('same-folder.txt');`),
 			},
+		},
+		"picat": {
+			compileLang: "PICAT",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 8000, MemoryMB: 512},
+			sources: []model.Source{source("Main.pi", `import addition.
+main =>
+    A = read_int(), B = read_int(),
+    println(add(A,B)).
+`), source("addition.pi", `module addition.
+add(A,B) = A+B.
+`)},
 		},
 		"prolog": {
 			compileLang: "PROLOG",
@@ -4853,6 +4918,20 @@ fn main() {
 }`),
 			},
 		},
+		"scala3": {
+			compileLang: "SCALA3",
+			judgeIO:     standardABJudgeIO,
+			limits:      model.Limits{TimeMs: 12000, MemoryMB: 1536},
+			sources: []model.Source{
+				source("Main.scala", `object Main:
+  def main(args: Array[String]): Unit =
+    val values = scala.io.Source.stdin.mkString.trim.split("\\s+").map(_.toInt)
+    println(Addition.sum(values(0), values(1)))`),
+				source("Addition.scala", `object Addition:
+  def sum(a: Int, b: Int): Int = a + b`),
+			},
+		},
+
 		"scala": {
 			compileLang: "SCALA",
 			judgeIO:     standardABJudgeIO,

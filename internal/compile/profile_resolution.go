@@ -10,6 +10,8 @@ import (
 func resolveProfile(lang string) (profiles.Profile, bool) {
 	l := strings.TrimSpace(lang)
 	switch strings.ToLower(l) {
+	case "pari-gp", "pari/gp", "gp":
+		l = "PARI_GP"
 	case "asm", "asm64", "assembly", "gas":
 		l = "ASM"
 	case "aheui":

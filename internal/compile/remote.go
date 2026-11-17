@@ -78,7 +78,11 @@ func (r *remoteRunner) Run(ctx context.Context, req *model.CompileRequest) model
 
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
-		absoluteTimeout = buildTimeout + remoteio.DefaultOperationOverhead
+		compileKind := ""
+		if profile, ok := resolveProfile(req.Lang); ok {
+			compileKind = profile.CompileKind
+		}
+		absoluteTimeout = compileTimeoutForKind(compileKind) + remoteio.DefaultOperationOverhead
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()

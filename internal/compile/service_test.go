@@ -253,6 +253,9 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		compileKind string
 		runLang     string
 	}{
+		"squirrel": {compileKind: "squirrel", runLang: "squirrel"},
+
+		"pari-gp":       {compileKind: "pari-gp", runLang: "pari-gp"},
 		"asm":           {compileKind: "asm", runLang: "binary"},
 		"aheui":         {compileKind: "none", runLang: "aheui"},
 		"nasm":          {compileKind: "nasm", runLang: "binary"},
@@ -260,6 +263,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"delphi":        {compileKind: "delphi", runLang: "binary"},
 		"objectpascal":  {compileKind: "objectpascal", runLang: "binary"},
 		"nim":           {compileKind: "nim", runLang: "binary"},
+		"nimony":        {compileKind: "nimony", runLang: "binary"},
 		"clojure":       {compileKind: "clojure", runLang: "clojure"},
 		"racket":        {compileKind: "racket", runLang: "racket"},
 		"scheme":        {compileKind: "scheme", runLang: "scheme"},
@@ -289,6 +293,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"erlang":        {compileKind: "erlang", runLang: "erlang"},
 		"mercury":       {compileKind: "mercury", runLang: "binary"},
 		"prolog":        {compileKind: "prolog", runLang: "prolog"},
+		"picat":         {compileKind: "picat", runLang: "picat"},
 		"gnu-prolog":    {compileKind: "gnu-prolog", runLang: "binary"},
 		"r":             {compileKind: "r", runLang: "r"},
 		"groovy":        {compileKind: "groovy", runLang: "groovy"},
@@ -324,6 +329,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"zig":           {compileKind: "zig", runLang: "binary"},
 		"lisp":          {compileKind: "lisp", runLang: "lisp"},
 		"picolisp":      {compileKind: "picolisp", runLang: "picolisp"},
+		"scala3":        {compileKind: "scala3", runLang: "scala3"},
 		"scala":         {compileKind: "scala", runLang: "scala"},
 		"fsharp":        {compileKind: "fsharp", runLang: "fsharp"},
 		"whitespace":    {compileKind: "whitespace", runLang: "whitespace"},
@@ -344,6 +350,7 @@ func TestResolveProfileSupportsNewLanguages(t *testing.T) {
 		"classic-basic": {compileKind: "classic-basic", runLang: "binary"},
 		"qbasic":        {compileKind: "classic-basic", runLang: "binary"},
 		"smalltalk":     {compileKind: "smalltalk", runLang: "smalltalk"},
+		"wren":          {compileKind: "wren", runLang: "wren"},
 		"golfscript":    {compileKind: "golfscript", runLang: "golfscript"},
 		"mojo":          {compileKind: "mojo", runLang: "mojo-binary"},
 		"moonbit":       {compileKind: "moonbit", runLang: "binary"},

@@ -1,5 +1,7 @@
 package compile
 
+import "path/filepath"
+
 const (
 	asCompileKind            = "assemblyscript"
 	chezSchemeCompileKind    = "chez-scheme"
@@ -11,7 +13,10 @@ const (
 )
 
 var compileRegistry = map[string]Compiler{
-	"entry": entryCompiler{},
+	"entry":    entryCompiler{},
+	"picat":    picatCompiler{},
+	"squirrel": squirrelCompiler{},
+	"pari-gp":  pariGPCompiler{},
 	"c": nativeCompiler{exts: []string{".c", ".h"}, bin: "gcc", flags: func(job CompileJob) []string {
 		return []string{"-O2", "-Wall", "-lm", "--static", "-DONLINE_JUDGE=1", "-std=" + job.Profile.CompileStd}
 	}},
@@ -30,6 +35,9 @@ var compileRegistry = map[string]Compiler{
 	}},
 	"nim": singleSourceExecutableCompiler{exts: []string{".nim"}, preferredBases: []string{"Main.nim"}, noSourceReason: "no nim sources", bin: "nim", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--out:" + outputPath(job), sourcePath}
+	}},
+	"nimony": singleSourceExecutableCompiler{exts: []string{".nim"}, preferredBases: []string{"Main.nim", "main.nim"}, noSourceReason: "no nimony sources", bin: "nimony", args: func(job CompileJob, sourcePath string) []string {
+		return []string{"c", "-d:release", "-d:ONLINE_JUDGE", "--opt:speed", "--parallelBuild:1", "--nimcache:" + filepath.Join(job.WorkDir, ".cache", "nimony"), "--out:" + outputPath(job), sourcePath}
 	}},
 	"zig": singleSourceExecutableCompiler{exts: []string{".zig"}, preferredBases: []string{"Main.zig"}, noSourceReason: "no zig sources", bin: "zig", args: func(job CompileJob, sourcePath string) []string {
 		return []string{"build-exe", sourcePath, "-O", "ReleaseSafe", "-mcpu=baseline", "-femit-bin=" + outputPath(job)}
@@ -163,6 +171,7 @@ var compileRegistry = map[string]Compiler{
 	"erlang":        erlangCompiler{},
 	"vb6":           passThroughCompiler{exts: []string{".bas", ".frm", ".cls"}, noSourceReason: "no vb6 sources"},
 	"smalltalk":     passThroughCompiler{exts: []string{".st"}, noSourceReason: "no smalltalk sources"},
+	"wren":          passThroughCompiler{exts: []string{".wren"}, noSourceReason: "no Wren sources"},
 	"golfscript":    passThroughCompiler{exts: []string{".gs"}, noSourceReason: "no golfscript sources"},
 	"duckdb":        passThroughCompiler{exts: []string{".sql"}, noSourceReason: "no duckdb sources"},
 	"bqn":           passThroughCompiler{exts: []string{".bqn"}, noSourceReason: "no bqn sources"},
@@ -184,6 +193,7 @@ var compileRegistry = map[string]Compiler{
 	"sqlite":        sqliteCompiler{},
 	"julia":         juliaCompiler{},
 	"scala":         scalaCompiler{},
+	"scala3":        scala3Compiler{},
 	"fsharp":        fsharpCompiler{},
 	"freebasic":     freeBasicCompiler{noSourceReason: "no freebasic sources"},
 	"classic-basic": freeBasicCompiler{dialectArgs: []string{"-lang", "qb"}, noSourceReason: "no classic-basic sources"},

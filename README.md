@@ -14,7 +14,7 @@ binary, configurable runtime images, and testable build metadata.
   new files to be created in the same working directory
 - symlink-safe output capture for file outputs and sidecar artifacts
 - optional [SIMD and AVX restrictions](docs/cpu-feature-policy.md) for C/C++
-  compilation and instruction-checked execution of static x86-64 binaries
+  compilation and instruction-checked execution of native x86-64 binaries
 - SPJ and interactive IO judging support for problems that need custom verdict
   logic or bidirectional contestant/interactor communication
 - [Entry block judging](docs/entry-judging.md) with selectable standard I/O or
@@ -67,11 +67,11 @@ language-specific commands keep their declared order.
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
-  Node/Deno/Bun/QuickJS/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
+  Scala 3, Node/Deno/Bun/QuickJS/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
-  Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog,
-  Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, Shakespeare, Piet, Unlambda, Lazy K, INTERCAL, WASM, Coq/Rocq, Lean, Agda,
+  Nimony, Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
+  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog, Picat,
+  Lisp/PicoLisp/Smalltalk/GolfScript/Wren, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, Shakespeare, Piet, Unlambda, Lazy K, INTERCAL, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
   submitters compile into binaries and should target the `plain` runtime image
@@ -85,6 +85,47 @@ language-specific commands keep their declared order.
   separately under `/usr/lib/jvm/aonohako-java25`, so existing Java profiles and
   other JVM languages retain their toolchains. `JAVA` still defaults to release
   11, and Kotlin/JVM targets remain limited to the existing releases through 21.
+- `SCALA3` selects checksum-pinned Scala 3.3.9 LTS in `type-b`. Compilation
+  calls the compiler directly on a fixed, image-installed classpath and emits
+  JVM classes targeting Java 17. Execute with `scala3` or `SCALA3`; the default
+  main class is `Main`, and `entry_point` can select another class, including
+  a top-level `@main` method's generated class. Both compilation and execution
+  are offline; Scala CLI directives do not fetch dependencies. Existing `SCALA`
+  continues to use its separate Scala toolchain and runtime libraries.
+
+- `PICAT` accepts `.pi` sources using Picat 3.9#12 in `type-a`. A trusted
+  compile helper checks all submitted Picat sources without loading bytecode or
+  invoking `main`. Only immutable submitted sources/data are returned; execution
+  compiles source in memory and invokes `main/0`. Submitted `.qi` bytecode is
+  rejected. Core tabling, list comprehensions, and the bundled constraint modules
+  are available; external solver programs are not installed.
+
+- `WREN` uses the official Wren CLI source pinned to
+  `18553636618a4d33f10af9b5ab92da6431784a8c` (Wren 0.4.0), linked against
+  Debian's system libuv. Compile and execute in `type-a`, or use `ci-wren` for
+  an isolated smoke image. Compilation preserves submitted sources without
+  evaluating them; syntax and import errors are reported during execution.
+  Use `import "io" for Stdin` for input and relative imports such as
+  `import "./addition" for Addition` for submitted helper modules.
+- `NIMONY` compiles `.nim` sources with the C backend of
+  [Nimony](https://github.com/nim-lang/nimony), pinned to source commit
+  `d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development). Compile in
+  `type-c` and execute the returned native artifact with `binary` in `plain`.
+  This compiler is still under development and has its own language and standard
+  library contracts; for example, `echo` requires `import std/syncio`, and
+  raising input-parsing and file-I/O calls require explicit error handling.
+  Its project, standard-library, and shared-object caches stay in the request's
+  workspace. Nimony compilation has a three-minute budget for cold macro and
+  standard-library builds. Existing `NIM` submissions continue to use the Nim toolchain.
+- `SQUIRREL` compiles `.nut` files to Squirrel 3.2 bytecode (`Main.cnut`).
+  Execute with `squirrel`. The pinned CLI uses a dedicated `aonohako-squirrel`
+  command to avoid system `sq` collisions, and propagates runtime errors as failures.
+
+- `PARI_GP` (also `pari-gp`, `pari/gp`, or `gp`) checks `.gp` source with
+  the parser from checksum-pinned PARI/GP 2.19.1 without evaluating it. Execute
+  with `pari-gp`. The judge driver disables startup configuration, exits after
+  the source, preserves stdin for input, and fails on unhandled errors. GP
+  backslash metacommands are outside the compile contract; use GP functions.
 - Zerolang is pinned to the official v0.3.4 Linux x64 release. Compilation
   imports canonical `.0` text into a graph and then builds a native executable
   with the `release-fast` profile. Its stable source projection does not yet
@@ -654,13 +695,15 @@ contract:
 - `disallowed_cpu_features`
   An optional `"avx"` / `"simd"` list on both `/compile` and `/execute`.
   Compilation checks C/C++ objects before linking. Execution uses the packaged
-  QEMU TCG emulation and a policy plugin for static Linux x86-64 contestant binaries;
-  it checks executed instructions, including guest library code. Execution
+  Durante/DynamoRIO native instrumentation for Linux x86-64 contestant binaries;
+  it checks executed instructions, including application library code. Execution
   currently supports standard I/O, ordinary and interactive contestants, and
   stdin/stdout pipelines. Network, communication mode, and contestant file
   outputs are rejected. Trusted interactors and SPJs keep their existing
-  execution path. Emulation costs count toward limits, and `simd` can reject
-  packed instructions in libc even for scalar source. See
+  execution path. The policy can share one run with diagnostic work measurement.
+  Instrumentation costs count toward limits, and `simd` can reject packed
+  instructions in libc even for scalar source. This retains Durante's
+  application-mutable trust level. See
   [CPU feature policy](docs/cpu-feature-policy.md) for scope and packaging.
 
 ## Security notes

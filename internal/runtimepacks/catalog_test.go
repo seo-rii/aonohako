@@ -492,7 +492,16 @@ func TestToolchainVersionReportScriptCoversNewRuntimesAndPythonLibraries(t *test
 		`report_once "NASM" nasm -v`,
 		`report_once "PyPy" pypy3 --version`,
 		`report_once "Free Pascal" fpc -iV`,
+		`report_once "Scala 3" java -cp '/opt/aonohako/scala3/lib/*' dotty.tools.dotc.Main -version`,
+
+		`report_once "Wren CLI" wren_cli --version`,
+
+		`report_once "Squirrel" aonohako-squirrel -v`,
+
+		`report_once "PARI/GP" aonohako-pari-gp --version-short`,
 		`report_once "Nim" nim --version`,
+		`report_once "Picat" picat --version`,
+		`report_once "Nimony" nimony --version`,
 		`report_once "Clojure" clojure -e "(println (clojure-version))"`,
 		`report_once "Racket" racket --version`,
 		`report_once "Dart" dart --version`,

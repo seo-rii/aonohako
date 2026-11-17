@@ -4,6 +4,9 @@ import "testing"
 
 func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 	languages := []string{
+		"SQUIRREL",
+
+		"PARI_GP",
 		"TEXT",
 		"C",
 		"C89",
@@ -35,6 +38,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"JAVASCRIPT_BUN",
 		"TYPESCRIPT_BUN",
 		"GO",
+		"NIMONY",
 		"ZIG",
 		"SCHEME",
 		"CHEZ_SCHEME",
@@ -125,8 +129,10 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"ERLANG",
 		"MERCURY",
 		"PROLOG",
+		"PICAT",
 		"GNU_PROLOG",
 		"SCALA",
+		"SCALA3",
 		"FSHARP",
 		"WHITESPACE",
 		"BEFUNGE",
@@ -164,6 +170,7 @@ func TestResolveSupportsDoolSourceLanguages(t *testing.T) {
 		"QBASIC",
 		"SMALLTALK",
 		"GST",
+		"WREN",
 		"GOLFSCRIPT",
 		"MOJO",
 		"DENO",

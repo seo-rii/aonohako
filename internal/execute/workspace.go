@@ -62,11 +62,13 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var pietPath string
 	var verilogPath string
 	var sourcePath string
+	var wrenPath string
 	var malbolgePath string
+	var picatPath string
 	classFiles := make([]string, 0)
 	entryPointPath := ""
 	switch lang {
-	case "java", "java25", "scala", "groovy":
+	case "java", "java25", "scala", "scala3", "groovy":
 		if _, err := normalizeJVMMainClass(req.EntryPoint, "Main"); err != nil {
 			return "", "", err
 		}
@@ -162,6 +164,16 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			clojurePath = dest
 		}
 		lowerClean := strings.ToLower(clean)
+		if lang == "picat" && strings.HasSuffix(lowerClean, ".pi") {
+			isMain := strings.EqualFold(filepath.Base(clean), "Main.pi")
+			wasMain := strings.EqualFold(filepath.Base(picatPath), "Main.pi")
+			if picatPath == "" || isMain && !wasMain || isMain == wasMain && dest < picatPath {
+				picatPath = dest
+			}
+		}
+		if strings.HasSuffix(lowerClean, ".wren") && (wrenPath == "" || lowerClean == "main.wren") {
+			wrenPath = dest
+		}
 		if strings.HasSuffix(lowerClean, ".v") && rocqPath == "" {
 			rocqPath = dest
 		}
@@ -199,7 +211,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		} else if strings.HasSuffix(lowerClean, ".mb") && malbolgePath == "" {
 			malbolgePath = dest
 		}
-		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".sml", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".spl", ".unl", ".lazy", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
+		for _, ext := range []string{".gp", ".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".sml", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".spl", ".unl", ".lazy", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -221,8 +233,35 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
+	case "picat":
+		if picatPath == "" {
+			return "", "", fmt.Errorf("Picat requires a .pi source")
+		}
+		return picatPath, lang, nil
+
+	case "wren":
+		if wrenPath == "" {
+			return "", "", fmt.Errorf("Wren requires a .wren source")
+		}
+		return wrenPath, lang, nil
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "chapel-binary", "chicken-scheme", "c3", "javascript", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "assemblyscript", "factor", "aheui", "apecode", "cuda-ocelot":
 		return primaryPath, lang, nil
+	case "squirrel":
+		return primaryPath, lang, nil
+
+	case "pari-gp":
+		selected := ""
+		for _, binary := range req.Binaries {
+			if strings.EqualFold(filepath.Ext(binary.Name), ".gp") {
+				if selected == "" || filepath.Clean(binary.Name) == "Main.gp" {
+					selected = filepath.Clean(binary.Name)
+				}
+			}
+		}
+		if selected == "" {
+			return "", "", fmt.Errorf("pari-gp requires .gp sources")
+		}
+		return submittedPaths[selected], lang, nil
 	case "entry":
 		return primaryPath, lang, nil
 	case "smlnj":
@@ -318,9 +357,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", err
 		}
 		return jar, lang, nil
-	case "scala":
+	case "scala", "scala3":
 		if len(classFiles) == 0 {
-			return "", "", fmt.Errorf("scala requires .class files")
+			return "", "", fmt.Errorf("%s requires .class files", lang)
 		}
 		return ws.BoxDir, lang, nil
 	case "groovy":

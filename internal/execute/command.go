@@ -263,6 +263,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{erlangRuntime, "+S", schedulerArg, "+A", asyncThreadsArg, "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
 	case "prolog":
 		return []string{"swipl", "-q", "-f", primaryPath, "-g", "main", "-t", "halt"}
+	case "picat":
+		return []string{"env", "PICATPATH=", "picat", primaryPath}
 	case "lisp":
 		dynamicSpaceMB := max(64, req.Limits.MemoryMB/2)
 		if dynamicSpaceMB > 512 {
@@ -327,13 +329,15 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			strings.Join(groovyClasspath, string(os.PathListSeparator)),
 			mainClass,
 		}
-	case "scala":
+	case "scala", "scala3":
 		mainClass, err := normalizeJVMMainClass(req.EntryPoint, "Main")
 		if err != nil {
 			return nil
 		}
 		scalaClasspath := []string{primaryPath}
-		if matches, err := filepath.Glob("/usr/share/java/scala*.jar"); err == nil {
+		if lang == "scala3" {
+			scalaClasspath = append(scalaClasspath, profiles.Scala3RuntimeClasspath)
+		} else if matches, err := filepath.Glob("/usr/share/java/scala*.jar"); err == nil {
 			scalaClasspath = append(scalaClasspath, matches...)
 		}
 		if len(scalaClasspath) == 1 {
@@ -474,6 +478,14 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{primaryPath}
 	case "smalltalk":
 		return []string{"gst", "-q", primaryPath}
+	case "wren":
+		return []string{"wren_cli", primaryPath}
+
+	case "squirrel":
+		return []string{"aonohako-squirrel", primaryPath}
+
+	case "pari-gp":
+		return []string{"aonohako-pari-gp", "-f", "-q", primaryPath}
 	case "golfscript":
 		// GolfScript string literals must not interpolate arbitrary Ruby code.
 		return []string{"ruby", "/usr/local/lib/aonohako/golfscript.rb", "-n", primaryPath}

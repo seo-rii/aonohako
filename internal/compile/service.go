@@ -21,7 +21,18 @@ import (
 	"aonohako/internal/util"
 )
 
-const buildTimeout = 60 * time.Second
+const (
+	buildTimeout       = 60 * time.Second
+	nimonyBuildTimeout = 3 * time.Minute
+)
+
+func compileTimeoutForKind(kind string) time.Duration {
+	// Nimony builds macro plugins and their standard library in each workspace.
+	if kind == "nimony" {
+		return nimonyBuildTimeout
+	}
+	return buildTimeout
+}
 
 const (
 	MaxDecodedSourceBytes      = 16 << 20
@@ -158,7 +169,7 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 	}
 
-	ctx, cancel := context.WithTimeout(parent, buildTimeout)
+	ctx, cancel := context.WithTimeout(parent, compileTimeoutForKind(profile.CompileKind))
 	defer cancel()
 	ctx = withCompileCgroupParent(ctx, s.cgroupParentDir)
 

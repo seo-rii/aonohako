@@ -400,12 +400,9 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		stdin = &sandboxPreparedStdin{file: readonlyInput}
 	}
 
-	var meter *durante.Session
-	if req.WorkMeasurement {
-		meter, err = durante.Prepare(ctx, ws.RootDir, s.workMeasurement, req.Lang, int(defaultSandboxUID), int(defaultSandboxGID))
-		if err != nil {
-			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "durante preparation failed: " + err.Error()}}
-		}
+	meter, err := s.prepareContestantDurante(ctx, ws, req)
+	if err != nil {
+		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "durante preparation failed: " + err.Error()}}
 	}
 	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer, meter)
 	if res.Status == model.RunStatusInitFail {
