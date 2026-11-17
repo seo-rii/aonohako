@@ -202,6 +202,15 @@ the Ubuntu `pypy3` 7.3.15 package):
 The hash seed accounts for CPython's and PyPy's variation. For Node, none of the extra
 flags removes the remaining 0.01-0.02%, and two add 18% work, so `v1` uses only
 `--predictable` (without it, the same workload varied by 20% in Durante's
-runtime observations). The sandbox does not disable ASLR, so production spread
-can be larger than these rows; the CI integration test logs the counts of two
-pinned runs per launcher but does not assert them.
+runtime observations).
+
+These rows disable ASLR. The sandbox does not, and each run gets a fresh
+workspace path, so production spread is larger. In the CI integration test
+(real sandbox and patched runtime, startup-dominated one-line probes), two
+pinned runs differed by 60,797 instructions (559 ppm) for CPython and 124,511
+(1349 ppm) for PyPy. The test logs these counts but does not assert them. In
+the same CI run, Node printed `true` for `--predictable` but its measurement
+was unavailable: the prepared runtime aborted at its process-exit thread
+synchronization barrier ("Failed to synchronize with all threads when
+detaching"). The integration test now runs an unpinned control in that case
+and fails only if the control completes.

@@ -73,18 +73,39 @@ func TestDuranteRuntimeDeterminismIntegration(t *testing.T) {
 	if os.Getenv("AONOHAKO_TEST_DURANTE_NODE") == "1" {
 		probes = append(probes, probe{"JAVASCRIPT", "main.js", "console.log(process.execArgv.includes('--predictable'))", "true", durante.RuntimeDeterminismV1})
 	}
+	unpinnedCfg := cfg
+	unpinnedCfg.RuntimeDeterminism = ""
+	unpinned := NewWithConfig(config.Config{MaxActiveRuns: 1, WorkRootMaxBytes: 128 << 20, Execution: config.ExecutionConfig{WorkMeasurement: unpinnedCfg}})
 	for _, p := range probes {
 		t.Run(p.lang, func(t *testing.T) {
-			var counts []uint64
-			for range 2 {
+			request := func() *model.RunRequest {
 				hard := durante.ResourceLimits{CPUTimeMs: 20000, WallTimeMs: 60000, MemoryMB: 1024}
-				req := &model.RunRequest{Lang: p.lang, WorkMeasurement: true, IgnoreTLE: true,
+				return &model.RunRequest{Lang: p.lang, WorkMeasurement: true, IgnoreTLE: true,
 					Binaries:       []model.Binary{{Name: p.name, DataB64: base64.StdEncoding.EncodeToString([]byte(p.source)), Mode: "text"}},
 					ExpectedStdout: p.expected, Limits: model.Limits{TimeMs: 1, WallTimeMs: 1, MemoryMB: 16}, WorkMeasurementLimits: &hard}
-				r := svc.Run(context.Background(), req, Hooks{})
+			}
+			var counts []uint64
+			for range 2 {
+				r := svc.Run(context.Background(), request(), Hooks{})
 				d, report := r.WorkMeasurementExecution, r.WorkMeasurement
-				if d == nil || d.State != "complete" || d.OutputMatches == nil || !*d.OutputMatches {
+				// The program's own output shows the options it ran with, even if
+				// the instrumented process could not complete its accounting.
+				if strings.TrimSpace(r.Stdout) != p.expected {
 					t.Fatalf("%s did not observe the pinned runtime (want %q): %+v metadata=%+v", p.lang, p.expected, r, d)
+				}
+				if d == nil || d.State != "complete" {
+					// Only acceptable when the same program also fails unpinned:
+					// then the failure is not caused by the pinned options.
+					control := unpinned.Run(context.Background(), request(), Hooks{})
+					if control.WorkMeasurementExecution != nil && control.WorkMeasurementExecution.State == "complete" {
+						t.Fatalf("%s measurement fails only when pinned: %+v metadata=%+v", p.lang, r, d)
+					}
+					t.Logf("%s measurement unavailable with and without the pinned options: pinned %q / %q, unpinned %q / %q",
+						p.lang, r.Reason, r.Stderr, control.Reason, control.Stderr)
+					return
+				}
+				if d.OutputMatches == nil || !*d.OutputMatches {
+					t.Fatalf("%s output did not match: %+v", p.lang, d)
 				}
 				if report == nil || !report.Complete || report.RuntimeDeterminism != p.determinism || report.Instructions == nil {
 					t.Fatalf("%s receipt %+v", p.lang, report)
