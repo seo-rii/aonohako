@@ -63,6 +63,8 @@ type event struct {
 	CPUPolicyVersion      *uint64 `json:"cpu_policy_version,omitempty"`
 	CPUPolicy             *string `json:"cpu_policy,omitempty"`
 	CPUFeature            *string `json:"feature,omitempty"`
+	CPUIDProfileVersion   *uint64 `json:"cpuid_profile_version,omitempty"`
+	CPUIDProfile          *string `json:"cpuid_profile,omitempty"`
 }
 
 func decodeEvent(data []byte) (event, error) {
@@ -129,6 +131,8 @@ func decodeEvent(data []byte) (event, error) {
 		CPUPolicyVersion    json.RawMessage `json:"cpu_policy_version"`
 		CPUPolicy           json.RawMessage `json:"cpu_policy"`
 		CPUFeature          json.RawMessage `json:"feature"`
+		CPUIDProfileVersion json.RawMessage `json:"cpuid_profile_version"`
+		CPUIDProfile        json.RawMessage `json:"cpuid_profile"`
 	}{event: &row}
 	if err := json.Unmarshal(data, &legacy); err != nil {
 		return row, errors.New("invalid report field type")
@@ -152,7 +156,8 @@ func decodeEvent(data []byte) (event, error) {
 		"rep_breakdown_version": &row.REPBreakdownVersion,
 		"rep_movs_bytes":        &row.REPMOVSBytes, "rep_stos_bytes": &row.REPSTOSBytes,
 		"rep_movs_entries": &row.REPMOVSEntries, "rep_stos_entries": &row.REPSTOSEntries,
-		"cpu_policy_version": &row.CPUPolicyVersion,
+		"cpu_policy_version":    &row.CPUPolicyVersion,
+		"cpuid_profile_version": &row.CPUIDProfileVersion,
 	} {
 		if raw, present := fields[key]; present {
 			var value uint64
@@ -165,7 +170,7 @@ func decodeEvent(data []byte) (event, error) {
 	if row.REPBreakdownVersion != nil && *row.REPBreakdownVersion != 1 {
 		return row, errors.New("unsupported REP breakdown version")
 	}
-	for key, target := range map[string]**string{"cpu_policy": &row.CPUPolicy, "feature": &row.CPUFeature} {
+	for key, target := range map[string]**string{"cpu_policy": &row.CPUPolicy, "feature": &row.CPUFeature, "cpuid_profile": &row.CPUIDProfile} {
 		if raw, present := fields[key]; present {
 			var value string
 			if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, &value) != nil {
@@ -175,6 +180,9 @@ func decodeEvent(data []byte) (event, error) {
 		}
 	}
 	if _, err := eventCPUPolicy(row); err != nil {
+		return row, err
+	}
+	if _, err := eventCPUIDProfile(row); err != nil {
 		return row, err
 	}
 	required := []string{"schema", "client_version", "authority", "metric", "pid", "segment", "seq", "event"}
@@ -224,6 +232,30 @@ func eventCPUPolicy(row event) (string, error) {
 	}
 }
 
+// CPUID profiles reported by the client. Absent means host CPUID was visible.
+const (
+	CPUIDProfileX8664V1 = "x86-64-v1"
+	CPUIDProfileX8664V2 = "x86-64-v2"
+)
+
+// ValidCPUIDProfile accepts only profiles the vendored client implements.
+func ValidCPUIDProfile(profile string) bool {
+	return profile == CPUIDProfileX8664V1 || profile == CPUIDProfileX8664V2
+}
+
+func eventCPUIDProfile(row event) (string, error) {
+	if row.CPUIDProfileVersion == nil && row.CPUIDProfile == nil {
+		return "", nil
+	}
+	if row.Event != "start" || row.CPUIDProfileVersion == nil || row.CPUIDProfile == nil || *row.CPUIDProfileVersion != 1 {
+		return "", errors.New("invalid CPUID profile capability")
+	}
+	if !ValidCPUIDProfile(*row.CPUIDProfile) {
+		return "", errors.New("invalid CPUID profile")
+	}
+	return *row.CPUIDProfile, nil
+}
+
 type lineage struct {
 	parent  int
 	segment string
@@ -270,13 +302,13 @@ func terminalREPBreakdown(row event, enabled, advertised bool) (*REPBreakdown, e
 	return &breakdown, nil
 }
 
-func nativeCPUStartupPolicy(streams map[int][]event, rootPID int) ([]cpupolicy.Feature, error) {
+func nativeCPUStartupPolicy(streams map[int][]event, rootPID int) ([]cpupolicy.Feature, string, error) {
 	if !validPID(rootPID) || len(streams) == 0 || len(streams) > maxProcesses {
-		return nil, errors.New("root PID or process count invalid")
+		return nil, "", errors.New("root PID or process count invalid")
 	}
 	rootRows := streams[rootPID]
 	if len(rootRows) == 0 {
-		return nil, errors.New("root process report missing")
+		return nil, "", errors.New("root process report missing")
 	}
 	root := rootRows[0]
 	prefix := strconv.Itoa(rootPID) + "-"
@@ -284,22 +316,33 @@ func nativeCPUStartupPolicy(streams map[int][]event, rootPID int) ([]cpupolicy.F
 		root.PID != rootPID || root.Seq != 1 || root.SDKVersion != "11.3.0" ||
 		!strings.HasPrefix(root.Segment, prefix) || !segmentSuffix.MatchString(strings.TrimPrefix(root.Segment, prefix)) ||
 		root.Origin != "initial" || root.ParentPID != 0 || root.ParentSegment != "" {
-		return nil, errors.New("invalid root start metadata")
+		return nil, "", errors.New("invalid root start metadata")
 	}
 	// Inspect every start before a violation can return early. An incomplete
 	// violating image must not hide mismatched policies in another process.
+	// Every image must also observe the same virtual processor: a host-visible
+	// image would reintroduce processor-dependent dispatch into the total.
 	policy, policyKnown := "", false
+	cpuid, cpuidKnown := "", false
 	for _, rows := range streams {
 		for _, row := range rows {
 			current, err := eventCPUPolicy(row)
 			if err != nil {
-				return nil, err
+				return nil, "", err
+			}
+			profile, err := eventCPUIDProfile(row)
+			if err != nil {
+				return nil, "", err
 			}
 			if row.Event == "start" {
 				if policyKnown && current != policy {
-					return nil, errors.New("mixed CPU policies")
+					return nil, "", errors.New("mixed CPU policies")
 				}
 				policy, policyKnown = current, true
+				if cpuidKnown && profile != cpuid {
+					return nil, "", errors.New("mixed CPUID profiles")
+				}
+				cpuid, cpuidKnown = profile, true
 			}
 		}
 	}
@@ -309,11 +352,11 @@ func nativeCPUStartupPolicy(streams map[int][]event, rootPID int) ([]cpupolicy.F
 			features = append(features, cpupolicy.Feature(feature))
 		}
 	}
-	return features, nil
+	return features, cpuid, nil
 }
 
 func aggregate(streams map[int][]event, rootPID int) (report Report, err error) {
-	features, err := nativeCPUStartupPolicy(streams, rootPID)
+	features, cpuid, err := nativeCPUStartupPolicy(streams, rootPID)
 	if err != nil {
 		return Report{}, err
 	}
@@ -495,7 +538,7 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 		breakdown = &breakdownTotals
 	}
 	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Scope: Scope, REPEnabled: repEnabled, Complete: true, Quality: quality, Instructions: &totals[0], REPBytes: &totals[1], REPEntries: &totals[2], UnsupportedREPEntries: &totals[3], SignalsObserved: totals[4], Processes: len(processes), Images: images,
-		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3]), REPBreakdown: breakdown, DisallowedCPUFeatures: features}, nil
+		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3]), REPBreakdown: breakdown, DisallowedCPUFeatures: features, CPUIDProfile: cpuid}, nil
 }
 
 func CollectDirectory(directory string, rootPID int) Report {

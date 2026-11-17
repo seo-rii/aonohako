@@ -160,7 +160,10 @@ type Report struct {
 	REPTelemetryStatus    string                `json:"rep_telemetry_status"`
 	Installation          *InstallationIdentity `json:"installation,omitempty"`
 	DisallowedCPUFeatures []cpupolicy.Feature   `json:"disallowed_cpu_features,omitempty"`
-	nativeCPUFeatures     []cpupolicy.Feature
+	// CPUIDProfile is the client's consistent fixed-processor receipt across
+	// every image. Empty means the host's CPUID was visible to the target.
+	CPUIDProfile      string `json:"cpuid_profile,omitempty"`
+	nativeCPUFeatures []cpupolicy.Feature
 }
 
 // HasCPUFeaturePolicy checks a locally collected, globally consistent policy
@@ -183,7 +186,7 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	// encoding/json accepts case-insensitive aliases. Do not let a second
 	// spelling override an explicit trust or coverage statement.
 	for key := range fields {
-		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown", "disallowed_cpu_features"} {
+		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown", "disallowed_cpu_features", "cpuid_profile"} {
 			if key != protected && strings.EqualFold(key, protected) {
 				return fmt.Errorf("noncanonical diagnostic contract field")
 			}
@@ -202,6 +205,9 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 			(len(decoded.DisallowedCPUFeatures) == 2 && decoded.DisallowedCPUFeatures[0] != cpupolicy.AVX) {
 			return fmt.Errorf("invalid or noncanonical disallowed CPU features")
 		}
+	}
+	if _, exists := fields["cpuid_profile"]; exists && !ValidCPUIDProfile(decoded.CPUIDProfile) {
+		return fmt.Errorf("invalid or empty CPUID profile")
 	}
 	*r = Report(decoded)
 	return nil
@@ -228,7 +234,7 @@ func (r *Report) WithoutTotals(reason string) *Report {
 func (r *Report) ValidUnavailableResult() bool {
 	return r != nil && !r.Complete && r.Reason != "" && r.Quality == "incomplete" && r.REPTelemetryStatus == REPUnavailable &&
 		r.Instructions == nil && r.REPBytes == nil && r.REPEntries == nil && r.UnsupportedREPEntries == nil && r.REPBreakdown == nil &&
-		r.SignalsObserved == 0 && r.Processes == 0 && r.Images == 0 && len(r.DisallowedCPUFeatures) == 0
+		r.SignalsObserved == 0 && r.Processes == 0 && r.Images == 0 && len(r.DisallowedCPUFeatures) == 0 && r.CPUIDProfile == ""
 }
 
 // ValidDiagnosticContract rejects old, absent or promoted remote contracts.

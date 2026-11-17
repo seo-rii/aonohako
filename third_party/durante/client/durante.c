@@ -32,6 +32,7 @@
 #include "drmgr.h"
 #include "durante_runtime.h"
 #include "cpu_policy.h"
+#include "cpuid_emulation.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
@@ -58,6 +59,8 @@ typedef struct {
   uint64_t rep_movs_bytes, rep_stos_bytes, rep_movs_entries, rep_stos_entries;
   bool rep_error;
   bool replay_error;
+  /* A CPUID-profile request outside the fixed table (sticky invalidity). */
+  bool cpuid_error;
   app_pc write_pc, write_next_pc, restart_pc;
   uint64_t write_suffix, write_rep_request, restart_rep_request;
   int write_rep_opcode, write_rep_bytes, write_rep_count_reg;
@@ -91,6 +94,9 @@ static app_pc cpu_policy_exit_pc;
 static int replay_without_tls;
 static int app_exit_code;
 static size_t file_bytes;
+#ifdef DURANTE_TEST_COUNT_LOCATIONS
+#include "../tests/count_locations/profile.h"
+#endif
 
 static void fail(const char *m) {
   dr_fprintf(STDERR, "durante: %s\n", m);
@@ -177,19 +183,25 @@ static void route_event(thread_data_t *d, const char *kind,
 }
 static void start_record(thread_data_t *d, const char *origin,
                          process_id_t parent, const char *parent_segment) {
-  char fields[384];
+  char fields[512];
   const char *policy = deny_avx && deny_simd ? "avx,simd" : deny_avx ? "avx" : "simd";
   char policy_fields[96] = "";
   if (deny_avx || deny_simd)
     dr_snprintf(policy_fields, sizeof(policy_fields),
                 ",\"cpu_policy_version\":1,\"cpu_policy\":\"%s\"", policy);
+  char cpuid_fields[96] = "";
+  if (durante_cpuid_active != DURANTE_CPUID_NONE)
+    dr_snprintf(cpuid_fields, sizeof(cpuid_fields),
+                ",\"cpuid_profile_version\":%d,\"cpuid_profile\":\"%s\"",
+                DURANTE_CPUID_PROFILE_VERSION,
+                durante_cpuid_profile_name(durante_cpuid_active));
   dr_snprintf(fields, sizeof(fields),
               ",\"origin\":\"%s\",\"parent_pid\":%d,"
               "\"parent_segment\":\"%s\",\"rep_bytes_enabled\":%s,"
               "\"rep_breakdown_version\":1,\"sdk_"
-              "version\":\"11.3.0\"%s",
+              "version\":\"11.3.0\"%s%s",
               origin, (int)parent, parent_segment,
-              rep_bytes_enabled ? "true" : "false", policy_fields);
+              rep_bytes_enabled ? "true" : "false", policy_fields, cpuid_fields);
   route_event(d, "start", fields);
 }
 static void open_stream(const char *origin, process_id_t parent,
@@ -201,7 +213,7 @@ static void open_stream(const char *origin, process_id_t parent,
 }
 
 static bool add_thread(thread_data_t *d) {
-  if (!d || d->rep_error || d->replay_error || d->restart_pc ||
+  if (!d || d->rep_error || d->replay_error || d->cpuid_error || d->restart_pc ||
       d->counter_overflows ||
       UINT64_MAX - total_instructions < d->instructions ||
       UINT64_MAX - total_signals < d->signals ||
@@ -242,8 +254,8 @@ static void snapshot_event(const char *kind, void *ctx, bool is_exec) {
   bool error = child ? false : accounting_error;
   error = error || __atomic_load_n(&replay_without_tls, __ATOMIC_RELAXED);
   if (is_exec || child) {
-    error = error || !d || d->rep_error || d->replay_error || d->restart_pc ||
-            d->counter_overflows ||
+    error = error || !d || d->rep_error || d->replay_error || d->cpuid_error ||
+            d->restart_pc || d->counter_overflows ||
             started != ended + 1;
     if (d) {
       if (UINT64_MAX - instructions < d->instructions ||
@@ -509,6 +521,9 @@ static void count_block(int instructions, app_pc first_pc) {
     return;
   }
   data->instructions += (uint64_t)instructions;
+#ifdef DURANTE_TEST_COUNT_LOCATIONS
+  profile_count(first_pc, (uint64_t)instructions);
+#endif
 }
 
 /* A fault can leave the middle of a BB whose entire length was charged at
@@ -559,6 +574,9 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
     return;
   }
   d->instructions -= rollback;
+#ifdef DURANTE_TEST_COUNT_LOCATIONS
+  profile_replay(rollback);
+#endif
   if (retry) {
     d->restart_pc = target_pc;
     d->restart_entered = false;
@@ -623,6 +641,15 @@ static void cpu_feature_violation(int feature) {
   dr_mutex_unlock(state_lock);
   /* This bounded event invalidates the whole measurement before termination. */
   cpu_policy_exit();
+}
+
+/* The profile has no defined value for this request. Charge the instruction
+ * as usual but make the whole measurement unusable. */
+static void cpuid_request_invalid(void *ctx) {
+  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
+  if (!d)
+    fail("CPUID profile observation without valid thread state");
+  d->cpuid_error = true;
 }
 
 static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
@@ -880,7 +907,13 @@ static void process_exit(void) {
     report_file = -1;
   }
   dr_mutex_unlock(state_lock);
+#ifdef DURANTE_TEST_COUNT_LOCATIONS
+  profile_dump();
+  drmgr_unregister_module_unload_event(profile_module_unload);
+#endif
   drmgr_unregister_bb_instrumentation_event(analyze_block);
+  if (durante_cpuid_active != DURANTE_CPUID_NONE)
+    drmgr_unregister_bb_app2app_event(durante_cpuid_app2app);
   drmgr_unregister_thread_init_event(thread_init);
   drmgr_unregister_thread_exit_event(thread_exit);
   drmgr_unregister_pre_syscall_event(pre_syscall);
@@ -902,10 +935,12 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
     fail("prepared runtime with code replay ABI 1 required");
   if (argc < 3 || strcmp(argv[1], "-outdir"))
     fail("usage: -c libdurante.so -outdir NEW_PRIVATE_DIRECTORY [-rep_bytes] "
-         "[-disallow_cpu_feature avx|simd] -- program");
+         "[-disallow_cpu_feature avx|simd] [-cpuid_profile x86-64-v1|x86-64-v2] "
+         "-- program");
   if (strlen(argv[2]) >= sizeof(outdir) || argv[2][0] != '/')
     fail("report directory must be absolute");
   memcpy(outdir, argv[2], strlen(argv[2]) + 1);
+  enum durante_cpuid_profile cpuid_profile = DURANTE_CPUID_NONE;
   for (int i = 3; i < argc; ++i) {
     if (strcmp(argv[i], "-rep_bytes") == 0 && !rep_bytes_enabled) {
       rep_bytes_enabled = true;
@@ -917,11 +952,22 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
         deny_simd = true;
       else
         fail("unknown or duplicate disallowed CPU feature");
+    } else if (strcmp(argv[i], "-cpuid_profile") == 0 && i + 1 < argc &&
+               cpuid_profile == DURANTE_CPUID_NONE) {
+      cpuid_profile = durante_cpuid_profile_parse(argv[++i]);
+      if (cpuid_profile == DURANTE_CPUID_NONE)
+        fail("unknown CPUID profile");
     } else {
       fail("unknown or duplicate client option");
     }
   }
   owner_pid = dr_get_process_id();
+  if (cpuid_profile != DURANTE_CPUID_NONE) {
+    /* Check the real processor before the first application instruction. */
+    const char *missing = durante_cpuid_enable(cpuid_profile, cpuid_request_invalid);
+    if (missing)
+      fail(missing);
+  }
   if (deny_avx || deny_simd) {
     cpu_policy_exit_pc = dr_raw_mem_alloc(dr_page_size(),
                                          DR_MEMPROT_READ | DR_MEMPROT_WRITE, NULL);
@@ -936,9 +982,15 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
   }
   if (!drmgr_init())
     fail("extension initialization failed");
+#ifdef DURANTE_TEST_COUNT_LOCATIONS
+  if (!drmgr_register_module_unload_event(profile_module_unload))
+    fail("test module lifetime registration failed");
+#endif
   state_lock = dr_mutex_create();
   tls_index = drmgr_register_tls_field();
   if (!state_lock || tls_index < 0 ||
+      (cpuid_profile != DURANTE_CPUID_NONE &&
+       !drmgr_register_bb_app2app_event(durante_cpuid_app2app, NULL)) ||
       !drmgr_register_thread_init_event(thread_init) ||
       !drmgr_register_thread_exit_event(thread_exit) ||
       !drmgr_register_bb_instrumentation_event(analyze_block, instrument_block,
