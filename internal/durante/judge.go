@@ -170,6 +170,11 @@ func (p JudgePolicy) Validate(cfg Config) error {
 	default:
 		return fmt.Errorf("unknown judge integrity mode %q", p.Integrity)
 	}
+	// Without a fixed virtual processor, counts follow each instance's CPU,
+	// which is exactly the instability judge mode exists to remove.
+	if cfg.CPUIDProfile == "" {
+		return fmt.Errorf("judge mode requires a configured CPUID profile")
+	}
 	// Judge mode needs a resource envelope and a time model to produce a
 	// virtual-millisecond verdict at all.
 	if cfg.ResourcePolicy == nil {

@@ -11,6 +11,10 @@ import (
 
 func judgeMeasurementConfig() durante.Config {
 	cfg := timeMeasurementConfig()
+	cfg.CPUIDProfile = durante.CPUIDProfileX8664V2
+	policy := *cfg.TimePolicy
+	policy.CPUIDProfile = durante.CPUIDProfileX8664V2
+	cfg.TimePolicy = &policy
 	cfg.Judge = durante.JudgePolicy{Enabled: true, Families: []string{"cpp"}, Integrity: durante.JudgeIntegrityOff}
 	return cfg
 }
@@ -26,6 +30,7 @@ func judgeRequest() *model.RunRequest {
 func judgeResponse(req *model.RunRequest, cfg durante.Config, status string, instructions uint64, output string) model.RunResponse {
 	report := completeEnvelopeReport()
 	report.Instructions = &instructions
+	report.CPUIDProfile = cfg.CPUIDProfile
 	exit := 0
 	resp := model.RunResponse{
 		Status: status, ExitCode: &exit, VerdictSource: output, WorkMeasurement: report,
@@ -86,6 +91,19 @@ func TestFinishJudgeUnavailableIsRuntimeError(t *testing.T) {
 	}
 	if got.WorkMeasurementJudgment.EstimatedTimeMs != nil {
 		t.Fatal("no estimate should be reported for an unconvertible observation")
+	}
+}
+
+func TestFinishJudgeRejectsMissingCPUIDReceipt(t *testing.T) {
+	cfg := judgeMeasurementConfig()
+	req := judgeRequest()
+	host := cfg
+	host.CPUIDProfile = "" // the observation's own receipt is empty
+	resp := judgeResponse(req, host, model.RunStatusAccepted, 5_000_000, "stdout")
+	resp = finishWorkMeasurementTime(req, resp, cfg)
+	got := finishWorkMeasurementJudge(req, resp, cfg)
+	if got.Status != model.RunStatusRE || got.Score != nil || got.WorkMeasurementJudgment.EstimatedTimeMs != nil {
+		t.Fatalf("host-CPUID counts must not be judged with a profiled model: %q", got.Status)
 	}
 }
 

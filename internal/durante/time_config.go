@@ -33,6 +33,7 @@ func ParseTimePolicy(raw string) (*TimePolicy, error) {
 		"family":                   &policy.Family,
 		"engine_profile":           &policy.EngineProfile,
 		"dispatch_profile":         &policy.DispatchProfile,
+		"cpuid_profile":            &policy.CPUIDProfile,
 		"instruction_ns_numerator": &policy.InstructionNSNumerator,
 		"rep_byte_ns_numerator":    &policy.REPByteNSNumerator,
 		"movs_byte_ns_numerator":   &policy.MOVSByteNSNumerator,
@@ -90,6 +91,9 @@ func ParseTimePolicy(raw string) (*TimePolicy, error) {
 	}
 	if seen["method"] && policy.Method == "" {
 		return nil, fmt.Errorf("explicit durante time method cannot be empty")
+	}
+	if seen["cpuid_profile"] && !ValidCPUIDProfile(policy.CPUIDProfile) {
+		return nil, fmt.Errorf("explicit durante time policy CPUID profile must be a supported profile")
 	}
 	for _, key := range required {
 		if !seen[key] {
@@ -157,6 +161,9 @@ func (c Config) ValidateTimeConfiguration() error {
 	if c.TimePolicy.DispatchProfile != c.DispatchProfile {
 		return fmt.Errorf("durante time policy dispatch profile does not match the configured dispatch profile")
 	}
+	if c.TimePolicy.CPUIDProfile != c.CPUIDProfile {
+		return fmt.Errorf("durante time policy CPUID profile does not match the configured CPUID profile")
+	}
 	source, _, hasImage := strings.Cut(c.TimePolicy.RuntimeID, "@")
 	if !hasImage {
 		return fmt.Errorf("durante time policy runtime ID requires a canonical source and image digest")
@@ -216,7 +223,7 @@ func (c Config) timePolicyForOptions(language string, options *RuntimeOptions) (
 			return TimePolicy{}, "", err
 		}
 		for _, binding := range c.TimeModels.Profiles {
-			if binding.SourceLanguage+"@"+binding.RuntimeImage != runtimeID || binding.EngineProfile != EngineProfile || binding.DispatchProfile != c.DispatchProfile {
+			if binding.SourceLanguage+"@"+binding.RuntimeImage != runtimeID || binding.EngineProfile != EngineProfile || binding.DispatchProfile != c.DispatchProfile || binding.CPUIDProfile != c.CPUIDProfile {
 				continue
 			}
 			if c.TimeModels.Schema == 2 {

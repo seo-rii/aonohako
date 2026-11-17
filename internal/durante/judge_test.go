@@ -10,6 +10,7 @@ func judgeConfig() Config {
 	image := "sha256:" + strings.Repeat("a", 64)
 	return Config{
 		Families: []string{"cpp"}, DispatchProfile: DispatchDefault, RuntimeImage: image,
+		CPUIDProfile: CPUIDProfileX8664V2,
 		ResourcePolicy: &ResourcePolicy{
 			MaxLimits:      ResourceLimits{CPUTimeMs: 3000, WallTimeMs: 10000, MemoryMB: 512},
 			MemoryBudgetMB: 4096, ReservedMemoryMB: 512,
@@ -17,6 +18,7 @@ func judgeConfig() Config {
 		TimePolicy: &TimePolicy{
 			ModelID: "unit", ModelVersion: 1, ReferenceID: "unit", RuntimeID: "CPP20@" + image,
 			Family: "cpp", EngineProfile: EngineProfile, DispatchProfile: DispatchDefault,
+			CPUIDProfile:           CPUIDProfileX8664V2,
 			InstructionNSNumerator: 1, REPByteNSNumerator: 1, NSDenominator: 1,
 		},
 	}
@@ -74,6 +76,12 @@ func TestJudgePolicyValidate(t *testing.T) {
 	noTime.TimePolicy = nil
 	if err := good.Validate(noTime); err == nil {
 		t.Fatal("expected missing time model rejection")
+	}
+	// Missing CPUID profile: counts would follow the instance's processor.
+	noCPUID := cfg
+	noCPUID.CPUIDProfile = ""
+	if err := good.Validate(noCPUID); err == nil {
+		t.Fatal("expected missing CPUID profile rejection")
 	}
 	// Missing resource policy.
 	noRes := cfg

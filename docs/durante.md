@@ -78,6 +78,7 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_DURANTE_TIME_POLICY` | Optional strict `TimePolicy` JSON with every model field and positive integer coefficient explicitly supplied. Enables requested C/C++ reference-time estimates with a resource policy. |
 | `AONOHAKO_DURANTE_TIME_MODELS` | Optional strict schema-1 (legacy) or schema-2 (effective runtime options) registry of shared coefficient models and explicit execution profiles. Mutually exclusive with `AONOHAKO_DURANTE_TIME_POLICY`; family registration alone enables no profile. |
 | `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with either time setting, independently of the model's profile bindings. |
+| `AONOHAKO_DURANTE_CPUID_PROFILE` | Empty (default) exposes host CPUID. `x86-64-v1` or `x86-64-v2` makes the client report one fixed virtual processor to every application CPUID/XGETBV, so library and runtime dispatch, and therefore counts, do not follow the Cloud Run instance's processor. Complete reports carry the client's `cpuid_profile` receipt; a missing or different receipt makes the observation unavailable. Requires an enabled family. See [CPUID profiles](https://github.com/seo-rii/durante/blob/main/docs/CPUID_PROFILE.md). |
 | `AONOHAKO_DURANTE_JUDGE_MODE` | `on` enables work-based judging (virtual-millisecond verdicts); empty or `off` disables it. See [work-based judging](durante-judging.md). |
 | `AONOHAKO_DURANTE_JUDGE_FAMILIES` | Comma-separated families a judge-mode request may ask to judge. Each must be an enabled, qualified measurement family. |
 | `AONOHAKO_DURANTE_JUDGE_INTEGRITY` | `off` (default) trusts the counts; `plausibility` additionally requires the instrumented run's raw CPU time to be consistent with the converted work. |
@@ -396,7 +397,7 @@ Build the overlay target `durante-validation` from the same source as `runtime`,
 then run it as root with networking disabled. Its default entrypoint executes:
 
 ```text
-durante-execute.test -test.v -test.run ^TestDurante(Sandbox|ResourceEnvelope|TimeEstimate|Interactive|Communication)Integration$ -test.timeout 240s
+durante-execute.test -test.v -test.run ^TestDurante(Sandbox|ResourceEnvelope|TimeEstimate|Judge|Interactive|Communication)Integration$ -test.timeout 240s
 ```
 
 After tagging that build `aonohako-durante-validation:local`, pass its actual image
@@ -565,12 +566,19 @@ records supporting each intended execution profile before configuring estimates.
 ```
 
 All fields are required except model `method`, whose absence means
-`weighted-work-nanoseconds-v1`. An explicitly empty method is rejected. The
+`weighted-work-nanoseconds-v1`, and binding `cpuid_profile`. An explicitly empty
+method is rejected. `cpuid_profile` names the virtual processor the binding's
+qualification evidence used; a binding without it applies only while host
+CPUID is visible, and a binding with it applies only when
+`AONOHAKO_DURANTE_CPUID_PROFILE` is the same profile. The legacy single
+`AONOHAKO_DURANTE_TIME_POLICY` accepts the same optional field with the same
+rule. Estimates record the profile, and a report whose receipt differs is not
+converted (`runtime_profile_mismatch`). The
 registry accepts at most 32 models, 128 profiles
 and 64 KiB of JSON. Unknown fields, duplicates, nulls, noncanonical source IDs,
 unknown model versions and ambiguous profile bindings are rejected. Each model
-ID/version is unique; each source/image/engine/dispatch combination has one binding
-in schema 1. Schema 2 also includes the effective runtime-options ID in this key.
+ID/version is unique; each source/image/engine/dispatch/CPUID-profile combination
+has one binding in schema 1. Schema 2 also includes the effective runtime-options ID in this key.
 The optional `glibc-2.41-sse2-v1` dispatch profile retains its C/C++ restriction.
 
 The source family must also be enabled in `AONOHAKO_DURANTE_FAMILIES`, and an
