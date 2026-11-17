@@ -197,6 +197,7 @@ func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 				Quality            string        `json:"quality"`
 				REPBreakdown       *REPBreakdown `json:"rep_breakdown"`
 				REPTelemetryStatus string        `json:"rep_telemetry_status"`
+				CPUIDProfile       string        `json:"cpuid_profile"`
 			} `json:"expected"`
 		} `json:"cases"`
 	}
@@ -243,6 +244,9 @@ func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 			}
 			if !reflect.DeepEqual(r.REPBreakdown, e.REPBreakdown) || !r.ValidREPTelemetry() || (e.REPTelemetryStatus != "" && r.REPTelemetryStatus != e.REPTelemetryStatus) {
 				t.Fatalf("REP detail differs from reference: report=%+v breakdown=%+v want=%+v", r, r.REPBreakdown, e.REPBreakdown)
+			}
+			if r.CPUIDProfile != e.CPUIDProfile {
+				t.Fatalf("CPUID profile receipt %q, want %q", r.CPUIDProfile, e.CPUIDProfile)
 			}
 		})
 	}

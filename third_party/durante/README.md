@@ -35,6 +35,12 @@ executes and records the violation; allowed runs retain the normal native work
 metric. See [CPU feature restrictions](docs/CPU_FEATURE_POLICY.md) for semantics,
 embedding arguments and the same in-process integrity limits as measurement.
 
+`--cpuid-profile x86-64-v1` or `x86-64-v2` on `run` and `isolate` reports one
+fixed virtual processor to every application CPUID/XGETBV, so library and
+runtime dispatch, and therefore counts, no longer follow the host processor.
+See [CPUID profiles](docs/CPUID_PROFILE.md) for the table, host checks and
+remaining host-visible inputs.
+
 New clients also report versioned `rep_breakdown` counters for MOVS and STOS
 requested bytes and entries separately, at image/process/tree level. This lets
 reference-model experiments distinguish copying from filling without changing
@@ -42,6 +48,10 @@ the existing combined totals. Legacy records omit the breakdown instead of
 inventing zeros. See the [protocol](docs/PROTOCOL.md) for the optional capability,
 checked sums and actual lifecycle/replay qualification tests. No time weights
 are selected by these counters.
+
+The [online work-budget proposal](docs/ONLINE_WORK_BUDGET.md) describes the
+remaining live-accounting, stop/cleanup and consumer contracts. It is a design
+draft; current Durante does not enforce a work-score limit during execution.
 
 ## Build and test
 
@@ -94,8 +104,10 @@ reduces address-space reservations; it does not waive target limits.
 Build and test on Linux x86-64. The client supports GCC or Clang; native test
 fixtures additionally require GCC. The full development suite uses Python 3.11
 or newer; the SDK builder also supports Python 3.10.
-PyPy is tested when installed, and absence is reported
-as a coverage gap. No SDK or generated executable is committed.
+The CI process-tree job requires PyPy 7.3.19, including its managed workloads.
+Local smoke checks report an absent PyPy as a coverage gap; explicitly selecting
+PyPy in the workload harness requires it to be present. No SDK or generated
+executable is committed.
 
 The [fixed-fixture overhead experiment](docs/OVERHEAD.md) compares native execution,
 the engine alone, and the counter with REP telemetry off/on. It reports per-run
@@ -270,6 +282,11 @@ still inside shared-VM creation remains unqualified; incomplete trees must not
 produce partial totals. Use the default SDK preparation above for this fix;
 `--upstream-only` is for fresh, unpatched diagnostic comparisons.
 
+[Vfork synchronization regression](docs/VFORK_SYNC.md) additionally holds a child
+behind a gate while another thread requests a cache reset. It checks another
+worker's continued progress, successful/failed exec, and a rejected clone followed
+by successful creation, using release/debug runtimes and the actual supervisor.
+
 ```sh
 python3 tests/concurrent_spawn.py \
   --sdk toolkit/sdk/DynamoRIO-Linux-11.3.0-1 --client build/libdurante.so \
@@ -327,8 +344,17 @@ or qualification of the separate `isolate` profile. Generated-code unit tests
 alone do not establish JVM compatibility.
 
 The [managed runtime workload suite](docs/RUNTIME_WORKLOADS.md) additionally
-requires Java 17/21, CPython and Node threading, allocation/GC and child-process
-fixtures through native/engine controls and the actual `durante run` path.
+requires Java 17/21, CPython, PyPy and Node threading, allocation/GC and
+child-process fixtures through native/engine controls and the actual
+`durante run` path. The default matrix covers Java, CPython and Node;
+`--runtime pypy` selects the separate twelve-observation PyPy matrix required in CI.
+
+The [runtime repeatability tool](docs/RUNTIME_REPEATABILITY.md) repeats those
+Java, CPython, PyPy and Node profiles in fresh processes, preserving failed and unrun observations.
+It separates collection success from exact integer spread qualification for
+instructions and combined/per-operation REP counters; it defines no time weights.
+Opt-in CPython and PyPy hash profiles compare startup inputs with recorded native
+probes; they preserve the default isolated profiles and do not qualify all programs.
 
 [SIMD and interpreter/JIT qualification](docs/QUALIFICATION.md) explains the
 additional native-control, output-preservation and exact-count tests. Per-run

@@ -74,8 +74,8 @@ ID and corpus ID are validated together; a runtime dataset cannot be relabeled a
 `cpp-reference-v1`. The two-coefficient fitter continues to use `instructions`
 and aggregate `rep_bytes`, with the same train/validation split and gates.
 
-The current collector uses `dynamorio-11.3-durante-v4-vm32m` and pins both runtime
-patches. Older seven-field installation identities and v3 reports can be decoded
+The current collector uses `dynamorio-11.3-durante-v5-vm32m` and pins both runtime
+patches. Older seven-field installation identities and v3/v4 reports can be decoded
 for inspection, but the current fitter rejects their old installation/profile.
 Keep the original dataset and matching historical fitter for reproducing past
 results. A current-runtime model requires fresh collection; do not relabel old
