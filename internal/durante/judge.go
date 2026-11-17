@@ -36,7 +36,11 @@ const (
 // enable any family on its own; a judged family must also be an enabled,
 // qualified measurement family.
 type JudgePolicy struct {
+	// Enabled configures the judge machinery: shadow comparisons may run.
 	Enabled bool
+	// VerdictsAllowed additionally lets work_measurement_judge requests decide
+	// the returned verdict. Mode "shadow" enables only comparisons; "on" both.
+	VerdictsAllowed bool
 	// Families lists measurement families for which a request may ask for a
 	// verdict. A measured family absent here cannot be judged.
 	Families  []string
@@ -47,16 +51,20 @@ type JudgePolicy struct {
 }
 
 // ParseJudgePolicy reads the four judge environment variables. An empty or
-// "off" mode disables judge mode and ignores the other values.
+// "off" mode disables judge mode and ignores the other values. "shadow" runs
+// only non-authoritative comparisons; "on" also allows judge verdicts.
 func ParseJudgePolicy(mode, families, integrity, ratio string) (JudgePolicy, error) {
+	verdicts := false
 	switch strings.TrimSpace(mode) {
 	case "", "off":
 		return JudgePolicy{Integrity: JudgeIntegrityOff}, nil
+	case "shadow":
 	case "on":
+		verdicts = true
 	default:
-		return JudgePolicy{}, fmt.Errorf("judge mode must be \"on\" or \"off\"")
+		return JudgePolicy{}, fmt.Errorf("judge mode must be \"on\", \"shadow\" or \"off\"")
 	}
-	policy := JudgePolicy{Enabled: true, Integrity: JudgeIntegrityOff}
+	policy := JudgePolicy{Enabled: true, VerdictsAllowed: verdicts, Integrity: JudgeIntegrityOff}
 	for _, name := range strings.Split(families, ",") {
 		if trimmed := strings.TrimSpace(name); trimmed != "" {
 			policy.Families = append(policy.Families, trimmed)
@@ -135,8 +143,8 @@ func (p JudgePolicy) JudgesFamily(family string) bool {
 // plausibility requires a positive ratio.
 func (p JudgePolicy) Validate(cfg Config) error {
 	if !p.Enabled {
-		if len(p.Families) != 0 || p.IntegrityRatio != 0 {
-			return fmt.Errorf("disabled judge mode cannot carry families or an integrity ratio")
+		if len(p.Families) != 0 || p.IntegrityRatio != 0 || p.VerdictsAllowed {
+			return fmt.Errorf("disabled judge mode cannot carry families, verdicts or an integrity ratio")
 		}
 		return nil
 	}

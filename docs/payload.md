@@ -123,6 +123,7 @@ error.
   "work_measurement": false,                // optional Durante diagnostics; requires source-language profiles when true
   "work_measurement_time": false,           // optional reference-time estimate; also requires the raw envelope and an approved operator execution profile
   "work_measurement_judge": false,          // optional work-based verdict (virtual ms); operator-gated, requires work_measurement_time + envelope; see docs/durante-judging.md
+  "work_measurement_shadow": false,         // optional non-deciding comparison: ordinary verdict plus a judge-mode shadow run; requires work_measurement_limits only
   "work_measurement_peer_time": null,       // optional version-1 per-role diagnostic budgets for interactor/communication; cannot use the ordinary time flag/envelope
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
@@ -278,6 +279,13 @@ accepted; a raw resource stop is `Time Limit Exceeded`; memory is not judged. Th
 counts remain `diagnostic_only` and application-mutable; `AONOHAKO_DURANTE_JUDGE_INTEGRITY=plausibility`
 withholds a verdict when the reported work is implausibly small against the
 instrumented run's own raw CPU time. See [work-based judging](durante-judging.md).
+
+`work_measurement_shadow: true` keeps the ordinary verdict authoritative and adds
+a `work_measurement_shadow` comparison with a separate judge-mode execution of the
+same input under `work_measurement_limits`. It cannot be combined with the other
+`work_measurement` options, and operator mode `shadow` or `on` must judge the
+family; otherwise the comparison is reported `unavailable` without affecting the
+verdict. See [shadow comparison](durante-judging.md#shadow-comparison).
 Requested conversion also reports versioned `time_estimate_eligibility` when an
 execution envelope exists, identifying exclusions while preserving the existing
 `time_estimate_unavailable` strings. It does not relax signal or REP coverage checks.

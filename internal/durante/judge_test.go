@@ -34,8 +34,12 @@ func TestParseJudgePolicy(t *testing.T) {
 		t.Fatalf("empty mode must disable regardless of families: %+v %v", empty, err)
 	}
 	on, err := ParseJudgePolicy("on", "cpp, cpython", "plausibility", "50")
-	if err != nil || !on.Enabled || len(on.Families) != 2 || on.Integrity != JudgeIntegrityPlausibility || on.IntegrityRatio != 50 {
+	if err != nil || !on.Enabled || !on.VerdictsAllowed || len(on.Families) != 2 || on.Integrity != JudgeIntegrityPlausibility || on.IntegrityRatio != 50 {
 		t.Fatalf("on: %+v %v", on, err)
+	}
+	shadow, err := ParseJudgePolicy("shadow", "cpp", "", "")
+	if err != nil || !shadow.Enabled || shadow.VerdictsAllowed || !shadow.JudgesFamily("cpp") {
+		t.Fatalf("shadow: %+v %v", shadow, err)
 	}
 	for _, tc := range []struct{ mode, families, integrity, ratio string }{
 		{"maybe", "cpp", "", ""},

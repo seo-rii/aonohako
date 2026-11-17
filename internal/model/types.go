@@ -301,6 +301,7 @@ type RunRequest struct {
 	WorkMeasurementLimits   *durante.ResourceLimits  `json:"work_measurement_limits,omitempty"`
 	WorkMeasurementTime     bool                     `json:"work_measurement_time,omitempty"`
 	WorkMeasurementJudge    bool                     `json:"work_measurement_judge,omitempty"`
+	WorkMeasurementShadow   bool                     `json:"work_measurement_shadow,omitempty"`
 	WorkMeasurementPeerTime *PeerTimeRequest         `json:"work_measurement_peer_time,omitempty"`
 	Lang                    string                   `json:"lang"`
 	EntryMode               string                   `json:"entry_mode,omitempty"`
@@ -334,6 +335,7 @@ type RunResponse struct {
 	WorkMeasurements         []WorkMeasurementProcess  `json:"work_measurements,omitempty"`
 	WorkMeasurementExecution *WorkMeasurementExecution `json:"work_measurement_execution,omitempty"`
 	WorkMeasurementJudgment  *WorkMeasurementJudgment  `json:"work_measurement_judgment,omitempty"`
+	WorkMeasurementShadow    *WorkMeasurementShadow    `json:"work_measurement_shadow,omitempty"`
 	Status                   string                    `json:"status"`
 	TimeMs                   int64                     `json:"time_ms"`
 	WallTimeMs               int64                     `json:"wall_time_ms"`
@@ -415,6 +417,29 @@ type WorkMeasurementExecution struct {
 	TimeEstimateUnavailable string                   `json:"time_estimate_unavailable,omitempty"`
 	TimeEstimateEligibility *durante.TimeEligibility `json:"time_estimate_eligibility,omitempty"`
 }
+
+// WorkMeasurementShadow compares the authoritative verdict of this response
+// with a separate judge-mode execution of the same request. It never changes
+// the enclosing Status, Score or resource values; see docs/durante-judging.md.
+// Response is the trimmed shadow execution (no stdout/stderr/sidecars), kept so
+// a control plane can recompute the shadow verdict from its raw observation.
+type WorkMeasurementShadow struct {
+	Version          int          `json:"version"`
+	Authority        string       `json:"authority"`
+	Agreement        string       `json:"agreement"`
+	PrimaryStatus    string       `json:"primary_status"`
+	PrimaryCPUTimeMs int64        `json:"primary_cpu_time_ms"`
+	ShadowStatus     string       `json:"shadow_status,omitempty"`
+	Unavailable      string       `json:"unavailable,omitempty"`
+	Response         *RunResponse `json:"response,omitempty"`
+}
+
+// Shadow agreement values.
+const (
+	ShadowAgree       = "agree"
+	ShadowDisagree    = "disagree"
+	ShadowUnavailable = "unavailable"
+)
 
 // WorkMeasurementJudgment is judge mode's verdict over a diagnostic execution.
 // Unlike the pure envelope, judge mode sets the response Status to this Verdict.
