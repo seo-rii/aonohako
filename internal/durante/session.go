@@ -17,7 +17,7 @@ import (
 // EngineProfile identifies the reviewed patched engine, basic-block execution
 // without trace construction, and fixed reservations.
 // Prepare verifies installation provenance before any report claims this profile.
-const EngineProfile = "dynamorio-11.3-durante-v4-vm32m"
+const EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
 
 // This profile was qualified only as a C/C++ diagnostic control on glibc 2.41.
 // The host version does not attest the embedded libc of static submissions.

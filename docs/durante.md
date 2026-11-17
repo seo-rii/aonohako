@@ -39,7 +39,7 @@ before downloading the separately SHA-256-pinned engine SDK. CI needs no private
 cross-repository checkout token.
 
 The launcher fixes `-disable_traces -vm_size 32M -vmheap_size 32M` and reports engine profile
-`dynamorio-11.3-durante-v4-vm32m`. Before launch, installation validation checks
+`dynamorio-11.3-durante-v5-vm32m`. Before launch, installation validation checks
 the runtime manifest's source, process-lifetime patch, code-replay patch and
 actual release-core digest.
 Missing or mismatched provenance refuses measurement. This is a trusted local
@@ -54,9 +54,11 @@ installation immutable and operator-owned for the lifetime of the service.
 The installation identity includes `runtime_code_replay_patch_sha256` in
 addition to `runtime_patch_sha256`. Old seven-field identities remain readable
 and retain their original values, but do not satisfy current installation
-validation. Old v1/v2/v3 time models and reports cannot be applied to v4
-observations. Rebuild the runtime overlay and collect a new reference dataset
-before qualifying a v4 model; never edit the identity of an old observation.
+validation. Old v1-v4 time models and reports cannot be applied to v5
+observations. v5 pins Durante `4016b33`, whose runtime patch completes vfork
+synchronization and failed-clone cleanup and whose client adds the optional
+fixed CPUID profile. Rebuild the runtime overlay and collect a new reference
+dataset before qualifying a v5 model; never edit the identity of an old observation.
 Upstream's large default virtual reservations can fail
 before main under the ordinary C/C++ address-space bound. These options reduce
 the engine's reservation budgets; no student CPU, RSS or address-space limit is
@@ -110,7 +112,7 @@ Selected fields of a successful lifecycle aggregate resemble:
   "metric": "bb_entry_app_instructions",
   "scope": "process_tree_user_code",
   "rep_bytes_enabled": true,
-  "engine_profile": "dynamorio-11.3-durante-v4-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
   "authority": "diagnostic_only",
   "integrity_verified": false,
   "measurement_contract": {
@@ -440,7 +442,7 @@ only; production coefficients have not been selected or calibrated.**
   "reference_id": "arithmetic-fixture-only",
   "runtime_id": "CPP20@<actual-overlay-image-digest>",
   "family": "cpp",
-  "engine_profile": "dynamorio-11.3-durante-v4-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
   "dispatch_profile": "default",
   "instruction_ns_numerator": 1,
   "rep_byte_ns_numerator": 1,
@@ -495,7 +497,7 @@ response fields would be:
       "reference_id": "arithmetic-fixture-only",
       "runtime_id": "CPP20@<actual-overlay-image-digest>",
       "family": "cpp",
-      "engine_profile": "dynamorio-11.3-durante-v4-vm32m",
+      "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
       "dispatch_profile": "default",
       "nanoseconds": 131648,
       "milliseconds": 1
