@@ -4,6 +4,9 @@ An explicitly requested supported-language run can execute under Durante and ret
 `work_measurement` alongside its ordinary verdict, CPU, wall and memory values.
 Interactive and communication-v1/v2 runs return separate role observations in
 `work_measurements` instead.
+The opt-in, operator-gated [work-based judging](durante-judging.md) path turns a
+completed C/C++-style observation into an actual AC/WA/TLE/RE verdict using
+`limits.time_ms` as a virtual-millisecond limit; it is off by default.
 The work metric counts application basic blocks across process images. Raw work
 units remain separate from scheduled CPU time. An optional reference-time
 estimate uses an explicit operator model and does not change TLE rules.
@@ -73,6 +76,10 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_DURANTE_TIME_POLICY` | Optional strict `TimePolicy` JSON with every model field and positive integer coefficient explicitly supplied. Enables requested C/C++ reference-time estimates with a resource policy. |
 | `AONOHAKO_DURANTE_TIME_MODELS` | Optional strict schema-1 (legacy) or schema-2 (effective runtime options) registry of shared coefficient models and explicit execution profiles. Mutually exclusive with `AONOHAKO_DURANTE_TIME_POLICY`; family registration alone enables no profile. |
 | `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with either time setting, independently of the model's profile bindings. |
+| `AONOHAKO_DURANTE_JUDGE_MODE` | `on` enables work-based judging (virtual-millisecond verdicts); empty or `off` disables it. See [work-based judging](durante-judging.md). |
+| `AONOHAKO_DURANTE_JUDGE_FAMILIES` | Comma-separated families a judge-mode request may ask to judge. Each must be an enabled, qualified measurement family. |
+| `AONOHAKO_DURANTE_JUDGE_INTEGRITY` | `off` (default) trusts the counts; `plausibility` additionally requires the instrumented run's raw CPU time to be consistent with the converted work. |
+| `AONOHAKO_DURANTE_JUDGE_INTEGRITY_RATIO` | With `plausibility`, the maximum believable ratio of instrumented raw CPU nanoseconds to converted virtual nanoseconds; a higher observed ratio withholds the verdict. |
 
 For example, configure `AONOHAKO_DURANTE_FAMILIES=cpp` and add
 `"work_measurement": true` to a normal run request with `"lang": "CPP20"`.

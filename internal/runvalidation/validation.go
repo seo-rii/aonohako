@@ -164,6 +164,11 @@ func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
 			return fmt.Errorf("work_measurement_time requires a registered source-language profile")
 		}
 	}
+	if req.WorkMeasurementJudge {
+		if !req.WorkMeasurement || !req.WorkMeasurementTime || req.WorkMeasurementLimits == nil {
+			return fmt.Errorf("work_measurement_judge requires work_measurement, work_measurement_time and work_measurement_limits")
+		}
+	}
 	if req.WorkMeasurementLimits == nil {
 		return nil
 	}

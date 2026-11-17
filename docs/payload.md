@@ -122,6 +122,7 @@ error.
   "lang": "binary",                          // runtime language key (see Supported Languages)
   "work_measurement": false,                // optional Durante diagnostics; requires source-language profiles when true
   "work_measurement_time": false,           // optional reference-time estimate; also requires the raw envelope and an approved operator execution profile
+  "work_measurement_judge": false,          // optional work-based verdict (virtual ms); operator-gated, requires work_measurement_time + envelope; see docs/durante-judging.md
   "work_measurement_peer_time": null,       // optional version-1 per-role diagnostic budgets for interactor/communication; cannot use the ordinary time flag/envelope
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
@@ -263,6 +264,20 @@ source profile, engine/dispatch profile and actual immutable Durante execution
 image; a remote control plane uses the downstream image/model.
 Omitting the flag preserves existing measurement behavior. Estimated time remains
 diagnostic and does not change raw resource accounting or grant a student verdict.
+
+`work_measurement_judge: true` turns the diagnostic observation into an actual
+`Accepted`/`Wrong Answer`/`Time Limit Exceeded`/`Runtime Error` verdict, using
+`limits.time_ms` as a virtual-millisecond limit for the configured runtime. It is
+operator-gated (`AONOHAKO_DURANTE_JUDGE_MODE`) per family and requires
+`work_measurement: true`, `work_measurement_time: true` and a valid
+`work_measurement_limits` envelope. Unlike the pure diagnostic envelope, a judge
+response sets `status` to the verdict and may set `score`, and returns a
+`work_measurement_judgment` object. An observation whose counts cannot convert
+(signals, partial REP, overflow) is reported as `Runtime Error`, never silently
+accepted; a raw resource stop is `Time Limit Exceeded`; memory is not judged. The
+counts remain `diagnostic_only` and application-mutable; `AONOHAKO_DURANTE_JUDGE_INTEGRITY=plausibility`
+withholds a verdict when the reported work is implausibly small against the
+instrumented run's own raw CPU time. See [work-based judging](durante-judging.md).
 Requested conversion also reports versioned `time_estimate_eligibility` when an
 execution envelope exists, identifying exclusions while preserving the existing
 `time_estimate_unavailable` strings. It does not relax signal or REP coverage checks.
