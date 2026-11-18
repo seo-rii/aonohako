@@ -5,7 +5,9 @@ import (
 	"context"
 	"io"
 	"sync"
-	"sync/atomic"
+	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 type interactiveTranscriptKey struct{}
@@ -105,103 +107,99 @@ func (t *interactiveTranscript) ready() bool {
 	return t.complete
 }
 
-type interactiveReply struct {
-	data   []byte
-	prompt int64
-	err    error
+type interactiveOutputPipe interface {
+	io.ReadCloser
+	SyscallConn() (syscall.RawConn, error)
 }
 
-// play owns both pipe ends. Closing them must interrupt blocked I/O. The
-// sandbox's stdout writer feeds fromContestant and closes it at target exit.
-func (t *interactiveTranscript) play(parent context.Context, toContestant io.WriteCloser, fromContestant io.ReadCloser) bool {
-	if !t.ready() || parent.Err() != nil {
-		_ = toContestant.Close()
-		_ = fromContestant.Close()
+// idleReplayPipe samples the child's actual stdout pipe. No Go relay can
+// hold a later reply outside this queue while playback issues another prompt.
+func idleReplayPipe(file interactiveOutputPipe, allowEOF bool) bool {
+	raw, err := file.SyscallConn()
+	if err != nil {
 		return false
 	}
-	ctx, cancel := context.WithCancel(parent)
+	idle := false
+	err = raw.Control(func(fd uintptr) {
+		poll := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+		n, err := unix.Poll(poll, 0)
+		idle = err == nil && (n == 0 || (allowEOF && poll[0].Revents == unix.POLLHUP))
+	})
+	return err == nil && idle
+}
+
+// A writer may still be blocked inside a single large pipe write after the
+// reader has drained one full pipe. Treat that boundary as ambiguous.
+func replayPipeCapacity(file interactiveOutputPipe) int {
+	raw, err := file.SyscallConn()
+	if err != nil {
+		return 0
+	}
+	var capacity int
+	if raw.Control(func(fd uintptr) {
+		capacity, _ = unix.FcntlInt(fd, unix.F_GETPIPE_SZ, 0)
+	}) != nil {
+		return 0
+	}
+	return capacity
+}
+
+// play owns both pipe ends. Read only the recorded reply size and leave all
+// surplus bytes in the kernel. Check the queue on both sides of each prompt
+// write: a fast reply observed during release has ambiguous ordering.
+func (t *interactiveTranscript) play(parent context.Context, toContestant io.WriteCloser, fromContestant interactiveOutputPipe, capture io.Writer) bool {
 	closeInput := sync.OnceValue(toContestant.Close)
 	closePipes := sync.OnceFunc(func() {
 		closeInput()
 		_ = fromContestant.Close()
 	})
-	stopClosing := context.AfterFunc(ctx, closePipes)
-
-	// Read continuously: a single write that crosses an unreleased prompt
-	// must not be split and silently credited to two separate replies.
-	var issuedPrompt atomic.Int64
-	replies := make(chan interactiveReply)
-	readerDone := make(chan struct{})
-	go func() {
-		defer close(readerDone)
-		var buf [32 << 10]byte
-		for {
-			n, err := fromContestant.Read(buf[:])
-			prompt := issuedPrompt.Load()
-			if n > 0 {
-				select {
-				case replies <- interactiveReply{data: bytes.Clone(buf[:n]), prompt: prompt}:
-				case <-ctx.Done():
-					return
-				}
-			}
-			if err != nil {
-				select {
-				case replies <- interactiveReply{prompt: prompt, err: err}:
-				case <-ctx.Done():
-				}
-				return
-			}
-		}
-	}()
+	stop := context.AfterFunc(parent, closePipes)
 	defer func() {
-		stopClosing()
-		cancel()
+		stop()
 		closePipes()
-		<-readerDone
 	}()
-
-	var prompt, lastDataPrompt int64
+	if !t.ready() || parent.Err() != nil {
+		return false
+	}
+	capacity := replayPipeCapacity(fromContestant)
+	if capacity <= 0 {
+		return false
+	}
+	reader := io.TeeReader(fromContestant, capture)
+	var precedingReply int
 	for _, turn := range t.turns {
-		if ctx.Err() != nil {
+		if parent.Err() != nil {
 			return false
 		}
 		if !turn.fromContestant {
-			prompt++
-			issuedPrompt.Store(prompt)
+			if precedingReply >= capacity || !idleReplayPipe(fromContestant, turn.eof) {
+				return false
+			}
 			if turn.eof {
 				if closeInput() != nil {
 					return false
 				}
-			} else {
-				lastDataPrompt = prompt
-				if n, err := toContestant.Write(turn.data); err != nil || n != len(turn.data) {
-					return false
-				}
+			} else if n, err := toContestant.Write(turn.data); err != nil || n != len(turn.data) {
+				return false
+			}
+			if !idleReplayPipe(fromContestant, turn.eof) {
+				return false
+			}
+			precedingReply = 0
+			continue
+		}
+		if turn.eof {
+			var extra [1]byte
+			if n, err := reader.Read(extra[:]); n != 0 || err != io.EOF {
+				return false
 			}
 			continue
 		}
-		expected := turn.data
-		for len(expected) != 0 || turn.eof {
-			var reply interactiveReply
-			select {
-			case <-ctx.Done():
-				return false
-			case reply = <-replies:
-			}
-			if turn.eof {
-				// The two final EOFs may race at clean shutdown. A contestant
-				// which exited before the final data prompt cannot match it.
-				if reply.err != io.EOF || reply.prompt < lastDataPrompt {
-					return false
-				}
-				break
-			}
-			if reply.err != nil || reply.prompt < prompt || !bytes.HasPrefix(expected, reply.data) {
-				return false
-			}
-			expected = expected[len(reply.data):]
+		reply := make([]byte, len(turn.data))
+		if _, err := io.ReadFull(reader, reply); err != nil || !bytes.Equal(reply, turn.data) {
+			return false
 		}
+		precedingReply += len(reply)
 	}
-	return ctx.Err() == nil
+	return parent.Err() == nil
 }

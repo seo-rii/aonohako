@@ -112,6 +112,9 @@ unambiguous captured exchange and a matching replay. Overlapping writes,
 partial deliveries, peer cancellation, exceeded bounds and differing output
 leave the row unavailable. The public result contains the submitted program
 IDs and diagnostic counters. The recorded conversation stays private.
+During replay the worker checks the contestant's stdout pipe before and
+after issuing a prompt. Already queued answers or a preceding reply that
+fills the pipe make the ordering ambiguous and leave the row unavailable.
 The native stage's `cpu_time_by_role` contains separate `contestant` and
 `interactor` CPU measurements, each with its own program ID, exit status and
 available nanosecond counters. The stage total includes both roles. Pair the

@@ -3,7 +3,6 @@ package execute
 import (
 	"context"
 	"crypto/sha256"
-	"io"
 	"os"
 
 	"aonohako/internal/config"
@@ -41,14 +40,20 @@ func (s *Service) replayInteractiveContestant(ctx context.Context, single *model
 	if err != nil {
 		return nil, "interactive contestant replay input unavailable"
 	}
-	read, stdout := io.Pipe()
+	read, stdout, err := os.Pipe()
+	if err != nil {
+		_ = stdin.Close()
+		_ = send.Close()
+		return nil, "interactive contestant replay output unavailable"
+	}
+	capture := cappedBuffer{limit: outputLimitBytes(&raw)}
 	executionCtx, start, cancel := sandboxRequestContext(ctx, &raw, timing.CPUNormalizer{})
 	defer cancel()
 	var matched bool
 	peerDone := make(chan struct{})
 	go func() {
 		defer close(peerDone)
-		matched = trace.play(executionCtx, send, read)
+		matched = trace.play(executionCtx, send, read, &capture)
 		if !matched {
 			cancel()
 		}
@@ -60,7 +65,7 @@ func (s *Service) replayInteractiveContestant(ctx context.Context, single *model
 		_ = stdout.Close()
 		<-peerDone
 	}
-	streams := sandboxStreamConfig{stdinFile: stdin, stdout: stdout, onStdoutDone: finishPeer,
+	streams := sandboxStreamConfig{stdinFile: stdin, stdoutFile: stdout, onStdoutDone: finishPeer,
 		startWallTimer: start, workMeasurement: meter}
 	result := runCommandWithSandboxStreams(executionCtx, cancel, ws, command, &raw, streams, Hooks{}, outputLimitBytes(&raw), tuning, s.cgroupParentDir)
 	finishPeer()
@@ -71,7 +76,7 @@ func (s *Service) replayInteractiveContestant(ctx context.Context, single *model
 		return nil, "interactive contestant replay did not match the native exchange"
 	}
 	status, _, _ := classifyRunStatusWithoutOutput(&raw, result)
-	if status != "OK" || result.ExitCode == nil || *result.ExitCode != 0 || result.StdoutTruncated || !observationReportMatches(single, s.workMeasurement, result.WorkMeasurement) {
+	if status != "OK" || result.ExitCode == nil || *result.ExitCode != 0 || capture.Truncated() || !observationReportMatches(single, s.workMeasurement, result.WorkMeasurement) {
 		return nil, "interactive contestant replay did not produce a complete compatible measurement"
 	}
 	var file []byte
@@ -81,7 +86,7 @@ func (s *Service) replayInteractiveContestant(ctx context.Context, single *model
 			return nil, "interactive contestant replay output file unavailable"
 		}
 	}
-	if pipelineOutputDigests(result.Stdout, file) != outputs {
+	if pipelineOutputDigests(capture.Bytes(), file) != outputs {
 		return nil, "interactive contestant replay output differs from native output"
 	}
 	return result.WorkMeasurement, ""

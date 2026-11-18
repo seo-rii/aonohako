@@ -8,9 +8,18 @@ import (
 	"os"
 	"sync"
 	"testing"
-	"testing/iotest"
 	"time"
 )
+
+func transcriptTestPipe(t *testing.T) (*os.File, *os.File) {
+	t.Helper()
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { read.Close(); write.Close() })
+	return read, write
+}
 
 type transcriptSink struct{ io.Writer }
 
@@ -41,16 +50,47 @@ func recordedDialogue(t *testing.T) *interactiveTranscript {
 	return record
 }
 
+// A matching response is unambiguous once the peer starts waiting for it.
+// A contestant that responds inside the prompt-release interval may legitimately
+// receive an unavailable observation. Synchronize the success fixture at the pipe.
+type waitingReplayOutput struct {
+	*os.File
+	readBytes int
+	reads     chan int
+}
+
+func (r *waitingReplayOutput) Read(data []byte) (int, error) {
+	r.reads <- r.readBytes
+	n, err := r.File.Read(data)
+	r.readBytes += n
+	return n, err
+}
+
+func (r *waitingReplayOutput) waitAt(t *testing.T, ctx context.Context, offset int) {
+	t.Helper()
+	for {
+		select {
+		case at := <-r.reads:
+			if at == offset {
+				return
+			}
+		case <-ctx.Done():
+			t.Fatalf("peer did not request response at byte %d", offset)
+		}
+	}
+}
+
 func TestInteractiveTranscriptReplay(t *testing.T) {
 	transcript := recordedDialogue(t)
 	for _, scenario := range []string{"match", "changed", "early next reply", "missing", "extra", "early EOF"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 			defer cancel()
-			input, send := io.Pipe()
-			read, output := io.Pipe()
+			input, send := transcriptTestPipe(t)
+			read, output := transcriptTestPipe(t)
 			seen := make(chan bool, 1)
-			go func() { seen <- transcript.play(ctx, send, read) }()
+			peer := &waitingReplayOutput{File: read, reads: make(chan int, 8)}
+			go func() { seen <- transcript.play(ctx, send, peer, io.Discard) }()
 			defer input.Close()
 			defer output.Close()
 
@@ -58,6 +98,7 @@ func TestInteractiveTranscriptReplay(t *testing.T) {
 			if _, err := io.ReadFull(input, first); err != nil || !bytes.Equal(first, []byte{'A', 0}) {
 				t.Fatalf("first prompt = %v err=%v", first, err)
 			}
+			peer.waitAt(t, ctx, 0)
 			switch scenario {
 			case "early next reply":
 				_, _ = output.Write([]byte("firstsecond"))
@@ -72,6 +113,7 @@ func TestInteractiveTranscriptReplay(t *testing.T) {
 				if _, err := io.ReadFull(input, next); err != nil || string(next) != "B" {
 					t.Fatal("second prompt unavailable")
 				}
+				peer.waitAt(t, ctx, len("first"))
 				if scenario == "match" {
 					_, _ = output.Write([]byte("second"))
 				} else if scenario == "extra" {
@@ -183,10 +225,10 @@ func TestInteractiveTranscriptCancellationUnblocksPlayback(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer input.Close()
-	read, output := io.Pipe()
+	read, output := transcriptTestPipe(t)
 	defer output.Close()
 	done := make(chan bool, 1)
-	go func() { done <- tr.play(ctx, send, read) }()
+	go func() { done <- tr.play(ctx, send, read, io.Discard) }()
 	first := make([]byte, 2)
 	if _, err := io.ReadFull(input, first); err != nil {
 		t.Fatal(err)
@@ -226,11 +268,11 @@ func TestInteractiveTranscriptCancellationUnblocksFullInputPipe(t *testing.T) {
 	}
 	defer input.Close() // Nobody drains this pipe.
 	w := &waitingTranscriptPipe{File: send, entered: make(chan struct{})}
-	read, output := io.Pipe()
+	read, output := transcriptTestPipe(t)
 	defer output.Close()
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan bool, 1)
-	go func() { done <- record.play(ctx, w, read) }()
+	go func() { done <- record.play(ctx, w, read, io.Discard) }()
 	<-w.entered
 	cancel()
 	select {
@@ -254,8 +296,41 @@ func TestInteractiveTranscriptRejectsEOFBeforeFinalDataPrompt(t *testing.T) {
 	record.seal(true)
 	// The reader reports the final bytes and EOF together. A real pipe can
 	// still accept the judge's final write into its kernel buffer.
-	output := io.NopCloser(iotest.DataErrReader(bytes.NewReader([]byte("done"))))
-	if record.play(t.Context(), transcriptSink{io.Discard}, output) {
+	output, writer := transcriptTestPipe(t)
+	_, _ = writer.Write([]byte("done"))
+	_ = writer.Close()
+	if record.play(t.Context(), transcriptSink{io.Discard}, output, io.Discard) {
 		t.Fatal("matched a contestant that exited before its final prompt")
+	}
+}
+
+// A single large stdout write includes the following turn before the second
+// prompt. The prefix is exactly the default os/exec relay buffer size.
+func TestInteractiveTranscriptEarlyBufferedReply(t *testing.T) {
+	first := bytes.Repeat([]byte{'a'}, 32<<10)
+	record := new(interactiveTranscript)
+	judge := &interactivePipeWriter{w: transcriptSink{io.Discard}, transcript: record}
+	player := &interactivePipeWriter{w: transcriptSink{io.Discard}, transcript: record, fromContestant: true}
+	_, _ = judge.Write([]byte("A"))
+	_, _ = player.Write(first)
+	_, _ = judge.Write([]byte("B"))
+	_, _ = player.Write([]byte("second"))
+	player.Close()
+	judge.Close()
+	record.seal(true)
+	input, send := transcriptTestPipe(t)
+	read, output := transcriptTestPipe(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	done := make(chan bool, 1)
+	go func() { done <- record.play(ctx, send, read, io.Discard) }()
+	var prompt [1]byte
+	if _, err := io.ReadFull(input, prompt[:]); err != nil || prompt[0] != 'A' {
+		t.Fatal("missing first prompt")
+	}
+	_, _ = output.Write(append(first, []byte("second")...))
+	_ = output.Close()
+	if <-done || ctx.Err() != nil {
+		t.Fatal("accepted bytes from a single write spanning an unreleased prompt, or stalled")
 	}
 }

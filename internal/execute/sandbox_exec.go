@@ -117,6 +117,7 @@ type sandboxStreamConfig struct {
 	liveStdin                 bool
 	stdinFile                 *os.File
 	stdout                    io.Writer
+	stdoutFile                *os.File
 	onStdoutDone              func()
 	stderr                    io.Writer
 	onStderrDone              func()
@@ -767,6 +768,9 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		stderrWriter = teeCaptureWriter{capture: &stderrBuf, forward: streams.stderr}
 	}
 	cmd.Stdout = stdoutWriter
+	if streams.stdoutFile != nil {
+		cmd.Stdout = streams.stdoutFile
+	}
 	cmd.Stderr = stderrWriter
 	sandbox.TrimParentMemoryBeforeSandbox()
 	if err := cmd.Start(); err != nil {
@@ -776,6 +780,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		// Child owns its copy. Holding this read end would suppress EPIPE
 		// after the receiving peer exits.
 		_ = streams.stdinFile.Close()
+	}
+	if streams.stdoutFile != nil {
+		// The replay peer reads the target pipe directly and needs its EOF.
+		_ = streams.stdoutFile.Close()
 	}
 	if streams.closeExtraFilesAfterStart {
 		for _, file := range streams.extraFiles {
