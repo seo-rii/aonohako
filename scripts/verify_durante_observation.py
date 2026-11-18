@@ -52,7 +52,7 @@ def artifact(name, text, mode=None):
 
 
 @contextmanager
-def server(args, port, enabled, remote=None, *, runner_token=None):
+def server(args, port, enabled, remote=None, *, runner_token=None, operator_env=None):
     env = {"PATH": os.defpath, "PORT": str(port), "AONOHAKO_DEPLOYMENT_TARGET": "dev",
            "AONOHAKO_INBOUND_AUTH": "none", "AONOHAKO_WORK_ROOT": "/work",
            "AONOHAKO_WORK_ROOT_MAX_BYTES": str(256 << 20), "AONOHAKO_MAX_ACTIVE_RUNS": "1",
@@ -65,6 +65,8 @@ def server(args, port, enabled, remote=None, *, runner_token=None):
            "AONOHAKO_DURANTE_RESOURCE_POLICY": json.dumps(RESOURCE_POLICY),
            "AONOHAKO_DURANTE_RUNTIME_IMAGE": args.runtime_image,
            "AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT": args.runtime_image}
+    if operator_env:
+        env.update(operator_env)
     if remote:
         env.update(AONOHAKO_REMOTE_RUNNER_URL=remote, AONOHAKO_REMOTE_RUNNER_AUTH="none")
         if runner_token:
@@ -96,9 +98,11 @@ def server(args, port, enabled, remote=None, *, runner_token=None):
                 process.wait()
 
 
-def post(url, path, payload):
-    request = urllib.request.Request(url + path, data=json.dumps(payload).encode(),
-                                     headers={"Content-Type": "application/json"})
+def post(url, path, payload, *, token=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    request = urllib.request.Request(url + path, data=json.dumps(payload).encode(), headers=headers)
     with urllib.request.urlopen(request, timeout=75) as response:
         require(response.headers.get_content_type() == "text/event-stream", f"{path}: expected SSE")
         body = response.read(8 << 20).decode()
