@@ -230,6 +230,26 @@ func TestRemoteShadowRoundTripKeepsPrimary(t *testing.T) {
 	}
 }
 
+func TestRemoteShadowDecodeFailurePreservesOnlyAValidPrimary(t *testing.T) {
+	cfg := judgeMeasurementConfig()
+	req := shadowRequest()
+	primary := model.RunResponse{Status: model.RunStatusAccepted, CPUTimeMs: 7, Stdout: "primary output", VerdictSource: "stdout"}
+	shadow := shadowJudgeResponse(t, cfg, 20_000_000, model.RunStatusAccepted)
+	// Simulate a worker using a newer receipt version that this control plane cannot decode.
+	shadow.WorkMeasurement.LatencyBound = &durante.LatencyBound{Version: 2, CyclesX16: 80_000_000}
+	paired := attachShadow(primary, &shadow, "")
+	got := exchangeTimeMeasurementResult(t, req, paired, cfg)
+	if got.Status != primary.Status || got.CPUTimeMs != primary.CPUTimeMs || got.Stdout != primary.Stdout ||
+		got.WorkMeasurementShadow == nil || got.WorkMeasurementShadow.Agreement != model.ShadowUnavailable || got.WorkMeasurementShadow.Response != nil {
+		t.Fatalf("undecodable shadow changed its primary: %+v", got)
+	}
+	paired.WorkMeasurement = shadow.WorkMeasurement
+	got = exchangeTimeMeasurementResult(t, req, paired, cfg)
+	if got.Status != model.RunStatusInitFail || !strings.Contains(got.Reason, "remote result decode failed") {
+		t.Fatalf("accepted an undecodable primary: %+v", got)
+	}
+}
+
 func TestRemoteShadowRetriesOnlyKnownLegacyAdmissionError(t *testing.T) {
 	for _, tc := range []struct {
 		name, code, message string

@@ -317,16 +317,18 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				remoteErrorReason = remoteErr.Message
 			}
 		case "result":
-			var remoteResult model.RunResponse
-			if err := json.Unmarshal([]byte(event.Data), &remoteResult); err != nil {
+			// Decode the optional shadow separately. Its receipt can use a newer
+			// wire format even when the ordinary verdict is fully compatible.
+			var wire struct {
+				model.RunResponse
+				Shadow json.RawMessage `json:"work_measurement_shadow"`
+			}
+			if err := json.Unmarshal([]byte(event.Data), &wire); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote result decode failed: " + err.Error()}
 			}
+			remoteResult := wire.RunResponse
 			if strings.TrimSpace(remoteResult.Reason) == "" {
 				remoteResult.Reason = remoteErrorReason
-			}
-			shadowBlock := remoteResult.WorkMeasurementShadow
-			if req.WorkMeasurementShadow {
-				remoteResult.WorkMeasurementShadow = nil // primary validators see an ordinary result
 			}
 			if err := validateRemoteMeasurementCounters(checked, remoteResult, r.workMeasurement); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -340,15 +342,21 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if err := validateRemoteWorkMeasurementJudge(checked, remoteResult, r.workMeasurement); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
-			remoteResult.WorkMeasurementShadow = shadowBlock
-			if err := validateRemoteShadow(req, remoteResult, r.workMeasurement, tuning); err != nil {
+			var shadowErr error
+			if wire.Shadow != nil {
+				shadowErr = json.Unmarshal(wire.Shadow, &remoteResult.WorkMeasurementShadow)
+			}
+			if shadowErr == nil {
+				shadowErr = validateRemoteShadow(req, remoteResult, r.workMeasurement, tuning)
+			}
+			if shadowErr != nil {
 				if !req.WorkMeasurementShadow {
-					return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: shadowErr.Error()}
 				}
 				// The shadow never decides: an old runner or an unverifiable
 				// comparison leaves the validated primary verdict intact.
 				remoteResult.WorkMeasurementShadow = nil
-				remoteResult = attachShadow(remoteResult, nil, "remote shadow result rejected: "+err.Error())
+				remoteResult = attachShadow(remoteResult, nil, "remote shadow result rejected: "+shadowErr.Error())
 			}
 			switch remoteResult.Status {
 			case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusMLE, model.RunStatusWLE, model.RunStatusRE, model.RunStatusInitFail:
