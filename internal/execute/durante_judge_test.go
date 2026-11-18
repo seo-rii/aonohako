@@ -15,7 +15,7 @@ func judgeMeasurementConfig() durante.Config {
 	policy := *cfg.TimePolicy
 	policy.CPUIDProfile = durante.CPUIDProfileX8664V2
 	cfg.TimePolicy = &policy
-	cfg.Judge = durante.JudgePolicy{Enabled: true, Families: []string{"cpp"}, Integrity: durante.JudgeIntegrityOff}
+	cfg.Judge = durante.JudgePolicy{Enabled: true, VerdictsAllowed: true, Families: []string{"cpp"}, Integrity: durante.JudgeIntegrityOff}
 	return cfg
 }
 
@@ -127,28 +127,38 @@ func TestFinishJudgeIgnoredWhenNotRequestedOrNotJudged(t *testing.T) {
 
 func TestValidateJudgeRequest(t *testing.T) {
 	cfg := judgeMeasurementConfig()
-	if err := validateJudgeRequest(judgeRequest(), cfg); err != nil {
+	if err := validateJudgeRequest(context.Background(), judgeRequest(), cfg); err != nil {
 		t.Fatalf("valid judge request rejected: %v", err)
 	}
-	if err := validateJudgeRequest(timeMeasurementRequest(), cfg); err != nil {
+	if err := validateJudgeRequest(context.Background(), timeMeasurementRequest(), cfg); err != nil {
 		t.Fatalf("non-judge request must pass: %v", err)
 	}
 	// Judge disabled by the operator.
 	disabled := cfg
 	disabled.Judge = durante.JudgePolicy{Integrity: durante.JudgeIntegrityOff}
-	if err := validateJudgeRequest(judgeRequest(), disabled); err == nil {
+	if err := validateJudgeRequest(context.Background(), judgeRequest(), disabled); err == nil {
 		t.Fatal("expected rejection when judge mode is disabled")
 	}
 	// Missing time flag.
 	noTime := judgeRequest()
 	noTime.WorkMeasurementTime = false
-	if err := validateJudgeRequest(noTime, cfg); err == nil {
+	if err := validateJudgeRequest(context.Background(), noTime, cfg); err == nil {
 		t.Fatal("expected rejection without work_measurement_time")
+	}
+	// Shadow-only mode: a client cannot obtain a deciding verdict, but the
+	// internal shadow execution can use the judge machinery.
+	shadowOnly := cfg
+	shadowOnly.Judge.VerdictsAllowed = false
+	if err := validateJudgeRequest(context.Background(), judgeRequest(), shadowOnly); err == nil {
+		t.Fatal("expected rejection of a verdict request in shadow-only mode")
+	}
+	if err := validateJudgeRequest(withShadowJudge(context.Background()), judgeRequest(), shadowOnly); err != nil {
+		t.Fatalf("internal shadow judge rejected in shadow-only mode: %v", err)
 	}
 	// Family not judged.
 	otherFamily := cfg
 	otherFamily.Judge.Families = []string{"cpython"}
-	if err := validateJudgeRequest(judgeRequest(), otherFamily); err == nil {
+	if err := validateJudgeRequest(context.Background(), judgeRequest(), otherFamily); err == nil {
 		t.Fatal("expected rejection for an unjudged family")
 	}
 }
