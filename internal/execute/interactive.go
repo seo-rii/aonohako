@@ -33,20 +33,31 @@ type interactiveRunResult struct {
 }
 
 type interactivePipeWriter struct {
-	w      io.WriteCloser
-	closed atomic.Bool
-	errMu  sync.Mutex
-	err    error
+	w              io.WriteCloser
+	transcript     *interactiveTranscript
+	fromContestant bool
+	closed         atomic.Bool
+	errMu          sync.Mutex
+	err            error
 }
 
 func (w *interactivePipeWriter) Write(p []byte) (int, error) {
+	if w != nil && w.transcript != nil {
+		w.transcript.begin(false)
+	}
 	if w == nil || w.w == nil || w.closed.Load() {
 		if w != nil {
 			w.recordError(io.ErrClosedPipe)
+			if w.transcript != nil {
+				w.transcript.end(w.fromContestant, p, false, false)
+			}
 		}
 		return 0, io.ErrClosedPipe
 	}
 	n, err := w.w.Write(p)
+	if w.transcript != nil {
+		w.transcript.end(w.fromContestant, p, false, n == len(p) && err == nil)
+	}
 	w.recordError(err)
 	return n, err
 }
@@ -56,7 +67,14 @@ func (w *interactivePipeWriter) Close() {
 		return
 	}
 	if w.closed.CompareAndSwap(false, true) {
-		w.recordError(w.w.Close())
+		if w.transcript != nil {
+			w.transcript.begin(true)
+		}
+		err := w.w.Close()
+		if w.transcript != nil {
+			w.transcript.end(w.fromContestant, nil, true, err == nil)
+		}
+		w.recordError(err)
 	}
 }
 
@@ -165,8 +183,9 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		_ = contestantInW.Close()
 		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor input pipe failed: " + err.Error()}}
 	}
-	contestantIn := &interactivePipeWriter{w: contestantInW}
-	interactorIn := &interactivePipeWriter{w: interactorInW}
+	transcript, _ := ctx.Value(interactiveTranscriptKey{}).(*interactiveTranscript)
+	contestantIn := &interactivePipeWriter{w: contestantInW, transcript: transcript}
+	interactorIn := &interactivePipeWriter{w: interactorInW, transcript: transcript, fromContestant: true}
 	defer contestantInR.Close()
 	defer interactorInR.Close()
 	defer contestantIn.Close()
@@ -328,6 +347,13 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		contestantDeadlineHit.Load() || ctx.Err() != nil,
 		contestantCanceledByInteractor.Load(),
 	)
+	if transcript != nil {
+		transcript.seal(ctx.Err() == nil && !contestantInterrupted && !interactorInterrupted && !contestantCanceledByInteractor.Load() &&
+			contestantRes.Status == "OK" && contestantRes.ExitCode != nil && *contestantRes.ExitCode == 0 &&
+			interactorRes.Status == "OK" && interactorRes.ExitCode != nil &&
+			!contestantRes.StdoutTruncated && !interactorRes.StdoutTruncated &&
+			(resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusWA))
+	}
 	resp.SidecarOutputs = sidecarOutputs
 	resp.SidecarErrors = sidecarErrors
 	if req.WorkMeasurement {
