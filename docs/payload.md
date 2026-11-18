@@ -286,7 +286,8 @@ a `work_measurement_shadow` comparison with a separate judge-mode execution of t
 same input under `work_measurement_limits`. It cannot be combined with the other
 `work_measurement` options, and operator mode `shadow` or `on` must judge the
 family; otherwise the comparison is reported `unavailable` without affecting the
-verdict. See [shadow comparison](durante-judging.md#shadow-comparison).
+verdict. For URL stdin a completed pair includes `work_measurement_shadow.stdin_sha256`,
+the lowercase SHA-256 of the input bytes shared by the two executions. See [shadow comparison](durante-judging.md#shadow-comparison).
 Requested conversion also reports versioned `time_estimate_eligibility` when an
 execution envelope exists, identifying exclusions while preserving the existing
 `time_estimate_unavailable` strings. It does not relax signal or REP coverage checks.

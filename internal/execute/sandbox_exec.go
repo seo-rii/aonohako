@@ -167,6 +167,10 @@ func (s *sandboxPreparedStdin) Read(p []byte) (int, error) {
 	return s.file.Read(p)
 }
 
+func (s *sandboxPreparedStdin) Close() error {
+	return s.file.Close()
+}
+
 type teeCaptureWriter struct {
 	capture *cappedBuffer
 	forward io.Writer

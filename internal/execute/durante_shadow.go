@@ -2,7 +2,10 @@ package execute
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"aonohako/internal/config"
 	"aonohako/internal/durante"
@@ -86,16 +89,31 @@ func (s *Service) runWithShadow(ctx context.Context, req *model.RunRequest, hook
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	primaryReq, shadowReq := runvalidation.ShadowRequests(req)
-	primary := s.Run(ctx, &primaryReq, hooks)
 	if reason := shadowGateUnavailable(req, s.workMeasurement); reason != "" {
-		return attachShadow(primary, nil, reason)
+		return attachShadow(s.Run(ctx, &primaryReq, hooks), nil, reason)
+	}
+	var snapshot *stdinSnapshot
+	if strings.TrimSpace(req.StdinURL) != "" {
+		// Capture the URL at the point where the primary would normally open
+		// it, after admission, and share the file with every later execution.
+		snapshot = &stdinSnapshot{hash: sha256.New()}
+		defer snapshot.close()
+		ctx = context.WithValue(ctx, shadowStdinKey{}, snapshot)
+	}
+	primary := s.Run(ctx, &primaryReq, hooks)
+	if snapshot != nil && snapshot.path == "" {
+		return attachShadow(primary, nil, "primary did not acquire the URL input")
 	}
 	if err := ctx.Err(); err != nil {
 		return attachShadow(primary, nil, "request cancelled before the shadow execution")
 	}
 	// The shadow never emits logs or images: the stream belongs to the primary.
 	shadow := s.Run(withShadowJudge(ctx), &shadowReq, Hooks{})
-	return attachShadow(primary, &shadow, "")
+	compared := attachShadow(primary, &shadow, "")
+	if snapshot != nil {
+		compared.WorkMeasurementShadow.StdinSHA256 = hex.EncodeToString(snapshot.hash.Sum(nil))
+	}
+	return compared
 }
 
 // shadowPrimaryRequest is the request that the authoritative portion of a
@@ -123,6 +141,16 @@ func validateRemoteShadow(req *model.RunRequest, response model.RunResponse, cfg
 	}
 	if block.Version != 1 || block.Authority != durante.Authority || block.PrimaryStatus != response.Status || block.PrimaryCPUTimeMs != response.CPUTimeMs {
 		return fmt.Errorf("invalid remote result: shadow does not describe the returned primary verdict")
+	}
+	// Earlier runners re-fetched stdin_url for the shadow. Only newer runners
+	// identify the single snapshot used by both executions.
+	if block.Response != nil && strings.TrimSpace(req.StdinURL) != "" {
+		digest, err := hex.DecodeString(block.StdinSHA256)
+		if err != nil || len(digest) != sha256.Size || block.StdinSHA256 != hex.EncodeToString(digest) {
+			return fmt.Errorf("invalid remote result: URL shadow requires a shared stdin SHA-256")
+		}
+	} else if block.StdinSHA256 != "" {
+		return fmt.Errorf("invalid remote result: unexpected shared stdin SHA-256")
 	}
 	if block.Response == nil {
 		if block.Agreement != model.ShadowUnavailable || block.Unavailable == "" || block.ShadowStatus != "" {

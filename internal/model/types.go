@@ -430,6 +430,7 @@ type WorkMeasurementShadow struct {
 	PrimaryStatus    string       `json:"primary_status"`
 	PrimaryCPUTimeMs int64        `json:"primary_cpu_time_ms"`
 	ShadowStatus     string       `json:"shadow_status,omitempty"`
+	StdinSHA256      string       `json:"stdin_sha256,omitempty"` // digest of the shared URL input file
 	Unavailable      string       `json:"unavailable,omitempty"`
 	Response         *RunResponse `json:"response,omitempty"`
 }

@@ -205,6 +205,7 @@ adds only `work_measurement_shadow`:
 | `agreement` | `agree`, `disagree`, or `unavailable` |
 | `primary_status`, `primary_cpu_time_ms` | The authoritative verdict and its CPU time |
 | `shadow_status` | The judge-mode verdict for the same input |
+| `stdin_sha256` | SHA-256 of the shared input when the primary fetched `stdin_url` and the shadow ran |
 | `unavailable` | Why no comparison exists (mode off, family not judged, cancelled, remote result rejected) |
 | `response` | The shadow execution's judgment, envelope, time estimate and Durante report, without stdout/stderr/sidecars |
 
@@ -214,8 +215,10 @@ with it, because the primary must stay unmetered. Operator-side gates (mode
 `off`, a family not in `AONOHAKO_DURANTE_JUDGE_FAMILIES`) never reject the
 request: the primary runs and the shadow is `unavailable`. The shadow costs one
 extra instrumented execution (about 3x CPU) per opted-in testcase, sequentially
-after the primary; sample submissions rather than shadowing everything. Inputs
-from `stdin_url` are fetched once per execution.
+after the primary; sample submissions rather than shadowing everything. The runner fetches a `stdin_url` once when the primary opens it. Each short-case
+repeat and the shadow reads an independent handle to the same bytes. With a URL
+request an older remote runner's comparison is unavailable if it cannot identify
+the shared input. Inline stdin is already part of the request.
 
 A remote control plane validates the primary as an ordinary result and
 recomputes the shadow comparison from the returned raw observation with its own
