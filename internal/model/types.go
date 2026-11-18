@@ -438,7 +438,7 @@ type WorkMeasurementExecution struct {
 	TimeEstimateEligibility *durante.TimeEligibility `json:"time_estimate_eligibility,omitempty"`
 }
 
-// PipelineStepObservation identifies the native stage supplying a replay's input and output.
+// PipelineStepObservation identifies the native stage or contestant supplying replay evidence.
 type PipelineStepObservation struct {
 	StepID      string          `json:"step_id"`
 	ProgramID   string          `json:"program_id"`
@@ -448,7 +448,8 @@ type PipelineStepObservation struct {
 	Report      *durante.Report `json:"report,omitempty"`
 }
 
-// WorkMeasurementObservation describes standalone (v1) or Pipeline V1 step (v2) replays.
+// WorkMeasurementObservation describes a batch replay (v1), or identifies the
+// contestant in standalone interactive, legacy step and Pipeline V1 replays (v2).
 // The enclosing response carries the native verdict.
 type WorkMeasurementObservation struct {
 	Steps       []PipelineStepObservation `json:"steps,omitempty"`

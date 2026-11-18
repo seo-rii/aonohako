@@ -130,6 +130,9 @@ func (o *observationOutput) record(output []byte) {
 
 func (s *Service) runWithObservation(ctx context.Context, req *model.RunRequest, hooks Hooks,
 	run func(context.Context, *model.RunRequest, Hooks) model.RunResponse) model.RunResponse {
+	if req.Interactor != nil && req.Communication == nil {
+		return s.runWithStandaloneInteractiveObservation(ctx, req, hooks, run)
+	}
 	reason := observationEligible(req, s.workMeasurement)
 	if reason == "" && s.workMeasurementPolicyError != nil {
 		reason = "observation resource policy is unavailable"

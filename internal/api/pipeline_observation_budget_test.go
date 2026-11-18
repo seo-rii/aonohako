@@ -89,3 +89,37 @@ func TestLegacyObservationBudgetRequiresNoWorkerHandshake(t *testing.T) {
 		})
 	}
 }
+
+func TestStandaloneInteractiveObservationBudgetIsOptional(t *testing.T) {
+	handler := newServerForTest(t).Handler()
+	maximum := execute.MaxInteractiveObservationBudget.Milliseconds()
+	for _, tc := range []struct {
+		name, payload string
+		header        []string
+		want          string
+	}{
+		{"direct", `{"interactor":{}}`, nil, "invalid_request"},
+		{"off", `{"interactor":{}}`, []string{"0"}, "invalid_request"},
+		{"maximum", `{"interactor":{}}`, []string{strconv.FormatInt(maximum, 10)}, "invalid_request"},
+		{"malformed", `{"interactor":{}}`, []string{"-1"}, "invalid_interactive_observation_budget"},
+		{"duplicate", `{"interactor":{}}`, []string{"1", "1"}, "invalid_interactive_observation_budget"},
+		{"excessive", `{"interactor":{}}`, []string{strconv.FormatInt(maximum+1, 10)}, "invalid_interactive_observation_budget"},
+		{"batch", `{}`, []string{"1"}, "invalid_interactive_observation_budget"},
+		{"legacy", `{"interactor":{},"steps":[{}]}`, []string{"1"}, "invalid_interactive_observation_budget"},
+		{"pipeline", `{"pipeline":{"version":1}}`, []string{"1"}, "invalid_interactive_observation_budget"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader(tc.payload))
+			r.Header.Set("Content-Type", "application/json")
+			for _, value := range tc.header {
+				r.Header.Add(model.InteractiveObservationBudgetHeader, value)
+			}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			var payload struct{ Error string }
+			if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil || w.Code != http.StatusBadRequest || payload.Error != tc.want {
+				t.Fatalf("status=%d body=%s, want %s", w.Code, w.Body.String(), tc.want)
+			}
+		})
+	}
+}

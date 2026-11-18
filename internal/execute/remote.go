@@ -135,7 +135,8 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 
 	observationBudget := remoteObservationBudget(req, r.workMeasurement)
 	legacySteps := runvalidation.UsesSteps(req)
-	if legacySteps {
+	standaloneInteractive := req.Interactor != nil && req.Pipeline == nil && !legacySteps
+	if legacySteps || standaloneInteractive {
 		if incoming := stepObservationBudgetFromContext(ctx); incoming.bounded {
 			observationBudget = min(observationBudget, incoming.maximum)
 		}
@@ -144,7 +145,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if absoluteTimeout <= 0 {
 		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)
 		absoluteTimeout += observationBudget
-		if (req.Pipeline != nil || legacySteps) && observationBudget > 0 {
+		if (req.Pipeline != nil || legacySteps || standaloneInteractive) && observationBudget > 0 {
 			// Leave time to reap a replay stopped at its deadline and return the native result.
 			absoluteTimeout += remoteio.DefaultOperationOverhead
 		}
@@ -167,6 +168,8 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	} else if legacySteps {
 		// Older workers ignore this optional ceiling and run their native steps normally.
 		httpReq.Header.Set(model.LegacyObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
+	} else if standaloneInteractive {
+		httpReq.Header.Set(model.InteractiveObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
 	}
 
 	if authHeader, err := r.authorizationHeader(ctx); err != nil {
@@ -515,7 +518,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
 			}
 			policy := r.workMeasurement
-			if legacySteps && observationBudget == 0 {
+			if (legacySteps || standaloneInteractive) && observationBudget == 0 {
 				// Retain the native stage identities, but no replay report is eligible.
 				policy.ResourcePolicy = nil
 			}

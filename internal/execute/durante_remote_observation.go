@@ -24,6 +24,9 @@ func remoteObservation(req *model.RunRequest, primary model.RunResponse, cfg dur
 	if runvalidation.UsesSteps(req) {
 		return remoteLegacyObservation(req, primary, cfg, raw)
 	}
+	if req.Interactor != nil {
+		return remoteStandaloneInteractiveObservation(req, primary, cfg, raw)
+	}
 	unavailable := func(reason string) *model.WorkMeasurementObservation {
 		return &model.WorkMeasurementObservation{Version: 1, Authority: durante.Authority, State: "unavailable", Reason: reason}
 	}
@@ -71,7 +74,11 @@ func remoteObservationBudget(req *model.RunRequest, cfg durante.Config) time.Dur
 		return budget
 	}
 	if req.Pipeline == nil {
-		if observationEligible(req, cfg) == "" {
+		single := req
+		if req.Interactor != nil {
+			single = standaloneInteractiveContestant(req)
+		}
+		if single != nil && observationEligible(single, cfg) == "" {
 			return perReplay
 		}
 		return 0
@@ -105,7 +112,41 @@ func verifyRemoteStepObservation(row *model.PipelineStepObservation, batch *mode
 	}
 	// Discard unverified counters and any diagnostic text from the worker.
 	*row = model.PipelineStepObservation{StepID: row.StepID, ProgramID: row.ProgramID,
-		State: "unavailable", Reason: "no verified batch observation"}
+		State: "unavailable", Reason: "no verified contestant observation"}
+}
+
+func remoteStandaloneInteractiveObservation(req *model.RunRequest, primary model.RunResponse, cfg durante.Config, raw json.RawMessage) *model.WorkMeasurementObservation {
+	count := 0
+	if len(primary.Steps) > 0 {
+		count = 1
+	}
+	block := decodeRemoteStepObservation(raw, "interactive", count)
+	if block == nil || (count == 1 && (block.Steps[0].StepID != "contestant" || block.Steps[0].ProgramID != "contestant")) {
+		return &model.WorkMeasurementObservation{Version: 2, State: "unavailable", Authority: durante.Authority,
+			Reason: "remote interactive observation is unavailable"}
+	}
+	if count == 0 {
+		return block
+	}
+	single := standaloneInteractiveContestant(req)
+	eligible := completedStandaloneInteractiveExchange(primary) && standaloneInteractiveAccountingMatches(req, primary)
+	verifyRemoteStepObservation(&block.Steps[0], single, cfg, eligible, "interactive_transcript")
+	return block
+}
+
+// A complete interactive receipt refers to a normally completed native run of
+// each role within its own CPU allowance. The aggregate includes both roles.
+func standaloneInteractiveAccountingMatches(req *model.RunRequest, primary model.RunResponse) bool {
+	contestant, judge := primary.Steps[0], primary.Steps[1]
+	judgeLimit := interactorRunRequest(req).Limits.TimeMs
+	if (req.Limits.TimeMs > 0 && contestant.CPUTimeMs > int64(req.Limits.TimeMs)) ||
+		(judgeLimit > 0 && judge.CPUTimeMs > int64(judgeLimit)) {
+		return false
+	}
+	totals := aggregateStepResponse(model.RunResponse{}, primary.Steps)
+	return primary.CPUTimeMs == totals.CPUTimeMs && primary.CPUTimeNs == totals.CPUTimeNs &&
+		equalPipelineCounter(primary.RawCPUTimeNs, totals.RawCPUTimeNs) && equalPipelineCounter(primary.RawCPUTimeMs, totals.RawCPUTimeMs) &&
+		primary.ProcessCPUTimeMs == totals.ProcessCPUTimeMs && primary.MemoryKB == totals.MemoryKB
 }
 
 func remotePipelineObservation(req *model.RunRequest, primary model.RunResponse, cfg durante.Config, raw json.RawMessage) *model.WorkMeasurementObservation {
