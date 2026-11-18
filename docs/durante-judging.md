@@ -279,3 +279,26 @@ with reference-time conversion.
 Memory judging, online (mid-run) work budgets, interactive/communication judge
 modes, and runtimes whose counts do not convert (signal-driven, e.g. Go) are out
 of scope for this path and remain documented limitations.
+
+## Time attribution by execution mode
+
+Ordinary C++ shadow comparisons are the first qualification cohort. Interactive
+and communication runs already produce independent diagnostic role estimates.
+A completed role is compared against its own limit in nanoseconds. A stopped
+role has an unavailable estimate. Use the following attribution rules when
+extending the deciding path after qualification.
+
+| Mode | Submission time to compare | Operator or helper work |
+|---|---|---|
+| Interactive | Compare the contestant process tree against its own limit. | Attribute interactor work to its own budget. Record coordinator cancellation as incomplete. |
+| Communication v1/v2 | Compare each participant seat separately, including seats executing the same program. Key the result by program ID and participant index. | Attribute the manager to its own budget. Keep the manager's score and match result separate from time diagnostics. |
+| Special judge | Measure the contestant up to completion and compare with its contestant limit. | Use the SPJ's limit and workspace for checking. A checker failure belongs to the checker. |
+| Pipeline | Match each executing participant to its step, program and step limit. Interactive steps also need a separate interactor observation. | Record artifact transfer and the final judge separately. Mark later, unstarted steps as such. |
+| Multi-step | Compare each executed step with its effective step limit. A displayed total may sum completed sequential steps while retaining their individual outcomes. | Account for handoff and coordination separately. Omit a credited total if any required step lacks an estimate. |
+
+The current API supports role time diagnostics for interactive and communication
+requests. SPJ, pipeline and multi-step Durante verdicts require dedicated
+execution-path and remote revalidation support. Before enabling a deciding
+path, verify which role exceeded its limit with an exact-boundary case, one
+where only the helper exceeds its limit, and one where the coordinator stops
+a peer before collection completes.

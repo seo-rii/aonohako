@@ -211,17 +211,14 @@ func TestDuranteCommunicationIntegration(t *testing.T) {
 		checkComplete(t, response)
 	})
 	for _, version := range []int{1, 2} {
-		for _, bound := range []bool{false, true} {
-			name := fmt.Sprintf("v%d_diagnostic_time_budgets", version)
-			if bound {
-				name += "_bound_options"
-			}
+		for _, variant := range []string{"", "_bound_options", "_latency"} {
+			name := fmt.Sprintf("v%d_diagnostic_time_budgets%s", version, variant)
 			t.Run(name, func(t *testing.T) {
 				timeConfig := serviceConfig
-				timeConfig.Execution.WorkMeasurement = peerTimeIntegrationConfig(t, cfg)
+				timeConfig.Execution.WorkMeasurement = peerTimeIntegrationConfig(t, cfg, variant == "_latency")
 				req := request(version, "stream", "stream", "stream")
 				addPeerTimeIntegrationBudgets(t, req)
-				if bound {
+				if variant == "_bound_options" {
 					timeConfig.Execution.WorkMeasurement = bindIntegrationRuntimeOptions(t, timeConfig.Execution.WorkMeasurement, req)
 				}
 				timeService := NewWithConfig(timeConfig)
