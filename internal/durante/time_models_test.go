@@ -168,7 +168,7 @@ func TestParseTimeModelsPreservesExactFieldsAndRejectsAmbiguity(t *testing.T) {
 	}
 	cfg := timeModelsFixture(t)
 	cfg.TimeModels.Models[0].Method = TimeMethod
-	cfg.TimeModels.Models[0].Coefficients = TimeCoefficients{math.MaxUint64, math.MaxUint64, math.MaxUint64}
+	cfg.TimeModels.Models[0].Coefficients = TimeCoefficients{InstructionNSNumerator: math.MaxUint64, REPByteNSNumerator: math.MaxUint64, NSDenominator: math.MaxUint64}
 	raw := timeConfigurationJSON(t, cfg.TimeModels)
 	if got, err := ParseTimeModels(raw); err != nil || !reflect.DeepEqual(got, cfg.TimeModels) {
 		t.Fatal("explicit method or uint64 coefficients changed", err)

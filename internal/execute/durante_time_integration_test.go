@@ -73,13 +73,20 @@ func TestDuranteTimeEstimateIntegration(t *testing.T) {
 	for _, tc := range []struct {
 		name             string
 		exceeds, matches bool
+		separateREP      bool
 	}{
-		{"within reference limit", false, true},
-		{"exceeds reference limit", true, true},
-		{"wrong output retains reference estimate", false, false},
+		{"within reference limit", false, true, false},
+		{"exceeds reference limit", true, true, false},
+		{"wrong output retains reference estimate", false, false, false},
+		{"separate REP costs", false, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg, req := makeRun()
+			if tc.separateREP {
+				cfg.TimePolicy.Method = durante.TimeMethodREPBreakdown
+				cfg.TimePolicy.REPByteNSNumerator = 0
+				cfg.TimePolicy.MOVSByteNSNumerator, cfg.TimePolicy.STOSByteNSNumerator = 3, 5
+			}
 			if tc.exceeds {
 				cfg.TimePolicy.InstructionNSNumerator, cfg.TimePolicy.NSDenominator = 1_000_001, 1
 			}
@@ -96,6 +103,9 @@ func TestDuranteTimeEstimateIntegration(t *testing.T) {
 			}
 			if response.WorkMeasurement == nil || response.WorkMeasurement.REPBreakdown == nil || !response.WorkMeasurement.ValidREPTelemetry() {
 				t.Fatalf("time observation lost REP detail: %+v", response.WorkMeasurement)
+			}
+			if tc.separateREP && (d.TimeEstimate.Method != durante.TimeMethodREPBreakdown || d.TimeEstimate.MOVSByteNSNumerator != 3 || d.TimeEstimate.STOSByteNSNumerator != 5 || d.TimeEstimate.REPByteNSNumerator != 0) {
+				t.Fatalf("separate REP conversion changed: %+v", d.TimeEstimate)
 			}
 			if err := validateRemoteWorkMeasurement(req, response); err != nil {
 				t.Fatal(err)

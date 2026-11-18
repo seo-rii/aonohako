@@ -21,7 +21,9 @@ const (
 // execution profiles. It has the same arithmetic and units as TimePolicy.
 type TimeCoefficients struct {
 	InstructionNSNumerator uint64 `json:"instruction_ns_numerator"`
-	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator"`
+	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator,omitempty"`
+	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
+	STOSByteNSNumerator    uint64 `json:"stos_byte_ns_numerator,omitempty"`
 	NSDenominator          uint64 `json:"ns_denominator"`
 }
 
@@ -88,9 +90,21 @@ func (c *TimeCoefficients) UnmarshalJSON(data []byte) error {
 	if err := decodeTimeModelFields(data, "time coefficients", map[string]any{
 		"instruction_ns_numerator": &decoded.InstructionNSNumerator,
 		"rep_byte_ns_numerator":    &decoded.REPByteNSNumerator,
+		"movs_byte_ns_numerator":   &decoded.MOVSByteNSNumerator,
+		"stos_byte_ns_numerator":   &decoded.STOSByteNSNumerator,
 		"ns_denominator":           &decoded.NSDenominator,
-	}); err != nil {
+	}, "rep_byte_ns_numerator", "movs_byte_ns_numerator", "stos_byte_ns_numerator"); err != nil {
 		return err
+	}
+	fields, err := manifestObject(data)
+	if err != nil {
+		return err
+	}
+	_, aggregate := fields["rep_byte_ns_numerator"]
+	_, movs := fields["movs_byte_ns_numerator"]
+	_, stos := fields["stos_byte_ns_numerator"]
+	if (aggregate && (movs || stos)) || (!aggregate && (!movs || !stos)) {
+		return fmt.Errorf("durante time coefficients requires exactly one complete REP formula")
 	}
 	*c = decoded
 	return nil
@@ -104,6 +118,13 @@ func (m *TimeModel) UnmarshalJSON(data []byte) error {
 		"method": &decoded.Method,
 	}, "method"); err != nil {
 		return err
+	}
+	fields, err := manifestObject(data)
+	if err != nil {
+		return err
+	}
+	if _, present := fields["method"]; present && decoded.Method == "" {
+		return fmt.Errorf("durante time model method must not be empty")
 	}
 	*m = decoded
 	return nil
@@ -162,11 +183,13 @@ func validTimeModelID(value string) bool {
 
 func (m TimeModel) resolve(binding TimeProfileBinding) TimePolicy {
 	return TimePolicy{
+		Method:  m.Method,
 		ModelID: m.ModelID, ModelVersion: m.ModelVersion, ReferenceID: m.ReferenceID,
 		RuntimeID: binding.SourceLanguage + "@" + binding.RuntimeImage,
 		Family:    binding.Family, EngineProfile: binding.EngineProfile, DispatchProfile: binding.DispatchProfile,
 		InstructionNSNumerator: m.Coefficients.InstructionNSNumerator,
 		REPByteNSNumerator:     m.Coefficients.REPByteNSNumerator, NSDenominator: m.Coefficients.NSDenominator,
+		MOVSByteNSNumerator: m.Coefficients.MOVSByteNSNumerator, STOSByteNSNumerator: m.Coefficients.STOSByteNSNumerator,
 	}
 }
 
@@ -179,11 +202,8 @@ func (r TimeModels) Validate() error {
 		if !validTimeModelID(model.ModelID) || !validTimeModelID(model.ReferenceID) || model.ModelVersion == 0 {
 			return fmt.Errorf("durante time model requires explicit model, version and reference identities")
 		}
-		if model.Method != "" && model.Method != TimeMethod {
-			return fmt.Errorf("durante time model has an unsupported method")
-		}
-		if model.Coefficients.InstructionNSNumerator == 0 || model.Coefficients.REPByteNSNumerator == 0 || model.Coefficients.NSDenominator == 0 {
-			return fmt.Errorf("durante time model requires positive explicit weights and denominator")
+		if err := model.resolve(TimeProfileBinding{}).validateWeights(); err != nil {
+			return fmt.Errorf("durante time model: %w", err)
 		}
 		key := timeModelKey{model.ModelID, model.ModelVersion}
 		if _, exists := models[key]; exists {

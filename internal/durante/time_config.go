@@ -25,6 +25,7 @@ func ParseTimePolicy(raw string) (*TimePolicy, error) {
 	}
 	var policy TimePolicy
 	fields := map[string]any{
+		"method":                   &policy.Method,
 		"model_id":                 &policy.ModelID,
 		"model_version":            &policy.ModelVersion,
 		"reference_id":             &policy.ReferenceID,
@@ -34,6 +35,8 @@ func ParseTimePolicy(raw string) (*TimePolicy, error) {
 		"dispatch_profile":         &policy.DispatchProfile,
 		"instruction_ns_numerator": &policy.InstructionNSNumerator,
 		"rep_byte_ns_numerator":    &policy.REPByteNSNumerator,
+		"movs_byte_ns_numerator":   &policy.MOVSByteNSNumerator,
+		"stos_byte_ns_numerator":   &policy.STOSByteNSNumerator,
 		"ns_denominator":           &policy.NSDenominator,
 	}
 	decoder := json.NewDecoder(strings.NewReader(raw))
@@ -70,8 +73,28 @@ func ParseTimePolicy(raw string) (*TimePolicy, error) {
 	if _, err := decoder.Token(); err != io.EOF {
 		return nil, fmt.Errorf("trailing durante time policy data")
 	}
-	if len(seen) != len(fields) {
-		return nil, fmt.Errorf("durante time policy requires all fields explicitly")
+	required := []string{"model_id", "model_version", "reference_id", "runtime_id", "family", "engine_profile", "dispatch_profile", "instruction_ns_numerator", "ns_denominator"}
+	switch policy.Formula() {
+	case TimeMethod:
+		required = append(required, "rep_byte_ns_numerator")
+		if seen["movs_byte_ns_numerator"] || seen["stos_byte_ns_numerator"] {
+			return nil, fmt.Errorf("v1 time policy cannot include operation-specific weights")
+		}
+	case TimeMethodREPBreakdown:
+		required = append(required, "method", "movs_byte_ns_numerator", "stos_byte_ns_numerator")
+		if seen["rep_byte_ns_numerator"] {
+			return nil, fmt.Errorf("v2 time policy cannot include the combined REP weight")
+		}
+	default:
+		return nil, fmt.Errorf("unsupported durante time method")
+	}
+	if seen["method"] && policy.Method == "" {
+		return nil, fmt.Errorf("explicit durante time method cannot be empty")
+	}
+	for _, key := range required {
+		if !seen[key] {
+			return nil, fmt.Errorf("durante time policy requires field %q explicitly", key)
+		}
 	}
 	if err := policy.Validate(); err != nil {
 		return nil, err

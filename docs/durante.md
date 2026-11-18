@@ -475,8 +475,9 @@ records supporting each intended execution profile before configuring estimates.
 }
 ```
 
-All fields are required except model `method`, whose absence or empty value means
-`weighted-work-nanoseconds-v1`. The registry accepts at most 32 models, 128 profiles
+All fields are required except model `method`, whose absence means
+`weighted-work-nanoseconds-v1`. An explicitly empty method is rejected. The
+registry accepts at most 32 models, 128 profiles
 and 64 KiB of JSON. Unknown fields, duplicates, nulls, noncanonical source IDs,
 unknown model versions and ambiguous profile bindings are rejected. Each model
 ID/version is unique; each source/image/engine/dispatch combination has one binding.
@@ -565,6 +566,10 @@ estimated_ns = ceil((instructions * instruction_ns_numerator
 
 The combined numerator uses exact wide arithmetic before rounding. Results that
 exceed signed 64-bit nanoseconds are rejected; milliseconds round upward.
+An explicit `method: weighted-rep-operations-nanoseconds-v2` instead uses
+separate positive MOVS and STOS byte weights and requires observed REP detail;
+see [separate MOVS and STOS costs](durante-rep-model.md) for configuration and
+compatibility. Omitting `method` preserves the formula above.
 Incompatible runtime/profile, incomplete counts, signals, unsupported REP, or
 missing counters yield an error and no estimate. Successful results still have
 `authority: diagnostic_only`. Model/reference identities and weights are retained
