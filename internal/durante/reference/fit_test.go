@@ -294,9 +294,15 @@ func TestFitRejectsInvalidOrIncompleteEvidence(t *testing.T) {
 		"metered native":         func(d *Dataset) { d.Samples[0].NativeBefore.WorkMeasurement = d.Samples[0].Metered.WorkMeasurement },
 		"incomplete envelope":    func(d *Dataset) { d.Samples[0].Metered.WorkMeasurementExecution.State = "incomplete" },
 		"wrong output":           func(d *Dataset) { *d.Samples[0].Metered.WorkMeasurementExecution.OutputMatches = false },
-		"nominal limits":         func(d *Dataset) { d.Samples[0].Metered.WorkMeasurementExecution.NominalLimits.TimeMs-- },
-		"raw limits":             func(d *Dataset) { d.Samples[0].Metered.WorkMeasurementExecution.RawLimits.CPUTimeMs-- },
-		"missing counter":        func(d *Dataset) { d.Samples[0].Metered.WorkMeasurement.Instructions = nil },
+		"extra replay on native control": func(d *Dataset) {
+			d.Samples[0].NativeAfter.WorkMeasurementObservation = &model.WorkMeasurementObservation{Version: 1, State: "complete"}
+		},
+		"extra replay on metered phase": func(d *Dataset) {
+			d.Samples[0].Metered.WorkMeasurementObservation = &model.WorkMeasurementObservation{Version: 1, State: "unavailable"}
+		},
+		"nominal limits":  func(d *Dataset) { d.Samples[0].Metered.WorkMeasurementExecution.NominalLimits.TimeMs-- },
+		"raw limits":      func(d *Dataset) { d.Samples[0].Metered.WorkMeasurementExecution.RawLimits.CPUTimeMs-- },
+		"missing counter": func(d *Dataset) { d.Samples[0].Metered.WorkMeasurement.Instructions = nil },
 		"changed installation": func(d *Dataset) {
 			d.Samples[1].Metered.WorkMeasurement.Installation.ClientSHA256 = strings.Repeat("d", 64)
 		},

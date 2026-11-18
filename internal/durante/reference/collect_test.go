@@ -471,6 +471,24 @@ func TestCollectionAcceptsZeroRSSWithValidFinalCPUAccounting(t *testing.T) {
 	}
 }
 
+func TestCollectionRejectsReplaysInEitherPhase(t *testing.T) {
+	dataset := collectionTestDataset()
+	for _, state := range []string{"complete", "unavailable"} {
+		t.Run(state, func(t *testing.T) {
+			native, metered := collectionTestNative(), collectionTestMetered(dataset)
+			for _, r := range []*model.RunResponse{&native, &metered} {
+				r.WorkMeasurementObservation = &model.WorkMeasurementObservation{Version: 1, Authority: durante.Authority, State: state}
+			}
+			if err := validateCollectedNative(native); err == nil {
+				t.Error("native control with an automatic observation was accepted")
+			}
+			if err := validateCollectedMetered(metered, dataset); err == nil {
+				t.Error("explicit measurement with an automatic observation was accepted")
+			}
+		})
+	}
+}
+
 func TestCollectionRejectsNormalizedOrIncompleteObservations(t *testing.T) {
 	for name, edit := range map[string]func(*model.RunResponse){
 		"normalized":            func(r *model.RunResponse) { r.CPUTimeNormalization = &model.CPUTimeNormalization{} },

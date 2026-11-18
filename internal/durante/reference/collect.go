@@ -118,6 +118,9 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	if err != nil {
 		return dataset, fmt.Errorf("reference environment: %w", err)
 	}
+	// The collector schedules its own metered phase between two native controls.
+	// An automatic replay would add a second metered run after each control.
+	cfg.Execution.WorkMeasurement.Observe = false
 	server, err := api.New(cfg)
 	if err != nil {
 		return dataset, fmt.Errorf("initialize reference API: %w", err)

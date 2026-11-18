@@ -260,6 +260,9 @@ func referenceCases(dataset Dataset, contract durante.TimePolicy) ([]*referenceC
 }
 
 func validateReferenceCPU(response model.RunResponse, cpuLimitMs, wallLimitMs int) error {
+	if response.WorkMeasurementObservation != nil {
+		return fmt.Errorf("reference phase contains an automatic work measurement observation")
+	}
 	if response.CPUTimeNs == 0 || response.CPUAccounting == nil || response.CPUTimeNormalization != nil || response.CPUTimeSampling != nil || response.RawCPUTimeNs != nil || response.RawCPUTimeMs != nil {
 		return fmt.Errorf("requires positive unnormalized CPU nanoseconds, accounting metadata, and no automatic sampling")
 	}
