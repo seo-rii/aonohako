@@ -28,15 +28,18 @@ const TimeMethodREPBreakdown = "weighted-rep-operations-nanoseconds-v2"
 // Family alone is insufficient to identify a compatible runtime. Report does
 // not attest RuntimeID or the target's libc, so this policy cannot do so either.
 type TimePolicy struct {
-	runtimeOptionsID       string // Set only by a validated schema 2 registry binding.
-	Method                 string `json:"method,omitempty"`
-	ModelID                string `json:"model_id"`
-	ModelVersion           uint64 `json:"model_version"`
-	ReferenceID            string `json:"reference_id"`
-	RuntimeID              string `json:"runtime_id"`
-	Family                 string `json:"family"`
-	EngineProfile          string `json:"engine_profile"`
-	DispatchProfile        string `json:"dispatch_profile"`
+	runtimeOptionsID string // Set only by a validated schema 2 registry binding.
+	Method           string `json:"method,omitempty"`
+	ModelID          string `json:"model_id"`
+	ModelVersion     uint64 `json:"model_version"`
+	ReferenceID      string `json:"reference_id"`
+	RuntimeID        string `json:"runtime_id"`
+	Family           string `json:"family"`
+	EngineProfile    string `json:"engine_profile"`
+	DispatchProfile  string `json:"dispatch_profile"`
+	// CPUIDProfile is the virtual processor the model was qualified under.
+	// Empty means host CPUID; it then never applies to profiled counts.
+	CPUIDProfile           string `json:"cpuid_profile,omitempty"`
 	InstructionNSNumerator uint64 `json:"instruction_ns_numerator"`
 	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator,omitempty"`
 	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
@@ -64,6 +67,7 @@ type TimeEstimate struct {
 	Family                 string `json:"family"`
 	EngineProfile          string `json:"engine_profile"`
 	DispatchProfile        string `json:"dispatch_profile"`
+	CPUIDProfile           string `json:"cpuid_profile,omitempty"`
 	Nanoseconds            int64  `json:"nanoseconds"`
 	Milliseconds           int64  `json:"milliseconds"`
 }
@@ -100,6 +104,9 @@ func (p TimePolicy) Validate() error {
 		}
 	default:
 		return fmt.Errorf("durante time policy requires a supported dispatch profile")
+	}
+	if p.CPUIDProfile != "" && !ValidCPUIDProfile(p.CPUIDProfile) {
+		return fmt.Errorf("durante time policy has an unsupported CPUID profile")
 	}
 	return p.validateWeights()
 }
@@ -139,7 +146,7 @@ func (p TimePolicy) EstimateWithEligibility(runtimeID string, report Report) (Ti
 	if err := p.Validate(); err != nil {
 		return TimeEstimate{}, timeEligibility(TimeIncompatibleConfiguration), err
 	}
-	if runtimeID != p.RuntimeID || report.Family != p.Family || report.EngineProfile != p.EngineProfile || report.DispatchProfile != p.DispatchProfile {
+	if runtimeID != p.RuntimeID || report.Family != p.Family || report.EngineProfile != p.EngineProfile || report.DispatchProfile != p.DispatchProfile || report.CPUIDProfile != p.CPUIDProfile {
 		return TimeEstimate{}, timeEligibility(TimeRuntimeProfileMismatch), fmt.Errorf("durante time policy runtime or profile mismatch")
 	}
 	if p.DispatchProfile == DispatchGLIBC241 && report.HostLibc != "2.41" {
@@ -184,6 +191,7 @@ func (p TimePolicy) EstimateWithEligibility(runtimeID string, report Report) (Ti
 		ModelID: p.ModelID, ModelVersion: p.ModelVersion, ReferenceID: p.ReferenceID,
 		RuntimeID: p.RuntimeID, Family: p.Family,
 		EngineProfile: p.EngineProfile, DispatchProfile: p.DispatchProfile,
-		Nanoseconds: nanoseconds, Milliseconds: milliseconds,
+		CPUIDProfile: p.CPUIDProfile,
+		Nanoseconds:  nanoseconds, Milliseconds: milliseconds,
 	}, eligibility, nil
 }

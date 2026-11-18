@@ -81,6 +81,16 @@ func TestDuranteSandboxIntegration(t *testing.T) {
 			}
 		})
 	}
+	t.Run("fixed CPUID profile", func(t *testing.T) {
+		profiled := cfg
+		profiled.CPUIDProfile = durante.CPUIDProfileX8664V2
+		svc := NewWithConfig(config.Config{Execution: config.ExecutionConfig{WorkMeasurement: profiled}})
+		resp := svc.Run(context.Background(), &model.RunRequest{Lang: "CPP20", WorkMeasurement: true, Binaries: []model.Binary{{Name: "Main", DataB64: base64.StdEncoding.EncodeToString(data), Mode: "exec"}}, Stdin: "normal 10000", ExpectedStdout: "49995000", Limits: model.Limits{TimeMs: 3000, WallTimeMs: 10000, MemoryMB: 512}}, Hooks{})
+		m := resp.WorkMeasurement
+		if resp.Status != model.RunStatusAccepted || m == nil || !m.Complete || m.CPUIDProfile != durante.CPUIDProfileX8664V2 || m.Instructions == nil || *m.Instructions == 0 {
+			t.Fatalf("profiled run lacks a complete receipt: %+v", resp)
+		}
+	})
 	t.Run("unmetered", func(t *testing.T) {
 		resp := run("normal 10000", "49995000", false, 3000)
 		if resp.Status != model.RunStatusAccepted || resp.WorkMeasurement != nil {

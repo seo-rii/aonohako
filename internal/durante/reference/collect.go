@@ -71,6 +71,7 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 		StartedAt: time.Now().UTC().Format(time.RFC3339Nano), SourceLanguage: profile.SourceLanguage,
 		RuntimeImage:    cfg.Execution.WorkMeasurement.RuntimeImage,
 		DispatchProfile: cfg.Execution.WorkMeasurement.DispatchProfile,
+		CPUIDProfile:    cfg.Execution.WorkMeasurement.CPUIDProfile,
 		Repetitions:     options.Repetitions,
 		NativeLimits:    model.Limits{TimeMs: 10000, WallTimeMs: 30000, MemoryMB: memoryMB},
 		MeteredLimits:   durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: memoryMB},
@@ -432,7 +433,7 @@ func validateCollectedMetered(response model.RunResponse, dataset Dataset) error
 		return fmt.Errorf("raw corpus collection returned unsolicited converted time or peer metadata")
 	}
 	r := response.WorkMeasurement
-	if r == nil || r.Family != profile.Family || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile {
+	if r == nil || r.Family != profile.Family || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile || r.CPUIDProfile != dataset.CPUIDProfile {
 		return fmt.Errorf("metered observation is absent, incomplete, or incompatible")
 	}
 	if !r.ValidInstallationIdentity() {

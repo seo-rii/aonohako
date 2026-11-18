@@ -22,6 +22,10 @@ type Config struct {
 	// RuntimeImage is operator-supplied deployment metadata, not an attestation
 	// of the executing image. It is configured independently of either time setting.
 	RuntimeImage string
+	// CPUIDProfile asks the client to report one fixed virtual processor to all
+	// application CPUID/XGETBV, so library and runtime dispatch, and therefore
+	// counts, do not follow the host processor. Empty exposes host CPUID.
+	CPUIDProfile string
 	// Judge turns qualified diagnostic observations into actual verdicts. It is
 	// disabled unless explicitly configured; see docs/durante-judging.md.
 	Judge JudgePolicy
@@ -55,6 +59,16 @@ func ParseConfig(familiesValue, drrun, client, dispatch string) (Config, error) 
 		}
 	}
 	return cfg, nil
+}
+
+// ParseCPUIDProfile accepts an empty value (host CPUID visible) or a profile
+// implemented by the vendored client.
+func ParseCPUIDProfile(raw string) (string, error) {
+	profile := strings.TrimSpace(raw)
+	if profile != "" && !ValidCPUIDProfile(profile) {
+		return "", fmt.Errorf("unknown durante CPUID profile %q", profile)
+	}
+	return profile, nil
 }
 
 func (c Config) Family(language string) (string, error) {

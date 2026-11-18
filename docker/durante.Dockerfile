@@ -51,6 +51,6 @@ COPY --from=durante-build /durante-reference /opt/durante/reference
 COPY --from=durante-build /durante-rep-breakdown /opt/durante/rep-breakdown
 ENV AONOHAKO_TEST_DURANTE=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 AONOHAKO_DURANTE_TEST_BINARY=/opt/durante/probe AONOHAKO_TEST_DURANTE_INTERACTIVE=/opt/durante/interactive AONOHAKO_TEST_DURANTE_COMMUNICATION=/opt/durante/communication AONOHAKO_TEST_DURANTE_REFERENCE=/opt/durante/reference AONOHAKO_TEST_DURANTE_REP_BREAKDOWN=/opt/durante/rep-breakdown
 ENTRYPOINT ["/opt/durante/durante-execute.test"]
-CMD ["-test.v", "-test.run", "^(TestDurante(Sandbox|ResourceEnvelope|REPBreakdown|TimeEstimate|Interactive|Communication)Integration|TestRunCPUFeaturePolicyInRootSandbox)$", "-test.timeout", "240s"]
+CMD ["-test.v", "-test.run", "^(TestDurante(Sandbox|ResourceEnvelope|REPBreakdown|TimeEstimate|Judge|Interactive|Communication)Integration|TestRunCPUFeaturePolicyInRootSandbox)$", "-test.timeout", "240s"]
 
 FROM durante-runtime AS runtime

@@ -37,6 +37,13 @@ fields as the reference-time path:
   resource policy, a time model (`AONOHAKO_DURANTE_TIME_POLICY` or
   `AONOHAKO_DURANTE_TIME_MODELS`) and a runtime image, exactly as reference-time
   conversion already requires.
+- Judge mode also requires `AONOHAKO_DURANTE_CPUID_PROFILE`. Without a fixed
+  virtual processor the count follows each instance's CPU, which is the
+  instability judge mode exists to remove, so startup rejects judge mode
+  without it. The model must be qualified under the same profile (its
+  `cpuid_profile` binding), and the observation must carry the matching
+  receipt; otherwise the estimate is unavailable and the verdict is
+  `Runtime Error`.
 - Judge mode reuses the raw resource envelope. Only an ordinary single-program
   request is accepted; SPJ, interactive, communication, pipeline, entry and
   multi-step requests are rejected, as the envelope already requires.
@@ -175,10 +182,12 @@ with reference-time conversion.
 1. Qualify a time model for the exact `CPP20@<image digest>` runtime with a held
    out error gate ([reference-time qualification](durante-reference.md)). Judge
    mode must stay off until a model passes.
-2. Pin the CPUID profile for the runtime so counts do not depend on the Cloud
-   Run instance's processor
-   ([CPUID profiles](https://github.com/seo-rii/durante/blob/main/docs/CPUID_PROFILE.md)),
-   and fix per-CPU runtime options (hash seed, GC/JIT thread counts).
+2. Choose the CPUID profile (`x86-64-v2` needs only SSE4.2-era features; the
+   client refuses to start on a host that lacks one, so a mismatch fails closed
+   rather than miscounting) and collect the qualification corpus with it, so the model and
+   the judged counts see the same virtual processor
+   ([CPUID profiles](https://github.com/seo-rii/durante/blob/main/docs/CPUID_PROFILE.md)).
+   Fix per-CPU runtime options (hash seed, GC/JIT thread counts) as well.
 3. Run judge mode in shadow: enable it on a mirror of real submissions, compare
    its verdict with the existing CPU-time verdict, and measure the
    disagreement rate before it decides anything.

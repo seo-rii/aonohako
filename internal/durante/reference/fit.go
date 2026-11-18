@@ -63,8 +63,8 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 	contract := durante.TimePolicy{
 		ModelID: options.ModelID, ModelVersion: options.ModelVersion, ReferenceID: options.ReferenceID,
 		RuntimeID: runtimeID, Family: profile.Family, EngineProfile: durante.EngineProfile,
-		DispatchProfile: durante.DispatchDefault, InstructionNSNumerator: 1,
-		REPByteNSNumerator: 1, NSDenominator: math.MaxUint64,
+		DispatchProfile: durante.DispatchDefault, CPUIDProfile: dataset.CPUIDProfile,
+		InstructionNSNumerator: 1, REPByteNSNumerator: 1, NSDenominator: math.MaxUint64,
 	}
 	if err := contract.Validate(); err != nil {
 		return invalid(fmt.Errorf("fit options: %w", err))

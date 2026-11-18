@@ -109,7 +109,7 @@ jobs:
             -e AONOHAKO_TEST_DURANTE_REFERENCE=/validation/reference \
             -e AONOHAKO_TEST_DURANTE_REP_BREAKDOWN=/validation/rep-breakdown \
             --entrypoint /validation/execute.test "$image_id" \
-            -test.v -test.run '^TestDurante(REPBreakdown|TimeEstimate|Interactive|Communication)Integration$' -test.timeout 240s
+            -test.v -test.run '^TestDurante(REPBreakdown|TimeEstimate|Judge|Interactive|Communication)Integration$' -test.timeout 240s
       - name: Collect fixed runtime corpora through actual compile and execute APIs
         shell: bash
         run: |
