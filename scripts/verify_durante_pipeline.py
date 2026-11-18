@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import secrets
 import struct
 import sysconfig
 import urllib.error
@@ -146,7 +147,7 @@ def single_marker_read():
         os.close(fd)
 
 
-def check_spj(url, binary, client_sha):
+def check_spj(url, binary, client_sha, *, name="one-final-spj"):
     request = make_pipeline(binary)
     with single_marker_read() as marker:
         checker = (f"with open({str(marker)!r}, 'rb') as f: assert f.read(1)\n"
@@ -157,12 +158,12 @@ def check_spj(url, binary, client_sha):
                    "print('0.625')\n")
         request["pipeline"]["final_judge"].update(kind="spj", spj={
             "lang": "PYTHON3", "binary": artifact("check.py", checker), "emit_score": True})
-        result = execute(url, "one-final-spj", request, ["complete", "complete"], client_sha, source="final:spj")
+        result = execute(url, name, request, ["complete", "complete"], client_sha, source="final:spj")
         require(result.get("score") == 0.625, "native final checker score changed")
     print(json.dumps({"final_checker_invocations": 1}), flush=True)
 
 
-def check_mixed_pipeline(url, binary, client_sha):
+def check_mixed_pipeline(url, binary, client_sha, *, remote=False):
     request = make_pipeline(binary)
     pipeline = request["pipeline"]
     write = pipeline["steps"][0]
@@ -177,15 +178,29 @@ def check_mixed_pipeline(url, binary, client_sha):
                    "assert response == 'PRIVATE_PIPE_STDOUT 20 0\\n'\n"
                    "Path(sys.argv[2]).write_text(response)\n")
         pipeline["programs"].append({"id": "judge", "lang": "PYTHON3", "binaries": [artifact("Main.py", checker)]})
-        result = execute(url, "interactive-then-batch", request, ["unavailable", "complete"], client_sha)
-        require("interactive" in result["work_measurement_observation"]["steps"][0]["reason"],
-                "missing interactive eligibility reason")
+        name = "remote-interactive-then-batch" if remote else "interactive-then-batch"
+        result = execute(url, name, request, ["unavailable", "complete"], client_sha)
+        if not remote:
+            require("interactive" in result["work_measurement_observation"]["steps"][0]["reason"],
+                    "missing interactive eligibility reason")
     print(json.dumps({"interactor_invocations": 1}), flush=True)
 
 
-def remote_capability(url, payload):
+def check_remote_capability(url, *, supported):
     with urllib.request.urlopen(url + "/capabilities", timeout=5) as response:
-        require("pipeline-v1" not in json.load(response)["capabilities"], "remote transport advertised Pipeline V1")
+        capabilities = json.load(response)
+    require(("pipeline-v1" in capabilities["capabilities"]) == supported, "unexpected Pipeline V1 capability")
+    if supported:
+        pipeline = capabilities["pipeline"]
+        require(pipeline["versions"] == [1] and pipeline["max_steps"] >= 2 and
+                {"batch", "interactive"} <= set(pipeline["executors"]) and
+                {"diff", "spj"} <= set(pipeline["final_judges"]), "incomplete remote Pipeline V1 contract")
+    else:
+        require("pipeline" not in capabilities, "ineligible worker advertised its pipeline contract")
+
+
+def check_unnegotiated_remote(url, payload, name):
+    check_remote_capability(url, supported=False)
     request = urllib.request.Request(url + "/execute", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
     try:
@@ -196,7 +211,7 @@ def remote_capability(url, payload):
                     "remote controller returned an unexpected pipeline response")
     else:
         raise RuntimeError("remote controller accepted an unnegotiated pipeline")
-    print(json.dumps({"case": "remote-capability", "http_status": 400, "reason": "unsupported_capability"}), flush=True)
+    print(json.dumps({"case": name, "http_status": 400, "reason": "unsupported_capability"}), flush=True)
 
 
 def main():
@@ -227,7 +242,24 @@ def main():
         check_spj(worker, binary, client_sha)
         check_mixed_pipeline(worker, binary, client_sha)
         with server(args, 18771, True, remote=worker) as control:
-            remote_capability(control, make_pipeline(binary))
+            check_unnegotiated_remote(control, make_pipeline(binary), "remote-without-auth")
+    # The controller authenticates to the worker over the offline container's
+    # loopback. Public clients use the same endpoints and payloads as above.
+    token = secrets.token_urlsafe(32)
+    with server(args, 18770, True, runner_token=token) as worker:
+        with server(args, 18771, True, remote=worker, runner_token=secrets.token_urlsafe(32)) as mismatched:
+            check_unnegotiated_remote(mismatched, make_pipeline(binary), "remote-wrong-bearer")
+        with server(args, 18771, True, remote=worker, runner_token=token) as control:
+            check_remote_capability(control, supported=True)
+            execute(control, "remote-batch-handoffs", make_pipeline(binary), complete, client_sha)
+            execute(control, "remote-wrong-answer", make_pipeline(binary, answer="wrong\n"), complete, client_sha,
+                    status="Wrong Answer")
+            execute(control, "remote-vary-file", make_pipeline(binary, "vary-file"), ["unavailable", "complete"],
+                    client_sha)
+            execute(control, "remote-failed-handoff", small, ["unavailable"], client_sha, count=1,
+                    status="Runtime Error", source="step:write:artifact")
+            check_spj(control, binary, client_sha, name="remote-one-final-spj")
+            check_mixed_pipeline(control, binary, client_sha, remote=True)
     print(json.dumps({"complete": True}), flush=True)
 
 
