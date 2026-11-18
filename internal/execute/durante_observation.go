@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strings"
 
 	"aonohako/internal/durante"
@@ -101,7 +102,10 @@ func observationReportMatches(req *model.RunRequest, cfg durante.Config, report 
 	if dispatch == "" {
 		dispatch = durante.DispatchDefault
 	}
-	return validDiagnosticWorkReport(req.Lang, report) && report.CPUIDProfile == cfg.CPUIDProfile &&
+	expectedFeatures := slices.Clone(req.DisallowedCPUFeatures)
+	slices.Sort(expectedFeatures)
+	return validDiagnosticWorkReport(req.Lang, report) && slices.Equal(report.DisallowedCPUFeatures, expectedFeatures) &&
+		report.CPUIDProfile == cfg.CPUIDProfile &&
 		report.DispatchProfile == dispatch && (report.LatencyBound != nil) == cfg.LatencyBound &&
 		report.RuntimeDeterminism == cfg.RuntimeDeterminismFor(profiles.NormalizeRunLang(req.Lang))
 }

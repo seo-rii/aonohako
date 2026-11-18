@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"aonohako/internal/cpupolicy"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 )
@@ -88,5 +89,42 @@ func TestAutomaticObservationRemotePreservesNativeResult(t *testing.T) {
 	cfg.Observe = false
 	if remoteObservation(r, primary, cfg, raw) != nil {
 		t.Fatal("accepted unsolicited observation when automatic collection was disabled")
+	}
+}
+
+func TestRemoteObservationCPUFeaturePolicy(t *testing.T) {
+	cfg := observerConfig()
+	req := observerRequest()
+	zero := 0
+	primary := model.RunResponse{Status: model.RunStatusAccepted, ExitCode: &zero, VerdictSource: "stdout", CPUTimeNs: 7001000, CPUTimeMs: 7}
+	for _, tc := range []struct {
+		name                string
+		requested, reported []cpupolicy.Feature
+		state               string
+	}{
+		{"missing", []cpupolicy.Feature{cpupolicy.AVX}, nil, "unavailable"},
+		{"unexpected", nil, []cpupolicy.Feature{cpupolicy.AVX}, "unavailable"},
+		{"different", []cpupolicy.Feature{cpupolicy.AVX}, []cpupolicy.Feature{cpupolicy.SIMD}, "unavailable"},
+		{"canonical", []cpupolicy.Feature{cpupolicy.SIMD, cpupolicy.AVX}, []cpupolicy.Feature{cpupolicy.AVX, cpupolicy.SIMD}, "complete"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req.DisallowedCPUFeatures = tc.requested
+			report := completeEnvelopeReport()
+			report.CPUIDProfile = cfg.CPUIDProfile
+			report.DisallowedCPUFeatures = tc.reported
+			wire := primary
+			wire.WorkMeasurementObservation = &model.WorkMeasurementObservation{
+				Version: 1, Authority: durante.Authority, State: "complete", OutputCheck: "native_output", Report: report,
+			}
+			got := exchangeTimeMeasurementResult(t, req, wire, cfg)
+			observation := got.WorkMeasurementObservation
+			if observation == nil || observation.State != tc.state || (observation.Report != nil) != (tc.state == "complete") {
+				t.Fatalf("unexpected observation: %+v", observation)
+			}
+			got.WorkMeasurementObservation = nil
+			if !reflect.DeepEqual(got, primary) {
+				t.Fatalf("primary verdict or timing changed: %+v", got)
+			}
+		})
 	}
 }
