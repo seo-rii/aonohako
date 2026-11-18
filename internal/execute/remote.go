@@ -508,12 +508,12 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: unrequested sidecar error path: " + clean}
 				}
 			}
-			if req.Communication != nil {
+			if req.Communication != nil && len(wire.CommunicationCPU) != 0 && !bytes.Equal(wire.CommunicationCPU, []byte("null")) {
 				rows := remoteCommunicationCPU(req, &remoteResult, wire.CommunicationCPU)
 				remoteResult.CommunicationCPUByRole = rows
 				if rows == nil {
-					// Older workers report millisecond accounting. Keep the native
-					// match if optional precise accounting is absent or inconsistent.
+					// Drop inconsistent role-derived totals while preserving the native
+					// verdict. Workers omitting the new field retain their native totals.
 					remoteResult.CPUTimeNs, remoteResult.RawCPUTimeNs = 0, nil
 				}
 			}

@@ -88,7 +88,7 @@ func TestRemoteCommunicationCPUForwarding(t *testing.T) {
 	}{
 		{"v1 duplicate program IDs", 1, nil, true},
 		{"v2 seats and manager", 2, nil, true},
-		{"older worker", 1, func(r *model.RunResponse) { r.CommunicationCPUByRole = nil }, false},
+		{"older worker preserves previously reported totals", 1, func(r *model.RunResponse) { r.CommunicationCPUByRole = nil }, true},
 		{"v1 swapped seats", 1, func(r *model.RunResponse) {
 			rows := r.CommunicationCPUByRole
 			rows[0], rows[1] = rows[1], rows[0]
