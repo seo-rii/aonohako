@@ -219,6 +219,29 @@ def check_spj(url, binary, client_sha, *, name="one-final-spj"):
     print(json.dumps({"final_checker_invocations": 1}), flush=True)
 
 
+def three_round_interactor(marker):
+    checker = (f"with open({str(marker)!r}, 'rb') as f: assert f.read(1)\n"
+               "import sys\nfrom pathlib import Path\n"
+               "mode = Path(sys.argv[1]).read_text().strip()\n"
+               "print(mode, flush=True)\n"
+               "challenge = 3\n"
+               "for turn in range(1, 4):\n"
+               "    print(challenge, flush=True)\n"
+               "    tag, reply, stamp = sys.stdin.readline().split()\n"
+               "    assert tag == 'PRIVATE_PIPE_REPLY' and int(reply) == 2 * challenge + turn\n"
+               "    assert (int(stamp) > 0) == (mode == 'vary-reply')\n"
+               "    challenge = int(reply) - 1\n"
+               "print('finish', flush=True)\n"
+               "assert sys.stdin.readline() == 'PRIVATE_PIPE_DONE\\n'\n"
+               "if mode == 'judge-wa':\n"
+               "    assert sys.stdin.read() == ''\n"
+               "    import time\n"
+               "    time.sleep(0.15)\n"
+               "    raise SystemExit(1)\n"
+               "Path(sys.argv[2]).write_text('PRIVATE_PIPE_STDOUT 20 0\\n')\n")
+    return artifact("Main.py", checker)
+
+
 def check_mixed_pipeline(url, binary, interactive, client_sha, *, remote=False):
     for mode, scored in (("stable", False), ("vary-reply", False), ("vary-file", False),
                          ("grace", False), ("judge-wa", False), ("stable", True), ("vary-reply", True)):
@@ -234,26 +257,8 @@ def check_mixed_pipeline(url, binary, interactive, client_sha, *, remote=False):
         with ExitStack() as markers:
             markers.enter_context(expect_marker_reads(participant_count, PARTICIPANT_MARKER))
             interactor_marker = markers.enter_context(expect_marker_reads())
-            checker = (f"with open({str(interactor_marker)!r}, 'rb') as f: assert f.read(1)\n"
-                       "import sys\nfrom pathlib import Path\n"
-                       "mode = Path(sys.argv[1]).read_text().strip()\n"
-                       "print(mode, flush=True)\n"
-                       "challenge = 3\n"
-                       "for turn in range(1, 4):\n"
-                       "    print(challenge, flush=True)\n"
-                       "    tag, reply, stamp = sys.stdin.readline().split()\n"
-                       "    assert tag == 'PRIVATE_PIPE_REPLY' and int(reply) == 2 * challenge + turn\n"
-                       "    assert (int(stamp) > 0) == (mode == 'vary-reply')\n"
-                       "    challenge = int(reply) - 1\n"
-                       "print('finish', flush=True)\n"
-                       "assert sys.stdin.readline() == 'PRIVATE_PIPE_DONE\\n'\n"
-                       "if mode == 'judge-wa':\n"
-                       "    assert sys.stdin.read() == ''\n"
-                       "    import time\n"
-                       "    time.sleep(0.15)\n"
-                       "    raise SystemExit(1)\n"
-                       "Path(sys.argv[2]).write_text('PRIVATE_PIPE_STDOUT 20 0\\n')\n")
-            pipeline["programs"].append({"id": "judge", "lang": "PYTHON3", "binaries": [artifact("Main.py", checker)]})
+            pipeline["programs"].append({"id": "judge", "lang": "PYTHON3",
+                                         "binaries": [three_round_interactor(interactor_marker)]})
             suffix = mode + "-one-spj" if scored else mode
             name = ("remote-" if remote else "") + "interactive-then-batch-" + suffix
             source = "final:diff"
