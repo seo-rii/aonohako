@@ -197,7 +197,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req.WorkMeasurementShadow {
 		return s.runWithShadow(ctx, req, hooks)
 	}
-	if automaticObservationRequested(req, s.workMeasurement) {
+	if req.Pipeline == nil && automaticObservationRequested(req, s.workMeasurement) {
 		return s.runWithObservation(ctx, req, hooks, s.runRequest)
 	}
 	return s.runRequest(ctx, req, hooks)

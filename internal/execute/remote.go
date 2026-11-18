@@ -135,10 +135,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
 		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)
-		if automaticObservationRequested(req, r.workMeasurement) && observationEligible(req, r.workMeasurement) == "" {
-			rawWall := time.Duration(r.workMeasurement.ResourcePolicy.MaxLimits.WallTimeMs) * time.Millisecond
-			absoluteTimeout += max(stdinURLDownloadTimeout, rawWall) + rawWall
-		}
+		absoluteTimeout += remoteObservationBudget(req, r.workMeasurement)
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()

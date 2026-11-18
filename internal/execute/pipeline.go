@@ -293,22 +293,34 @@ func (s *Service) runPipelineV1(ctx context.Context, req *model.RunRequest, _ Ho
 	return RedactPipelineResponse(s.runPipelineV1Private(ctx, req, tuning))
 }
 
-func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunRequest, tuning config.RuntimeTuningConfig) model.RunResponse {
+func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunRequest, tuning config.RuntimeTuningConfig) (response model.RunResponse) {
+	var artifacts *pipelineArtifactStore
+	defer func() { artifacts.close() }()
+
+	// Keep references to immutable native resources and artifacts. Rebuild each
+	// replay input only after the entire native judgment has finished.
+	var replays map[string]pipelineBatchReplay
+	if automaticObservationRequested(req, s.workMeasurement) {
+		replays = make(map[string]pipelineBatchReplay)
+		defer func() {
+			response.WorkMeasurementObservation = s.observePipelineSteps(ctx, req, response.Steps, replays, artifacts, tuning)
+		}()
+	}
+
 	plan, err := compileExecutionPlan(req)
 	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error(), VerdictSource: "pipeline:resource"}
 	}
-	artifacts, err := newPipelineArtifactStore()
+	artifacts, err = newPipelineArtifactStore()
 	if err != nil {
 		slog.Warn("pipeline artifact store creation failed", "err", err)
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "pipeline artifact store creation failed", VerdictSource: "pipeline:artifact"}
 	}
-	defer artifacts.close()
 
 	stepResults := make([]model.StepResult, 0, len(plan.steps))
 	stepStdout := make(map[string][]byte, len(plan.steps))
 
-	for _, step := range plan.steps {
+	for index, step := range plan.steps {
 		stdin, stdinMaxBytes, err := preparePipelineStdin(step, artifacts)
 		if err != nil {
 			return aggregateStepResponse(model.RunResponse{
@@ -324,16 +336,7 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 		var interactorOutputPath string
 		var interactorOutputErr error
 		if step.kind == "batch" {
-			stepReq := pipelineProgramRequest(req, step.program, step.limits)
-			for _, output := range step.outputs {
-				source := strings.ToLower(strings.TrimSpace(output.Source.Kind))
-				if source == "participant_file" {
-					stepReq.FileOutputs = []model.OutputFile{{Path: output.Source.Path}}
-				}
-				if source == "participant_stdout" && stepReq.Limits.OutputBytes < int(output.MaxBytes) {
-					stepReq.Limits.OutputBytes = int(output.MaxBytes)
-				}
-			}
+			stepReq := pipelineBatchRequest(req, step.program, step.limits, step.outputs)
 			captureRawStdout := len(stepReq.FileOutputs) > 0
 			run := s.runOneWithStdin(ctx, stepReq, stdin, stdinMaxBytes, Hooks{}, tuning, false, captureRawStdout)
 			resp = run.response
@@ -454,6 +457,14 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			}
 			artifactBytes += int64(len(data))
 		}
+		if replays != nil && step.kind == "batch" && resp.ExitCode != nil && *resp.ExitCode == 0 && !resp.StdoutTruncated && s.workMeasurementPolicyError == nil {
+			single := pipelineObservationRequest(req, req.Pipeline.Steps[index])
+			if single != nil && observationEligible(single, s.workMeasurement) == "" {
+				replays[step.id] = pipelineBatchReplay{
+					request: single, inputs: step, outputs: pipelineOutputDigests(stdout, participantFileOutput),
+				}
+			}
+		}
 		stepResults[len(stepResults)-1].HandoffBytes = artifactBytes
 		stepStdout[step.id] = append([]byte(nil), stdout...)
 	}
@@ -506,6 +517,19 @@ func pipelinePublicReason(status, source string) string {
 	default:
 		return "pipeline execution failed"
 	}
+}
+
+func pipelineBatchRequest(req *model.RunRequest, program model.RunProgram, limits model.Limits, outputs []model.PipelineOutput) *model.RunRequest {
+	single := pipelineProgramRequest(req, program, limits)
+	for _, output := range outputs {
+		switch strings.ToLower(strings.TrimSpace(output.Source.Kind)) {
+		case "participant_file":
+			single.FileOutputs = []model.OutputFile{{Path: output.Source.Path}}
+		case "participant_stdout":
+			single.Limits.OutputBytes = max(single.Limits.OutputBytes, int(output.MaxBytes))
+		}
+	}
+	return single
 }
 
 func pipelineProgramRequest(req *model.RunRequest, program model.RunProgram, limits model.Limits) *model.RunRequest {

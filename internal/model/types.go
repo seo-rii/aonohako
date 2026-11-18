@@ -422,16 +422,27 @@ type WorkMeasurementExecution struct {
 	TimeEstimateEligibility *durante.TimeEligibility `json:"time_estimate_eligibility,omitempty"`
 }
 
-// WorkMeasurementObservation is the optional diagnostic receipt of a separate
-// contestant replay. The enclosing response is the ordinary native verdict.
-type WorkMeasurementObservation struct {
-	OutputCheck string          `json:"output_check,omitempty"`
-	Version     int             `json:"version"`
-	Authority   string          `json:"authority"`
+// PipelineStepObservation identifies the native stage supplying a replay's input and output.
+type PipelineStepObservation struct {
+	StepID      string          `json:"step_id"`
+	ProgramID   string          `json:"program_id"`
 	State       string          `json:"state"`
 	Reason      string          `json:"reason,omitempty"`
-	StdinSHA256 string          `json:"stdin_sha256,omitempty"`
+	OutputCheck string          `json:"output_check,omitempty"`
 	Report      *durante.Report `json:"report,omitempty"`
+}
+
+// WorkMeasurementObservation describes standalone (v1) or Pipeline V1 step (v2) replays.
+// The enclosing response carries the native verdict.
+type WorkMeasurementObservation struct {
+	Steps       []PipelineStepObservation `json:"steps,omitempty"`
+	OutputCheck string                    `json:"output_check,omitempty"`
+	Version     int                       `json:"version"`
+	Authority   string                    `json:"authority"`
+	State       string                    `json:"state"`
+	Reason      string                    `json:"reason,omitempty"`
+	StdinSHA256 string                    `json:"stdin_sha256,omitempty"`
+	Report      *durante.Report           `json:"report,omitempty"`
 }
 
 // WorkMeasurementShadow compares the authoritative verdict of this response
