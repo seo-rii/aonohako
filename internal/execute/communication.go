@@ -52,6 +52,7 @@ type communicationManagerResult struct {
 }
 
 type communicationProcessResult struct {
+	started          bool
 	entryPoint       string
 	manager          bool
 	participant      int
@@ -492,6 +493,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			onLimit:   cancelParticipant,
 		}
 		go func(index int, prepared communicationPreparedProcess) {
+			started := false
 			res := executeSandboxCommandWithStreams(
 				participantCtx,
 				prepared.ws,
@@ -506,6 +508,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 					identity:        communicationParticipantIdentity(index),
 					onTargetReady:   func() { readyCh <- false },
 					onTargetStarted: func() {
+						started = true
 						if startedParticipants.Add(1) == int32(len(participants)) {
 							close(allParticipantsStarted)
 						}
@@ -526,6 +529,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				res.VerdictSource = "output_limit"
 			}
 			process := communicationProcessResult{
+				started:     started,
 				entryPoint:  prepared.entryPoint,
 				participant: index,
 				request:     prepared.request,
@@ -545,6 +549,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	managerCtx, cancelManager := context.WithCancel(communicationCtx)
 	defer cancelManager()
 	go func() {
+		started := false
 		res := executeSandboxCommandWithStreams(
 			managerCtx,
 			manager.ws,
@@ -556,9 +561,12 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 					uid: security.CommunicationManagerUID,
 					gid: security.CommunicationManagerGID,
 				},
-				extraFiles:              managerFiles,
-				onTargetReady:           func() { readyCh <- true },
-				onTargetStarted:         onTargetStarted,
+				extraFiles:    managerFiles,
+				onTargetReady: func() { readyCh <- true },
+				onTargetStarted: func() {
+					started = true
+					onTargetStarted()
+				},
 				targetRelease:           releaseTargets,
 				communicationRestricted: true,
 				cpuNormalizer:           s.cpuNormalizer,
@@ -569,6 +577,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			aggregate.Path,
 		)
 		process := communicationProcessResult{
+			started:     started,
 			entryPoint:  manager.entryPoint,
 			manager:     true,
 			participant: -1,
@@ -780,33 +789,58 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			break
 		}
 	}
-	if req.WorkMeasurement {
-		// Collect only after every completion event and manager pipe close has
-		// reached the coordinator. Reading reports and hashing the runtime must
-		// not delay the timestamps or pipe shutdown used to decide a forfeit.
-		response.WorkMeasurements = make([]model.WorkMeasurementProcess, totalProcesses)
-		for _, process := range results {
-			role, programID, index := "manager", managerProgram.ID, len(participants)
-			var participantIndex *int
-			if !process.manager {
-				role, index = "participant", process.participant
-				programID = participantProgram.ID
-				if competitive {
-					programID = participantPrograms[index].ID
-				}
-				seat := index
-				participantIndex = &seat
-			}
-			interrupted := process.interrupted
-			status, _, _ := communicationFinalProcessStatus(process)
-			if status == model.RunStatusTLE || status == model.RunStatusMLE || status == model.RunStatusWLE {
-				interrupted = true
-			}
-			response.WorkMeasurements[index] = collectPeerWorkMeasurement(process.meter, process.result, interrupted, role, programID, participantIndex)
-		}
-	}
+	attachCommunicationRoleTiming(req, &response, results)
 	emitCapturedLog(hooks, "stderr", []byte(response.Stderr), responseStderrLimitBytes(req))
 	return response
+}
+
+// The coordinator calls this after every process result and pipe close that
+// selects a verdict. Neither precise accounting nor Durante report collection
+// belongs on the path that determines whether a seat forfeited.
+func attachCommunicationRoleTiming(req *model.RunRequest, response *model.RunResponse, processes []communicationProcessResult) {
+	spec := req.Communication
+	response.CommunicationCPUByRole = make([]model.CommunicationRoleCPU, spec.ParticipantCount+1)
+	if req.WorkMeasurement {
+		response.WorkMeasurements = make([]model.WorkMeasurementProcess, len(response.CommunicationCPUByRole))
+	}
+	totalNs, totalRawNs := new(uint64), new(uint64)
+	anyStarted := false
+	for _, process := range processes {
+		index := spec.ParticipantCount
+		row := model.CommunicationRoleCPU{
+			Role: "manager", ProgramID: spec.ManagerProgramID,
+			Started: process.started, Interrupted: process.interrupted,
+			ExecutionStatus: process.result.Status, ExitCode: process.result.ExitCode,
+			CPULimitMs: process.request.Limits.TimeMs, CPUTimeMs: process.result.CPUTimeMs,
+		}
+		if !process.manager {
+			seat := process.participant
+			index = seat
+			row.Role, row.ProgramID, row.ParticipantIndex = "participant", spec.ParticipantProgramID, &seat
+			if spec.Version == 2 {
+				row.ProgramID = spec.ParticipantProgramIDs[seat]
+			}
+		}
+		if process.started {
+			anyStarted = true
+			row.CPUTimeNs = measuredStepCPUTime(process.result.CPUTimeNs, process.result.CPUAccounting)
+			row.RawCPUTimeMs, row.RawCPUTimeNs = process.result.RawCPUTimeMs, process.result.RawCPUTimeNs
+			totalNs = sumStepNanoseconds(totalNs, row.CPUTimeNs)
+			totalRawNs = sumStepNanoseconds(totalRawNs, row.RawCPUTimeNs)
+		}
+		response.CommunicationCPUByRole[index] = row
+		if req.WorkMeasurement {
+			status, _, _ := communicationFinalProcessStatus(process)
+			interrupted := row.Interrupted || status == model.RunStatusTLE || status == model.RunStatusMLE || status == model.RunStatusWLE
+			response.WorkMeasurements[index] = collectPeerWorkMeasurement(process.meter, process.result, interrupted, row.Role, row.ProgramID, row.ParticipantIndex)
+		}
+	}
+	if anyStarted {
+		if totalNs != nil {
+			response.CPUTimeNs = *totalNs
+		}
+		response.RawCPUTimeNs = totalRawNs
+	}
 }
 
 func communicationWallAllowanceMs(deploymentTarget platform.DeploymentTarget, cgroupParent string, participantCount, availableCPUs, timeLimitMs int) (int64, bool) {
@@ -1203,6 +1237,13 @@ func communicationParticipantFailureOverridesManager(process communicationProces
 	return managerCompletedAt.IsZero() || process.completedAt.Before(managerCompletedAt)
 }
 
+func addCommunicationProcessUsage(response *model.RunResponse, result execResult) {
+	response.CPUTimeMs += result.CPUTimeMs
+	response.RawCPUTimeMs = sumRawCPUTime(response.RawCPUTimeMs, result.RawCPUTimeMs)
+	response.ProcessCPUTimeMs += result.ProcessCPUTimeMs
+	response.MemoryKB += result.MemoryKB
+}
+
 func buildCommunicationResponse(processes []communicationProcessResult, managerResult communicationManagerResult, managerResultErr error, startedParticipants int, wallTimeMs int64, firstParticipantFailure *communicationProcessResult) model.RunResponse {
 	response := model.RunResponse{
 		Status:              model.RunStatusRE,
@@ -1216,10 +1257,7 @@ func buildCommunicationResponse(processes []communicationProcessResult, managerR
 	var manager *communicationProcessResult
 	for i := range processes {
 		process := processes[i]
-		response.CPUTimeMs += process.result.CPUTimeMs
-		response.RawCPUTimeMs = sumRawCPUTime(response.RawCPUTimeMs, process.result.RawCPUTimeMs)
-		response.ProcessCPUTimeMs += process.result.ProcessCPUTimeMs
-		response.MemoryKB += process.result.MemoryKB
+		addCommunicationProcessUsage(&response, process.result)
 		if process.manager {
 			manager = &process
 		}

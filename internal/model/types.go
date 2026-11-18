@@ -129,6 +129,23 @@ type MatchParticipant struct {
 	MemoryKB      int64           `json:"memory_kb"`
 }
 
+// CommunicationRoleCPU identifies the target whose process tree the native
+// sandbox timed, including repeated seats running the same program.
+type CommunicationRoleCPU struct {
+	Role             string  `json:"role"`
+	ProgramID        string  `json:"program_id"`
+	ParticipantIndex *int    `json:"participant_index,omitempty"`
+	Started          bool    `json:"started"`
+	Interrupted      bool    `json:"interrupted"`
+	ExecutionStatus  string  `json:"execution_status"`
+	ExitCode         *int    `json:"exit_code,omitempty"`
+	CPULimitMs       int     `json:"cpu_limit_ms"`
+	CPUTimeMs        int64   `json:"cpu_time_ms"`
+	CPUTimeNs        *uint64 `json:"cpu_time_ns,omitempty"`
+	RawCPUTimeMs     *int64  `json:"raw_cpu_time_ms,omitempty"`
+	RawCPUTimeNs     *uint64 `json:"raw_cpu_time_ns,omitempty"`
+}
+
 type MatchResult struct {
 	Version            int                `json:"version"`
 	Outcome            string             `json:"outcome"`
@@ -377,6 +394,7 @@ type RunResponse struct {
 	ReasonTruncated          bool                      `json:"reason_truncated,omitempty"`
 	VerdictSource            string                    `json:"verdict_source,omitempty"`
 	Score                    *float64                  `json:"score,omitempty"`
+	CommunicationCPUByRole   []CommunicationRoleCPU    `json:"communication_cpu_by_role,omitempty"`
 	StartedParticipants      int                       `json:"started_participants,omitempty"`
 	Match                    *MatchResult              `json:"match,omitempty"`
 	Steps                    []StepResult              `json:"steps,omitempty"`

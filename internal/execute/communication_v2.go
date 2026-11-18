@@ -181,9 +181,7 @@ func buildCommunicationMatchResponse(req *model.RunRequest, processes []communic
 	var manager *communicationProcessResult
 	for i := range processes {
 		process := &processes[i]
-		response.CPUTimeMs += process.result.CPUTimeMs
-		response.ProcessCPUTimeMs += process.result.ProcessCPUTimeMs
-		response.MemoryKB += process.result.MemoryKB
+		addCommunicationProcessUsage(&response, process.result)
 		if process.manager {
 			manager = process
 		} else if process.participant >= 0 && process.participant < len(response.Match.Participants) {

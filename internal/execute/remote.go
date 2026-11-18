@@ -355,8 +355,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			// wire format even when the ordinary verdict is fully compatible.
 			var wire struct {
 				model.RunResponse
-				Shadow      json.RawMessage `json:"work_measurement_shadow"`
-				Observation json.RawMessage `json:"work_measurement_observation"`
+				Shadow           json.RawMessage `json:"work_measurement_shadow"`
+				Observation      json.RawMessage `json:"work_measurement_observation"`
+				CommunicationCPU json.RawMessage `json:"communication_cpu_by_role"`
 			}
 			if err := json.Unmarshal([]byte(event.Data), &wire); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote result decode failed: " + err.Error()}
@@ -507,6 +508,16 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: unrequested sidecar error path: " + clean}
 				}
 			}
+			if req.Communication != nil {
+				rows := remoteCommunicationCPU(req, &remoteResult, wire.CommunicationCPU)
+				remoteResult.CommunicationCPUByRole = rows
+				if rows == nil {
+					// Older workers report millisecond accounting. Keep the native
+					// match if optional precise accounting is absent or inconsistent.
+					remoteResult.CPUTimeNs, remoteResult.RawCPUTimeNs = 0, nil
+				}
+			}
+
 			var truncated bool
 			remoteResult.Stdout, truncated = capturedOutputValue([]byte(remoteResult.Stdout), stdoutResponseLimit)
 			if truncated {
