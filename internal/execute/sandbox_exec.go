@@ -360,16 +360,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if prepared, ok := streams.stdin.(*sandboxPreparedStdin); ok && prepared.file != nil {
 		workspaceAvailableBytes -= prepared.outsideWorkspaceBytes
 	}
-	baseEnv := util.BaseEnv()
-	innerEnv := append(append(baseEnv[:0:0], baseEnv...), security.ThreadLimitEnv()...)
-	innerEnv = append(innerEnv, security.WorkspaceScopedEnv(ws.RootDir)...)
-	if !req.EnableNetwork {
-		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
-	}
+	innerEnv := sandboxBaseEnvironment(ws, req)
 	imgPath := firstImagePath(req.SidecarOutputs)
-	if imgPath != "" {
-		innerEnv = append(innerEnv, "IMG_CAPTURE=1")
-	}
 
 	runLang := profiles.NormalizeRunLang(req.Lang)
 	isC3 := runLang == "c3"
@@ -731,7 +723,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	cmd.ExtraFiles = append([]*os.File{requestRead, targetReadyWrite, targetReleaseRead}, streams.extraFiles...)
 	cmd.Env = append(
-		append(baseEnv[:0:0], baseEnv...),
+		util.BaseEnv(),
 		sandbox.HelperModeEnv+"="+sandbox.HelperModeExec,
 		sandbox.RequestFDEnv+"=3",
 		sandbox.TargetReadyFDEnv+"=4",

@@ -39,7 +39,7 @@ func main() {
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: durante-reference collect|fit [options]")
+		fmt.Fprintln(stderr, "usage: durante-reference collect|fit|describe-runtime-options [options]")
 		return 1
 	}
 	switch args[0] {
@@ -47,8 +47,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return collect(ctx, args[1:], stdout, stderr)
 	case "fit":
 		return fit(ctx, args[1:], stdout, stderr)
+	case "describe-runtime-options":
+		return describeRuntimeOptions(ctx, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintln(stderr, "expected collect or fit")
+		fmt.Fprintln(stderr, "expected collect, fit or describe-runtime-options")
 		return 1
 	}
 }

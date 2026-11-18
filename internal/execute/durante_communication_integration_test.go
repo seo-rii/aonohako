@@ -211,28 +211,37 @@ func TestDuranteCommunicationIntegration(t *testing.T) {
 		checkComplete(t, response)
 	})
 	for _, version := range []int{1, 2} {
-		t.Run(fmt.Sprintf("v%d_diagnostic_time_budgets", version), func(t *testing.T) {
-			timeConfig := serviceConfig
-			timeConfig.Execution.WorkMeasurement = peerTimeIntegrationConfig(t, cfg)
-			timeService := NewWithConfig(timeConfig)
-			req := request(version, "stream", "stream", "stream")
-			addPeerTimeIntegrationBudgets(t, req)
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer cancel()
-			response := timeService.Run(ctx, req, Hooks{})
-			if response.Status != model.RunStatusAccepted || response.StartedParticipants != 2 {
-				t.Fatalf("diagnostic time budgets changed communication: %+v", response)
+		for _, bound := range []bool{false, true} {
+			name := fmt.Sprintf("v%d_diagnostic_time_budgets", version)
+			if bound {
+				name += "_bound_options"
 			}
-			if version == 1 && (response.Score == nil || *response.Score != 1) {
-				t.Fatalf("diagnostic time budgets changed the v1 score: %+v", response)
-			}
-			if version == 2 && (response.Score != nil || response.Match == nil || response.Match.Outcome != "completed" || response.Match.Wins == nil || *response.Match.Wins != [2]int{7, 13}) {
-				t.Fatalf("diagnostic time budgets changed the v2 match: %+v", response)
-			}
-			checkReports(t, req, response)
-			checkComplete(t, response)
-			assertPeerTimeIntegrationBudgets(t, req, response, timeConfig.Execution.WorkMeasurement)
-		})
+			t.Run(name, func(t *testing.T) {
+				timeConfig := serviceConfig
+				timeConfig.Execution.WorkMeasurement = peerTimeIntegrationConfig(t, cfg)
+				req := request(version, "stream", "stream", "stream")
+				addPeerTimeIntegrationBudgets(t, req)
+				if bound {
+					timeConfig.Execution.WorkMeasurement = bindIntegrationRuntimeOptions(t, timeConfig.Execution.WorkMeasurement, req)
+				}
+				timeService := NewWithConfig(timeConfig)
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer cancel()
+				response := timeService.Run(ctx, req, Hooks{})
+				if response.Status != model.RunStatusAccepted || response.StartedParticipants != 2 {
+					t.Fatalf("diagnostic time budgets changed communication: %+v", response)
+				}
+				if version == 1 && (response.Score == nil || *response.Score != 1) {
+					t.Fatalf("diagnostic time budgets changed the v1 score: %+v", response)
+				}
+				if version == 2 && (response.Score != nil || response.Match == nil || response.Match.Outcome != "completed" || response.Match.Wins == nil || *response.Match.Wins != [2]int{7, 13}) {
+					t.Fatalf("diagnostic time budgets changed the v2 match: %+v", response)
+				}
+				checkReports(t, req, response)
+				checkComplete(t, response)
+				assertPeerTimeIntegrationBudgets(t, req, response, timeConfig.Execution.WorkMeasurement)
+			})
+		}
 	}
 	t.Run("v2_forfeit", func(t *testing.T) {
 		req := request(2, "exit", "wait", "forfeit")

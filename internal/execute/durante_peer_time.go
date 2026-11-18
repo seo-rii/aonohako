@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/runvalidation"
@@ -32,7 +33,7 @@ type peerTimePlan struct {
 
 // Resolve every role before execution or remote upload. Budget array order has
 // no meaning; communication seats remain distinct even for the same program.
-func workMeasurementPeerTimePlans(req *model.RunRequest, cfg durante.Config) (map[peerTimeIdentity]peerTimePlan, error) {
+func workMeasurementPeerTimePlans(req *model.RunRequest, cfg durante.Config, runtimeTuning ...config.RuntimeTuningConfig) (map[peerTimeIdentity]peerTimePlan, error) {
 	if req == nil || req.WorkMeasurementPeerTime == nil {
 		return nil, nil
 	}
@@ -57,7 +58,11 @@ func workMeasurementPeerTimePlans(req *model.RunRequest, cfg durante.Config) (ma
 		if !found {
 			return nil, fmt.Errorf("work_measurement_peer_time is missing a budget for %s %q", role.role, role.programID)
 		}
-		policy, runtimeID, err := cfg.TimePolicyFor(role.language)
+		roleReq, err := peerRuntimeRequest(req, role)
+		if err != nil {
+			return nil, err
+		}
+		policy, runtimeID, err := timePolicyForRequest(roleReq, cfg, optionalRuntimeTuning(runtimeTuning))
 		if err != nil {
 			return nil, fmt.Errorf("work_measurement_peer_time %s %q: %w", role.role, role.programID, err)
 		}
@@ -96,11 +101,11 @@ func evaluatePeerTimeBudget(plan peerTimePlan, observed model.WorkMeasurementPro
 	return result
 }
 
-func finishWorkMeasurementPeerTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config) model.RunResponse {
+func finishWorkMeasurementPeerTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config, runtimeTuning ...config.RuntimeTuningConfig) model.RunResponse {
 	if req == nil || req.WorkMeasurementPeerTime == nil || len(response.WorkMeasurements) == 0 {
 		return response
 	}
-	plans, err := workMeasurementPeerTimePlans(req, cfg)
+	plans, err := workMeasurementPeerTimePlans(req, cfg, runtimeTuning...)
 	if err != nil {
 		return response // Admission rejects this before any execution starts.
 	}
@@ -114,7 +119,7 @@ func finishWorkMeasurementPeerTime(req *model.RunRequest, response model.RunResp
 	return response
 }
 
-func validateRemoteWorkMeasurementPeerTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config) error {
+func validateRemoteWorkMeasurementPeerTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config, runtimeTuning ...config.RuntimeTuningConfig) error {
 	if req.WorkMeasurementPeerTime == nil {
 		for _, role := range response.WorkMeasurements {
 			if role.TimeBudget != nil {
@@ -123,7 +128,7 @@ func validateRemoteWorkMeasurementPeerTime(req *model.RunRequest, response model
 		}
 		return nil
 	}
-	plans, err := workMeasurementPeerTimePlans(req, cfg)
+	plans, err := workMeasurementPeerTimePlans(req, cfg, runtimeTuning...)
 	if err != nil {
 		return fmt.Errorf("invalid remote result: incompatible per-role time configuration")
 	}

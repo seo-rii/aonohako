@@ -26,19 +26,21 @@ import (
 const cloudRunMetadataIdentityURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
 
 type remoteRunner struct {
-	workMeasurement  durante.Config
-	client           *http.Client
-	metadataClient   *http.Client
-	executeURL       string
-	auth             config.RemoteAuthMode
-	bearerToken      string
-	audience         string
-	metadataURL      string
-	idleTimeout      time.Duration
-	absoluteTimeout  time.Duration
-	uploadTimeout    time.Duration
-	errorBodyTimeout time.Duration
-	strictProto      bool
+	runtimeTuning         config.RuntimeTuningConfig
+	runtimeTuningProfiles map[string]config.RuntimeTuningConfig
+	workMeasurement       durante.Config
+	client                *http.Client
+	metadataClient        *http.Client
+	executeURL            string
+	auth                  config.RemoteAuthMode
+	bearerToken           string
+	audience              string
+	metadataURL           string
+	idleTimeout           time.Duration
+	absoluteTimeout       time.Duration
+	uploadTimeout         time.Duration
+	errorBodyTimeout      time.Duration
+	strictProto           bool
 }
 
 func newRemoteRunner(cfg config.Config) Runner {
@@ -47,18 +49,20 @@ func newRemoteRunner(cfg config.Config) Runner {
 		auth = config.RemoteAuthNone
 	}
 	return &remoteRunner{
-		workMeasurement:  snapshotWorkMeasurementConfig(cfg.Execution.WorkMeasurement),
-		client:           remoteio.NewHTTPClient(),
-		metadataClient:   remoteio.NewMetadataHTTPClient(),
-		executeURL:       normalizeRemoteExecuteURL(cfg.Execution.Remote.URL),
-		auth:             auth,
-		bearerToken:      cfg.Execution.Remote.BearerToken,
-		audience:         cfg.Execution.Remote.Audience,
-		metadataURL:      cloudRunMetadataIdentityURL,
-		idleTimeout:      cfg.Execution.Remote.SSEIdleTimeout,
-		uploadTimeout:    remoteio.DefaultRequestUploadTimeout,
-		errorBodyTimeout: remoteio.DefaultErrorResponseBodyTimeout,
-		strictProto:      cfg.Execution.Remote.StrictProtocol,
+		runtimeTuning:         cfg.Execution.RuntimeTuning.WithSafeDefaults(),
+		runtimeTuningProfiles: cloneRuntimeTuningProfiles(cfg.Execution.RuntimeTuningProfiles),
+		workMeasurement:       snapshotWorkMeasurementConfig(cfg.Execution.WorkMeasurement),
+		client:                remoteio.NewHTTPClient(),
+		metadataClient:        remoteio.NewMetadataHTTPClient(),
+		executeURL:            normalizeRemoteExecuteURL(cfg.Execution.Remote.URL),
+		auth:                  auth,
+		bearerToken:           cfg.Execution.Remote.BearerToken,
+		audience:              cfg.Execution.Remote.Audience,
+		metadataURL:           cloudRunMetadataIdentityURL,
+		idleTimeout:           cfg.Execution.Remote.SSEIdleTimeout,
+		uploadTimeout:         remoteio.DefaultRequestUploadTimeout,
+		errorBodyTimeout:      remoteio.DefaultErrorResponseBodyTimeout,
+		strictProto:           cfg.Execution.Remote.StrictProtocol,
 	}
 }
 
@@ -82,12 +86,20 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	if req.WorkMeasurementTime {
-		if _, _, err := r.workMeasurement.TimePolicyFor(req.Lang); err != nil {
+	tuning := r.runtimeTuning.WithSafeDefaults()
+	if (req.WorkMeasurementTime || req.WorkMeasurementPeerTime != nil) && r.workMeasurement.TimeModels != nil && r.workMeasurement.TimeModels.Schema == 2 {
+		var err error
+		tuning, err = resolveRuntimeTuning(req, r.runtimeTuning, r.runtimeTuningProfiles)
+		if err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
-	if _, err := workMeasurementPeerTimePlans(req, r.workMeasurement); err != nil {
+	if req.WorkMeasurementTime {
+		if _, _, err := ordinaryTimePolicy(req, r.workMeasurement, tuning); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	if _, err := workMeasurementPeerTimePlans(req, r.workMeasurement, tuning); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
@@ -292,10 +304,10 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if err := validateRemoteWorkMeasurement(req, remoteResult); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
-			if err := validateRemoteWorkMeasurementTime(req, remoteResult, r.workMeasurement); err != nil {
+			if err := validateRemoteWorkMeasurementTime(req, remoteResult, r.workMeasurement, tuning); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
-			if err := validateRemoteWorkMeasurementPeerTime(req, remoteResult, r.workMeasurement); err != nil {
+			if err := validateRemoteWorkMeasurementPeerTime(req, remoteResult, r.workMeasurement, tuning); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
 			switch remoteResult.Status {

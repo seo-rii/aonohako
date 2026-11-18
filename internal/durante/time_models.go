@@ -39,14 +39,15 @@ type TimeModel struct {
 // QualificationID identifies the operator's evidence; its presence is not a
 // verification of that evidence. Family registration never creates a binding.
 type TimeProfileBinding struct {
-	SourceLanguage  string `json:"source_language"`
-	Family          string `json:"family"`
-	RuntimeImage    string `json:"runtime_image"`
-	EngineProfile   string `json:"engine_profile"`
-	DispatchProfile string `json:"dispatch_profile"`
-	ModelID         string `json:"model_id"`
-	ModelVersion    uint64 `json:"model_version"`
-	QualificationID string `json:"qualification_id"`
+	SourceLanguage  string          `json:"source_language"`
+	Family          string          `json:"family"`
+	RuntimeImage    string          `json:"runtime_image"`
+	EngineProfile   string          `json:"engine_profile"`
+	DispatchProfile string          `json:"dispatch_profile"`
+	ModelID         string          `json:"model_id"`
+	ModelVersion    uint64          `json:"model_version"`
+	QualificationID string          `json:"qualification_id"`
+	RuntimeOptions  *RuntimeOptions `json:"runtime_options,omitempty"`
 }
 
 // TimeModels may contain bindings for more than one deployment. The executing
@@ -137,7 +138,8 @@ func (p *TimeProfileBinding) UnmarshalJSON(data []byte) error {
 		"runtime_image": &decoded.RuntimeImage, "engine_profile": &decoded.EngineProfile,
 		"dispatch_profile": &decoded.DispatchProfile, "model_id": &decoded.ModelID,
 		"model_version": &decoded.ModelVersion, "qualification_id": &decoded.QualificationID,
-	}); err != nil {
+		"runtime_options": &decoded.RuntimeOptions,
+	}, "runtime_options"); err != nil {
 		return err
 	}
 	*p = decoded
@@ -182,9 +184,14 @@ func validTimeModelID(value string) bool {
 }
 
 func (m TimeModel) resolve(binding TimeProfileBinding) TimePolicy {
+	optionsID := ""
+	if binding.RuntimeOptions != nil {
+		optionsID, _ = binding.RuntimeOptions.ID() // Validate checks descriptors before selection.
+	}
 	return TimePolicy{
-		Method:  m.Method,
-		ModelID: m.ModelID, ModelVersion: m.ModelVersion, ReferenceID: m.ReferenceID,
+		runtimeOptionsID: optionsID,
+		Method:           m.Method,
+		ModelID:          m.ModelID, ModelVersion: m.ModelVersion, ReferenceID: m.ReferenceID,
 		RuntimeID: binding.SourceLanguage + "@" + binding.RuntimeImage,
 		Family:    binding.Family, EngineProfile: binding.EngineProfile, DispatchProfile: binding.DispatchProfile,
 		InstructionNSNumerator: m.Coefficients.InstructionNSNumerator,
@@ -194,8 +201,8 @@ func (m TimeModel) resolve(binding TimeProfileBinding) TimePolicy {
 }
 
 func (r TimeModels) Validate() error {
-	if r.Schema != 1 || len(r.Models) == 0 || len(r.Models) > maxTimeModels || len(r.Profiles) > maxTimeProfiles {
-		return fmt.Errorf("durante time models requires schema 1, 1..%d models and at most %d profiles", maxTimeModels, maxTimeProfiles)
+	if (r.Schema != 1 && r.Schema != 2) || len(r.Models) == 0 || len(r.Models) > maxTimeModels || len(r.Profiles) > maxTimeProfiles {
+		return fmt.Errorf("durante time models requires schema 1 or 2, 1..%d models and at most %d profiles", maxTimeModels, maxTimeProfiles)
 	}
 	models := make(map[timeModelKey]TimeModel, len(r.Models))
 	for _, model := range r.Models {
@@ -211,7 +218,7 @@ func (r TimeModels) Validate() error {
 		}
 		models[key] = model
 	}
-	type profileKey struct{ runtimeID, engine, dispatch string }
+	type profileKey struct{ runtimeID, engine, dispatch, options string }
 	seen := make(map[profileKey]bool, len(r.Profiles))
 	for _, binding := range r.Profiles {
 		profile, ok := profiles.Resolve(binding.SourceLanguage)
@@ -236,7 +243,21 @@ func (r TimeModels) Validate() error {
 		if err := model.resolve(binding).Validate(); err != nil {
 			return err
 		}
-		key := profileKey{runtimeID, binding.EngineProfile, binding.DispatchProfile}
+		optionsID := ""
+		if r.Schema == 1 {
+			if binding.RuntimeOptions != nil {
+				return fmt.Errorf("schema 1 time profiles cannot claim runtime options binding")
+			}
+		} else {
+			if binding.RuntimeOptions == nil || !SupportsRuntimeOptions(binding.SourceLanguage) {
+				return fmt.Errorf("schema 2 time profile requires runtime_options and a supported launcher")
+			}
+			optionsID, err = binding.RuntimeOptions.ID()
+			if err != nil {
+				return err
+			}
+		}
+		key := profileKey{runtimeID, binding.EngineProfile, binding.DispatchProfile, optionsID}
 		if seen[key] {
 			return fmt.Errorf("duplicate durante time profile for %q", runtimeID)
 		}
@@ -253,5 +274,8 @@ func (r *TimeModels) Clone() *TimeModels {
 	copy := *r
 	copy.Models = slices.Clone(r.Models)
 	copy.Profiles = slices.Clone(r.Profiles)
+	for i := range copy.Profiles {
+		copy.Profiles[i].RuntimeOptions = r.Profiles[i].RuntimeOptions.clone()
+	}
 	return &copy
 }
