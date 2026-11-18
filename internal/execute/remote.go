@@ -146,6 +146,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
+	if req.Pipeline != nil {
+		httpReq.Header.Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+	}
 
 	if authHeader, err := r.authorizationHeader(ctx); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote auth failed: " + err.Error()}
@@ -204,7 +207,10 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if mediaTypeErr != nil || !strings.EqualFold(mediaType, "text/event-stream") {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote execute returned unexpected content type: %s", contentType)}
 	}
-	if err := remoteio.CheckProtocolVersionWithPolicy(resp.Header, r.strictProto); err != nil {
+	if req.Pipeline != nil && resp.Header.Get(model.PipelineV1WorkerHeader) != model.PipelineV1WorkerProtocol {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote worker did not confirm Pipeline V1 execution"}
+	}
+	if err := remoteio.CheckProtocolVersionWithPolicy(resp.Header, r.strictProto || req.Pipeline != nil); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute protocol mismatch: " + err.Error()}
 	}
 
@@ -329,6 +335,11 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote result decode failed: " + err.Error()}
 			}
 			remoteResult := wire.RunResponse
+			if req.Pipeline != nil {
+				if err := validateRemotePipelineResult(req, &remoteResult); err != nil {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+				}
+			}
 			if strings.TrimSpace(remoteResult.Reason) == "" {
 				remoteResult.Reason = remoteErrorReason
 			}

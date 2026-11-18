@@ -88,13 +88,14 @@ type Server struct {
 	compile interface {
 		Run(context.Context, *model.CompileRequest) model.CompileResponse
 	}
-	execute      execute.Runner
-	queue        *queue.Manager
-	work         workLifecycle
-	seq          atomic.Uint64
-	streams      atomic.Int64
-	uploads      atomic.Int64
-	requestBytes requestByteBudget
+	execute            execute.Runner
+	queue              *queue.Manager
+	work               workLifecycle
+	seq                atomic.Uint64
+	streams            atomic.Int64
+	uploads            atomic.Int64
+	requestBytes       requestByteBudget
+	pipelineCapability pipelineCapabilityCache
 
 	principalMu      sync.Mutex
 	principalStreams map[string]int
@@ -136,14 +137,15 @@ func NewWithServices(cfg config.Config, compileService interface {
 	}
 	payloadURLFetchSlots = max(1, payloadURLFetchSlots)
 	return &Server{
-		cfg:              cfg,
-		compile:          compileService,
-		execute:          executeRunner,
-		queue:            queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
-		requestBytes:     requestByteBudget{limit: cfg.MaxRetainedRequestBytes},
-		principalStreams: map[string]int{},
-		principalUploads: map[string]int{},
-		principalRates:   map[string]principalRateWindow{},
+		cfg:                cfg,
+		compile:            compileService,
+		execute:            executeRunner,
+		queue:              queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
+		pipelineCapability: pipelineCapabilityCache{lock: make(chan struct{}, 1)},
+		requestBytes:       requestByteBudget{limit: cfg.MaxRetainedRequestBytes},
+		principalStreams:   map[string]int{},
+		principalUploads:   map[string]int{},
+		principalRates:     map[string]principalRateWindow{},
 		platformBodyHashSlots: make(
 			chan struct{},
 			platformBodyHashConcurrency(cfg),
@@ -175,6 +177,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/healthz", s.readyz)
 	mux.HandleFunc("/capabilities", s.capabilities)
+	mux.Handle(model.PipelineV1WorkerPath, s.requireAuth(http.HandlerFunc(s.pipelineWorkerCapability)))
 	mux.Handle("/compile", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler)))))
 	mux.Handle("/execute", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler)))))
 	return mux
@@ -212,7 +215,7 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 			capabilities = append(capabilities, pythonpolicy.InstalledCapability)
 		}
 	}
-	pipelineSupported := s.supportsPipelineV1()
+	pipelineSupported := s.supportsPipelineV1(r.Context())
 	if pipelineSupported {
 		capabilities = append(capabilities, "pipeline-v1")
 	}
@@ -236,29 +239,13 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 		body["entry"] = map[string]any{"engine_version": "4.0.23", "grader_version": entrypolicy.Capability, "modes": []string{"stdio", "state"}}
 	}
 	if pipelineSupported {
-		body["pipeline"] = map[string]any{
-			"versions":         []int{1},
-			"max_steps":        runvalidation.MaxPipelineSteps,
-			"executors":        []string{"batch", "interactive"},
-			"artifact_sources": []string{"participant_stdout", "participant_file", "interactor_output"},
-			"artifact_source_max_bytes": map[string]int64{
-				"participant_stdout": runvalidation.MaxStepHandoffBytes,
-				"participant_file":   runvalidation.MaxPipelineParticipantFileBytes,
-				"interactor_output":  runvalidation.MaxStepHandoffBytes,
-			},
-			"final_judges": []string{"diff", "spj"},
-		}
+		body["pipeline"] = runvalidation.PipelineV1Contract()
 	}
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-func (s *Server) supportsPipelineV1() bool {
-	return s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded &&
-		s.cfg.Execution.Platform.SandboxBackend == platform.SandboxBackendHelper
-}
-
 func (s *Server) supportsEntryV1() bool {
-	if !s.supportsPipelineV1() {
+	if !s.isEmbeddedHelper() {
 		return false
 	}
 	installed := false
@@ -561,7 +548,12 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_python_library_mode", err.Error())
 		return
 	}
-	if req.Pipeline != nil && !s.supportsPipelineV1() {
+	workerProtocol := r.Header.Get(model.PipelineV1WorkerHeader)
+	if workerProtocol != "" && (workerProtocol != model.PipelineV1WorkerProtocol || req.Pipeline == nil || !s.canAttestPipelineWorker()) {
+		writeJSONError(w, http.StatusBadRequest, "unsupported_capability")
+		return
+	}
+	if req.Pipeline != nil && !s.supportsPipelineV1(r.Context()) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "unsupported_capability", "pipeline-v1 is not supported by this execution transport")
 		return
 	}
@@ -638,6 +630,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	releaseUploadAdmission(r.Context())
 
+	if workerProtocol != "" {
+		w.Header().Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+	}
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {

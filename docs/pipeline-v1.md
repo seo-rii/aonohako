@@ -7,10 +7,20 @@ handoff from combinations such as `interactor` plus legacy `steps`.
 
 `GET /capabilities` advertises the supported version, deployment step limit,
 executors, artifact sources and their byte limits, and final judges. A client
-must not silently fall back when `pipeline-v1` is unavailable. The current
-remote control-plane architecture has no authenticated downstream capability
-negotiation, so remote transports neither advertise nor accept Pipeline V1;
-embedded helper runners advertise and accept the capability.
+must not silently fall back when `pipeline-v1` is unavailable. Embedded helper
+runners support the contract locally. A remote control plane
+advertises and admits it after an authenticated worker confirms the supported
+version, step count, executors, artifact byte limits and final judges. The
+control plane uses its configured runner URL and execution credentials for
+`GET /internal/capabilities/pipeline-v1`. Only an authenticated embedded
+helper serves that route. Discovery has a three-second deadline and shares
+its result for five seconds. Unavailable or older workers yield
+`unsupported_capability` at admission.
+
+The control plane also requests confirmation on the actual `POST /execute`.
+The worker identifies the pipeline protocol in the SSE response headers.
+If a different instance cannot confirm the protocol, the request yields an
+initialization failure. Each submitted execution is forwarded at most once.
 
 ## Request contract
 
