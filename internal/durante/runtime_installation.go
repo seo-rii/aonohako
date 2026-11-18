@@ -22,7 +22,7 @@ const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32
 const releaseCore = "lib64/release/libdynamorio.so"
 
 // Updated together with the complete third_party/durante snapshot.
-const sourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
+const sourceCommit = "238193f90f5896b300563180e7939088ac8c346c"
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
 // Matching hashes do not attest application counters or an adversarial host.

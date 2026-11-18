@@ -20,7 +20,8 @@ const (
 // TimeCoefficients describes the common conversion independently of its approved
 // execution profiles. It has the same arithmetic and units as TimePolicy.
 type TimeCoefficients struct {
-	InstructionNSNumerator uint64 `json:"instruction_ns_numerator"`
+	InstructionNSNumerator uint64 `json:"instruction_ns_numerator,omitempty"`
+	LatencyX16NSNumerator  uint64 `json:"latency_x16_ns_numerator,omitempty"`
 	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator,omitempty"`
 	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
 	STOSByteNSNumerator    uint64 `json:"stos_byte_ns_numerator,omitempty"`
@@ -93,16 +94,22 @@ func (c *TimeCoefficients) UnmarshalJSON(data []byte) error {
 	var decoded TimeCoefficients
 	if err := decodeTimeModelFields(data, "time coefficients", map[string]any{
 		"instruction_ns_numerator": &decoded.InstructionNSNumerator,
+		"latency_x16_ns_numerator": &decoded.LatencyX16NSNumerator,
 		"rep_byte_ns_numerator":    &decoded.REPByteNSNumerator,
 		"movs_byte_ns_numerator":   &decoded.MOVSByteNSNumerator,
 		"stos_byte_ns_numerator":   &decoded.STOSByteNSNumerator,
 		"ns_denominator":           &decoded.NSDenominator,
-	}, "rep_byte_ns_numerator", "movs_byte_ns_numerator", "stos_byte_ns_numerator"); err != nil {
+	}, "instruction_ns_numerator", "latency_x16_ns_numerator", "rep_byte_ns_numerator", "movs_byte_ns_numerator", "stos_byte_ns_numerator"); err != nil {
 		return err
 	}
 	fields, err := manifestObject(data)
 	if err != nil {
 		return err
+	}
+	_, instructions := fields["instruction_ns_numerator"]
+	_, latency := fields["latency_x16_ns_numerator"]
+	if instructions == latency {
+		return fmt.Errorf("durante time coefficients require exactly one instruction or latency weight")
 	}
 	_, aggregate := fields["rep_byte_ns_numerator"]
 	_, movs := fields["movs_byte_ns_numerator"]
@@ -207,6 +214,7 @@ func (m TimeModel) resolve(binding TimeProfileBinding) TimePolicy {
 		Family:    binding.Family, EngineProfile: binding.EngineProfile, DispatchProfile: binding.DispatchProfile,
 		CPUIDProfile:           binding.CPUIDProfile,
 		InstructionNSNumerator: m.Coefficients.InstructionNSNumerator,
+		LatencyX16NSNumerator:  m.Coefficients.LatencyX16NSNumerator,
 		REPByteNSNumerator:     m.Coefficients.REPByteNSNumerator, NSDenominator: m.Coefficients.NSDenominator,
 		MOVSByteNSNumerator: m.Coefficients.MOVSByteNSNumerator, STOSByteNSNumerator: m.Coefficients.STOSByteNSNumerator,
 	}

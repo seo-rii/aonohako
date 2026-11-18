@@ -62,6 +62,8 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	output := flags.String("output", "", "new private output directory (required)")
 	language := flags.String("language", "CPP20", "source profile: CPP20, PYTHON3, PYPY3 or RUST2024")
 	memoryMB := flags.Int("memory-mb", 0, "native/raw RSS limit in MiB (0: corpus default, CPP20 256; other profiles 512)")
+	meteredCPU := flags.Int("metered-cpu-ms", 0, "instrumented CPU limit in ms (0 uses 10000)")
+	meteredWall := flags.Int("metered-wall-ms", 0, "instrumented wall limit in ms (0 uses 30000)")
 	smoke := flags.Bool("smoke", false, "small integration corpus; cannot qualify a model")
 	repetitions := flags.Int("repetitions", 3, "ordered native/observed/native triplets per case (3..9; smoke 1..9)")
 	timeout := flags.Duration("timeout", 20*time.Minute, "total collection timeout (at most 1h)")
@@ -95,6 +97,7 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	path := filepath.Join(*output, "dataset.json")
 	dataset, collectErr := reference.Collect(ctx, cfg, reference.CollectOptions{
 		Language: profile.SourceLanguage, MemoryMB: *memoryMB, Smoke: *smoke, Repetitions: *repetitions,
+		MeteredCPUTimeMs: *meteredCPU, MeteredWallTimeMs: *meteredWall,
 		OnSample: func(snapshot reference.Dataset) error { return writeJSON(path, snapshot) },
 	})
 	if err := writeJSON(path, dataset); err != nil {
@@ -126,7 +129,7 @@ func fit(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	input := flags.String("input", "", "collected dataset.json (required)")
 	output := flags.String("output", "", "new private output directory (required)")
 	var options reference.FitOptions
-	flags.StringVar(&options.Method, "method", durante.TimeMethod, "conversion method (currently only weighted-work-nanoseconds-v1)")
+	flags.StringVar(&options.Method, "method", durante.TimeMethod, "conversion method ("+durante.TimeMethod+" or "+durante.TimeMethodLatencyBoundREP+")")
 	flags.StringVar(&options.ModelID, "model-id", "", "explicit diagnostic model identity (required)")
 	flags.Uint64Var(&options.ModelVersion, "model-version", 0, "positive model version (required)")
 	flags.StringVar(&options.ReferenceID, "reference-id", "", "reference collection identity (required)")

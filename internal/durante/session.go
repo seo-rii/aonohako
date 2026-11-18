@@ -17,7 +17,7 @@ import (
 // EngineProfile identifies the reviewed patched engine, basic-block execution
 // without trace construction, and fixed reservations.
 // Prepare verifies installation provenance before any report claims this profile.
-const EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
+const EngineProfile = "dynamorio-11.3-durante-v6-vm32m"
 
 // This profile was qualified only as a C/C++ diagnostic control on glibc 2.41.
 // The host version does not attest the embedded libc of static submissions.
@@ -146,6 +146,9 @@ func (s *Session) Wrap(command []string) []string {
 	if s.config.CPUIDProfile != "" {
 		args = append(args, "-cpuid_profile", s.config.CPUIDProfile)
 	}
+	if s.config.LatencyBound {
+		args = append(args, "-latency_bound")
+	}
 	args = append(args, "--")
 	return append(args, command...)
 }
@@ -188,6 +191,8 @@ func (s *Session) Collect(rootPID int) *Report {
 		// A legacy client, host CPUID or another profile cannot satisfy the
 		// configured virtual processor; never publish those totals.
 		report = incomplete("durante CPUID profile receipt does not match the configuration")
+	} else if report.Complete && (report.LatencyBound != nil) != s.config.LatencyBound {
+		report = incomplete("durante latency bound receipt does not match the configuration")
 	}
 	report.Installation = &identity
 	report.Family = s.family

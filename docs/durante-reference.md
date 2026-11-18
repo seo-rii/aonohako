@@ -1,8 +1,7 @@
 # Runtime reference-time qualification
 
 `cmd/durante-reference` collects explicitly selected runtime programs through Aonohako's actual
-`/compile` and `/execute` handlers, then evaluates a two-coefficient diagnostic
-time policy. It starts a temporary loopback API; it does not connect to a running
+`/compile` and `/execute` handlers, then compares two-coefficient diagnostic time models. It starts a temporary loopback API; it does not connect to a running
 judge or change its configuration. A successful fit is a reference-cohort result,
 not authorization to use the estimate as an official verdict.
 
@@ -71,10 +70,13 @@ Each `metered.work_measurement` retains the optional version-1 `rep_breakdown`
 legacy detail means unspecified, not zero. Invalid partitions or counter
 overflow reject collection/fitting. Dataset schema remains 1. The source-language
 ID and corpus ID are validated together; a runtime dataset cannot be relabeled as
-`cpp-reference-v1`. The two-coefficient fitter continues to use `instructions`
-and aggregate `rep_bytes`, with the same train/validation split and gates.
+`cpp-reference-v1`. Select `AONOHAKO_DURANTE_LATENCY_BOUND=v1` for a paired model comparison.
+The collector records `latency_bound_version: 1` at the dataset level. Every
+metered sample must carry the matching process-tree `latency_bound.cycles_x16`
+receipt. Both time models use the same compiled binaries, native observations
+and training/held-out partition.
 
-The current collector uses `dynamorio-11.3-durante-v5-vm32m` and pins both runtime
+The current collector uses `dynamorio-11.3-durante-v6-vm32m` and pins both runtime
 patches. A collection made with `AONOHAKO_DURANTE_CPUID_PROFILE` records that
 profile as the dataset's `cpuid_profile`, requires every metered receipt to match
 it, and the fitted candidate policy carries the same `cpuid_profile`, so it
@@ -83,12 +85,16 @@ applies only to identically profiled runs. Likewise, a collection made with
 pinned source (CPython, PyPy, Node), requires every metered report to carry it, and
 fits only such reports; bind the resulting coefficients through a schema 2
 descriptor generated with the same setting. Older seven-field installation identities and v3/v4 reports can be decoded
-for inspection, but the current fitter rejects their old installation/profile.
+for inspection, but the current fitter rejects earlier installation/profile identities, including v5.
 Keep the original dataset and matching historical fitter for reproducing past
 results. A current-runtime model requires fresh collection; do not relabel old
 identities, fill absent detail with zeros, or reuse old coefficients as qualified.
 
-Both paths use CPU 10,000 ms and wall 30,000 ms. Memory defaults to 256 MiB for
+Native execution uses a 10,000 ms CPU limit and a 30,000 ms wall limit.
+Instrumented execution defaults to the same limits. For a slower counter,
+`--metered-cpu-ms` and `--metered-wall-ms` select a larger raw envelope for
+that execution only. The collector checks it against the operator's resource
+policy before starting and records it for offline validation. Memory defaults to 256 MiB for
 CPP20 and 512 MiB for the new runtime corpus, accommodating interpreter startup.
 `--memory-mb` can explicitly select another positive limit up to 4,096 MiB; the
 resolved value is recorded in both `native_limits` and `metered_limits`. It must
@@ -131,10 +137,12 @@ docker run --rm --network none --read-only --memory 2g --pids-limit 512 --cpus 2
   -e AONOHAKO_WORK_ROOT_MAX_BYTES=268435456 \
   -e AONOHAKO_CPU_NORMALIZATION=false -e AONOHAKO_CPU_SHORT_CASE_SAMPLING=false \
   -e AONOHAKO_DURANTE_FAMILIES=cpp -e AONOHAKO_DURANTE_DISPATCH_PROFILE=default \
+  -e AONOHAKO_DURANTE_CPUID_PROFILE=x86-64-v2 -e AONOHAKO_DURANTE_LATENCY_BOUND=v1 \
   -e AONOHAKO_DURANTE_RUNTIME_IMAGE="$image_id" \
-  -e 'AONOHAKO_DURANTE_RESOURCE_POLICY={"max_limits":{"cpu_time_ms":10000,"wall_time_ms":30000,"memory_mb":256},"memory_budget_mb":2048,"reserved_memory_mb":512}' \
+  -e 'AONOHAKO_DURANTE_RESOURCE_POLICY={"max_limits":{"cpu_time_ms":60000,"wall_time_ms":90000,"memory_mb":256},"memory_budget_mb":2048,"reserved_memory_mb":512}' \
   --entrypoint /validation/reference-tool "$image_id" \
-  collect --language CPP20 --memory-mb 256 --output /output/full --repetitions 3 --timeout 20m
+  collect --language CPP20 --memory-mb 256 --metered-cpu-ms 60000 --metered-wall-ms 90000 \
+    --output /output/full --repetitions 3 --timeout 20m
 sudo chown -R "$(id -u):$(id -g)" "$output"
 ```
 
@@ -188,11 +196,28 @@ and `1/N` per repetition. Only the two training programs determine coefficients.
 Validation programs never influence fitting.
 
 The fitter chooses the corpus and report family from the dataset's canonical
-source/corpus metadata. `--method weighted-work-nanoseconds-v1` is the default
-and currently the only fitted method; unsupported corpora, languages and methods
-fail explicitly. Runtime workloads may expose too little REP variation to
-identify both weights. Such a dataset receives the existing rank/conditioning
-failure, not an invented REP coefficient or a silent one-variable fit.
+source/corpus metadata. `--method weighted-work-nanoseconds-v1` fits instructions and aggregate REP
+bytes. `--method latency-bound-rep-nanoseconds-v1` fits version 1
+`cycles_x16` and the same aggregate REP bytes. Each method uses the same
+default thresholds. The latency fit also checks the spread of the latency
+counter against the work-spread threshold. The fitted latency coefficient
+already accounts for the counter's unit of one sixteenth of a modeled cycle.
+
+Run both methods over the same dataset, including when the first candidate
+fails a quality gate.
+
+```sh
+for method in weighted-work-nanoseconds-v1 latency-bound-rep-nanoseconds-v1; do
+  status=0
+  /tmp/durante-reference fit --input "$output/full/dataset.json" \
+    --output "$output/$method" --method "$method" --model-id "cpp-$method" \
+    --model-version 1 --reference-id YOUR_COLLECTION_RECORD || status=$?
+  case "$status" in 0|2) ;; *) exit "$status" ;; esac
+done
+```
+
+Each evaluation records the input SHA-256 and the worst observed prediction
+error per case. Keep both evaluations and any failed gates with the dataset.
 
 The two-variable normal equations use exact rational arithmetic. Singular or
 near-collinear designs (`det/(A*C) < 10^-12`), nonpositive weights, coefficients
@@ -227,6 +252,36 @@ has reviewed the applicable evidence; the legacy single-policy environment
 setting retains its C/C++ restriction.
 For API configuration and unchanged verdict semantics, see
 [Durante integration](durante.md#explicit-reference-time-calculator).
+
+## Paired CPP20 qualification, 2026-11-18
+
+A shared AMD EPYC 7B12 KVM host ran the v6 engine with fixed `x86-64-v2`
+CPUID and the v1 latency counter. The static g++ 14.2.0 runtime image was
+`sha256:5f1fee5fb589c9494f2155478bab0e01af620f73e99ebf2ff9177a09626d5bf3`.
+In the first full collection the raw 10,000 ms CPU limit stopped the instrumented
+branch case at scale 4 after 24 complete triplets. The incomplete run was
+retained. A fresh collection used 60,000 ms raw CPU and 90,000 ms raw wall;
+native limits remained 10,000/30,000 ms. All 45 full triplets completed (135
+executions), with matching output and a latency receipt for each instrumented
+execution. Both fits used the same dataset, SHA-256
+`d1fd7c1f03e541a75ff45fef104a9e3af9de16956995c514634ec187ccde11d7`.
+
+Each cell below shows the signed error for the worst repetition at each
+held-out scale (1, 2, 4), relative to the native CPU median. Positive is an
+overestimate. The predeclared maximum absolute error was 20%.
+
+| Held-out program | Instructions + REP bytes | Latency bound + REP bytes |
+|---|---:|---:|
+| Branch | +73.30%, +77.97%, +78.81% | −45.76%, −44.30%, −44.03% |
+| Sort | −37.80%, −35.88%, −33.80% | −80.53%, −79.93%, −79.28% |
+| REP fill | +61.82%, +62.81%, +70.97% | +62.14%, +68.34%, +79.71% |
+
+Both models failed all 27 held-out repetitions. Six of the 15 program/scale
+combinations also exceeded the 10% native spread gate (maximum 30.69%).
+Branch and sort passed that spread gate and still failed on prediction error.
+Neither fit exported a policy. Repeating on a dedicated reference host would
+test how much host variability contributed. A revised model needs a new
+predeclared validation set, especially for branch, sort and memory work.
 
 ## Local multi-language smoke result
 

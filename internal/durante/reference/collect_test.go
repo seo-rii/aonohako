@@ -95,7 +95,7 @@ func collectionTestMetered(dataset Dataset) model.RunResponse {
 		REPEnabled: true, REPTelemetryStatus: durante.REPMovsStosOnly, Processes: 1, Images: 1,
 		IntegrityVerified: &verified, MeasurementContract: durante.DiagnosticContract(),
 		Installation: &durante.InstallationIdentity{
-			SourceCommit: "4016b33fc69b93d36a13efbd00953213b8f6317f", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
+			SourceCommit: "238193f90f5896b300563180e7939088ac8c346c", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
 			RuntimePatchSHA256:           "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c",
 			RuntimeCodeReplayPatchSHA256: "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72",
 			LauncherSHA256:               strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true,
@@ -511,5 +511,52 @@ func TestCollectionRejectsNormalizedOrIncompleteObservations(t *testing.T) {
 				t.Fatal("incompatible metered observation was accepted")
 			}
 		})
+	}
+}
+
+func TestCollectionInstrumentedTimeLimits(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cfg := collectionTestConfig()
+	opts := CollectOptions{Repetitions: 3, MeteredCPUTimeMs: 60000, MeteredWallTimeMs: 90000}
+	dataset, err := Collect(ctx, cfg, opts)
+	if !errors.Is(err, context.Canceled) || dataset.NativeLimits != collectionTestDataset().NativeLimits ||
+		dataset.MeteredLimits != (durante.ResourceLimits{CPUTimeMs: 60000, WallTimeMs: 90000, MemoryMB: 256}) {
+		t.Fatalf("mismatched collection envelope: native=%+v metered=%+v err=%v", dataset.NativeLimits, dataset.MeteredLimits, err)
+	}
+	if err := validateCollectionConfig(cfg, opts, dataset.MeteredLimits); err == nil {
+		t.Fatal("accepted a request above the configured operator cap")
+	}
+	cfg.Execution.WorkMeasurement.ResourcePolicy.MaxLimits = dataset.MeteredLimits
+	if err := validateCollectionConfig(cfg, opts, dataset.MeteredLimits); err != nil {
+		t.Fatal(err)
+	}
+	for _, limit := range []durante.ResourceLimits{
+		{CPUTimeMs: 9999, WallTimeMs: 90000, MemoryMB: 256},
+		{CPUTimeMs: 10000, WallTimeMs: 29999, MemoryMB: 256},
+		{CPUTimeMs: 60000, WallTimeMs: 50000, MemoryMB: 256},
+		{CPUTimeMs: 60000, WallTimeMs: durante.MaxResourceTimeMs + 1, MemoryMB: 256},
+	} {
+		if err := validateCollectionConfig(cfg, opts, limit); err == nil {
+			t.Fatalf("accepted incompatible raw limits %+v", limit)
+		}
+	}
+	metered := collectionTestMetered(dataset)
+	metered.CPUTimeMs, metered.CPUTimeNs, metered.WallTimeMs = 55000, 55_000_000_000, 65000
+	if err := validateCollectedMetered(metered, dataset); err != nil {
+		t.Fatalf("valid instrumented observation above nominal limits: %v", err)
+	}
+	metered.WallTimeMs = 90001
+	if err := validateCollectedMetered(metered, dataset); err == nil {
+		t.Fatal("accepted a wall observation above its instrumented limit")
+	}
+	metered.CPUTimeMs, metered.CPUTimeNs, metered.WallTimeMs = 60001, 60_001_000_000, 65000
+	if err := validateCollectedMetered(metered, dataset); err == nil {
+		t.Fatal("accepted a CPU observation above its instrumented limit")
+	}
+	native := collectionTestNative()
+	native.CPUTimeMs, native.CPUTimeNs = 11000, 11_000_000_000
+	if err := validateCollectedNative(native); err == nil {
+		t.Fatal("accepted a native observation above the fixed native limit")
 	}
 }

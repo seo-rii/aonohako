@@ -660,6 +660,16 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_MODELS: %w", err)
 	}
 	workMeasurement.RuntimeImage = os.Getenv("AONOHAKO_DURANTE_RUNTIME_IMAGE")
+	switch strings.TrimSpace(os.Getenv("AONOHAKO_DURANTE_LATENCY_BOUND")) {
+	case "", "off":
+	case "v1":
+		if len(workMeasurement.Families) == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_LATENCY_BOUND requires an enabled measurement family")
+		}
+		workMeasurement.LatencyBound = true
+	default:
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_LATENCY_BOUND must be empty, off or v1")
+	}
 	workMeasurement.CPUIDProfile, err = durante.ParseCPUIDProfile(os.Getenv("AONOHAKO_DURANTE_CPUID_PROFILE"))
 	if err != nil {
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_CPUID_PROFILE: %w", err)

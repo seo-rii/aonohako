@@ -328,7 +328,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if req.WorkMeasurementShadow {
 				remoteResult.WorkMeasurementShadow = nil // primary validators see an ordinary result
 			}
-			if err := validateRemoteWorkMeasurement(checked, remoteResult); err != nil {
+			if err := validateRemoteMeasurementCounters(checked, remoteResult, r.workMeasurement); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
 			if err := validateRemoteWorkMeasurementTime(checked, remoteResult, r.workMeasurement, tuning); err != nil {

@@ -42,7 +42,7 @@ before downloading the separately SHA-256-pinned engine SDK. CI needs no private
 cross-repository checkout token.
 
 The launcher fixes `-disable_traces -vm_size 32M -vmheap_size 32M` and reports engine profile
-`dynamorio-11.3-durante-v5-vm32m`. Before launch, installation validation checks
+`dynamorio-11.3-durante-v6-vm32m`. Before launch, installation validation checks
 the runtime manifest's source, process-lifetime patch, code-replay patch and
 actual release-core digest.
 Missing or mismatched provenance refuses measurement. This is a trusted local
@@ -57,11 +57,10 @@ installation immutable and operator-owned for the lifetime of the service.
 The installation identity includes `runtime_code_replay_patch_sha256` in
 addition to `runtime_patch_sha256`. Old seven-field identities remain readable
 and retain their original values, but do not satisfy current installation
-validation. Old v1-v4 time models and reports cannot be applied to v5
-observations. v5 pins Durante `4016b33`, whose runtime patch completes vfork
-synchronization and failed-clone cleanup and whose client adds the optional
-fixed CPUID profile. Rebuild the runtime overlay and collect a new reference
-dataset before qualifying a v5 model; never edit the identity of an old observation.
+validation. Engine profile v6 pins Durante `238193f` and supports the optional
+version 1 static block latency counter. The installation identity and time
+models bind to this version. Rebuild the runtime overlay and collect new
+reference data before qualifying coefficients for v6.
 Upstream's large default virtual reservations can fail
 before main under the ordinary C/C++ address-space bound. These options reduce
 the engine's reservation budgets; no student CPU, RSS or address-space limit is
@@ -79,6 +78,7 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_DURANTE_TIME_MODELS` | Optional strict schema-1 (legacy) or schema-2 (effective runtime options) registry of shared coefficient models and explicit execution profiles. Mutually exclusive with `AONOHAKO_DURANTE_TIME_POLICY`; family registration alone enables no profile. |
 | `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with either time setting, independently of the model's profile bindings. |
 | `AONOHAKO_DURANTE_CPUID_PROFILE` | Empty (default) exposes host CPUID. `x86-64-v1` or `x86-64-v2` makes the client report one fixed virtual processor to every application CPUID/XGETBV, so library and runtime dispatch, and therefore counts, do not follow the Cloud Run instance's processor. Complete reports carry the client's `cpuid_profile` receipt; a missing or different receipt makes the observation unavailable. Requires an enabled family. See [CPUID profiles](https://github.com/seo-rii/durante/blob/main/docs/CPUID_PROFILE.md). |
+| `AONOHAKO_DURANTE_LATENCY_BOUND` | `v1` enables the static block latency counter for measured executions. Empty or `off` disables it. A complete report from an enabled run carries `latency_bound: {"version":1,"cycles_x16":...}` for the process tree. The unit is one sixteenth of a modeled cycle. |
 | `AONOHAKO_DURANTE_RUNTIME_DETERMINISM` | Empty or `off` (default) runs every launcher unchanged. `v1` pins runtime-internal nondeterminism of measured executions only: Node (`JAVASCRIPT`, and sources that run as JavaScript) gets `--predictable`, and CPython gets hash seed 0 (`-I` is replaced by `-s -P` and every `PYTHON*` variable except `PYTHONHASHSEED=0` is removed, because isolated mode ignores `PYTHONHASHSEED`); PyPy gets `PYTHONHASHSEED=0`, which it reads even under `-I`. Native targets and other launchers are unchanged. The options are part of the effective runtime-options descriptor, complete reports for a pinned launcher carry `runtime_determinism`, and an estimate requires the report to match the configuration. Schema 1 time models cannot bind a pinned launcher; use schema 2. Required by judge mode for `cpython`, `pypy` and `javascript-wasm`. Requires an enabled family. See [Runtime determinism](durante-runtime-options.md#runtime-determinism). |
 | `AONOHAKO_DURANTE_JUDGE_MODE` | `on` enables work-based judging (virtual-millisecond verdicts) and shadow comparisons; `shadow` enables only non-deciding `work_measurement_shadow` comparisons; empty or `off` disables both. See [work-based judging](durante-judging.md). |
 | `AONOHAKO_DURANTE_JUDGE_FAMILIES` | Comma-separated families a judge-mode request may ask to judge. Each must be an enabled, qualified measurement family. |
@@ -122,7 +122,7 @@ Selected fields of a successful lifecycle aggregate resemble:
   "metric": "bb_entry_app_instructions",
   "scope": "process_tree_user_code",
   "rep_bytes_enabled": true,
-  "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
   "authority": "diagnostic_only",
   "integrity_verified": false,
   "measurement_contract": {
@@ -316,7 +316,7 @@ Every role must have a selectable operator time policy for its declared source
 profile, deployment image, and dispatch before execution or remote upload starts.
 The [shared-model registry](#shared-models-and-approved-execution-profiles) lets
 different approved source profiles select one model without duplicating weights.
-Both v1 aggregate-REP and v2 MOVS/STOS formulas are supported. A legacy single
+Supported formulas use instructions with aggregate REP, instructions with separate MOVS/STOS costs, or the v1 latency counter with aggregate REP. A legacy single
 policy is sufficient when every role uses its one approved source profile.
 Requests supply budgets only; they cannot supply or override model coefficients.
 
@@ -548,7 +548,7 @@ records supporting each intended execution profile before configuring estimates.
     "source_language": "CPP20",
     "family": "cpp",
     "runtime_image": "<actual-overlay-image-digest>",
-    "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
+    "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
     "dispatch_profile": "default",
     "model_id": "shared-arithmetic-example",
     "model_version": 1,
@@ -557,7 +557,7 @@ records supporting each intended execution profile before configuring estimates.
     "source_language": "PYTHON3",
     "family": "cpython",
     "runtime_image": "<actual-overlay-image-digest>",
-    "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
+    "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
     "dispatch_profile": "default",
     "model_id": "shared-arithmetic-example",
     "model_version": 1,
@@ -637,7 +637,7 @@ only; production coefficients have not been selected or calibrated.**
   "reference_id": "arithmetic-fixture-only",
   "runtime_id": "CPP20@<actual-overlay-image-digest>",
   "family": "cpp",
-  "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
   "dispatch_profile": "default",
   "instruction_ns_numerator": 1,
   "rep_byte_ns_numerator": 1,
@@ -696,7 +696,7 @@ response fields would be:
       "reference_id": "arithmetic-fixture-only",
       "runtime_id": "CPP20@<actual-overlay-image-digest>",
       "family": "cpp",
-      "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
+      "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
       "dispatch_profile": "default",
       "nanoseconds": 131648,
       "milliseconds": 1
@@ -774,6 +774,8 @@ Version 1 evaluates stages in this order:
 | Code, in canonical order | Meaning |
 |---|---|
 | `execution_cancelled` | The execution context was cancelled. |
+| `latency_bound_missing` | The selected timing method requires the version 1 latency counter. |
+| `latency_bound_invalid` | The observed bound is incompatible with the instruction total or counter version. |
 | `execution_resource_exhausted` | A raw resource limit stopped execution. |
 | `execution_failed` | Execution failed before a convertible completed result. |
 | `execution_incomplete` | Execution did not provide a completed diagnostic observation. |

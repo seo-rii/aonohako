@@ -23,6 +23,8 @@ const (
 	TimeUnsupportedREP            = "unsupported_rep_entries"
 	TimeREPTelemetryMismatch      = "rep_telemetry_mismatch"
 	TimeREPBreakdownMissing       = "rep_breakdown_missing"
+	TimeLatencyBoundMissing       = "latency_bound_missing"
+	TimeLatencyBoundInvalid       = "latency_bound_invalid"
 	TimeNumericOverflow           = "numeric_overflow"
 )
 
@@ -36,7 +38,7 @@ var timeReasonOrder = [...]string{
 	TimeReportContractMismatch, TimeIncompleteAccounting, TimeSignalsObserved,
 	TimeInvalidQuality, TimeIncompleteProcessTree, TimeREPDisabled, TimeCountersMissing,
 	TimeInvalidCounters, TimeUnsupportedREP, TimeREPTelemetryMismatch,
-	TimeREPBreakdownMissing, TimeNumericOverflow,
+	TimeREPBreakdownMissing, TimeLatencyBoundMissing, TimeLatencyBoundInvalid, TimeNumericOverflow,
 }
 
 // TimeEligibility explains conversion availability, not a verdict or evidence
@@ -92,7 +94,7 @@ func (e *TimeEligibility) UnmarshalJSON(data []byte) error {
 // identity and execution status remain the caller's separate responsibilities.
 // It never changes report quality, counters or REP coverage.
 func (r Report) TimeConversionEligibility(method string) TimeEligibility {
-	if method != "" && method != TimeMethod && method != TimeMethodREPBreakdown {
+	if method != "" && method != TimeMethod && method != TimeMethodREPBreakdown && method != TimeMethodLatencyBoundREP {
 		return timeEligibility(TimeIncompatibleConfiguration)
 	}
 	var reasons []string
@@ -132,6 +134,12 @@ func (r Report) TimeConversionEligibility(method string) TimeEligibility {
 	}
 	if method == TimeMethodREPBreakdown && r.REPBreakdown == nil {
 		reasons = append(reasons, TimeREPBreakdownMissing)
+	}
+	if method == TimeMethodLatencyBoundREP && r.LatencyBound == nil {
+		reasons = append(reasons, TimeLatencyBoundMissing)
+	}
+	if r.LatencyBound != nil && !r.ValidLatencyBound() {
+		reasons = append(reasons, TimeLatencyBoundInvalid)
 	}
 	return timeEligibility(reasons...)
 }

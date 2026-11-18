@@ -135,7 +135,7 @@ func validateRemoteShadow(req *model.RunRequest, response model.RunResponse, cfg
 		return fmt.Errorf("invalid remote result: shadow observation is not trimmed")
 	}
 	_, shadowReq := runvalidation.ShadowRequests(req)
-	if err := validateRemoteWorkMeasurement(&shadowReq, shadow); err != nil {
+	if err := validateRemoteMeasurementCounters(&shadowReq, shadow, cfg); err != nil {
 		return fmt.Errorf("shadow %w", err)
 	}
 	if err := validateRemoteWorkMeasurementTime(&shadowReq, shadow, cfg, tuning); err != nil {

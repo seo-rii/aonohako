@@ -35,6 +35,7 @@ func ParseTimePolicy(raw string) (*TimePolicy, error) {
 		"dispatch_profile":         &policy.DispatchProfile,
 		"cpuid_profile":            &policy.CPUIDProfile,
 		"instruction_ns_numerator": &policy.InstructionNSNumerator,
+		"latency_x16_ns_numerator": &policy.LatencyX16NSNumerator,
 		"rep_byte_ns_numerator":    &policy.REPByteNSNumerator,
 		"movs_byte_ns_numerator":   &policy.MOVSByteNSNumerator,
 		"stos_byte_ns_numerator":   &policy.STOSByteNSNumerator,
@@ -74,12 +75,23 @@ func ParseTimePolicy(raw string) (*TimePolicy, error) {
 	if _, err := decoder.Token(); err != io.EOF {
 		return nil, fmt.Errorf("trailing durante time policy data")
 	}
-	required := []string{"model_id", "model_version", "reference_id", "runtime_id", "family", "engine_profile", "dispatch_profile", "instruction_ns_numerator", "ns_denominator"}
+	required := []string{"model_id", "model_version", "reference_id", "runtime_id", "family", "engine_profile", "dispatch_profile", "ns_denominator"}
+	if policy.Formula() == TimeMethodLatencyBoundREP {
+		required = append(required, "latency_x16_ns_numerator")
+		if seen["instruction_ns_numerator"] {
+			return nil, fmt.Errorf("latency time policy cannot include an instruction weight")
+		}
+	} else {
+		required = append(required, "instruction_ns_numerator")
+		if seen["latency_x16_ns_numerator"] {
+			return nil, fmt.Errorf("instruction time policy cannot include a latency weight")
+		}
+	}
 	switch policy.Formula() {
-	case TimeMethod:
+	case TimeMethod, TimeMethodLatencyBoundREP:
 		required = append(required, "rep_byte_ns_numerator")
 		if seen["movs_byte_ns_numerator"] || seen["stos_byte_ns_numerator"] {
-			return nil, fmt.Errorf("v1 time policy cannot include operation-specific weights")
+			return nil, fmt.Errorf("combined REP time policy cannot include operation-specific weights")
 		}
 	case TimeMethodREPBreakdown:
 		required = append(required, "method", "movs_byte_ns_numerator", "stos_byte_ns_numerator")
@@ -164,6 +176,9 @@ func (c Config) ValidateTimeConfiguration() error {
 	if err := c.TimePolicy.Validate(); err != nil {
 		return err
 	}
+	if c.TimePolicy.Formula() == TimeMethodLatencyBoundREP && !c.LatencyBound {
+		return fmt.Errorf("latency time policy requires the v1 latency counter")
+	}
 	if c.TimePolicy.Family != "cpp" {
 		return fmt.Errorf("durante time policy requires the cpp family")
 	}
@@ -247,6 +262,9 @@ func (c Config) timePolicyForOptions(language string, options *RuntimeOptions) (
 			for _, model := range c.TimeModels.Models {
 				if model.ModelID == binding.ModelID && model.ModelVersion == binding.ModelVersion {
 					policy := model.resolve(binding)
+					if policy.Formula() == TimeMethodLatencyBoundREP && !c.LatencyBound {
+						return TimePolicy{}, "", fmt.Errorf("latency time model requires the v1 latency counter")
+					}
 					policy.runtimeDeterminism = c.RuntimeDeterminismFor(profiles.NormalizeRunLang(language))
 					return policy, runtimeID, nil
 				}

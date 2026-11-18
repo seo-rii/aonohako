@@ -35,11 +35,14 @@ import (
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimeidentity"
+	"aonohako/internal/runvalidation"
 	"aonohako/internal/rustpolicy"
 	"aonohako/internal/util"
 )
 
 const (
+	referenceNativeCPUTimeMs   = 10000
+	referenceNativeWallTimeMs  = 30000
 	collectionRequestTimeout   = 90 * time.Second
 	collectionCompileBytes     = 16 << 20
 	collectionRustCompileBytes = 24 << 20
@@ -52,10 +55,13 @@ type CollectOptions struct {
 	Language string
 	// Zero selects the documented corpus default: CPP20 256 MiB, runtime
 	// corpus 512 MiB. The resolved value is recorded in both dataset limits.
-	MemoryMB    int
-	Smoke       bool
-	Repetitions int
-	OnSample    func(Dataset) error
+	MemoryMB int
+	// Zero uses the corresponding native time limit for instrumented execution.
+	MeteredCPUTimeMs  int
+	MeteredWallTimeMs int
+	Smoke             bool
+	Repetitions       int
+	OnSample          func(Dataset) error
 }
 
 // Collect runs the fixed corpus through a local instance of the normal HTTP
@@ -67,6 +73,13 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	if memoryMB == 0 {
 		memoryMB = profile.DefaultMemoryMB
 	}
+	metered := durante.ResourceLimits{CPUTimeMs: options.MeteredCPUTimeMs, WallTimeMs: options.MeteredWallTimeMs, MemoryMB: memoryMB}
+	if metered.CPUTimeMs == 0 {
+		metered.CPUTimeMs = referenceNativeCPUTimeMs
+	}
+	if metered.WallTimeMs == 0 {
+		metered.WallTimeMs = referenceNativeWallTimeMs
+	}
 	dataset = Dataset{
 		Schema: Schema, CorpusID: profile.CorpusID, Smoke: options.Smoke,
 		StartedAt: time.Now().UTC().Format(time.RFC3339Nano), SourceLanguage: profile.SourceLanguage,
@@ -74,8 +87,11 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 		DispatchProfile: cfg.Execution.WorkMeasurement.DispatchProfile,
 		CPUIDProfile:    cfg.Execution.WorkMeasurement.CPUIDProfile,
 		Repetitions:     options.Repetitions,
-		NativeLimits:    model.Limits{TimeMs: 10000, WallTimeMs: 30000, MemoryMB: memoryMB},
-		MeteredLimits:   durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: memoryMB},
+		NativeLimits:    model.Limits{TimeMs: referenceNativeCPUTimeMs, WallTimeMs: referenceNativeWallTimeMs, MemoryMB: memoryMB},
+		MeteredLimits:   metered,
+	}
+	if cfg.Execution.WorkMeasurement.LatencyBound {
+		dataset.LatencyBoundVersion = 1
 	}
 	dataset.RuntimeDeterminism = cfg.Execution.WorkMeasurement.RuntimeDeterminismFor(profiles.NormalizeRunLang(profile.SourceLanguage))
 	defer func() { recordCollectionFailure(&dataset, err) }()
@@ -183,6 +199,12 @@ func validateCollectionConfig(cfg config.Config, options CollectOptions, limits 
 	if err := measurement.ResourcePolicy.ValidateAdmission(cfg.MaxActiveRuns, cfg.WorkRootMaxBytes); err != nil {
 		return fmt.Errorf("reference resource admission: %w", err)
 	}
+	if err := runvalidation.ValidateWorkMeasurementLimits(&model.RunRequest{
+		Lang: profile.SourceLanguage, WorkMeasurement: true, WorkMeasurementLimits: &limits,
+		Limits: model.Limits{TimeMs: referenceNativeCPUTimeMs, WallTimeMs: referenceNativeWallTimeMs, MemoryMB: limits.MemoryMB},
+	}); err != nil {
+		return fmt.Errorf("reference raw limits: %w", err)
+	}
 	if err := measurement.ResourcePolicy.ValidateRequest(limits); err != nil {
 		return fmt.Errorf("reference raw limits: %w", err)
 	}
@@ -261,12 +283,15 @@ func collectCorpus(ctx context.Context, client *http.Client, baseURL string, cor
 				}
 				for _, phase := range phases {
 					runRequest := request
+					requestTimeout := collectionRequestTimeout
 					if phase.metered {
 						limits := dataset.MeteredLimits
 						runRequest.WorkMeasurement = true
 						runRequest.WorkMeasurementLimits = &limits
+						// Allow the runner its raw wall budget plus time for setup and teardown.
+						requestTimeout = max(requestTimeout, time.Duration(limits.WallTimeMs)*time.Millisecond+30*time.Second)
 					}
-					err := postCollectionSSE(ctx, client, baseURL+"/execute", runRequest, phase.result, collectionExecuteBytes, collectionRequestTimeout)
+					err := postCollectionSSE(ctx, client, baseURL+"/execute", runRequest, phase.result, collectionExecuteBytes, requestTimeout)
 					if err == nil {
 						if phase.metered {
 							err = validateCollectedMetered(*phase.result, *dataset)
@@ -384,34 +409,11 @@ func validateCollectedNative(response model.RunResponse) error {
 	if response.Status != model.RunStatusAccepted || response.ExitCode == nil || *response.ExitCode != 0 || response.VerdictSource != "stdout" {
 		return fmt.Errorf("native execution did not accept: status=%s reason=%s", response.Status, collectionExcerpt(response.Reason))
 	}
-	if err := validateCollectedRawCPU(response); err != nil {
+	if err := validateReferenceCPU(response, referenceNativeCPUTimeMs, referenceNativeWallTimeMs); err != nil {
 		return err
 	}
 	if response.Score != nil || response.WorkMeasurement != nil || response.WorkMeasurementExecution != nil || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil {
 		return fmt.Errorf("native execution returned unexpected scoring or measurement metadata")
-	}
-	return nil
-}
-
-func validateCollectedRawCPU(response model.RunResponse) error {
-	if response.CPUTimeNormalization != nil || response.CPUTimeSampling != nil || response.RawCPUTimeNs != nil || response.RawCPUTimeMs != nil {
-		return fmt.Errorf("reference CPU observation was normalized or sampled")
-	}
-	// Short executions may finish between RSS polls. A zero RSS observation
-	// does not invalidate their final CPU accounting or imply zero memory use.
-	if response.CPUTimeNs == 0 || response.CPUTimeMs <= 0 || response.MemoryKB < 0 || response.WallTimeMs < 0 || response.TimeMs < 0 || response.ProcessCPUTimeMs < 0 || response.CPUAccounting == nil {
-		return fmt.Errorf("reference CPU or resource accounting is missing")
-	}
-	if response.CPUTimeNs > 10_000_000_000 || response.CPUTimeMs != int64((response.CPUTimeNs+999_999)/1_000_000) {
-		return fmt.Errorf("reference CPU observation is outside the raw limits or has inconsistent units")
-	}
-	switch response.CPUAccounting.SelectedSource {
-	case "process_clock", "wait_rusage", "cgroup":
-	default:
-		return fmt.Errorf("reference CPU accounting has an unknown source")
-	}
-	if response.StdoutTruncated || response.StderrTruncated {
-		return fmt.Errorf("reference execution truncated its output")
 	}
 	return nil
 }
@@ -421,12 +423,12 @@ func validateCollectedMetered(response model.RunResponse, dataset Dataset) error
 	if err != nil {
 		return err
 	}
-	if err := validateCollectedRawCPU(response); err != nil {
-		return err
-	}
 	d := response.WorkMeasurementExecution
 	if response.Status != model.RunStatusInitFail || response.Score != nil || response.ExitCode == nil || *response.ExitCode != 0 || response.VerdictSource != "durante_complete" || d == nil {
 		return fmt.Errorf("metered execution did not complete: status=%s reason=%s", response.Status, collectionExcerpt(response.Reason))
+	}
+	if err := validateReferenceCPU(response, dataset.MeteredLimits.CPUTimeMs, dataset.MeteredLimits.WallTimeMs); err != nil {
+		return err
 	}
 	if d.State != "complete" || d.Authority != durante.Authority || d.OutputMatches == nil || !*d.OutputMatches || d.TerminationSource != "stdout" || d.RawLimits != dataset.MeteredLimits || d.NominalLimits != dataset.NativeLimits {
 		return fmt.Errorf("metered execution returned inconsistent completion or limits")
@@ -438,6 +440,9 @@ func validateCollectedMetered(response model.RunResponse, dataset Dataset) error
 	if r == nil || r.Family != profile.Family || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile || r.CPUIDProfile != dataset.CPUIDProfile ||
 		r.RuntimeDeterminism != dataset.RuntimeDeterminism {
 		return fmt.Errorf("metered observation is absent, incomplete, or incompatible")
+	}
+	if err := validateReferenceLatencyBound(r, dataset.LatencyBoundVersion); err != nil {
+		return err
 	}
 	if !r.ValidInstallationIdentity() {
 		return fmt.Errorf("metered observation lacks a compatible installation identity")

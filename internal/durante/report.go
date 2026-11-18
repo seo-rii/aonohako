@@ -21,6 +21,37 @@ const (
 	REPUnavailable  = "unavailable"
 )
 
+// LatencyBound is a static block cost summed over the executed process tree.
+// Version 1 charges at least four sixteenths of a cycle per instruction.
+type LatencyBound struct {
+	Version   int    `json:"version"`
+	CyclesX16 uint64 `json:"cycles_x16"`
+}
+
+func (b *LatencyBound) UnmarshalJSON(data []byte) error {
+	fields, err := manifestObject(data)
+	if err != nil {
+		return err
+	}
+	if len(fields) != 2 {
+		return fmt.Errorf("invalid latency bound fields")
+	}
+	var version int
+	if err := json.Unmarshal(fields["version"], &version); err != nil || version != 1 {
+		return fmt.Errorf("unsupported latency bound version")
+	}
+	var cycles *uint64
+	if err := json.Unmarshal(fields["cycles_x16"], &cycles); err != nil || cycles == nil {
+		return fmt.Errorf("missing or invalid latency bound cycles_x16")
+	}
+	*b = LatencyBound{Version: version, CyclesX16: *cycles}
+	return nil
+}
+
+func (b LatencyBound) validFor(instructions uint64) bool {
+	return b.Version == 1 && instructions > 0 && instructions <= b.CyclesX16/4
+}
+
 // REPBreakdown partitions supported REP work by instruction kind. A missing
 // breakdown is legacy, unspecified detail, not four observed zero counters.
 type REPBreakdown struct {
@@ -148,6 +179,7 @@ type Report struct {
 	REPEntries            *uint64               `json:"rep_entries,omitempty"`
 	UnsupportedREPEntries *uint64               `json:"unsupported_rep_entries,omitempty"`
 	REPBreakdown          *REPBreakdown         `json:"rep_breakdown,omitempty"`
+	LatencyBound          *LatencyBound         `json:"latency_bound,omitempty"`
 	Processes             int                   `json:"processes"`
 	Images                int                   `json:"images"`
 	SignalsObserved       uint64                `json:"signals_observed"`
@@ -189,8 +221,12 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	}
 	// encoding/json accepts case-insensitive aliases. Do not let a second
 	// spelling override an explicit trust or coverage statement.
+	protectedFields := []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown", "latency_bound", "disallowed_cpu_features", "cpuid_profile", "runtime_determinism"}
+	if _, present := fields["latency_bound"]; present {
+		protectedFields = append(protectedFields, "complete", "instructions")
+	}
 	for key := range fields {
-		for _, protected := range []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown", "disallowed_cpu_features", "cpuid_profile", "runtime_determinism"} {
+		for _, protected := range protectedFields {
 			if key != protected && strings.EqualFold(key, protected) {
 				return fmt.Errorf("noncanonical diagnostic contract field")
 			}
@@ -203,6 +239,9 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	var decoded plain
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
+	}
+	if _, exists := fields["latency_bound"]; exists && (decoded.LatencyBound == nil || !(*Report)(&decoded).ValidLatencyBound()) {
+		return fmt.Errorf("invalid latency bound on diagnostic report")
 	}
 	if _, exists := fields["disallowed_cpu_features"]; exists {
 		if len(decoded.DisallowedCPUFeatures) == 0 || cpupolicy.Validate(decoded.DisallowedCPUFeatures) != nil ||
@@ -240,9 +279,14 @@ func (r *Report) WithoutTotals(reason string) *Report {
 
 func (r *Report) ValidUnavailableResult() bool {
 	return r != nil && !r.Complete && r.Reason != "" && r.Quality == "incomplete" && r.REPTelemetryStatus == REPUnavailable &&
-		r.Instructions == nil && r.REPBytes == nil && r.REPEntries == nil && r.UnsupportedREPEntries == nil && r.REPBreakdown == nil &&
+		r.Instructions == nil && r.REPBytes == nil && r.REPEntries == nil && r.UnsupportedREPEntries == nil && r.REPBreakdown == nil && r.LatencyBound == nil &&
 		r.SignalsObserved == 0 && r.Processes == 0 && r.Images == 0 && len(r.DisallowedCPUFeatures) == 0 && r.CPUIDProfile == "" &&
 		r.RuntimeDeterminism == ""
+}
+
+// ValidLatencyBound checks the optional counter against its instruction total.
+func (r *Report) ValidLatencyBound() bool {
+	return r != nil && (r.LatencyBound == nil || (r.Complete && r.Instructions != nil && r.LatencyBound.validFor(*r.Instructions)))
 }
 
 // ValidDiagnosticContract rejects old, absent or promoted remote contracts.
