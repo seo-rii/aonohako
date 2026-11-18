@@ -13,13 +13,44 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
+	"aonohako/internal/cpupolicy"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
+	"aonohako/internal/timing"
 )
 
+type cpuCohortIdentity struct {
+	durante.TimePolicy
+	RuntimeOptionsID    string                        `json:"runtime_options_id,omitempty"`
+	RuntimeDeterminism  string                        `json:"runtime_determinism,omitempty"`
+	LatencyBoundVersion int                           `json:"latency_bound_version,omitempty"`
+	HostLibc            string                        `json:"host_glibc_version,omitempty"`
+	DisallowedFeatures  []cpupolicy.Feature           `json:"disallowed_cpu_features,omitempty"`
+	Installation        *durante.InstallationIdentity `json:"installation"`
+	IntegrityMode       string                        `json:"integrity_mode"`
+	NormalizationMethod string                        `json:"native_normalization_method,omitempty"`
+	NativeReferenceNs   uint64                        `json:"native_reference_ns,omitempty"`
+}
+
+type cpuCohort struct {
+	cpuCohortIdentity
+	NativeACShadowAC   int `json:"native_ac_shadow_ac"`
+	NativeACShadowTLE  int `json:"native_ac_shadow_tle"`
+	NativeTLEShadowAC  int `json:"native_tle_shadow_ac"`
+	NativeTLEShadowTLE int `json:"native_tle_shadow_tle"`
+}
+
+type cpuComparisons struct {
+	Cohorts  map[string]*cpuCohort `json:"cohorts"`
+	Excluded map[string]int        `json:"excluded"`
+}
+
 type counts struct {
+	CPUComparison        cpuComparisons `json:"cpu_comparison"`
 	Testcases            int            `json:"testcases"`
 	PrimaryAC            int            `json:"primary_ac"`
 	PrimaryTLE           int            `json:"primary_tle"`
@@ -43,6 +74,180 @@ func knownStatus(s string) bool {
 }
 
 func (c *counts) add(primary model.RunResponse, stdinSource string) error {
+	// The verdict summary already checks URL provenance, output, and raw or incomplete stops.
+	previous := c.ComparablePrimaryAC + c.ComparablePrimaryTLE
+	if err := c.addVerdict(primary, stdinSource); err != nil {
+		return err
+	}
+	if c.CPUComparison.Cohorts == nil {
+		c.CPUComparison.Cohorts = make(map[string]*cpuCohort)
+		c.CPUComparison.Excluded = make(map[string]int)
+	}
+	if primary.Status != model.RunStatusAccepted && primary.Status != model.RunStatusTLE {
+		c.CPUComparison.Excluded["other_native_verdict"]++
+		return nil
+	}
+	if previous == c.ComparablePrimaryAC+c.ComparablePrimaryTLE {
+		c.CPUComparison.Excluded["no_comparable_shadow"]++
+		return nil
+	}
+	block := primary.WorkMeasurementShadow
+	if block.StdinSHA256 != "" && !canonicalSHA256(block.StdinSHA256) {
+		c.CPUComparison.Excluded["unverified_shared_input"]++
+		return nil
+	}
+	inner := block.Response
+	if (inner.Status == model.RunStatusAccepted && (inner.Score == nil || *inner.Score != 1)) ||
+		(inner.Status == model.RunStatusTLE && inner.Score != nil) {
+		c.CPUComparison.Excluded["inconsistent_shadow_score"]++
+		return nil
+	}
+	if reason := nativeCPUExclusion(primary, inner.WorkMeasurementExecution); reason != "" {
+		c.CPUComparison.Excluded[reason]++
+		return nil
+	}
+	cohort, ok := verifiedCPUModel(inner)
+	if !ok {
+		c.CPUComparison.Excluded["unverified_model"]++
+		return nil
+	}
+	if norm := primary.CPUTimeNormalization; norm != nil {
+		cohort.NormalizationMethod, cohort.NativeReferenceNs = norm.Method, norm.ReferenceTimeNs
+	}
+	encoded, err := json.Marshal(cohort)
+	if err != nil {
+		return errors.New("cannot encode CPU comparison cohort")
+	}
+	digest := sha256.Sum256(encoded)
+	key := hex.EncodeToString(digest[:])
+	row := c.CPUComparison.Cohorts[key]
+	if row == nil {
+		row = &cpuCohort{cpuCohortIdentity: cohort}
+		c.CPUComparison.Cohorts[key] = row
+	}
+	switch {
+	case primary.Status == model.RunStatusAccepted && inner.Status == model.RunStatusAccepted:
+		row.NativeACShadowAC++
+	case primary.Status == model.RunStatusAccepted:
+		row.NativeACShadowTLE++
+	case inner.Status == model.RunStatusAccepted:
+		row.NativeTLEShadowAC++
+	default:
+		row.NativeTLEShadowTLE++
+	}
+	return nil
+}
+
+func canonicalSHA256(value string) bool {
+	if len(value) != 2*sha256.Size {
+		return false
+	}
+	digest, err := hex.DecodeString(value)
+	return err == nil && hex.EncodeToString(digest) == value
+}
+
+func ceilMillis(ns uint64) int64 {
+	if ns == 0 {
+		return 0
+	}
+	return int64(1 + (ns-1)/1_000_000)
+}
+
+func nativeCPUExclusion(primary model.RunResponse, shadow *model.WorkMeasurementExecution) string {
+	if primary.Status == model.RunStatusAccepted {
+		if primary.Score != nil || primary.ExitCode == nil || *primary.ExitCode != 0 || primary.VerdictSource != shadow.TerminationSource {
+			return "unverified_native_ac"
+		}
+	} else {
+		// With ignore_tle the ordinary checker can also report binary credit
+		// for the output already produced before the native CPU stop.
+		if primary.Score != nil && *primary.Score != 0 && *primary.Score != 1 {
+			return "unverified_native_tle"
+		}
+		switch primary.VerdictSource {
+		case "cpu_time", "cpu_time_cgroup", "cpu_time_final", "cpu_time_cgroup_final":
+		case "wall_time":
+			return "native_wall_tle"
+		case "cpu_rlimit":
+			return "native_signal_tle"
+		default:
+			return "unverified_native_tle"
+		}
+	}
+	// Zero is omitted on the wire. Historical millisecond-only or missing
+	// samples cannot establish which side of a nanosecond boundary was hit.
+	if primary.CPUTimeNs == 0 {
+		return "missing_native_cpu_ns"
+	}
+	if primary.CPUTimeMs != ceilMillis(primary.CPUTimeNs) ||
+		(primary.CPUTimeMs > int64(shadow.NominalLimits.TimeMs)) != (primary.Status == model.RunStatusTLE) {
+		return "inconsistent_native_cpu"
+	}
+	if norm := primary.CPUTimeNormalization; norm != nil {
+		calibration, err := timing.NewCPUNormalizer(norm.Method, norm.ReferenceTimeNs, norm.ObservedTimeNs)
+		info, enabled := calibration.Info()
+		if err != nil || !enabled || norm.Method != timing.CPUNormalizationMethod || norm.ScalePPM != info.ScalePPM ||
+			primary.RawCPUTimeMs == nil || primary.RawCPUTimeNs == nil || *primary.RawCPUTimeMs != ceilMillis(*primary.RawCPUTimeNs) ||
+			calibration.NormalizeNanoseconds(*primary.RawCPUTimeNs) != primary.CPUTimeNs {
+			return "unverified_native_normalization"
+		}
+	} else if primary.RawCPUTimeNs != nil || primary.RawCPUTimeMs != nil {
+		return "unverified_native_normalization"
+	}
+	return ""
+}
+
+// Recompute the archived conversion with the same integer arithmetic used by
+// the worker. A label can be reused across versions of a candidate's weights.
+func verifiedCPUModel(inner *model.RunResponse) (cpuCohortIdentity, bool) {
+	e := inner.WorkMeasurementExecution.TimeEstimate
+	report := inner.WorkMeasurement
+	language, image, _ := strings.Cut(e.RuntimeID, "@")
+	id, err := durante.TimeRuntimeID(language, image)
+	family, ok := durante.FamilyForLanguage(language)
+	// Judge mode requires a fixed virtual CPU and the pinned runtime options
+	// for launchers affected by CPython, PyPy or Node nondeterminism.
+	pinned := durante.Config{RuntimeDeterminism: durante.RuntimeDeterminismV1}
+	if err != nil || id != e.RuntimeID || !ok || family != e.Family || !durante.ValidCPUIDProfile(e.CPUIDProfile) ||
+		e.RuntimeDeterminism != pinned.RuntimeDeterminismFor(profiles.NormalizeRunLang(language)) {
+		return cpuCohortIdentity{}, false
+	}
+	policy := durante.TimePolicy{
+		Method: e.Method, ModelID: e.ModelID, ModelVersion: e.ModelVersion, ReferenceID: e.ReferenceID,
+		RuntimeID: e.RuntimeID, Family: e.Family, EngineProfile: e.EngineProfile, DispatchProfile: e.DispatchProfile, CPUIDProfile: e.CPUIDProfile,
+		InstructionNSNumerator: e.InstructionNSNumerator, REPByteNSNumerator: e.REPByteNSNumerator, LatencyX16NSNumerator: e.LatencyX16NSNumerator,
+		MOVSByteNSNumerator: e.MOVSByteNSNumerator, STOSByteNSNumerator: e.STOSByteNSNumerator, NSDenominator: e.NSDenominator,
+	}
+	result, err := policy.WithRuntimeDeterminism(e.RuntimeDeterminism).Estimate(e.RuntimeID, *report)
+	if err != nil || result.Nanoseconds != e.Nanoseconds || result.Milliseconds != e.Milliseconds {
+		return cpuCohortIdentity{}, false
+	}
+	if e.RuntimeOptionsID != "" {
+		suffix, ok := strings.CutPrefix(e.RuntimeOptionsID, "runtime-options-v1:sha256:")
+		if !ok || !canonicalSHA256(suffix) {
+			return cpuCohortIdentity{}, false
+		}
+	}
+	if report.DispatchProfile == durante.DispatchDefault && report.HostLibc != "" {
+		return cpuCohortIdentity{}, false
+	}
+	var latencyVersion int
+	if report.LatencyBound != nil {
+		latencyVersion = report.LatencyBound.Version
+	}
+	features := slices.Clone(report.DisallowedCPUFeatures)
+	if cpupolicy.Validate(features) != nil {
+		return cpuCohortIdentity{}, false
+	}
+	slices.Sort(features)
+	return cpuCohortIdentity{
+		TimePolicy: policy, RuntimeOptionsID: e.RuntimeOptionsID, RuntimeDeterminism: e.RuntimeDeterminism,
+		LatencyBoundVersion: latencyVersion, HostLibc: report.HostLibc, DisallowedFeatures: features, Installation: report.Installation,
+		IntegrityMode: inner.WorkMeasurementJudgment.IntegrityMode,
+	}, true
+}
+
+func (c *counts) addVerdict(primary model.RunResponse, stdinSource string) error {
 	if stdinSource != "" && stdinSource != "inline" && stdinSource != "url" {
 		return errors.New("stdin_source must be inline or url when supplied")
 	}
@@ -161,8 +366,7 @@ func (c *counts) add(primary model.RunResponse, stdinSource string) error {
 		return nil
 	}
 	if stdinSource == "url" {
-		digest, err := hex.DecodeString(block.StdinSHA256)
-		if err != nil || len(digest) != sha256.Size || block.StdinSHA256 != hex.EncodeToString(digest) {
+		if !canonicalSHA256(block.StdinSHA256) {
 			return errors.New("URL comparison lacks a canonical shared input SHA-256")
 		}
 	}

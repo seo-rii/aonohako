@@ -385,8 +385,8 @@ Use `go run ./cmd/durante-shadow-summary cases.jsonl` to summarize a sample.
 Supply one JSON object per testcase with a stable `problem_id` (a string or
 unsigned integer) and the control plane's final `/execute` result in
 `response`. Standard input is also supported. Use the same observation period,
-cohort and model for each comparison. The summary contains counts and problem
-IDs. Source code, submission IDs, program output and free-form reasons are
+cohort and model for each comparison. The summary includes problem IDs, counts and the operator policy identities
+used for CPU comparisons. Source code, submission IDs, program output and free-form reasons are
 unnecessary.
 
 For archived v5 time comparisons, set the optional row field `stdin_source` to
@@ -399,7 +399,7 @@ and their time comparisons do not require this field. When supplied, `"url"`
 requires the current worker's shared SHA-256 receipt and `"inline"` requires
 that receipt to be absent.
 
-For each problem, divide `primary_ac_shadow_virtual_tle` by
+For the existing verdict-level counts, divide `primary_ac_shadow_virtual_tle` by
 `comparable_primary_ac` to measure how often a completed, eligible shadow
 changes a primary AC to TLE. Divide `primary_tle_shadow_ac` by
 `comparable_primary_tle` for the reverse direction. Report zero denominators
@@ -407,6 +407,35 @@ as unavailable. `testcases`, `primary_ac` and `primary_tle` include the entire
 sample. `raw_stops_by_source` counts raw resource stops, including legacy
 responses labeled TLE. Also report `missing_shadow`, `unavailable` and `other`
 alongside the disagreement rates so coverage is visible.
+
+For CPU-limit accuracy, use each problem's `cpu_comparison.cohorts`. Each
+cohort reports four counts. Divide `native_ac_shadow_tle` by
+`native_ac_shadow_ac + native_ac_shadow_tle` for the false-TLE rate. Divide
+`native_tle_shadow_ac` by `native_tle_shadow_ac + native_tle_shadow_tle` for
+the false-AC rate. A zero denominator means the rate is unavailable.
+
+A native AC needs a normal exit, the same output comparison as the shadow
+and positive measured CPU nanoseconds within the limit. A native TLE needs
+a measured CPU stop and a reading strictly over the limit. A native output AC
+carries no score. A native TLE may carry the binary output credit returned by
+`ignore_tle`. A shadow AC must carry score 1 and a virtual TLE must omit the
+score. A nonempty shared-input receipt must be a canonical SHA-256 digest,
+including when the archive omits `stdin_source`. Each CPU reading must
+agree with its rounded milliseconds. For normalized CPU, the raw reading
+must reproduce the recorded conversion. The command recomputes the virtual
+time from the model coefficients and observed work using the current engine's
+estimator. It checks the canonical runtime image ID against its source family,
+the fixed CPUID profile, and the effective runtime determinism of its launcher.
+Older records can still contribute to verdict-level counts.
+
+The SHA-256 cohort keys cover the displayed policy, including its weights,
+reference, runtime options, installation, CPU features and dispatch profile,
+as well as the native normalization reference when present. Use a consistent
+native reference host for unnormalized cases. The archive alone cannot
+establish which physical worker ran them. `cpu_comparison.excluded` counts
+every remaining testcase once, including wall-time and signal stops, missing
+precise timing, unavailable shadows and estimates the current estimator could
+not verify. Report these exclusions with the rates to show coverage.
 
 ## Remote control plane
 
