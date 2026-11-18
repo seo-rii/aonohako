@@ -12,6 +12,8 @@ func TestRemotePipelineNativeResult(t *testing.T) {
 	nano := uint64(2_670_000)
 	rawNano := uint64(2_900_000)
 	rawMs := int64(3)
+	zero, partial := 0.0, 0.75
+	nonzeroExit := 7
 	one := model.StepResult{
 		ID: "phase1", ProgramID: "participant", Status: model.RunStatusAccepted, VerdictSource: "interactor",
 		TimeMs: 21, WallTimeMs: 21, CPUTimeMs: 3, CPUTimeNs: &nano, RawCPUTimeNs: &rawNano, RawCPUTimeMs: &rawMs,
@@ -55,6 +57,17 @@ func TestRemotePipelineNativeResult(t *testing.T) {
 		}
 	})
 
+	t.Run("native interactive failure score and accepted grace", func(t *testing.T) {
+		failure := native(model.RunStatusWA, "step:phase1:interactor:exit_code", failedInteractor)
+		failure.Score = &zero
+		grace := one
+		grace.ExitCode = &nonzeroExit
+		for _, resp := range []model.RunResponse{failure, native(model.RunStatusAccepted, "final:spj", grace, two)} {
+			if err := validateRemotePipelineResult(req, &resp); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
 	t.Run("old worker or missing precise samples", func(t *testing.T) {
 		oldOne, oldTwo := one, two
 		oldOne.CPUTimeNs, oldTwo.CPUTimeNs, oldOne.RawCPUTimeNs, oldTwo.RawCPUTimeNs = nil, nil, nil, nil
@@ -85,6 +98,30 @@ func TestRemotePipelineNativeResult(t *testing.T) {
 		name string
 		edit func(*model.RunResponse)
 	}{
+		{"accepted batch with nonzero exit", func(r *model.RunResponse) { r.Steps[1].ExitCode = &nonzeroExit }},
+		{"accepted batch with failure source", func(r *model.RunResponse) { r.Steps[1].VerdictSource = "cpu_time" }},
+		{"accepted batch with truncated execution output", func(r *model.RunResponse) { r.Steps[1].StdoutTruncated = true }},
+		{"accepted interactive with failure source", func(r *model.RunResponse) { r.Steps[0].VerdictSource = "contestant:wall_time" }},
+		{"score before first stage", func(r *model.RunResponse) {
+			*r = native(model.RunStatusInitFail, "pipeline:resource")
+			r.Score = &partial
+		}},
+		{"score before next stage", func(r *model.RunResponse) {
+			*r = native(model.RunStatusInitFail, "step:phase2:stdin", one)
+			r.Score = &zero
+		}},
+		{"score after artifact failure", func(r *model.RunResponse) {
+			*r = native(model.RunStatusRE, "step:phase1:artifact", artifact)
+			r.Score = &partial
+		}},
+		{"score after batch failure", func(r *model.RunResponse) {
+			*r = native(model.RunStatusRE, "step:phase2:exit_code", one, failed)
+			r.Score = &zero
+		}},
+		{"stale positive interactive failure score", func(r *model.RunResponse) {
+			*r = native(model.RunStatusWA, "step:phase1:interactor:exit_code", failedInteractor)
+			r.Score = &partial
+		}},
 		{"wrong role", func(r *model.RunResponse) { r.Steps[0].ProgramID = "interactor" }},
 		{"wrong order", func(r *model.RunResponse) { r.Steps[0], r.Steps[1] = r.Steps[1], r.Steps[0] }},
 		{"early final", func(r *model.RunResponse) { *r = native(model.RunStatusAccepted, "final:spj", one) }},

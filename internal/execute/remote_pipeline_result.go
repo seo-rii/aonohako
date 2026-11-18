@@ -26,7 +26,7 @@ func validateRemotePipelineResult(req *model.RunRequest, resp *model.RunResponse
 			program = expected.Executor.ParticipantProgramID
 		}
 		if step.ID != expected.ID || step.ProgramID != strings.TrimSpace(program) ||
-			!publicPipelineStepSource(step.VerdictSource, interactive) {
+			!publicPipelineStepSource(step, interactive) {
 			return errors.New("remote pipeline step identity or verdict source is inconsistent")
 		}
 		if i+1 < len(resp.Steps) && step.Status != model.RunStatusAccepted {
@@ -70,16 +70,22 @@ func remotePipelineOutcomeMatches(plan *model.PipelineV1, resp *model.RunRespons
 	if count > 0 {
 		last := resp.Steps[count-1]
 		if last.Status != model.RunStatusAccepted {
+			// A failed interactive verdict can carry zero. Batch execution and
+			// preparation failures have no score before the final judge runs.
+			if resp.Score != nil && (*resp.Score != 0 || last.VerdictSource == "" ||
+				!strings.EqualFold(strings.TrimSpace(plan.Steps[count-1].Executor.Kind), "interactive")) {
+				return false
+			}
 			return resp.Status == last.Status && resp.VerdictSource == prefixStepVerdictSource(last.ID, last.VerdictSource)
 		}
 		if resp.Status == model.RunStatusRE && resp.VerdictSource == "step:"+last.ID+":artifact" {
 			// Artifact capture/storage happens before HandoffBytes is published.
-			return last.HandoffBytes == 0
+			return last.HandoffBytes == 0 && resp.Score == nil
 		}
 	} else if resp.Status == model.RunStatusInitFail {
 		switch resp.VerdictSource {
 		case "", "pipeline:resource", "pipeline:artifact":
-			return true
+			return resp.Score == nil
 		}
 	}
 
@@ -88,7 +94,7 @@ func remotePipelineOutcomeMatches(plan *model.PipelineV1, resp *model.RunRespons
 		prefix := "step:" + next.ID + ":"
 		// A stage can fail during stdin or interactive artifact setup before
 		// producing its first native result row.
-		return resp.Status == model.RunStatusInitFail &&
+		return resp.Status == model.RunStatusInitFail && resp.Score == nil &&
 			(resp.VerdictSource == prefix+"stdin" ||
 				(resp.VerdictSource == prefix+"artifact" && strings.EqualFold(strings.TrimSpace(next.Executor.Kind), "interactive")))
 	}
@@ -108,7 +114,16 @@ func remotePipelineOutcomeMatches(plan *model.PipelineV1, resp *model.RunRespons
 
 // Only return coordinator and sandbox source codes across this boundary.
 // In particular, a downstream verdict source must not carry arbitrary text.
-func publicPipelineStepSource(source string, interactive bool) bool {
+func publicPipelineStepSource(step model.StepResult, interactive bool) bool {
+	source := step.VerdictSource
+	if step.Status == model.RunStatusAccepted {
+		if interactive {
+			// The interactor can accept before the contestant exits. Preserve
+			// its verdict even when the grace period ends the contestant.
+			return source == "interactor"
+		}
+		return source == "" && (step.ExitCode == nil || *step.ExitCode == 0) && !step.StdoutTruncated
+	}
 	if interactive {
 		switch source {
 		case "", "contestant", "interactor", "interactor:interactor", "interactive", "interactive:wall_time":
