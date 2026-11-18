@@ -52,8 +52,8 @@ protocols. The automatic path is off by default.
 
 The automatic replay handles a single contestant with a registered, enabled
 source language and resolved artifacts. It skips network-enabled submissions,
-sidecar artifacts, interactive and communication sessions, pipelines, entry
-modes and multi-step jobs. Interactive and communication jobs already support
+sidecar artifacts, interactive and communication sessions, entry modes and
+legacy multi-step jobs. Pipeline V1 has its own per-step observations below. Interactive and communication jobs already support
 explicit per-role observations. JVM measurement still requires sandbox
 qualification. Native wall-time or memory stops do not establish that a
 contestant finished or exhausted CPU. Their optional observation is unavailable.
@@ -62,6 +62,33 @@ The HTTP verification script exercises direct and forwarded requests in an
 offline validation container. It compiles real submissions, checks native
 results, validates Durante receipts and verifies that the SPJ executes once.
 [Verification harness](../scripts/verify_durante_observation.py)
+
+### Pipeline V1 batch observations
+
+On an embedded helper worker, the same operator setting collects one
+diagnostic replay for each eligible completed batch stage, up to the
+pipeline's two-stage limit. The final diff or special judge runs on the
+native artifacts. After native judging stops, the worker reconstructs the
+stage input from its resolved resources and immutable native handoffs, applies
+the configured raw limits, and compares the replay's full captured stdout
+and any declared participant file with the native bytes. The final judge and
+interactive peers run once. A replay cannot supply input to another stage.
+
+The response carries a version 2 `work_measurement_observation` with state
+`pipeline`. Its `steps` are in execution order. Each row identifies its
+`step_id` and `program_id`. A complete row has `output_check: native_output`
+and a diagnostic report. An ineligible, incomplete or differing replay has an
+unavailable row. An unstarted stage has no row. Resource bytes, output hashes,
+artifacts and checker messages stay private. Optional replays add to response
+latency. The enclosing verdict, score and native time refer to the primary run.
+
+Each native `steps[]` row includes `cpu_time_ns` when precise timing is
+available, plus `raw_cpu_time_ns` when normalization records that counter.
+The top-level precise total requires corresponding readings from every executed
+stage. The existing per-stage millisecond rounding is preserved. Consumers
+can join the diagnostic rows to the native timings by step and program ID.
+The public API advertises Pipeline V1 on embedded helper workers.
+[Pipeline V1 request and response contract](pipeline-v1.md)
 
 ## When it applies
 

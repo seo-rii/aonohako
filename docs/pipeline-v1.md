@@ -10,7 +10,7 @@ executors, artifact sources and their byte limits, and final judges. A client
 must not silently fall back when `pipeline-v1` is unavailable. The current
 remote control-plane architecture has no authenticated downstream capability
 negotiation, so remote transports neither advertise nor accept Pipeline V1;
-embedded helper runners fail closed until such negotiation exists.
+embedded helper runners advertise and accept the capability.
 
 ## Request contract
 
@@ -128,3 +128,12 @@ The existing network policy and request-wide binary/resource budgets apply to
 all pipeline programs and the final SPJ. Interactive admission should use the
 concurrent participant-plus-interactor peak; sequential batch and final-judge
 peaks are compared rather than summed.
+
+
+## Timing and Durante observations
+
+The `steps` array carries native CPU nanoseconds when available. An operator
+can enable output-checked Durante observations for the individual batch stages.
+The response binds each diagnostic report to its executed step and program
+ID. The final judge consumes the original native outputs, including when an
+optional replay fails. [Observation fields and limits](durante-judging.md#pipeline-v1-batch-observations)
