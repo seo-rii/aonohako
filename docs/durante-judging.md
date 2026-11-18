@@ -235,6 +235,16 @@ cohort and model for each comparison. The summary contains counts and problem
 IDs. Source code, submission IDs, program output and free-form reasons are
 unnecessary.
 
+For archived v5 time comparisons, set the optional row field `stdin_source` to
+`"inline"` only when the original request confirms inline stdin (including
+empty input). Use `"url"` for URL inputs and omit the field when the source is
+unknown. The v5 runner fetched URLs separately for the two executions, so
+the summary counts v5 time verdicts with URL or unknown input as unavailable.
+Raw resource stops are still counted by cause. Current workers share one input
+and their time comparisons do not require this field. When supplied, `"url"`
+requires the current worker's shared SHA-256 receipt and `"inline"` requires
+that receipt to be absent.
+
 For each problem, divide `primary_ac_shadow_virtual_tle` by
 `comparable_primary_ac` to measure how often a completed, eligible shadow
 changes a primary AC to TLE. Divide `primary_tle_shadow_ac` by

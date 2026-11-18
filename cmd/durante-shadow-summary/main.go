@@ -1,9 +1,12 @@
 // Command durante-shadow-summary aggregates control-plane /execute results.
 // Input is JSON Lines, with one {problem_id,response} object per testcase.
+// Optional stdin_source records whether the archived request used inline or URL input.
 package main
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -39,7 +42,10 @@ func knownStatus(s string) bool {
 	return false
 }
 
-func (c *counts) add(primary model.RunResponse) error {
+func (c *counts) add(primary model.RunResponse, stdinSource string) error {
+	if stdinSource != "" && stdinSource != "inline" && stdinSource != "url" {
+		return errors.New("stdin_source must be inline or url when supplied")
+	}
 	if !knownStatus(primary.Status) || primary.CPUTimeMs < 0 {
 		return errors.New("invalid primary verdict or CPU time")
 	}
@@ -145,6 +151,21 @@ func (c *counts) add(primary model.RunResponse) error {
 	if err != nil {
 		return err
 	}
+	if stdinSource == "inline" && block.StdinSHA256 != "" {
+		return errors.New("inline request conflicts with the shared URL input receipt")
+	}
+	// v5 fetched the primary and shadow URLs independently. Those workers
+	// emitted the same response shape for inline and URL inputs.
+	if inner.WorkMeasurement.EngineProfile == "dynamorio-11.3-durante-v5-vm32m" && stdinSource != "inline" {
+		c.Unavailable++
+		return nil
+	}
+	if stdinSource == "url" {
+		digest, err := hex.DecodeString(block.StdinSHA256)
+		if err != nil || len(digest) != sha256.Size || block.StdinSHA256 != hex.EncodeToString(digest) {
+			return errors.New("URL comparison lacks a canonical shared input SHA-256")
+		}
+	}
 	switch primary.Status {
 	case model.RunStatusAccepted:
 		c.ComparablePrimaryAC++
@@ -223,8 +244,9 @@ func summarize(in io.Reader, out io.Writer) error {
 	scanner.Buffer(make([]byte, 64<<10), 64<<20)
 	for line := 1; scanner.Scan(); line++ {
 		var item struct {
-			ProblemID json.RawMessage   `json:"problem_id"`
-			Response  model.RunResponse `json:"response"`
+			ProblemID   json.RawMessage   `json:"problem_id"`
+			StdinSource string            `json:"stdin_source"`
+			Response    model.RunResponse `json:"response"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
 			// Input and decoder errors can contain participant-controlled text.
@@ -239,7 +261,7 @@ func summarize(in io.Reader, out io.Writer) error {
 			row = &counts{RawStopsBySource: make(map[string]int)}
 			problems[id] = row
 		}
-		if err := row.add(item.Response); err != nil {
+		if err := row.add(item.Response, item.StdinSource); err != nil {
 			return fmt.Errorf("line %d: %w", line, err)
 		}
 	}

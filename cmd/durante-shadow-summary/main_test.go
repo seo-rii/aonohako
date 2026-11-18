@@ -81,7 +81,7 @@ func rawStop(t *testing.T, source, status string) model.RunResponse {
 	return r
 }
 
-func TestSummaryAcceptsHistoricalFileOutputShadow(t *testing.T) {
+func TestSummaryRequiresInputProvenanceForHistoricalTimeComparisons(t *testing.T) {
 	r := timedResponse(t, model.RunStatusTLE, 1_000_000)
 	inner := r.WorkMeasurementShadow.Response
 	report, d := inner.WorkMeasurement, inner.WorkMeasurementExecution
@@ -90,9 +90,52 @@ func TestSummaryAcceptsHistoricalFileOutputShadow(t *testing.T) {
 	d.TimeEstimate.EngineProfile = report.EngineProfile
 	d.TimeEstimateEligibility = nil
 	d.TerminationSource, inner.WorkMeasurementJudgment.TerminationSource = "file_output", "file_output"
-	var row counts
-	if err := row.add(r); err != nil || row.PrimaryTLEShadowAC != 1 || row.ComparablePrimaryTLE != 1 {
-		t.Fatalf("historical file output: %+v, %v", row, err)
+	for _, tc := range []struct {
+		source                  string
+		comparable, unavailable int
+	}{
+		{"", 0, 1}, {"url", 0, 1}, {"inline", 1, 0},
+	} {
+		item := map[string]any{"problem_id": "p", "response": r}
+		if tc.source != "" {
+			item["stdin_source"] = tc.source
+		}
+		var input, output bytes.Buffer
+		if err := json.NewEncoder(&input).Encode(item); err != nil {
+			t.Fatal(err)
+		}
+		if err := summarize(&input, &output); err != nil {
+			t.Fatal(err)
+		}
+		var summary struct {
+			Problems map[string]counts `json:"problems"`
+		}
+		if err := json.Unmarshal(output.Bytes(), &summary); err != nil {
+			t.Fatal(err)
+		}
+		got := summary.Problems["p"]
+		if got.Testcases != 1 || got.PrimaryTLE != 1 || got.PrimaryTLEShadowAC != tc.comparable || got.ComparablePrimaryTLE != tc.comparable || got.Unavailable != tc.unavailable {
+			t.Fatalf("historical file output, stdin source %q: %+v", tc.source, got)
+		}
+	}
+}
+
+func TestSummaryChecksExplicitInputSourceAgainstCurrentTimeReceipts(t *testing.T) {
+	digest := strings.Repeat("ab", 32)
+	for _, tc := range []struct {
+		source, receipt string
+		valid           bool
+	}{
+		{"url", digest, true}, {"url", "", false}, {"url", strings.ToUpper(digest), false},
+		{"url", digest[:60], false}, {"inline", digest, false}, {"inline", "", true}, {"", digest, true},
+	} {
+		r := timedResponse(t, model.RunStatusAccepted, 1_000_001)
+		r.WorkMeasurementShadow.StdinSHA256 = tc.receipt
+		var row counts
+		err := row.add(r, tc.source)
+		if (err == nil) != tc.valid || (tc.valid && row.PrimaryACShadowTLE != 1) {
+			t.Fatalf("source %q, receipt %q: %+v, error %v", tc.source, tc.receipt, row, err)
+		}
 	}
 }
 
@@ -109,7 +152,11 @@ func TestSummaryCountsDirectionalDisagreementsAndRawStopsSeparately(t *testing.T
 	add("42", timedResponse(t, model.RunStatusAccepted, 1_000_001))
 	add("42", timedResponse(t, model.RunStatusTLE, 1_000_000))
 	add("42", timedResponse(t, model.RunStatusTLE, 1_000_001))
-	add("42", rawStop(t, "wall_time", model.RunStatusTLE))
+	legacyStop := rawStop(t, "wall_time", model.RunStatusTLE)
+	legacyReport := legacyStop.WorkMeasurementShadow.Response.WorkMeasurement
+	legacyReport.EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
+	legacyReport.Installation.SourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
+	add("42", legacyStop)
 	add("42", rawStop(t, "memory_rss", model.RunStatusInitFail))
 	add("42", rawStop(t, "cpu_time_final", model.RunStatusInitFail))
 	add("42", rawStop(t, "private-submission-output", model.RunStatusInitFail))
