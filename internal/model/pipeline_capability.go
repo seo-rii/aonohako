@@ -5,6 +5,7 @@ const (
 	PipelineV1WorkerProtocol        = "aonohako-pipeline-worker-v1"
 	PipelineV1WorkerHeader          = "X-Aonohako-Pipeline-Worker"
 	PipelineObservationBudgetHeader = "X-Aonohako-Pipeline-Observation-Budget-Ms"
+	LegacyObservationBudgetHeader   = "X-Aonohako-Legacy-Observation-Budget-Ms"
 )
 
 type PipelineV1Capability struct {

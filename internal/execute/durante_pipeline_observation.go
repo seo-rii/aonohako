@@ -3,6 +3,7 @@ package execute
 import (
 	"context"
 	"crypto/sha256"
+	"io"
 	"os"
 	"strings"
 
@@ -65,10 +66,6 @@ func (s *Service) observePipelineSteps(ctx context.Context, req *model.RunReques
 }
 
 func (s *Service) replayPipelineBatch(ctx context.Context, snapshot pipelineBatchReplay, artifacts *pipelineArtifactStore, tuning config.RuntimeTuningConfig) (*durante.Report, string) {
-	policy := s.workMeasurement.ResourcePolicy
-	if policy == nil || policy.ValidateRequest(policy.MaxLimits) != nil {
-		return nil, "pipeline observation resource policy unavailable"
-	}
 	// The compiled inputs reference the original resolved resource bytes and
 	// immutable native handoffs. Materialize one replay input at a time.
 	input, maxBytes, err := preparePipelineStdin(snapshot.inputs, artifacts)
@@ -79,27 +76,35 @@ func (s *Service) replayPipelineBatch(ctx context.Context, snapshot pipelineBatc
 		_ = input.Close()
 		_ = os.Remove(input.Name())
 	}()
-	replay := observationRequest(snapshot.request, policy.MaxLimits)
+	return s.observeBatchWithStdin(ctx, snapshot.request, snapshot.outputs, input, maxBytes, tuning)
+}
+
+func (s *Service) observeBatchWithStdin(ctx context.Context, req *model.RunRequest, outputs [2][sha256.Size]byte, input io.Reader, maxBytes int64, tuning config.RuntimeTuningConfig) (*durante.Report, string) {
+	policy := s.workMeasurement.ResourcePolicy
+	if policy == nil || policy.ValidateRequest(policy.MaxLimits) != nil {
+		return nil, "pipeline observation resource policy unavailable"
+	}
+	replay := observationRequest(req, policy.MaxLimits)
 	hasFile := len(replay.FileOutputs) > 0
 	run := s.runWorkMeasurementWithStdin(ctx, &replay, input, maxBytes, Hooks{}, tuning, hasFile)
 	if ctx.Err() != nil {
 		return nil, "pipeline observation cancelled"
 	}
-	return pipelineReplayReport(snapshot, run, s.workMeasurement)
+	return batchReplayReport(req, outputs, run, s.workMeasurement)
 }
 
-func pipelineReplayReport(snapshot pipelineBatchReplay, run sandboxRunResult, cfg durante.Config) (*durante.Report, string) {
+func batchReplayReport(req *model.RunRequest, outputs [2][sha256.Size]byte, run sandboxRunResult, cfg durante.Config) (*durante.Report, string) {
 	envelope := run.response.WorkMeasurementExecution
 	if envelope == nil || envelope.State != "complete" || run.stdoutLimitExceeded ||
-		!observationReportMatches(snapshot.request, cfg, run.response.WorkMeasurement) {
+		!observationReportMatches(req, cfg, run.response.WorkMeasurement) {
 		return nil, "pipeline replay did not produce a complete compatible measurement"
 	}
 	stdout := run.judgeOut
 	var file []byte
-	if len(snapshot.request.FileOutputs) > 0 {
+	if len(req.FileOutputs) > 0 {
 		stdout, file = run.stdoutOut, run.judgeOut
 	}
-	if snapshot.outputs != pipelineOutputDigests(stdout, file) {
+	if outputs != pipelineOutputDigests(stdout, file) {
 		return nil, "pipeline replay output differs from native output"
 	}
 	return run.response.WorkMeasurement, ""

@@ -520,6 +520,17 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func parseStepObservationBudget(header []string, maximum time.Duration) (time.Duration, bool) {
+	if len(header) != 1 {
+		return 0, false
+	}
+	ms, err := strconv.ParseUint(header[0], 10, 64)
+	if err != nil || strconv.FormatUint(ms, 10) != header[0] || ms > uint64(maximum.Milliseconds()) {
+		return 0, false
+	}
+	return time.Duration(ms) * time.Millisecond, true
+}
+
 func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSONErrorMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
@@ -555,16 +566,20 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "unsupported_capability")
 			return
 		}
-		if len(budgetHeader) != 1 {
+		budget, ok := parseStepObservationBudget(budgetHeader, execute.MaxPipelineObservationBudget)
+		if !ok {
 			writeJSONError(w, http.StatusBadRequest, "invalid_pipeline_observation_budget")
 			return
 		}
-		ms, err := strconv.ParseUint(budgetHeader[0], 10, 64)
-		if err != nil || strconv.FormatUint(ms, 10) != budgetHeader[0] || ms > uint64(execute.MaxPipelineObservationBudget.Milliseconds()) {
-			writeJSONError(w, http.StatusBadRequest, "invalid_pipeline_observation_budget")
+		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), budget))
+	}
+	if legacy := r.Header.Values(model.LegacyObservationBudgetHeader); len(legacy) > 0 {
+		budget, ok := parseStepObservationBudget(legacy, execute.MaxLegacyObservationBudget)
+		if !ok || !runvalidation.UsesSteps(&req) {
+			writeJSONError(w, http.StatusBadRequest, "invalid_legacy_observation_budget")
 			return
 		}
-		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), time.Duration(ms)*time.Millisecond))
+		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), budget))
 	}
 	if req.Pipeline != nil && !s.supportsPipelineV1(r.Context()) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "unsupported_capability", "pipeline-v1 is not supported by this execution transport")

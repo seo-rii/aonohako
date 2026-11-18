@@ -134,11 +134,17 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	}
 
 	observationBudget := remoteObservationBudget(req, r.workMeasurement)
+	legacySteps := runvalidation.UsesSteps(req)
+	if legacySteps {
+		if incoming := stepObservationBudgetFromContext(ctx); incoming.bounded {
+			observationBudget = min(observationBudget, incoming.maximum)
+		}
+	}
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
 		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)
 		absoluteTimeout += observationBudget
-		if req.Pipeline != nil && observationBudget > 0 {
+		if (req.Pipeline != nil || legacySteps) && observationBudget > 0 {
 			// Leave time to reap a replay stopped at its deadline and return the native result.
 			absoluteTimeout += remoteio.DefaultOperationOverhead
 		}
@@ -155,6 +161,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if req.Pipeline != nil {
 		httpReq.Header.Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
 		httpReq.Header.Set(model.PipelineObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
+	} else if legacySteps {
+		// Older workers ignore this optional ceiling and run their native steps normally.
+		httpReq.Header.Set(model.LegacyObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
 	}
 
 	if authHeader, err := r.authorizationHeader(ctx); err != nil {
@@ -499,7 +508,12 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if req.Interactor == nil && req.Communication == nil {
 				remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
 			}
-			remoteResult.WorkMeasurementObservation = remoteObservation(req, remoteResult, r.workMeasurement, wire.Observation)
+			policy := r.workMeasurement
+			if legacySteps && observationBudget == 0 {
+				// Retain the native stage identities, but no replay report is eligible.
+				policy.ResourcePolicy = nil
+			}
+			remoteResult.WorkMeasurementObservation = remoteObservation(req, remoteResult, policy, wire.Observation)
 			return remoteResult
 		}
 	}
