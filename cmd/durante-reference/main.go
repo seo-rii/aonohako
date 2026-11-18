@@ -1,4 +1,4 @@
-// durante-reference collects native/observed C++ pairs and evaluates an explicit
+// durante-reference collects native/observed runtime pairs and evaluates an explicit
 // diagnostic time policy. Collection always uses a temporary local Aonohako API.
 package main
 
@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/durante/reference"
 	"aonohako/internal/processhardening"
 	"aonohako/internal/sandbox"
@@ -57,6 +58,8 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("collect", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	output := flags.String("output", "", "new private output directory (required)")
+	language := flags.String("language", "CPP20", "source profile: CPP20, PYTHON3, PYPY3 or RUST2024")
+	memoryMB := flags.Int("memory-mb", 0, "native/raw RSS limit in MiB (0: corpus default, CPP20 256; other profiles 512)")
 	smoke := flags.Bool("smoke", false, "small integration corpus; cannot qualify a model")
 	repetitions := flags.Int("repetitions", 3, "ordered native/observed/native triplets per case (3..9; smoke 1..9)")
 	timeout := flags.Duration("timeout", 20*time.Minute, "total collection timeout (at most 1h)")
@@ -67,8 +70,13 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if *smoke {
 		minimum = 1
 	}
-	if flags.NArg() != 0 || *output == "" || *repetitions < minimum || *repetitions > 9 || *timeout <= 0 || *timeout > time.Hour {
-		fmt.Fprintln(stderr, "require --output, valid repetition count, and timeout in (0,1h]")
+	if flags.NArg() != 0 || *output == "" || *repetitions < minimum || *repetitions > 9 || *timeout <= 0 || *timeout > time.Hour || *memoryMB < 0 || *memoryMB > 4096 {
+		fmt.Fprintln(stderr, "require --output, valid repetition count, timeout in (0,1h], and memory-mb in [0,4096]")
+		return 1
+	}
+	profile, err := reference.ResolveCorpusProfile(*language)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	cfg, err := config.Load()
@@ -84,7 +92,7 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	path := filepath.Join(*output, "dataset.json")
 	dataset, collectErr := reference.Collect(ctx, cfg, reference.CollectOptions{
-		Smoke: *smoke, Repetitions: *repetitions,
+		Language: profile.SourceLanguage, MemoryMB: *memoryMB, Smoke: *smoke, Repetitions: *repetitions,
 		OnSample: func(snapshot reference.Dataset) error { return writeJSON(path, snapshot) },
 	})
 	if err := writeJSON(path, dataset); err != nil {
@@ -116,6 +124,7 @@ func fit(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	input := flags.String("input", "", "collected dataset.json (required)")
 	output := flags.String("output", "", "new private output directory (required)")
 	var options reference.FitOptions
+	flags.StringVar(&options.Method, "method", durante.TimeMethod, "conversion method (currently only weighted-work-nanoseconds-v1)")
 	flags.StringVar(&options.ModelID, "model-id", "", "explicit diagnostic model identity (required)")
 	flags.Uint64Var(&options.ModelVersion, "model-version", 0, "positive model version (required)")
 	flags.StringVar(&options.ReferenceID, "reference-id", "", "reference collection identity (required)")
