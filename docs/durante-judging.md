@@ -227,11 +227,22 @@ shadow block that fails recomputation, does not fail the response: the shadow
 becomes `unavailable` with the reason and the validated primary verdict is
 returned.
 
-Count disagreements by class (primary AC / shadow TLE, primary TLE / shadow AC,
-anything involving RE) and by problem. Primary AC with shadow TLE near the limit
-measures how often the model is stricter than the reference machine; the
-opposite measures leniency. Both are needed before switching a problem set to
-`on`.
+Use `go run ./cmd/durante-shadow-summary cases.jsonl` to summarize a sample.
+Supply one JSON object per testcase with a stable `problem_id` (a string or
+unsigned integer) and the control plane's final `/execute` result in
+`response`. Standard input is also supported. Use the same observation period,
+cohort and model for each comparison. The summary contains counts and problem
+IDs. Source code, submission IDs, program output and free-form reasons are
+unnecessary.
+
+For each problem, divide `primary_ac_shadow_virtual_tle` by
+`comparable_primary_ac` to measure how often a completed, eligible shadow
+changes a primary AC to TLE. Divide `primary_tle_shadow_ac` by
+`comparable_primary_tle` for the reverse direction. Report zero denominators
+as unavailable. `testcases`, `primary_ac` and `primary_tle` include the entire
+sample. `raw_stops_by_source` counts raw resource stops, including legacy
+responses labeled TLE. Also report `missing_shadow`, `unavailable` and `other`
+alongside the disagreement rates so coverage is visible.
 
 ## Remote control plane
 
