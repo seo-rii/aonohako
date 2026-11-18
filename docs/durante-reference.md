@@ -100,6 +100,12 @@ CPP20 and 512 MiB for the new runtime corpus, accommodating interpreter startup.
 resolved value is recorded in both `native_limits` and `metered_limits`. It must
 fit the operator's resource policy and total admission budget. The collector
 never silently increases that policy or substitutes a smaller limit.
+The collector disables automatic Durante observations in its private API instance
+so each trial runs exactly one native control, one metered execution and one
+native control. This also applies when the operator sets
+`AONOHAKO_DURANTE_OBSERVE=on` for ordinary submissions. Collection and offline
+fitting reject a triplet if any phase carries an automatic observation receipt.
+
 Collection requires root Linux amd64, embedded/helper execution, one active run,
 the selected source's enabled family, default dispatch, and an explicit resource policy and image
 digest. Controlled glibc dispatch, JVM, peers, remote runners and memory
