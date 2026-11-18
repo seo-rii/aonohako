@@ -610,11 +610,19 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		)
 	}
 	score := &scoreVal
+	contestant := interactiveContestantStepResult(req, contestantRes)
+	interactor := interactiveInteractorStepResult(interactorReq, interactorRes)
+	var cpuNs uint64
+	if total := sumStepNanoseconds(contestant.CPUTimeNs, interactor.CPUTimeNs); total != nil {
+		cpuNs = *total
+	}
 	return model.RunResponse{
 		Status:           status,
 		TimeMs:           wallMs,
 		WallTimeMs:       wallMs,
 		CPUTimeMs:        contestantRes.CPUTimeMs + interactorRes.CPUTimeMs,
+		CPUTimeNs:        cpuNs,
+		RawCPUTimeNs:     sumStepNanoseconds(contestant.RawCPUTimeNs, interactor.RawCPUTimeNs),
 		RawCPUTimeMs:     sumRawCPUTime(contestantRes.RawCPUTimeMs, interactorRes.RawCPUTimeMs),
 		ProcessCPUTimeMs: contestantRes.ProcessCPUTimeMs + interactorRes.ProcessCPUTimeMs,
 		MemoryKB:         max(contestantRes.MemoryKB, interactorRes.MemoryKB),
@@ -626,10 +634,7 @@ func interactiveResponse(req, interactorReq *model.RunRequest, contestantRes, in
 		Reason:           reason,
 		VerdictSource:    source,
 		Score:            score,
-		Steps: []model.StepResult{
-			interactiveContestantStepResult(req, contestantRes),
-			interactiveInteractorStepResult(interactorReq, interactorRes),
-		},
+		Steps:            []model.StepResult{contestant, interactor},
 	}
 }
 
@@ -678,6 +683,8 @@ func interactiveContestantStepResult(req *model.RunRequest, res execResult) mode
 		TimeMs:           res.WallTimeMs,
 		WallTimeMs:       res.WallTimeMs,
 		CPUTimeMs:        res.CPUTimeMs,
+		CPUTimeNs:        measuredStepCPUTime(res.CPUTimeNs, res.CPUAccounting),
+		RawCPUTimeNs:     res.RawCPUTimeNs,
 		RawCPUTimeMs:     res.RawCPUTimeMs,
 		ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB:         res.MemoryKB,
@@ -704,6 +711,8 @@ func interactiveInteractorStepResult(req *model.RunRequest, res execResult) mode
 		TimeMs:           res.WallTimeMs,
 		WallTimeMs:       res.WallTimeMs,
 		CPUTimeMs:        res.CPUTimeMs,
+		CPUTimeNs:        measuredStepCPUTime(res.CPUTimeNs, res.CPUAccounting),
+		RawCPUTimeNs:     res.RawCPUTimeNs,
 		RawCPUTimeMs:     res.RawCPUTimeMs,
 		ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 		MemoryKB:         res.MemoryKB,

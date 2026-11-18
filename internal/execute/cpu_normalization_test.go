@@ -170,3 +170,28 @@ func TestAggregateStepResponsePreservesNormalizedAndRawTotals(t *testing.T) {
 		t.Fatalf("aggregate response mislabeled last-stage accounting: %+v", response)
 	}
 }
+
+func TestSequentialStageNanosecondsRequireEveryMeasuredSample(t *testing.T) {
+	zero, a, b := uint64(0), uint64(1_600_000), uint64(2_550_000)
+	step := stepResultFromResponse("last", "p", model.RunResponse{
+		CPUTimeNs: a, RawCPUTimeNs: &b, CPUTimeMs: 2,
+	})
+	measuredZero := stepResultFromResponse("early", "p", model.RunResponse{
+		CPUAccounting: &model.CPUAccounting{}, RawCPUTimeNs: &zero,
+	})
+	if step.CPUTimeNs == nil || *step.CPUTimeNs != a || measuredZero.CPUTimeNs == nil || *measuredZero.CPUTimeNs != 0 {
+		t.Fatalf("missing measured step times: %+v %+v", step, measuredZero)
+	}
+	primary := model.RunResponse{CPUTimeNs: 9, RawCPUTimeNs: &a, CPUAccounting: &model.CPUAccounting{}}
+	got := aggregateStepResponse(primary, []model.StepResult{measuredZero, step, step})
+	if got.CPUTimeMs != 4 || got.CPUTimeNs != 2*a || got.RawCPUTimeNs == nil || *got.RawCPUTimeNs != 2*b || got.CPUAccounting != nil {
+		t.Fatalf("unexpected aggregate: %+v", got)
+	}
+	maxNs := ^uint64(0)
+	for _, steps := range [][]model.StepResult{nil, {step, {}}, {{CPUTimeNs: &a, RawCPUTimeNs: &a}, {CPUTimeNs: &maxNs, RawCPUTimeNs: &maxNs}}} {
+		got := aggregateStepResponse(primary, steps)
+		if got.CPUTimeNs != 0 || got.RawCPUTimeNs != nil {
+			t.Fatalf("partial or overflowing sum published: %+v", got)
+		}
+	}
+}

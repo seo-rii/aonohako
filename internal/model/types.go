@@ -230,24 +230,26 @@ type PipelineV1 struct {
 }
 
 type StepResult struct {
-	ID               string `json:"id"`
-	ProgramID        string `json:"program_id,omitempty"`
-	Status           string `json:"status"`
-	TimeMs           int64  `json:"time_ms"`
-	WallTimeMs       int64  `json:"wall_time_ms"`
-	CPUTimeMs        int64  `json:"cpu_time_ms"`
-	RawCPUTimeMs     *int64 `json:"raw_cpu_time_ms,omitempty"`
-	ProcessCPUTimeMs int64  `json:"process_cpu_time_ms,omitempty"`
-	MemoryKB         int64  `json:"memory_kb"`
-	ExitCode         *int   `json:"exit_code,omitempty"`
-	Stdout           string `json:"stdout,omitempty"`
-	Stderr           string `json:"stderr,omitempty"`
-	StdoutTruncated  bool   `json:"stdout_truncated,omitempty"`
-	StderrTruncated  bool   `json:"stderr_truncated,omitempty"`
-	Reason           string `json:"reason,omitempty"`
-	ReasonTruncated  bool   `json:"reason_truncated,omitempty"`
-	VerdictSource    string `json:"verdict_source,omitempty"`
-	HandoffBytes     int64  `json:"handoff_bytes,omitempty"`
+	ID               string  `json:"id"`
+	ProgramID        string  `json:"program_id,omitempty"`
+	Status           string  `json:"status"`
+	TimeMs           int64   `json:"time_ms"`
+	WallTimeMs       int64   `json:"wall_time_ms"`
+	CPUTimeMs        int64   `json:"cpu_time_ms"`
+	CPUTimeNs        *uint64 `json:"cpu_time_ns,omitempty"`
+	RawCPUTimeNs     *uint64 `json:"raw_cpu_time_ns,omitempty"`
+	RawCPUTimeMs     *int64  `json:"raw_cpu_time_ms,omitempty"`
+	ProcessCPUTimeMs int64   `json:"process_cpu_time_ms,omitempty"`
+	MemoryKB         int64   `json:"memory_kb"`
+	ExitCode         *int    `json:"exit_code,omitempty"`
+	Stdout           string  `json:"stdout,omitempty"`
+	Stderr           string  `json:"stderr,omitempty"`
+	StdoutTruncated  bool    `json:"stdout_truncated,omitempty"`
+	StderrTruncated  bool    `json:"stderr_truncated,omitempty"`
+	Reason           string  `json:"reason,omitempty"`
+	ReasonTruncated  bool    `json:"reason_truncated,omitempty"`
+	VerdictSource    string  `json:"verdict_source,omitempty"`
+	HandoffBytes     int64   `json:"handoff_bytes,omitempty"`
 }
 
 type CPUTimeNormalization struct {
@@ -420,16 +422,27 @@ type WorkMeasurementExecution struct {
 	TimeEstimateEligibility *durante.TimeEligibility `json:"time_estimate_eligibility,omitempty"`
 }
 
-// WorkMeasurementObservation is the optional diagnostic receipt of a separate
-// contestant replay. The enclosing response is the ordinary native verdict.
-type WorkMeasurementObservation struct {
-	OutputCheck string          `json:"output_check,omitempty"`
-	Version     int             `json:"version"`
-	Authority   string          `json:"authority"`
+// PipelineStepObservation identifies the native stage supplying a replay's input and output.
+type PipelineStepObservation struct {
+	StepID      string          `json:"step_id"`
+	ProgramID   string          `json:"program_id"`
 	State       string          `json:"state"`
 	Reason      string          `json:"reason,omitempty"`
-	StdinSHA256 string          `json:"stdin_sha256,omitempty"`
+	OutputCheck string          `json:"output_check,omitempty"`
 	Report      *durante.Report `json:"report,omitempty"`
+}
+
+// WorkMeasurementObservation describes standalone (v1) or Pipeline V1 step (v2) replays.
+// The enclosing response carries the native verdict.
+type WorkMeasurementObservation struct {
+	Steps       []PipelineStepObservation `json:"steps,omitempty"`
+	OutputCheck string                    `json:"output_check,omitempty"`
+	Version     int                       `json:"version"`
+	Authority   string                    `json:"authority"`
+	State       string                    `json:"state"`
+	Reason      string                    `json:"reason,omitempty"`
+	StdinSHA256 string                    `json:"stdin_sha256,omitempty"`
+	Report      *durante.Report           `json:"report,omitempty"`
 }
 
 // WorkMeasurementShadow compares the authoritative verdict of this response

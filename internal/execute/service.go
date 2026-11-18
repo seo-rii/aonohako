@@ -197,7 +197,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req.WorkMeasurementShadow {
 		return s.runWithShadow(ctx, req, hooks)
 	}
-	if automaticObservationRequested(req, s.workMeasurement) {
+	if req.Pipeline == nil && automaticObservationRequested(req, s.workMeasurement) {
 		return s.runWithObservation(ctx, req, hooks, s.runRequest)
 	}
 	return s.runRequest(ctx, req, hooks)
@@ -812,6 +812,8 @@ func stepResultFromResponse(id, programID string, resp model.RunResponse) model.
 		TimeMs:           resp.TimeMs,
 		WallTimeMs:       resp.WallTimeMs,
 		CPUTimeMs:        resp.CPUTimeMs,
+		CPUTimeNs:        measuredStepCPUTime(resp.CPUTimeNs, resp.CPUAccounting),
+		RawCPUTimeNs:     resp.RawCPUTimeNs,
 		RawCPUTimeMs:     resp.RawCPUTimeMs,
 		ProcessCPUTimeMs: resp.ProcessCPUTimeMs,
 		MemoryKB:         resp.MemoryKB,
@@ -857,15 +859,35 @@ func initializationFailureResponse(res execResult, wallMs int64) model.RunRespon
 	}
 }
 
+// An older runner or a setup failure can lack a precise CPU sample. Keep that
+// distinct from a measured zero, including in sums over completed stages.
+func measuredStepCPUTime(ns uint64, accounting *model.CPUAccounting) *uint64 {
+	if ns == 0 && accounting == nil {
+		return nil
+	}
+	return &ns
+}
+
+func sumStepNanoseconds(total, sample *uint64) *uint64 {
+	if total == nil || sample == nil || ^uint64(0)-*total < *sample {
+		return nil
+	}
+	value := *total + *sample
+	return &value
+}
+
 func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) model.RunResponse {
 	var wallMs int64
 	var cpuMs int64
+	cpuNs, rawNs := new(uint64), new(uint64)
 	var processCPUTimeMs int64
 	var rawCPUTimeMs *int64
 	var memoryKB int64
 	for _, step := range steps {
 		wallMs += step.WallTimeMs
 		cpuMs += step.CPUTimeMs
+		cpuNs = sumStepNanoseconds(cpuNs, step.CPUTimeNs)
+		rawNs = sumStepNanoseconds(rawNs, step.RawCPUTimeNs)
 		rawCPUTimeMs = sumRawCPUTime(rawCPUTimeMs, step.RawCPUTimeMs)
 		processCPUTimeMs += step.ProcessCPUTimeMs
 		if step.MemoryKB > memoryKB {
@@ -876,10 +898,15 @@ func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) mod
 	resp.WallTimeMs = wallMs
 	resp.CPUTimeMs = cpuMs
 	resp.RawCPUTimeMs = rawCPUTimeMs
-	// These diagnostics describe one sandbox, not the aggregate of its stages.
-	// Do not leave the final stage's precise counter beside a summed ms total.
-	resp.CPUTimeNs = 0
-	resp.RawCPUTimeNs = nil
+	// Each stage has its own accounting source. Report exact sums only when all
+	// executed stages supplied the corresponding precise counter.
+	resp.CPUTimeNs, resp.RawCPUTimeNs = 0, nil
+	if len(steps) > 0 {
+		if cpuNs != nil {
+			resp.CPUTimeNs = *cpuNs
+		}
+		resp.RawCPUTimeNs = rawNs
+	}
 	resp.CPUAccounting = nil
 	resp.ProcessCPUTimeMs = processCPUTimeMs
 	if memoryKB > resp.MemoryKB {

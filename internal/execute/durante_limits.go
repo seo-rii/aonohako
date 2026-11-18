@@ -3,6 +3,7 @@ package execute
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"aonohako/internal/config"
 	"aonohako/internal/durante"
@@ -11,17 +12,20 @@ import (
 )
 
 func (s *Service) runWorkMeasurementDiagnostic(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
-	// Keep the caller's nominal limits and the shared service immutable. The
-	// helper, runtime heap/AS settings, watchdog and final resource checks all
-	// receive the same raw envelope, with no startup CPU normalization.
+	run := s.runWorkMeasurementWithStdin(ctx, req, nil, 0, hooks, tuning, false)
+	response := finishWorkMeasurementTime(req, run.response, s.workMeasurement, tuning)
+	return finishWorkMeasurementJudge(req, response, s.workMeasurement)
+}
+
+func (s *Service) runWorkMeasurementWithStdin(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, captureRawStdout bool) sandboxRunResult {
+	// The watchdog and final resource checks must use the same raw envelope.
 	rawReq := workMeasurementRawRequest(req)
 	rawService := *s
 	rawService.cpuNormalizer = timing.CPUNormalizer{}
 	rawService.shortCaseSampling = false
-	response := rawService.runOne(ctx, &rawReq, hooks, tuning, true).response
-	response = finishWorkMeasurementDiagnostic(ctx, req, response)
-	response = finishWorkMeasurementTime(req, response, s.workMeasurement, tuning)
-	return finishWorkMeasurementJudge(req, response, s.workMeasurement)
+	run := rawService.runOneWithStdin(ctx, &rawReq, stdin, stdinMaxBytes, hooks, tuning, true, captureRawStdout)
+	run.response = finishWorkMeasurementDiagnostic(ctx, req, run.response)
+	return run
 }
 
 func workMeasurementRawRequest(req *model.RunRequest) model.RunRequest {
