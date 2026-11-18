@@ -331,6 +331,8 @@ type RunRequest struct {
 }
 
 type RunResponse struct {
+	WorkMeasurementObservation *WorkMeasurementObservation `json:"work_measurement_observation,omitempty"`
+
 	WorkMeasurement          *durante.Report           `json:"work_measurement,omitempty"`
 	WorkMeasurements         []WorkMeasurementProcess  `json:"work_measurements,omitempty"`
 	WorkMeasurementExecution *WorkMeasurementExecution `json:"work_measurement_execution,omitempty"`
@@ -416,6 +418,18 @@ type WorkMeasurementExecution struct {
 	NominalTimeExceeded     *bool                    `json:"nominal_time_exceeded,omitempty"`
 	TimeEstimateUnavailable string                   `json:"time_estimate_unavailable,omitempty"`
 	TimeEstimateEligibility *durante.TimeEligibility `json:"time_estimate_eligibility,omitempty"`
+}
+
+// WorkMeasurementObservation is the optional diagnostic receipt of a separate
+// contestant replay. The enclosing response is the ordinary native verdict.
+type WorkMeasurementObservation struct {
+	OutputCheck string          `json:"output_check,omitempty"`
+	Version     int             `json:"version"`
+	Authority   string          `json:"authority"`
+	State       string          `json:"state"`
+	Reason      string          `json:"reason,omitempty"`
+	StdinSHA256 string          `json:"stdin_sha256,omitempty"`
+	Report      *durante.Report `json:"report,omitempty"`
 }
 
 // WorkMeasurementShadow compares the authoritative verdict of this response

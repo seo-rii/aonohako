@@ -135,6 +135,10 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
 		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)
+		if automaticObservationRequested(req, r.workMeasurement) && observationEligible(req, r.workMeasurement) == "" {
+			rawWall := time.Duration(r.workMeasurement.ResourcePolicy.MaxLimits.WallTimeMs) * time.Millisecond
+			absoluteTimeout += max(stdinURLDownloadTimeout, rawWall) + rawWall
+		}
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()
@@ -321,7 +325,8 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			// wire format even when the ordinary verdict is fully compatible.
 			var wire struct {
 				model.RunResponse
-				Shadow json.RawMessage `json:"work_measurement_shadow"`
+				Shadow      json.RawMessage `json:"work_measurement_shadow"`
+				Observation json.RawMessage `json:"work_measurement_observation"`
 			}
 			if err := json.Unmarshal([]byte(event.Data), &wire); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote result decode failed: " + err.Error()}
@@ -479,6 +484,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if req.Interactor == nil && req.Communication == nil {
 				remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
 			}
+			remoteResult.WorkMeasurementObservation = remoteObservation(req, remoteResult, r.workMeasurement, wire.Observation)
 			return remoteResult
 		}
 	}

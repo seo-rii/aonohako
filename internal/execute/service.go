@@ -197,6 +197,13 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req.WorkMeasurementShadow {
 		return s.runWithShadow(ctx, req, hooks)
 	}
+	if automaticObservationRequested(req, s.workMeasurement) {
+		return s.runWithObservation(ctx, req, hooks, s.runRequest)
+	}
+	return s.runRequest(ctx, req, hooks)
+}
+
+func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
 	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
@@ -441,6 +448,9 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		}
 	}
 
+	if capture, ok := ctx.Value(observationOutputKey{}).(*observationOutput); ok {
+		capture.record(judgeOut)
+	}
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(ws, req.SidecarOutputs)
 	status, evalReason, verdictSource := classifyRunStatusWithoutOutput(req, res)
 	var score *float64

@@ -630,6 +630,13 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
 	}
+	workMeasurement.Observe, err = parseBoolEnv("AONOHAKO_DURANTE_OBSERVE", os.Getenv("AONOHAKO_DURANTE_OBSERVE"), false)
+	if err != nil {
+		return Config{}, err
+	}
+	if workMeasurement.Observe && workMeasurement.ResourcePolicy == nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_OBSERVE requires AONOHAKO_DURANTE_RESOURCE_POLICY for bounded diagnostic replays")
+	}
 	if workMeasurement.ResourcePolicy != nil {
 		// Raw envelopes apply to every compatible enabled family. Keep the
 		// runtime and dispatch exclusions used during request admission.
