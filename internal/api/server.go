@@ -177,7 +177,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/healthz", s.readyz)
 	mux.HandleFunc("/capabilities", s.capabilities)
-	mux.Handle(model.PipelineV1WorkerPath, s.requireAuth(http.HandlerFunc(s.pipelineWorkerCapability)))
+	mux.HandleFunc(model.PipelineV1WorkerPath, s.pipelineWorkerCapability)
 	mux.Handle("/compile", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler)))))
 	mux.Handle("/execute", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler)))))
 	return mux

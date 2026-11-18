@@ -60,19 +60,25 @@ func (s *Server) canAttestPipelineWorker() bool {
 		(auth.PlatformPrincipalHMACSecret != "" || (s.cfg.TrustedPlatformHeaders && len(s.cfg.TrustedPlatformHeaderCIDRs) > 0)))
 }
 
-// This route is behind the worker's normal /execute authentication middleware.
-// Only the worker that will run submissions may describe this contract.
+// Discovery accepts only an empty GET before the normal execution authentication
+// middleware, which may hash the request body for a signed platform principal.
 func (s *Server) pipelineWorkerCapability(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet {
 		writeJSONErrorMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET only")
 		return
 	}
+	if r.ContentLength != 0 || len(r.TransferEncoding) != 0 {
+		writeJSONError(w, http.StatusBadRequest, "unexpected_request_body")
+		return
+	}
 	if !s.canAttestPipelineWorker() {
 		writeJSONError(w, http.StatusNotFound, "unsupported_capability")
 		return
 	}
-	contract := runvalidation.PipelineV1Contract()
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(model.PipelineV1WorkerCapability{Protocol: model.PipelineV1WorkerProtocol, Pipeline: &contract})
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		contract := runvalidation.PipelineV1Contract()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(model.PipelineV1WorkerCapability{Protocol: model.PipelineV1WorkerProtocol, Pipeline: &contract})
+	})).ServeHTTP(w, r)
 }

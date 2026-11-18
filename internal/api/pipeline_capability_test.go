@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -54,6 +55,31 @@ func TestPipelineWorkerAttestation(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestWorkerDiscoveryAdmitsOnlyBodylessGETBeforeAuthentication(t *testing.T) {
+	cfg := configForTest(t)
+	cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "test-key"}
+	s := NewWithServices(cfg, nil, nil)
+	for _, tc := range []struct {
+		method  string
+		chunked bool
+		status  int
+	}{
+		{http.MethodPost, false, http.StatusMethodNotAllowed},
+		{http.MethodGet, false, http.StatusBadRequest},
+		{http.MethodGet, true, http.StatusBadRequest},
+	} {
+		r := httptest.NewRequest(tc.method, model.PipelineV1WorkerPath, strings.NewReader("body"))
+		if tc.chunked {
+			r.ContentLength, r.TransferEncoding = -1, []string{"chunked"}
+		}
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		if w.Code != tc.status {
+			t.Fatalf("%s chunked=%v status = %d, want %d", tc.method, tc.chunked, w.Code, tc.status)
+		}
 	}
 }
 
