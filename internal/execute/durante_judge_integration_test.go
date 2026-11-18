@@ -1,17 +1,25 @@
 package execute
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
+	"io"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"sort"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
+	"aonohako/internal/runvalidation"
 )
 
 // TestDuranteJudgeIntegration runs judge mode through the real sandbox, the
@@ -123,9 +131,13 @@ func TestDuranteJudgeIntegration(t *testing.T) {
 		name                   string
 		numerator, denominator uint64
 		agreement, shadow      string
+		latency, urlInput      bool
 	}{
-		{"shadow agrees", 1, math.MaxUint64, model.ShadowAgree, model.RunStatusAccepted},
-		{"shadow disagrees", 1_000_001, 1, model.ShadowDisagree, model.RunStatusTLE},
+		{"shadow agrees", 1, math.MaxUint64, model.ShadowAgree, model.RunStatusAccepted, false, false},
+		{"shadow disagrees", 1_000_001, 1, model.ShadowDisagree, model.RunStatusTLE, false, false},
+		{"shadow latency agrees", 1, math.MaxUint64, model.ShadowAgree, model.RunStatusAccepted, true, false},
+		{"shadow latency disagrees", 1_000_001, 1, model.ShadowDisagree, model.RunStatusTLE, true, false},
+		{"shadow and sampled primary share binary URL stdin", 1, math.MaxUint64, model.ShadowAgree, model.RunStatusAccepted, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := timeMeasurementConfig()
@@ -138,6 +150,12 @@ func TestDuranteJudgeIntegration(t *testing.T) {
 			}
 			cfg.RuntimeImage, cfg.TimePolicy.RuntimeID = image, runtimeID
 			cfg.TimePolicy.InstructionNSNumerator, cfg.TimePolicy.NSDenominator = tc.numerator, tc.denominator
+			if tc.latency {
+				cfg.LatencyBound = true
+				cfg.TimePolicy.Method = durante.TimeMethodLatencyBoundREP
+				cfg.TimePolicy.InstructionNSNumerator = 0
+				cfg.TimePolicy.LatencyX16NSNumerator = tc.numerator
+			}
 			cfg.CPUIDProfile, cfg.TimePolicy.CPUIDProfile = durante.CPUIDProfileX8664V2, durante.CPUIDProfileX8664V2
 			cfg.Judge = durante.JudgePolicy{Enabled: true, Families: []string{"cpp"}, Integrity: durante.JudgeIntegrityOff}
 			req := &model.RunRequest{
@@ -148,6 +166,35 @@ func TestDuranteJudgeIntegration(t *testing.T) {
 				WorkMeasurementLimits: &durante.ResourceLimits{CPUTimeMs: 3000, WallTimeMs: 10000, MemoryMB: 128},
 			}
 			svc := NewWithConfig(config.Config{MaxActiveRuns: 1, WorkRootMaxBytes: 128 << 20, Execution: config.ExecutionConfig{WorkMeasurement: cfg}})
+			var downloads atomic.Int32
+			digest := make(chan string, 1)
+			if tc.urlInput {
+				// Include binary data beyond the inline text limit. The program
+				// consumes the first integer; a second GET changes its answer.
+				chunk := bytes.Repeat([]byte{0, 0xff}, 16<<10)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					if downloads.Add(1) != 1 {
+						fmt.Fprint(w, "1")
+						return
+					}
+					hash := sha256.New()
+					out := io.MultiWriter(w, hash)
+					if _, err := fmt.Fprintln(out, "4096"); err != nil {
+						return
+					}
+					for written := 0; written < runvalidation.MaxTextFieldBytes; written += len(chunk) {
+						if _, err := out.Write(chunk); err != nil {
+							return
+						}
+					}
+					digest <- fmt.Sprintf("%x", hash.Sum(nil))
+				}))
+				defer server.Close()
+				setStdinURLHTTPClientForTest(t, server.URL)
+				req.Stdin, req.StdinURL = "", "http://payload.example/case"
+				svc.shortCaseSampling = true
+				svc.cpuNormalizer = testCPUNormalizer(t, 1, 1)
+			}
 			resp := svc.Run(context.Background(), req, Hooks{})
 			b := resp.WorkMeasurementShadow
 			if resp.Status != model.RunStatusAccepted || resp.WorkMeasurement != nil || resp.WorkMeasurementJudgment != nil || b == nil {
@@ -156,8 +203,19 @@ func TestDuranteJudgeIntegration(t *testing.T) {
 			if b.Agreement != tc.agreement || b.ShadowStatus != tc.shadow || b.PrimaryStatus != model.RunStatusAccepted || b.Response == nil {
 				t.Fatalf("shadow comparison: %+v", b)
 			}
+			if tc.urlInput {
+				if downloads.Load() != 1 || resp.CPUTimeSampling == nil || len(resp.CPUTimeSampling.Samples) != 3 {
+					t.Fatalf("URL downloads=%d, primary sampling=%+v", downloads.Load(), resp.CPUTimeSampling)
+				}
+				if want := <-digest; b.StdinSHA256 != want {
+					t.Fatalf("shared stdin SHA-256 = %q, want %q", b.StdinSHA256, want)
+				}
+			}
 			if r := b.Response.WorkMeasurement; r == nil || !r.Complete || r.CPUIDProfile != durante.CPUIDProfileX8664V2 {
 				t.Fatalf("shadow lacks a complete profiled observation: %+v", r)
+			}
+			if tc.latency && (b.Response.WorkMeasurement.LatencyBound == nil || b.Response.WorkMeasurementExecution.TimeEstimate.Method != durante.TimeMethodLatencyBoundREP) {
+				t.Fatal("shadow latency estimate lacks the requested counter or method")
 			}
 			if err := validateRemoteShadow(req, resp, cfg, config.RuntimeTuningConfig{}); err != nil {
 				t.Fatal(err)

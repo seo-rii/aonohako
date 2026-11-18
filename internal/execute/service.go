@@ -352,7 +352,12 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 
 	if stdin == nil && strings.TrimSpace(req.StdinURL) != "" {
 		urlMaxBytes := stdinURLMaxBytes(req.Limits)
-		stdinURLReader, err := openStdinURL(ctx, req.StdinURL, urlMaxBytes, nil)
+		var stdinURLReader io.ReadCloser
+		if snapshot, ok := ctx.Value(shadowStdinKey{}).(*stdinSnapshot); ok {
+			stdinURLReader, err = snapshot.open(ctx, req.StdinURL, urlMaxBytes)
+		} else {
+			stdinURLReader, err = openStdinURL(ctx, req.StdinURL, urlMaxBytes, nil)
+		}
 		if err != nil {
 			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin_url: " + err.Error()}}
 		}

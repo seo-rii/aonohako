@@ -22,7 +22,7 @@ const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32
 const releaseCore = "lib64/release/libdynamorio.so"
 
 // Updated together with the complete third_party/durante snapshot.
-const sourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
+const sourceCommit = "238193f90f5896b300563180e7939088ac8c346c"
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
 // Matching hashes do not attest application counters or an adversarial host.
@@ -71,11 +71,29 @@ func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
 }
 
 func (r *Report) ValidInstallationIdentity() bool {
-	if r == nil || r.Installation == nil {
+	return r != nil && r.Installation.validForSource(sourceCommit)
+}
+
+// ValidShadowInstallationIdentity checks archived observations against the
+// installation pinned by the worker that emitted their engine profile.
+func (r *Report) ValidShadowInstallationIdentity() bool {
+	if r == nil {
 		return false
 	}
-	i := r.Installation
-	if !i.Unchanged || i.SourceCommit != sourceCommit || i.RuntimeSourceCommit != runtimeSourceCommit || i.RuntimePatchSHA256 != runtimePatchSHA256 || i.RuntimeCodeReplayPatchSHA256 != runtimeCodeReplayPatchSHA256 {
+	switch r.EngineProfile {
+	case EngineProfile:
+		return r.ValidInstallationIdentity()
+	case "dynamorio-11.3-durante-v5-vm32m":
+		// The first worker with shadow support used the same runtime patches
+		// as v6 and a client that did not emit latency bounds.
+		return r.LatencyBound == nil && r.Installation.validForSource("4016b33fc69b93d36a13efbd00953213b8f6317f")
+	default:
+		return false
+	}
+}
+
+func (i *InstallationIdentity) validForSource(commit string) bool {
+	if i == nil || !i.Unchanged || i.SourceCommit != commit || i.RuntimeSourceCommit != runtimeSourceCommit || i.RuntimePatchSHA256 != runtimePatchSHA256 || i.RuntimeCodeReplayPatchSHA256 != runtimeCodeReplayPatchSHA256 {
 		return false
 	}
 	for _, digest := range []string{i.LauncherSHA256, i.ClientSHA256, i.CoreSHA256} {

@@ -31,6 +31,7 @@ const (
 	JudgeWrongAnswer       JudgeVerdict = "wrong_answer"
 	JudgeTimeLimitExceeded JudgeVerdict = "time_limit_exceeded"
 	JudgeRuntimeError      JudgeVerdict = "runtime_error"
+	JudgeUnavailable       JudgeVerdict = "unavailable"
 )
 
 // JudgePolicy is the operator's judge-mode configuration. Enabling it does not
@@ -245,8 +246,8 @@ func (p JudgePolicy) Decide(in JudgeInputs) JudgeResult {
 		result.Verdict, result.Reason = JudgeAccepted, "output matches and estimated work time is within the limit"
 		return result
 	case "resource_exhausted":
-		result.Verdict = JudgeTimeLimitExceeded
-		result.Reason = "execution exceeded the raw resource envelope"
+		result.Verdict = JudgeUnavailable
+		result.Reason = "raw resource limit stopped execution before virtual time was measured"
 		return result
 	default: // incomplete, failed, cancelled, or any unknown state.
 		result.Verdict = JudgeRuntimeError

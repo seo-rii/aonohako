@@ -90,16 +90,13 @@ func TestDuranteInteractiveIntegration(t *testing.T) {
 			t.Fatalf("unmetered interactive execution changed: %+v", response)
 		}
 	})
-	for _, bound := range []bool{false, true} {
-		name := "diagnostic_time_budgets"
-		if bound {
-			name += "_bound_options"
-		}
+	for _, variant := range []string{"", "_bound_options", "_latency"} {
+		name := "diagnostic_time_budgets" + variant
 		t.Run(name, func(t *testing.T) {
-			timeCfg := peerTimeIntegrationConfig(t, cfg)
+			timeCfg := peerTimeIntegrationConfig(t, cfg, variant == "_latency")
 			req := request("accept", true)
 			addPeerTimeIntegrationBudgets(t, req)
-			if bound {
+			if variant == "_bound_options" {
 				timeCfg = bindIntegrationRuntimeOptions(t, timeCfg, req)
 			}
 			timeService := NewWithConfig(config.Config{Execution: config.ExecutionConfig{WorkMeasurement: timeCfg}})

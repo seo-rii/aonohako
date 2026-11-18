@@ -65,6 +65,8 @@ type event struct {
 	CPUFeature            *string `json:"feature,omitempty"`
 	CPUIDProfileVersion   *uint64 `json:"cpuid_profile_version,omitempty"`
 	CPUIDProfile          *string `json:"cpuid_profile,omitempty"`
+	LatencyBoundVersion   *uint64 `json:"latency_bound_version,omitempty"`
+	LatencyBoundX16       *uint64 `json:"latency_bound_x16,omitempty"`
 }
 
 func decodeEvent(data []byte) (event, error) {
@@ -133,6 +135,9 @@ func decodeEvent(data []byte) (event, error) {
 		CPUFeature          json.RawMessage `json:"feature"`
 		CPUIDProfileVersion json.RawMessage `json:"cpuid_profile_version"`
 		CPUIDProfile        json.RawMessage `json:"cpuid_profile"`
+		Instructions        json.RawMessage `json:"instructions"`
+		LatencyBoundVersion json.RawMessage `json:"latency_bound_version"`
+		LatencyBoundX16     json.RawMessage `json:"latency_bound_x16"`
 	}{event: &row}
 	if err := json.Unmarshal(data, &legacy); err != nil {
 		return row, errors.New("invalid report field type")
@@ -147,6 +152,7 @@ func decodeEvent(data []byte) (event, error) {
 		"sdk_version": &row.SDKVersion, "origin": &row.Origin,
 		"parent_pid": &row.ParentPID, "parent_segment": &row.ParentSegment,
 		"rep_bytes_enabled": &row.REPEnabled,
+		"instructions":      &row.Instructions,
 	} {
 		if raw, present := fields[key]; present && json.Unmarshal(raw, target) != nil {
 			return row, errors.New("invalid report field type")
@@ -158,17 +164,25 @@ func decodeEvent(data []byte) (event, error) {
 		"rep_movs_entries": &row.REPMOVSEntries, "rep_stos_entries": &row.REPSTOSEntries,
 		"cpu_policy_version":    &row.CPUPolicyVersion,
 		"cpuid_profile_version": &row.CPUIDProfileVersion,
+		"latency_bound_version": &row.LatencyBoundVersion,
+		"latency_bound_x16":     &row.LatencyBoundX16,
 	} {
 		if raw, present := fields[key]; present {
 			var value uint64
 			if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, &value) != nil {
-				return row, errors.New("invalid REP breakdown field type")
+				return row, errors.New("invalid unsigned report field: " + key)
 			}
 			*target = &value
 		}
 	}
 	if row.REPBreakdownVersion != nil && *row.REPBreakdownVersion != 1 {
 		return row, errors.New("unsupported REP breakdown version")
+	}
+	if row.LatencyBoundVersion != nil && (row.Event != "start" || *row.LatencyBoundVersion != 1) {
+		return row, errors.New("invalid latency bound capability")
+	}
+	if row.LatencyBoundX16 != nil && row.Event != "end" && row.Event != "exec_attempt" {
+		return row, errors.New("latency bound outside terminal")
 	}
 	for key, target := range map[string]**string{"cpu_policy": &row.CPUPolicy, "feature": &row.CPUFeature, "cpuid_profile": &row.CPUIDProfile} {
 		if raw, present := fields[key]; present {
@@ -375,6 +389,10 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 	edges := map[int]lineage{}
 	var totals [5]uint64
 	breakdownTotals := REPBreakdown{Version: 1}
+	var latency *LatencyBound
+	if streams[rootPID][0].LatencyBoundVersion != nil {
+		latency = &LatencyBound{Version: 1}
+	}
 	images := 0
 	repKnown, repEnabled, breakdownEnabled := false, false, false
 	sum := func(row event, isExec bool) error {
@@ -391,6 +409,19 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 			if err != nil {
 				return err
 			}
+		}
+		if (row.LatencyBoundX16 != nil) != (latency != nil) {
+			return errors.New("latency bound capability mismatch")
+		}
+		if latency != nil {
+			work := *row.LatencyBoundX16
+			if row.Instructions > work/4 {
+				return errors.New("latency bound below issue cost")
+			}
+			if work > math.MaxUint64-latency.CyclesX16 {
+				return errors.New("latency bound aggregate overflow")
+			}
+			latency.CyclesX16 += work
 		}
 		for i, value := range counts {
 			if totals[i] > math.MaxUint64-value {
@@ -430,6 +461,9 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 				}
 				if repKnown && breakdownEnabled != (row.REPBreakdownVersion != nil) {
 					return Report{}, errors.New("mixed REP breakdown capabilities")
+				}
+				if (row.LatencyBoundVersion != nil) != (latency != nil) {
+					return Report{}, errors.New("mixed latency bound capabilities")
 				}
 				repKnown = true
 				repEnabled = row.REPEnabled
@@ -538,7 +572,7 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 		breakdown = &breakdownTotals
 	}
 	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Scope: Scope, REPEnabled: repEnabled, Complete: true, Quality: quality, Instructions: &totals[0], REPBytes: &totals[1], REPEntries: &totals[2], UnsupportedREPEntries: &totals[3], SignalsObserved: totals[4], Processes: len(processes), Images: images,
-		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3]), REPBreakdown: breakdown, DisallowedCPUFeatures: features, CPUIDProfile: cpuid}, nil
+		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3]), REPBreakdown: breakdown, LatencyBound: latency, DisallowedCPUFeatures: features, CPUIDProfile: cpuid}, nil
 }
 
 func CollectDirectory(directory string, rootPID int) Report {

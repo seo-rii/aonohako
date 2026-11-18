@@ -17,6 +17,8 @@ func judgeVerdictStatus(v durante.JudgeVerdict) (string, bool) {
 		return model.RunStatusWA, false
 	case durante.JudgeTimeLimitExceeded:
 		return model.RunStatusTLE, false
+	case durante.JudgeUnavailable:
+		return model.RunStatusInitFail, false
 	case durante.JudgeRuntimeError:
 		return model.RunStatusRE, false
 	default:

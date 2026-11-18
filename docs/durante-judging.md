@@ -80,7 +80,8 @@ estimated_ns = ceil((instructions * instruction_ns_numerator
                    + rep_bytes    * rep_byte_ns_numerator) / ns_denominator)
 ```
 
-(or the v2 MOVS/STOS form). The comparison is exact in nanoseconds:
+(or the separate MOVS/STOS formula). The latency model substitutes
+`latency_bound.cycles_x16 * latency_x16_ns_numerator` for the instruction term. The comparison is exact in nanoseconds:
 
 ```
 over_time = estimated_ns > limits.time_ms * 1_000_000      // strict >
@@ -105,7 +106,7 @@ estimate are final. Original output comparison is unchanged.
 | `complete` | matches | available, `estimated_ns > limit` | **Time Limit Exceeded** |
 | `complete` | mismatch | (not evaluated) | **Wrong Answer** |
 | `complete` | matches | unavailable | **Runtime Error** |
-| `resource_exhausted` | — | — | **Time Limit Exceeded** |
+| `resource_exhausted` | — | — | **Container Initialization Failed**, unscored |
 | `incomplete` / `failed` / `cancelled` | — | — | **Runtime Error** |
 
 - **Wrong Answer** uses the existing output oracle (stdout or the single file
@@ -119,14 +120,13 @@ estimate are final. Original output comparison is unchanged.
   condition to retry or investigate, never a free `Accepted`. Signal-driven
   runtimes such as Go are therefore unjudgeable today; enable judge mode only for
   families whose counts convert (C/C++ first).
-- **`resource_exhausted` → Time Limit Exceeded.** The raw envelope is a safety
-  net set well above the nominal limit's expected work. Hitting it means the
-  submission ran far past any plausible accepted solution even with generous
-  actual limits, so TLE is correct. `termination_source` is preserved. Memory is
-  **not** judged in judge mode — instrumented RSS includes the engine and code
-  cache — so the operator sets `work_measurement_limits.memory_mb` generously; a
-  raw memory stop also lands here as TLE rather than a credited MLE. Problems
-  that need a real memory verdict must not use judge mode yet.
+- **Raw resource exhaustion.** A raw CPU, wall or memory stop ends measurement
+  before Durante can produce a virtual time. Judge mode returns the existing
+  unscored `Container Initialization Failed` status with
+  `work_measurement_judgment.state = "resource_exhausted"`. The termination
+  source identifies the resource to review. Shadow comparisons record this
+  case as unavailable. Only a completed, eligible, over-budget estimate can
+  yield a virtual TLE.
 - **`incomplete` / `failed` / `cancelled` → Runtime Error.** Launch failure,
   client/collection failure, a forced stop, or cancellation cannot yield a
   trusted count, so the verdict is a (retryable) `Runtime Error`, never AC/TLE.
@@ -135,7 +135,7 @@ The response carries `work_measurement_judgment` with the chosen verdict, the
 reason, the virtual-millisecond estimate, the integrity decision, and the raw
 diagnostic execution block. Unlike the pure diagnostic envelope, judge mode sets
 `status` to the real verdict (`Accepted`, `Wrong Answer`, `Time Limit Exceeded`
-or `Runtime Error`) and may set `score`.
+or `Runtime Error`) for judged runs. A raw resource stop carries an unscored initialization failure.
 
 ## Counter integrity (threat model is a flag)
 
@@ -205,6 +205,7 @@ adds only `work_measurement_shadow`:
 | `agreement` | `agree`, `disagree`, or `unavailable` |
 | `primary_status`, `primary_cpu_time_ms` | The authoritative verdict and its CPU time |
 | `shadow_status` | The judge-mode verdict for the same input |
+| `stdin_sha256` | SHA-256 of the shared input when the primary fetched `stdin_url` and the shadow ran |
 | `unavailable` | Why no comparison exists (mode off, family not judged, cancelled, remote result rejected) |
 | `response` | The shadow execution's judgment, envelope, time estimate and Durante report, without stdout/stderr/sidecars |
 
@@ -214,8 +215,10 @@ with it, because the primary must stay unmetered. Operator-side gates (mode
 `off`, a family not in `AONOHAKO_DURANTE_JUDGE_FAMILIES`) never reject the
 request: the primary runs and the shadow is `unavailable`. The shadow costs one
 extra instrumented execution (about 3x CPU) per opted-in testcase, sequentially
-after the primary; sample submissions rather than shadowing everything. Inputs
-from `stdin_url` are fetched once per execution.
+after the primary; sample submissions rather than shadowing everything. The runner fetches a `stdin_url` once when the primary opens it. Each short-case
+repeat and the shadow reads an independent handle to the same bytes. With a URL
+request an older remote runner's comparison is unavailable if it cannot identify
+the shared input. Inline stdin is already part of the request.
 
 A remote control plane validates the primary as an ordinary result and
 recomputes the shadow comparison from the returned raw observation with its own
@@ -224,11 +227,32 @@ shadow block that fails recomputation, does not fail the response: the shadow
 becomes `unavailable` with the reason and the validated primary verdict is
 returned.
 
-Count disagreements by class (primary AC / shadow TLE, primary TLE / shadow AC,
-anything involving RE) and by problem. Primary AC with shadow TLE near the limit
-measures how often the model is stricter than the reference machine; the
-opposite measures leniency. Both are needed before switching a problem set to
-`on`.
+Use `go run ./cmd/durante-shadow-summary cases.jsonl` to summarize a sample.
+Supply one JSON object per testcase with a stable `problem_id` (a string or
+unsigned integer) and the control plane's final `/execute` result in
+`response`. Standard input is also supported. Use the same observation period,
+cohort and model for each comparison. The summary contains counts and problem
+IDs. Source code, submission IDs, program output and free-form reasons are
+unnecessary.
+
+For archived v5 time comparisons, set the optional row field `stdin_source` to
+`"inline"` only when the original request confirms inline stdin (including
+empty input). Use `"url"` for URL inputs and omit the field when the source is
+unknown. The v5 runner fetched URLs separately for the two executions, so
+the summary counts v5 time verdicts with URL or unknown input as unavailable.
+Raw resource stops are still counted by cause. Current workers share one input
+and their time comparisons do not require this field. When supplied, `"url"`
+requires the current worker's shared SHA-256 receipt and `"inline"` requires
+that receipt to be absent.
+
+For each problem, divide `primary_ac_shadow_virtual_tle` by
+`comparable_primary_ac` to measure how often a completed, eligible shadow
+changes a primary AC to TLE. Divide `primary_tle_shadow_ac` by
+`comparable_primary_tle` for the reverse direction. Report zero denominators
+as unavailable. `testcases`, `primary_ac` and `primary_tle` include the entire
+sample. `raw_stops_by_source` counts raw resource stops, including legacy
+responses labeled TLE. Also report `missing_shadow`, `unavailable` and `other`
+alongside the disagreement rates so coverage is visible.
 
 ## Remote control plane
 
@@ -265,3 +289,26 @@ with reference-time conversion.
 Memory judging, online (mid-run) work budgets, interactive/communication judge
 modes, and runtimes whose counts do not convert (signal-driven, e.g. Go) are out
 of scope for this path and remain documented limitations.
+
+## Time attribution by execution mode
+
+Ordinary C++ shadow comparisons are the first qualification cohort. Interactive
+and communication runs already produce independent diagnostic role estimates.
+A completed role is compared against its own limit in nanoseconds. A stopped
+role has an unavailable estimate. Use the following attribution rules when
+extending the deciding path after qualification.
+
+| Mode | Submission time to compare | Operator or helper work |
+|---|---|---|
+| Interactive | Compare the contestant process tree against its own limit. | Attribute interactor work to its own budget. Record coordinator cancellation as incomplete. |
+| Communication v1/v2 | Compare each participant seat separately, including seats executing the same program. Key the result by program ID and participant index. | Attribute the manager to its own budget. Keep the manager's score and match result separate from time diagnostics. |
+| Special judge | Measure the contestant up to completion and compare with its contestant limit. | Use the SPJ's limit and workspace for checking. A checker failure belongs to the checker. |
+| Pipeline | Match each executing participant to its step, program and step limit. Interactive steps also need a separate interactor observation. | Record artifact transfer and the final judge separately. Mark later, unstarted steps as such. |
+| Multi-step | Compare each executed step with its effective step limit. A displayed total may sum completed sequential steps while retaining their individual outcomes. | Account for handoff and coordination separately. Omit a credited total if any required step lacks an estimate. |
+
+The current API supports role time diagnostics for interactive and communication
+requests. SPJ, pipeline and multi-step Durante verdicts require dedicated
+execution-path and remote revalidation support. Before enabling a deciding
+path, verify which role exceeded its limit with an exact-boundary case, one
+where only the helper exceeds its limit, and one where the coordinator stops
+a peer before collection completes.

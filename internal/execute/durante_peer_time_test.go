@@ -138,6 +138,46 @@ func TestPeerTimeBudgetExactBoundaryAndV2(t *testing.T) {
 	}
 }
 
+func TestLatencyBudgetIsAttributedToTheMeasuredRole(t *testing.T) {
+	for _, mode := range []string{"interactive", "communication-v1", "communication-v2"} {
+		t.Run(mode, func(t *testing.T) {
+			req, response := peerTimeFixture(t, mode)
+			cfg := timeMeasurementConfig()
+			cfg.LatencyBound = true
+			cfg.TimePolicy.Method = durante.TimeMethodLatencyBoundREP
+			cfg.TimePolicy.InstructionNSNumerator = 0
+			cfg.TimePolicy.LatencyX16NSNumerator = 1
+			cfg.TimePolicy.NSDenominator = 4
+			for i, role := range response.WorkMeasurements {
+				// Each contestant exactly meets the limit. Only the helper exceeds it.
+				bound := 4 * *role.Report.Instructions
+				if i == len(response.WorkMeasurements)-1 {
+					bound += 4
+				}
+				role.Report.LatencyBound = &durante.LatencyBound{Version: 1, CyclesX16: bound}
+			}
+			local := finishWorkMeasurementPeerTime(req, response, cfg)
+			got := peerTimeExchange(t, req, local, cfg, true)
+			if got.Status != response.Status || got.Score == nil || *got.Score != *response.Score {
+				t.Fatalf("helper work affected the ordinary verdict: %+v", got)
+			}
+			for i, role := range got.WorkMeasurements {
+				if role.TimeBudget == nil || role.TimeBudget.Exceeded == nil || *role.TimeBudget.Exceeded != (i == len(got.WorkMeasurements)-1) {
+					t.Fatalf("incorrect attribution: %s %+v", role.Role, role.TimeBudget)
+				}
+			}
+			if len(got.WorkMeasurements) != len(response.WorkMeasurements) {
+				t.Fatal("missing measured role")
+			}
+			local.WorkMeasurements[0].Report.LatencyBound = nil
+			rejected := peerTimeExchange(t, req, local, cfg, true)
+			if rejected.Status != model.RunStatusInitFail || !strings.Contains(rejected.Reason, "latency counter mismatch") {
+				t.Fatalf("missing role counter accepted: %+v", rejected)
+			}
+		})
+	}
+}
+
 func TestPeerTimeUnavailableDoesNotDiscardCompletedPeers(t *testing.T) {
 	for _, mode := range []string{"interactive", "communication-v1", "communication-v2"} {
 		for name, edit := range map[string]func(*model.WorkMeasurementProcess){
@@ -304,7 +344,7 @@ func TestPeerTimeBindsEveryRoleLanguageBeforeUploadOrExecution(t *testing.T) {
 
 // Synthetic weights test exact plumbing against the observed counts. They do
 // not qualify an execution-time model for either source-language profile.
-func peerTimeIntegrationConfig(t *testing.T, cfg durante.Config) durante.Config {
+func peerTimeIntegrationConfig(t *testing.T, cfg durante.Config, latency bool) durante.Config {
 	t.Helper()
 	cfg.RuntimeImage = os.Getenv("AONOHAKO_DURANTE_RUNTIME_IMAGE")
 	cfg.ResourcePolicy = timeMeasurementConfig().ResourcePolicy
@@ -314,6 +354,12 @@ func peerTimeIntegrationConfig(t *testing.T, cfg durante.Config) durante.Config 
 		Method:       durante.TimeMethodREPBreakdown,
 		Coefficients: durante.TimeCoefficients{InstructionNSNumerator: 1, MOVSByteNSNumerator: 2, STOSByteNSNumerator: 3, NSDenominator: 1},
 	}}}
+	if latency {
+		cfg.LatencyBound = true
+		model := &cfg.TimeModels.Models[0]
+		model.Method = durante.TimeMethodLatencyBoundREP
+		model.Coefficients = durante.TimeCoefficients{LatencyX16NSNumerator: 1, REPByteNSNumerator: 2, NSDenominator: 1}
+	}
 	for _, language := range []string{"CPP20", "C11"} {
 		cfg.TimeModels.Profiles = append(cfg.TimeModels.Profiles, durante.TimeProfileBinding{
 			SourceLanguage: language, Family: "cpp", RuntimeImage: cfg.RuntimeImage,
@@ -355,7 +401,15 @@ func assertPeerTimeIntegrationBudgets(t *testing.T, req *model.RunRequest, respo
 		// This fixture is bounded far below uint64/int64 overflow; compute the
 		// arithmetic independently of the production calculator.
 		wantNS := int64(*report.Instructions + 2*report.REPBreakdown.MOVSBytes + 3*report.REPBreakdown.STOSBytes)
-		if result.Estimate.Nanoseconds != wantNS || *result.Exceeded != (wantNS > int64(i+1)*1_000_000) || result.Estimate.Method != durante.TimeMethodREPBreakdown {
+		method := durante.TimeMethodREPBreakdown
+		if cfg.LatencyBound {
+			if report.LatencyBound == nil || !report.ValidLatencyBound() {
+				t.Fatalf("role %d lacks its complete latency counter: %+v", i, report)
+			}
+			wantNS = int64(report.LatencyBound.CyclesX16 + 2*(*report.REPBytes))
+			method = durante.TimeMethodLatencyBoundREP
+		}
+		if result.Estimate.Nanoseconds != wantNS || *result.Exceeded != (wantNS > int64(i+1)*1_000_000) || result.Estimate.Method != method {
 			t.Fatalf("role %d has an incorrect estimate or budget comparison: %+v", i, result)
 		}
 	}

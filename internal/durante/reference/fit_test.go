@@ -41,7 +41,7 @@ func syntheticReport(instructions, rep uint64) *durante.Report {
 		Instructions: &instructions, REPBytes: &rep, REPEntries: &entries, UnsupportedREPEntries: &zero,
 		IntegrityVerified: &verified, MeasurementContract: durante.DiagnosticContract(),
 		Installation: &durante.InstallationIdentity{
-			SourceCommit: "4016b33fc69b93d36a13efbd00953213b8f6317f", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
+			SourceCommit: "238193f90f5896b300563180e7939088ac8c346c", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
 			RuntimePatchSHA256:           "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c",
 			RuntimeCodeReplayPatchSHA256: "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72",
 			LauncherSHA256:               strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true,
@@ -506,5 +506,98 @@ func TestFitRequiresExplicitValidOptions(t *testing.T) {
 		if err == nil || got.Passed || got.CandidatePolicy != nil || got.Options != options {
 			t.Fatalf("invalid options acquired defaults: %+v, %v", got, err)
 		}
+	}
+}
+
+func TestFitComparesLatencyAndInstructionsOnIdenticalTriplets(t *testing.T) {
+	dataset := syntheticDataset()
+	dataset.LatencyBoundVersion = 1
+	for i := range dataset.Samples {
+		sample := &dataset.Samples[i]
+		report := sample.Metered.WorkMeasurement
+		cyclesX16 := 8 * *report.Instructions
+		if sample.Split == SplitValidation {
+			cyclesX16 = 4 * *report.Instructions
+		}
+		report.LatencyBound = &durante.LatencyBound{Version: 1, CyclesX16: cyclesX16}
+		ns := 2*cyclesX16 + 3**report.REPBytes
+		sample.NativeBefore, sample.NativeAfter = syntheticNativeResponse(ns), syntheticNativeResponse(ns)
+	}
+
+	options := syntheticFitOptions()
+	baseline := requireFit(t, dataset, options)
+	if baseline.Passed || baseline.CandidatePolicy == nil || baseline.CandidatePolicy.InstructionNSNumerator != 16*coefficientDenominator ||
+		!strings.Contains(strings.Join(baseline.Failures, "\n"), "held-out error") {
+		t.Fatalf("instruction model must expose its held-out error: %+v", baseline)
+	}
+	options.Method = durante.TimeMethodLatencyBoundREP
+	got := requireFit(t, dataset, options)
+	policy := got.CandidatePolicy
+	if !got.Passed || policy == nil || policy.Method != options.Method || policy.LatencyX16NSNumerator != 2*coefficientDenominator ||
+		policy.InstructionNSNumerator != 0 || policy.REPByteNSNumerator != 3*coefficientDenominator {
+		t.Fatalf("latency model did not recover its known weights: %+v", got)
+	}
+	for _, c := range got.Cases {
+		if c.AbsoluteErrorNs != 0 || c.LatencyBoundSpreadPPM == nil || *c.LatencyBoundSpreadPPM != 0 {
+			t.Fatalf("wrong prediction or missing observed zero spread: %+v", c)
+		}
+	}
+
+	// Perturb one held-out count without changing training. Allow arbitrary
+	// prediction errors here to test the candidate's separate stability gate.
+	for i := range dataset.Samples {
+		if sample := &dataset.Samples[i]; sample.WorkloadID == "branch" && sample.Scale == 1 && sample.Repetition == 2 {
+			sample.Metered.WorkMeasurement.LatencyBound.CyclesX16 *= 2
+		}
+	}
+	options.MaxErrorPPM = math.MaxUint64
+	unstable := requireFit(t, dataset, options)
+	if unstable.Passed || unstable.CandidatePolicy == nil || *unstable.CandidatePolicy != *policy ||
+		!strings.Contains(strings.Join(unstable.Failures, "\n"), "branch scale 1: latency bound spread exceeds") {
+		t.Fatalf("unstable latency should fail its gate and preserve training coefficients: %+v", unstable)
+	}
+	options.Method = durante.TimeMethod
+	if result := requireFit(t, dataset, options); !result.Passed {
+		t.Fatalf("latency spread changed qualification of the instruction method: %+v", result)
+	}
+}
+
+func TestReferenceRequiresConsistentLatencyCapability(t *testing.T) {
+	options := syntheticFitOptions()
+	options.Method = durante.TimeMethodLatencyBoundREP
+	if _, err := Fit(syntheticDataset(), options); err == nil {
+		t.Fatal("latency method accepted a dataset collected without a latency counter")
+	}
+	for _, tc := range []struct {
+		name    string
+		version int
+		bound   *durante.LatencyBound
+	}{
+		{"unrequested counter", 0, &durante.LatencyBound{Version: 1, CyclesX16: 4000}},
+		{"missing counter", 1, nil},
+		{"unknown dataset version", 2, nil},
+		{"unknown report version", 1, &durante.LatencyBound{Version: 2, CyclesX16: 4000}},
+		{"below issue floor", 1, &durante.LatencyBound{Version: 1, CyclesX16: 3999}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := syntheticDataset()
+			data.LatencyBoundVersion = tc.version
+			if tc.version == 1 {
+				for i := range data.Samples {
+					report := data.Samples[i].Metered.WorkMeasurement
+					report.LatencyBound = &durante.LatencyBound{Version: 1, CyclesX16: 4 * *report.Instructions}
+				}
+			}
+			data.Samples[0].Metered.WorkMeasurement.LatencyBound = tc.bound
+			if err := validateCollectedMetered(data.Samples[0].Metered, data); err == nil {
+				t.Fatal("collection accepted inconsistent latency metadata")
+			}
+			for _, method := range []string{durante.TimeMethod, durante.TimeMethodLatencyBoundREP} {
+				options.Method = method
+				if evaluation, err := Fit(data, options); err == nil || evaluation.Passed || evaluation.CandidatePolicy != nil {
+					t.Fatalf("%s fitted inconsistent observations: %+v, %v", method, evaluation, err)
+				}
+			}
+		})
 	}
 }

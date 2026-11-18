@@ -65,6 +65,8 @@ type Dataset struct {
 	// RuntimeDeterminism is the option set the collection applied to this
 	// source's measured launcher (empty: none).
 	RuntimeDeterminism string `json:"runtime_determinism,omitempty"`
+	// LatencyBoundVersion binds every metered sample to the requested counter.
+	LatencyBoundVersion int `json:"latency_bound_version,omitempty"`
 }
 
 type FitOptions struct {
@@ -94,6 +96,8 @@ type CaseEvaluation struct {
 	AbsoluteErrorNs      uint64 `json:"absolute_error_ns"`
 	AbsoluteErrorPPM     uint64 `json:"absolute_error_ppm"`
 	Underestimated       bool   `json:"underestimated"`
+	// A zero spread is observed when all latency bounds in the case agree.
+	LatencyBoundSpreadPPM *uint64 `json:"latency_bound_spread_ppm,omitempty"`
 }
 
 type Evaluation struct {

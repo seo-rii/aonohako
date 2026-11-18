@@ -10,6 +10,7 @@ import (
 // a claim that the counters are trusted hardware-retired instructions.
 const TimeMethod = "weighted-work-nanoseconds-v1"
 const TimeMethodREPBreakdown = "weighted-rep-operations-nanoseconds-v2"
+const TimeMethodLatencyBoundREP = "latency-bound-rep-nanoseconds-v1"
 
 // TimePolicy is an operator-supplied, versioned diagnostic conversion. There is
 // deliberately no default policy or default weight. ReferenceID identifies the
@@ -22,6 +23,9 @@ const TimeMethodREPBreakdown = "weighted-rep-operations-nanoseconds-v2"
 // movs_bytes * MOVSByteNSNumerator + stos_bytes * STOSByteNSNumerator. Every
 // selected weight must be positive. REP costs are additive to the instruction
 // count, which already includes each instrumented REP instruction entry.
+// The latency model replaces the instruction term with version 1 cycles_x16
+// multiplied by LatencyX16NSNumerator. The denominator uses the same units as
+// the fitted coefficients, so no additional factor of 16 is applied.
 //
 // RuntimeID is an exact, case-sensitive identity supplied by the caller from
 // trusted execution metadata, ideally including its immutable runtime build.
@@ -40,7 +44,8 @@ type TimePolicy struct {
 	// CPUIDProfile is the virtual processor the model was qualified under.
 	// Empty means host CPUID; it then never applies to profiled counts.
 	CPUIDProfile           string `json:"cpuid_profile,omitempty"`
-	InstructionNSNumerator uint64 `json:"instruction_ns_numerator"`
+	InstructionNSNumerator uint64 `json:"instruction_ns_numerator,omitempty"`
+	LatencyX16NSNumerator  uint64 `json:"latency_x16_ns_numerator,omitempty"`
 	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator,omitempty"`
 	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
 	STOSByteNSNumerator    uint64 `json:"stos_byte_ns_numerator,omitempty"`
@@ -56,7 +61,8 @@ type TimePolicy struct {
 // Milliseconds is the same total rounded up to whole milliseconds.
 type TimeEstimate struct {
 	RuntimeOptionsID       string `json:"runtime_options_id,omitempty"`
-	InstructionNSNumerator uint64 `json:"instruction_ns_numerator"`
+	InstructionNSNumerator uint64 `json:"instruction_ns_numerator,omitempty"`
+	LatencyX16NSNumerator  uint64 `json:"latency_x16_ns_numerator,omitempty"`
 	REPByteNSNumerator     uint64 `json:"rep_byte_ns_numerator,omitempty"`
 	MOVSByteNSNumerator    uint64 `json:"movs_byte_ns_numerator,omitempty"`
 	STOSByteNSNumerator    uint64 `json:"stos_byte_ns_numerator,omitempty"`
@@ -125,13 +131,13 @@ func (p TimePolicy) Validate() error {
 }
 
 func (p TimePolicy) validateWeights() error {
-	if p.InstructionNSNumerator == 0 || p.NSDenominator == 0 {
+	if p.NSDenominator == 0 {
 		return fmt.Errorf("durante time policy requires positive explicit weights and denominator")
 	}
 	switch p.Formula() {
-	case TimeMethod:
+	case TimeMethod, TimeMethodLatencyBoundREP:
 		if p.REPByteNSNumerator == 0 || p.MOVSByteNSNumerator != 0 || p.STOSByteNSNumerator != 0 {
-			return fmt.Errorf("v1 time policy requires only the combined REP weight")
+			return fmt.Errorf("time policy requires only the combined REP weight")
 		}
 	case TimeMethodREPBreakdown:
 		if p.REPByteNSNumerator != 0 || p.MOVSByteNSNumerator == 0 || p.STOSByteNSNumerator == 0 {
@@ -139,6 +145,13 @@ func (p TimePolicy) validateWeights() error {
 		}
 	default:
 		return fmt.Errorf("unsupported durante time method")
+	}
+	if p.Formula() == TimeMethodLatencyBoundREP {
+		if p.LatencyX16NSNumerator == 0 || p.InstructionNSNumerator != 0 {
+			return fmt.Errorf("latency time policy requires a positive latency weight and no instruction weight")
+		}
+	} else if p.InstructionNSNumerator == 0 || p.LatencyX16NSNumerator != 0 {
+		return fmt.Errorf("instruction time policy requires a positive instruction weight and no latency weight")
 	}
 	return nil
 }
@@ -173,8 +186,12 @@ func (p TimePolicy) EstimateWithEligibility(runtimeID string, report Report) (Ti
 	// Sum the exact products before rounding. A v2 model partitions REP bytes
 	// instead of charging both the old total and its operation-specific parts.
 	var total, rep, weight, denominator, remainder big.Int
-	total.SetUint64(*report.Instructions)
-	total.Mul(&total, weight.SetUint64(p.InstructionNSNumerator))
+	work, workWeight := *report.Instructions, p.InstructionNSNumerator
+	if p.Formula() == TimeMethodLatencyBoundREP {
+		work, workWeight = report.LatencyBound.CyclesX16, p.LatencyX16NSNumerator
+	}
+	total.SetUint64(work)
+	total.Mul(&total, weight.SetUint64(workWeight))
 	terms := [][2]uint64{{*report.REPBytes, p.REPByteNSNumerator}}
 	if p.Formula() == TimeMethodREPBreakdown {
 		terms = [][2]uint64{{report.REPBreakdown.MOVSBytes, p.MOVSByteNSNumerator}, {report.REPBreakdown.STOSBytes, p.STOSByteNSNumerator}}
@@ -199,6 +216,7 @@ func (p TimePolicy) EstimateWithEligibility(runtimeID string, report Report) (Ti
 	return TimeEstimate{
 		RuntimeOptionsID:       p.runtimeOptionsID,
 		InstructionNSNumerator: p.InstructionNSNumerator,
+		LatencyX16NSNumerator:  p.LatencyX16NSNumerator,
 		REPByteNSNumerator:     p.REPByteNSNumerator, NSDenominator: p.NSDenominator,
 		MOVSByteNSNumerator: p.MOVSByteNSNumerator, STOSByteNSNumerator: p.STOSByteNSNumerator,
 		Method: p.Formula(), Authority: Authority,

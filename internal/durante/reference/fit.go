@@ -32,8 +32,9 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 		evaluation.Failures = append(evaluation.Failures, err.Error())
 		return evaluation, err
 	}
-	if options.Method != "" && options.Method != durante.TimeMethod {
-		return invalid(fmt.Errorf("reference fitting supports only %s", durante.TimeMethod))
+	useLatency := options.Method == durante.TimeMethodLatencyBoundREP
+	if options.Method != "" && options.Method != durante.TimeMethod && !useLatency {
+		return invalid(fmt.Errorf("reference fitting supports only %s and %s", durante.TimeMethod, durante.TimeMethodLatencyBoundREP))
 	}
 	if options.MinRepetitions < 3 || options.MinRepetitions > 9 || options.MinNativeNs == 0 {
 		return invalid(fmt.Errorf("fit requires min_repetitions between 3 and 9 and positive min_native_ns"))
@@ -44,6 +45,9 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 	profile, err := referenceDatasetProfile(dataset)
 	if err != nil {
 		return invalid(err)
+	}
+	if useLatency && dataset.LatencyBoundVersion != 1 {
+		return invalid(fmt.Errorf("%s requires data collected with latency_bound_version 1", options.Method))
 	}
 	if dataset.Smoke {
 		return invalid(fmt.Errorf("smoke observations cannot qualify a reference-time policy"))
@@ -66,6 +70,11 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 		RuntimeID: runtimeID, Family: profile.Family, EngineProfile: durante.EngineProfile,
 		DispatchProfile: durante.DispatchDefault, CPUIDProfile: dataset.CPUIDProfile,
 		InstructionNSNumerator: 1, REPByteNSNumerator: 1, NSDenominator: math.MaxUint64,
+	}
+	if useLatency {
+		contract.Method = options.Method
+		contract.InstructionNSNumerator = 0
+		contract.LatencyX16NSNumerator = 1
 	}
 	if err := contract.Validate(); err != nil {
 		return invalid(fmt.Errorf("fit options: %w", err))
@@ -90,7 +99,11 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 		native := make([]uint64, 0, 2*len(item.samples))
 		minimumNative := uint64(math.MaxUint64)
 		instructions, rep := make([]uint64, 0, len(item.samples)), make([]uint64, 0, len(item.samples))
+		var latency []uint64
 		for _, sample := range item.samples {
+			if bound := sample.Metered.WorkMeasurement.LatencyBound; bound != nil {
+				latency = append(latency, bound.CyclesX16)
+			}
 			native = append(native, sample.NativeBefore.CPUTimeNs, sample.NativeAfter.CPUTimeNs)
 			minimumNative = min(minimumNative, sample.NativeBefore.CPUTimeNs, sample.NativeAfter.CPUTimeNs)
 			instructions = append(instructions, *sample.Metered.WorkMeasurement.Instructions)
@@ -104,8 +117,16 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 			NativeMedianNs: item.median, NativeSpreadPPM: referencePPM(nativeRange, item.median),
 			InstructionSpreadPPM: referencePPM(instructionRange, instructionMedian), REPSpreadPPM: referencePPM(repRange, repMedian),
 		}
-		evaluation.Cases = append(evaluation.Cases, row)
 		label := fmt.Sprintf("%s scale %d", row.WorkloadID, row.Scale)
+		if len(latency) > 0 {
+			latencyRange, latencyMedian := referenceRange(latency), referenceMedian(latency)
+			spread := referencePPM(latencyRange, latencyMedian)
+			row.LatencyBoundSpreadPPM = &spread
+			if useLatency && referenceExceedsPPM(latencyRange, latencyMedian, options.MaxWorkSpreadPPM) {
+				evaluation.Failures = append(evaluation.Failures, label+": latency bound spread exceeds max_work_spread_ppm")
+			}
+		}
+		evaluation.Cases = append(evaluation.Cases, row)
 		if minimumNative < options.MinNativeNs {
 			evaluation.Failures = append(evaluation.Failures, label+": native observation below min_native_ns")
 		}
@@ -212,7 +233,7 @@ func referenceCases(dataset Dataset, contract durante.TimePolicy) ([]*referenceC
 			name     string
 			response model.RunResponse
 		}{{"native_before", sample.NativeBefore}, {"native_after", sample.NativeAfter}} {
-			if err := validateReferenceNative(native.response, dataset.NativeLimits.TimeMs); err != nil {
+			if err := validateReferenceNative(native.response, dataset.NativeLimits); err != nil {
 				return nil, fmt.Errorf("%s %s: %w", label, native.name, err)
 			}
 		}
@@ -238,14 +259,20 @@ func referenceCases(dataset Dataset, contract durante.TimePolicy) ([]*referenceC
 	return cases, nil
 }
 
-func validateReferenceCPU(response model.RunResponse, limitMs int) error {
+func validateReferenceCPU(response model.RunResponse, cpuLimitMs, wallLimitMs int) error {
 	if response.CPUTimeNs == 0 || response.CPUAccounting == nil || response.CPUTimeNormalization != nil || response.CPUTimeSampling != nil || response.RawCPUTimeNs != nil || response.RawCPUTimeMs != nil {
 		return fmt.Errorf("requires positive unnormalized CPU nanoseconds, accounting metadata, and no automatic sampling")
 	}
 	// Dataset limits were validated before examining any responses, so this
 	// multiplication is bounded by the raw envelope's 600,000 ms ceiling.
-	if response.CPUTimeNs > uint64(limitMs)*1_000_000 {
+	if response.CPUTimeNs > uint64(cpuLimitMs)*1_000_000 {
 		return fmt.Errorf("CPU nanoseconds exceed declared execution cap")
+	}
+	if wallLimitMs > 0 && response.WallTimeMs > int64(wallLimitMs) {
+		return fmt.Errorf("wall milliseconds exceed declared execution cap")
+	}
+	if response.StdoutTruncated || response.StderrTruncated {
+		return fmt.Errorf("reference execution truncated its output")
 	}
 	wantMS := response.CPUTimeNs / 1_000_000
 	if response.CPUTimeNs%1_000_000 != 0 {
@@ -265,27 +292,30 @@ func validateReferenceCPU(response model.RunResponse, limitMs int) error {
 	return nil
 }
 
-func validateReferenceNative(response model.RunResponse, limitMs int) error {
-	if response.Status != model.RunStatusAccepted || response.ExitCode == nil || *response.ExitCode != 0 || response.VerdictSource != "stdout" || response.WorkMeasurement != nil || response.WorkMeasurementExecution != nil || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil || response.StdoutTruncated || response.StderrTruncated {
+func validateReferenceNative(response model.RunResponse, limits model.Limits) error {
+	if response.Status != model.RunStatusAccepted || response.ExitCode == nil || *response.ExitCode != 0 || response.VerdictSource != "stdout" || response.WorkMeasurement != nil || response.WorkMeasurementExecution != nil || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil {
 		return fmt.Errorf("requires an accepted, normally exited unmetered ordinary run with matching output")
 	}
-	return validateReferenceCPU(response, limitMs)
+	return validateReferenceCPU(response, limits.TimeMs, limits.WallTimeMs)
 }
 
 func validateReferenceMetered(response model.RunResponse, dataset Dataset, contract durante.TimePolicy) error {
 	d := response.WorkMeasurementExecution
-	if response.Status != model.RunStatusInitFail || response.VerdictSource != "durante_complete" || response.Score != nil || response.ExitCode == nil || *response.ExitCode != 0 || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil || response.StdoutTruncated || response.StderrTruncated || d == nil {
+	if response.Status != model.RunStatusInitFail || response.VerdictSource != "durante_complete" || response.Score != nil || response.ExitCode == nil || *response.ExitCode != 0 || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil || d == nil {
 		return fmt.Errorf("requires a normally exited complete diagnostic envelope")
 	}
 	if d.Authority != durante.Authority || d.State != "complete" || d.OutputMatches == nil || !*d.OutputMatches || d.TerminationSource != "stdout" || d.NominalLimits != dataset.NativeLimits || d.RawLimits != dataset.MeteredLimits || d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" || d.TimeEstimateEligibility != nil {
 		return fmt.Errorf("diagnostic output, limits, or envelope contract mismatch")
 	}
-	if err := validateReferenceCPU(response, dataset.MeteredLimits.CPUTimeMs); err != nil {
+	if err := validateReferenceCPU(response, dataset.MeteredLimits.CPUTimeMs, dataset.MeteredLimits.WallTimeMs); err != nil {
 		return err
 	}
 	report := response.WorkMeasurement
 	if report == nil || !report.ValidInstallationIdentity() {
 		return fmt.Errorf("missing or incompatible Durante installation identity")
+	}
+	if err := validateReferenceLatencyBound(report, dataset.LatencyBoundVersion); err != nil {
+		return err
 	}
 	if _, err := contract.Estimate(contract.RuntimeID, *report); err != nil {
 		return fmt.Errorf("incompatible measurement report: %w", err)
@@ -293,8 +323,19 @@ func validateReferenceMetered(response model.RunResponse, dataset Dataset, contr
 	return nil
 }
 
+func validateReferenceLatencyBound(report *durante.Report, version int) error {
+	if version != 0 && version != 1 {
+		return fmt.Errorf("unsupported dataset latency_bound_version %d", version)
+	}
+	if (version == 1) != (report.LatencyBound != nil) || !report.ValidLatencyBound() {
+		return fmt.Errorf("metered latency bound is invalid or disagrees with dataset latency_bound_version")
+	}
+	return nil
+}
+
 func fitReferenceCoefficients(cases []*referenceCase, template durante.TimePolicy) (durante.TimePolicy, error) {
-	ii, ir, rr, it, rt := new(big.Rat), new(big.Rat), new(big.Rat), new(big.Rat), new(big.Rat)
+	useLatency := template.Formula() == durante.TimeMethodLatencyBoundREP
+	ww, wr, rr, wt, rt := new(big.Rat), new(big.Rat), new(big.Rat), new(big.Rat), new(big.Rat)
 	for _, item := range cases {
 		if item.workload.Split != SplitTrain {
 			continue
@@ -302,35 +343,43 @@ func fitReferenceCoefficients(cases []*referenceCase, template durante.TimePolic
 		weight := big.NewRat(1, int64(len(item.samples)))
 		for _, sample := range item.samples {
 			report := sample.Metered.WorkMeasurement
-			x := new(big.Rat).SetFrac(new(big.Int).SetUint64(*report.Instructions), new(big.Int).SetUint64(item.median))
+			work := *report.Instructions
+			if useLatency {
+				work = report.LatencyBound.CyclesX16
+			}
+			x := new(big.Rat).SetFrac(new(big.Int).SetUint64(work), new(big.Int).SetUint64(item.median))
 			y := new(big.Rat).SetFrac(new(big.Int).SetUint64(*report.REPBytes), new(big.Int).SetUint64(item.median))
-			ii.Add(ii, new(big.Rat).Mul(weight, new(big.Rat).Mul(x, x)))
-			ir.Add(ir, new(big.Rat).Mul(weight, new(big.Rat).Mul(x, y)))
+			ww.Add(ww, new(big.Rat).Mul(weight, new(big.Rat).Mul(x, x)))
+			wr.Add(wr, new(big.Rat).Mul(weight, new(big.Rat).Mul(x, y)))
 			rr.Add(rr, new(big.Rat).Mul(weight, new(big.Rat).Mul(y, y)))
-			it.Add(it, new(big.Rat).Mul(weight, x))
+			wt.Add(wt, new(big.Rat).Mul(weight, x))
 			rt.Add(rt, new(big.Rat).Mul(weight, y))
 		}
 	}
-	product := new(big.Rat).Mul(ii, rr)
-	determinant := new(big.Rat).Sub(product, new(big.Rat).Mul(ir, ir))
+	product := new(big.Rat).Mul(ww, rr)
+	determinant := new(big.Rat).Sub(product, new(big.Rat).Mul(wr, wr))
 	if determinant.Sign() <= 0 {
 		return durante.TimePolicy{}, fmt.Errorf("training counters are rank deficient; both coefficients must be identifiable")
 	}
 	// This fixed numerical gate rejects almost-collinear feature columns:
-	// det/(ii*rr) = 1 - squared cosine must be at least 1e-12. It is not a
+	// det/(ww*rr) = 1 - squared cosine must be at least 1e-12. It is not a
 	// deployment accuracy threshold; the explicit prediction-error gate is separate.
 	if new(big.Rat).Mul(determinant, big.NewRat(1_000_000_000_000, 1)).Cmp(product) < 0 {
 		return durante.TimePolicy{}, fmt.Errorf("training counters are ill-conditioned: normalized determinant below 1e-12")
 	}
-	instruction := new(big.Rat).Quo(new(big.Rat).Sub(new(big.Rat).Mul(it, rr), new(big.Rat).Mul(rt, ir)), determinant)
-	rep := new(big.Rat).Quo(new(big.Rat).Sub(new(big.Rat).Mul(rt, ii), new(big.Rat).Mul(it, ir)), determinant)
-	if instruction.Sign() <= 0 || rep.Sign() <= 0 {
-		return durante.TimePolicy{}, fmt.Errorf("training fit does not have strictly positive instruction and REP coefficients")
+	work := new(big.Rat).Quo(new(big.Rat).Sub(new(big.Rat).Mul(wt, rr), new(big.Rat).Mul(rt, wr)), determinant)
+	rep := new(big.Rat).Quo(new(big.Rat).Sub(new(big.Rat).Mul(rt, ww), new(big.Rat).Mul(wt, wr)), determinant)
+	if work.Sign() <= 0 || rep.Sign() <= 0 {
+		return durante.TimePolicy{}, fmt.Errorf("training fit does not have strictly positive work and REP coefficients")
 	}
-	var err error
-	template.InstructionNSNumerator, err = quantizeReferenceCoefficient(instruction)
+	workWeight, err := quantizeReferenceCoefficient(work)
 	if err != nil {
-		return durante.TimePolicy{}, fmt.Errorf("instruction coefficient: %w", err)
+		return durante.TimePolicy{}, fmt.Errorf("work coefficient: %w", err)
+	}
+	if useLatency {
+		template.LatencyX16NSNumerator = workWeight
+	} else {
+		template.InstructionNSNumerator = workWeight
 	}
 	template.REPByteNSNumerator, err = quantizeReferenceCoefficient(rep)
 	if err != nil {

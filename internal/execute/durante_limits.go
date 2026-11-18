@@ -97,7 +97,7 @@ func validDiagnosticWorkReport(language string, report *durante.Report) bool {
 	}
 	return report != nil && report.Schema == 1 && report.ClientVersion == 1 &&
 		report.Complete && report.Reason == "" && report.Authority == durante.Authority &&
-		report.ValidDiagnosticContract() && report.ValidREPTelemetry() && report.ValidInstallationIdentity() &&
+		report.ValidDiagnosticContract() && report.ValidREPTelemetry() && report.ValidLatencyBound() && report.ValidInstallationIdentity() &&
 		((report.SignalsObserved == 0 && report.Quality == "uninterrupted") || (report.SignalsObserved > 0 && report.Quality == "signals_observed")) &&
 		report.EngineProfile == durante.EngineProfile && report.Family == family &&
 		(report.DispatchProfile == durante.DispatchDefault || (family == "cpp" && report.DispatchProfile == durante.DispatchGLIBC241 && report.HostLibc == "2.41")) &&
@@ -105,6 +105,26 @@ func validDiagnosticWorkReport(language string, report *durante.Report) bool {
 		report.Instructions != nil && *report.Instructions > 0 && report.REPBytes != nil && report.REPEntries != nil &&
 		(*report.REPEntries > 0 || *report.REPBytes == 0) &&
 		report.UnsupportedREPEntries != nil && report.REPEnabled && report.Processes > 0 && report.Images >= report.Processes
+}
+
+// Complete observations from the downstream runner must match the counter
+// selected by the control plane. Interrupted roles may carry no totals.
+func validateRemoteMeasurementCounters(req *model.RunRequest, response model.RunResponse, cfg durante.Config) error {
+	if err := validateRemoteWorkMeasurement(req, response); err != nil {
+		return err
+	}
+	matches := func(r *durante.Report) bool {
+		return r == nil || !r.Complete || (r.LatencyBound != nil) == cfg.LatencyBound
+	}
+	if !matches(response.WorkMeasurement) {
+		return fmt.Errorf("invalid remote result: work measurement latency counter mismatch")
+	}
+	for _, role := range response.WorkMeasurements {
+		if !matches(role.Report) {
+			return fmt.Errorf("invalid remote result: %s latency counter mismatch", role.Role)
+		}
+	}
+	return nil
 }
 
 func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResponse) error {
