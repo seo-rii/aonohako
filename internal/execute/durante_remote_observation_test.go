@@ -218,6 +218,12 @@ func TestRemotePipelineObservationsBindRowsToNativeSteps(t *testing.T) {
 	if got := get(block); got.Steps[1].State != "complete" {
 		t.Fatal("rejected a complete exchange that received native WA")
 	}
+	req.Pipeline.Steps[1].Executor.InteractorLimits = &model.Limits{TimeMs: 1}
+	primary.Steps[1].CPUTimeByRole.Interactor.CPUTimeMs = 2
+	if got := get(block); got.Steps[1].State != "unavailable" || got.Steps[0].State != "complete" {
+		t.Fatal("credited an exchange whose judge exceeded its CPU limit")
+	}
+	primary.Steps[1].CPUTimeByRole.Interactor.CPUTimeMs = 0
 	primary.Steps[1].CPUTimeByRole.Contestant.ExitCode = nil
 	if got := get(block); got.Steps[1].State != "unavailable" {
 		t.Fatal("credited an interrupted interactive contestant")

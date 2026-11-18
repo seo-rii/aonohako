@@ -80,14 +80,32 @@ func pipelineRoleTimesMatch(step model.StepResult, roles *model.PipelineRoleTime
 		default:
 			return false
 		}
-		if role.CPUTimeMs < 0 || role.CPUTimeMs > step.CPUTimeMs ||
+		if !roleCPUMillisecondsMatch(role.CPUTimeMs, role.CPUTimeNs) || role.CPUTimeMs > step.CPUTimeMs ||
 			(role.Status == model.RunStatusAccepted && role.ExitCode != nil && *role.ExitCode != 0) {
 			return false
 		}
 	}
+	if c.RawCPUTimeNs != nil && j.RawCPUTimeNs != nil {
+		rawMs := ceilCPUMilliseconds(*c.RawCPUTimeNs) + ceilCPUMilliseconds(*j.RawCPUTimeNs)
+		if step.RawCPUTimeMs == nil || *step.RawCPUTimeMs != rawMs {
+			return false
+		}
+	}
 	return equalPipelineCounter(step.ExitCode, c.ExitCode) && step.CPUTimeMs-c.CPUTimeMs == j.CPUTimeMs &&
-		equalPipelineCounter(step.CPUTimeNs, sumStepNanoseconds(c.CPUTimeNs, j.CPUTimeNs)) &&
-		equalPipelineCounter(step.RawCPUTimeNs, sumStepNanoseconds(c.RawCPUTimeNs, j.RawCPUTimeNs))
+		roleNanosecondsMatch(step.CPUTimeNs, c.CPUTimeNs, j.CPUTimeNs) &&
+		roleNanosecondsMatch(step.RawCPUTimeNs, c.RawCPUTimeNs, j.RawCPUTimeNs)
+}
+
+func roleCPUMillisecondsMatch(ms int64, ns *uint64) bool {
+	return ms >= 0 && (ns == nil || ms == ceilCPUMilliseconds(*ns))
+}
+
+func roleNanosecondsMatch(total, first, second *uint64) bool {
+	if first == nil || second == nil {
+		return total == nil
+	}
+	// A missing counter and a sum that cannot fit have different meanings.
+	return total != nil && *first <= *total && *total-*first == *second
 }
 
 func equalPipelineCounter[T int | int64 | uint64](a, b *T) bool {

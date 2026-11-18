@@ -142,11 +142,20 @@ func remotePipelineObservation(req *model.RunRequest, primary model.RunResponse,
 			check = "interactive_transcript"
 			roles := native.CPUTimeByRole
 			eligible = !artifactFailure && !native.StdoutTruncated && completedInteractiveExchange(native) && roles.Contestant.ProgramID == native.ProgramID &&
-				roles.Interactor.ProgramID == strings.TrimSpace(step.Executor.InteractorProgramID)
+				roles.Interactor.ProgramID == strings.TrimSpace(step.Executor.InteractorProgramID) &&
+				interactiveRoleCPUWithinLimits(roles.Contestant.CPUTimeMs, roles.Interactor.CPUTimeMs,
+					&model.RunRequest{Limits: step.Limits, Interactor: &model.InteractorSpec{Limits: step.Executor.InteractorLimits}})
 		}
 		verifyRemoteStepObservation(row, batch, cfg, eligible, check)
 	}
 	return block
+}
+
+func interactiveRoleCPUWithinLimits(contestantMs, interactorMs int64, req *model.RunRequest) bool {
+	judgeLimit := interactorRunRequest(req).Limits.TimeMs
+	return contestantMs >= 0 && interactorMs >= 0 &&
+		(req.Limits.TimeMs <= 0 || contestantMs <= int64(req.Limits.TimeMs)) &&
+		(judgeLimit <= 0 || interactorMs <= int64(judgeLimit))
 }
 
 func remoteLegacyObservation(req *model.RunRequest, primary model.RunResponse, cfg durante.Config, raw json.RawMessage) *model.WorkMeasurementObservation {

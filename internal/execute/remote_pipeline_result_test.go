@@ -82,6 +82,19 @@ func TestRemotePipelineNativeResult(t *testing.T) {
 		if err := validateRemotePipelineResult(req, &response); err != nil {
 			t.Fatal(err)
 		}
+		// Changing the split can leave both the native millisecond and
+		// nanosecond totals unchanged while falsely attributing work to a role.
+		later := uint64(2_000_000)
+		remainder := nano - later
+		roles.Contestant.CPUTimeNs, roles.Interactor.CPUTimeNs = &later, &remainder
+		if validateRemotePipelineResult(req, &response) == nil {
+			t.Fatal("accepted role nanoseconds inconsistent with their native milliseconds")
+		}
+		roles.Contestant.CPUTimeNs, roles.Interactor.CPUTimeNs = &cpu, &nothing
+		maximum, extra := ^uint64(0), uint64(1)
+		if roleNanosecondsMatch(nil, &maximum, &extra) {
+			t.Fatal("accepted overflow as a missing precise total")
+		}
 		roles.Interactor.Status = model.RunStatusWA
 		if validateRemotePipelineResult(req, &response) == nil {
 			t.Fatal("accepted a native accepted stage from a rejecting interactor")
