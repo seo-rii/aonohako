@@ -283,6 +283,17 @@ Neither fit exported a policy. Repeating on a dedicated reference host would
 test how much host variability contributed. A revised model needs a new
 predeclared validation set, especially for branch, sort and memory work.
 
+Two held-out inputs show why refitting positive weights alone cannot meet
+the gate on this dataset. In all three repetitions, branch at scale 1 has
+at least 229,460,596 instructions and 917,843,604 latency units. Sort at
+scale 2 has 177,135,248 instructions and 708,542,180 latency units. Both
+have 3,624 REP bytes. Any nonnegative weighting of these counters therefore
+estimates at least as much time for the branch case. Its native median is
+34.1025 ms and the largest passing prediction is 40.923 ms. The sort median
+is 71.154 ms and its smallest passing prediction is 56.9232 ms. Those bounds
+require the opposite order. This post-collection check uses the reported
+observations to identify a missing distinction and fits no new weights.
+
 ## Local multi-language smoke result
 
 The 2026-11-15 local Linux amd64 smoke run used the verified v4 SDK/client and
