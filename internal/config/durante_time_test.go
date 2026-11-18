@@ -13,6 +13,7 @@ const duranteTimeImageForLoad = "sha256:0123456789abcdef0123456789abcdef01234567
 func configureDuranteTimeLoadTest(t *testing.T) {
 	t.Helper()
 	configureDuranteResourceLoadTest(t)
+	t.Setenv("AONOHAKO_DURANTE_TIME_MODELS", "")
 	// These weights exercise configuration only; they are not calibrated.
 	policy := durante.TimePolicy{
 		ModelID: "configuration-test", ModelVersion: 1, ReferenceID: "synthetic-test-only",
@@ -50,7 +51,7 @@ func TestLoadDuranteTimePolicyIsOptIn(t *testing.T) {
 	for _, image := range []string{"", duranteTimeImageForLoad} {
 		t.Setenv("AONOHAKO_DURANTE_RUNTIME_IMAGE", image)
 		cfg, err := Load()
-		if err != nil || cfg.Execution.WorkMeasurement.TimePolicy != nil || cfg.Execution.WorkMeasurement.RuntimeImage != image {
+		if err != nil || cfg.Execution.WorkMeasurement.TimePolicy != nil || cfg.Execution.WorkMeasurement.TimeModels != nil || cfg.Execution.WorkMeasurement.RuntimeImage != image {
 			t.Fatalf("disabled time configuration changed: %+v, %v", cfg.Execution.WorkMeasurement, err)
 		}
 	}

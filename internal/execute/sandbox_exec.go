@@ -372,16 +372,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if prepared, ok := streams.stdin.(*sandboxPreparedStdin); ok && prepared.file != nil {
 		workspaceAvailableBytes -= prepared.outsideWorkspaceBytes
 	}
-	baseEnv := util.BaseEnv()
-	innerEnv := append(append(baseEnv[:0:0], baseEnv...), security.ThreadLimitEnv()...)
-	innerEnv = append(innerEnv, security.WorkspaceScopedEnv(ws.RootDir)...)
-	if !req.EnableNetwork {
-		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
-	}
+	innerEnv := sandboxBaseEnvironment(ws, req)
 	imgPath := firstImagePath(req.SidecarOutputs)
-	if imgPath != "" {
-		innerEnv = append(innerEnv, "IMG_CAPTURE=1")
-	}
 
 	runLang := profiles.NormalizeRunLang(req.Lang)
 	isC3 := runLang == "c3"
@@ -569,8 +561,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	// Select every sandbox permission and resource limit from the original
 	// runtime before wrapping it. Instrumentation grants no extra capability.
 	if streams.workMeasurement != nil {
+		var err error
+		finalCommand, innerEnv, err = streams.workMeasurement.Runtime(runLang, finalCommand, innerEnv)
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "durante runtime options: " + err.Error()}
+		}
 		finalCommand = streams.workMeasurement.Wrap(finalCommand)
-		innerEnv = streams.workMeasurement.Environment(innerEnv)
 	}
 	helperReq := sandbox.ExecRequest{
 		Command:                  finalCommand,
@@ -742,7 +738,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	cmd.ExtraFiles = append([]*os.File{requestRead, targetReadyWrite, targetReleaseRead}, streams.extraFiles...)
 	cmd.Env = append(
-		append(baseEnv[:0:0], baseEnv...),
+		util.BaseEnv(),
 		sandbox.HelperModeEnv+"="+sandbox.HelperModeExec,
 		sandbox.RequestFDEnv+"=3",
 		sandbox.TargetReadyFDEnv+"=4",

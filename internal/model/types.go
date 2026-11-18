@@ -297,40 +297,45 @@ type SidecarError struct {
 }
 
 type RunRequest struct {
-	WorkMeasurement       bool                     `json:"work_measurement,omitempty"`
-	WorkMeasurementLimits *durante.ResourceLimits  `json:"work_measurement_limits,omitempty"`
-	WorkMeasurementTime   bool                     `json:"work_measurement_time,omitempty"`
-	Lang                  string                   `json:"lang"`
-	EntryMode             string                   `json:"entry_mode,omitempty"`
-	Binaries              []Binary                 `json:"binaries"`
-	Programs              []RunProgram             `json:"programs,omitempty"`
-	Steps                 []RunStep                `json:"steps,omitempty"`
-	Stdin                 string                   `json:"stdin"`
-	StdinURL              string                   `json:"stdin_url,omitempty"`
-	ExpectedStdout        string                   `json:"expected_stdout,omitempty"`
-	ExpectedStdoutURL     string                   `json:"expected_stdout_url,omitempty"`
-	Limits                Limits                   `json:"limits"`
-	CaptureLimits         *CaptureLimits           `json:"capture_limits,omitempty"`
-	ProblemID             string                   `json:"problem_id,omitempty"`
-	RuntimeProfile        string                   `json:"runtime_profile,omitempty"`
-	PythonLibraryMode     pythonpolicy.LibraryMode `json:"python_library_mode,omitempty"`
-	DisallowedCPUFeatures []cpupolicy.Feature      `json:"disallowed_cpu_features,omitempty"`
-	EnableNetwork         bool                     `json:"enable_network,omitempty"`
-	EntryPoint            string                   `json:"entry_point,omitempty"`
-	SPJ                   *SPJSpec                 `json:"spj,omitempty"`
-	Interactor            *InteractorSpec          `json:"interactor,omitempty"`
-	Communication         *CommunicationSpec       `json:"communication,omitempty"`
-	FileOutputs           []OutputFile             `json:"file_outputs,omitempty"`
-	SidecarOutputs        []OutputFile             `json:"sidecar_outputs,omitempty"`
-	EmitLogs              *bool                    `json:"emit_logs,omitempty"`
-	IgnoreTLE             bool                     `json:"ignore_tle,omitempty"`
-	Pipeline              *PipelineV1              `json:"pipeline,omitempty"`
+	WorkMeasurement         bool                     `json:"work_measurement,omitempty"`
+	WorkMeasurementLimits   *durante.ResourceLimits  `json:"work_measurement_limits,omitempty"`
+	WorkMeasurementTime     bool                     `json:"work_measurement_time,omitempty"`
+	WorkMeasurementJudge    bool                     `json:"work_measurement_judge,omitempty"`
+	WorkMeasurementShadow   bool                     `json:"work_measurement_shadow,omitempty"`
+	WorkMeasurementPeerTime *PeerTimeRequest         `json:"work_measurement_peer_time,omitempty"`
+	Lang                    string                   `json:"lang"`
+	EntryMode               string                   `json:"entry_mode,omitempty"`
+	Binaries                []Binary                 `json:"binaries"`
+	Programs                []RunProgram             `json:"programs,omitempty"`
+	Steps                   []RunStep                `json:"steps,omitempty"`
+	Stdin                   string                   `json:"stdin"`
+	StdinURL                string                   `json:"stdin_url,omitempty"`
+	ExpectedStdout          string                   `json:"expected_stdout,omitempty"`
+	ExpectedStdoutURL       string                   `json:"expected_stdout_url,omitempty"`
+	Limits                  Limits                   `json:"limits"`
+	CaptureLimits           *CaptureLimits           `json:"capture_limits,omitempty"`
+	ProblemID               string                   `json:"problem_id,omitempty"`
+	RuntimeProfile          string                   `json:"runtime_profile,omitempty"`
+	PythonLibraryMode       pythonpolicy.LibraryMode `json:"python_library_mode,omitempty"`
+	DisallowedCPUFeatures   []cpupolicy.Feature      `json:"disallowed_cpu_features,omitempty"`
+	EnableNetwork           bool                     `json:"enable_network,omitempty"`
+	EntryPoint              string                   `json:"entry_point,omitempty"`
+	SPJ                     *SPJSpec                 `json:"spj,omitempty"`
+	Interactor              *InteractorSpec          `json:"interactor,omitempty"`
+	Communication           *CommunicationSpec       `json:"communication,omitempty"`
+	FileOutputs             []OutputFile             `json:"file_outputs,omitempty"`
+	SidecarOutputs          []OutputFile             `json:"sidecar_outputs,omitempty"`
+	EmitLogs                *bool                    `json:"emit_logs,omitempty"`
+	IgnoreTLE               bool                     `json:"ignore_tle,omitempty"`
+	Pipeline                *PipelineV1              `json:"pipeline,omitempty"`
 }
 
 type RunResponse struct {
 	WorkMeasurement          *durante.Report           `json:"work_measurement,omitempty"`
 	WorkMeasurements         []WorkMeasurementProcess  `json:"work_measurements,omitempty"`
 	WorkMeasurementExecution *WorkMeasurementExecution `json:"work_measurement_execution,omitempty"`
+	WorkMeasurementJudgment  *WorkMeasurementJudgment  `json:"work_measurement_judgment,omitempty"`
+	WorkMeasurementShadow    *WorkMeasurementShadow    `json:"work_measurement_shadow,omitempty"`
 	Status                   string                    `json:"status"`
 	TimeMs                   int64                     `json:"time_ms"`
 	WallTimeMs               int64                     `json:"wall_time_ms"`
@@ -363,13 +368,37 @@ type RunResponse struct {
 // separate. ExecutionStatus and TerminationSource describe the actual execution
 // before interactive or match coordinator verdicts reinterpret a peer shutdown.
 type WorkMeasurementProcess struct {
-	Role              string          `json:"role"`
-	ProgramID         string          `json:"program_id"`
-	ParticipantIndex  *int            `json:"participant_index,omitempty"`
-	ExecutionStatus   string          `json:"execution_status"`
-	ExitCode          *int            `json:"exit_code,omitempty"`
-	TerminationSource string          `json:"termination_source,omitempty"`
-	Report            *durante.Report `json:"report,omitempty"`
+	Role              string                `json:"role"`
+	ProgramID         string                `json:"program_id"`
+	ParticipantIndex  *int                  `json:"participant_index,omitempty"`
+	ExecutionStatus   string                `json:"execution_status"`
+	ExitCode          *int                  `json:"exit_code,omitempty"`
+	TerminationSource string                `json:"termination_source,omitempty"`
+	Report            *durante.Report       `json:"report,omitempty"`
+	TimeBudget        *PeerTimeBudgetResult `json:"time_budget,omitempty"`
+}
+
+// PeerTimeRequest compares each role's completed diagnostic observation with an
+// explicit budget. It does not replace runtime limits or the peer verdict.
+type PeerTimeRequest struct {
+	Version int              `json:"version"`
+	Budgets []PeerTimeBudget `json:"budgets"`
+}
+
+type PeerTimeBudget struct {
+	Role             string `json:"role"`
+	ProgramID        string `json:"program_id"`
+	ParticipantIndex *int   `json:"participant_index,omitempty"`
+	TimeMs           int    `json:"time_ms"`
+}
+
+type PeerTimeBudgetResult struct {
+	Version     int                   `json:"version"`
+	Authority   string                `json:"authority"`
+	BudgetMs    int                   `json:"budget_ms"`
+	Estimate    *durante.TimeEstimate `json:"estimate,omitempty"`
+	Exceeded    *bool                 `json:"exceeded,omitempty"`
+	Unavailable string                `json:"unavailable,omitempty"`
 }
 
 // WorkMeasurementExecution describes an opt-in diagnostic execution. Its
@@ -377,15 +406,56 @@ type WorkMeasurementProcess struct {
 // The enclosing response is always InitFail until an authoritative judgement
 // policy exists, including when this diagnostic completed successfully.
 type WorkMeasurementExecution struct {
-	Authority               string                 `json:"authority"`
-	State                   string                 `json:"state"`
-	NominalLimits           Limits                 `json:"nominal_limits"`
-	RawLimits               durante.ResourceLimits `json:"raw_limits"`
-	OutputMatches           *bool                  `json:"output_matches,omitempty"`
-	TerminationSource       string                 `json:"termination_source,omitempty"`
-	TimeEstimate            *durante.TimeEstimate  `json:"time_estimate,omitempty"`
-	NominalTimeExceeded     *bool                  `json:"nominal_time_exceeded,omitempty"`
-	TimeEstimateUnavailable string                 `json:"time_estimate_unavailable,omitempty"`
+	Authority               string                   `json:"authority"`
+	State                   string                   `json:"state"`
+	NominalLimits           Limits                   `json:"nominal_limits"`
+	RawLimits               durante.ResourceLimits   `json:"raw_limits"`
+	OutputMatches           *bool                    `json:"output_matches,omitempty"`
+	TerminationSource       string                   `json:"termination_source,omitempty"`
+	TimeEstimate            *durante.TimeEstimate    `json:"time_estimate,omitempty"`
+	NominalTimeExceeded     *bool                    `json:"nominal_time_exceeded,omitempty"`
+	TimeEstimateUnavailable string                   `json:"time_estimate_unavailable,omitempty"`
+	TimeEstimateEligibility *durante.TimeEligibility `json:"time_estimate_eligibility,omitempty"`
+}
+
+// WorkMeasurementShadow compares the authoritative verdict of this response
+// with a separate judge-mode execution of the same request. It never changes
+// the enclosing Status, Score or resource values; see docs/durante-judging.md.
+// Response is the trimmed shadow execution (no stdout/stderr/sidecars), kept so
+// a control plane can recompute the shadow verdict from its raw observation.
+type WorkMeasurementShadow struct {
+	Version          int          `json:"version"`
+	Authority        string       `json:"authority"`
+	Agreement        string       `json:"agreement"`
+	PrimaryStatus    string       `json:"primary_status"`
+	PrimaryCPUTimeMs int64        `json:"primary_cpu_time_ms"`
+	ShadowStatus     string       `json:"shadow_status,omitempty"`
+	Unavailable      string       `json:"unavailable,omitempty"`
+	Response         *RunResponse `json:"response,omitempty"`
+}
+
+// Shadow agreement values.
+const (
+	ShadowAgree       = "agree"
+	ShadowDisagree    = "disagree"
+	ShadowUnavailable = "unavailable"
+)
+
+// WorkMeasurementJudgment is judge mode's verdict over a diagnostic execution.
+// Unlike the pure envelope, judge mode sets the response Status to this Verdict.
+// The counts remain diagnostic_only and application-mutable; the verdict is an
+// operator policy over them, not a trusted measurement. See docs/durante-judging.md.
+type WorkMeasurementJudgment struct {
+	Authority         string `json:"authority"`
+	Verdict           string `json:"verdict"`
+	Reason            string `json:"reason,omitempty"`
+	State             string `json:"state"`
+	NominalTimeMs     int64  `json:"nominal_time_ms"`
+	EstimatedTimeMs   *int64 `json:"estimated_time_ms,omitempty"`
+	EstimatedTimeNs   *int64 `json:"estimated_time_ns,omitempty"`
+	IntegrityMode     string `json:"integrity_mode"`
+	IntegrityFlagged  bool   `json:"integrity_flagged,omitempty"`
+	TerminationSource string `json:"termination_source,omitempty"`
 }
 
 const (

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"debug/elf"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -25,24 +26,33 @@ import (
 	"time"
 
 	"aonohako/internal/api"
+	"aonohako/internal/compilewire"
 	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
+	"aonohako/internal/profiles"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runtimeidentity"
+	"aonohako/internal/rustpolicy"
 	"aonohako/internal/util"
 )
 
 const (
-	collectionRequestTimeout = 90 * time.Second
-	collectionCompileBytes   = 16 << 20
-	collectionExecuteBytes   = 2 << 20
-	collectionArtifactBytes  = 8 << 20
-	collectionCompilerFlags  = "-O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=c++20"
+	collectionRequestTimeout   = 90 * time.Second
+	collectionCompileBytes     = 16 << 20
+	collectionRustCompileBytes = 24 << 20
+	collectionExecuteBytes     = 2 << 20
+	collectionArtifactBytes    = 8 << 20
+	collectionCompilerFlags    = "-O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=c++20"
 )
 
 type CollectOptions struct {
+	Language string
+	// Zero selects the documented corpus default: CPP20 256 MiB, runtime
+	// corpus 512 MiB. The resolved value is recorded in both dataset limits.
+	MemoryMB    int
 	Smoke       bool
 	Repetitions int
 	OnSample    func(Dataset) error
@@ -52,16 +62,26 @@ type CollectOptions struct {
 // API. Every sample is ordered native-before, metered, native-after, using one
 // compiled artifact. Failed attempts remain in an incomplete returned dataset.
 func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (dataset Dataset, err error) {
+	profile, profileErr := ResolveCorpusProfile(options.Language)
+	memoryMB := options.MemoryMB
+	if memoryMB == 0 {
+		memoryMB = profile.DefaultMemoryMB
+	}
 	dataset = Dataset{
-		Schema: Schema, CorpusID: CorpusID, Smoke: options.Smoke,
-		StartedAt: time.Now().UTC().Format(time.RFC3339Nano), SourceLanguage: "CPP20",
+		Schema: Schema, CorpusID: profile.CorpusID, Smoke: options.Smoke,
+		StartedAt: time.Now().UTC().Format(time.RFC3339Nano), SourceLanguage: profile.SourceLanguage,
 		RuntimeImage:    cfg.Execution.WorkMeasurement.RuntimeImage,
 		DispatchProfile: cfg.Execution.WorkMeasurement.DispatchProfile,
+		CPUIDProfile:    cfg.Execution.WorkMeasurement.CPUIDProfile,
 		Repetitions:     options.Repetitions,
-		NativeLimits:    model.Limits{TimeMs: 10000, WallTimeMs: 30000, MemoryMB: 256},
-		MeteredLimits:   durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: 256},
+		NativeLimits:    model.Limits{TimeMs: 10000, WallTimeMs: 30000, MemoryMB: memoryMB},
+		MeteredLimits:   durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: memoryMB},
 	}
+	dataset.RuntimeDeterminism = cfg.Execution.WorkMeasurement.RuntimeDeterminismFor(profiles.NormalizeRunLang(profile.SourceLanguage))
 	defer func() { recordCollectionFailure(&dataset, err) }()
+	if profileErr != nil {
+		return dataset, profileErr
+	}
 	if err = ctx.Err(); err != nil {
 		return dataset, err
 	}
@@ -78,7 +98,7 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	if actualPlatform != cfg.Execution.Platform {
 		return dataset, fmt.Errorf("reference execution configuration differs from the process environment")
 	}
-	dataset.RunnerSHA256, dataset.Environment, err = collectionEnvironment(ctx)
+	dataset.RunnerSHA256, dataset.Environment, err = collectionEnvironment(ctx, profile)
 	if err != nil {
 		return dataset, fmt.Errorf("reference environment: %w", err)
 	}
@@ -106,7 +126,11 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport}
-	if err = collectCorpus(ctx, client, httpServer.URL, Corpus(options.Smoke), options, &dataset); err != nil {
+	corpus, err := CorpusForLanguage(profile.SourceLanguage, options.Smoke)
+	if err != nil {
+		return dataset, err
+	}
+	if err = collectCorpus(ctx, client, httpServer.URL, corpus, options, &dataset); err != nil {
 		return dataset, err
 	}
 	if err = ctx.Err(); err != nil {
@@ -117,6 +141,13 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 }
 
 func validateCollectionConfig(cfg config.Config, options CollectOptions, limits durante.ResourceLimits) error {
+	profile, err := ResolveCorpusProfile(options.Language)
+	if err != nil {
+		return err
+	}
+	if options.MemoryMB < 0 || options.MemoryMB > 4096 || (options.MemoryMB != 0 && options.MemoryMB != limits.MemoryMB) {
+		return fmt.Errorf("reference memory option must match the recorded raw limit within 1..4096 MiB")
+	}
 	minimum := 3
 	if options.Smoke {
 		minimum = 1
@@ -143,7 +174,7 @@ func validateCollectionConfig(cfg config.Config, options CollectOptions, limits 
 	if measurement.DispatchProfile != durante.DispatchDefault {
 		return fmt.Errorf("reference corpus requires the default dispatch profile")
 	}
-	if _, err := measurement.Family("CPP20"); err != nil {
+	if _, err := measurement.Family(profile.SourceLanguage); err != nil {
 		return err
 	}
 	if !filepath.IsAbs(measurement.Drrun) || !filepath.IsAbs(measurement.Client) {
@@ -160,6 +191,14 @@ func validateCollectionConfig(cfg config.Config, options CollectOptions, limits 
 
 func collectCorpus(ctx context.Context, client *http.Client, baseURL string, corpus []Workload, options CollectOptions, dataset *Dataset) (err error) {
 	defer func() { recordCollectionFailure(dataset, err) }()
+	profile, err := referenceDatasetProfile(*dataset)
+	if err != nil {
+		return err
+	}
+	selected, err := ResolveCorpusProfile(options.Language)
+	if err != nil || selected.SourceLanguage != profile.SourceLanguage {
+		return fmt.Errorf("reference collection options do not match the dataset language")
+	}
 	if len(corpus) == 0 {
 		return fmt.Errorf("reference corpus is empty")
 	}
@@ -170,13 +209,23 @@ func collectCorpus(ctx context.Context, client *http.Client, baseURL string, cor
 		}
 		var compiled model.CompileResponse
 		compileRequest := model.CompileRequest{
-			Lang: "CPP20", Target: "Main", EmitLogs: &emitLogs,
-			Sources: []model.Source{{Name: "Main.cpp", DataB64: base64.StdEncoding.EncodeToString([]byte(workload.Source))}},
+			Lang: profile.SourceLanguage, Target: "Main", EmitLogs: &emitLogs,
+			Sources: []model.Source{{Name: profile.SourceName, DataB64: base64.StdEncoding.EncodeToString([]byte(workload.Source))}},
 		}
-		if err := postCollectionSSE(ctx, client, baseURL+"/compile", compileRequest, &compiled, collectionCompileBytes, collectionRequestTimeout); err != nil {
+		if profile.Family == "native" {
+			compileRequest.RustCrateMode = rustpolicy.CrateModeStdlib
+		}
+		compileBytes := int64(collectionCompileBytes)
+		if profile.SourceLanguage == "RUST2024" {
+			// A normal rustc artifact can exceed the original 8 MiB C++
+			// collector cap. Keep the API's 16 MiB single-file contract,
+			// with room for its base64 encoding and response metadata.
+			compileBytes = collectionRustCompileBytes
+		}
+		if err := postCollectionSSE(ctx, client, baseURL+"/compile", compileRequest, &compiled, compileBytes, collectionRequestTimeout); err != nil {
 			return fmt.Errorf("%s compile: %w", workload.ID, err)
 		}
-		binary, binaryHash, err := collectionArtifact(compiled)
+		binary, binaryHash, err := collectionProfileArtifact(profile, compiled, workload.Source)
 		if err != nil {
 			return fmt.Errorf("%s compile: %w", workload.ID, err)
 		}
@@ -195,8 +244,11 @@ func collectCorpus(ctx context.Context, client *http.Client, baseURL string, cor
 				dataset.Samples = append(dataset.Samples, sample)
 				current := &dataset.Samples[len(dataset.Samples)-1]
 				request := model.RunRequest{
-					Lang: "CPP20", Binaries: []model.Binary{binary}, Stdin: input.Input,
+					Lang: profile.SourceLanguage, Binaries: []model.Binary{binary}, Stdin: input.Input,
 					ExpectedStdout: input.ExpectedStdout, Limits: dataset.NativeLimits, EmitLogs: &emitLogs,
+				}
+				if profile.Family == "cpython" || profile.Family == "pypy" {
+					request.PythonLibraryMode = pythonpolicy.LibraryModeStdlib
 				}
 				phases := []struct {
 					name    string
@@ -251,19 +303,65 @@ func collectCorpus(ctx context.Context, client *http.Client, baseURL string, cor
 }
 
 func collectionArtifact(response model.CompileResponse) (model.Binary, string, error) {
+	profile, _ := ResolveCorpusProfile("CPP20")
+	return collectionProfileArtifact(profile, response, "")
+}
+
+func collectionProfileArtifact(profile CorpusProfile, response model.CompileResponse, source string) (model.Binary, string, error) {
 	if response.Status != model.CompileStatusOK {
 		return model.Binary{}, "", fmt.Errorf("status=%s reason=%s stderr=%s", response.Status, collectionExcerpt(response.Reason), collectionExcerpt(response.Stderr))
 	}
-	if len(response.Artifacts) != 1 || response.Artifacts[0].Name != "Main" || response.Artifacts[0].Mode != "exec" {
-		return model.Binary{}, "", fmt.Errorf("expected one executable Main artifact")
+	var artifact model.Artifact
+	if profile.Family == "cpython" || profile.Family == "pypy" {
+		if len(response.Artifacts) != 2 {
+			return model.Binary{}, "", fmt.Errorf("expected source and compiled bytecode artifacts")
+		}
+		seen := map[string]bool{}
+		for _, candidate := range response.Artifacts {
+			if seen[candidate.Name] || candidate.Mode != "" {
+				return model.Binary{}, "", fmt.Errorf("invalid Python artifact name or mode")
+			}
+			seen[candidate.Name] = true
+			switch candidate.Name {
+			case profile.SourceName:
+				if candidate.DataB64 != base64.StdEncoding.EncodeToString([]byte(source)) {
+					return model.Binary{}, "", fmt.Errorf("compiler changed the reference Python source")
+				}
+			case profile.ArtifactName:
+				artifact = candidate
+			default:
+				return model.Binary{}, "", fmt.Errorf("unexpected Python artifact")
+			}
+		}
+	} else {
+		if len(response.Artifacts) != 1 || response.Artifacts[0].Name != profile.ArtifactName || response.Artifacts[0].Mode != "exec" {
+			return model.Binary{}, "", fmt.Errorf("expected one executable Main artifact")
+		}
+		artifact = response.Artifacts[0]
 	}
-	artifact := response.Artifacts[0]
-	if len(artifact.DataB64) > base64.StdEncoding.EncodedLen(collectionArtifactBytes) {
-		return model.Binary{}, "", fmt.Errorf("reference artifact exceeds %d bytes", collectionArtifactBytes)
+	maxArtifactBytes := collectionArtifactBytes
+	if profile.SourceLanguage == "RUST2024" {
+		maxArtifactBytes = compilewire.ArtifactBytes
+	}
+	if len(artifact.DataB64) > base64.StdEncoding.EncodedLen(maxArtifactBytes) {
+		return model.Binary{}, "", fmt.Errorf("reference artifact exceeds %d bytes", maxArtifactBytes)
 	}
 	data, err := base64.StdEncoding.Strict().DecodeString(artifact.DataB64)
 	if err != nil || len(data) == 0 || base64.StdEncoding.EncodeToString(data) != artifact.DataB64 {
 		return model.Binary{}, "", fmt.Errorf("reference artifact is not canonical nonempty base64")
+	}
+	if len(data) > maxArtifactBytes {
+		return model.Binary{}, "", fmt.Errorf("reference artifact exceeds %d bytes", maxArtifactBytes)
+	}
+	if profile.Family == "cpython" || profile.Family == "pypy" {
+		// compileall is explicitly asked for a checked-hash PEP 552 header.
+		// The interpreter, whose version is recorded separately, validates its
+		// own magic/code format on execution. No source fallback is supplied.
+		if len(data) <= 16 || data[2] != '\r' || data[3] != '\n' || binary.LittleEndian.Uint32(data[4:8]) != 3 {
+			return model.Binary{}, "", fmt.Errorf("reference bytecode lacks a checked-hash header")
+		}
+		digest := collectionSHA(data)
+		return model.Binary{Name: artifact.Name, DataB64: artifact.DataB64, Mode: artifact.Mode, SHA256: digest}, digest, nil
 	}
 	file, err := elf.NewFile(bytes.NewReader(data))
 	if err != nil {
@@ -274,7 +372,7 @@ func collectionArtifact(response model.CompileResponse) (model.Binary, string, e
 		return model.Binary{}, "", fmt.Errorf("reference artifact is not an amd64 executable")
 	}
 	for _, segment := range file.Progs {
-		if segment.Type == elf.PT_INTERP {
+		if segment.Type == elf.PT_INTERP && profile.SourceLanguage == "CPP20" {
 			return model.Binary{}, "", fmt.Errorf("reference artifact unexpectedly requires a dynamic interpreter")
 		}
 	}
@@ -319,6 +417,10 @@ func validateCollectedRawCPU(response model.RunResponse) error {
 }
 
 func validateCollectedMetered(response model.RunResponse, dataset Dataset) error {
+	profile, err := referenceDatasetProfile(dataset)
+	if err != nil {
+		return err
+	}
 	if err := validateCollectedRawCPU(response); err != nil {
 		return err
 	}
@@ -329,18 +431,19 @@ func validateCollectedMetered(response model.RunResponse, dataset Dataset) error
 	if d.State != "complete" || d.Authority != durante.Authority || d.OutputMatches == nil || !*d.OutputMatches || d.TerminationSource != "stdout" || d.RawLimits != dataset.MeteredLimits || d.NominalLimits != dataset.NativeLimits {
 		return fmt.Errorf("metered execution returned inconsistent completion or limits")
 	}
-	if d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil {
+	if d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" || d.TimeEstimateEligibility != nil || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil {
 		return fmt.Errorf("raw corpus collection returned unsolicited converted time or peer metadata")
 	}
 	r := response.WorkMeasurement
-	if r == nil || !r.Complete || r.Schema != 1 || r.ClientVersion != 1 || r.Reason != "" || r.Authority != durante.Authority || r.Metric != durante.Metric || r.Scope != durante.Scope || r.Family != "cpp" || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile {
+	if r == nil || r.Family != profile.Family || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile || r.CPUIDProfile != dataset.CPUIDProfile ||
+		r.RuntimeDeterminism != dataset.RuntimeDeterminism {
 		return fmt.Errorf("metered observation is absent, incomplete, or incompatible")
 	}
-	if !r.ValidDiagnosticContract() || !r.ValidInstallationIdentity() || !r.ValidREPTelemetry() || !r.REPEnabled || r.Instructions == nil || *r.Instructions == 0 || r.Processes <= 0 || r.Images < r.Processes {
-		return fmt.Errorf("metered observation lacks a complete diagnostic contract or counters")
+	if !r.ValidInstallationIdentity() {
+		return fmt.Errorf("metered observation lacks a compatible installation identity")
 	}
-	if r.SignalsObserved != 0 || r.Quality != "uninterrupted" || *r.UnsupportedREPEntries != 0 {
-		return fmt.Errorf("metered observation is not convertible: signals or unsupported REP work")
+	if eligibility := r.TimeConversionEligibility(durante.TimeMethod); !eligibility.Eligible {
+		return fmt.Errorf("metered observation is not convertible: %s", strings.Join(eligibility.ReasonCodes, ", "))
 	}
 	return nil
 }
@@ -350,14 +453,18 @@ func postCollectionSSE(ctx context.Context, client *http.Client, endpoint string
 	if err != nil || parsed.Scheme != "http" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || !net.ParseIP(parsed.Hostname()).IsLoopback() || (parsed.Path != "/compile" && parsed.Path != "/execute") {
 		return fmt.Errorf("reference requests must use the local loopback compile/execute API")
 	}
-	if maxBytes <= 0 || maxBytes > collectionCompileBytes || timeout <= 0 {
+	if maxBytes <= 0 || maxBytes > collectionRustCompileBytes || timeout <= 0 {
 		return fmt.Errorf("invalid reference HTTP budget")
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("encode request: %w", err)
 	}
-	if len(body) > collectionCompileBytes {
+	requestBytes := collectionCompileBytes
+	if request, ok := payload.(model.RunRequest); ok && request.Lang == "RUST2024" {
+		requestBytes = collectionRustCompileBytes
+	}
+	if len(body) > requestBytes {
 		return fmt.Errorf("reference request exceeds body limit")
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -430,7 +537,7 @@ func postCollectionSSE(ctx context.Context, client *http.Client, endpoint string
 	}
 }
 
-func collectionEnvironment(ctx context.Context) (string, map[string]string, error) {
+func collectionEnvironment(ctx context.Context, profile CorpusProfile) (string, map[string]string, error) {
 	executable, err := os.Open("/proc/self/exe")
 	if err != nil {
 		return "", nil, err
@@ -460,7 +567,7 @@ func collectionEnvironment(ctx context.Context) (string, map[string]string, erro
 	if cpuModel == "" || strings.TrimSpace(string(kernel)) == "" {
 		return "", nil, fmt.Errorf("kernel or CPU model is unavailable")
 	}
-	compiler, err := util.ResolveCommandPath("g++", util.BaseEnv())
+	compiler, err := util.ResolveCommandPath(profile.Compiler, util.BaseEnv())
 	if err != nil {
 		return "", nil, err
 	}
@@ -481,7 +588,9 @@ func collectionEnvironment(ctx context.Context) (string, map[string]string, erro
 	environment := map[string]string{
 		"os": runtime.GOOS, "arch": runtime.GOARCH, "kernel": strings.TrimSpace(string(kernel)),
 		"cpu_model": cpuModel, "logical_cpus": strconv.Itoa(runtime.NumCPU()),
-		"compiler_path": compiler, "compiler_version": version, "compiler_flags": collectionCompilerFlags,
+		"compiler_path": compiler, "compiler_version": version, "compiler_flags": profile.CompilerFlags,
+		"source_language": profile.SourceLanguage, "runtime_family": profile.Family,
+		"entry_artifact": profile.ArtifactName,
 	}
 	return hex.EncodeToString(hash.Sum(nil)), environment, nil
 }

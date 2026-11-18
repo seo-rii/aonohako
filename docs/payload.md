@@ -121,7 +121,10 @@ error.
 {
   "lang": "binary",                          // runtime language key (see Supported Languages)
   "work_measurement": false,                // optional Durante diagnostics; requires source-language profiles when true
-  "work_measurement_time": false,           // optional C/C++ reference-time estimate; also requires the raw envelope and an operator model
+  "work_measurement_time": false,           // optional reference-time estimate; also requires the raw envelope and an approved operator execution profile
+  "work_measurement_judge": false,          // optional work-based verdict (virtual ms); operator-gated, requires work_measurement_time + envelope; see docs/durante-judging.md
+  "work_measurement_shadow": false,         // optional non-deciding comparison: ordinary verdict plus a judge-mode shadow run; requires work_measurement_limits only
+  "work_measurement_peer_time": null,       // optional version-1 per-role diagnostic budgets for interactor/communication; cannot use the ordinary time flag/envelope
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
@@ -250,13 +253,42 @@ modes, and legacy steps do not support this flag. The separate
 `work_measurement_limits` raw diagnostic envelope supports ordinary runs only.
 `work_measurement_time: true` additionally requests an operator-configured
 reference-time estimate. It requires `work_measurement: true`, a valid
-`work_measurement_limits` envelope, and an ordinary C/C++ source profile.
-It is rejected for Python/PyPy, other runtime families, generic `binary`, peers,
-SPJs, pipelines, entry modes, and steps. Requests cannot select coefficients.
-The operator binds the model to the canonical source profile and actual immutable
-Durante execution image; a remote control plane uses the downstream image/model.
+`work_measurement_limits` envelope, and an ordinary registered source profile.
+The legacy operator policy supports one C/C++ source profile. The optional shared
+model registry can explicitly bind compatible source profiles, including CPython,
+PyPy and other supported families, to the same coefficients. Family registration
+alone never enables a time model; JVM remains unavailable pending qualification.
+Generic `binary`, SPJs, pipelines, entry modes, and steps remain unsupported.
+Peers use the separate `work_measurement_peer_time` object described below.
+Requests cannot select coefficients. The operator binds the model to the canonical
+source profile, engine/dispatch profile and actual immutable Durante execution
+image; a remote control plane uses the downstream image/model.
 Omitting the flag preserves existing measurement behavior. Estimated time remains
 diagnostic and does not change raw resource accounting or grant a student verdict.
+
+`work_measurement_judge: true` turns the diagnostic observation into an actual
+`Accepted`/`Wrong Answer`/`Time Limit Exceeded`/`Runtime Error` verdict, using
+`limits.time_ms` as a virtual-millisecond limit for the configured runtime. It is
+operator-gated (`AONOHAKO_DURANTE_JUDGE_MODE`) per family and requires
+`work_measurement: true`, `work_measurement_time: true` and a valid
+`work_measurement_limits` envelope. Unlike the pure diagnostic envelope, a judge
+response sets `status` to the verdict and may set `score`, and returns a
+`work_measurement_judgment` object. An observation whose counts cannot convert
+(signals, partial REP, overflow) is reported as `Runtime Error`, never silently
+accepted; a raw resource stop is `Time Limit Exceeded`; memory is not judged. The
+counts remain `diagnostic_only` and application-mutable; `AONOHAKO_DURANTE_JUDGE_INTEGRITY=plausibility`
+withholds a verdict when the reported work is implausibly small against the
+instrumented run's own raw CPU time. See [work-based judging](durante-judging.md).
+
+`work_measurement_shadow: true` keeps the ordinary verdict authoritative and adds
+a `work_measurement_shadow` comparison with a separate judge-mode execution of the
+same input under `work_measurement_limits`. It cannot be combined with the other
+`work_measurement` options, and operator mode `shadow` or `on` must judge the
+family; otherwise the comparison is reported `unavailable` without affecting the
+verdict. See [shadow comparison](durante-judging.md#shadow-comparison).
+Requested conversion also reports versioned `time_estimate_eligibility` when an
+execution envelope exists, identifying exclusions while preserving the existing
+`time_estimate_unavailable` strings. It does not relax signal or REP coverage checks.
 See [Durante diagnostics](durante.md) for operator configuration and result semantics.
 `capture_limits` is separate from `limits.output_bytes`. An omitted object or
 member retains the legacy response cap of `min(limits.output_bytes, 64 KiB)`;
@@ -600,6 +632,36 @@ ordinary singular `work_measurement`; the reports do not change verdicts or
 combine the peers' instruction counts. Each complete report may include optional
 `rep_breakdown` MOVS/STOS bytes and entries; absence means unspecified detail,
 and stopped roles omit all totals. See [the per-role contract](durante.md#interactive-and-communication-observations).
+
+To compare each role's completed estimate with an explicit diagnostic budget,
+also set `work_measurement_peer_time`. The object has `version: 1` and `budgets`,
+with one `{role, program_id, participant_index?, time_ms}` entry for every actual
+role. `time_ms` is an integer from 1 through 600000; `participant_index` is required
+only for participants. Request order is irrelevant, and repeated uses of one
+program need distinct seat entries. For example, interactive budgets are:
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 1,
+    "budgets": [
+      {"role": "contestant", "program_id": "contestant", "time_ms": 1000},
+      {"role": "interactor", "program_id": "interactor", "time_ms": 2000}
+    ]
+  }
+}
+```
+
+All roles need an operator-approved source/image/dispatch time profile before
+execution or remote upload. This object supplies no model coefficients and
+cannot be mixed with `work_measurement_time`, `work_measurement_limits`, or an
+ordinary/SPJ/pipeline/steps request. The result adds `time_budget` to each role,
+with either the complete `estimate` and strict nanosecond `exceeded` comparison,
+or an `unavailable` reason. It is diagnostic after execution: it does not stop
+peers, expand their resource limits, or alter score/match/verdict/CPU/RSS.
+Omitting the object preserves existing behavior. See
+[per-role budgets and configuration](durante.md#per-role-diagnostic-time-budgets).
 
 The interactor is invoked as:
 

@@ -90,6 +90,27 @@ func TestDuranteInteractiveIntegration(t *testing.T) {
 			t.Fatalf("unmetered interactive execution changed: %+v", response)
 		}
 	})
+	for _, bound := range []bool{false, true} {
+		name := "diagnostic_time_budgets"
+		if bound {
+			name += "_bound_options"
+		}
+		t.Run(name, func(t *testing.T) {
+			timeCfg := peerTimeIntegrationConfig(t, cfg)
+			req := request("accept", true)
+			addPeerTimeIntegrationBudgets(t, req)
+			if bound {
+				timeCfg = bindIntegrationRuntimeOptions(t, timeCfg, req)
+			}
+			timeService := NewWithConfig(config.Config{Execution: config.ExecutionConfig{WorkMeasurement: timeCfg}})
+			response := timeService.Run(context.Background(), req, Hooks{})
+			if response.Status != model.RunStatusAccepted || response.Score == nil || *response.Score != 1 {
+				t.Fatalf("diagnostic time budgets changed the interactor verdict: %+v", response)
+			}
+			assertReports(t, req, response, [2]bool{true, true})
+			assertPeerTimeIntegrationBudgets(t, req, response, timeCfg)
+		})
+	}
 	t.Run("contestant CPU limit", func(t *testing.T) {
 		req := request("burn", true)
 		req.Limits.TimeMs = 200

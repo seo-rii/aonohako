@@ -4,6 +4,9 @@ An explicitly requested supported-language run can execute under Durante and ret
 `work_measurement` alongside its ordinary verdict, CPU, wall and memory values.
 Interactive and communication-v1/v2 runs return separate role observations in
 `work_measurements` instead.
+The opt-in, operator-gated [work-based judging](durante-judging.md) path turns a
+completed C/C++-style observation into an actual AC/WA/TLE/RE verdict using
+`limits.time_ms` as a virtual-millisecond limit; it is off by default.
 The work metric counts application basic blocks across process images. Raw work
 units remain separate from scheduled CPU time. An optional reference-time
 estimate uses an explicit operator model and does not change TLE rules.
@@ -73,7 +76,14 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_DURANTE_DISPATCH_PROFILE` | `default`, or the C/C++ diagnostic profile `glibc-2.41-sse2-v1`. |
 | `AONOHAKO_DURANTE_RESOURCE_POLICY` | Optional strict JSON operator policy for separate raw CPU/wall/RSS diagnostic limits; disabled when absent. |
 | `AONOHAKO_DURANTE_TIME_POLICY` | Optional strict `TimePolicy` JSON with every model field and positive integer coefficient explicitly supplied. Enables requested C/C++ reference-time estimates with a resource policy. |
-| `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with a time policy. |
+| `AONOHAKO_DURANTE_TIME_MODELS` | Optional strict schema-1 (legacy) or schema-2 (effective runtime options) registry of shared coefficient models and explicit execution profiles. Mutually exclusive with `AONOHAKO_DURANTE_TIME_POLICY`; family registration alone enables no profile. |
+| `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with either time setting, independently of the model's profile bindings. |
+| `AONOHAKO_DURANTE_CPUID_PROFILE` | Empty (default) exposes host CPUID. `x86-64-v1` or `x86-64-v2` makes the client report one fixed virtual processor to every application CPUID/XGETBV, so library and runtime dispatch, and therefore counts, do not follow the Cloud Run instance's processor. Complete reports carry the client's `cpuid_profile` receipt; a missing or different receipt makes the observation unavailable. Requires an enabled family. See [CPUID profiles](https://github.com/seo-rii/durante/blob/main/docs/CPUID_PROFILE.md). |
+| `AONOHAKO_DURANTE_RUNTIME_DETERMINISM` | Empty or `off` (default) runs every launcher unchanged. `v1` pins runtime-internal nondeterminism of measured executions only: Node (`JAVASCRIPT`, and sources that run as JavaScript) gets `--predictable`, and CPython gets hash seed 0 (`-I` is replaced by `-s -P` and every `PYTHON*` variable except `PYTHONHASHSEED=0` is removed, because isolated mode ignores `PYTHONHASHSEED`); PyPy gets `PYTHONHASHSEED=0`, which it reads even under `-I`. Native targets and other launchers are unchanged. The options are part of the effective runtime-options descriptor, complete reports for a pinned launcher carry `runtime_determinism`, and an estimate requires the report to match the configuration. Schema 1 time models cannot bind a pinned launcher; use schema 2. Required by judge mode for `cpython`, `pypy` and `javascript-wasm`. Requires an enabled family. See [Runtime determinism](durante-runtime-options.md#runtime-determinism). |
+| `AONOHAKO_DURANTE_JUDGE_MODE` | `on` enables work-based judging (virtual-millisecond verdicts) and shadow comparisons; `shadow` enables only non-deciding `work_measurement_shadow` comparisons; empty or `off` disables both. See [work-based judging](durante-judging.md). |
+| `AONOHAKO_DURANTE_JUDGE_FAMILIES` | Comma-separated families a judge-mode request may ask to judge. Each must be an enabled, qualified measurement family. |
+| `AONOHAKO_DURANTE_JUDGE_INTEGRITY` | `off` (default) trusts the counts; `plausibility` additionally requires the instrumented run's raw CPU time to be consistent with the converted work. |
+| `AONOHAKO_DURANTE_JUDGE_INTEGRITY_RATIO` | With `plausibility`, the maximum believable ratio of instrumented raw CPU nanoseconds to converted virtual nanoseconds; a higher observed ratio withholds the verdict. |
 
 For example, configure `AONOHAKO_DURANTE_FAMILIES=cpp` and add
 `"work_measurement": true` to a normal run request with `"lang": "CPP20"`.
@@ -273,6 +283,84 @@ raw envelope remains restricted to ordinary single-program requests and is
 rejected with interactive or communication requests. It does not silently expand
 every peer's resource allowance.
 
+### Per-role diagnostic time budgets
+
+Interactive and communication v1/v2 requests can additionally set
+`work_measurement_peer_time`. It requires `work_measurement: true` and a version-1
+budget for **every actual role**, identified by `role`, `program_id`, and the
+participant's zero-based `participant_index`. Budget order is irrelevant;
+communication-v1 seats running the same program still need separate budgets.
+Each `time_ms` is an integer from 1 through 600000. Duplicated, missing, or extra
+role identities are rejected. For an interactive request, add:
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 1,
+    "budgets": [
+      {"role": "contestant", "program_id": "contestant", "time_ms": 1000},
+      {"role": "interactor", "program_id": "interactor", "time_ms": 2000}
+    ]
+  }
+}
+```
+
+For communication, use `role: "participant"` with the requested program ID and
+seat index for each participant, followed by a `role: "manager"` budget with its
+program ID and no index. For example, two v1 entries may both have
+`program_id: "solver"`, distinguished by indices 0 and 1. Non-participant roles
+must omit `participant_index`.
+
+Every role must have a selectable operator time policy for its declared source
+profile, deployment image, and dispatch before execution or remote upload starts.
+The [shared-model registry](#shared-models-and-approved-execution-profiles) lets
+different approved source profiles select one model without duplicating weights.
+Both v1 aggregate-REP and v2 MOVS/STOS formulas are supported. A legacy single
+policy is sufficient when every role uses its one approved source profile.
+Requests supply budgets only; they cannot supply or override model coefficients.
+
+After execution, each `work_measurements[]` entry gains a `time_budget` object:
+
+```jsonc
+{
+  "version": 1,
+  "authority": "diagnostic_only",
+  "budget_ms": 1000,
+  "estimate": { /* complete TimeEstimate, including model, coefficients and ns/ms */ },
+  "exceeded": false
+}
+```
+
+The comparison is strictly `estimate.nanoseconds > budget_ms * 1000000`;
+equality does not exceed the budget. Only complete, normally exited,
+uninterrupted observations with current installation/profile identity and
+observed REP detail are convertible. A normal nonzero exit may retain an
+estimate while its original verdict remains a failure. Coordinator stops,
+cancellation and unstarted roles instead have `unavailable:
+"execution_not_complete"`; absent or incompatible reports have
+`observation_unavailable` or `incompatible_observation`. Signals, partial REP,
+legacy missing REP detail, and arithmetic overflow yield
+`observation_not_convertible`. Unavailable results omit both `estimate` and
+`exceeded`. Other completed roles retain their own estimates when one role fails.
+A pre-execution initialization failure may still omit the entire role array.
+
+This is a **post-execution diagnostic comparison**. It does not stop a program
+when the diagnostic budget is crossed, change CPU/wall/memory limits, create a
+cross-role total, or change status, score, match outcome, or raw CPU/RSS/counts.
+Existing measured peer resource limits still include instrumentation overhead.
+The option cannot be combined with ordinary `work_measurement_time`,
+`work_measurement_limits`, SPJs, pipelines, entry modes, or steps. Peer raw-resource
+envelopes and online budget enforcement are not implemented by this option.
+
+The remote control plane independently selects each role's model and recomputes
+the full result. It rejects different budgets, coefficients, estimates, reasons,
+unsolicited results, and a downstream runner that ignores the requested option.
+Configure the actual downstream execution image on both sides. Without this
+option, `time_budget` is absent and the existing peer behavior is unchanged.
+The integration fixtures use synthetic arithmetic weights only; they do not
+supply calibrated production coefficients.
+
 ## Process trees and sandbox boundaries
 
 The engine follows supported children and exec images. Parent and child counters
@@ -310,7 +398,7 @@ Build the overlay target `durante-validation` from the same source as `runtime`,
 then run it as root with networking disabled. Its default entrypoint executes:
 
 ```text
-durante-execute.test -test.v -test.run ^TestDurante(Sandbox|ResourceEnvelope|TimeEstimate|Interactive|Communication)Integration$ -test.timeout 240s
+durante-execute.test -test.v -test.run ^TestDurante(Sandbox|ResourceEnvelope|TimeEstimate|Judge|Interactive|Communication)Integration$ -test.timeout 240s
 ```
 
 After tagging that build `aonohako-durante-validation:local`, pass its actual image
@@ -409,18 +497,125 @@ trusted credited-time or credited-memory policy is enabled by this change.
 `work_measurement_time: true` asks the execution API to apply the operator's
 `internal/durante.TimePolicy` to a completed diagnostic observation. This option
 requires both `work_measurement: true` and `work_measurement_limits`, and accepts
-only ordinary C/C++ source profiles such as `C11` or `CPP20`. Python/PyPy, other
-runtime families, ambiguous `binary`, interactive/communication runs, SPJs,
-pipelines, entry modes, and steps do not support time conversion. Without this
-flag, the existing measurement admission rules remain unchanged.
+ordinary registered source profiles explicitly covered by the operator's time
+configuration. The legacy single policy retains its C/C++ scope. The shared-model
+registry below can approve compatible families such as CPython and PyPy. JVM
+execution remains unavailable pending sandbox qualification. Ambiguous `binary`,
+SPJs, pipelines, entry modes, and steps do not support time conversion.
+Interactive/communication runs use the separate
+[`work_measurement_peer_time` option](#per-role-diagnostic-time-budgets) rather
+than this ordinary envelope flag. Without this flag, the existing measurement admission
+rules remain unchanged.
 
-The operator must enable `cpp`, configure a valid resource policy, and supply
-both `AONOHAKO_DURANTE_TIME_POLICY` and `AONOHAKO_DURANTE_RUNTIME_IMAGE`. The time
+For the existing single-policy format, the operator must enable `cpp`, configure
+a valid resource policy, and supply both `AONOHAKO_DURANTE_TIME_POLICY` and
+`AONOHAKO_DURANTE_RUNTIME_IMAGE`. The time
 policy's engine and dispatch profiles must match the measurement configuration.
 Its `runtime_id` must exactly equal `<canonical source-language ID>@<image digest>`;
 for example, `CPP20@sha256:<64 lowercase hex digits>`. A model for `CPP20` does
 not also admit `C11` or `CPP17`. Source aliases resolve to their canonical profile
-before this comparison.
+before this comparison. Existing single-policy configuration and response JSON
+remain compatible.
+
+### Shared models and approved execution profiles
+
+Alternatively, set `AONOHAKO_DURANTE_TIME_MODELS` and leave
+`AONOHAKO_DURANTE_TIME_POLICY` empty. A model stores one set of exact coefficients;
+each profile selects a model ID/version and separately names its canonical source,
+family, image, engine and dispatch. Several source languages can use the same model
+without copying or fitting a separate set of coefficients for each language.
+
+The following registry illustrates the shape only. **Its coefficients and
+qualification IDs are synthetic, not a calibrated cross-language model.** Replace
+the image placeholders with immutable image digests and qualification IDs with
+records supporting each intended execution profile before configuring estimates.
+
+```json
+{
+  "schema": 1,
+  "models": [{
+    "model_id": "shared-arithmetic-example",
+    "model_version": 1,
+    "reference_id": "arithmetic-fixture-only",
+    "method": "weighted-work-nanoseconds-v1",
+    "coefficients": {
+      "instruction_ns_numerator": 1,
+      "rep_byte_ns_numerator": 1,
+      "ns_denominator": 1
+    }
+  }],
+  "profiles": [{
+    "source_language": "CPP20",
+    "family": "cpp",
+    "runtime_image": "<actual-overlay-image-digest>",
+    "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
+    "dispatch_profile": "default",
+    "model_id": "shared-arithmetic-example",
+    "model_version": 1,
+    "qualification_id": "synthetic-cpp20-example"
+  }, {
+    "source_language": "PYTHON3",
+    "family": "cpython",
+    "runtime_image": "<actual-overlay-image-digest>",
+    "engine_profile": "dynamorio-11.3-durante-v5-vm32m",
+    "dispatch_profile": "default",
+    "model_id": "shared-arithmetic-example",
+    "model_version": 1,
+    "qualification_id": "synthetic-python3-example"
+  }]
+}
+```
+
+All fields are required except model `method`, whose absence means
+`weighted-work-nanoseconds-v1`, and binding `cpuid_profile`. An explicitly empty
+method is rejected. `cpuid_profile` names the virtual processor the binding's
+qualification evidence used; a binding without it applies only while host
+CPUID is visible, and a binding with it applies only when
+`AONOHAKO_DURANTE_CPUID_PROFILE` is the same profile. The legacy single
+`AONOHAKO_DURANTE_TIME_POLICY` accepts the same optional field with the same
+rule. Estimates record the profile, and a report whose receipt differs is not
+converted (`runtime_profile_mismatch`). The
+registry accepts at most 32 models, 128 profiles
+and 64 KiB of JSON. Unknown fields, duplicates, nulls, noncanonical source IDs,
+unknown model versions and ambiguous profile bindings are rejected. Each model
+ID/version is unique; each source/image/engine/dispatch/CPUID-profile combination
+has one binding in schema 1. Schema 2 also includes the effective runtime-options ID in this key.
+The optional `glibc-2.41-sse2-v1` dispatch profile retains its C/C++ restriction.
+
+The source family must also be enabled in `AONOHAKO_DURANTE_FAMILIES`, and an
+independent `AONOHAKO_DURANTE_RUNTIME_IMAGE` plus a valid resource policy are still
+required. A registry may list other images or dispatch profiles, but only a binding
+matching this execution image and configured dispatch is selectable. `profiles: []`
+registers models without approving any execution. Adding a family or a model never
+creates missing bindings. A `qualification_id` records an operator's approval; the
+service does not verify that external record or infer CPU-time accuracy from it.
+Adding a JVM binding cannot bypass its existing execution gate.
+
+Schema 1 bindings match source, image, engine and dispatch only. They remain
+unbound with respect to effective runtime options and must not be read as
+qualification of every configuration within one image. Keep their runtime
+profile, operator tuning, Python library mode and memory-derived heap settings
+fixed to their evidence. Schema 2 additionally requires an exact generated
+runtime-options descriptor for its explicitly supported launchers; mismatches
+are rejected before local execution or remote upload, without fallback. See
+[effective runtime options](durante-runtime-options.md) for migration, supported
+launchers, operator inspection and the boundary of this configuration identity.
+Neither format supplies qualification evidence or an enforceable live budget.
+
+Selection resolves to the existing `TimePolicy` and `time_estimate` response shape,
+including the selected canonical `SOURCE@image` runtime ID. The runner and remote
+control plane each hold independent immutable configuration snapshots. Neither
+request payloads nor returned estimates choose the model or its coefficients.
+
+These shared coefficients express a common mapping from observed machine work.
+They do not require two implementations of the same algorithm to have identical
+counts: interpreter, runtime, library and generated-code work is included. A shared
+work-score definition is distinct from predicting actual CPU nanoseconds; CPU-time
+accuracy requires representative held-out validation. The existing CPP20 corpus
+does not qualify other language profiles, and this registry adds no production
+weights or credited-time verdict policy.
+
+### Single-policy example and result semantics
 
 Use the actual final Durante overlay image identity from deployment metadata.
 This value is an operator assertion; the service does not discover or attest its
@@ -473,6 +668,10 @@ estimated_ns = ceil((instructions * instruction_ns_numerator
 
 The combined numerator uses exact wide arithmetic before rounding. Results that
 exceed signed 64-bit nanoseconds are rejected; milliseconds round upward.
+An explicit `method: weighted-rep-operations-nanoseconds-v2` instead uses
+separate positive MOVS and STOS byte weights and requires observed REP detail;
+see [separate MOVS and STOS costs](durante-rep-model.md) for configuration and
+compatibility. Omitting `method` preserves the formula above.
 Incompatible runtime/profile, incomplete counts, signals, unsupported REP, or
 missing counters yield an error and no estimate. Successful results still have
 `authority: diagnostic_only`. Model/reference identities and weights are retained
@@ -502,7 +701,8 @@ response fields would be:
       "nanoseconds": 131648,
       "milliseconds": 1
     },
-    "nominal_time_exceeded": false
+    "nominal_time_exceeded": false,
+    "time_estimate_eligibility": {"version": 1, "eligible": true, "reason_codes": []}
   }
 }
 ```
@@ -530,10 +730,92 @@ Requesting a time estimate without an applicable operator policy is rejected
 before target execution. Omitting the flag preserves the previous response and
 does not automatically apply a configured model.
 
+### Structured conversion eligibility
+
+When `work_measurement_time` is requested and an execution envelope exists,
+`time_estimate_eligibility` provides an additional versioned explanation. The
+existing `time_estimate_unavailable` values above remain unchanged. For example,
+a complete report with signals and unsupported REP work, evaluated with a v2
+model but lacking operation detail, keeps its raw counts and reports:
+
+```json
+{
+  "time_estimate_unavailable": "observation_not_convertible",
+  "time_estimate_eligibility": {
+    "version": 1,
+    "eligible": false,
+    "reason_codes": ["signals_observed", "unsupported_rep_entries", "rep_breakdown_missing"]
+  }
+}
+```
+
+Successful conversion has `eligible: true` and an explicit empty reason array.
+Ineligible conversion has `eligible: false` and at least one code; it never
+returns an estimate or nominal-limit comparison. This explains eligibility for
+the selected diagnostic model, not measurement trust or a student verdict.
+Signal/partial-REP exclusions remain strict. A missing legacy REP breakdown
+blocks v2 even when combined bytes are zero; an explicitly observed, consistent
+zero breakdown passes that requirement. V1 retains its legacy-detail behavior.
+
+Version 1 evaluates stages in this order:
+
+1. Execution completion. A stopped execution returns its execution code alone;
+   discarded or nonexistent counters are not analyzed as if still observed.
+2. The execution API's ordinary diagnostic-report validation, then model
+   selection. Failure returns `incompatible_observation` or
+   `incompatible_time_configuration` alone.
+3. The estimator's policy validity, runtime/family/engine/dispatch binding, then
+   controlled-dispatch host libc. Each failed stage stops before later checks.
+4. Raw report eligibility. All applicable report codes are emitted, once each,
+   in the table order below. Missing fields are not guessed as zero.
+5. Exact arithmetic. Only otherwise eligible observations reach calculation;
+   final int64 overflow returns `numeric_overflow` alone.
+
+| Code, in canonical order | Meaning |
+|---|---|
+| `execution_cancelled` | The execution context was cancelled. |
+| `execution_resource_exhausted` | A raw resource limit stopped execution. |
+| `execution_failed` | Execution failed before a convertible completed result. |
+| `execution_incomplete` | Execution did not provide a completed diagnostic observation. |
+| `execution_not_complete` | Defensive fallback for another noncomplete internal state; remote envelope validation still rejects unknown states. |
+| `incompatible_observation` | The API's complete-report contract is not satisfied. |
+| `incompatible_time_configuration` | No valid selected policy applies. |
+| `runtime_profile_mismatch` | Runtime ID, family, engine or dispatch differs from the selected policy. |
+| `host_libc_mismatch` | The controlled dispatch does not report the required host libc. |
+| `report_contract_mismatch` | Schema, metric, scope, authority or diagnostic contract is incompatible. |
+| `incomplete_accounting` | The report is incomplete or carries an incompleteness reason. |
+| `signals_observed` | At least one signal was observed; handler work is not silently treated as uninterrupted work. |
+| `invalid_accounting_quality` | The quality label contradicts the signal count. |
+| `incomplete_process_tree` | Process/image counts do not describe a complete tree. |
+| `rep_disabled` | REP collection was disabled. |
+| `counters_missing` | At least one required instruction/REP counter is absent. |
+| `invalid_counters` | Instructions are zero or positive REP bytes have no REP entry. |
+| `unsupported_rep_entries` | Unsupported REP work is present, so full REP coverage is unavailable. |
+| `rep_telemetry_mismatch` | REP status, enabled mode or optional breakdown contradicts its totals. |
+| `rep_breakdown_missing` | V2 lacks an observed operation breakdown. |
+| `numeric_overflow` | The final rounded time cannot fit int64 nanoseconds. |
+
+The object has exactly `version`, `eligible` and `reason_codes`; all three are
+required when present. Nulls, unknown codes, duplicates, reordered codes,
+contradictory eligible/reason states and noncanonical field spellings are rejected.
+Older remote runners may omit the whole object. Absence stays absent and means
+the explanation was not supplied; it is not successful qualification. The remote
+control plane still recomputes the estimate and legacy unavailable string with
+its own model. If eligibility is present, its complete ordered contents must also
+match recomputation. Removing it cannot bypass the previous validation.
+
+No eligibility is emitted without the explicit time request, and raw corpus
+collection/fitting rejects unsolicited conversion metadata. `TimePolicy.Estimate`
+and `EstimateWithEligibility` share one gate and exact-arithmetic implementation;
+reference collection reuses the raw `Report.TimeConversionEligibility` checks.
+
 For actual API corpus collection, exact train-only fitting and held-out error
-gates, see [C++ reference-time qualification](durante-reference.md). The tool
+gates, see [runtime reference-time qualification](durante-reference.md). The tool
 exports a candidate policy only after the entire full corpus passes; its CI
-smoke collection does not qualify production coefficients.
+smoke collection does not qualify production coefficients. CPP20 remains the
+default corpus; CPython, PyPy and Rust require an explicit language selection and
+produce separate runtime datasets. Passing one dataset does not qualify a common
+model across those runtimes.
 
 There is deliberately no default coefficient based on the observed 3.1× CPU
 cost or the two-submission experiment. A representative reference workload set

@@ -655,9 +655,34 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_POLICY: %w", err)
 	}
+	workMeasurement.TimeModels, err = durante.ParseTimeModels(os.Getenv("AONOHAKO_DURANTE_TIME_MODELS"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_MODELS: %w", err)
+	}
 	workMeasurement.RuntimeImage = os.Getenv("AONOHAKO_DURANTE_RUNTIME_IMAGE")
+	workMeasurement.CPUIDProfile, err = durante.ParseCPUIDProfile(os.Getenv("AONOHAKO_DURANTE_CPUID_PROFILE"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_CPUID_PROFILE: %w", err)
+	}
+	if workMeasurement.CPUIDProfile != "" && len(workMeasurement.Families) == 0 {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_CPUID_PROFILE requires an enabled measurement family")
+	}
+	workMeasurement.RuntimeDeterminism, err = durante.ParseRuntimeDeterminism(os.Getenv("AONOHAKO_DURANTE_RUNTIME_DETERMINISM"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RUNTIME_DETERMINISM: %w", err)
+	}
+	if workMeasurement.RuntimeDeterminism != "" && len(workMeasurement.Families) == 0 {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RUNTIME_DETERMINISM requires an enabled measurement family")
+	}
 	if err := workMeasurement.ValidateTimeConfiguration(); err != nil {
-		return Config{}, fmt.Errorf("durante time configuration (AONOHAKO_DURANTE_TIME_POLICY, AONOHAKO_DURANTE_RUNTIME_IMAGE): %w", err)
+		return Config{}, fmt.Errorf("durante time configuration (AONOHAKO_DURANTE_TIME_POLICY, AONOHAKO_DURANTE_TIME_MODELS, AONOHAKO_DURANTE_RUNTIME_IMAGE, AONOHAKO_DURANTE_RUNTIME_DETERMINISM): %w", err)
+	}
+	workMeasurement.Judge, err = durante.ParseJudgePolicy(os.Getenv("AONOHAKO_DURANTE_JUDGE_MODE"), os.Getenv("AONOHAKO_DURANTE_JUDGE_FAMILIES"), os.Getenv("AONOHAKO_DURANTE_JUDGE_INTEGRITY"), os.Getenv("AONOHAKO_DURANTE_JUDGE_INTEGRITY_RATIO"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_JUDGE_MODE (AONOHAKO_DURANTE_JUDGE_FAMILIES, AONOHAKO_DURANTE_JUDGE_INTEGRITY, AONOHAKO_DURANTE_JUDGE_INTEGRITY_RATIO): %w", err)
+	}
+	if err := workMeasurement.Judge.Validate(workMeasurement); err != nil {
+		return Config{}, fmt.Errorf("durante judge configuration: %w", err)
 	}
 	execution := ExecutionConfig{
 		WorkMeasurement: workMeasurement,

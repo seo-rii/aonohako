@@ -7,7 +7,7 @@ ARG BUILD_IMAGE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573
 # Lightweight CI compiler image. This stage does not rebuild the pinned SDK;
 # collection mounts the same verified SDK/client used by the sandbox tests.
 FROM ${BUILD_IMAGE} AS reference-tools
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates python3 pypy3 rustc && rm -rf /var/lib/apt/lists/*
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS durante-go
 WORKDIR /src
@@ -51,6 +51,6 @@ COPY --from=durante-build /durante-reference /opt/durante/reference
 COPY --from=durante-build /durante-rep-breakdown /opt/durante/rep-breakdown
 ENV AONOHAKO_TEST_DURANTE=1 AONOHAKO_ENFORCE_SANDBOX_TESTS=1 AONOHAKO_DURANTE_TEST_BINARY=/opt/durante/probe AONOHAKO_TEST_DURANTE_INTERACTIVE=/opt/durante/interactive AONOHAKO_TEST_DURANTE_COMMUNICATION=/opt/durante/communication AONOHAKO_TEST_DURANTE_REFERENCE=/opt/durante/reference AONOHAKO_TEST_DURANTE_REP_BREAKDOWN=/opt/durante/rep-breakdown
 ENTRYPOINT ["/opt/durante/durante-execute.test"]
-CMD ["-test.v", "-test.run", "^(TestDurante(Sandbox|ResourceEnvelope|REPBreakdown|TimeEstimate|Interactive|Communication)Integration|TestRunCPUFeaturePolicyInRootSandbox)$", "-test.timeout", "240s"]
+CMD ["-test.v", "-test.run", "^(TestDurante(Sandbox|ResourceEnvelope|REPBreakdown|TimeEstimate|Judge|Interactive|Communication)Integration|TestRunCPUFeaturePolicyInRootSandbox)$", "-test.timeout", "240s"]
 
 FROM durante-runtime AS runtime

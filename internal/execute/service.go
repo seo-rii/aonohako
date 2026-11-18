@@ -18,7 +18,6 @@ import (
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runtimeidentity"
-	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/timing"
 )
@@ -195,16 +194,26 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if req.WorkMeasurementShadow {
+		return s.runWithShadow(ctx, req, hooks)
+	}
 	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
+	tuning, err := resolveRuntimeTuning(req, s.runtimeTuning, s.runtimeTuningProfiles)
+	if err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 	if req.WorkMeasurementTime {
-		if _, _, err := s.workMeasurement.TimePolicyFor(req.Lang); err != nil {
+		if _, _, err := ordinaryTimePolicy(req, s.workMeasurement, tuning); err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
+	}
+	if _, err := workMeasurementPeerTimePlans(req, s.workMeasurement, tuning); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if req.WorkMeasurementLimits != nil {
 		if s.workMeasurementPolicyError != nil {
@@ -218,6 +227,9 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 		if err := validateWorkMeasurementRequest(req, s.workMeasurement); err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
+	}
+	if err := validateJudgeRequest(ctx, req, s.workMeasurement); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -251,17 +263,6 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
-	tuning := s.runtimeTuning.WithSafeDefaults()
-	if req.RuntimeProfile != "" {
-		if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
-			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid runtime_profile: " + err.Error()}
-		}
-		profileTuning, ok := s.runtimeTuningProfiles[req.RuntimeProfile]
-		if !ok {
-			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "unknown runtime_profile: " + req.RuntimeProfile}
-		}
-		tuning = profileTuning.WithSafeDefaults()
-	}
 	var response model.RunResponse
 	switch {
 	case req.WorkMeasurementLimits != nil:
@@ -283,6 +284,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 			response = s.runOne(ctx, req, hooks, tuning, true).response
 		}
 	}
+	response = finishWorkMeasurementPeerTime(req, response, s.workMeasurement, tuning)
 	return s.decorateCPUTimeNormalization(response)
 }
 

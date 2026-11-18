@@ -110,15 +110,15 @@ func TestParseTimePolicyRejectsAmbiguousOrInvalidJSON(t *testing.T) {
 }
 
 func TestTimeRuntimeIDUsesCanonicalSourceAndImmutableImage(t *testing.T) {
-	for language, source := range map[string]string{" cpp20 ": "CPP20", "CPP": "CPP", "c11": "C11", "C": "C"} {
+	for language, source := range map[string]string{" cpp20 ": "CPP20", "CPP": "CPP", "c11": "C11", "C": "C", "python3": "PYTHON3", "pypy3": "PYPY3", "rust2021": "RUST2021"} {
 		got, err := TimeRuntimeID(language, timeConfigImageDigest)
 		if err != nil || got != source+"@"+timeConfigImageDigest {
 			t.Fatalf("%q: identity %q, %v", language, got, err)
 		}
 	}
-	for _, language := range []string{"binary", "unknown", "RUST2021", "PYTHON3", "JAVA25"} {
+	for _, language := range []string{"binary", "unknown", "JAVA25"} {
 		if got, err := TimeRuntimeID(language, timeConfigImageDigest); err == nil || got != "" {
-			t.Fatalf("non-C/C++ source %q returned identity %q: %v", language, got, err)
+			t.Fatalf("unavailable source %q returned identity %q: %v", language, got, err)
 		}
 	}
 	for _, digest := range []string{"", "runner:latest", timeConfigImageDigest + " ", strings.ToUpper(timeConfigImageDigest), "sha256:abc"} {

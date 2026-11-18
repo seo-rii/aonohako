@@ -215,7 +215,28 @@ reports omit it. This extension keeps report schema 1 and the existing time
 formula. See [the result contract](durante.md#result-contract) for byte semantics
 and current installation/profile compatibility.
 
-An ordinary C/C++ envelope request can additionally opt into
+With explicit `work_measurement_peer_time` budgets, interactive and communication
+v1/v2 results additionally attach `time_budget` to each role. It contains
+`version: 1`, `authority: "diagnostic_only"`, the matched `budget_ms`, and either
+`estimate` (the full time-estimate model and coefficients) plus `exceeded`, or an
+`unavailable` reason with both estimate/comparison fields absent. The comparison
+is strictly `estimate.nanoseconds > budget_ms * 1000000`, including false at
+equality. Results stay in canonical role order even when request budgets are
+reordered; seats using the same program remain separate.
+
+Only normally exited complete convertible roles receive estimates. Coordinator
+stops and unstarted roles return `execution_not_complete`; missing/incompatible
+observations or signals/partial REP/missing detail/overflow remain unavailable.
+One role's failure does not discard another completed role's estimate. Status,
+score, match outcome, raw counters, CPU, and RSS remain unchanged. These are
+post-execution diagnostics, not online stopping or expanded raw-resource limits.
+The option cannot use the ordinary time flag or resource envelope. Without the
+option, `time_budget` is absent. Remote forwarding requires every requested role's
+budget result and recomputes it from the independently configured operator model;
+unsolicited `time_budget` results, mismatches, and old runners ignoring the option are rejected.
+See [per-role budget configuration](durante.md#per-role-diagnostic-time-budgets).
+
+An ordinary envelope request with an explicitly approved source/runtime profile can opt into
 `work_measurement_time: true`. With a compatible operator model, the final
 `work_measurement_execution` includes `time_estimate` containing the model ID and
 version, reference/runtime identities, family, engine/dispatch profiles, exact
@@ -230,11 +251,20 @@ If estimation is unavailable, both fields are absent and
 observation with signals, partial REP coverage, or overflowing estimated time
 can remain complete while conversion is unavailable. An execution rejected before
 initialization may omit the diagnostic execution object. Without the explicit
-flag, no estimate, nominal comparison, or conversion-unavailable field is emitted.
+flag, no estimate, nominal comparison, conversion-unavailable or eligibility field
+is emitted. With the flag and an execution envelope, the optional additive
+`time_estimate_eligibility` object has `version: 1`, `eligible`, and an ordered
+`reason_codes` array. Success uses an explicit empty array; exclusions such as
+`signals_observed`, `unsupported_rep_entries`, and `rep_breakdown_missing` remain
+ineligible and retain the existing unavailable string. See the
+[eligibility stages and codes](durante.md#structured-conversion-eligibility).
 
 Local execution and remote forwarding require their own matching operator
-policy and downstream execution-image identity. Remote forwarding recomputes and
-verifies the estimate rather than adopting returned coefficients. Raw CPU/RSS
+policy (legacy or shared-model registry) and downstream execution-image identity. Remote forwarding recomputes and
+verifies the estimate rather than adopting returned coefficients. Present
+eligibility must exactly match its recomputed reasons. Legacy omission is allowed
+without weakening estimate or unavailable-string validation; explicit null and
+ambiguous/malformed objects are rejected. Raw CPU/RSS
 and the envelope's initialization-failure status remain unchanged, with no score
 or CPU normalization. Production coefficients are not supplied by this API.
 See [reference-time configuration and examples](durante.md#explicit-reference-time-calculator).

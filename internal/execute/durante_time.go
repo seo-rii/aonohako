@@ -2,7 +2,9 @@ package execute
 
 import (
 	"fmt"
+	"slices"
 
+	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 )
@@ -18,32 +20,47 @@ func snapshotWorkMeasurementConfig(cfg durante.Config) durante.Config {
 		policy := *cfg.TimePolicy
 		cfg.TimePolicy = &policy
 	}
+	cfg.TimeModels = cfg.TimeModels.Clone()
+	cfg.Judge.Families = append([]string(nil), cfg.Judge.Families...)
 	return cfg
 }
 
 // Conversion is attached after the execution state has been finalized. It does
 // not change the diagnostic report, raw resource values, or outer verdict.
-func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config) model.RunResponse {
+func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config, runtimeTuning ...config.RuntimeTuningConfig) model.RunResponse {
 	if !req.WorkMeasurementTime || response.WorkMeasurementExecution == nil {
 		return response
 	}
 	d := *response.WorkMeasurementExecution
 	response.WorkMeasurementExecution = &d
 	d.TimeEstimate, d.NominalTimeExceeded, d.TimeEstimateUnavailable = nil, nil, ""
+	d.TimeEstimateEligibility = nil
+	unavailable := func(code string) {
+		d.TimeEstimateEligibility = &durante.TimeEligibility{Version: 1, ReasonCodes: []string{code}}
+	}
 	if d.State != "complete" {
 		d.TimeEstimateUnavailable = "execution_" + d.State
+		switch d.State {
+		case "cancelled", "resource_exhausted", "failed", "incomplete":
+			unavailable(d.TimeEstimateUnavailable)
+		default:
+			unavailable(durante.TimeExecutionNotComplete)
+		}
 		return response
 	}
 	if !validDiagnosticWorkReport(req.Lang, response.WorkMeasurement) {
 		d.TimeEstimateUnavailable = "incompatible_observation"
+		unavailable(durante.TimeIncompatibleObservation)
 		return response
 	}
-	policy, runtimeID, err := cfg.TimePolicyFor(req.Lang)
+	policy, runtimeID, err := ordinaryTimePolicy(req, cfg, optionalRuntimeTuning(runtimeTuning))
 	if err != nil {
 		d.TimeEstimateUnavailable = "incompatible_time_configuration"
+		unavailable(durante.TimeIncompatibleConfiguration)
 		return response
 	}
-	estimate, err := policy.Estimate(runtimeID, *response.WorkMeasurement)
+	estimate, eligibility, err := policy.EstimateWithEligibility(runtimeID, *response.WorkMeasurement)
+	d.TimeEstimateEligibility = &eligibility
 	if err != nil {
 		d.TimeEstimateUnavailable = "observation_not_convertible"
 		return response
@@ -55,23 +72,23 @@ func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse
 	return response
 }
 
-func validateRemoteWorkMeasurementTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config) error {
+func validateRemoteWorkMeasurementTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config, runtimeTuning ...config.RuntimeTuningConfig) error {
 	d := response.WorkMeasurementExecution
 	if d == nil { // Admission/initialization failed before an envelope execution.
 		return nil
 	}
 	if !req.WorkMeasurementTime {
-		if d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" {
+		if d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" || d.TimeEstimateEligibility != nil {
 			return fmt.Errorf("invalid remote result: unsolicited work measurement time")
 		}
 		return nil
 	}
-	if _, _, err := cfg.TimePolicyFor(req.Lang); err != nil {
+	if _, _, err := ordinaryTimePolicy(req, cfg, optionalRuntimeTuning(runtimeTuning)); err != nil {
 		return fmt.Errorf("invalid remote result: incompatible work measurement time configuration")
 	}
 	// Recompute from the complete raw observation and the control plane's own
 	// configured downstream image/model, never from returned weights or time.
-	expected := finishWorkMeasurementTime(req, response, cfg).WorkMeasurementExecution
+	expected := finishWorkMeasurementTime(req, response, cfg, runtimeTuning...).WorkMeasurementExecution
 	if (d.TimeEstimate == nil) != (expected.TimeEstimate == nil) ||
 		(d.NominalTimeExceeded == nil) != (expected.NominalTimeExceeded == nil) ||
 		d.TimeEstimateUnavailable != expected.TimeEstimateUnavailable {
@@ -79,6 +96,11 @@ func validateRemoteWorkMeasurementTime(req *model.RunRequest, response model.Run
 	}
 	if d.TimeEstimate != nil && (*d.TimeEstimate != *expected.TimeEstimate || *d.NominalTimeExceeded != *expected.NominalTimeExceeded) {
 		return fmt.Errorf("invalid remote result: work measurement time estimate mismatch")
+	}
+	// Absence preserves older runner compatibility. Present eligibility never
+	// overrides the recomputed estimate or the pre-existing unavailable string.
+	if d.TimeEstimateEligibility != nil && (d.TimeEstimateEligibility.Validate() != nil || d.TimeEstimateEligibility.Eligible != expected.TimeEstimateEligibility.Eligible || !slices.Equal(d.TimeEstimateEligibility.ReasonCodes, expected.TimeEstimateEligibility.ReasonCodes)) {
+		return fmt.Errorf("invalid remote result: work measurement time eligibility mismatch")
 	}
 	return nil
 }

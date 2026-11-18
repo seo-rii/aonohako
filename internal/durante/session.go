@@ -61,6 +61,8 @@ type Session struct {
 	hostLibc     string
 	installation InstallationIdentity
 	cpuFeatures  []cpupolicy.Feature
+	// runtimeDeterminism is the option set Runtime applied to this execution.
+	runtimeDeterminism string
 }
 
 func Prepare(ctx context.Context, root string, cfg Config, language string, uid, gid int) (*Session, error) {
@@ -141,18 +143,35 @@ func (s *Session) Wrap(command []string) []string {
 	for _, feature := range s.cpuFeatures {
 		args = append(args, "-disallow_cpu_feature", string(feature))
 	}
+	if s.config.CPUIDProfile != "" {
+		args = append(args, "-cpuid_profile", s.config.CPUIDProfile)
+	}
 	args = append(args, "--")
 	return append(args, command...)
 }
 
-func (s *Session) Environment(env []string) []string {
+// Runtime applies the measured-execution argv and environment (see
+// Config.MeasuredRuntime) and records the applied option set for the report.
+// Call it once, with the normalized run language, before Wrap.
+func (s *Session) Runtime(runLang string, command, env []string) ([]string, []string, error) {
+	command, env, err := s.config.MeasuredRuntime(runLang, command, env)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.runtimeDeterminism = s.config.RuntimeDeterminismFor(runLang)
+	return command, env, nil
+}
+
+// RuntimeEnvironment applies the same dispatch environment to execution and
+// effective runtime-options descriptors without opening a measurement session.
+func (c Config) RuntimeEnvironment(env []string) []string {
 	out := make([]string, 0, len(env)+1)
 	for _, value := range env {
 		if !strings.HasPrefix(value, "GLIBC_TUNABLES=") {
 			out = append(out, value)
 		}
 	}
-	if s.config.DispatchProfile == DispatchGLIBC241 {
+	if c.DispatchProfile == DispatchGLIBC241 {
 		out = append(out, "GLIBC_TUNABLES="+portableGLIBC241)
 	}
 	return out
@@ -165,6 +184,10 @@ func (s *Session) Collect(rootPID int) *Report {
 	identity.Unchanged = err == nil && current == s.installation
 	if !identity.Unchanged {
 		report = incomplete("durante installation changed during observation")
+	} else if report.Complete && report.CPUIDProfile != s.config.CPUIDProfile {
+		// A legacy client, host CPUID or another profile cannot satisfy the
+		// configured virtual processor; never publish those totals.
+		report = incomplete("durante CPUID profile receipt does not match the configuration")
 	}
 	report.Installation = &identity
 	report.Family = s.family
@@ -174,5 +197,8 @@ func (s *Session) Collect(rootPID int) *Report {
 		report.DispatchProfile = DispatchDefault
 	}
 	report.HostLibc = s.hostLibc
+	if report.Complete {
+		report.RuntimeDeterminism = s.runtimeDeterminism
+	}
 	return &report
 }

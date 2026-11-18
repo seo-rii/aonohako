@@ -71,31 +71,61 @@ func TestDuranteTimeEstimateIntegration(t *testing.T) {
 		return svc.Run(ctx, req, Hooks{})
 	}
 	for _, tc := range []struct {
-		name             string
-		exceeds, matches bool
+		name                 string
+		exceeds, matches     bool
+		separateREP          bool
+		optionsBound, python bool
 	}{
-		{"within reference limit", false, true},
-		{"exceeds reference limit", true, true},
-		{"wrong output retains reference estimate", false, false},
+		{"within reference limit", false, true, false, false, false},
+		{"exceeds reference limit", true, true, false, false, false},
+		{"wrong output retains reference estimate", false, false, false, false, false},
+		{"separate REP costs", false, true, true, false, false},
+		{"bound runtime options", false, true, false, true, false},
+		{"bound Python runtime options", false, true, false, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.python && os.Getenv("AONOHAKO_TEST_DURANTE_RUNTIME_OPTIONS_PYTHON") != "1" {
+				t.Skip("enable the Python options case in an immutable image with CPython")
+			}
 			cfg, req := makeRun()
+			if tc.python {
+				req.Lang = "PYTHON3"
+				req.Binaries = []model.Binary{{Name: "Main.py", DataB64: base64.StdEncoding.EncodeToString([]byte("print(42)\n"))}}
+				req.Stdin, req.ExpectedStdout = "", "42"
+				cfg.Families = append(cfg.Families, "cpython")
+			}
+			if tc.separateREP {
+				cfg.TimePolicy.Method = durante.TimeMethodREPBreakdown
+				cfg.TimePolicy.REPByteNSNumerator = 0
+				cfg.TimePolicy.MOVSByteNSNumerator, cfg.TimePolicy.STOSByteNSNumerator = 3, 5
+			}
 			if tc.exceeds {
 				cfg.TimePolicy.InstructionNSNumerator, cfg.TimePolicy.NSDenominator = 1_000_001, 1
 			}
 			if !tc.matches {
 				req.ExpectedStdout = "wrong"
 			}
+			if tc.optionsBound {
+				cfg = bindIntegrationRuntimeOptions(t, cfg, req)
+			}
 			response := run(context.Background(), cfg, req)
 			d := response.WorkMeasurementExecution
 			if response.Status != model.RunStatusInitFail || response.Score != nil || response.CPUTimeNormalization != nil || d == nil || d.State != "complete" || d.TimeEstimate == nil || d.NominalTimeExceeded == nil || d.TimeEstimateUnavailable != "" || d.OutputMatches == nil {
 				t.Fatalf("reference observation failed: response=%+v execution=%+v", response, d)
 			}
-			if *d.NominalTimeExceeded != tc.exceeds || *d.OutputMatches != tc.matches || d.TimeEstimate.RuntimeID != runtimeID || response.CPUTimeNs <= 1_000_000 {
+			if *d.NominalTimeExceeded != tc.exceeds || *d.OutputMatches != tc.matches || d.TimeEstimate.RuntimeID != req.Lang+"@"+image || response.CPUTimeNs <= 1_000_000 {
 				t.Fatalf("reference/raw limits conflated: response=%+v execution=%+v", response, d)
 			}
 			if response.WorkMeasurement == nil || response.WorkMeasurement.REPBreakdown == nil || !response.WorkMeasurement.ValidREPTelemetry() {
 				t.Fatalf("time observation lost REP detail: %+v", response.WorkMeasurement)
+			}
+			if tc.optionsBound {
+				assertIntegrationRuntimeOptions(t, cfg, req, []durante.TimeEstimate{*d.TimeEstimate})
+			} else if d.TimeEstimate.RuntimeOptionsID != "" {
+				t.Fatal("legacy policy claimed effective runtime options")
+			}
+			if tc.separateREP && (d.TimeEstimate.Method != durante.TimeMethodREPBreakdown || d.TimeEstimate.MOVSByteNSNumerator != 3 || d.TimeEstimate.STOSByteNSNumerator != 5 || d.TimeEstimate.REPByteNSNumerator != 0) {
+				t.Fatalf("separate REP conversion changed: %+v", d.TimeEstimate)
 			}
 			if err := validateRemoteWorkMeasurement(req, response); err != nil {
 				t.Fatal(err)

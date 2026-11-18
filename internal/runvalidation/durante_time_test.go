@@ -9,8 +9,8 @@ import (
 	"aonohako/internal/model"
 )
 
-func TestWorkMeasurementTimeAcceptsOrdinaryCPPEnvelopes(t *testing.T) {
-	for _, language := range []string{"C", "C11", "CPP", "CPP20", "CPP26", "cpp20"} {
+func TestWorkMeasurementTimeAcceptsOrdinaryRegisteredEnvelopes(t *testing.T) {
+	for _, language := range []string{"C", "C11", "CPP", "CPP20", "CPP26", "cpp20", "PYTHON3", "PYPY3", "RUST2021"} {
 		t.Run(language, func(t *testing.T) {
 			req := validDuranteLimitsRequest()
 			req.Lang = language
@@ -20,10 +20,10 @@ func TestWorkMeasurementTimeAcceptsOrdinaryCPPEnvelopes(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := ValidateWorkMeasurementLimits(req); err != nil {
-				t.Fatalf("direct runner rejected a C/C++ time request: %v", err)
+				t.Fatalf("direct runner rejected a registered time request: %v", err)
 			}
 			if err := Validate(req); err != nil {
-				t.Fatalf("API rejected a C/C++ time request: %v", err)
+				t.Fatalf("API rejected a registered time request: %v", err)
 			}
 			after, err := json.Marshal(req)
 			if err != nil || string(before) != string(after) {
@@ -44,11 +44,8 @@ func TestWorkMeasurementTimeRejectsMissingEnvelopeAndUnsupportedModes(t *testing
 	for name, edit := range map[string]func(*model.RunRequest){
 		"measurement disabled": func(r *model.RunRequest) { r.WorkMeasurement = false },
 		"no raw envelope":      func(r *model.RunRequest) { r.WorkMeasurementLimits = nil },
-		"CPython":              func(r *model.RunRequest) { r.Lang = "PYTHON3" },
-		"PyPy":                 func(r *model.RunRequest) { r.Lang = "PYPY3" },
 		"JVM":                  func(r *model.RunRequest) { r.Lang = "JAVA21" },
 		"generic binary":       func(r *model.RunRequest) { r.Lang = "binary" },
-		"other native family":  func(r *model.RunRequest) { r.Lang = "RUST2021" },
 		"interactor":           func(r *model.RunRequest) { r.Interactor = &model.InteractorSpec{} },
 		"communication":        func(r *model.RunRequest) { r.Communication = &model.CommunicationSpec{} },
 		"special judge":        func(r *model.RunRequest) { r.SPJ = &model.SPJSpec{} },

@@ -1,4 +1,4 @@
-// Package reference collects fixed C++ workloads and evaluates explicit
+// Package reference collects fixed runtime workloads and evaluates explicit
 // reference-time candidates. Its results retain diagnostic authority.
 package reference
 
@@ -9,6 +9,7 @@ import (
 
 const Schema = 1
 const CorpusID = "cpp-reference-v1"
+const RuntimeCorpusID = "runtime-reference-v1"
 const SplitTrain = "train"
 const SplitValidation = "validation"
 
@@ -53,6 +54,7 @@ type Dataset struct {
 	RuntimeImage    string                 `json:"runtime_image"`
 	SourceLanguage  string                 `json:"source_language"`
 	DispatchProfile string                 `json:"dispatch_profile"`
+	CPUIDProfile    string                 `json:"cpuid_profile,omitempty"`
 	RunnerSHA256    string                 `json:"runner_sha256"`
 	Environment     map[string]string      `json:"environment"`
 	Repetitions     int                    `json:"repetitions"`
@@ -60,9 +62,13 @@ type Dataset struct {
 	MeteredLimits   durante.ResourceLimits `json:"metered_limits"`
 	Samples         []Sample               `json:"samples"`
 	Failures        []string               `json:"failures,omitempty"`
+	// RuntimeDeterminism is the option set the collection applied to this
+	// source's measured launcher (empty: none).
+	RuntimeDeterminism string `json:"runtime_determinism,omitempty"`
 }
 
 type FitOptions struct {
+	Method             string `json:"method,omitempty"`
 	ModelID            string `json:"model_id"`
 	ModelVersion       uint64 `json:"model_version"`
 	ReferenceID        string `json:"reference_id"`
