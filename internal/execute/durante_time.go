@@ -21,6 +21,7 @@ func snapshotWorkMeasurementConfig(cfg durante.Config) durante.Config {
 		cfg.TimePolicy = &policy
 	}
 	cfg.TimeModels = cfg.TimeModels.Clone()
+	cfg.Judge.Families = append([]string(nil), cfg.Judge.Families...)
 	return cfg
 }
 
