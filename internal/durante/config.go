@@ -17,8 +17,10 @@ type Config struct {
 	Client          string
 	DispatchProfile string
 	ResourcePolicy  *ResourcePolicy
-	TimePolicy      *TimePolicy
-	TimeModels      *TimeModels
+	// Observe replays eligible ordinary requests after their native verdict.
+	Observe    bool
+	TimePolicy *TimePolicy
+	TimeModels *TimeModels
 	// RuntimeImage is operator-supplied deployment metadata, not an attestation
 	// of the executing image. It is configured independently of either time setting.
 	RuntimeImage string

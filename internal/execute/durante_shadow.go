@@ -90,7 +90,7 @@ func (s *Service) runWithShadow(ctx context.Context, req *model.RunRequest, hook
 	}
 	primaryReq, shadowReq := runvalidation.ShadowRequests(req)
 	if reason := shadowGateUnavailable(req, s.workMeasurement); reason != "" {
-		return attachShadow(s.Run(ctx, &primaryReq, hooks), nil, reason)
+		return attachShadow(s.runRequest(ctx, &primaryReq, hooks), nil, reason)
 	}
 	var snapshot *stdinSnapshot
 	if strings.TrimSpace(req.StdinURL) != "" {
@@ -100,7 +100,7 @@ func (s *Service) runWithShadow(ctx context.Context, req *model.RunRequest, hook
 		defer snapshot.close()
 		ctx = context.WithValue(ctx, shadowStdinKey{}, snapshot)
 	}
-	primary := s.Run(ctx, &primaryReq, hooks)
+	primary := s.runRequest(ctx, &primaryReq, hooks)
 	if snapshot != nil && snapshot.path == "" {
 		return attachShadow(primary, nil, "primary did not acquire the URL input")
 	}
@@ -108,7 +108,7 @@ func (s *Service) runWithShadow(ctx context.Context, req *model.RunRequest, hook
 		return attachShadow(primary, nil, "request cancelled before the shadow execution")
 	}
 	// The shadow never emits logs or images: the stream belongs to the primary.
-	shadow := s.Run(withShadowJudge(ctx), &shadowReq, Hooks{})
+	shadow := s.runRequest(withShadowJudge(ctx), &shadowReq, Hooks{})
 	compared := attachShadow(primary, &shadow, "")
 	if snapshot != nil {
 		compared.WorkMeasurementShadow.StdinSHA256 = hex.EncodeToString(snapshot.hash.Sum(nil))
@@ -159,7 +159,7 @@ func validateRemoteShadow(req *model.RunRequest, response model.RunResponse, cfg
 		return nil
 	}
 	shadow := *block.Response
-	if shadow.WorkMeasurementShadow != nil || shadow.Stdout != "" || shadow.Stderr != "" ||
+	if shadow.WorkMeasurementShadow != nil || shadow.WorkMeasurementObservation != nil || shadow.Stdout != "" || shadow.Stderr != "" ||
 		shadow.StdoutTruncated || shadow.StderrTruncated || len(shadow.SidecarOutputs) != 0 || len(shadow.SidecarErrors) != 0 ||
 		len(shadow.Steps) != 0 || shadow.Match != nil {
 		return fmt.Errorf("invalid remote result: shadow observation is not trimmed")
