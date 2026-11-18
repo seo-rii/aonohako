@@ -69,12 +69,12 @@ func TestPipelineReplayRequiresCompleteStdoutAndDeclaredFile(t *testing.T) {
 			req := observerRequest()
 			report := completeEnvelopeReport()
 			report.CPUIDProfile = cfg.CPUIDProfile
-			input := pipelineBatchReplay{request: req, outputs: pipelineOutputDigests(stdout, nil)}
+			outputs := pipelineOutputDigests(stdout, nil)
 			run := sandboxRunResult{response: model.RunResponse{WorkMeasurement: report,
 				WorkMeasurementExecution: &model.WorkMeasurementExecution{State: "complete"}}, judgeOut: stdout}
 			if tc.withFile {
 				req.FileOutputs = []model.OutputFile{{Path: "payload"}}
-				input.outputs = pipelineOutputDigests(stdout, file)
+				outputs = pipelineOutputDigests(stdout, file)
 				run.stdoutOut, run.judgeOut = stdout, file
 			}
 			switch tc.change {
@@ -93,7 +93,7 @@ func TestPipelineReplayRequiresCompleteStdoutAndDeclaredFile(t *testing.T) {
 			case "profile":
 				report.CPUIDProfile = ""
 			}
-			got, reason := pipelineReplayReport(input, run, cfg)
+			got, reason := batchReplayReport(req, outputs, run, cfg)
 			if (got != nil) != tc.complete || (reason == "") != tc.complete || strings.Contains(reason, "private") {
 				t.Fatalf("got report=%v, reason=%q", got != nil, reason)
 			}

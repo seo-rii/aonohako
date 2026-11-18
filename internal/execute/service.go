@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
@@ -197,7 +196,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req.WorkMeasurementShadow {
 		return s.runWithShadow(ctx, req, hooks)
 	}
-	if req.Pipeline == nil && automaticObservationRequested(req, s.workMeasurement) {
+	if req.Pipeline == nil && !runvalidation.UsesSteps(req) && automaticObservationRequested(req, s.workMeasurement) {
 		return s.runWithObservation(ctx, req, hooks, s.runRequest)
 	}
 	return s.runRequest(ctx, req, hooks)
@@ -528,21 +527,28 @@ func (s *Service) networkRequestRejection(enabled bool) string {
 	return ""
 }
 
-func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
+func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) (response model.RunResponse) {
 	if err := runvalidation.ValidateStepPipeline(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	programs := make(map[string]model.RunProgram, len(req.Programs))
-	for _, program := range req.Programs {
-		programs[strings.TrimSpace(program.ID)] = program
-	}
-
 	handoffDir, err := createRunWorkDir()
 	if err != nil {
 		slog.Warn("execute step handoff directory creation failed", "err", err)
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "handoff directory creation failed"}
 	}
 	defer os.RemoveAll(handoffDir)
+	var replays map[string]legacyStepReplay
+	if automaticObservationRequested(req, s.workMeasurement) {
+		budget := stepObservationBudgetFromContext(ctx)
+		if budget.allowsReplay() {
+			replays = make(map[string]legacyStepReplay, len(req.Steps))
+		}
+		defer func() {
+			replayCtx, cancel := budget.start(ctx)
+			defer cancel()
+			response.WorkMeasurementObservation = s.observeLegacySteps(replayCtx, response, replays, tuning)
+		}()
+	}
 
 	handoffs := map[string]string{}
 	stepResults := make([]model.StepResult, 0, len(req.Steps))
@@ -552,8 +558,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 	}
 	stdinURLBudget := &stdinURLDownloadBudget{remaining: stdinURLTimeout}
 	for i, step := range req.Steps {
-		program := programs[strings.TrimSpace(step.ProgramID)]
-		stdin, stdinReader, closeStdin, stdinVerdictSource, stdinMaxBytes, err := prepareStepStdin(ctx, step, handoffs, handoffDir, stdinURLBudget)
+		_, stdinReader, closeStdin, stdinVerdictSource, stdinMaxBytes, err := prepareStepStdin(ctx, step, handoffs, handoffDir, stdinURLBudget)
 		if err != nil {
 			slog.Warn("execute step stdin preparation failed", "step", step.ID, "err", err)
 			return aggregateStepResponse(model.RunResponse{
@@ -562,34 +567,15 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 				VerdictSource: "step:" + step.ID + ":" + stdinVerdictSource,
 			}, stepResults)
 		}
-		stepReq := &model.RunRequest{
-			Lang:                  program.Lang,
-			Binaries:              program.Binaries,
-			Stdin:                 stdin,
-			Limits:                effectiveStepLimits(step),
-			CaptureLimits:         req.CaptureLimits,
-			RuntimeProfile:        req.RuntimeProfile,
-			PythonLibraryMode:     req.PythonLibraryMode,
-			DisallowedCPUFeatures: slices.Clone(req.DisallowedCPUFeatures),
-			EnableNetwork:         program.EnableNetwork,
-			EntryPoint:            program.EntryPoint,
-		}
-		if step.Handoff != nil {
-			handoffFrom := strings.ToLower(strings.TrimSpace(step.Handoff.From))
-			if handoffFrom == "file" || handoffFrom == "file_output" {
-				stepReq.FileOutputs = []model.OutputFile{{Path: step.Handoff.Path}}
-			}
-		}
+		stepReq := legacyStepRequest(req, i)
 		finalStep := i == len(req.Steps)-1
-		if finalStep {
-			stepReq.ExpectedStdout = req.ExpectedStdout
-			stepReq.SPJ = req.SPJ
-			stepReq.FileOutputs = req.FileOutputs
-			stepReq.SidecarOutputs = req.SidecarOutputs
-			stepReq.IgnoreTLE = req.IgnoreTLE
+		observe := replays != nil && s.workMeasurementPolicyError == nil && observationEligible(stepReq, s.workMeasurement) == ""
+		var replay legacyStepReplay
+		if observe {
+			replay, stdinReader = prepareLegacyReplay(stepReq, stdinReader, stdinMaxBytes)
 		}
-
-		run := s.runOneWithStdin(ctx, stepReq, stdinReader, stdinMaxBytes, hooks, tuning, finalStep, false)
+		captureStdout := observe && len(stepReq.FileOutputs) > 0
+		run := s.runOneWithStdin(ctx, stepReq, stdinReader, stdinMaxBytes, hooks, tuning, finalStep, captureStdout)
 		if closeStdin != nil {
 			_ = closeStdin()
 		}
@@ -603,6 +589,17 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			stepResult.HandoffBytes = int64(len(run.judgeOut))
 		}
 		stepResults = append(stepResults, stepResult)
+		if observe && !run.stdoutLimitExceeded && legacyNativeStepOutput(stepReq, stepResult, finalStep) {
+			if replay.url != nil {
+				replay.url.source = nil // The native descriptor has closed.
+			}
+			stdout, file := run.judgeOut, []byte(nil)
+			if captureStdout {
+				stdout, file = run.stdoutOut, run.judgeOut
+			}
+			replay.outputs = pipelineOutputDigests(stdout, file)
+			replays[step.ID] = replay
+		}
 
 		if !finalStep {
 			if run.response.Status != "OK" {

@@ -51,10 +51,10 @@ Explicit measurement, time, shadow and judge requests keep their existing
 protocols. The automatic path is off by default.
 
 The automatic replay handles a single contestant with a registered, enabled
-source language and resolved artifacts. It skips network-enabled submissions,
-sidecar artifacts, interactive and communication sessions, entry modes and
-legacy multi-step jobs. Pipeline V1 has its own per-step observations below. Interactive and communication jobs already support
-explicit per-role observations. JVM measurement still requires sandbox
+source language and resolved artifacts. Standalone replays skip network-enabled submissions, sidecar artifacts,
+interactive and communication sessions, and entry modes. Pipeline V1 and
+legacy two-step jobs have per-stage observations. Interactive and
+communication jobs also support explicit per-role observations. JVM measurement still requires sandbox
 qualification. Native wall-time or memory stops do not establish that a
 contestant finished or exhausted CPU. Their optional observation is unavailable.
 
@@ -93,6 +93,29 @@ to receive verified per-stage reports through the remote API. A forwarded
 request bounds the total time for optional replays. Turning observation off on
 the controller suppresses replays even when the worker has observation enabled.
 [Pipeline V1 request and response contract](pipeline-v1.md)
+
+### Legacy two-step observations
+
+With automatic observation enabled, a `programs` and `steps` request can
+return a version 2 receipt with `state: steps`. Its rows carry the original
+`step_id` and `program_id` in execution order. The worker finishes the native
+handoff and final diff or SPJ before replaying any stage. Each eligible row
+compares the full native stdout and, when used, the selected output file.
+A verified row can accompany a final Wrong Answer. A failed handoff has an
+unavailable row, and an unstarted consumer has no row.
+
+The replay uses the original inline input, assembled stdin parts or private
+handoff. For direct `stdin_url`, the worker keeps up to 8 MiB of the bytes
+read during the native download. A larger or incomplete stream leaves
+that stage unavailable while the native run uses its normal download limit.
+Network-enabled stages and final stages using sidecars or `ignore_tle` skip
+observation. Results retain the existing legacy output and timing semantics.
+
+On a remote control plane the optional replay budget travels with the original
+request. An older worker can still return its native verdict, with a version
+2 unavailable observation on a controller expecting stage evidence. Update
+controllers before enabling observations on newer workers so controllers pass
+their configured budget. [HTTP qualification harness](../scripts/verify_durante_legacy_steps.py)
 
 ## When it applies
 

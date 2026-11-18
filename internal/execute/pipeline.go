@@ -291,15 +291,38 @@ func preparePipelineStdin(step executionPlanStep, artifacts *pipelineArtifactSto
 	return file, maxBytes, nil
 }
 
-// MaxPipelineObservationBudget includes each replay's startup and execution allowances.
-const MaxPipelineObservationBudget = runvalidation.MaxPipelineSteps * (max(stdinURLDownloadTimeout, durante.MaxResourceTimeMs*time.Millisecond) + durante.MaxResourceTimeMs*time.Millisecond)
+// Each replay needs a bounded startup and execution allowance.
+const (
+	maxStepReplayBudget          = max(stdinURLDownloadTimeout, durante.MaxResourceTimeMs*time.Millisecond) + durante.MaxResourceTimeMs*time.Millisecond
+	MaxPipelineObservationBudget = runvalidation.MaxPipelineSteps * maxStepReplayBudget
+	MaxLegacyObservationBudget   = runvalidation.MaxSteps * maxStepReplayBudget
+)
 
 type pipelineObservationBudgetKey struct{}
 
-// WithPipelineObservationBudget records the negotiated diagnostic allowance.
-// The worker starts this clock only once the native pipeline has finished.
+type stepObservationBudget struct {
+	maximum time.Duration
+	bounded bool
+}
+
+// WithPipelineObservationBudget records a diagnostic ceiling for a step-based
+// execution. The worker starts this clock only after native judging finishes.
 func WithPipelineObservationBudget(ctx context.Context, budget time.Duration) context.Context {
-	return context.WithValue(ctx, pipelineObservationBudgetKey{}, budget)
+	return context.WithValue(ctx, pipelineObservationBudgetKey{}, stepObservationBudget{maximum: budget, bounded: true})
+}
+
+func stepObservationBudgetFromContext(ctx context.Context) stepObservationBudget {
+	budget, _ := ctx.Value(pipelineObservationBudgetKey{}).(stepObservationBudget)
+	return budget
+}
+
+func (b stepObservationBudget) allowsReplay() bool { return !b.bounded || b.maximum > 0 }
+
+func (b stepObservationBudget) start(ctx context.Context) (context.Context, context.CancelFunc) {
+	if b.bounded && b.maximum > 0 {
+		return context.WithTimeout(ctx, b.maximum)
+	}
+	return context.WithCancel(ctx)
 }
 
 func (s *Service) runPipelineV1(ctx context.Context, req *model.RunRequest, _ Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
@@ -313,18 +336,14 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 	// Keep references to immutable native resources and artifacts. Rebuild each
 	// replay input only after the entire native judgment has finished.
 	var replays map[string]pipelineBatchReplay
-	budget, bounded := ctx.Value(pipelineObservationBudgetKey{}).(time.Duration)
 	if automaticObservationRequested(req, s.workMeasurement) {
-		if !bounded || budget > 0 {
+		budget := stepObservationBudgetFromContext(ctx)
+		if budget.allowsReplay() {
 			replays = make(map[string]pipelineBatchReplay)
 		}
 		defer func() {
-			replayCtx := ctx
-			if bounded && budget > 0 {
-				var cancel context.CancelFunc
-				replayCtx, cancel = context.WithTimeout(ctx, budget)
-				defer cancel()
-			}
+			replayCtx, cancel := budget.start(ctx)
+			defer cancel()
 			response.WorkMeasurementObservation = s.observePipelineSteps(replayCtx, req, response.Steps, replays, artifacts, tuning)
 		}()
 	}

@@ -21,6 +21,9 @@ func remoteObservation(req *model.RunRequest, primary model.RunResponse, cfg dur
 	if req.Pipeline != nil {
 		return remotePipelineObservation(req, primary, cfg, raw)
 	}
+	if runvalidation.UsesSteps(req) {
+		return remoteLegacyObservation(req, primary, cfg, raw)
+	}
 	unavailable := func(reason string) *model.WorkMeasurementObservation {
 		return &model.WorkMeasurementObservation{Version: 1, Authority: durante.Authority, State: "unavailable", Reason: reason}
 	}
@@ -58,6 +61,15 @@ func remoteObservationBudget(req *model.RunRequest, cfg durante.Config) time.Dur
 	}
 	wall := time.Duration(cfg.ResourcePolicy.MaxLimits.WallTimeMs) * time.Millisecond
 	perReplay := max(stdinURLDownloadTimeout, wall) + wall
+	if runvalidation.UsesSteps(req) {
+		var budget time.Duration
+		for i := range min(len(req.Steps), runvalidation.MaxSteps) {
+			if single := legacyStepRequest(req, i); single != nil && observationEligible(single, cfg) == "" {
+				budget += perReplay
+			}
+		}
+		return budget
+	}
 	if req.Pipeline == nil {
 		if observationEligible(req, cfg) == "" {
 			return perReplay
@@ -74,13 +86,33 @@ func remoteObservationBudget(req *model.RunRequest, cfg durante.Config) time.Dur
 	return budget
 }
 
+func decodeRemoteStepObservation(raw json.RawMessage, state string, count int) *model.WorkMeasurementObservation {
+	var block model.WorkMeasurementObservation
+	if json.Unmarshal(raw, &block) != nil || block.Version != 2 || block.Authority != durante.Authority ||
+		block.State != state || block.Reason != "" || block.OutputCheck != "" || block.StdinSHA256 != "" ||
+		block.Report != nil || len(block.Steps) != count {
+		return nil
+	}
+	return &block
+}
+
+func verifyRemoteStepObservation(row *model.PipelineStepObservation, batch *model.RunRequest, cfg durante.Config, eligible bool) {
+	if eligible && batch != nil && observationEligible(batch, cfg) == "" &&
+		row.State == "complete" && row.Reason == "" && row.OutputCheck == "native_output" &&
+		observationReportMatches(batch, cfg, row.Report) &&
+		(row.Report.DispatchProfile != durante.DispatchDefault || row.Report.HostLibc == "") {
+		return
+	}
+	// Discard unverified counters and any diagnostic text from the worker.
+	*row = model.PipelineStepObservation{StepID: row.StepID, ProgramID: row.ProgramID,
+		State: "unavailable", Reason: "no verified batch observation"}
+}
+
 func remotePipelineObservation(req *model.RunRequest, primary model.RunResponse, cfg durante.Config, raw json.RawMessage) *model.WorkMeasurementObservation {
 	unavailable := &model.WorkMeasurementObservation{Version: 2, State: "unavailable", Authority: durante.Authority,
 		Reason: "remote pipeline observation is unavailable"}
-	var block model.WorkMeasurementObservation
-	if json.Unmarshal(raw, &block) != nil || block.Version != 2 || block.Authority != durante.Authority ||
-		block.State != "pipeline" || block.Reason != "" || block.OutputCheck != "" || block.StdinSHA256 != "" ||
-		block.Report != nil || len(block.Steps) != len(primary.Steps) || len(primary.Steps) > len(req.Pipeline.Steps) {
+	block := decodeRemoteStepObservation(raw, "pipeline", len(primary.Steps))
+	if block == nil || len(primary.Steps) > len(req.Pipeline.Steps) {
 		return unavailable
 	}
 	finalJudgeRan := strings.HasPrefix(primary.VerdictSource, "final:")
@@ -104,16 +136,71 @@ func remotePipelineObservation(req *model.RunRequest, primary model.RunResponse,
 			return unavailable
 		}
 		batch := pipelineObservationRequest(req, step)
-		if row.State == "complete" && row.Reason == "" && row.OutputCheck == "native_output" &&
-			batch != nil && observationEligible(batch, cfg) == "" && native.Status == model.RunStatusAccepted &&
-			native.ExitCode != nil && *native.ExitCode == 0 && !native.StdoutTruncated &&
-			!artifactFailure && observationReportMatches(batch, cfg, row.Report) &&
-			(row.Report.DispatchProfile != durante.DispatchDefault || row.Report.HostLibc == "") {
-			continue
-		}
-		// A remote diagnostic reason may contain private resource or artifact bytes.
-		*row = model.PipelineStepObservation{StepID: native.ID, ProgramID: native.ProgramID,
-			State: "unavailable", Reason: "no verified batch observation"}
+		eligible := native.Status == model.RunStatusAccepted && native.ExitCode != nil && *native.ExitCode == 0 && !native.StdoutTruncated && !artifactFailure
+		verifyRemoteStepObservation(row, batch, cfg, eligible)
 	}
-	return &block
+	return block
+}
+
+func remoteLegacyObservation(req *model.RunRequest, primary model.RunResponse, cfg durante.Config, raw json.RawMessage) *model.WorkMeasurementObservation {
+	unavailable := &model.WorkMeasurementObservation{Version: 2, State: "unavailable", Authority: durante.Authority,
+		Reason: "remote step observations are unavailable"}
+	rows := primary.Steps
+	block := decodeRemoteStepObservation(raw, "steps", len(rows))
+	if block == nil || len(rows) > len(req.Steps) {
+		return unavailable
+	}
+	if primary.Status == model.RunStatusAccepted || primary.Status == model.RunStatusWA {
+		if len(rows) == 0 || len(rows) != len(req.Steps) {
+			return unavailable
+		}
+	}
+	if len(rows) == 1 && len(req.Steps) == 2 {
+		first, next := rows[0], req.Steps[1]
+		if first.Status == model.RunStatusAccepted {
+			handoffFailure := (primary.Status == model.RunStatusRE || primary.Status == model.RunStatusInitFail) &&
+				primary.VerdictSource == "step:"+req.Steps[0].ID+":handoff"
+			stdinSource := "handoff"
+			if len(next.StdinParts) != 0 {
+				stdinSource = "stdin_parts"
+			}
+			nextInputFailure := primary.Status == model.RunStatusInitFail && primary.VerdictSource == "step:"+next.ID+":"+stdinSource
+			if !handoffFailure && !nextInputFailure {
+				return unavailable
+			}
+		} else if primary.Status != first.Status || primary.VerdictSource != prefixStepVerdictSource(first.ID, first.VerdictSource) {
+			return unavailable
+		}
+	}
+	for i, native := range rows {
+		step := req.Steps[i]
+		row := &block.Steps[i]
+		if row.StepID != step.ID || row.ProgramID != step.ProgramID || native.ID != step.ID || native.ProgramID != step.ProgramID {
+			return unavailable
+		}
+		handoffFailed := primary.VerdictSource == "step:"+step.ID+":handoff"
+		single := legacyStepRequest(req, i)
+		final := i == len(req.Steps)-1
+		if !final && !handoffFailed && (i+1 < len(rows) || native.Status == model.RunStatusAccepted) {
+			if single == nil || !legacyNativeStepOutput(single, native, false) || step.Handoff == nil {
+				return unavailable
+			}
+			maxBytes := step.Handoff.MaxBytes
+			if maxBytes == 0 {
+				maxBytes = int64(outputLimitBytes(single))
+			}
+			if native.HandoffBytes < 0 || native.HandoffBytes > maxBytes {
+				return unavailable
+			}
+		}
+		if handoffFailed && i+1 < len(rows) {
+			return unavailable
+		}
+		if final && (primary.Status != native.Status || primary.VerdictSource != prefixStepVerdictSource(step.ID, native.VerdictSource)) {
+			return unavailable
+		}
+		eligible := single != nil && !handoffFailed && legacyNativeStepOutput(single, native, final)
+		verifyRemoteStepObservation(row, single, cfg, eligible)
+	}
+	return block
 }
