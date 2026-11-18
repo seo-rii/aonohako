@@ -96,9 +96,9 @@ func decodeRemoteStepObservation(raw json.RawMessage, state string, count int) *
 	return &block
 }
 
-func verifyRemoteStepObservation(row *model.PipelineStepObservation, batch *model.RunRequest, cfg durante.Config, eligible bool) {
+func verifyRemoteStepObservation(row *model.PipelineStepObservation, batch *model.RunRequest, cfg durante.Config, eligible bool, outputCheck string) {
 	if eligible && batch != nil && observationEligible(batch, cfg) == "" &&
-		row.State == "complete" && row.Reason == "" && row.OutputCheck == "native_output" &&
+		row.State == "complete" && row.Reason == "" && row.OutputCheck == outputCheck &&
 		observationReportMatches(batch, cfg, row.Report) &&
 		(row.Report.DispatchProfile != durante.DispatchDefault || row.Report.HostLibc == "") {
 		return
@@ -137,7 +137,14 @@ func remotePipelineObservation(req *model.RunRequest, primary model.RunResponse,
 		}
 		batch := pipelineObservationRequest(req, step)
 		eligible := native.Status == model.RunStatusAccepted && native.ExitCode != nil && *native.ExitCode == 0 && !native.StdoutTruncated && !artifactFailure
-		verifyRemoteStepObservation(row, batch, cfg, eligible)
+		check := "native_output"
+		if strings.EqualFold(strings.TrimSpace(step.Executor.Kind), "interactive") {
+			check = "interactive_transcript"
+			roles := native.CPUTimeByRole
+			eligible = !artifactFailure && !native.StdoutTruncated && completedInteractiveExchange(native) && roles.Contestant.ProgramID == native.ProgramID &&
+				roles.Interactor.ProgramID == strings.TrimSpace(step.Executor.InteractorProgramID)
+		}
+		verifyRemoteStepObservation(row, batch, cfg, eligible, check)
 	}
 	return block
 }
@@ -200,7 +207,7 @@ func remoteLegacyObservation(req *model.RunRequest, primary model.RunResponse, c
 			return unavailable
 		}
 		eligible := single != nil && !handoffFailed && legacyNativeStepOutput(single, native, final)
-		verifyRemoteStepObservation(row, single, cfg, eligible)
+		verifyRemoteStepObservation(row, single, cfg, eligible, "native_output")
 	}
 	return block
 }

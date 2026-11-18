@@ -68,6 +68,35 @@ func TestRemotePipelineNativeResult(t *testing.T) {
 			}
 		}
 	})
+	t.Run("bind native role counters to the submitted programs", func(t *testing.T) {
+		response := native(model.RunStatusAccepted, "final:spj", one, two)
+		zero := 0
+		cpu, raw := nano, rawNano
+		nothing := uint64(0)
+		response.Steps[0].ExitCode = &zero
+		roles := &model.PipelineRoleTimes{
+			Contestant: model.PipelineRoleCPU{ProgramID: "participant", Status: model.RunStatusAccepted, ExitCode: &zero, CPUTimeMs: 3, CPUTimeNs: &cpu, RawCPUTimeNs: &raw},
+			Interactor: model.PipelineRoleCPU{ProgramID: req.Pipeline.Steps[0].Executor.InteractorProgramID, Status: model.RunStatusAccepted, ExitCode: &zero, CPUTimeNs: &nothing, RawCPUTimeNs: &nothing},
+		}
+		response.Steps[0].CPUTimeByRole = roles
+		if err := validateRemotePipelineResult(req, &response); err != nil {
+			t.Fatal(err)
+		}
+		roles.Interactor.Status = model.RunStatusWA
+		if validateRemotePipelineResult(req, &response) == nil {
+			t.Fatal("accepted a native accepted stage from a rejecting interactor")
+		}
+		roles.Interactor.Status = model.RunStatusAccepted
+		roles.Interactor.ProgramID = "other"
+		if validateRemotePipelineResult(req, &response) == nil {
+			t.Fatal("accepted timing from the wrong judge")
+		}
+		roles.Interactor.ProgramID = req.Pipeline.Steps[0].Executor.InteractorProgramID
+		cpu++
+		if validateRemotePipelineResult(req, &response) == nil {
+			t.Fatal("accepted inconsistent contestant CPU nanoseconds")
+		}
+	})
 	t.Run("old worker or missing precise samples", func(t *testing.T) {
 		oldOne, oldTwo := one, two
 		oldOne.CPUTimeNs, oldTwo.CPUTimeNs, oldOne.RawCPUTimeNs, oldTwo.RawCPUTimeNs = nil, nil, nil, nil

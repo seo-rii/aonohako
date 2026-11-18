@@ -194,8 +194,33 @@ func TestRemotePipelineObservationsBindRowsToNativeSteps(t *testing.T) {
 		t.Fatal("deadline omits a bounded stage replay")
 	}
 	req.Pipeline.Steps[1].Executor = model.PipelineExecutor{Kind: "interactive", ParticipantProgramID: "p", InteractorProgramID: "judge"}
-	if remoteObservationBudget(req, cfg) != oneBudget {
-		t.Fatal("budgeted an interactive replay")
+	if remoteObservationBudget(req, cfg) != 2*oneBudget {
+		t.Fatal("deadline omits the eligible interactive contestant")
+	}
+	primary.Status, primary.VerdictSource = model.RunStatusAccepted, "final:diff"
+	nativeRole := model.PipelineRoleCPU{ProgramID: "p", ExitCode: &zero, Status: model.RunStatusAccepted}
+	judgeRole := nativeRole
+	judgeRole.ProgramID = "judge"
+	primary.Steps[1].Status, primary.Steps[1].VerdictSource = model.RunStatusAccepted, "interactor"
+	primary.Steps[1].CPUTimeByRole = &model.PipelineRoleTimes{Contestant: nativeRole, Interactor: judgeRole}
+	if got := get(block); got.Steps[1].State != "unavailable" {
+		t.Fatal("accepted ordinary batch output evidence for an interactive exchange")
+	}
+	block.Steps[1].OutputCheck = "interactive_transcript"
+	if got := get(block); got.Steps[1].State != "complete" {
+		t.Fatal("rejected a verified contestant exchange")
+	}
+	reject := 1
+	primary.Status, primary.VerdictSource = model.RunStatusWA, "step:consume:interactor:exit_code"
+	primary.Steps[1].Status, primary.Steps[1].VerdictSource = model.RunStatusWA, "interactor:exit_code"
+	primary.Steps[1].CPUTimeByRole.Interactor.Status = model.RunStatusWA
+	primary.Steps[1].CPUTimeByRole.Interactor.ExitCode = &reject
+	if got := get(block); got.Steps[1].State != "complete" {
+		t.Fatal("rejected a complete exchange that received native WA")
+	}
+	primary.Steps[1].CPUTimeByRole.Contestant.ExitCode = nil
+	if got := get(block); got.Steps[1].State != "unavailable" {
+		t.Fatal("credited an interrupted interactive contestant")
 	}
 	cfg.Observe = false
 	if remoteObservationBudget(req, cfg) != 0 || remoteObservation(req, primary, cfg, nil) != nil {

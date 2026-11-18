@@ -29,6 +29,13 @@ func validateRemotePipelineResult(req *model.RunRequest, resp *model.RunResponse
 			!publicPipelineStepSource(step, interactive) {
 			return errors.New("remote pipeline step identity or verdict source is inconsistent")
 		}
+		if roles := step.CPUTimeByRole; roles != nil {
+			if !interactive || roles.Contestant.ProgramID != step.ProgramID ||
+				roles.Interactor.ProgramID != strings.TrimSpace(expected.Executor.InteractorProgramID) ||
+				!pipelineRoleTimesMatch(step, roles) {
+				return errors.New("remote interactive role timing is inconsistent")
+			}
+		}
 		if i+1 < len(resp.Steps) && step.Status != model.RunStatusAccepted {
 			return errors.New("remote pipeline continued after a failed step")
 		}
@@ -61,7 +68,29 @@ func validateRemotePipelineResult(req *model.RunRequest, resp *model.RunResponse
 	return nil
 }
 
-func equalPipelineCounter[T int64 | uint64](a, b *T) bool {
+func pipelineRoleTimesMatch(step model.StepResult, roles *model.PipelineRoleTimes) bool {
+	c, j := roles.Contestant, roles.Interactor
+	if step.Status == model.RunStatusAccepted && (j.Status != model.RunStatusAccepted || j.ExitCode == nil || *j.ExitCode != 0) {
+		return false
+	}
+	for _, role := range []model.PipelineRoleCPU{c, j} {
+		switch role.Status {
+		case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusMLE,
+			model.RunStatusWLE, model.RunStatusRE, model.RunStatusInitFail:
+		default:
+			return false
+		}
+		if role.CPUTimeMs < 0 || role.CPUTimeMs > step.CPUTimeMs ||
+			(role.Status == model.RunStatusAccepted && role.ExitCode != nil && *role.ExitCode != 0) {
+			return false
+		}
+	}
+	return equalPipelineCounter(step.ExitCode, c.ExitCode) && step.CPUTimeMs-c.CPUTimeMs == j.CPUTimeMs &&
+		equalPipelineCounter(step.CPUTimeNs, sumStepNanoseconds(c.CPUTimeNs, j.CPUTimeNs)) &&
+		equalPipelineCounter(step.RawCPUTimeNs, sumStepNanoseconds(c.RawCPUTimeNs, j.RawCPUTimeNs))
+}
+
+func equalPipelineCounter[T int | int64 | uint64](a, b *T) bool {
 	return a == b || (a != nil && b != nil && *a == *b)
 }
 

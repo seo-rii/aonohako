@@ -13,10 +13,11 @@ import (
 	"aonohako/internal/runvalidation"
 )
 
-type pipelineBatchReplay struct {
-	request *model.RunRequest
-	inputs  executionPlanStep
-	outputs [2][sha256.Size]byte
+type pipelineStepReplay struct {
+	transcript *interactiveTranscript
+	request    *model.RunRequest
+	inputs     executionPlanStep
+	outputs    [2][sha256.Size]byte
 }
 
 // Compare stdout and the participant file independently, including binary bytes.
@@ -24,15 +25,36 @@ func pipelineOutputDigests(stdout, file []byte) [2][sha256.Size]byte {
 	return [2][sha256.Size]byte{sha256.Sum256(stdout), sha256.Sum256(file)}
 }
 
-// Resolve just the batch contestant and its effective limits. The remote
-// validator can use this without decoding or exposing private pipeline inputs.
+type skipInteractiveReplayKey struct{}
+
+// WithoutInteractivePipelineReplay preserves the batch-only allowance of older controllers.
+func WithoutInteractivePipelineReplay(ctx context.Context) context.Context {
+	return context.WithValue(ctx, skipInteractiveReplayKey{}, true)
+}
+
+// Resolve only the contestant that will be measured. The interactor never runs
+// in the replay. Keep the native stage's stdout and declared file limits.
 func pipelineObservationRequest(req *model.RunRequest, step model.PipelineStep) *model.RunRequest {
-	if req == nil || req.Pipeline == nil || !strings.EqualFold(strings.TrimSpace(step.Executor.Kind), "batch") {
+	if req == nil || req.Pipeline == nil {
+		return nil
+	}
+	id := step.Executor.ProgramID
+	interactive := strings.EqualFold(strings.TrimSpace(step.Executor.Kind), "interactive")
+	if interactive {
+		id = step.Executor.ParticipantProgramID
+	} else if !strings.EqualFold(strings.TrimSpace(step.Executor.Kind), "batch") {
 		return nil
 	}
 	for _, program := range req.Pipeline.Programs {
-		if program.ID == strings.TrimSpace(step.Executor.ProgramID) {
+		if program.ID == strings.TrimSpace(id) {
 			single := pipelineBatchRequest(req, program, step.Limits, step.Outputs)
+			if interactive {
+				for _, output := range step.Outputs {
+					if strings.EqualFold(strings.TrimSpace(output.Source.Kind), "participant_file") {
+						single.Limits.OutputBytes = max(single.Limits.OutputBytes, int(output.MaxBytes))
+					}
+				}
+			}
 			if !runvalidation.UsesPython(single) {
 				single.PythonLibraryMode = ""
 			}
@@ -42,7 +64,7 @@ func pipelineObservationRequest(req *model.RunRequest, step model.PipelineStep) 
 	return nil
 }
 
-func (s *Service) observePipelineSteps(ctx context.Context, req *model.RunRequest, steps []model.StepResult, replays map[string]pipelineBatchReplay, artifacts *pipelineArtifactStore, tuning config.RuntimeTuningConfig) *model.WorkMeasurementObservation {
+func (s *Service) observePipelineSteps(ctx context.Context, req *model.RunRequest, steps []model.StepResult, replays map[string]pipelineStepReplay, artifacts *pipelineArtifactStore, tuning config.RuntimeTuningConfig) *model.WorkMeasurementObservation {
 	observation := &model.WorkMeasurementObservation{Version: 2, Authority: durante.Authority, State: "pipeline"}
 	for i, step := range steps {
 		row := model.PipelineStepObservation{StepID: step.ID, ProgramID: step.ProgramID, State: "unavailable"}
@@ -50,14 +72,21 @@ func (s *Service) observePipelineSteps(ctx context.Context, req *model.RunReques
 		switch {
 		case ctx.Err() != nil:
 			row.Reason = "pipeline observation cancelled"
-		case !strings.EqualFold(strings.TrimSpace(req.Pipeline.Steps[i].Executor.Kind), "batch"):
-			row.Reason = "interactive pipeline step is not replayed"
 		case !ready:
 			row.Reason = "pipeline step has no eligible native output"
+			if strings.EqualFold(strings.TrimSpace(req.Pipeline.Steps[i].Executor.Kind), "interactive") {
+				row.Reason = "native interactive dialogue is unavailable for replay"
+			}
 		default:
-			row.Report, row.Reason = s.replayPipelineBatch(ctx, replay, artifacts, tuning)
+			check := "native_output"
+			if replay.transcript != nil {
+				check = "interactive_transcript"
+				row.Report, row.Reason = s.replayInteractiveContestant(ctx, replay.request, replay.transcript, replay.outputs, tuning)
+			} else {
+				row.Report, row.Reason = s.replayPipelineBatch(ctx, replay, artifacts, tuning)
+			}
 			if row.Report != nil {
-				row.State, row.OutputCheck = "complete", "native_output"
+				row.State, row.OutputCheck = "complete", check
 			}
 		}
 		observation.Steps = append(observation.Steps, row)
@@ -65,7 +94,7 @@ func (s *Service) observePipelineSteps(ctx context.Context, req *model.RunReques
 	return observation
 }
 
-func (s *Service) replayPipelineBatch(ctx context.Context, snapshot pipelineBatchReplay, artifacts *pipelineArtifactStore, tuning config.RuntimeTuningConfig) (*durante.Report, string) {
+func (s *Service) replayPipelineBatch(ctx context.Context, snapshot pipelineStepReplay, artifacts *pipelineArtifactStore, tuning config.RuntimeTuningConfig) (*durante.Report, string) {
 	// The compiled inputs reference the original resolved resource bytes and
 	// immutable native handoffs. Materialize one replay input at a time.
 	input, maxBytes, err := preparePipelineStdin(snapshot.inputs, artifacts)

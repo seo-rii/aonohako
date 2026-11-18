@@ -43,8 +43,9 @@ func TestPipelineObservationBindsResolvedContestantAndLimits(t *testing.T) {
 		t.Fatal("unknown program resolved")
 	}
 	step.Executor = model.PipelineExecutor{Kind: "interactive", ParticipantProgramID: "compute", InteractorProgramID: "python"}
-	if pipelineObservationRequest(req, step) != nil {
-		t.Fatal("interactive step resolved as a batch")
+	if target := pipelineObservationRequest(req, step); target == nil || target.Lang != "CPP20" || target.Interactor != nil ||
+		target.FileOutputs[0].Path != "payload.bin" {
+		t.Fatal("interactive replay must resolve the original contestant alone")
 	}
 }
 

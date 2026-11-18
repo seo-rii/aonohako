@@ -160,6 +160,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	httpReq.Header.Set("Accept", "text/event-stream")
 	if req.Pipeline != nil {
 		httpReq.Header.Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+		if observationBudget > 0 {
+			httpReq.Header.Set(model.PipelineInteractiveObservationHeader, "v1")
+		}
 		httpReq.Header.Set(model.PipelineObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
 	} else if legacySteps {
 		// Older workers ignore this optional ceiling and run their native steps normally.
@@ -422,6 +425,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			}
 			for i := range remoteResult.Steps {
 				step := &remoteResult.Steps[i]
+				if req.Pipeline == nil {
+					step.CPUTimeByRole = nil
+				}
 				switch step.Status {
 				case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusMLE, model.RunStatusWLE, model.RunStatusRE, model.RunStatusInitFail:
 				default:

@@ -335,11 +335,11 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 
 	// Keep references to immutable native resources and artifacts. Rebuild each
 	// replay input only after the entire native judgment has finished.
-	var replays map[string]pipelineBatchReplay
+	var replays map[string]pipelineStepReplay
 	if automaticObservationRequested(req, s.workMeasurement) {
 		budget := stepObservationBudgetFromContext(ctx)
 		if budget.allowsReplay() {
-			replays = make(map[string]pipelineBatchReplay)
+			replays = make(map[string]pipelineStepReplay)
 		}
 		defer func() {
 			replayCtx, cancel := budget.start(ctx)
@@ -371,11 +371,20 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			}, stepResults)
 		}
 
+		var measurement *model.RunRequest
+		if replays != nil && s.workMeasurementPolicyError == nil {
+			single := pipelineObservationRequest(req, req.Pipeline.Steps[index])
+			if single != nil && observationEligible(single, s.workMeasurement) == "" {
+				measurement = single
+			}
+		}
+		var transcript *interactiveTranscript
 		var resp model.RunResponse
 		var stdout []byte
 		var participantFileOutput []byte
 		var interactorOutputPath string
 		var interactorOutputErr error
+		participantFileOK := true
 		if step.kind == "batch" {
 			stepReq := pipelineBatchRequest(req, step.program, step.limits, step.outputs)
 			captureRawStdout := len(stepReq.FileOutputs) > 0
@@ -428,7 +437,12 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 				}
 				interactorOutputPath = interactorOutputFile.Name()
 			}
-			run := s.runInteractiveExecution(ctx, stepReq, stdin, stdinMaxBytes, interactorOutputFile, interactorOutputMax, true, Hooks{}, tuning)
+			nativeCtx := ctx
+			if measurement != nil && ctx.Value(skipInteractiveReplayKey{}) != true {
+				transcript = &interactiveTranscript{}
+				nativeCtx = context.WithValue(ctx, interactiveTranscriptKey{}, transcript)
+			}
+			run := s.runInteractiveExecution(nativeCtx, stepReq, stdin, stdinMaxBytes, interactorOutputFile, interactorOutputMax, true, Hooks{}, tuning)
 			if interactorOutputFile != nil {
 				if closeErr := interactorOutputFile.Close(); closeErr != nil && run.interactorOutputErr == nil {
 					run.interactorOutputErr = closeErr
@@ -444,6 +458,7 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			participantFileOutput = run.participantFileOutput
 			interactorOutputErr = run.interactorOutputErr
 			if run.participantFileErr != nil {
+				participantFileOK = false
 				interactorOutputErr = run.participantFileErr
 			}
 		}
@@ -453,8 +468,27 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 		resp.Stdout = "" // Pipeline artifacts and interactive transcripts are private.
 		stepResult := stepResultFromResponse(step.id, step.program.ID, resp)
 		stepResult.Stdout = ""
+		if step.kind == "interactive" && len(resp.Steps) == 2 {
+			roles := &model.PipelineRoleTimes{
+				Contestant: pipelineRoleCPU(step.program.ID, resp.Steps[0]),
+				Interactor: pipelineRoleCPU(step.interactor.ID, resp.Steps[1]),
+			}
+			stepResult.CPUTimeByRole = roles
+			stepResult.CPUTimeNs = sumStepNanoseconds(roles.Contestant.CPUTimeNs, roles.Interactor.CPUTimeNs)
+		}
 		stepResults = append(stepResults, stepResult)
+		var replay *pipelineStepReplay
+		if measurement != nil && resp.ExitCode != nil && *resp.ExitCode == 0 && !resp.StdoutTruncated &&
+			((step.kind == "batch" && stepResult.Status == model.RunStatusAccepted) ||
+				(participantFileOK && transcript.ready() && completedInteractiveExchange(stepResult))) {
+			replay = &pipelineStepReplay{request: measurement, inputs: step, transcript: transcript,
+				outputs: pipelineOutputDigests(stdout, participantFileOutput)}
+		}
 		if resp.Status != "OK" && resp.Status != model.RunStatusAccepted {
+			// A cleanly rejected dialogue still supplies a complete transcript.
+			if replay != nil {
+				replays[step.id] = *replay
+			}
 			return aggregateStepResponse(failedStepResponse(resp, step.id), stepResults)
 		}
 		if interactorOutputErr != nil {
@@ -498,13 +532,8 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			}
 			artifactBytes += int64(len(data))
 		}
-		if replays != nil && step.kind == "batch" && resp.ExitCode != nil && *resp.ExitCode == 0 && !resp.StdoutTruncated && s.workMeasurementPolicyError == nil {
-			single := pipelineObservationRequest(req, req.Pipeline.Steps[index])
-			if single != nil && observationEligible(single, s.workMeasurement) == "" {
-				replays[step.id] = pipelineBatchReplay{
-					request: single, inputs: step, outputs: pipelineOutputDigests(stdout, participantFileOutput),
-				}
-			}
+		if replay != nil {
+			replays[step.id] = *replay
 		}
 		stepResults[len(stepResults)-1].HandoffBytes = artifactBytes
 		stepStdout[step.id] = append([]byte(nil), stdout...)
@@ -513,6 +542,25 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 	actual := stepStdout[plan.finalJudge.actualStepID]
 	final := s.runPipelineFinalJudge(ctx, req, plan.finalJudge, actual, tuning)
 	return aggregateStepResponse(final, stepResults)
+}
+
+func pipelineRoleCPU(programID string, role model.StepResult) model.PipelineRoleCPU {
+	return model.PipelineRoleCPU{ProgramID: programID, Status: role.Status, ExitCode: role.ExitCode,
+		CPUTimeMs: role.CPUTimeMs, CPUTimeNs: role.CPUTimeNs, RawCPUTimeNs: role.RawCPUTimeNs}
+}
+
+func completedInteractiveExchange(step model.StepResult) bool {
+	roles := step.CPUTimeByRole
+	if roles == nil || roles.Contestant.Status != model.RunStatusAccepted ||
+		roles.Contestant.ExitCode == nil || *roles.Contestant.ExitCode != 0 || roles.Interactor.ExitCode == nil {
+		return false
+	}
+	exit := *roles.Interactor.ExitCode
+	if step.Status == model.RunStatusAccepted {
+		return step.VerdictSource == "interactor" && roles.Interactor.Status == model.RunStatusAccepted && exit == 0
+	}
+	return step.Status == model.RunStatusWA && step.VerdictSource == "interactor:exit_code" &&
+		roles.Interactor.Status == model.RunStatusWA && exit > 0 && exit != 3
 }
 
 // RedactPipelineResponse applies the public Pipeline V1 diagnostic boundary.
