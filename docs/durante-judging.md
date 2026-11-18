@@ -50,11 +50,12 @@ A malformed optional receipt also leaves a valid primary intact.
 Explicit measurement, time, shadow and judge requests keep their existing
 protocols. The automatic path is off by default.
 
-The automatic replay handles a single contestant with a registered, enabled
-source language and resolved artifacts. Standalone replays skip network-enabled submissions, sidecar artifacts,
-interactive and communication sessions, and entry modes. Pipeline V1 and
-legacy two-step jobs have per-stage observations. Interactive and
-communication jobs also support explicit per-role observations. JVM measurement still requires sandbox
+Automatic replay requires a contestant with a registered, enabled source
+language and resolved artifacts. Standalone interactive jobs can collect a
+contestant observation after the native exchange. Communication jobs support
+explicit per-role observations. Standalone replays skip network-enabled
+submissions, sidecar artifacts and entry modes. Pipeline V1 and legacy
+two-step jobs have per-stage observations. JVM measurement still requires sandbox
 qualification. Native wall-time or memory stops do not establish that a
 contestant finished or exhausted CPU. Their optional observation is unavailable.
 
@@ -62,6 +63,31 @@ The HTTP verification script exercises direct and forwarded requests in an
 offline validation container. It compiles real submissions, checks native
 results, validates Durante receipts and verifies that the SPJ executes once.
 [Verification harness](../scripts/verify_durante_observation.py)
+
+### Standalone interactive observations
+
+With automatic observation enabled, the native contestant and interactor
+finish their exchange and establish the verdict. The worker then replays
+the contestant with a private copy of the delivered dialogue. The same
+bounded recording and byte comparison apply to
+[Pipeline V1 interactive stages](#pipeline-v1-interactive-observations).
+A normal contestant exit and a matching replay can produce counters for
+both an accepted exchange and an exchange the interactor judged wrong.
+If the interactor ends the session while the contestant is still running,
+the native verdict is available with an unavailable contestant observation.
+
+The version 2 `work_measurement_observation` uses `state: interactive`.
+An executed contestant has one row identified by `step_id: contestant`
+and `program_id: contestant`. A complete row carries the diagnostic report
+and `output_check: interactive_transcript`. Use the native `contestant`
+row in the response's top-level `steps` to pair that report with contestant
+CPU time. The top-level CPU time also includes the interactor.
+
+For remote workers, update the controller first so each forwarded request
+carries its replay budget. A zero budget suppresses replay even on a worker
+with observation enabled. A direct request without the forwarding header
+uses the worker's local observation setting.
+[Standalone interactive HTTP verification](../scripts/verify_durante_interactive.py)
 
 ### Pipeline V1 batch observations
 

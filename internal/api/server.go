@@ -585,6 +585,14 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), budget))
 	}
+	if interactive := r.Header.Values(model.InteractiveObservationBudgetHeader); len(interactive) > 0 {
+		budget, ok := parseStepObservationBudget(interactive, execute.MaxInteractiveObservationBudget)
+		if !ok || req.Interactor == nil || req.Pipeline != nil || runvalidation.UsesSteps(&req) {
+			writeJSONError(w, http.StatusBadRequest, "invalid_interactive_observation_budget")
+			return
+		}
+		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), budget))
+	}
 	if req.Pipeline != nil && !s.supportsPipelineV1(r.Context()) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "unsupported_capability", "pipeline-v1 is not supported by this execution transport")
 		return

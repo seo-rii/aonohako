@@ -10,6 +10,7 @@ import (
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/timing"
 )
 
 // A missing or newer diagnostic payload can only affect the optional replay.
@@ -23,6 +24,9 @@ func remoteObservation(req *model.RunRequest, primary model.RunResponse, cfg dur
 	}
 	if runvalidation.UsesSteps(req) {
 		return remoteLegacyObservation(req, primary, cfg, raw)
+	}
+	if req.Interactor != nil {
+		return remoteStandaloneInteractiveObservation(req, primary, cfg, raw)
 	}
 	unavailable := func(reason string) *model.WorkMeasurementObservation {
 		return &model.WorkMeasurementObservation{Version: 1, Authority: durante.Authority, State: "unavailable", Reason: reason}
@@ -71,7 +75,11 @@ func remoteObservationBudget(req *model.RunRequest, cfg durante.Config) time.Dur
 		return budget
 	}
 	if req.Pipeline == nil {
-		if observationEligible(req, cfg) == "" {
+		single := req
+		if req.Interactor != nil {
+			single = standaloneInteractiveContestant(req)
+		}
+		if single != nil && observationEligible(single, cfg) == "" {
 			return perReplay
 		}
 		return 0
@@ -105,7 +113,69 @@ func verifyRemoteStepObservation(row *model.PipelineStepObservation, batch *mode
 	}
 	// Discard unverified counters and any diagnostic text from the worker.
 	*row = model.PipelineStepObservation{StepID: row.StepID, ProgramID: row.ProgramID,
-		State: "unavailable", Reason: "no verified batch observation"}
+		State: "unavailable", Reason: "no verified contestant observation"}
+}
+
+func remoteStandaloneInteractiveObservation(req *model.RunRequest, primary model.RunResponse, cfg durante.Config, raw json.RawMessage) *model.WorkMeasurementObservation {
+	count := 0
+	if len(primary.Steps) > 0 {
+		count = 1
+	}
+	block := decodeRemoteStepObservation(raw, "interactive", count)
+	if block == nil || (count == 1 && (block.Steps[0].StepID != "contestant" || block.Steps[0].ProgramID != "contestant")) {
+		return &model.WorkMeasurementObservation{Version: 2, State: "unavailable", Authority: durante.Authority,
+			Reason: "remote interactive observation is unavailable"}
+	}
+	if count == 0 {
+		return block
+	}
+	single := standaloneInteractiveContestant(req)
+	eligible := completedStandaloneInteractiveExchange(primary) && standaloneInteractiveAccountingMatches(req, primary)
+	verifyRemoteStepObservation(&block.Steps[0], single, cfg, eligible, "interactive_transcript")
+	return block
+}
+
+// A complete interactive receipt refers to a normally completed native run of
+// each role within its own CPU allowance. The aggregate includes both roles.
+func standaloneInteractiveAccountingMatches(req *model.RunRequest, primary model.RunResponse) bool {
+	contestant, judge := primary.Steps[0], primary.Steps[1]
+	if !interactiveRoleCPUWithinLimits(contestant.CPUTimeMs, judge.CPUTimeMs, req) || primary.TimeMs != primary.WallTimeMs {
+		return false
+	}
+	var calibration timing.CPUNormalizer
+	if norm := primary.CPUTimeNormalization; norm != nil {
+		var err error
+		calibration, err = timing.NewCPUNormalizer(norm.Method, norm.ReferenceTimeNs, norm.ObservedTimeNs)
+		info, _ := calibration.Info()
+		if err != nil || norm.Method != timing.CPUNormalizationMethod || norm.ScalePPM != info.ScalePPM {
+			return false
+		}
+	}
+	for _, role := range primary.Steps {
+		// Both normally exited peers have exact samples. Native accounting
+		// rounds each role up separately before adding their milliseconds.
+		if role.CPUTimeNs == nil || !roleCPUMillisecondsMatch(role.CPUTimeMs, role.CPUTimeNs) ||
+			role.TimeMs != role.WallTimeMs || role.WallTimeMs > primary.WallTimeMs {
+			return false
+		}
+		if calibration.Enabled() {
+			if role.RawCPUTimeMs == nil || role.RawCPUTimeNs == nil || !roleCPUMillisecondsMatch(*role.RawCPUTimeMs, role.RawCPUTimeNs) ||
+				calibration.NormalizeNanoseconds(*role.RawCPUTimeNs) != *role.CPUTimeNs {
+				return false
+			}
+		} else if role.RawCPUTimeMs != nil || role.RawCPUTimeNs != nil {
+			return false
+		}
+	}
+	// The general aggregator omits an overflowing sum just as it omits a
+	// missing sample. A completed observed pair must be representable.
+	if !roleNanosecondsMatch(&primary.CPUTimeNs, contestant.CPUTimeNs, judge.CPUTimeNs) ||
+		!roleNanosecondsMatch(primary.RawCPUTimeNs, contestant.RawCPUTimeNs, judge.RawCPUTimeNs) {
+		return false
+	}
+	totals := aggregateStepResponse(model.RunResponse{}, primary.Steps)
+	return primary.CPUTimeMs == totals.CPUTimeMs && equalPipelineCounter(primary.RawCPUTimeMs, totals.RawCPUTimeMs) &&
+		primary.ProcessCPUTimeMs == totals.ProcessCPUTimeMs && primary.MemoryKB == totals.MemoryKB
 }
 
 func remotePipelineObservation(req *model.RunRequest, primary model.RunResponse, cfg durante.Config, raw json.RawMessage) *model.WorkMeasurementObservation {

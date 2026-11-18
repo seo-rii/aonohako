@@ -7,6 +7,7 @@ const (
 	PipelineV1WorkerHeader               = "X-Aonohako-Pipeline-Worker"
 	PipelineObservationBudgetHeader      = "X-Aonohako-Pipeline-Observation-Budget-Ms"
 	LegacyObservationBudgetHeader        = "X-Aonohako-Legacy-Observation-Budget-Ms"
+	InteractiveObservationBudgetHeader   = "X-Aonohako-Interactive-Observation-Budget-Ms"
 )
 
 type PipelineV1Capability struct {

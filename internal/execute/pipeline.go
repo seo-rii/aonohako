@@ -293,9 +293,10 @@ func preparePipelineStdin(step executionPlanStep, artifacts *pipelineArtifactSto
 
 // Each replay needs a bounded startup and execution allowance.
 const (
-	maxStepReplayBudget          = max(stdinURLDownloadTimeout, durante.MaxResourceTimeMs*time.Millisecond) + durante.MaxResourceTimeMs*time.Millisecond
-	MaxPipelineObservationBudget = runvalidation.MaxPipelineSteps * maxStepReplayBudget
-	MaxLegacyObservationBudget   = runvalidation.MaxSteps * maxStepReplayBudget
+	maxStepReplayBudget             = max(stdinURLDownloadTimeout, durante.MaxResourceTimeMs*time.Millisecond) + durante.MaxResourceTimeMs*time.Millisecond
+	MaxPipelineObservationBudget    = runvalidation.MaxPipelineSteps * maxStepReplayBudget
+	MaxLegacyObservationBudget      = runvalidation.MaxSteps * maxStepReplayBudget
+	MaxInteractiveObservationBudget = maxStepReplayBudget
 )
 
 type pipelineObservationBudgetKey struct{}
@@ -305,7 +306,7 @@ type stepObservationBudget struct {
 	bounded bool
 }
 
-// WithPipelineObservationBudget records a diagnostic ceiling for a step-based
+// WithPipelineObservationBudget records a diagnostic ceiling for an observed
 // execution. The worker starts this clock only after native judging finishes.
 func WithPipelineObservationBudget(ctx context.Context, budget time.Duration) context.Context {
 	return context.WithValue(ctx, pipelineObservationBudgetKey{}, stepObservationBudget{maximum: budget, bounded: true})
@@ -551,16 +552,9 @@ func pipelineRoleCPU(programID string, role model.StepResult) model.PipelineRole
 
 func completedInteractiveExchange(step model.StepResult) bool {
 	roles := step.CPUTimeByRole
-	if roles == nil || roles.Contestant.Status != model.RunStatusAccepted ||
-		roles.Contestant.ExitCode == nil || *roles.Contestant.ExitCode != 0 || roles.Interactor.ExitCode == nil {
-		return false
-	}
-	exit := *roles.Interactor.ExitCode
-	if step.Status == model.RunStatusAccepted {
-		return step.VerdictSource == "interactor" && roles.Interactor.Status == model.RunStatusAccepted && exit == 0
-	}
-	return step.Status == model.RunStatusWA && step.VerdictSource == "interactor:exit_code" &&
-		roles.Interactor.Status == model.RunStatusWA && exit > 0 && exit != 3
+	return roles != nil && roles.Contestant.Status == model.RunStatusAccepted &&
+		roles.Contestant.ExitCode != nil && *roles.Contestant.ExitCode == 0 &&
+		completedInteractorVerdict(step.Status, step.VerdictSource, roles.Interactor.Status, roles.Interactor.ExitCode)
 }
 
 // RedactPipelineResponse applies the public Pipeline V1 diagnostic boundary.

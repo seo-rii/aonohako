@@ -184,6 +184,11 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor input pipe failed: " + err.Error()}}
 	}
 	transcript, _ := ctx.Value(interactiveTranscriptKey{}).(*interactiveTranscript)
+	capture, _ := ctx.Value(standaloneInteractiveCaptureKey{}).(*standaloneInteractiveCapture)
+	if capture != nil {
+		transcript = &capture.trace
+		capture.tuning = tuning
+	}
 	contestantIn := &interactivePipeWriter{w: contestantInW, transcript: transcript}
 	interactorIn := &interactivePipeWriter{w: interactorInW, transcript: transcript, fromContestant: true}
 	defer contestantInR.Close()
@@ -353,6 +358,9 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			interactorRes.Status == "OK" && interactorRes.ExitCode != nil &&
 			!contestantRes.StdoutTruncated && !interactorRes.StdoutTruncated &&
 			(resp.Status == model.RunStatusAccepted || resp.Status == model.RunStatusWA))
+		if capture != nil && transcript.ready() {
+			capture.outputs = pipelineOutputDigests(contestantRes.Stdout, nil)
+		}
 	}
 	resp.SidecarOutputs = sidecarOutputs
 	resp.SidecarErrors = sidecarErrors
@@ -686,6 +694,18 @@ func classifyInteractorStatus(req *model.RunRequest, res execResult) (string, st
 	default:
 		return model.RunStatusWA, clipUTF8(res.Stderr, responseStderrLimitBytes(req)), "exit_code"
 	}
+}
+
+// A peer killed after a nominal acceptance or rejection cannot confirm an
+// exchange. Keep both automatic replay paths aligned with classifyInteractorStatus.
+func completedInteractorVerdict(status, source, interactorStatus string, exit *int) bool {
+	if exit == nil || interactorStatus != status {
+		return false
+	}
+	if status == model.RunStatusAccepted {
+		return source == "interactor" && *exit == 0
+	}
+	return status == model.RunStatusWA && source == "interactor:exit_code" && *exit > 0 && *exit != 3
 }
 
 func interactiveContestantStepResult(req *model.RunRequest, res execResult) model.StepResult {
