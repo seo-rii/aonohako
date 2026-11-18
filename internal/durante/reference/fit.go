@@ -260,7 +260,7 @@ func validateReferenceMetered(response model.RunResponse, dataset Dataset, contr
 	if response.Status != model.RunStatusInitFail || response.VerdictSource != "durante_complete" || response.Score != nil || response.ExitCode == nil || *response.ExitCode != 0 || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil || response.StdoutTruncated || response.StderrTruncated || d == nil {
 		return fmt.Errorf("requires a normally exited complete diagnostic envelope")
 	}
-	if d.Authority != durante.Authority || d.State != "complete" || d.OutputMatches == nil || !*d.OutputMatches || d.TerminationSource != "stdout" || d.NominalLimits != dataset.NativeLimits || d.RawLimits != dataset.MeteredLimits || d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" {
+	if d.Authority != durante.Authority || d.State != "complete" || d.OutputMatches == nil || !*d.OutputMatches || d.TerminationSource != "stdout" || d.NominalLimits != dataset.NativeLimits || d.RawLimits != dataset.MeteredLimits || d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" || d.TimeEstimateEligibility != nil {
 		return fmt.Errorf("diagnostic output, limits, or envelope contract mismatch")
 	}
 	if err := validateReferenceCPU(response, dataset.MeteredLimits.CPUTimeMs); err != nil {

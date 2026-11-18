@@ -230,11 +230,20 @@ If estimation is unavailable, both fields are absent and
 observation with signals, partial REP coverage, or overflowing estimated time
 can remain complete while conversion is unavailable. An execution rejected before
 initialization may omit the diagnostic execution object. Without the explicit
-flag, no estimate, nominal comparison, or conversion-unavailable field is emitted.
+flag, no estimate, nominal comparison, conversion-unavailable or eligibility field
+is emitted. With the flag and an execution envelope, the optional additive
+`time_estimate_eligibility` object has `version: 1`, `eligible`, and an ordered
+`reason_codes` array. Success uses an explicit empty array; exclusions such as
+`signals_observed`, `unsupported_rep_entries`, and `rep_breakdown_missing` remain
+ineligible and retain the existing unavailable string. See the
+[eligibility stages and codes](durante.md#structured-conversion-eligibility).
 
 Local execution and remote forwarding require their own matching operator
 policy (legacy or shared-model registry) and downstream execution-image identity. Remote forwarding recomputes and
-verifies the estimate rather than adopting returned coefficients. Raw CPU/RSS
+verifies the estimate rather than adopting returned coefficients. Present
+eligibility must exactly match its recomputed reasons. Legacy omission is allowed
+without weakening estimate or unavailable-string validation; explicit null and
+ambiguous/malformed objects are rejected. Raw CPU/RSS
 and the envelope's initialization-failure status remain unchanged, with no score
 or CPU normalization. Production coefficients are not supplied by this API.
 See [reference-time configuration and examples](durante.md#explicit-reference-time-calculator).

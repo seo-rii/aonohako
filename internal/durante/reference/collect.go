@@ -329,18 +329,18 @@ func validateCollectedMetered(response model.RunResponse, dataset Dataset) error
 	if d.State != "complete" || d.Authority != durante.Authority || d.OutputMatches == nil || !*d.OutputMatches || d.TerminationSource != "stdout" || d.RawLimits != dataset.MeteredLimits || d.NominalLimits != dataset.NativeLimits {
 		return fmt.Errorf("metered execution returned inconsistent completion or limits")
 	}
-	if d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil {
+	if d.TimeEstimate != nil || d.NominalTimeExceeded != nil || d.TimeEstimateUnavailable != "" || d.TimeEstimateEligibility != nil || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil {
 		return fmt.Errorf("raw corpus collection returned unsolicited converted time or peer metadata")
 	}
 	r := response.WorkMeasurement
-	if r == nil || !r.Complete || r.Schema != 1 || r.ClientVersion != 1 || r.Reason != "" || r.Authority != durante.Authority || r.Metric != durante.Metric || r.Scope != durante.Scope || r.Family != "cpp" || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile {
+	if r == nil || r.Family != "cpp" || r.EngineProfile != durante.EngineProfile || r.DispatchProfile != dataset.DispatchProfile {
 		return fmt.Errorf("metered observation is absent, incomplete, or incompatible")
 	}
-	if !r.ValidDiagnosticContract() || !r.ValidInstallationIdentity() || !r.ValidREPTelemetry() || !r.REPEnabled || r.Instructions == nil || *r.Instructions == 0 || r.Processes <= 0 || r.Images < r.Processes {
-		return fmt.Errorf("metered observation lacks a complete diagnostic contract or counters")
+	if !r.ValidInstallationIdentity() {
+		return fmt.Errorf("metered observation lacks a compatible installation identity")
 	}
-	if r.SignalsObserved != 0 || r.Quality != "uninterrupted" || *r.UnsupportedREPEntries != 0 {
-		return fmt.Errorf("metered observation is not convertible: signals or unsupported REP work")
+	if eligibility := r.TimeConversionEligibility(durante.TimeMethod); !eligibility.Eligible {
+		return fmt.Errorf("metered observation is not convertible: %s", strings.Join(eligibility.ReasonCodes, ", "))
 	}
 	return nil
 }
