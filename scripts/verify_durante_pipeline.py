@@ -29,6 +29,10 @@ PROGRAM = r"""
 #include <cstring>
 #include <ctime>
 int main() {
+#ifdef INVOCATION_MARKER
+    FILE *marker = fopen(INVOCATION_MARKER, "rb");
+    if (!marker || fgetc(marker) == EOF || fclose(marker) != 0) return 8;
+#endif
     char tag[64], mode[64];
     if (scanf("%63s", tag) != 1) return 2;
     if (!strcmp(tag, "produce")) {
@@ -52,6 +56,7 @@ int main() {
 """
 ANSWER = "PRIVATE_PIPE_FINAL 42\n"
 LIMITS = {"time_ms": 3000, "wall_time_ms": 8000, "memory_mb": 256}
+MARKER = Path(sysconfig.get_path("stdlib")) / "colorsys.py"
 
 
 def resource(text):
@@ -129,27 +134,26 @@ def execute(url, name, payload, states, client_sha, *, status="Accepted", source
 
 
 @contextmanager
-def single_marker_read():
-    # Only the native checker/interactor opens this stdlib file. Watching open
-    # and close prevents the kernel coalescing consecutive identical events.
-    marker = Path(sysconfig.get_path("stdlib")) / "colorsys.py"
+def expect_marker_reads(count=1):
+    # Watching open and close prevents the kernel coalescing two native or
+    # metered invocations into one event.
     libc = ctypes.CDLL(None, use_errno=True)
     fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
     if fd < 0:
         raise OSError(ctypes.get_errno(), "inotify_init1")
     try:
-        if libc.inotify_add_watch(fd, os.fsencode(marker), 0x20 | 0x10) < 0:
-            raise OSError(ctypes.get_errno(), str(marker))
-        yield marker
+        if libc.inotify_add_watch(fd, os.fsencode(MARKER), 0x20 | 0x10) < 0:
+            raise OSError(ctypes.get_errno(), str(MARKER))
+        yield MARKER
         masks = [mask for _, mask, _, _ in struct.iter_unpack("iIII", os.read(fd, 65536))]
-        require(masks == [0x20, 0x10], "expected one checker or interactor invocation")
+        require(masks == [0x20, 0x10] * count, f"expected {count} marker reads, observed {masks}")
     finally:
         os.close(fd)
 
 
 def check_spj(url, binary, client_sha, *, name="one-final-spj"):
     request = make_pipeline(binary)
-    with single_marker_read() as marker:
+    with expect_marker_reads() as marker:
         checker = (f"with open({str(marker)!r}, 'rb') as f: assert f.read(1)\n"
                    "import sys\nfrom pathlib import Path\n"
                    "assert Path(sys.argv[1]).read_text() == 'produce stable\\n'\n"
@@ -170,7 +174,7 @@ def check_mixed_pipeline(url, binary, client_sha, *, remote=False):
     write["executor"] = {"kind": "interactive", "participant_program_id": "producer",
                          "interactor_program_id": "judge", "interactor_limits": LIMITS}
     write["outputs"][0]["source"] = {"kind": "interactor_output"}
-    with single_marker_read() as marker:
+    with expect_marker_reads() as marker:
         checker = (f"with open({str(marker)!r}, 'rb') as f: assert f.read(1)\n"
                    "import sys\nfrom pathlib import Path\n"
                    "print(Path(sys.argv[1]).read_text().strip(), flush=True)\n"
@@ -223,6 +227,7 @@ def main():
     client_sha = hashlib.sha256(Path("/opt/durante/lib/libdurante.so").read_bytes()).hexdigest()
     with server(args, 18770, False) as off:
         binary = compile_cpp(off, PROGRAM)
+        counted_binary = compile_cpp(off, f"#define INVOCATION_MARKER {json.dumps(str(MARKER))}\n" + PROGRAM)
         execute(off, "observation-disabled", make_pipeline(binary), None, client_sha)
     with server(args, 18770, True) as worker:
         complete = ["complete", "complete"]
@@ -249,6 +254,10 @@ def main():
     with server(args, 18770, True, runner_token=token) as worker:
         with server(args, 18771, True, remote=worker, runner_token=secrets.token_urlsafe(32)) as mismatched:
             check_unnegotiated_remote(mismatched, make_pipeline(binary), "remote-wrong-bearer")
+        with server(args, 18771, False, remote=worker, runner_token=token) as control:
+            with expect_marker_reads(2):
+                execute(control, "remote-observation-disabled", make_pipeline(counted_binary), None, client_sha)
+            print(json.dumps({"remote_observation_disabled_invocations": 2}), flush=True)
         with server(args, 18771, True, remote=worker, runner_token=token) as control:
             check_remote_capability(control, supported=True)
             execute(control, "remote-batch-handoffs", make_pipeline(binary), complete, client_sha)

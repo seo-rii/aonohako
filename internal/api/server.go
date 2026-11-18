@@ -548,10 +548,23 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_python_library_mode", err.Error())
 		return
 	}
-	workerProtocol := r.Header.Get(model.PipelineV1WorkerHeader)
-	if workerProtocol != "" && (workerProtocol != model.PipelineV1WorkerProtocol || req.Pipeline == nil || !s.canAttestPipelineWorker()) {
-		writeJSONError(w, http.StatusBadRequest, "unsupported_capability")
-		return
+	workerProtocol := r.Header.Values(model.PipelineV1WorkerHeader)
+	budgetHeader := r.Header.Values(model.PipelineObservationBudgetHeader)
+	if len(workerProtocol) != 0 || len(budgetHeader) != 0 {
+		if len(workerProtocol) != 1 || workerProtocol[0] != model.PipelineV1WorkerProtocol || req.Pipeline == nil || !s.canAttestPipelineWorker() {
+			writeJSONError(w, http.StatusBadRequest, "unsupported_capability")
+			return
+		}
+		if len(budgetHeader) != 1 {
+			writeJSONError(w, http.StatusBadRequest, "invalid_pipeline_observation_budget")
+			return
+		}
+		ms, err := strconv.ParseUint(budgetHeader[0], 10, 64)
+		if err != nil || strconv.FormatUint(ms, 10) != budgetHeader[0] || ms > uint64(execute.MaxPipelineObservationBudget.Milliseconds()) {
+			writeJSONError(w, http.StatusBadRequest, "invalid_pipeline_observation_budget")
+			return
+		}
+		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), time.Duration(ms)*time.Millisecond))
 	}
 	if req.Pipeline != nil && !s.supportsPipelineV1(r.Context()) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "unsupported_capability", "pipeline-v1 is not supported by this execution transport")
@@ -630,7 +643,7 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	releaseUploadAdmission(r.Context())
 
-	if workerProtocol != "" {
+	if len(workerProtocol) != 0 {
 		w.Header().Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
 	}
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)

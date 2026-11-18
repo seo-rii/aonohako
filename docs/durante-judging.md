@@ -89,7 +89,9 @@ The top-level precise total requires corresponding readings from every executed
 stage. The existing per-stage millisecond rounding is preserved. Consumers
 can join the diagnostic rows to the native timings by step and program ID.
 Configure observation on both the control plane and its authenticated worker
-to receive verified per-stage reports through the remote API.
+to receive verified per-stage reports through the remote API. A forwarded
+request bounds the total time for optional replays. Turning observation off on
+the controller suppresses replays even when the worker has observation enabled.
 [Pipeline V1 request and response contract](pipeline-v1.md)
 
 ## When it applies

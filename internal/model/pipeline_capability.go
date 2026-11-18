@@ -1,9 +1,10 @@
 package model
 
 const (
-	PipelineV1WorkerPath     = "/internal/capabilities/pipeline-v1"
-	PipelineV1WorkerProtocol = "aonohako-pipeline-worker-v1"
-	PipelineV1WorkerHeader   = "X-Aonohako-Pipeline-Worker"
+	PipelineV1WorkerPath            = "/internal/capabilities/pipeline-v1"
+	PipelineV1WorkerProtocol        = "aonohako-pipeline-worker-v1"
+	PipelineV1WorkerHeader          = "X-Aonohako-Pipeline-Worker"
+	PipelineObservationBudgetHeader = "X-Aonohako-Pipeline-Observation-Budget-Ms"
 )
 
 type PipelineV1Capability struct {

@@ -12,6 +12,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -132,10 +133,15 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote request encode failed: " + err.Error()}
 	}
 
+	observationBudget := remoteObservationBudget(req, r.workMeasurement)
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
 		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)
-		absoluteTimeout += remoteObservationBudget(req, r.workMeasurement)
+		absoluteTimeout += observationBudget
+		if req.Pipeline != nil && observationBudget > 0 {
+			// Leave time to reap a replay stopped at its deadline and return the native result.
+			absoluteTimeout += remoteio.DefaultOperationOverhead
+		}
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()
@@ -148,6 +154,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	httpReq.Header.Set("Accept", "text/event-stream")
 	if req.Pipeline != nil {
 		httpReq.Header.Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+		httpReq.Header.Set(model.PipelineObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
 	}
 
 	if authHeader, err := r.authorizationHeader(ctx); err != nil {
