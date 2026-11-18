@@ -272,6 +272,84 @@ raw envelope remains restricted to ordinary single-program requests and is
 rejected with interactive or communication requests. It does not silently expand
 every peer's resource allowance.
 
+### Per-role diagnostic time budgets
+
+Interactive and communication v1/v2 requests can additionally set
+`work_measurement_peer_time`. It requires `work_measurement: true` and a version-1
+budget for **every actual role**, identified by `role`, `program_id`, and the
+participant's zero-based `participant_index`. Budget order is irrelevant;
+communication-v1 seats running the same program still need separate budgets.
+Each `time_ms` is an integer from 1 through 600000. Duplicated, missing, or extra
+role identities are rejected. For an interactive request, add:
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 1,
+    "budgets": [
+      {"role": "contestant", "program_id": "contestant", "time_ms": 1000},
+      {"role": "interactor", "program_id": "interactor", "time_ms": 2000}
+    ]
+  }
+}
+```
+
+For communication, use `role: "participant"` with the requested program ID and
+seat index for each participant, followed by a `role: "manager"` budget with its
+program ID and no index. For example, two v1 entries may both have
+`program_id: "solver"`, distinguished by indices 0 and 1. Non-participant roles
+must omit `participant_index`.
+
+Every role must have a selectable operator time policy for its declared source
+profile, deployment image, and dispatch before execution or remote upload starts.
+The [shared-model registry](#shared-models-and-approved-execution-profiles) lets
+different approved source profiles select one model without duplicating weights.
+Both v1 aggregate-REP and v2 MOVS/STOS formulas are supported. A legacy single
+policy is sufficient when every role uses its one approved source profile.
+Requests supply budgets only; they cannot supply or override model coefficients.
+
+After execution, each `work_measurements[]` entry gains a `time_budget` object:
+
+```jsonc
+{
+  "version": 1,
+  "authority": "diagnostic_only",
+  "budget_ms": 1000,
+  "estimate": { /* complete TimeEstimate, including model, coefficients and ns/ms */ },
+  "exceeded": false
+}
+```
+
+The comparison is strictly `estimate.nanoseconds > budget_ms * 1000000`;
+equality does not exceed the budget. Only complete, normally exited,
+uninterrupted observations with current installation/profile identity and
+observed REP detail are convertible. A normal nonzero exit may retain an
+estimate while its original verdict remains a failure. Coordinator stops,
+cancellation and unstarted roles instead have `unavailable:
+"execution_not_complete"`; absent or incompatible reports have
+`observation_unavailable` or `incompatible_observation`. Signals, partial REP,
+legacy missing REP detail, and arithmetic overflow yield
+`observation_not_convertible`. Unavailable results omit both `estimate` and
+`exceeded`. Other completed roles retain their own estimates when one role fails.
+A pre-execution initialization failure may still omit the entire role array.
+
+This is a **post-execution diagnostic comparison**. It does not stop a program
+when the diagnostic budget is crossed, change CPU/wall/memory limits, create a
+cross-role total, or change status, score, match outcome, or raw CPU/RSS/counts.
+Existing measured peer resource limits still include instrumentation overhead.
+The option cannot be combined with ordinary `work_measurement_time`,
+`work_measurement_limits`, SPJs, pipelines, entry modes, or steps. Peer raw-resource
+envelopes and online budget enforcement are not implemented by this option.
+
+The remote control plane independently selects each role's model and recomputes
+the full result. It rejects different budgets, coefficients, estimates, reasons,
+unsolicited results, and a downstream runner that ignores the requested option.
+Configure the actual downstream execution image on both sides. Without this
+option, `time_budget` is absent and the existing peer behavior is unchanged.
+The integration fixtures use synthetic arithmetic weights only; they do not
+supply calibrated production coefficients.
+
 ## Process trees and sandbox boundaries
 
 The engine follows supported children and exec images. Parent and child counters
@@ -412,8 +490,10 @@ ordinary registered source profiles explicitly covered by the operator's time
 configuration. The legacy single policy retains its C/C++ scope. The shared-model
 registry below can approve compatible families such as CPython and PyPy. JVM
 execution remains unavailable pending sandbox qualification. Ambiguous `binary`,
-interactive/communication runs, SPJs, pipelines, entry modes, and steps do not
-support time conversion. Without this flag, the existing measurement admission
+SPJs, pipelines, entry modes, and steps do not support time conversion.
+Interactive/communication runs use the separate
+[`work_measurement_peer_time` option](#per-role-diagnostic-time-budgets) rather
+than this ordinary envelope flag. Without this flag, the existing measurement admission
 rules remain unchanged.
 
 For the existing single-policy format, the operator must enable `cpp`, configure
