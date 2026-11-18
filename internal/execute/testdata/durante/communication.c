@@ -66,6 +66,11 @@ static int pipe_fd(const char *path) {
   return fd;
 }
 
+static void burn_cpu(void) {
+  volatile uint64_t count = 0;
+  for (;;) count++;
+}
+
 static int participant(const char *seat_arg, const char *mode) {
   unsigned int seat = (unsigned int)strtoul(seat_arg, NULL, 10);
   if (seat > 1 || getuid() != 65000U - seat) return fail(10);
@@ -77,10 +82,7 @@ static int participant(const char *seat_arg, const char *mode) {
   if (!strcmp(mode, "wait") || !strcmp(mode, "burn")) {
     int pid = (int)getpid();
     if (!write_all(STDOUT_FILENO, &pid, sizeof(pid))) return fail(13);
-    if (!strcmp(mode, "burn")) {
-      volatile uint64_t count = 0;
-      for (;;) count++;
-    }
+    if (!strcmp(mode, "burn")) burn_cpu();
     for (;;) pause();
   }
   if (strcmp(mode, "stream")) return fail(14);
@@ -120,13 +122,14 @@ static int manager(int argc, char **argv, const char *mode) {
     if (!write_all(result_fd, result, strlen(result)) || close(result_fd) != 0) return fail(47);
     return 0;
   }
-  if (!strcmp(mode, "wait") || !strcmp(mode, "early")) {
+  if (!strcmp(mode, "wait") || !strcmp(mode, "early") || !strcmp(mode, "burn")) {
     int pids[2];
     for (int seat = 0; seat < 2; ++seat) {
       int fd = pipe_fd(argv[5 + 2 * seat]);
       if (fd < 0 || !read_all(fd, &pids[seat], sizeof(pids[seat]))) return fail(35);
     }
     if (!strcmp(mode, "early")) return write_result(result_fd, version);
+    if (!strcmp(mode, "burn")) burn_cpu();
     FILE *input = fopen(argv[1], "r");
     char ready_path[4096];
     if (!input) return fail(36);
@@ -158,6 +161,12 @@ static int manager(int argc, char **argv, const char *mode) {
 }
 
 int main(int argc, char **argv) {
+#ifdef COMMUNICATION_LAUNCH_MARKERS
+  static const char *paths[] = COMMUNICATION_LAUNCH_MARKERS;
+  int slot = argc == 2 ? (argv[1][0] == '0' ? 0 : 1) : 2;
+  FILE *launch = fopen(paths[slot], "rb");
+  if (!launch || fgetc(launch) == EOF || fclose(launch) != 0) return fail(48);
+#endif
   signal(SIGPIPE, SIG_IGN);
   char mode[32];
   if (!read_word("mode.dat", mode)) return fail(1);

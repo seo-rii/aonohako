@@ -227,6 +227,28 @@ Report files remain in the private per-run workspace and are removed with it.
 
 ## Interactive and communication observations
 
+Ordinary communication v1/v2 responses include `communication_cpu_by_role`
+after the worker runs the match processes. Seats appear in participant-index
+order, followed by the manager. Each row carries the program ID, native CPU
+limit in milliseconds, sandbox execution status, start and interruption flags,
+and CPU usage. Two seats running the same program have different indices.
+Preflight failures can return before role accounting exists.
+
+Use `cpu_time_ns` for a role's precise reading when present. With CPU
+normalization enabled, `raw_cpu_time_ns` records CPU time before calibration.
+The legacy top-level `cpu_time_ms` sums the roles' individually rounded
+milliseconds. A precise total requires a sample from every started role.
+Interrupted roles can have measured CPU time even if they produced no complete
+Durante report. The coordinator still determines the score, forfeit or judge
+error. On a forwarded match an older worker can return millisecond totals
+alone. A controller that cannot verify the additional role counters retains
+the original outcome and omits the new timing details.
+
+When a request also asks for Durante, join `work_measurements` to these
+rows by role, program ID and participant index. In that mode the CPU
+readings include instrumentation overhead. Ordinary matches record their
+own CPU usage in a single execution of each role.
+
 Set the top-level `work_measurement` flag to `true` to instrument both the
 contestant and interactor, or every communication participant and the manager.
 Each role uses its own Durante session and report directory. Interactive runs

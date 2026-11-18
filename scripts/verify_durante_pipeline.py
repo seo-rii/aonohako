@@ -197,7 +197,11 @@ def expect_marker_reads(count=1, marker=MARKER):
         if libc.inotify_add_watch(fd, os.fsencode(marker), 0x20 | 0x10) < 0:
             raise OSError(ctypes.get_errno(), str(marker))
         yield marker
-        masks = [mask for _, mask, _, _ in struct.iter_unpack("iIII", os.read(fd, 65536))]
+        try:
+            events = os.read(fd, 65536)
+        except BlockingIOError:
+            events = b""
+        masks = [mask for _, mask, _, _ in struct.iter_unpack("iIII", events)]
         require(masks == [0x20, 0x10] * count, f"expected {count} marker reads, observed {masks}")
     finally:
         os.close(fd)
