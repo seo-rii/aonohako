@@ -65,6 +65,8 @@ func attachShadow(primary model.RunResponse, shadow *model.RunResponse, unavaila
 	case shadow.WorkMeasurementJudgment == nil:
 		block.Agreement = model.ShadowUnavailable
 		block.Unavailable = "shadow execution produced no judgment: " + shadow.Reason
+	case shadow.WorkMeasurementJudgment.State == "resource_exhausted":
+		block.Agreement, block.Unavailable = model.ShadowUnavailable, "raw resource limit stopped the shadow execution"
 	case shadow.WorkMeasurementJudgment.State == "cancelled":
 		block.Agreement, block.Unavailable = model.ShadowUnavailable, "shadow execution was cancelled"
 	default:

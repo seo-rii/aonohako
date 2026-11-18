@@ -80,7 +80,8 @@ estimated_ns = ceil((instructions * instruction_ns_numerator
                    + rep_bytes    * rep_byte_ns_numerator) / ns_denominator)
 ```
 
-(or the v2 MOVS/STOS form). The comparison is exact in nanoseconds:
+(or the separate MOVS/STOS formula). The latency model substitutes
+`latency_bound.cycles_x16 * latency_x16_ns_numerator` for the instruction term. The comparison is exact in nanoseconds:
 
 ```
 over_time = estimated_ns > limits.time_ms * 1_000_000      // strict >
@@ -105,7 +106,7 @@ estimate are final. Original output comparison is unchanged.
 | `complete` | matches | available, `estimated_ns > limit` | **Time Limit Exceeded** |
 | `complete` | mismatch | (not evaluated) | **Wrong Answer** |
 | `complete` | matches | unavailable | **Runtime Error** |
-| `resource_exhausted` | — | — | **Time Limit Exceeded** |
+| `resource_exhausted` | — | — | **Container Initialization Failed**, unscored |
 | `incomplete` / `failed` / `cancelled` | — | — | **Runtime Error** |
 
 - **Wrong Answer** uses the existing output oracle (stdout or the single file
@@ -119,14 +120,13 @@ estimate are final. Original output comparison is unchanged.
   condition to retry or investigate, never a free `Accepted`. Signal-driven
   runtimes such as Go are therefore unjudgeable today; enable judge mode only for
   families whose counts convert (C/C++ first).
-- **`resource_exhausted` → Time Limit Exceeded.** The raw envelope is a safety
-  net set well above the nominal limit's expected work. Hitting it means the
-  submission ran far past any plausible accepted solution even with generous
-  actual limits, so TLE is correct. `termination_source` is preserved. Memory is
-  **not** judged in judge mode — instrumented RSS includes the engine and code
-  cache — so the operator sets `work_measurement_limits.memory_mb` generously; a
-  raw memory stop also lands here as TLE rather than a credited MLE. Problems
-  that need a real memory verdict must not use judge mode yet.
+- **Raw resource exhaustion.** A raw CPU, wall or memory stop ends measurement
+  before Durante can produce a virtual time. Judge mode returns the existing
+  unscored `Container Initialization Failed` status with
+  `work_measurement_judgment.state = "resource_exhausted"`. The termination
+  source identifies the resource to review. Shadow comparisons record this
+  case as unavailable. Only a completed, eligible, over-budget estimate can
+  yield a virtual TLE.
 - **`incomplete` / `failed` / `cancelled` → Runtime Error.** Launch failure,
   client/collection failure, a forced stop, or cancellation cannot yield a
   trusted count, so the verdict is a (retryable) `Runtime Error`, never AC/TLE.
@@ -135,7 +135,7 @@ The response carries `work_measurement_judgment` with the chosen verdict, the
 reason, the virtual-millisecond estimate, the integrity decision, and the raw
 diagnostic execution block. Unlike the pure diagnostic envelope, judge mode sets
 `status` to the real verdict (`Accepted`, `Wrong Answer`, `Time Limit Exceeded`
-or `Runtime Error`) and may set `score`.
+or `Runtime Error`) for judged runs. A raw resource stop carries an unscored initialization failure.
 
 ## Counter integrity (threat model is a flag)
 

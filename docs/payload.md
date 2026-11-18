@@ -275,7 +275,8 @@ operator-gated (`AONOHAKO_DURANTE_JUDGE_MODE`) per family and requires
 response sets `status` to the verdict and may set `score`, and returns a
 `work_measurement_judgment` object. An observation whose counts cannot convert
 (signals, partial REP, overflow) is reported as `Runtime Error`, never silently
-accepted; a raw resource stop is `Time Limit Exceeded`; memory is not judged. The
+accepted. A raw resource stop returns the unscored `Container Initialization Failed` status with
+`work_measurement_judgment.state = "resource_exhausted"` and its termination source. The
 counts remain `diagnostic_only` and application-mutable; `AONOHAKO_DURANTE_JUDGE_INTEGRITY=plausibility`
 withholds a verdict when the reported work is implausibly small against the
 instrumented run's own raw CPU time. See [work-based judging](durante-judging.md).

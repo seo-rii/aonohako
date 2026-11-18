@@ -131,7 +131,7 @@ func TestJudgeDecideVerdicts(t *testing.T) {
 		{"tle over", JudgeInputs{State: "complete", OutputMatches: boolp(true), Estimate: estimate(2_000_000), NominalTimeExceeded: boolp(true)}, JudgeTimeLimitExceeded, false},
 		{"wrong answer", JudgeInputs{State: "complete", OutputMatches: boolp(false)}, JudgeWrongAnswer, false},
 		{"unconvertible", JudgeInputs{State: "complete", OutputMatches: boolp(true), Estimate: nil, NominalTimeExceeded: nil}, JudgeRuntimeError, false},
-		{"resource exhausted tle", JudgeInputs{State: "resource_exhausted"}, JudgeTimeLimitExceeded, false},
+		{"raw limit makes time unavailable", JudgeInputs{State: "resource_exhausted"}, JudgeUnavailable, false},
 		{"incomplete re", JudgeInputs{State: "incomplete"}, JudgeRuntimeError, false},
 		{"failed re", JudgeInputs{State: "failed"}, JudgeRuntimeError, false},
 		{"cancelled re", JudgeInputs{State: "cancelled"}, JudgeRuntimeError, false},

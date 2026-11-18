@@ -54,7 +54,9 @@ func TestFinishJudgeVerdicts(t *testing.T) {
 		{"accepted", model.RunStatusAccepted, 5_000_000, "stdout", model.RunStatusAccepted, true},
 		{"tle on work", model.RunStatusAccepted, 20_000_000, "stdout", model.RunStatusTLE, false},
 		{"wrong answer", model.RunStatusWA, 5_000_000, "stdout", model.RunStatusWA, false},
-		{"raw resource stop", model.RunStatusTLE, 5_000_000, "stdout", model.RunStatusTLE, false},
+		{"raw cpu", model.RunStatusTLE, 5_000_000, "cpu_time", model.RunStatusInitFail, false},
+		{"raw wall", model.RunStatusTLE, 5_000_000, "wall_time", model.RunStatusInitFail, false},
+		{"raw rss", model.RunStatusMLE, 5_000_000, "memory", model.RunStatusInitFail, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := judgeRequest()
@@ -68,6 +70,21 @@ func TestFinishJudgeVerdicts(t *testing.T) {
 			}
 			if got.WorkMeasurementJudgment == nil || got.WorkMeasurementJudgment.Verdict != tc.wantStatus {
 				t.Fatalf("missing/incorrect judgment: %+v", got.WorkMeasurementJudgment)
+			}
+			if tc.wantStatus == model.RunStatusInitFail {
+				j := got.WorkMeasurementJudgment
+				shadow := attachShadow(model.RunResponse{Status: model.RunStatusAccepted}, &got, "").WorkMeasurementShadow
+				if j.State != "resource_exhausted" || j.EstimatedTimeNs != nil || j.TerminationSource != tc.source || shadow.Agreement != model.ShadowUnavailable {
+					t.Fatalf("raw resource stop was scored: judgment=%+v shadow=%+v", j, shadow)
+				}
+				if err := validateRemoteWorkMeasurementJudge(req, got, cfg); err != nil {
+					t.Fatalf("remote rejected the unscored resource stop: %v", err)
+				}
+				legacy := got
+				legacy.Status = model.RunStatusTLE
+				if err := validateRemoteWorkMeasurementJudge(req, legacy, cfg); err == nil {
+					t.Fatal("remote accepted a raw resource stop as a virtual TLE")
+				}
 			}
 			if got.WorkMeasurement == nil {
 				t.Fatal("diagnostic report must be retained for audit")
