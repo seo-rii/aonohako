@@ -52,7 +52,7 @@ def artifact(name, text, mode=None):
 
 
 @contextmanager
-def server(args, port, enabled, remote=None):
+def server(args, port, enabled, remote=None, *, runner_token=None):
     env = {"PATH": os.defpath, "PORT": str(port), "AONOHAKO_DEPLOYMENT_TARGET": "dev",
            "AONOHAKO_INBOUND_AUTH": "none", "AONOHAKO_WORK_ROOT": "/work",
            "AONOHAKO_WORK_ROOT_MAX_BYTES": str(256 << 20), "AONOHAKO_MAX_ACTIVE_RUNS": "1",
@@ -67,6 +67,10 @@ def server(args, port, enabled, remote=None):
            "AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT": args.runtime_image}
     if remote:
         env.update(AONOHAKO_REMOTE_RUNNER_URL=remote, AONOHAKO_REMOTE_RUNNER_AUTH="none")
+        if runner_token:
+            env.update(AONOHAKO_REMOTE_RUNNER_AUTH="bearer", AONOHAKO_REMOTE_RUNNER_TOKEN=runner_token)
+    elif runner_token:
+        env.update(AONOHAKO_INBOUND_AUTH="bearer", AONOHAKO_API_BEARER_TOKEN=runner_token)
     url = f"http://127.0.0.1:{port}"
     process = subprocess.Popen([args.server], env=env)
     try:

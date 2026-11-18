@@ -14,7 +14,7 @@ control planes fail closed because the current remote protocol does not
 negotiate downstream capabilities. See
 [Pipeline V1](pipeline-v1.md) for the request contract and security invariants.
 
-When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner for legacy modes, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. Pipeline V1 is rejected before forwarding until downstream capability negotiation is available; the remote runner client still defensively redacts Pipeline responses. `/compile` returns the remote compile result with the same buffered `log` and `result` shape, also honoring `emit_logs=false`.
+When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner for legacy modes, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. Pipeline V1 requires an authenticated worker capability check and confirmation on the execution response. Pipeline streams expose the native outcome and verified per-step observations while keeping artifacts and checker output private. `/compile` returns the remote compile result with the same buffered `log` and `result` shape, also honoring `emit_logs=false`.
 
 ## Event Types
 

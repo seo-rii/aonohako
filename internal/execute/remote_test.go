@@ -104,7 +104,12 @@ func TestRemoteRunnerForwardsSSELogsImagesAndResult(t *testing.T) {
 
 func TestRemoteRunnerRedactsPipelineLogsImagesAndResultDiagnostics(t *testing.T) {
 	const secret = "PRIVATE-REMOTE-PIPELINE-DIAGNOSTIC"
-	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(model.PipelineV1WorkerHeader) != model.PipelineV1WorkerProtocol {
+			t.Error("missing pipeline negotiation on execute")
+		}
+		w.Header().Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+		w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = fmt.Fprintf(w, "event: log\ndata: {\"stream\":\"stderr\",\"chunk\":%q}\n\n", secret)
 		_, _ = w.Write([]byte("event: image\ndata: {\"mime\":\"image/png\",\"b64\":\"Zm9v\",\"ts\":123}\n\n"))
@@ -116,6 +121,7 @@ func TestRemoteRunnerRedactsPipelineLogsImagesAndResultDiagnostics(t *testing.T)
 			VerdictSource: "step:phase2:exit_code",
 			Steps: []model.StepResult{{
 				ID:            "phase2",
+				ProgramID:     "participant",
 				Status:        model.RunStatusRE,
 				Stdout:        secret,
 				Stderr:        secret,
@@ -143,7 +149,7 @@ func TestRemoteRunnerRedactsPipelineLogsImagesAndResultDiagnostics(t *testing.T)
 	})
 	var logCalled atomic.Bool
 	var imageCalled atomic.Bool
-	resp := runner.Run(context.Background(), &model.RunRequest{Pipeline: &model.PipelineV1{}}, Hooks{
+	resp := runner.Run(context.Background(), &model.RunRequest{Pipeline: &model.PipelineV1{Steps: []model.PipelineStep{{ID: "phase2", Executor: model.PipelineExecutor{Kind: "batch", ProgramID: "participant"}}}}}, Hooks{
 		OnLog:   func(string, string) { logCalled.Store(true) },
 		OnImage: func(string, string, int64) { imageCalled.Store(true) },
 	})
@@ -162,10 +168,32 @@ func TestRemoteRunnerRedactsPipelineLogsImagesAndResultDiagnostics(t *testing.T)
 	}
 }
 
+func TestRemoteRunnerRequiresPipelineContractOnExecutionResponse(t *testing.T) {
+	for _, token := range []string{"", "aonohako-pipeline-worker-v0"} {
+		worker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
+			w.Header().Set(model.PipelineV1WorkerHeader, token)
+			fmt.Fprint(w, "event: result\ndata: {\"status\":\"Accepted\"}\n\n")
+		}))
+		runner := newRemoteRunner(config.Config{Execution: config.ExecutionConfig{Remote: config.RemoteExecutorConfig{URL: worker.URL}}})
+		resp := runner.Run(t.Context(), &model.RunRequest{Pipeline: &model.PipelineV1{}}, Hooks{})
+		worker.Close()
+		if resp.Status != model.RunStatusInitFail {
+			t.Errorf("worker protocol %q: got %s", token, resp.Status)
+		}
+	}
+}
+
 func TestRemoteRunnerPipelineCancellationIsPromptAndRedacted(t *testing.T) {
 	requestCanceled := make(chan struct{})
 	unblock := make(chan struct{})
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(model.PipelineV1WorkerHeader) != model.PipelineV1WorkerProtocol {
+			t.Error("missing pipeline negotiation on execute")
+		}
+		w.Header().Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+		w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: progress\ndata: {\"stage\":\"start\"}\n\n"))
 		if flusher, ok := w.(http.Flusher); ok {
@@ -773,6 +801,17 @@ func TestRemoteRunnerAbsoluteDeadlineIncludesOnlyEligibleShortCaseRepetitions(t 
 func assertRemoteRunnerAbsoluteDeadline(t *testing.T, ctx context.Context, req *model.RunRequest, absoluteTimeout, want time.Duration) {
 	t.Helper()
 	var deadline time.Time
+	header := http.Header{"Content-Type": []string{"text/event-stream"}}
+	result := `{"status":"Accepted"}`
+	wantStatus, wantSource := model.RunStatusAccepted, ""
+	if req.Pipeline != nil {
+		// These fixtures specify stage budgets only. A negotiated worker can
+		// return an initialization result before starting their first stage.
+		header.Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+		header.Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
+		result = `{"status":"Container Initialization Failed","verdict_source":"pipeline:resource"}`
+		wantStatus, wantSource = model.RunStatusInitFail, "pipeline:resource"
+	}
 	runner := &remoteRunner{
 		client: &http.Client{Transport: executeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var ok bool
@@ -783,8 +822,8 @@ func assertRemoteRunnerAbsoluteDeadline(t *testing.T, ctx context.Context, req *
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Status:     "200 OK",
-				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"Accepted\"}\n\n")),
+				Header:     header,
+				Body:       io.NopCloser(strings.NewReader("event: result\ndata: " + result + "\n\n")),
 			}, nil
 		})},
 		executeURL:      "http://remote.example/execute",
@@ -793,7 +832,7 @@ func assertRemoteRunnerAbsoluteDeadline(t *testing.T, ctx context.Context, req *
 	started := time.Now()
 	resp := runner.Run(ctx, req, Hooks{})
 	finished := time.Now()
-	if resp.Status != model.RunStatusAccepted {
+	if resp.Status != wantStatus || resp.VerdictSource != wantSource {
 		t.Fatalf("response = %+v", resp)
 	}
 	earliest, latest := started.Add(want), finished.Add(want)

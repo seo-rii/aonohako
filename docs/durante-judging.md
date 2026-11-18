@@ -65,7 +65,8 @@ results, validates Durante receipts and verifies that the SPJ executes once.
 
 ### Pipeline V1 batch observations
 
-On an embedded helper worker, the same operator setting collects one
+On an embedded helper worker, including one behind a negotiated remote
+control plane, the same operator setting collects one
 diagnostic replay for each eligible completed batch stage, up to the
 pipeline's two-stage limit. The final diff or special judge runs on the
 native artifacts. After native judging stops, the worker reconstructs the
@@ -87,7 +88,10 @@ available, plus `raw_cpu_time_ns` when normalization records that counter.
 The top-level precise total requires corresponding readings from every executed
 stage. The existing per-stage millisecond rounding is preserved. Consumers
 can join the diagnostic rows to the native timings by step and program ID.
-The public API advertises Pipeline V1 on embedded helper workers.
+Configure observation on both the control plane and its authenticated worker
+to receive verified per-stage reports through the remote API. A forwarded
+request bounds the total time for optional replays. Turning observation off on
+the controller suppresses replays even when the worker has observation enabled.
 [Pipeline V1 request and response contract](pipeline-v1.md)
 
 ## When it applies

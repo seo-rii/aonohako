@@ -10,8 +10,10 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/runvalidation"
 )
@@ -289,6 +291,17 @@ func preparePipelineStdin(step executionPlanStep, artifacts *pipelineArtifactSto
 	return file, maxBytes, nil
 }
 
+// MaxPipelineObservationBudget includes each replay's startup and execution allowances.
+const MaxPipelineObservationBudget = runvalidation.MaxPipelineSteps * (max(stdinURLDownloadTimeout, durante.MaxResourceTimeMs*time.Millisecond) + durante.MaxResourceTimeMs*time.Millisecond)
+
+type pipelineObservationBudgetKey struct{}
+
+// WithPipelineObservationBudget records the negotiated diagnostic allowance.
+// The worker starts this clock only once the native pipeline has finished.
+func WithPipelineObservationBudget(ctx context.Context, budget time.Duration) context.Context {
+	return context.WithValue(ctx, pipelineObservationBudgetKey{}, budget)
+}
+
 func (s *Service) runPipelineV1(ctx context.Context, req *model.RunRequest, _ Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
 	return RedactPipelineResponse(s.runPipelineV1Private(ctx, req, tuning))
 }
@@ -300,10 +313,19 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 	// Keep references to immutable native resources and artifacts. Rebuild each
 	// replay input only after the entire native judgment has finished.
 	var replays map[string]pipelineBatchReplay
+	budget, bounded := ctx.Value(pipelineObservationBudgetKey{}).(time.Duration)
 	if automaticObservationRequested(req, s.workMeasurement) {
-		replays = make(map[string]pipelineBatchReplay)
+		if !bounded || budget > 0 {
+			replays = make(map[string]pipelineBatchReplay)
+		}
 		defer func() {
-			response.WorkMeasurementObservation = s.observePipelineSteps(ctx, req, response.Steps, replays, artifacts, tuning)
+			replayCtx := ctx
+			if bounded && budget > 0 {
+				var cancel context.CancelFunc
+				replayCtx, cancel = context.WithTimeout(ctx, budget)
+				defer cancel()
+			}
+			response.WorkMeasurementObservation = s.observePipelineSteps(replayCtx, req, response.Steps, replays, artifacts, tuning)
 		}()
 	}
 
