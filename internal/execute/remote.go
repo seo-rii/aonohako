@@ -141,6 +141,11 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			observationBudget = min(observationBudget, incoming.maximum)
 		}
 	}
+	if standaloneInteractive {
+		// The downstream worker receives whole, nonnegative milliseconds.
+		// Use exactly that allowance for the deadline and returned receipt.
+		observationBudget = max(0, observationBudget.Truncate(time.Millisecond))
+	}
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
 		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)

@@ -10,6 +10,7 @@ import (
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/timing"
 )
 
 // A missing or newer diagnostic payload can only affect the optional replay.
@@ -138,14 +139,42 @@ func remoteStandaloneInteractiveObservation(req *model.RunRequest, primary model
 // each role within its own CPU allowance. The aggregate includes both roles.
 func standaloneInteractiveAccountingMatches(req *model.RunRequest, primary model.RunResponse) bool {
 	contestant, judge := primary.Steps[0], primary.Steps[1]
-	judgeLimit := interactorRunRequest(req).Limits.TimeMs
-	if (req.Limits.TimeMs > 0 && contestant.CPUTimeMs > int64(req.Limits.TimeMs)) ||
-		(judgeLimit > 0 && judge.CPUTimeMs > int64(judgeLimit)) {
+	if !interactiveRoleCPUWithinLimits(contestant.CPUTimeMs, judge.CPUTimeMs, req) || primary.TimeMs != primary.WallTimeMs {
+		return false
+	}
+	var calibration timing.CPUNormalizer
+	if norm := primary.CPUTimeNormalization; norm != nil {
+		var err error
+		calibration, err = timing.NewCPUNormalizer(norm.Method, norm.ReferenceTimeNs, norm.ObservedTimeNs)
+		info, _ := calibration.Info()
+		if err != nil || norm.Method != timing.CPUNormalizationMethod || norm.ScalePPM != info.ScalePPM {
+			return false
+		}
+	}
+	for _, role := range primary.Steps {
+		// Both normally exited peers have exact samples. Native accounting
+		// rounds each role up separately before adding their milliseconds.
+		if role.CPUTimeNs == nil || !roleCPUMillisecondsMatch(role.CPUTimeMs, role.CPUTimeNs) ||
+			role.TimeMs != role.WallTimeMs || role.WallTimeMs > primary.WallTimeMs {
+			return false
+		}
+		if calibration.Enabled() {
+			if role.RawCPUTimeMs == nil || role.RawCPUTimeNs == nil || !roleCPUMillisecondsMatch(*role.RawCPUTimeMs, role.RawCPUTimeNs) ||
+				calibration.NormalizeNanoseconds(*role.RawCPUTimeNs) != *role.CPUTimeNs {
+				return false
+			}
+		} else if role.RawCPUTimeMs != nil || role.RawCPUTimeNs != nil {
+			return false
+		}
+	}
+	// The general aggregator omits an overflowing sum just as it omits a
+	// missing sample. A completed observed pair must be representable.
+	if !roleNanosecondsMatch(&primary.CPUTimeNs, contestant.CPUTimeNs, judge.CPUTimeNs) ||
+		!roleNanosecondsMatch(primary.RawCPUTimeNs, contestant.RawCPUTimeNs, judge.RawCPUTimeNs) {
 		return false
 	}
 	totals := aggregateStepResponse(model.RunResponse{}, primary.Steps)
-	return primary.CPUTimeMs == totals.CPUTimeMs && primary.CPUTimeNs == totals.CPUTimeNs &&
-		equalPipelineCounter(primary.RawCPUTimeNs, totals.RawCPUTimeNs) && equalPipelineCounter(primary.RawCPUTimeMs, totals.RawCPUTimeMs) &&
+	return primary.CPUTimeMs == totals.CPUTimeMs && equalPipelineCounter(primary.RawCPUTimeMs, totals.RawCPUTimeMs) &&
 		primary.ProcessCPUTimeMs == totals.ProcessCPUTimeMs && primary.MemoryKB == totals.MemoryKB
 }
 

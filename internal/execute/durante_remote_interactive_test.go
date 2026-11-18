@@ -3,6 +3,7 @@ package execute
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/timing"
 )
 
 func observedInteractiveRemoteRequest() *model.RunRequest {
@@ -27,8 +29,8 @@ func observedInteractiveRemoteRequest() *model.RunRequest {
 
 func observedInteractiveRemoteResult(req *model.RunRequest, judgeExit int) model.RunResponse {
 	zero := 0
-	contestant := execResult{Status: "OK", ExitCode: &zero, CPUTimeMs: 7, CPUTimeNs: 7000001, MemoryKB: 1000}
-	judge := execResult{Status: "OK", ExitCode: &judgeExit, CPUTimeMs: 6, CPUTimeNs: 6000002, MemoryKB: 800}
+	contestant := execResult{Status: "OK", ExitCode: &zero, CPUTimeMs: 7, CPUTimeNs: 6_900_001, MemoryKB: 1000}
+	judge := execResult{Status: "OK", ExitCode: &judgeExit, CPUTimeMs: 6, CPUTimeNs: 5_900_002, MemoryKB: 800}
 	return interactiveResponse(req, interactorRunRequest(req), contestant, judge, 15, false, false)
 }
 
@@ -47,6 +49,26 @@ func TestRemoteStandaloneInteractiveReceiptUsesNativeRoles(t *testing.T) {
 		native  model.RunResponse
 		receipt model.WorkMeasurementObservation
 	}
+	normalized := func(f *fixture) {
+		calibration, err := timing.NewCPUNormalizer(timing.CPUNormalizationMethod, 2, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, _ := calibration.Info()
+		f.native.CPUTimeNormalization = &model.CPUTimeNormalization{Method: info.Method, ScalePPM: info.ScalePPM,
+			ReferenceTimeNs: info.ReferenceTimeNs, ObservedTimeNs: info.ObservedTimeNs}
+		for i := range f.native.Steps {
+			role := &f.native.Steps[i]
+			raw := *role.CPUTimeNs
+			rawMs := ceilCPUMilliseconds(raw)
+			role.RawCPUTimeNs, role.RawCPUTimeMs = &raw, &rawMs
+			ns := calibration.NormalizeNanoseconds(raw)
+			role.CPUTimeNs, role.CPUTimeMs = &ns, ceilCPUMilliseconds(ns)
+		}
+		totals := aggregateStepResponse(model.RunResponse{}, f.native.Steps)
+		f.native.CPUTimeNs, f.native.CPUTimeMs = totals.CPUTimeNs, totals.CPUTimeMs
+		f.native.RawCPUTimeNs, f.native.RawCPUTimeMs = totals.RawCPUTimeNs, totals.RawCPUTimeMs
+	}
 	for _, tc := range []struct {
 		name     string
 		change   func(*fixture)
@@ -61,6 +83,54 @@ func TestRemoteStandaloneInteractiveReceiptUsesNativeRoles(t *testing.T) {
 		{"display-clipped contestant preview", func(f *fixture) { f.native.Steps[0].StdoutTruncated = true }, true},
 		{"truncated judge stream", func(f *fixture) { f.native.Steps[1].StdoutTruncated = true }, false},
 		{"contradictory aggregate", func(f *fixture) { f.native.CPUTimeNs++ }, false},
+		{"calibrated native roles", normalized, true},
+		{"contestant precise time over CPU limit with stale ms", func(f *fixture) {
+			*f.native.Steps[0].CPUTimeNs = uint64(f.req.Limits.TimeMs)*uint64(time.Millisecond) + 1
+			f.native.CPUTimeNs = *f.native.Steps[0].CPUTimeNs + *f.native.Steps[1].CPUTimeNs
+		}, false},
+		{"missing role sample", func(f *fixture) {
+			f.native.Steps[0].CPUTimeNs = nil
+			f.native.CPUTimeNs = 0
+		}, false},
+		{"overflowing precise role times", func(f *fixture) {
+			*f.native.Steps[0].CPUTimeNs = math.MaxUint64
+			f.native.CPUTimeNs = 0
+		}, false},
+		{"inconsistent normalization scale", func(f *fixture) {
+			normalized(f)
+			f.native.CPUTimeNormalization.ScalePPM++
+		}, false},
+		{"wrong normalized time with matching totals", func(f *fixture) {
+			normalized(f)
+			*f.native.Steps[0].CPUTimeNs++
+			f.native.CPUTimeNs++
+		}, false},
+		{"raw sample without calibration", func(f *fixture) {
+			normalized(f)
+			f.native.CPUTimeNormalization = nil
+		}, false},
+		{"raw sum overflow masquerades as missing", func(f *fixture) {
+			f.native.CPUTimeNormalization = &model.CPUTimeNormalization{Method: timing.CPUNormalizationMethod,
+				ScalePPM: 1, ReferenceTimeNs: 1, ObservedTimeNs: math.MaxUint64}
+			for i := range f.native.Steps {
+				role := &f.native.Steps[i]
+				raw, ns := uint64(math.MaxUint64), uint64(1)
+				rawMs := ceilCPUMilliseconds(raw)
+				role.RawCPUTimeNs, role.RawCPUTimeMs = &raw, &rawMs
+				role.CPUTimeNs, role.CPUTimeMs = &ns, 1
+			}
+			f.native.CPUTimeMs, f.native.CPUTimeNs = 2, 2
+			f.native.RawCPUTimeMs = sumRawCPUTime(f.native.Steps[0].RawCPUTimeMs, f.native.Steps[1].RawCPUTimeMs)
+			f.native.RawCPUTimeNs = nil
+		}, false},
+		{"raw milliseconds disagree with nanoseconds", func(f *fixture) {
+			normalized(f)
+			*f.native.Steps[1].RawCPUTimeMs++
+			*f.native.RawCPUTimeMs++
+		}, false},
+		{"role wall exceeds primary wall", func(f *fixture) {
+			f.native.Steps[1].TimeMs, f.native.Steps[1].WallTimeMs = 16, 16
+		}, false},
 		{"contestant over its own limit", func(f *fixture) { f.req.Limits.TimeMs = 6 }, false},
 		{"interactor over its own limit", func(f *fixture) { f.req.Interactor.Limits = &model.Limits{TimeMs: 5} }, false},
 		{"interactor report", func(f *fixture) { f.receipt.Steps[0].ProgramID = "interactor" }, false},
@@ -122,13 +192,15 @@ func TestRemoteStandaloneInteractiveBudgetMixedVersions(t *testing.T) {
 		{"on controller and incompatible worker", true, -1, allowed, json.RawMessage(`{"version":"future"}`), "unavailable"},
 		{"on controller and enabled worker", true, -1, allowed, report, "complete"},
 		{"caller suppresses", true, 0, 0, report, "unavailable"},
+		{"sub-millisecond caller allowance", true, 900 * time.Microsecond, 0, report, "unavailable"},
+		{"negative caller allowance", true, -time.Millisecond, 0, report, "unavailable"},
 		{"caller shortens", true, 10 * time.Millisecond, 10 * time.Millisecond, report, "complete"},
 		{"caller cannot extend", true, MaxInteractiveObservationBudget, allowed, report, "complete"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				ctx := t.Context()
-				if tc.incoming >= 0 {
+				if tc.incoming != -1 {
 					ctx = WithPipelineObservationBudget(ctx, tc.incoming)
 				}
 				policy := cfg
