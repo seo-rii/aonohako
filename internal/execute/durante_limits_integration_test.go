@@ -113,9 +113,15 @@ func TestDurantePythonResourceEnvelopeIntegration(t *testing.T) {
 	}
 	for _, language := range languages {
 		t.Run(language, func(t *testing.T) {
-			run := func(ctx context.Context, source, expected string, hard durante.ResourceLimits) model.RunResponse {
+			run := func(ctx context.Context, source, expected string, hard durante.ResourceLimits) (model.RunResponse, string) {
 				req := &model.RunRequest{Lang: language, WorkMeasurement: true, IgnoreTLE: true, Binaries: []model.Binary{{Name: "Main.py", DataB64: base64.StdEncoding.EncodeToString([]byte(source)), Mode: "text"}}, ExpectedStdout: expected, Limits: model.Limits{TimeMs: 1, WallTimeMs: 1, MemoryMB: 16}, WorkMeasurementLimits: &hard}
-				return svc.Run(ctx, req, Hooks{})
+				var stdout strings.Builder
+				r := svc.Run(ctx, req, Hooks{OnLog: func(stream, chunk string) {
+					if stream == "stdout" {
+						stdout.WriteString(chunk)
+					}
+				}})
+				return r, stdout.String()
 			}
 			hard := durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: 512}
 			for _, tc := range []struct{ name, source, expected string }{
@@ -124,7 +130,7 @@ func TestDurantePythonResourceEnvelopeIntegration(t *testing.T) {
 				{"zlib", "import zlib\nprint(len(zlib.decompress(zlib.compress(b'a'*100000))))", "100000"},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					r := run(context.Background(), tc.source, tc.expected, hard)
+					r, _ := run(context.Background(), tc.source, tc.expected, hard)
 					if r.Status != model.RunStatusInitFail || r.WorkMeasurementExecution == nil || r.WorkMeasurementExecution.State != "complete" || r.WorkMeasurementExecution.OutputMatches == nil || !*r.WorkMeasurementExecution.OutputMatches || r.Score != nil || r.CPUTimeNormalization != nil {
 						t.Fatalf("interpreter diagnostic: %+v metadata=%+v", r, r.WorkMeasurementExecution)
 					}
@@ -138,11 +144,15 @@ func TestDurantePythonResourceEnvelopeIntegration(t *testing.T) {
 				limits                       durante.ResourceLimits
 			}{
 				{"cpu", "while True: pass", "cpu", durante.ResourceLimits{CPUTimeMs: 1000, WallTimeMs: 10000, MemoryMB: 512}},
-				{"wall", "import time\ntime.sleep(30)", "wall", durante.ResourceLimits{CPUTimeMs: 3000, WallTimeMs: 3000, MemoryMB: 512}},
+				// Give instrumented interpreter startup its independently tested CPU budget.
+				{"wall", "import time\nprint('ready-to-sleep', flush=True)\ntime.sleep(30)", "wall", durante.ResourceLimits{CPUTimeMs: hard.CPUTimeMs, WallTimeMs: hard.CPUTimeMs, MemoryMB: 512}},
 				{"rss", "a=bytearray(512*1024*1024)\nprint(len(a))", "memory", durante.ResourceLimits{CPUTimeMs: 10000, WallTimeMs: 30000, MemoryMB: 96}},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					r := run(context.Background(), tc.source, "", tc.limits)
+					r, stdout := run(context.Background(), tc.source, "", tc.limits)
+					if tc.expectedSource == "wall" && stdout != "ready-to-sleep\n" {
+						t.Fatalf("interpreter did not reach the sleep before its limit: stdout=%q, reason=%s", stdout, r.Reason)
+					}
 					d := r.WorkMeasurementExecution
 					if r.Status != model.RunStatusInitFail || d == nil || d.State != "resource_exhausted" || d.OutputMatches != nil || r.Score != nil || !strings.Contains(d.TerminationSource, tc.expectedSource) {
 						t.Fatalf("interpreter hard stop: %+v metadata=%+v", r, d)
@@ -157,7 +167,7 @@ func TestDurantePythonResourceEnvelopeIntegration(t *testing.T) {
 				defer cancel()
 				timer := time.AfterFunc(500*time.Millisecond, cancel)
 				defer timer.Stop()
-				r := run(ctx, "while True: pass", "", hard)
+				r, _ := run(ctx, "while True: pass", "", hard)
 				if r.Status != model.RunStatusInitFail || r.WorkMeasurementExecution == nil || r.WorkMeasurementExecution.State != "cancelled" || r.Score != nil {
 					t.Fatalf("interpreter cancellation: %+v", r)
 				}
