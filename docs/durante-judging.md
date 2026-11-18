@@ -16,6 +16,53 @@ a verdict *policy* layered on the existing envelope and time conversion. It is
 enabled only for families and runtimes the operator has qualified, and only when
 a request asks for it. It does not touch ordinary requests.
 
+## Automatic observations alongside native grading
+
+Set `AONOHAKO_DURANTE_OBSERVE=on` to collect work for supported submissions
+using ordinary requests to `/execute`. The operator enables the measured
+families in `AONOHAKO_DURANTE_FAMILIES` and supplies
+`AONOHAKO_DURANTE_RESOURCE_POLICY`. Its `max_limits` bound one additional
+contestant execution. The native run still sets the verdict, score, CPU time,
+wall time and peak memory. End-to-end request latency includes the additional
+execution, and only the primary produces streamed events. This mode can run
+without a time model or a per-submission measurement flag.
+
+The optional `work_measurement_observation` field reports one of these outcomes.
+
+| Result | Evidence |
+|---|---|
+| `state: complete`, `output_check: native_output` | The native contestant finished with AC or WA. The replay produced the same judged output bytes before truncation. For standalone SPJ the primary ran the checker once, and the replay measured only the contestant. |
+| `state: complete`, `output_check: expected_output` | Measured native CPU exceeded the limit on an ordinary stdout case. The replay completed within its separate raw envelope and passed the normal comparison against a supplied nonempty answer. The original verdict remains TLE. |
+| `state: unavailable` | The reason identifies a skipped or incomplete observation. The enclosing response carries the native result. |
+
+Complete observations include `report` with the family's diagnostic work
+counters and installation identity. When using `stdin_url`, the primary
+and replay share one snapshot and the receipt includes its SHA-256. The
+runtime comparison requires a matching configured processor and dispatch
+profile, optional latency counter and effective runtime determinism options.
+A submission that produces different judged bytes during ordinary repeats
+or in the replay gets an unavailable observation.
+
+Configure the control plane and execution worker with matching observation
+settings and raw budgets for remote execution. A control plane receiving a
+native result from an older worker can return it with an unavailable observation.
+A malformed optional receipt also leaves a valid primary intact.
+Explicit measurement, time, shadow and judge requests keep their existing
+protocols. The automatic path is off by default.
+
+The automatic replay handles a single contestant with a registered, enabled
+source language and resolved artifacts. It skips network-enabled submissions,
+sidecar artifacts, interactive and communication sessions, pipelines, entry
+modes and multi-step jobs. Interactive and communication jobs already support
+explicit per-role observations. JVM measurement still requires sandbox
+qualification. Native wall-time or memory stops do not establish that a
+contestant finished or exhausted CPU. Their optional observation is unavailable.
+
+The HTTP verification script exercises direct and forwarded requests in an
+offline validation container. It compiles real submissions, checks native
+results, validates Durante receipts and verifies that the SPJ executes once.
+[Verification harness](../scripts/verify_durante_observation.py)
+
 ## When it applies
 
 A request opts in with `work_measurement_judge: true`, which requires the same

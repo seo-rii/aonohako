@@ -4,6 +4,10 @@ An explicitly requested supported-language run can execute under Durante and ret
 `work_measurement` alongside its ordinary verdict, CPU, wall and memory values.
 Interactive and communication-v1/v2 runs return separate role observations in
 `work_measurements` instead.
+A deployment can also collect counters by replaying eligible ordinary requests
+after native grading. This path preserves the native contestant's reported
+CPU time and verdict. [Automatic observations](durante-judging.md#automatic-observations-alongside-native-grading)
+
 The opt-in, operator-gated [work-based judging](durante-judging.md) path turns a
 completed C/C++-style observation into an actual AC/WA/TLE/RE verdict using
 `limits.time_ms` as a virtual-millisecond limit; it is off by default.
