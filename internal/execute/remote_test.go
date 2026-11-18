@@ -801,6 +801,17 @@ func TestRemoteRunnerAbsoluteDeadlineIncludesOnlyEligibleShortCaseRepetitions(t 
 func assertRemoteRunnerAbsoluteDeadline(t *testing.T, ctx context.Context, req *model.RunRequest, absoluteTimeout, want time.Duration) {
 	t.Helper()
 	var deadline time.Time
+	header := http.Header{"Content-Type": []string{"text/event-stream"}}
+	result := `{"status":"Accepted"}`
+	wantStatus, wantSource := model.RunStatusAccepted, ""
+	if req.Pipeline != nil {
+		// These fixtures specify stage budgets only. A negotiated worker can
+		// return an initialization result before starting their first stage.
+		header.Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+		header.Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
+		result = `{"status":"Container Initialization Failed","verdict_source":"pipeline:resource"}`
+		wantStatus, wantSource = model.RunStatusInitFail, "pipeline:resource"
+	}
 	runner := &remoteRunner{
 		client: &http.Client{Transport: executeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var ok bool
@@ -811,8 +822,8 @@ func assertRemoteRunnerAbsoluteDeadline(t *testing.T, ctx context.Context, req *
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Status:     "200 OK",
-				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"Accepted\"}\n\n")),
+				Header:     header,
+				Body:       io.NopCloser(strings.NewReader("event: result\ndata: " + result + "\n\n")),
 			}, nil
 		})},
 		executeURL:      "http://remote.example/execute",
@@ -821,7 +832,7 @@ func assertRemoteRunnerAbsoluteDeadline(t *testing.T, ctx context.Context, req *
 	started := time.Now()
 	resp := runner.Run(ctx, req, Hooks{})
 	finished := time.Now()
-	if resp.Status != model.RunStatusAccepted {
+	if resp.Status != wantStatus || resp.VerdictSource != wantSource {
 		t.Fatalf("response = %+v", resp)
 	}
 	earliest, latest := started.Add(want), finished.Add(want)
