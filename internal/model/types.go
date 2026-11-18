@@ -229,27 +229,43 @@ type PipelineV1 struct {
 	FinalJudge PipelineFinalJudge          `json:"final_judge"`
 }
 
+// PipelineRoleCPU exposes native role accounting without peer output or diagnostics.
+type PipelineRoleCPU struct {
+	ProgramID    string  `json:"program_id"`
+	Status       string  `json:"status"`
+	ExitCode     *int    `json:"exit_code,omitempty"`
+	CPUTimeMs    int64   `json:"cpu_time_ms"`
+	CPUTimeNs    *uint64 `json:"cpu_time_ns,omitempty"`
+	RawCPUTimeNs *uint64 `json:"raw_cpu_time_ns,omitempty"`
+}
+
+type PipelineRoleTimes struct {
+	Contestant PipelineRoleCPU `json:"contestant"`
+	Interactor PipelineRoleCPU `json:"interactor"`
+}
+
 type StepResult struct {
-	ID               string  `json:"id"`
-	ProgramID        string  `json:"program_id,omitempty"`
-	Status           string  `json:"status"`
-	TimeMs           int64   `json:"time_ms"`
-	WallTimeMs       int64   `json:"wall_time_ms"`
-	CPUTimeMs        int64   `json:"cpu_time_ms"`
-	CPUTimeNs        *uint64 `json:"cpu_time_ns,omitempty"`
-	RawCPUTimeNs     *uint64 `json:"raw_cpu_time_ns,omitempty"`
-	RawCPUTimeMs     *int64  `json:"raw_cpu_time_ms,omitempty"`
-	ProcessCPUTimeMs int64   `json:"process_cpu_time_ms,omitempty"`
-	MemoryKB         int64   `json:"memory_kb"`
-	ExitCode         *int    `json:"exit_code,omitempty"`
-	Stdout           string  `json:"stdout,omitempty"`
-	Stderr           string  `json:"stderr,omitempty"`
-	StdoutTruncated  bool    `json:"stdout_truncated,omitempty"`
-	StderrTruncated  bool    `json:"stderr_truncated,omitempty"`
-	Reason           string  `json:"reason,omitempty"`
-	ReasonTruncated  bool    `json:"reason_truncated,omitempty"`
-	VerdictSource    string  `json:"verdict_source,omitempty"`
-	HandoffBytes     int64   `json:"handoff_bytes,omitempty"`
+	CPUTimeByRole    *PipelineRoleTimes `json:"cpu_time_by_role,omitempty"`
+	ID               string             `json:"id"`
+	ProgramID        string             `json:"program_id,omitempty"`
+	Status           string             `json:"status"`
+	TimeMs           int64              `json:"time_ms"`
+	WallTimeMs       int64              `json:"wall_time_ms"`
+	CPUTimeMs        int64              `json:"cpu_time_ms"`
+	CPUTimeNs        *uint64            `json:"cpu_time_ns,omitempty"`
+	RawCPUTimeNs     *uint64            `json:"raw_cpu_time_ns,omitempty"`
+	RawCPUTimeMs     *int64             `json:"raw_cpu_time_ms,omitempty"`
+	ProcessCPUTimeMs int64              `json:"process_cpu_time_ms,omitempty"`
+	MemoryKB         int64              `json:"memory_kb"`
+	ExitCode         *int               `json:"exit_code,omitempty"`
+	Stdout           string             `json:"stdout,omitempty"`
+	Stderr           string             `json:"stderr,omitempty"`
+	StdoutTruncated  bool               `json:"stdout_truncated,omitempty"`
+	StderrTruncated  bool               `json:"stderr_truncated,omitempty"`
+	Reason           string             `json:"reason,omitempty"`
+	ReasonTruncated  bool               `json:"reason_truncated,omitempty"`
+	VerdictSource    string             `json:"verdict_source,omitempty"`
+	HandoffBytes     int64              `json:"handoff_bytes,omitempty"`
 }
 
 type CPUTimeNormalization struct {

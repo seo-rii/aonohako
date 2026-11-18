@@ -143,7 +143,9 @@ peaks are compared rather than summed.
 ## Timing and Durante observations
 
 The `steps` array carries native CPU nanoseconds when available. An operator
-can enable output-checked Durante observations for the individual batch stages.
+can enable output-checked Durante observations for batch stages and for
+contestants in completed interactive exchanges. Interactive steps expose
+native `cpu_time_by_role` for the contestant and the interactor.
 The response binds each diagnostic report to its executed step and program
 ID. The final judge consumes the original native outputs, including when an
 optional replay fails. [Observation fields and limits](durante-judging.md#pipeline-v1-batch-observations)

@@ -572,6 +572,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), budget))
+		if r.Header.Get(model.PipelineInteractiveObservationHeader) != "v1" {
+			// Older controllers budgeted only for batch stages.
+			r = r.WithContext(execute.WithoutInteractivePipelineReplay(r.Context()))
+		}
 	}
 	if legacy := r.Header.Values(model.LegacyObservationBudgetHeader); len(legacy) > 0 {
 		budget, ok := parseStepObservationBudget(legacy, execute.MaxLegacyObservationBudget)

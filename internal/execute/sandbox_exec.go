@@ -117,6 +117,7 @@ type sandboxStreamConfig struct {
 	liveStdin                 bool
 	stdinFile                 *os.File
 	stdout                    io.Writer
+	stdoutFile                *os.File
 	onStdoutDone              func()
 	stderr                    io.Writer
 	onStderrDone              func()
@@ -238,20 +239,27 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 }
 
 func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer, meters ...*durante.Session) execResult {
-	wallLimit := time.Duration(executionWallTimeMs(req.Limits, false, cpuNormalizer.WallLimitMillis)) * time.Millisecond
-	// Preparation stays separate from the wall-clock safety deadline. CPU
-	// limits continue to be enforced by the sandbox watchdog and RLIMIT_CPU.
-	startupLimit := max(stdinURLDownloadTimeout, wallLimit)
-	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, wallLimit)
+	ctx, startTimer, cancel := sandboxRequestContext(parent, req, cpuNormalizer)
 	defer cancel()
-
 	var meter *durante.Session
 	if len(meters) > 0 {
 		meter = meters[0]
 	}
-	result := executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
-		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer, cpuNormalizer: cpuNormalizer, workMeasurement: meter,
-	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	streams := sandboxStreamConfig{stdin: stdinReader, stdinMaxBytes: stdinMaxBytes,
+		startWallTimer: startTimer, cpuNormalizer: cpuNormalizer, workMeasurement: meter}
+	return runCommandWithSandboxStreams(ctx, cancel, ws, command, req, streams, hooks, outputLimitBytes, tuning, cgroupParentDir)
+}
+
+func sandboxRequestContext(parent context.Context, req *model.RunRequest, normalizer timing.CPUNormalizer) (context.Context, func() bool, context.CancelFunc) {
+	wall := time.Duration(executionWallTimeMs(req.Limits, false, normalizer.WallLimitMillis)) * time.Millisecond
+	return sandboxExecutionContext(parent, max(stdinURLDownloadTimeout, wall), wall)
+}
+
+// Both ordinary and live replay contestants use the same instrumentation and
+// CPU-feature lifecycle after the sandbox has stopped.
+func runCommandWithSandboxStreams(ctx context.Context, cancel context.CancelFunc, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+	result := executeSandboxCommandWithStreams(ctx, ws, command, req, streams, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	meter := streams.workMeasurement
 	if meter != nil {
 		if len(req.DisallowedCPUFeatures) == 0 {
 			result = collectCompletedSandboxWorkMeasurement(ctx, cancel, result, meter.Collect)
@@ -760,6 +768,9 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		stderrWriter = teeCaptureWriter{capture: &stderrBuf, forward: streams.stderr}
 	}
 	cmd.Stdout = stdoutWriter
+	if streams.stdoutFile != nil {
+		cmd.Stdout = streams.stdoutFile
+	}
 	cmd.Stderr = stderrWriter
 	sandbox.TrimParentMemoryBeforeSandbox()
 	if err := cmd.Start(); err != nil {
@@ -769,6 +780,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		// Child owns its copy. Holding this read end would suppress EPIPE
 		// after the receiving peer exits.
 		_ = streams.stdinFile.Close()
+	}
+	if streams.stdoutFile != nil {
+		// The replay peer reads the target pipe directly and needs its EOF.
+		_ = streams.stdoutFile.Close()
 	}
 	if streams.closeExtraFilesAfterStart {
 		for _, file := range streams.extraFiles {

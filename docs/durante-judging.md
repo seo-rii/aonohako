@@ -72,12 +72,11 @@ pipeline's two-stage limit. The final diff or special judge runs on the
 native artifacts. After native judging stops, the worker reconstructs the
 stage input from its resolved resources and immutable native handoffs, applies
 the configured raw limits, and compares the replay's full captured stdout
-and any declared participant file with the native bytes. The final judge and
-interactive peers run once. A replay cannot supply input to another stage.
+and any declared participant file with the native bytes. The final judge runs once. A replay cannot supply input to another stage.
 
 The response carries a version 2 `work_measurement_observation` with state
 `pipeline`. Its `steps` are in execution order. Each row identifies its
-`step_id` and `program_id`. A complete row has `output_check: native_output`
+`step_id` and `program_id`. A complete batch row has `output_check: native_output`
 and a diagnostic report. An ineligible, incomplete or differing replay has an
 unavailable row. An unstarted stage has no row. Resource bytes, output hashes,
 artifacts and checker messages stay private. Optional replays add to response
@@ -93,6 +92,34 @@ to receive verified per-stage reports through the remote API. A forwarded
 request bounds the total time for optional replays. Turning observation off on
 the controller suppresses replays even when the worker has observation enabled.
 [Pipeline V1 request and response contract](pipeline-v1.md)
+
+### Pipeline V1 interactive observations
+
+For an interactive stage, the worker can replay the contestant alone after
+native judging finishes. During the native session it records successfully
+delivered pipe writes and EOF in a request-private buffer. The buffer is
+limited to 1 MiB across both directions and 4,096 data writes. The replay
+uses a live pipe. A scripted peer supplies the recorded judge prompts in
+order and compares the contestant's responses as it reads them. Each later
+prompt waits for the recorded responses from the preceding turn. The worker
+checks the full contestant stdout and any declared participant file. The
+original interactor and final judge each run once.
+
+A complete contestant observation has `output_check: interactive_transcript`.
+It covers an accepted exchange and a cleanly completed exchange that the
+interactor judged wrong. Both require a normal contestant exit, an
+unambiguous captured exchange and a matching replay. Overlapping writes,
+partial deliveries, peer cancellation, exceeded bounds and differing output
+leave the row unavailable. The public result contains the submitted program
+IDs and diagnostic counters. The recorded conversation stays private.
+During replay the worker checks the contestant's stdout pipe before and
+after issuing a prompt. Already queued answers or a preceding reply that
+fills the pipe make the ordering ambiguous and leave the row unavailable.
+The native stage's `cpu_time_by_role` contains separate `contestant` and
+`interactor` CPU measurements, each with its own program ID, exit status and
+available nanosecond counters. The stage total includes both roles. Pair the
+contestant receipt with its own native CPU measurement when evaluating timing
+models. The raw replay does not reproduce native wall-clock timing.
 
 ### Legacy two-step observations
 
