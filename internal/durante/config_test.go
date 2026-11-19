@@ -5,7 +5,6 @@ import (
 
 	"aonohako/internal/cpupolicy"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -58,8 +57,7 @@ func TestDuranteConfigIsOptIn(t *testing.T) {
 func TestSessionPinsEnvironmentAndPreservesArguments(t *testing.T) {
 	dir := t.TempDir()
 	launcher := runtimeInstallationFixture(t, dir)
-	client := filepath.Join(dir, "client.so")
-	os.WriteFile(client, []byte("x"), 0600)
+	client := runtimeClientFixture(t, dir)
 	cfg, _ := ParseConfig("cpp", launcher, client, DispatchGLIBC241)
 	s, err := prepare(context.Background(), dir, cfg, "CPP20", os.Geteuid(), os.Getegid(), func(context.Context) (string, error) { return "2.41", nil })
 	if err != nil {
@@ -87,10 +85,7 @@ func TestSessionPinsEnvironmentAndPreservesArguments(t *testing.T) {
 func TestCPUFeaturePolicySessionUsesConfiguredRuntimeWithoutMeasurementOptIn(t *testing.T) {
 	dir := t.TempDir()
 	launcher := runtimeInstallationFixture(t, dir)
-	client := filepath.Join(dir, "client.so")
-	if err := os.WriteFile(client, []byte("native policy client"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	client := runtimeClientFixture(t, dir)
 	// A policy-only request does not select a measurement family or impose
 	// the separately configured measurement dispatch environment.
 	cfg, err := ParseConfig("", launcher, client, DispatchGLIBC241)
@@ -141,10 +136,7 @@ func TestCPUFeaturePolicySessionRequiresPreparedTrustedInstallation(t *testing.T
 	}
 	dir := t.TempDir()
 	launcher := runtimeInstallationFixture(t, dir)
-	client := filepath.Join(dir, "client.so")
-	if err := os.WriteFile(client, []byte("client"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	client := runtimeClientFixture(t, dir)
 	cfg, err := ParseConfig("", launcher, client, "")
 	if err != nil {
 		t.Fatal(err)

@@ -207,18 +207,21 @@ func TestTimeEstimateUsesEntireCollectedProcessTree(t *testing.T) {
 	}
 }
 
-func TestTimePolicyRejectsPreStabilizationEngineProfile(t *testing.T) {
-	for _, profile := range []string{"dynamorio-11.3-vm32m-v1", "dynamorio-11.3-durante-v2-vm32m", "dynamorio-11.3-durante-v3-vm32m"} {
+func TestTimePolicyRejectsOtherEngineProfiles(t *testing.T) {
+	for _, profile := range []string{"dynamorio-11.3-vm32m-v1", "dynamorio-11.3-durante-v2-vm32m", "dynamorio-11.3-durante-v3-vm32m", engineProfileV7, engineProfileV8} {
+		if profile == EngineProfile {
+			continue
+		}
 		policy := timePolicyFixture()
 		policy.EngineProfile = profile
 		if err := policy.Validate(); err == nil {
-			t.Fatal("old runtime calibration survived patched engine profile")
+			t.Fatalf("worker %s accepted a %s calibration", EngineProfile, profile)
 		}
 		policy = timePolicyFixture()
 		report := timeReportFixture(100, 0)
 		report.EngineProfile = profile
 		if _, err := policy.Estimate(policy.RuntimeID, report); err == nil {
-			t.Fatal("old runtime report accepted under patched calibration")
+			t.Fatalf("worker %s calibration accepted a %s report", EngineProfile, profile)
 		}
 	}
 }

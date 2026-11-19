@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -146,10 +145,7 @@ func TestSessionRecordsAppliedRuntimeDeterminism(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			launcher := runtimeInstallationFixture(t, root)
-			client := filepath.Join(root, "client.so")
-			if err := os.WriteFile(client, []byte("synthetic diagnostic client"), 0600); err != nil {
-				t.Fatal(err)
-			}
+			client := runtimeClientFixture(t, root)
 			cfg, err := ParseConfig("cpython", launcher, client, DispatchDefault)
 			if err != nil {
 				t.Fatal(err)

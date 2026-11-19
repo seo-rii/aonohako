@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # Explicit opt-in overlay. Supply a reviewed immutable execution-image digest.
 ARG RUNTIME_IMAGE
+ARG DURANTE_VERSION=v7
 ARG GO_IMAGE=golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0
 ARG BUILD_IMAGE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
 
@@ -14,6 +15,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+ARG DURANTE_VERSION
+ENV GOFLAGS="-tags=durante_${DURANTE_VERSION}"
+RUN case "$DURANTE_VERSION" in v7|v8) ;; *) echo 'unsupported Durante version' >&2; exit 1 ;; esac
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako ./cmd/server
 
 FROM durante-go AS durante-go-test
@@ -21,12 +25,15 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -c -o /out/durante-execute.tes
 
 FROM ${BUILD_IMAGE} AS durante-build
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake patch python3 ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY third_party/durante/ /durante/
+COPY third_party/durante/ /vendor/durante/
+COPY third_party/durante-v8/ /vendor/durante-v8/
 COPY scripts/verify_durante_vendor.py /verify_durante_vendor.py
 COPY --chmod=0755 scripts/install_durante_runtime.sh /install_durante_runtime.sh
-RUN python3 /verify_durante_vendor.py --root /durante
+COPY --chmod=0755 scripts/build_durante_client.sh /build_durante_client.sh
+ARG DURANTE_VERSION
+RUN python3 /verify_durante_vendor.py --root /vendor/durante --version "$DURANTE_VERSION" --output /durante
 RUN python3 /durante/toolkit/fetch_sdk.py
-RUN cmake -S /durante/client -B /build -DCMAKE_BUILD_TYPE=Release -DDynamoRIO_DIR=/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/cmake && cmake --build /build --target durante -j2
+RUN /build_durante_client.sh /durante /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1 /build
 RUN /install_durante_runtime.sh /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1 /build/libdurante.so /durante /out/durante
 COPY internal/execute/testdata/durante/probe.c /probe.c
 RUN gcc -O2 -Wall -Wextra -Werror -static /probe.c -o /durante-probe

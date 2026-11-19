@@ -45,10 +45,7 @@ func TestLatencyBoundReportDecoding(t *testing.T) {
 func TestSessionLatencyBoundReceipt(t *testing.T) {
 	root := t.TempDir()
 	launcher := runtimeInstallationFixture(t, root)
-	client := filepath.Join(root, "client.so")
-	if err := os.WriteFile(client, []byte("test client"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	client := runtimeClientFixture(t, root)
 	cfg, err := ParseConfig("cpp", launcher, client, DispatchDefault)
 	if err != nil {
 		t.Fatal(err)
