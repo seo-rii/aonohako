@@ -336,7 +336,7 @@ and a writable output parent. The tool creates the specified output directory.
 ```sh
 python3 /scripts/verify_durante_native_boundaries.py \
   --server /validation/server --reference /validation/reference-tool \
-  --runtime-image "$image_id" --manifest /inputs/manifest.json \
+  --runtime-image "$AONOHAKO_DURANTE_RUNTIME_IMAGE" --manifest /inputs/manifest.json \
   --frozen-policy /inputs/frozen-policy.json --dataset /inputs/dataset.json \
   --output /output/boundaries
 ```
