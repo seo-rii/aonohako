@@ -33,24 +33,25 @@ import (
 )
 
 type execResult struct {
-	WorkMeasurement  *durante.Report
-	targetPID        int
-	Status           string
-	ExitCode         *int
-	Stdout           []byte
-	Stderr           []byte
-	StdoutTruncated  bool
-	StderrTruncated  bool
-	MemoryKB         int64
-	WallTimeMs       int64
-	CPUTimeMs        int64
-	CPUTimeNs        uint64
-	RawCPUTimeMs     *int64
-	RawCPUTimeNs     *uint64
-	CPUAccounting    *model.CPUAccounting
-	ProcessCPUTimeMs int64
-	Reason           string
-	VerdictSource    string
+	WorkMeasurement   *durante.Report
+	workClockProgress *durante.WorkClockProgress
+	targetPID         int
+	Status            string
+	ExitCode          *int
+	Stdout            []byte
+	Stderr            []byte
+	StdoutTruncated   bool
+	StderrTruncated   bool
+	MemoryKB          int64
+	WallTimeMs        int64
+	CPUTimeMs         int64
+	CPUTimeNs         uint64
+	RawCPUTimeMs      *int64
+	RawCPUTimeNs      *uint64
+	CPUAccounting     *model.CPUAccounting
+	ProcessCPUTimeMs  int64
+	Reason            string
+	VerdictSource     string
 	// The typed stdout/stderr copy error from cmd.Wait, if any. Only interactive
 	// verdict reconciliation may discount an expected peer shutdown.
 	streamRelayErr error
@@ -259,6 +260,12 @@ func sandboxRequestContext(parent context.Context, req *model.RunRequest, normal
 // CPU-feature lifecycle after the sandbox has stopped.
 func runCommandWithSandboxStreams(ctx context.Context, cancel context.CancelFunc, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	result := executeSandboxCommandWithStreams(ctx, ws, command, req, streams, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	if result.VerdictSource == "durante_work_clock_cleanup" {
+		// The lifecycle collector requires a stopped tree.
+		cancel()
+		return result
+	}
+
 	meter := streams.workMeasurement
 	if meter != nil {
 		if len(req.DisallowedCPUFeatures) == 0 {
@@ -338,7 +345,7 @@ func executeSandboxCommandWithStdinLimit(ctx context.Context, ws Workspace, comm
 	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{stdin: stdinReader, stdinMaxBytes: stdinMaxBytes}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
 
-func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) (finished execResult) {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
 	}
@@ -572,13 +579,38 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 
 	// Select every sandbox permission and resource limit from the original
 	// runtime before wrapping it. Instrumentation grants no extra capability.
+	var clock *durante.WorkClock
+	var clockPath string
+	if req.WorkMeasurementClock != nil {
+		if streams.workMeasurement == nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "work clock requires a Durante session"}
+		}
+		clock, err = durante.OpenWorkClock(ws.RootDir, int(identity.gid))
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "prepare Durante work clock: " + err.Error()}
+		}
+		defer clock.Close()
+		// Registered before cgroup cleanup, so the final publication is read
+		// only after both the target and its owned execution scope have stopped.
+		defer func() {
+			if finished.targetPID <= 0 || finished.VerdictSource == "durante_work_clock_cleanup" {
+				return
+			}
+			if !workClockGroupStopped(finished.targetPID) {
+				rejectWorkClockCleanup(&finished)
+				return
+			}
+			finished.workClockProgress = clock.Snapshot()
+		}()
+		clockPath = clock.Path()
+	}
 	if streams.workMeasurement != nil {
 		var err error
 		finalCommand, innerEnv, err = streams.workMeasurement.Runtime(runLang, finalCommand, innerEnv)
 		if err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "durante runtime options: " + err.Error()}
 		}
-		finalCommand = streams.workMeasurement.Wrap(finalCommand)
+		finalCommand = streams.workMeasurement.WrapWithWorkClock(finalCommand, clockPath)
 	}
 	helperReq := sandbox.ExecRequest{
 		Command:                  finalCommand,
@@ -741,6 +773,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		Setpgid:   true,
 		Pdeathsig: syscall.SIGKILL,
 	}
+	clockRootFD := -1
+	if clock != nil {
+		cmd.SysProcAttr.PidFD = &clockRootFD
+	}
 	if os.Geteuid() == 0 {
 		cmd.SysProcAttr.Credential = &syscall.Credential{
 			Uid:    identity.uid,
@@ -775,6 +811,14 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	sandbox.TrimParentMemoryBeforeSandbox()
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
+	}
+	if clock != nil {
+		if clockRootFD < 0 {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return execResult{Status: model.RunStatusInitFail, Reason: "work clock requires a kernel pidfd for its target"}
+		}
+		defer syscall.Close(clockRootFD)
 	}
 	if streams.stdinFile != nil {
 		// Child owns its copy. Holding this read end would suppress EPIPE
@@ -842,7 +886,9 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			cgroupLimitBaselineSet = true
 		}
 		defer func() {
-			cleanupSandboxCgroup("execute", runGroup)
+			if err := cleanupSandboxCgroup("execute", runGroup); err != nil && clock != nil {
+				rejectWorkClockCleanup(&finished)
+			}
 		}()
 	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
@@ -1172,6 +1218,25 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 					killTarget(result.VerdictSource)
 				}
 			}
+			if clock != nil && targetStarted && result.Status == "OK" && parentKillReason == "" && ctx.Err() == nil {
+				if progress := clock.Snapshot(); progress != nil && req.WorkMeasurementClock.Exceeds(*progress) {
+					select {
+					case err := <-waitCh:
+						waitErr = err
+						goto done
+					default:
+					}
+					delivered, err := signalWorkClockRoot(clockRootFD)
+					if err != nil {
+						result.Status, result.Reason, result.VerdictSource = model.RunStatusInitFail, "could not deliver Durante work clock stop", "durante_work_clock_signal"
+						killTarget(result.VerdictSource)
+					} else if delivered {
+						// The kernel accepted the signal for this root lifetime. Also
+						// stop every peer in the sandbox's process group.
+						killTarget("durante_work_clock")
+					}
+				}
+			}
 		}
 	}
 done:
@@ -1285,13 +1350,16 @@ done:
 		}
 	}
 
+	clockKilledTarget := false
 	if ps := cmd.ProcessState; ps != nil {
 		if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
 			if ws.Exited() {
 				c := ws.ExitStatus()
 				result.ExitCode = &c
 			}
-			if ws.Signaled() {
+			if ws.Signaled() && ws.Signal() == syscall.SIGKILL && parentKillReason == "durante_work_clock" && result.Status == "OK" {
+				clockKilledTarget = true
+			} else if ws.Signaled() {
 				result.Status, result.Reason, result.VerdictSource = classifySandboxSignal(
 					result.Status,
 					result.Reason,
@@ -1360,6 +1428,16 @@ done:
 	if result.Status == "OK" && errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
+	}
+	if clock != nil && result.Status == "OK" {
+		switch {
+		case memoryLimitKB > 0 && result.MemoryKB > memoryLimitKB:
+			result.Status, result.Reason, result.VerdictSource = model.RunStatusMLE, "memory limit exceeded", "memory_reported"
+		case result.WallTimeMs > int64(req.Limits.WallTimeMs):
+			result.Status, result.Reason, result.VerdictSource = model.RunStatusTLE, "wall time limit exceeded", "wall_time"
+		case clockKilledTarget:
+			result.Status, result.Reason, result.VerdictSource = model.RunStatusTLE, "Durante work budget exceeded", "durante_work_clock"
+		}
 	}
 	result.targetPID = cmd.Process.Pid
 	normalizeExecResultCPU(&result, cpuNormalizer)
@@ -1430,13 +1508,15 @@ func cgroupLimitBreachSince(stats, baseline cgroup.Stats, hasBaseline bool) cgro
 	return cgroup.LimitBreachNone
 }
 
-func cleanupSandboxCgroup(scope string, group cgroup.Group) {
+func cleanupSandboxCgroup(scope string, group cgroup.Group) error {
 	if strings.TrimSpace(group.Path) == "" {
-		return
+		return nil
 	}
-	if err := group.KillAndRemoveWithRetry(250 * time.Millisecond); err != nil {
+	err := group.KillAndRemoveWithRetry(250 * time.Millisecond)
+	if err != nil {
 		slog.Warn("sandbox cgroup cleanup failed", "scope", scope, "path", group.Path, "err", err)
 	}
+	return err
 }
 
 func ioCopy(dst interface{ Write([]byte) (int, error) }, src any) (int64, error) {

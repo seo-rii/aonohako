@@ -128,7 +128,18 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 
-	body, err := json.Marshal(req)
+	forward := req
+	if err := validateJudgeClockBinding(req, r.workMeasurement, tuning); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if clock := effectiveWorkClock(req, r.workMeasurement, tuning); clock != nil && clock.TimePolicy != nil {
+		// An earlier worker rejects the versioned request field before execution.
+		// A current worker checks the model binding against its own configuration.
+		copy := *req
+		copy.JudgeClockBinding = clock.ModelBinding()
+		forward = &copy
+	}
+	body, err := json.Marshal(forward)
 	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote request encode failed: " + err.Error()}
 	}
@@ -374,13 +385,16 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if err := validateRemoteMeasurementCounters(checked, remoteResult, r.workMeasurement); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
+			if err := validateRemoteWorkClock(checked, remoteResult, effectiveWorkClock(checked, r.workMeasurement, tuning)); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
 			if err := validateRemoteWorkMeasurementTime(checked, remoteResult, r.workMeasurement, tuning); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
 			if err := validateRemoteWorkMeasurementPeerTime(checked, remoteResult, r.workMeasurement, tuning); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
-			if err := validateRemoteWorkMeasurementJudge(checked, remoteResult, r.workMeasurement); err != nil {
+			if err := validateRemoteWorkMeasurementJudge(checked, remoteResult, r.workMeasurement, tuning); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 			}
 			var shadowErr error
@@ -530,7 +544,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			// Peer coordinators enforce CPU limits for each role. Their total
 			// also includes the judge and other participants, so comparing it
 			// with one contestant's allowance would change a valid verdict.
-			if req.Interactor == nil && req.Communication == nil {
+			// A validated Durante judgment compares model time to the nominal
+			// allowance. Its raw CPU belongs to the independent safety envelope.
+			if !req.WorkMeasurementJudge && req.Interactor == nil && req.Communication == nil {
 				remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
 			}
 			policy := r.workMeasurement

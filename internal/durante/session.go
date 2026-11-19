@@ -139,7 +139,14 @@ func (s *Session) SetDisallowedCPUFeatures(features []cpupolicy.Feature) error {
 }
 
 func (s *Session) Wrap(command []string) []string {
+	return s.WrapWithWorkClock(command, "")
+}
+
+func (s *Session) WrapWithWorkClock(command []string, clockPath string) []string {
 	args := []string{s.config.Drrun, "-quiet", "-follow_children", "-disable_traces", "-vm_size", "32M", "-vmheap_size", "32M", "-c", s.config.Client, "-outdir", s.dir, "-rep_bytes"}
+	if clockPath != "" {
+		args = append(args, "-live_work_v1", clockPath)
+	}
 	for _, feature := range s.cpuFeatures {
 		args = append(args, "-disallow_cpu_feature", string(feature))
 	}
