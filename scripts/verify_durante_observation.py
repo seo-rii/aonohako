@@ -52,7 +52,7 @@ def artifact(name, text, mode=None):
 
 
 @contextmanager
-def server(args, port, enabled, remote=None, *, runner_token=None, operator_env=None):
+def server(args, port, enabled, remote=None, *, runner_token=None, operator_env=None, umask=-1):
     env = {"PATH": os.defpath, "PORT": str(port), "AONOHAKO_DEPLOYMENT_TARGET": "dev",
            "AONOHAKO_INBOUND_AUTH": "none", "AONOHAKO_WORK_ROOT": "/work",
            "AONOHAKO_WORK_ROOT_MAX_BYTES": str(256 << 20), "AONOHAKO_MAX_ACTIVE_RUNS": "1",
@@ -74,7 +74,7 @@ def server(args, port, enabled, remote=None, *, runner_token=None, operator_env=
     elif runner_token:
         env.update(AONOHAKO_INBOUND_AUTH="bearer", AONOHAKO_API_BEARER_TOKEN=runner_token)
     url = f"http://127.0.0.1:{port}"
-    process = subprocess.Popen([args.server], env=env)
+    process = subprocess.Popen([args.server], env=env, umask=umask)
     try:
         for _ in range(100):
             require(process.poll() is None, f"server {port} exited before readiness")
@@ -98,14 +98,16 @@ def server(args, port, enabled, remote=None, *, runner_token=None, operator_env=
                 process.wait()
 
 
-def post(url, path, payload, *, token=None):
+def post(url, path, payload, *, token=None, timeout=75, max_bytes=8 << 20):
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(url + path, data=json.dumps(payload).encode(), headers=headers)
-    with urllib.request.urlopen(request, timeout=75) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         require(response.headers.get_content_type() == "text/event-stream", f"{path}: expected SSE")
-        body = response.read(8 << 20).decode()
+        data = response.read(max_bytes + 1)
+        require(len(data) <= max_bytes, f"{path}: SSE response exceeds {max_bytes} bytes")
+        body = data.decode()
     events = []
     for frame in body.split("\n\n"):
         pair = frame.splitlines()
@@ -117,8 +119,9 @@ def post(url, path, payload, *, token=None):
     return events[-1][1], stdout
 
 
-def compile_cpp(url, source):
-    result, _ = post(url, "/compile", {"lang": "CPP20", "sources": [artifact("Main.cpp", source)], "target": "Main"})
+def compile_cpp(url, source, *, timeout=75, max_bytes=8 << 20):
+    payload = {"lang": "CPP20", "sources": [artifact("Main.cpp", source)], "target": "Main"}
+    result, _ = post(url, "/compile", payload, timeout=timeout, max_bytes=max_bytes)
     require(result["status"] == "OK", f"C++ compile failed: {result.get('reason')}, {result.get('stderr')}")
     binary, = result["artifacts"]
     sha = hashlib.sha256(base64.b64decode(binary["data_b64"], validate=True)).hexdigest()
