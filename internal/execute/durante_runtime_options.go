@@ -165,6 +165,12 @@ func DescribeWorkMeasurementRuntimeOptions(req *model.RunRequest, execution conf
 	if err != nil {
 		return nil, err
 	}
+	if req.WorkMeasurementJudge && req.WorkMeasurementTime && req.WorkMeasurement {
+		req, err = candidateJudgeWorkLimits(req, execution.WorkMeasurement)
+		if err != nil {
+			return nil, err
+		}
+	}
 	roles, err := workMeasurementRequestRoles(req)
 	if err != nil {
 		return nil, err

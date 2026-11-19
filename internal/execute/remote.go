@@ -95,9 +95,6 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			return attachShadow(r.run(ctx, checked, hooks), nil, reason)
 		}
 	}
-	if err := runvalidation.ValidateWorkMeasurementLimits(checked); err != nil {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
-	}
 	tuning := r.runtimeTuning.WithSafeDefaults()
 	schema2 := r.workMeasurement.TimeModels != nil && r.workMeasurement.TimeModels.Schema == 2
 	if (checked.WorkMeasurementTime || checked.WorkMeasurementPeerTime != nil || req.WorkMeasurementShadow) && schema2 {
@@ -106,6 +103,16 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		if err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
+	}
+	if !req.WorkMeasurementShadow {
+		admitted, err := resolveJudgeWorkLimits(req, r.workMeasurement, tuning)
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+		req, checked = admitted, admitted
+	}
+	if err := runvalidation.ValidateWorkMeasurementLimits(checked); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if checked.WorkMeasurementTime {
 		if _, _, err := ordinaryTimePolicy(checked, r.workMeasurement, tuning); err != nil {

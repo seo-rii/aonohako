@@ -25,9 +25,9 @@ func timedResponse(t *testing.T, primary string, ns uint64) model.RunResponse {
 		Instructions: &ns, REPBytes: &zero, REPEntries: &zero, UnsupportedREPEntries: &zero,
 		IntegrityVerified: &verified, MeasurementContract: durante.DiagnosticContract(),
 		Installation: &durante.InstallationIdentity{
-			SourceCommit: "3d070ca527263bf3b1bb6bb074f1d8726923063c", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
+			SourceCommit: "41743068ef9070b6e04195bf7822c5ee513660ff", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
 			RuntimePatchSHA256:           "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c",
-			RuntimeCodeReplayPatchSHA256: "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72",
+			RuntimeCodeReplayPatchSHA256: "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b",
 			LauncherSHA256:               strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true,
 		},
 	}
@@ -93,6 +93,7 @@ func TestSummaryRequiresInputProvenanceForHistoricalTimeComparisons(t *testing.T
 	report, d := inner.WorkMeasurement, inner.WorkMeasurementExecution
 	report.EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
 	report.Installation.SourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
+	report.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 	d.TimeEstimate.EngineProfile = report.EngineProfile
 	d.TimeEstimateEligibility = nil
 	d.TerminationSource, inner.WorkMeasurementJudgment.TerminationSource = "file_output", "file_output"
@@ -162,6 +163,7 @@ func TestSummaryCountsDirectionalDisagreementsAndRawStopsSeparately(t *testing.T
 	legacyReport := legacyStop.WorkMeasurementShadow.Response.WorkMeasurement
 	legacyReport.EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
 	legacyReport.Installation.SourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
+	legacyReport.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 	add("42", legacyStop)
 	add("42", rawStop(t, "memory_rss", model.RunStatusInitFail))
 	add("42", rawStop(t, "cpu_time_final", model.RunStatusInitFail))
@@ -387,6 +389,7 @@ func TestCPUComparisonRecomputesArchivedCoefficientsAndCalibration(t *testing.T)
 			inner := r.WorkMeasurementShadow.Response
 			inner.WorkMeasurement.EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
 			inner.WorkMeasurement.Installation.SourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
+			inner.WorkMeasurement.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 			inner.WorkMeasurementExecution.TimeEstimate.EngineProfile = inner.WorkMeasurement.EngineProfile
 		}},
 	} {

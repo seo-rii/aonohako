@@ -2,12 +2,17 @@ package execute
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
 	"os/exec"
 	"syscall"
+	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
-	"testing"
 
+	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/runvalidation"
@@ -100,6 +105,81 @@ func TestWorkClockAdmission(t *testing.T) {
 		change(&copyReq)
 		if err := runvalidation.ValidateWorkMeasurementLimits(&copyReq); err == nil {
 			t.Fatal("accepted unsupported clock request")
+		}
+	}
+}
+
+func TestJudgeWorkLimitsUseOperatorEnvelopeForBoundClock(t *testing.T) {
+	req := judgeRequest()
+	req.WorkMeasurementLimits = nil
+	execution := boundRuntimeOptionsConfig(t, req, config.ExecutionConfig{}).Execution
+	execution.WorkMeasurement.Judge = judgeMeasurementConfig().Judge
+	execution.WorkMeasurement.CPUIDProfile = durante.CPUIDProfileX8664V2
+	execution.WorkMeasurement.TimeModels.Profiles[0].CPUIDProfile = durante.CPUIDProfileX8664V2
+	tuning := config.DefaultRuntimeTuningConfig()
+	limits := execution.WorkMeasurement.ResourcePolicy.MaxLimits
+	admitted, err := resolveJudgeWorkLimits(req, execution.WorkMeasurement, tuning)
+	if err != nil || admitted == req || *admitted.WorkMeasurementLimits != limits || req.WorkMeasurementLimits != nil {
+		t.Fatalf("resolving default raw envelope: %+v, %v", admitted, err)
+	}
+	explicit := *req
+	explicit.WorkMeasurementLimits = &limits
+	defaultClock := effectiveWorkClock(admitted, execution.WorkMeasurement, tuning)
+	explicitClock := effectiveWorkClock(&explicit, execution.WorkMeasurement, tuning)
+	if defaultClock == nil || explicitClock == nil || defaultClock.ModelBinding() != explicitClock.ModelBinding() {
+		t.Fatal("default envelope produced a different model binding")
+	}
+	var deadline time.Time
+	remote := &remoteRunner{workMeasurement: execution.WorkMeasurement, uploadTimeout: time.Second, executeURL: "http://worker.example/execute"}
+	remote.client = &http.Client{Transport: executeRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var forwarded model.RunRequest
+		if err := json.NewDecoder(request.Body).Decode(&forwarded); err != nil {
+			t.Fatal(err)
+		}
+		if forwarded.WorkMeasurementLimits == nil || *forwarded.WorkMeasurementLimits != limits || forwarded.JudgeClockBinding != defaultClock.ModelBinding() {
+			t.Fatal("remote runner did not forward the resolved envelope and binding")
+		}
+		deadline, _ = request.Context().Deadline()
+		return nil, errors.New("captured outgoing request")
+	})}
+	wantTimeout := remoteExecutionTimeout(&explicit, time.Second)
+	start := time.Now()
+	result := remote.Run(context.Background(), req, Hooks{})
+	if deadline.Before(start.Add(wantTimeout)) || deadline.After(time.Now().Add(wantTimeout)) || req.WorkMeasurementLimits != nil {
+		t.Fatalf("remote deadline %v did not use the raw wall limit, result: %s", deadline, result.Reason)
+	}
+	limits.CPUTimeMs, limits.WallTimeMs = 500, 1500
+	if err := ApplyJudgeWorkLimits(&explicit, execution); err != nil || *explicit.WorkMeasurementLimits != limits {
+		t.Fatalf("explicit limits were lost: %v", err)
+	}
+	for _, implicit := range []bool{false, true} {
+		for _, nominal := range []int{limits.CPUTimeMs, limits.WallTimeMs} {
+			r := explicit
+			r.Limits.TimeMs = nominal
+			cfg := execution
+			policy := *cfg.WorkMeasurement.ResourcePolicy
+			policy.MaxLimits = limits
+			cfg.WorkMeasurement.ResourcePolicy = &policy
+			if implicit {
+				r.WorkMeasurementLimits = nil
+			}
+			if err := ApplyJudgeWorkLimits(&r, cfg); err == nil {
+				t.Fatalf("accepted raw limits %+v at nominal %d (implicit %t)", limits, nominal, implicit)
+			}
+		}
+	}
+	for _, mutate := range []func(*durante.Config){
+		func(c *durante.Config) { c.Judge.VerdictsAllowed = false },
+		func(c *durante.Config) { c.Judge.Integrity = durante.JudgeIntegrityPlausibility },
+		func(c *durante.Config) { c.TimeModels = nil },
+		func(c *durante.Config) { c.ResourcePolicy = nil },
+		func(c *durante.Config) { c.Judge.Families = nil },
+		func(c *durante.Config) { c.ResourcePolicy.MaxLimits.MemoryMB-- },
+	} {
+		cfg := snapshotWorkMeasurementConfig(execution.WorkMeasurement)
+		mutate(&cfg)
+		if _, err := resolveJudgeWorkLimits(req, cfg, tuning); err == nil {
+			t.Fatal("accepted implicit limits without a bound deciding clock")
 		}
 	}
 }

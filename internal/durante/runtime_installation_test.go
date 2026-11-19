@@ -182,6 +182,25 @@ func replaceRuntimeMarker(t *testing.T, root, old, new string) {
 	}
 }
 
+func TestArchivedShadowInstallationUsesItsOriginalReplayPatch(t *testing.T) {
+	for _, historical := range []struct{ profile, source string }{
+		{"dynamorio-11.3-durante-v6-vm32m", "238193f90f5896b300563180e7939088ac8c346c"},
+		{"dynamorio-11.3-durante-v5-vm32m", "4016b33fc69b93d36a13efbd00953213b8f6317f"},
+	} {
+		i := InstallationIdentity{SourceCommit: historical.source, RuntimeSourceCommit: runtimeSourceCommit,
+			RuntimePatchSHA256: runtimePatchSHA256, RuntimeCodeReplayPatchSHA256: archivedV5V6CodeReplayPatchSHA256,
+			LauncherSHA256: strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
+		r := Report{EngineProfile: historical.profile, Installation: &i}
+		if !r.ValidShadowInstallationIdentity() || r.ValidInstallationIdentity() {
+			t.Fatalf("%s archive identity mismatch", historical.profile)
+		}
+		i.RuntimeCodeReplayPatchSHA256 = runtimeCodeReplayPatchSHA256
+		if r.ValidShadowInstallationIdentity() {
+			t.Fatalf("%s accepted a replay patch from a later engine", historical.profile)
+		}
+	}
+}
+
 func TestInstallationIdentityRejectsAmbiguousJSONAndDigestAliases(t *testing.T) {
 	identity := InstallationIdentity{SourceCommit: sourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
 		RuntimePatchSHA256: runtimePatchSHA256, RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
