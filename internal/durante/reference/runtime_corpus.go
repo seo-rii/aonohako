@@ -64,7 +64,7 @@ func referenceDatasetProfile(dataset Dataset) (CorpusProfile, error) {
 	if err != nil {
 		return CorpusProfile{}, err
 	}
-	if dataset.SourceLanguage != profile.SourceLanguage || dataset.CorpusID != profile.CorpusID {
+	if dataset.SourceLanguage != profile.SourceLanguage || dataset.CorpusID != profile.CorpusID || dataset.CorpusSHA256 != "" || dataset.FrozenPolicySHA256 != "" {
 		return CorpusProfile{}, fmt.Errorf("reference corpus identity does not match its canonical source-language profile")
 	}
 	return profile, nil

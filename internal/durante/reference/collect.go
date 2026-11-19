@@ -52,7 +52,9 @@ const (
 )
 
 type CollectOptions struct {
-	Language string
+	Language         string
+	ValidationCorpus *ValidationCorpus
+	FrozenPolicy     *FrozenPolicy
 	// Zero selects the documented corpus default: CPP20 256 MiB, runtime
 	// corpus 512 MiB. The resolved value is recorded in both dataset limits.
 	MemoryMB int
@@ -64,7 +66,7 @@ type CollectOptions struct {
 	OnSample          func(Dataset) error
 }
 
-// Collect runs the fixed corpus through a local instance of the normal HTTP
+// Collect runs the selected corpus through a local instance of the normal HTTP
 // API. Every sample is ordered native-before, metered, native-after, using one
 // compiled artifact. Failed attempts remain in an incomplete returned dataset.
 func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (dataset Dataset, err error) {
@@ -100,6 +102,29 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	}
 	if err = ctx.Err(); err != nil {
 		return dataset, err
+	}
+	var corpus []Workload
+	if options.ValidationCorpus != nil {
+		if profile.SourceLanguage != "CPP20" || options.Smoke || !referenceSHA256(options.FrozenPolicy.SHA256()) {
+			return dataset, fmt.Errorf("external reference collection requires CPP20, full collection and a parsed frozen policy")
+		}
+		corpus, err = options.ValidationCorpus.snapshot()
+		if err != nil {
+			return dataset, err
+		}
+		dataset.CorpusID = ExternalCorpusID
+		dataset.CorpusSHA256 = options.ValidationCorpus.SHA256()
+		dataset.FrozenPolicySHA256 = options.FrozenPolicy.SHA256()
+		policy := options.FrozenPolicy.Policy()
+		runtimeID, err := durante.TimeRuntimeID(profile.SourceLanguage, dataset.RuntimeImage)
+		if err != nil || policy.RuntimeID != runtimeID || policy.Family != profile.Family || policy.DispatchProfile != dataset.DispatchProfile || policy.CPUIDProfile != dataset.CPUIDProfile {
+			return dataset, fmt.Errorf("frozen policy does not match the collection runtime, family, dispatch or CPUID profile")
+		}
+		if policy.Formula() == durante.TimeMethodLatencyBoundREP && dataset.LatencyBoundVersion != 1 {
+			return dataset, fmt.Errorf("frozen latency policy requires the v1 latency counter")
+		}
+	} else if options.FrozenPolicy != nil {
+		return dataset, fmt.Errorf("frozen policy requires an external validation corpus")
 	}
 	if err = validateCollectionConfig(cfg, options, dataset.MeteredLimits); err != nil {
 		return dataset, err
@@ -145,9 +170,11 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport}
-	corpus, err := CorpusForLanguage(profile.SourceLanguage, options.Smoke)
-	if err != nil {
-		return dataset, err
+	if options.ValidationCorpus == nil {
+		corpus, err = CorpusForLanguage(profile.SourceLanguage, options.Smoke)
+		if err != nil {
+			return dataset, err
+		}
 	}
 	if err = collectCorpus(ctx, client, httpServer.URL, corpus, options, &dataset); err != nil {
 		return dataset, err
@@ -216,7 +243,7 @@ func validateCollectionConfig(cfg config.Config, options CollectOptions, limits 
 
 func collectCorpus(ctx context.Context, client *http.Client, baseURL string, corpus []Workload, options CollectOptions, dataset *Dataset) (err error) {
 	defer func() { recordCollectionFailure(dataset, err) }()
-	profile, err := referenceDatasetProfile(*dataset)
+	profile, err := referenceCollectionProfile(*dataset)
 	if err != nil {
 		return err
 	}
@@ -422,7 +449,7 @@ func validateCollectedNative(response model.RunResponse) error {
 }
 
 func validateCollectedMetered(response model.RunResponse, dataset Dataset) error {
-	profile, err := referenceDatasetProfile(dataset)
+	profile, err := referenceCollectionProfile(dataset)
 	if err != nil {
 		return err
 	}
@@ -625,7 +652,7 @@ func collectionReadFile(path string, limit int64) ([]byte, error) {
 		return nil, err
 	}
 	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("environment file %s exceeds limit", path)
+		return nil, fmt.Errorf("%s exceeds %d bytes", path, limit)
 	}
 	return data, nil
 }

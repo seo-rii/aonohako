@@ -9,6 +9,7 @@ import (
 
 const Schema = 1
 const CorpusID = "cpp-reference-v1"
+const ExternalCorpusID = "external-cpp20-validation-v1"
 const RuntimeCorpusID = "runtime-reference-v1"
 const SplitTrain = "train"
 const SplitValidation = "validation"
@@ -67,6 +68,9 @@ type Dataset struct {
 	RuntimeDeterminism string `json:"runtime_determinism,omitempty"`
 	// LatencyBoundVersion binds every metered sample to the requested counter.
 	LatencyBoundVersion int `json:"latency_bound_version,omitempty"`
+	// External collections bind the held-out workloads and preselected policy.
+	CorpusSHA256       string `json:"corpus_sha256,omitempty"`
+	FrozenPolicySHA256 string `json:"frozen_policy_sha256,omitempty"`
 }
 
 type FitOptions struct {
