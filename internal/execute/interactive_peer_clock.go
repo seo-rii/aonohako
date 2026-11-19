@@ -63,17 +63,21 @@ func validateInteractivePeerClockVerdict(response model.RunResponse) error {
 	}
 	for i, role := range []string{"contestant", "interactor"} {
 		row, step := response.WorkMeasurements[i], response.Steps[i]
+		stdoutExceeded := false
 		if b := row.TimeBudget; b != nil && b.RawUsage != nil {
 			u := b.RawUsage
+			stdoutExceeded = u.StdoutLimitExceeded
+			// Only contestant stdout is clipped separately for display.
+			if stdoutExceeded && !step.StdoutTruncated || i == 1 && stdoutExceeded != step.StdoutTruncated {
+				return fmt.Errorf("invalid remote result: inconsistent interactive stdout truncation")
+			}
 			if !equalPipelineCounter(u.CPUTimeNs, step.CPUTimeNs) || u.WallTimeMs == nil || *u.WallTimeMs != step.WallTimeMs ||
 				u.MemoryKB == nil || *u.MemoryKB != step.MemoryKB {
 				return fmt.Errorf("invalid remote result: inconsistent interactive clock resource usage")
 			}
 		}
-		// Step stdout truncation also includes clipping for the response. Only
-		// the executor's stdout_limit source denotes an execution output limit.
 		raw := execResult{Status: row.ExecutionStatus, ExitCode: row.ExitCode, VerdictSource: row.TerminationSource,
-			StdoutTruncated: step.StdoutTruncated && step.VerdictSource == role+":stdout_limit"}
+			StdoutTruncated: stdoutExceeded}
 		var expected model.StepResult
 		if i == 0 {
 			expected = interactiveContestantStepResult(&model.RunRequest{}, raw)

@@ -29,10 +29,21 @@ func TestInteractivePeerClockVerdictChecksRolesAndUsage(t *testing.T) {
 	if err := validateInteractivePeerClockVerdict(fresh()); err != nil {
 		t.Fatal(err)
 	}
+	clipped := fresh()
+	clipped.Steps[0].StdoutTruncated = true
+	if err := validateInteractivePeerClockVerdict(clipped); err != nil {
+		t.Fatalf("display-only contestant clipping changed verdict: %v", err)
+	}
 	for _, change := range []func(*model.RunResponse){
 		func(r *model.RunResponse) { r.Status = model.RunStatusTLE },
 		func(r *model.RunResponse) { r.Score = nil },
 		func(r *model.RunResponse) { r.Steps[1].MemoryKB++ },
+		func(r *model.RunResponse) { r.WorkMeasurements[0].TimeBudget.RawUsage.StdoutLimitExceeded = true },
+		func(r *model.RunResponse) { r.Steps[1].StdoutTruncated = true },
+		func(r *model.RunResponse) {
+			r.WorkMeasurements[0].TimeBudget.RawUsage.StdoutLimitExceeded = true
+			r.Steps[0].StdoutTruncated = true
+		},
 		func(r *model.RunResponse) { r.Steps[0].WallTimeMs++ },
 		func(r *model.RunResponse) { r.Steps[0].ExitCode = nil },
 		func(r *model.RunResponse) { r.Steps[1].VerdictSource = "contestant:exit_code" },
