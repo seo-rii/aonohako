@@ -323,6 +323,101 @@ built-in training corpora. For operating decisions, record the host CPU,
 affinity, competing load and how the selected programs represent the intended
 submission population.
 
+## GCE CPP20 qualification, 2026-11-19
+
+A temporary Google Compute Engine `n2d-standard-4` VM ran the v7 collector
+and the Aonohako judge on an AMD EPYC 7B12. The VM had one thread per core,
+and the grading container ran one execution at a time on guest CPU 1. The VM
+was reserved for this experiment. The physical host could serve other tenants.
+The server was built from merge commit `fdc8525` and the collector from
+its PR head `6bb1ce4`. Both commits have the same Git tree. All rounds used
+the same static CPP20 compiler image, `x86-64-v2` CPUID profile and default
+dispatch.
+
+The development run paired three Durante measurements with six native CPU
+controls for each of 15 program/scale combinations. A new candidate used all
+five previously exposed program families to minimize the largest relative
+error with nonnegative weights for instructions, MOVS bytes and STOS bytes.
+Its weights were frozen before running the external solutions. Nine of 45
+development estimates were within 20% of their case median.
+
+The data also gives a lower bound for *any* nonnegative choice of those three
+weights. Branch at scale 2 executed at least 458,749,200 instructions, while
+sort at scale 4 executed at most 373,690,919. Both had zero MOVS bytes and 3,624 STOS
+bytes. The model must assign branch at least as much time as sort. Yet the
+slowest native branch took 66.455 ms and the fastest native sort took
+141.451 ms. Even at those favorable endpoints, one of the two relative errors
+must be at least `(141.451 − 66.455) / (141.451 + 66.455) = 36.07%`.
+
+The external cohort used six author-published CSES solutions. Edit Distance,
+Counting Rooms and Factory Machines had appeared in an earlier experiment.
+Towers, Removal Game and Counting Divisors were reserved before this run.
+Each used a fixed input and an independently computed stdout oracle. Each
+of three policies ran its own 18 native-before / Durante / native-after
+triplets. The collector allowed 10 s CPU and 30 s wall per native execution,
+and 60 s CPU and 90 s wall per instrumented execution.
+
+| Frozen policy | Repetitions within ±20% | Fresh subset within ±20% | Largest absolute error |
+|---|---:|---:|---:|
+| Historical instruction + REP | 3/18 | 3/9 | 270.61% |
+| Historical instruction + MOVS + STOS | 0/18 | 0/9 | 207.88% |
+| GCE instruction + MOVS + STOS | 0/18 | 0/9 | 200.89% |
+
+Factory Machines and Counting Divisors each had a native sample below the
+20 ms minimum in every round. Counting Divisors also exceeded the 10% spread
+limit in both historical-policy rounds. All three estimates within ±20% in
+the first round came from Counting Divisors. All three policies failed
+qualification. In the GCE round, Edit Distance met both native duration and
+spread gates, yet its estimated 120.732 ms was three times its native median
+of 40.125 ms.
+
+### Verdicts at native CPU limits
+
+The GCE-fitted policy was bound to the test judge. Each program was run at
+two nominal CPU limits derived from its six native controls collected under
+the 10 s CPU limit. The low limit was 80% of the median rounded down to whole
+milliseconds, and the high limit was 120% rounded up. At each limit the
+judge ran the same binary and input once with Durante and three times
+through ordinary native grading. The native runs allowed 30 s wall, and
+Durante retained its 60 s CPU / 90 s wall watchdog.
+
+| Program | Low / high limit (ms) | Native low / high (all 3 runs) | Durante low / high |
+|---|---:|---|---|
+| Edit Distance | 32 / 49 | TLE / AC | TLE / TLE |
+| Counting Rooms | 17 / 27 | TLE / AC | TLE / TLE |
+| Factory Machines | 15 / 24 | TLE / AC | TLE / TLE |
+| Towers | 21 / 33 | TLE / AC | TLE / TLE |
+| Removal Game | 46 / 70 | TLE / AC | AC / AC |
+| Counting Divisors | 15 / 24 | TLE / AC | AC / AC |
+
+Every native timeout came from its CPU limit, every Durante timeout came from
+the live work clock, and every acceptance matched the expected stdout. Across
+these twelve limits, Durante timed out four cases that native grading accepted
+and accepted two cases that native grading timed out. Four of the eight limits
+from programs meeting both native timing quality gates also disagreed. These
+are paired observations on six programs from one guest. The GCE candidate
+does not qualify for deciding submissions.
+
+The separate judge smoke used a fixture model on both direct and forwarded
+requests. Four finite executions passed with full credit. Durante stopped two
+busy loops when their measured work exceeded the nominal limit. Two sleeping
+processes reached the outer wall watchdog and received no score. Four
+requests with insufficient watchdog headroom were rejected, as was a
+forwarded request with a mismatched model binding.
+
+The [measurement record](durante/gce-cpp20-v7-qualification.json) includes
+per-repetition native CPU times, counter values and policy coefficients. To
+recreate the exact external manifest, run the following from this repository
+with a checkout of the upstream sources at commit
+`eeaf7b164735a4747493b0555edf688479014448`.
+[Upstream solutions](https://github.com/ks-iitjmu/MyCSES/tree/eeaf7b164735a4747493b0555edf688479014448)
+
+```sh
+python3 scripts/durante_gce_cpp20_manifest.py /path/to/MyCSES -o combined.json
+sha256sum combined.json
+# 6d41c52f5f923f8a2deeba794f6c3f2b58de8f2318ec2559aa1caf7e4c44912a
+```
+
 ## Paired CPP20 qualification, 2026-11-18
 
 A shared AMD EPYC 7B12 KVM host ran the v6 engine with fixed `x86-64-v2`
