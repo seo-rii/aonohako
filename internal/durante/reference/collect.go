@@ -3,6 +3,7 @@ package reference
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"debug/elf"
 	"encoding/base64"
@@ -143,9 +144,7 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	if err != nil {
 		return dataset, fmt.Errorf("reference environment: %w", err)
 	}
-	// The collector schedules its own metered phase between two native controls.
-	// An automatic replay would add a second metered run after each control.
-	cfg.Execution.WorkMeasurement.Observe = false
+	cfg = collectionAPIConfig(cfg)
 	server, err := api.New(cfg)
 	if err != nil {
 		return dataset, fmt.Errorf("initialize reference API: %w", err)
@@ -170,6 +169,9 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport}
+	if cfg.InboundAuth.Mode == config.InboundAuthBearer {
+		client.Transport = collectionBearerTransport{transport, httpServer.URL, cfg.InboundAuth.BearerToken}
+	}
 	if options.ValidationCorpus == nil {
 		corpus, err = CorpusForLanguage(profile.SourceLanguage, options.Smoke)
 		if err != nil {
@@ -184,6 +186,36 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	}
 	dataset.Complete = true
 	return dataset, nil
+}
+
+func collectionAPIConfig(cfg config.Config) config.Config {
+	// An automatic replay would add a second metered run after each native control.
+	cfg.Execution.WorkMeasurement.Observe = false
+	if cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetCloudRun {
+		// The private listener is created for this one collection. The deployed
+		// service's inbound token or platform signing key never authorizes it.
+		cfg.InboundAuth = config.InboundAuthConfig{Mode: config.InboundAuthBearer, BearerToken: rand.Text()}
+	}
+	return cfg
+}
+
+type collectionBearerTransport struct {
+	base   http.RoundTripper
+	origin string
+	token  string
+}
+
+func (t collectionBearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	endpoint := r.URL.String()
+	if r.Method != http.MethodPost || (endpoint != t.origin+"/compile" && endpoint != t.origin+"/execute") {
+		if r.Body != nil {
+			r.Body.Close()
+		}
+		return nil, fmt.Errorf("reference bearer is restricted to this collection's loopback API")
+	}
+	local := r.Clone(r.Context())
+	local.Header.Set("Authorization", "Bearer "+t.token)
+	return t.base.RoundTrip(local)
 }
 
 func validateCollectionConfig(cfg config.Config, options CollectOptions, limits durante.ResourceLimits) error {
@@ -210,7 +242,13 @@ func validateCollectionConfig(cfg config.Config, options CollectOptions, limits 
 	if cfg.Execution.CPUNormalization.Enabled || cfg.Execution.CPUNormalization.ShortCaseSampling {
 		return fmt.Errorf("reference collection requires CPU normalization and short-case sampling disabled")
 	}
-	if cfg.InboundAuth.Mode != "" && cfg.InboundAuth.Mode != config.InboundAuthNone {
+	if cfg.Execution.Platform.DeploymentTarget == platform.DeploymentTargetCloudRun {
+		auth := cfg.InboundAuth
+		if !(auth.Mode == config.InboundAuthBearer && auth.BearerToken != "" ||
+			auth.Mode == config.InboundAuthPlatform && auth.PlatformPrincipalHMACSecret != "") {
+			return fmt.Errorf("Cloud Run collection requires a configured bearer or platform inbound authentication policy")
+		}
+	} else if cfg.InboundAuth.Mode != "" && cfg.InboundAuth.Mode != config.InboundAuthNone {
 		return fmt.Errorf("local reference API requires inbound_auth=none")
 	}
 	measurement := cfg.Execution.WorkMeasurement

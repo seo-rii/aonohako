@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"aonohako/internal/api"
 	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
@@ -164,6 +165,64 @@ func TestCollectPreflightReturnsIncompleteDatasetWithoutExecution(t *testing.T) 
 	dataset, err = Collect(context.Background(), collectionTestConfig(), CollectOptions{Repetitions: 1})
 	if err == nil || dataset.Complete || len(dataset.Failures) != 1 || dataset.RunnerSHA256 != "" {
 		t.Fatalf("invalid options reached environment collection: dataset=%+v err=%v", dataset, err)
+	}
+}
+
+type collectionTestCompiler struct{}
+
+func (collectionTestCompiler) Run(context.Context, *model.CompileRequest) model.CompileResponse {
+	return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: []model.Artifact{collectionTestArtifact(false)}}
+}
+
+func TestCloudRunReferenceAPIUsesPrivateBearer(t *testing.T) {
+	cfg := collectionTestConfig()
+	cfg.Execution.Platform.DeploymentTarget = platform.DeploymentTargetCloudRun
+	for _, auth := range []config.InboundAuthConfig{
+		{Mode: config.InboundAuthNone},
+		{Mode: config.InboundAuthBearer},
+		{Mode: config.InboundAuthPlatform},
+		{Mode: "unknown"},
+	} {
+		cfg.InboundAuth = auth
+		if err := validateCollectionConfig(cfg, CollectOptions{Repetitions: 3}, collectionTestDataset().MeteredLimits); err == nil {
+			t.Errorf("accepted incomplete Cloud Run auth mode %q", auth.Mode)
+		}
+	}
+	for _, auth := range []config.InboundAuthConfig{
+		{Mode: config.InboundAuthBearer, BearerToken: "deployment-token"},
+		{Mode: config.InboundAuthPlatform, PlatformPrincipalHMACSecret: "deployment-signing-key"},
+	} {
+		t.Run(string(auth.Mode), func(t *testing.T) {
+			cfg.InboundAuth = auth
+			if err := validateCollectionConfig(cfg, CollectOptions{Repetitions: 3}, collectionTestDataset().MeteredLimits); err != nil {
+				t.Fatal(err)
+			}
+			private := collectionAPIConfig(cfg)
+			token := private.InboundAuth.BearerToken
+			if token == "" || private.InboundAuth.Mode != config.InboundAuthBearer || private.InboundAuth.PlatformPrincipalHMACSecret != "" ||
+				token == cfg.InboundAuth.BearerToken || token == cfg.InboundAuth.PlatformPrincipalHMACSecret || cfg.InboundAuth != auth ||
+				token == collectionAPIConfig(cfg).InboundAuth.BearerToken {
+				t.Fatal("collector did not isolate its loopback API credential")
+			}
+			handler := api.NewWithServices(private, collectionTestCompiler{}, nil).Handler()
+			server := httptest.NewServer(handler)
+			defer server.Close()
+			request := model.CompileRequest{Lang: "CPP20", Target: "Main", Sources: []model.Source{{Name: "Main.cpp", DataB64: "Cg=="}}}
+			var result model.CompileResponse
+			for _, client := range []*http.Client{server.Client(), {Transport: collectionBearerTransport{
+				base: server.Client().Transport, origin: server.URL, token: "deployment-token",
+			}}} {
+				err := postCollectionSSE(t.Context(), client, server.URL+"/compile", request, &result, 4096, time.Second)
+				if err == nil || !strings.Contains(err.Error(), "401") {
+					t.Fatalf("private reference API accepted a caller without its own bearer: %v", err)
+				}
+			}
+			client := &http.Client{Transport: collectionBearerTransport{server.Client().Transport, server.URL, token}}
+			err := postCollectionSSE(t.Context(), client, server.URL+"/compile", request, &result, 4096, time.Second)
+			if err != nil || result.Status != model.CompileStatusOK {
+				t.Fatalf("authenticated compile status %q, err %v", result.Status, err)
+			}
+		})
 	}
 }
 
@@ -403,9 +462,14 @@ func TestPostCollectionSSERejectsRedirectAndNonlocalEndpoints(t *testing.T) {
 	}))
 	defer redirect.Close()
 	var result model.RunResponse
-	err := postCollectionSSE(context.Background(), redirect.Client(), redirect.URL+"/execute", model.RunRequest{}, &result, 256, time.Second)
+	client := &http.Client{Transport: collectionBearerTransport{redirect.Client().Transport, redirect.URL, "test-credential"}}
+	err := postCollectionSSE(context.Background(), client, redirect.URL+"/execute", model.RunRequest{}, &result, 256, time.Second)
 	if err == nil || destinationCalled.Load() {
 		t.Fatalf("collector followed an API redirect: called=%t err=%v", destinationCalled.Load(), err)
+	}
+	err = postCollectionSSE(t.Context(), client, destination.URL+"/execute", model.RunRequest{}, &result, 256, time.Second)
+	if err == nil || destinationCalled.Load() {
+		t.Fatalf("collector sent an authenticated request to another loopback port: called=%t err=%v", destinationCalled.Load(), err)
 	}
 	for _, endpoint := range []string{"https://127.0.0.1/execute", "http://192.0.2.1/execute", destination.URL + "/other", destination.URL + "/execute?url=remote"} {
 		if err := postCollectionSSE(context.Background(), destination.Client(), endpoint, model.RunRequest{}, &result, 256, time.Second); err == nil {
