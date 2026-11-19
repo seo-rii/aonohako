@@ -449,7 +449,8 @@ estimated at 189.124 ms (+96.91%). Subarray Sums II took 79.575 ms and was
 estimated at 36.428 ms (−54.22%).
 
 The same Cloud Run revision then judged the three programs at both nominal
-cutoffs. Each native cell below represents three unanimous native executions.
+cutoffs. Each native verdict below represents three unanimous executions at
+that cutoff.
 
 | Program | Low / high limit (ms) | Native low / high | Durante low / high |
 |---|---:|---|---|
