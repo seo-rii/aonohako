@@ -112,6 +112,23 @@ digest. Controlled glibc dispatch, JVM, peers, remote runners and memory
 calibration are outside this corpus. The default total timeout is 20 minutes
 (maximum 1 hour); cancellation retains an incomplete dataset.
 
+### Collect on Cloud Run
+
+Run the collector inside the reference revision with the real `cloudrun`
+deployment target, embedded/helper backend and the revision's normal inbound
+authentication configuration (bearer or signed platform requests). Keep the
+resource envelope, one active execution, compiler image and Durante install
+fixed. Disable CPU normalization and short-case sampling for the native
+controls. Allow the enclosing Cloud Run request enough time for the whole
+collection, including both native executions around each metered run.
+
+The collector starts its own loopback API inside the instance. It generates a
+fresh bearer credential for that collection, uses it for the local compile and
+execute requests, and discards it when the collection ends. The revision's
+externally accessible service retains its configured authentication policy.
+Keep the resulting dataset before the instance is released, and record the
+revision image digest and the CPU and memory limits beside it.
+
 ## Run in the intended execution image
 
 Build the tool using the repository's Go version:
