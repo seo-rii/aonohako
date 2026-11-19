@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import urllib.error
 
-from verify_durante_observation import RESOURCE_POLICY, compile_cpp, post, require, server
+from verify_durante_observation import RESOURCE_POLICY, check_clock_receipt, compile_cpp, post, require, server
 
 
 PROGRAM = """#include <cstdio>
@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--server", type=Path, required=True)
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--runtime-image", required=True)
+    parser.add_argument("--no-latency-bound", dest="latency_bound", action="store_false",
+                        help="exercise the ordinary instruction and REP clock without static latency accounting")
     args = parser.parse_args()
     require(os.geteuid() == 0 and os.listdir("/sys/class/net") == ["lo"], "use a network-none validation container")
     hard = {"cpu_time_ms": 5000, "wall_time_ms": 12000, "memory_mb": 256}
@@ -37,7 +39,7 @@ def main():
                     "work_measurement": True, "work_measurement_limits": hard}
         response, _ = post(compiler, "/execute", template)
         report = response["work_measurement"]
-        require(report["complete"], str(response))
+        check_clock_receipt(report, args.latency_bound, "initial measurement")
     with tempfile.TemporaryDirectory() as folder:
         reqfile = Path(folder) / "request.json"
         reqfile.write_text(json.dumps(template))
@@ -90,7 +92,8 @@ def main():
                     not result["work_measurement"]["complete"] and not envelope.get("time_estimate") and
                     result["wall_time_ms"] < raw["wall_time_ms"], "busy loop did not stop on live virtual work")
         elif mode == "f":
-            require(result["score"] == 1 and result["work_measurement"]["complete"], "missing final counts")
+            require(result["score"] == 1, "unexpected score for completed work")
+            check_clock_receipt(result["work_measurement"], args.latency_bound, "completed work")
         else:
             require("wall" in envelope["termination_source"] and not result.get("score"),
                     "idle watchdog misattributed to measured work")

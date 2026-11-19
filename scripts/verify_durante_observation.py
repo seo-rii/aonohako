@@ -44,6 +44,14 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
+def check_clock_receipt(report, latency_bound, name):
+    require(report and report.get("complete") is True, f"{name}: missing complete Durante report")
+    if latency_bound:
+        require((report.get("latency_bound") or {}).get("version") == 1, f"{name}: missing v1 latency bound")
+    else:
+        require("latency_bound" not in report, f"{name}: ordinary clock unexpectedly reported a latency bound")
+
+
 def artifact(name, text, mode=None):
     fields = {"name": name, "data_b64": base64.b64encode(text.encode()).decode()}
     if mode:
@@ -61,7 +69,8 @@ def server(args, port, enabled, remote=None, *, runner_token=None, operator_env=
            "AONOHAKO_SANDBOX_BACKEND": "none" if remote else "helper",
            "AONOHAKO_DURANTE_OBSERVE": "on" if enabled else "off",
            "AONOHAKO_DURANTE_FAMILIES": "cpp,cpython", "AONOHAKO_DURANTE_CPUID_PROFILE": "x86-64-v2",
-           "AONOHAKO_DURANTE_LATENCY_BOUND": "v1", "AONOHAKO_DURANTE_RUNTIME_DETERMINISM": "v1",
+           "AONOHAKO_DURANTE_LATENCY_BOUND": "v1" if getattr(args, "latency_bound", True) else "off",
+           "AONOHAKO_DURANTE_RUNTIME_DETERMINISM": "v1",
            "AONOHAKO_DURANTE_RESOURCE_POLICY": json.dumps(RESOURCE_POLICY),
            "AONOHAKO_DURANTE_RUNTIME_IMAGE": args.runtime_image,
            "AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT": args.runtime_image}

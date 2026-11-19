@@ -10,7 +10,7 @@ import tempfile
 import urllib.request
 
 from verify_durante_communication import WORKER, compile_fixture, request as communication_request
-from verify_durante_observation import compile_cpp, post, require, server
+from verify_durante_observation import check_clock_receipt, compile_cpp, post, require, server
 
 
 # The same executable plays either side; its argc distinguishes the trusted
@@ -88,6 +88,8 @@ def main():
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--runtime-image", required=True)
     parser.add_argument("--fixture", required=True, type=Path)
+    parser.add_argument("--no-latency-bound", dest="latency_bound", action="store_false",
+                        help="exercise the ordinary instruction and REP clock without static latency accounting")
     args = parser.parse_args()
     require(os.geteuid() == 0 and os.listdir("/sys/class/net") == ["lo"], "use a root network-none container")
     with server(args, 18763, False) as compiler:
@@ -96,6 +98,7 @@ def main():
         report, _ = post(compiler, "/execute", {"lang": "CPP20", "binaries": pair, "stdin": "x",
             "expected_stdout": "ok\n", "work_measurement": True, "limits": {"time_ms": 1000, "memory_mb": 128},
             "work_measurement_limits": {"cpu_time_ms": 3000, "wall_time_ms": 9000, "memory_mb": 128}})
+        check_clock_receipt(report["work_measurement"], args.latency_bound, "initial measurement")
         engine = report["work_measurement"]["engine_profile"]
     with server(args, 18764, False, runner_token=secrets.token_urlsafe(), operator_env=WORKER) as worker:
         with urllib.request.urlopen(worker + "/capabilities", timeout=5) as caps:
@@ -124,11 +127,15 @@ def main():
                     rows = result.get("work_measurements", [])
                     require(len(rows) == len(req["work_measurement_peer_time"]["budgets"]),
                             f"{name}: missing role receipts ({result.get('reason')})")
+                    completed_case = name.endswith("complete") or name == "interactive-f"
                     for row in rows:
                         b = row["time_budget"]
                         require(b["version"] == 2 and b["clock"]["model_binding"], f"{name}: role clock binding")
+                        report = row.get("report") or {}
+                        if completed_case or report.get("complete"):
+                            check_clock_receipt(report, args.latency_bound, f"{name}: {row['role']}")
                     crossed = [r["role"] for r in rows if r.get("termination_source") == "durante_work_clock"]
-                    if name.endswith("complete") or name == "interactive-f":
+                    if completed_case:
                         require(result["status"] == "Accepted" and not crossed, f"{name}: completion")
                     elif name == "interactive-c":
                         require(result["status"] == "Time Limit Exceeded" and crossed == ["contestant"],
