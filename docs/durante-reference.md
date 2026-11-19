@@ -330,9 +330,9 @@ and the Aonohako judge on an AMD EPYC 7B12. The VM had one thread per core,
 and the grading container ran one execution at a time on guest CPU 1. The VM
 was reserved for this experiment. The physical host could serve other tenants.
 The server was built from merge commit `fdc8525` and the collector from
-its PR head `6bb1ce4`. Both commits have the same Git tree. All rounds used
-the same static CPP20 compiler image, `x86-64-v2` CPUID profile and default
-dispatch.
+its PR head `6bb1ce4`. Both commits have the same Git tree. All runs used
+the same static CPP20 compiler image. Durante used the `x86-64-v2` CPUID
+profile and default dispatch.
 
 The development run paired three Durante measurements with six native CPU
 controls for each of 15 program/scale combinations. A new candidate used all
