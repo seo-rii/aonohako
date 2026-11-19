@@ -38,19 +38,37 @@ supplies the matching headers, extensions and launcher; a stock core is not the
 v4 profile. The client and patched runtime share a private replay callback ABI;
 update both from the pinned snapshot rather than reusing an older runtime core.
 
-`docker/durante.Dockerfile` is an explicit overlay on a reviewed execution
-image. Supply an immutable `RUNTIME_IMAGE` digest and select target `runtime`.
-It installs the new runner plus the engine/client under `/opt/durante`, without
-modifying the existing language image build definitions. The current client
-supports Linux x86-64 only. `third_party/durante/UPSTREAM.json` pins the private
-upstream commit and every vendored source hash; the overlay verifies that manifest
-before downloading the separately SHA-256-pinned engine SDK. CI needs no private
-cross-repository checkout token.
+`docker/durante.Dockerfile` builds a Linux x86-64 worker on a reviewed
+execution image. The default build uses engine profile
+`dynamorio-11.3-durante-v7-vm32m`. To try the optimized v8 work clock, set
+`RUNTIME_IMAGE` to the immutable digest reference of your language image and run
 
-The launcher fixes `-disable_traces -vm_size 32M -vmheap_size 32M` and reports engine profile
-`dynamorio-11.3-durante-v7-vm32m`. Before launch, installation validation checks
-the runtime manifest's source, process-lifetime patch, code-replay patch and
-actual release-core digest.
+```sh
+docker build --platform linux/amd64 -f docker/durante.Dockerfile --target runtime \
+  --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" --build-arg DURANTE_VERSION=v8 \
+  -t aonohako-durante:v8 .
+```
+
+The build pairs the worker with the v8 client under `/opt/durante`. It
+verifies the source against `third_party/durante-v8/UPSTREAM.json`. V8 uses
+Durante commit `614761c18d4735f00e93667c74c099cfdb2800c7` and reports
+`dynamorio-11.3-durante-v8-vm32m`. The faster path applies to the original
+code of fixed-address static x86-64 executables when the live work clock is
+active and static latency accounting is off. Other code uses the existing
+instrumentation.
+
+Build the reference tool for this worker with
+`go build -tags durante_v8 ./cmd/durante-reference`. Use the final v8 image
+digest and v8 profile when collecting reference data and qualifying a time
+model. A control plane that evaluates or forwards model-bound v8 requests
+also needs the v8 build and the same binding. Existing v7 qualifications
+belong to their original image and profile.
+
+Both builds fix `-disable_traces -vm_size 32M -vmheap_size 32M`. Before
+launch, the worker checks the runtime manifest's source, process-lifetime
+patch, code-replay patch and actual release-core digest. The v8 client also
+carries its source commit in the ELF file. A v8 worker requires that marker
+on the selected client, including when the operator overrides its path.
 Missing or mismatched provenance refuses measurement. This is a trusted local
 installation check, not attestation against the host administrator or submission.
 Reports record the source commit, pinned runtime source/patch identities and the
@@ -63,10 +81,8 @@ installation immutable and operator-owned for the lifetime of the service.
 The installation identity includes `runtime_code_replay_patch_sha256` in
 addition to `runtime_patch_sha256`. Old seven-field identities remain readable
 and retain their original values, but do not satisfy current installation
-validation. Engine profile v6 pins Durante `238193f` and supports the optional
-version 1 static block latency counter. The installation identity and time
-models bind to this version. Rebuild the runtime overlay and collect new
-reference data before qualifying coefficients for v6.
+validation. Historical v6 reports bind to Durante `238193f` and can contain
+the optional version 1 static block latency counter.
 Upstream's large default virtual reservations can fail
 before main under the ordinary C/C++ address-space bound. These options reduce
 the engine's reservation budgets; no student CPU, RSS or address-space limit is

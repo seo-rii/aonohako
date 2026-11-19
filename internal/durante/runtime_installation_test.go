@@ -1,8 +1,11 @@
 package durante
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"debug/elf"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -16,10 +19,7 @@ func TestSessionRecordsActualInstallationBeforeAndAfterObservation(t *testing.T)
 		t.Run("changed-"+changed, func(t *testing.T) {
 			root := t.TempDir()
 			launcher := runtimeInstallationFixture(t, root)
-			client := filepath.Join(root, "client.so")
-			if err := os.WriteFile(client, []byte("synthetic diagnostic client"), 0600); err != nil {
-				t.Fatal(err)
-			}
+			client := runtimeClientFixture(t, root)
 			cfg, err := ParseConfig("cpp", launcher, client, DispatchDefault)
 			if err != nil {
 				t.Fatal(err)
@@ -28,7 +28,7 @@ func TestSessionRecordsActualInstallationBeforeAndAfterObservation(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if s.installation.SourceCommit != sourceCommit || s.installation.RuntimePatchSHA256 != runtimePatchSHA256 || s.installation.RuntimeCodeReplayPatchSHA256 != runtimeCodeReplayPatchSHA256 {
+			if s.installation.SourceCommit != SourceCommit || s.installation.RuntimePatchSHA256 != runtimePatchSHA256 || s.installation.RuntimeCodeReplayPatchSHA256 != runtimeCodeReplayPatchSHA256 {
 				t.Fatal("installation does not identify all reviewed runtime inputs")
 			}
 			writeTree(t, s.dir)
@@ -58,6 +58,75 @@ func TestSessionRecordsActualInstallationBeforeAndAfterObservation(t *testing.T)
 				}
 			} else if r.Complete || r.ValidInstallationIdentity() || r.Instructions != nil || r.REPBytes != nil || r.REPTelemetryStatus != REPUnavailable || r.Reason != "durante installation changed during observation" {
 				t.Fatalf("changed installation produced accepted totals: %+v", r)
+			}
+		})
+	}
+}
+
+func runtimeClientFixture(t *testing.T, root string) string {
+	t.Helper()
+	var markers []string
+	if EngineProfile == engineProfileV8 {
+		markers = []string{SourceCommit}
+	}
+	path := filepath.Join(root, "client.so")
+	if err := os.WriteFile(path, clientELF(t, markers...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// Construct a shared object containing only the section names and any requested
+// source markers. This exercises the same ELF parser without a compiler dependency.
+func clientELF(t *testing.T, markers ...string) []byte {
+	t.Helper()
+	const names = "\x00.shstrtab\x00.durante.source\x00"
+	sections := make([]elf.Section64, 2+len(markers))
+	var header elf.Header64
+	copy(header.Ident[:], "\x7fELF\x02\x01\x01")
+	header.Type, header.Machine, header.Version = uint16(elf.ET_DYN), uint16(elf.EM_X86_64), uint32(elf.EV_CURRENT)
+	header.Ehsize, header.Shentsize = uint16(binary.Size(header)), uint16(binary.Size(sections[0]))
+	header.Shoff, header.Shnum, header.Shstrndx = uint64(header.Ehsize), uint16(len(sections)), 1
+	start := header.Shoff + uint64(binary.Size(sections))
+	sections[1] = elf.Section64{Name: 1, Type: uint32(elf.SHT_STRTAB), Off: start, Size: uint64(len(names))}
+	payload := []byte(names)
+	for i, marker := range markers {
+		sections[i+2] = elf.Section64{Name: uint32(strings.Index(names, ".durante.source")), Type: uint32(elf.SHT_PROGBITS),
+			Off: start + uint64(len(payload)), Size: uint64(len(marker))}
+		payload = append(payload, marker...)
+	}
+	var buf bytes.Buffer
+	for _, field := range []any{header, sections, payload} {
+		if err := binary.Write(&buf, binary.LittleEndian, field); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return buf.Bytes()
+}
+
+func TestClientSourceMustMatchWorker(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		markers []string
+		valid   bool
+	}{
+		{"unmarked v7 package", nil, EngineProfile == engineProfileV7},
+		{"v8 package", []string{sourceCommitV8}, EngineProfile == engineProfileV8},
+		{"unknown source", []string{strings.Repeat("a", 40)}, false},
+		{"empty marker", []string{""}, false},
+		{"trailing newline", []string{SourceCommit + "\n"}, false},
+		{"duplicate marker", []string{SourceCommit, SourceCommit}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			launcher := runtimeInstallationFixture(t, root)
+			client := filepath.Join(root, "custom-client.so")
+			if err := os.WriteFile(client, clientELF(t, tc.markers...), 0600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := snapshotInstallation(Config{Drrun: launcher, Client: client})
+			if (err == nil) != tc.valid {
+				t.Fatalf("worker %s, snapshot error %v", EngineProfile, err)
 			}
 		})
 	}
@@ -201,11 +270,31 @@ func TestArchivedShadowInstallationUsesItsOriginalReplayPatch(t *testing.T) {
 	}
 }
 
+func TestV7AndV8ShadowRecordsPreserveProfileSourcePair(t *testing.T) {
+	i := InstallationIdentity{RuntimeSourceCommit: runtimeSourceCommit, RuntimePatchSHA256: runtimePatchSHA256,
+		RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
+		ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
+	for profile, source := range map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8} {
+		r := Report{EngineProfile: profile, Installation: &i}
+		i.SourceCommit = source
+		if !r.ValidShadowInstallationIdentity() || r.ValidInstallationIdentity() != (profile == EngineProfile) {
+			t.Fatalf("wrong identity acceptance for %s", profile)
+		}
+		r.EngineProfile = engineProfileV7
+		if profile == engineProfileV7 {
+			r.EngineProfile = engineProfileV8
+		}
+		if r.ValidShadowInstallationIdentity() || r.ValidInstallationIdentity() {
+			t.Fatal("mismatched engine and source accepted")
+		}
+	}
+}
+
 func TestInstallationIdentityRejectsAmbiguousJSONAndDigestAliases(t *testing.T) {
-	identity := InstallationIdentity{SourceCommit: sourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
+	identity := InstallationIdentity{SourceCommit: SourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
 		RuntimePatchSHA256: runtimePatchSHA256, RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
 		ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
-	valid := Report{Installation: &identity}
+	valid := Report{EngineProfile: EngineProfile, Installation: &identity}
 	if !valid.ValidInstallationIdentity() {
 		t.Fatal("valid identity rejected")
 	}
@@ -252,7 +341,7 @@ func TestInstallationIdentityRejectsAmbiguousJSONAndDigestAliases(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			copy := identity
 			edit(&copy)
-			if (&Report{Installation: &copy}).ValidInstallationIdentity() {
+			if (&Report{EngineProfile: EngineProfile, Installation: &copy}).ValidInstallationIdentity() {
 				t.Fatal("noncanonical or stock digest accepted")
 			}
 		})
@@ -297,7 +386,7 @@ func TestInstallationIdentityReadsLegacyWithoutQualifyingCurrentRuntime(t *testi
 	if err := json.Unmarshal(data, &decoded); err != nil || decoded != legacy {
 		t.Fatal("historical installation identity did not round-trip", err)
 	}
-	if (&Report{Installation: &decoded}).ValidInstallationIdentity() {
+	if (&Report{EngineProfile: EngineProfile, Installation: &decoded}).ValidInstallationIdentity() {
 		t.Fatal("historical installation qualified as the current runtime")
 	}
 	roundTrip, err := json.Marshal(decoded)
@@ -317,28 +406,30 @@ func TestInstallationIdentityReadsLegacyWithoutQualifyingCurrentRuntime(t *testi
 	if err := json.Unmarshal([]byte(prefix+`,"runtime_code_replay_patch_sha256":"`+runtimeCodeReplayPatchSHA256+`"}`), &decoded); err != nil {
 		t.Fatal("explicit replay field could not be read", err)
 	}
-	if (&Report{Installation: &decoded}).ValidInstallationIdentity() {
+	if (&Report{EngineProfile: EngineProfile, Installation: &decoded}).ValidInstallationIdentity() {
 		t.Fatal("replay patch alone qualified a historical source/runtime pin")
 	}
 }
 
 func TestRuntimeInstallationPinsMatchVendoredSource(t *testing.T) {
-	vendor := filepath.Join("..", "..", "third_party", "durante")
-	data, err := os.ReadFile(filepath.Join(vendor, "UPSTREAM.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var manifest struct {
-		Commit string `json:"commit"`
-	}
-	if err := json.Unmarshal(data, &manifest); err != nil || manifest.Commit != sourceCommit {
-		t.Fatal("installation source pin differs from vendor manifest", err)
+	vendor := filepath.Join("..", "..", "third_party")
+	for dir, commit := range map[string]string{"durante": sourceCommitV7, "durante-v8": sourceCommitV8} {
+		data, err := os.ReadFile(filepath.Join(vendor, dir, "UPSTREAM.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var manifest struct {
+			Commit string `json:"commit"`
+		}
+		if err := json.Unmarshal(data, &manifest); err != nil || manifest.Commit != commit {
+			t.Fatalf("%s installation source pin differs from vendor manifest", dir)
+		}
 	}
 	for name, want := range map[string]string{
 		"dynamorio-vfork-lifetime.patch": runtimePatchSHA256,
 		"dynamorio-code-replay.patch":    runtimeCodeReplayPatchSHA256,
 	} {
-		data, err := os.ReadFile(filepath.Join(vendor, "toolkit", "patches", name))
+		data, err := os.ReadFile(filepath.Join(vendor, "durante", "toolkit", "patches", name))
 		if err != nil {
 			t.Fatal(err)
 		}

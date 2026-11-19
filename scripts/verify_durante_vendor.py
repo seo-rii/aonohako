@@ -5,15 +5,24 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 
 
-def verify(root):
+COMMITS = {
+    'v7': '41743068ef9070b6e04195bf7822c5ee513660ff',
+    'v8': '614761c18d4735f00e93667c74c099cfdb2800c7',
+}
+
+
+def verify(root, version):
     manifest = json.loads((root / 'UPSTREAM.json').read_text())
     if manifest.get('repository') != 'https://github.com/seo-rii/durante':
         raise ValueError('unexpected upstream repository')
-    if not re.fullmatch(r'[0-9a-f]{40}', manifest.get('commit', '')):
-        raise ValueError('invalid upstream commit')
+    if manifest.get('commit') != COMMITS[version]:
+        raise ValueError('unexpected upstream commit for ' + version)
     files = manifest.get('files')
     if not isinstance(files, dict) or not files:
         raise ValueError('empty source manifest')
@@ -34,16 +43,51 @@ def verify(root):
     return manifest['commit'], len(files)
 
 
+def materialize(root, version, output):
+    # Verify and assemble in a fresh directory. A failed patch or verification
+    # must leave the caller's source and the requested destination untouched.
+    root = root.resolve()
+    if output.resolve().is_relative_to(root):
+        raise ValueError('output must be outside the base source directory')
+    if output.exists() or output.is_symlink():
+        raise ValueError('output directory already exists')
+    verify(root, 'v7')
+    with tempfile.TemporaryDirectory(dir=output.parent) as temporary:
+        tree = Path(temporary) / 'durante'
+        shutil.copytree(root, tree)
+        if version == 'v8':
+            overlay = root.with_name('durante-v8')
+            with (overlay / 'changes.patch').open('rb') as diff:
+                subprocess.run(['patch', '--batch', '--forward', '--fuzz=0', '-p1'],
+                               cwd=tree, stdin=diff, check=True)
+            shutil.copyfile(overlay / 'UPSTREAM.json', tree / 'UPSTREAM.json')
+        result = verify(tree, version)
+        tree.rename(output)
+        return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent.parent / 'third_party/durante')
+    parser.add_argument('--root', type=Path, help='verify an existing source tree (defaults to v7)')
+    parser.add_argument('--version', choices=COMMITS)
+    parser.add_argument('--output', type=Path, help='assemble the selected verified source in a new directory')
     args = parser.parse_args()
+    root = args.root or Path(__file__).resolve().parent.parent / 'third_party/durante'
     try:
-        commit, count = verify(args.root)
-    except (ValueError, OSError, TypeError) as exc:
+        if args.output:
+            results = [materialize(root, args.version or 'v7', args.output)]
+        elif args.root:
+            results = [verify(root, args.version or 'v7')]
+        else:
+            # The repository CI entry point checks both profiles by default.
+            versions = (args.version,) if args.version else COMMITS
+            with tempfile.TemporaryDirectory() as tmp:
+                results = [materialize(root, version, Path(tmp) / version) for version in versions]
+    except (ValueError, OSError, TypeError, subprocess.CalledProcessError) as exc:
         print('Durante vendor verification failed: ' + str(exc), file=sys.stderr)
         return 1
-    print('Verified %d Durante files at %s' % (count, commit))
+    for commit, count in results:
+        print('Verified %d Durante files at %s' % (count, commit))
     return 0
 
 

@@ -3,6 +3,7 @@ package durante
 import (
 	"bytes"
 	"crypto/sha256"
+	"debug/elf"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -22,8 +23,12 @@ const archivedV5V6CodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8db
 const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32a100bf48788c"
 const releaseCore = "lib64/release/libdynamorio.so"
 
-// Updated together with the complete third_party/durante snapshot.
-const sourceCommit = "41743068ef9070b6e04195bf7822c5ee513660ff"
+const (
+	engineProfileV7 = "dynamorio-11.3-durante-v7-vm32m"
+	sourceCommitV7  = "41743068ef9070b6e04195bf7822c5ee513660ff"
+	engineProfileV8 = "dynamorio-11.3-durante-v8-vm32m"
+	sourceCommitV8  = "614761c18d4735f00e93667c74c099cfdb2800c7"
+)
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
 // Matching hashes do not attest application counters or an adversarial host.
@@ -72,7 +77,7 @@ func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
 }
 
 func (r *Report) ValidInstallationIdentity() bool {
-	return r != nil && r.Installation.validForSource(sourceCommit, runtimeCodeReplayPatchSHA256)
+	return r != nil && r.EngineProfile == EngineProfile && r.Installation.validForSource(SourceCommit, runtimeCodeReplayPatchSHA256)
 }
 
 // ValidShadowInstallationIdentity checks archived observations against the
@@ -82,8 +87,10 @@ func (r *Report) ValidShadowInstallationIdentity() bool {
 		return false
 	}
 	switch r.EngineProfile {
-	case EngineProfile:
-		return r.ValidInstallationIdentity()
+	case engineProfileV8:
+		return r.Installation.validForSource(sourceCommitV8, runtimeCodeReplayPatchSHA256)
+	case engineProfileV7:
+		return r.Installation.validForSource(sourceCommitV7, runtimeCodeReplayPatchSHA256)
 	case "dynamorio-11.3-durante-v6-vm32m":
 		return r.Installation.validForSource("238193f90f5896b300563180e7939088ac8c346c", archivedV5V6CodeReplayPatchSHA256)
 	case "dynamorio-11.3-durante-v5-vm32m":
@@ -113,21 +120,49 @@ func snapshotInstallation(cfg Config) (InstallationIdentity, error) {
 	if err != nil {
 		return InstallationIdentity{}, err
 	}
-	identity := InstallationIdentity{SourceCommit: sourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
+	identity := InstallationIdentity{SourceCommit: SourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
 		RuntimePatchSHA256: runtimePatchSHA256, RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, CoreSHA256: core}
-	for _, item := range []struct {
-		path        string
-		destination *string
-	}{{cfg.Drrun, &identity.LauncherSHA256}, {cfg.Client, &identity.ClientSHA256}} {
-		// Bound the actual selected binaries, not an administrator-supplied digest.
-		data, err := installationFile(item.path, 64<<20)
-		if err != nil {
-			return InstallationIdentity{}, err
-		}
-		digest := sha256.Sum256(data)
-		*item.destination = hex.EncodeToString(digest[:])
+	launcher, err := installationFile(cfg.Drrun, 64<<20)
+	if err != nil {
+		return InstallationIdentity{}, err
 	}
+	client, err := installationFile(cfg.Client, 64<<20)
+	if err != nil {
+		return InstallationIdentity{}, err
+	}
+	if err := verifyClientSource(client); err != nil {
+		return InstallationIdentity{}, err
+	}
+	identity.LauncherSHA256 = fmt.Sprintf("%x", sha256.Sum256(launcher))
+	identity.ClientSHA256 = fmt.Sprintf("%x", sha256.Sum256(client))
 	return identity, nil
+}
+
+// The v8 image records its reviewed source in the selected DSO, including when
+// the operator overrides the client path. Existing v7 packages have no marker.
+func verifyClientSource(data []byte) error {
+	file, err := elf.NewFile(bytes.NewReader(data))
+	if err != nil || file.Class != elf.ELFCLASS64 || file.Machine != elf.EM_X86_64 || file.Type != elf.ET_DYN {
+		return fmt.Errorf("durante requires a Linux x86-64 ELF shared client")
+	}
+	found := false
+	for _, section := range file.Sections {
+		if section.Name != ".durante.source" {
+			continue
+		}
+		if found || section.Type != elf.SHT_PROGBITS || section.Flags != 0 || section.Size != uint64(len(SourceCommit)) {
+			return fmt.Errorf("invalid durante client source marker")
+		}
+		found = true
+		source, err := section.Data()
+		if err != nil || string(source) != SourceCommit {
+			return fmt.Errorf("durante client source does not match %s", EngineProfile)
+		}
+	}
+	if !found && EngineProfile != engineProfileV7 {
+		return fmt.Errorf("durante client source marker is missing for %s", EngineProfile)
+	}
+	return nil
 }
 
 // manifestObject rejects duplicate fields before decoding security-relevant

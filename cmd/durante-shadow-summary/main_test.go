@@ -25,7 +25,7 @@ func timedResponse(t *testing.T, primary string, ns uint64) model.RunResponse {
 		Instructions: &ns, REPBytes: &zero, REPEntries: &zero, UnsupportedREPEntries: &zero,
 		IntegrityVerified: &verified, MeasurementContract: durante.DiagnosticContract(),
 		Installation: &durante.InstallationIdentity{
-			SourceCommit: "41743068ef9070b6e04195bf7822c5ee513660ff", RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
+			SourceCommit: durante.SourceCommit, RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
 			RuntimePatchSHA256:           "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c",
 			RuntimeCodeReplayPatchSHA256: "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b",
 			LauncherSHA256:               strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true,
