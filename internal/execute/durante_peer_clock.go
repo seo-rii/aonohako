@@ -140,7 +140,7 @@ func peerClockResult(plan peerTimePlan, observed model.WorkMeasurementProcess) (
 	}
 	result.Clock, result.RawUsage, result.RawSource = input.Clock, input.RawUsage, input.RawSource
 	c := result.Clock
-	if c == nil || c.Version != 1 || c.Metric != plan.clock.MetricName() || c.Budget != plan.clock.Budget || c.ModelBinding != plan.clock.ModelBinding() {
+	if plan.clock.TimePolicy == nil || c == nil || c.Version != 1 || c.Metric != plan.clock.MetricName() || c.Budget != plan.clock.Budget || c.ModelBinding != plan.clock.ModelBinding() {
 		return nil, fmt.Errorf("role clock model or budget mismatch")
 	}
 	if c.Progress == nil {
@@ -185,14 +185,17 @@ func peerClockResult(plan peerTimePlan, observed model.WorkMeasurementProcess) (
 		}
 		return result, nil
 	}
-	if observed.ExitCode == nil || *observed.ExitCode < 0 || !terminalWorkClockMatches(req, plan.clock, report, p) || result.RawSource != "" {
+	if observed.ExitCode == nil || *observed.ExitCode < 0 || result.RawSource != "" {
 		return nil, fmt.Errorf("missing terminal role clock evidence")
 	}
-	estimate, err := plan.policy.Estimate(plan.runtimeID, *report)
-	if err != nil {
-		return nil, err
+	estimate, valid := terminalWorkClockEstimate(req, plan.clock, report, p, plan.runtimeID)
+	if !valid {
+		return nil, fmt.Errorf("invalid terminal role clock evidence")
 	}
-	result.Estimate = &estimate
+	result.Estimate = estimate
+	if estimate == nil {
+		result.Unavailable = durante.TimeNumericOverflow
+	}
 	if exceeded && !(peerClockGuest(plan.role.role) && *observed.ExitCode != 0) {
 		if observed.ExecutionStatus != model.RunStatusTLE || observed.TerminationSource != "durante_work_clock_final" {
 			return nil, fmt.Errorf("missing terminal role cutoff")

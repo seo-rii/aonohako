@@ -64,6 +64,11 @@ func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse
 	d.TimeEstimateEligibility = &eligibility
 	if err != nil {
 		d.TimeEstimateUnavailable = "observation_not_convertible"
+		if terminalClock && req.WorkMeasurementJudge && eligibility.NumericOverflow() {
+			d.TimeEstimateUnavailable = durante.TimeNumericOverflow
+			exceeded := true
+			d.NominalTimeExceeded = &exceeded
+		}
 		return response
 	}
 	// ValidateWorkMeasurementLimits bounds nominal time by the raw envelope's
@@ -95,7 +100,8 @@ func validateRemoteWorkMeasurementTime(req *model.RunRequest, response model.Run
 		d.TimeEstimateUnavailable != expected.TimeEstimateUnavailable {
 		return fmt.Errorf("invalid remote result: work measurement time availability mismatch")
 	}
-	if d.TimeEstimate != nil && (*d.TimeEstimate != *expected.TimeEstimate || *d.NominalTimeExceeded != *expected.NominalTimeExceeded) {
+	if d.TimeEstimate != nil && *d.TimeEstimate != *expected.TimeEstimate ||
+		d.NominalTimeExceeded != nil && *d.NominalTimeExceeded != *expected.NominalTimeExceeded {
 		return fmt.Errorf("invalid remote result: work measurement time estimate mismatch")
 	}
 	// Absence preserves older runner compatibility. Present eligibility never

@@ -19,14 +19,28 @@ func validWorkClockIdentity(req *model.RunRequest, r *durante.Report) bool {
 }
 
 func terminalWorkClockMatches(req *model.RunRequest, plan *durante.WorkClockRequest, report *durante.Report, progress *durante.WorkClockProgress) bool {
+	var runtimeID string
+	if plan.TimePolicy != nil {
+		runtimeID = plan.TimePolicy.RuntimeID
+	}
+	_, valid := terminalWorkClockEstimate(req, plan, report, progress, runtimeID)
+	return valid
+}
+
+// A verified strict crossing needs no bounded display estimate. Numeric overflow
+// is the only conversion failure after runtime and report eligibility passed.
+func terminalWorkClockEstimate(req *model.RunRequest, plan *durante.WorkClockRequest, report *durante.Report, progress *durante.WorkClockProgress, runtimeID string) (*durante.TimeEstimate, bool) {
 	if !validDiagnosticWorkReport(req.Lang, report) || progress == nil || !progress.Matches(report) {
-		return false
+		return nil, false
 	}
-	if policy := plan.TimePolicy; policy != nil {
-		_, _, err := policy.EstimateWithEligibility(policy.RuntimeID, *report)
-		return err == nil
+	if plan.TimePolicy == nil {
+		return nil, true
 	}
-	return true
+	estimate, eligibility, err := plan.TimePolicy.EstimateWithEligibility(runtimeID, *report)
+	if err != nil {
+		return nil, eligibility.NumericOverflow() && plan.Exceeds(*progress)
+	}
+	return &estimate, true
 }
 
 // Finalize after the target has been reaped and its installation was checked.

@@ -267,13 +267,19 @@ options. Both raw time ceilings must exceed `limits.time_ms`. Operators should
 allow enough headroom for instrumentation overhead, idle programs and blocked
 pipes. The controller forwards the effective limits to the worker and verifies
 them against `work_measurement_execution.raw_limits` in the response.
+
+A verified terminal crossing can exceed the range of a signed 64-bit
+nanosecond estimate. The ordinary and role clocks record the crossing and
+`numeric_overflow`, and omit the estimate. Role clocks preserve the verdict
+rules for nonzero exit codes and trusted checker failures.
+
 Schema 1 and legacy time policies, latency-bound models, shadow collection and
 plausibility checks continue to use their terminal observations.
 
 | Outcome | Execution evidence |
 |---|---|
 | The virtual clock crossed during execution | `budget_exceeded`, source `durante_work_clock`, TLE with an observed prefix and no complete counts or total time estimate. |
-| The program exited over budget between samples | `budget_exceeded`, source `durante_work_clock_final` with a complete report and estimate after all three live counts match the terminal counts. |
+| The program exited over budget between samples | `budget_exceeded`, source `durante_work_clock_final` with a complete report after all three live counts match the terminal counts. |
 | The program finished within budget | The existing output and eligibility checks decide the verdict using the complete terminal report. |
 | A raw CPU, wall or memory watchdog fired | `resource_exhausted` with the watchdog's termination source and an unscored result. |
 
@@ -417,7 +423,7 @@ the output comparison and time estimate.
 - **Wrong Answer** uses the existing output oracle (stdout or the single file
   output), before any time comparison. A nonzero exit on an output match is a
   runtime error at the ordinary layer and produces `Runtime Error` here too.
-- **Time estimate unavailable → Runtime Error.** A complete, output-matching run
+- **Terminal-only time estimate unavailable → Runtime Error.** A complete, output-matching run
   whose counts cannot be converted — signals observed, partial REP coverage,
   numeric overflow, or an incompatible report — is reported as `Runtime Error`
   with the eligibility reason, not silently accepted and not called TLE. This is
