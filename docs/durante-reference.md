@@ -323,6 +323,42 @@ built-in training corpora. For operating decisions, record the host CPU,
 affinity, competing load and how the selected programs represent the intended
 submission population.
 
+### Compare actual native and Durante verdicts
+
+After collecting a frozen external CPP20 dataset, use the following command
+to replay its programs on the same reference host and pinned CPU. Use the
+compiler and runtime image from collection. Build `./cmd/server` alongside
+`./cmd/durante-reference` and mount both executables and the repository's
+`scripts` directory read-only. Run as root in the network-isolated container
+described above, with Python 3 available, the frozen inputs mounted read-only
+and a writable output parent. The tool creates the specified output directory.
+
+```sh
+python3 /scripts/verify_durante_native_boundaries.py \
+  --server /validation/server --reference /validation/reference-tool \
+  --runtime-image "$image_id" --manifest /inputs/manifest.json \
+  --frozen-policy /inputs/frozen-policy.json --dataset /inputs/dataset.json \
+  --output /output/boundaries
+```
+
+For each workload and scale, the low CPU limit is 80% of its native median
+rounded down to whole milliseconds (at least 1 ms). The high limit is 120%
+rounded up. A median too short to bracket at whole-millisecond resolution
+is recorded as an exclusion. Both judges receive the same compiled artifact, input, expected
+stdout and nominal limits. At each limit the tool obtains one actual Durante
+verdict and three ordinary native verdicts. A native timeout must come from
+the CPU limit. A Durante timeout requires evidence of exhausted weighted
+work under the bound model. A raw watchdog stop cannot count as an agreement.
+
+Exit 0 means the Durante verdict matched all three native verdicts at every
+limit. Exit 2 records measured disagreement or mixed native outcomes. Exit 1
+indicates an incomplete or invalid comparison. The output contains individual
+HTTP results and a checkpointed `summary.json` with their digests and counts
+for each direction of disagreement. Check its
+`reference_validation_exit` as well. A value of 2 records a failed accuracy
+or stability gate even if the actual verdicts agreed. The tool starts temporary
+loopback servers inside the test container.
+
 ## GCE CPP20 qualification, 2026-11-19
 
 A temporary Google Compute Engine `n2d-standard-4` VM ran the v7 collector
