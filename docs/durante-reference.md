@@ -376,6 +376,110 @@ for each direction of disagreement. Check its
 or stability gate even if the actual verdicts agreed. The tool starts temporary
 loopback servers inside the test container.
 
+## Managed Cloud Run CPP20 qualification, 2026-11-19
+
+A private Gen2 Cloud Run service in `asia-northeast3` used the serving CPP20
+image, 1 vCPU, 2 GiB, request concurrency 1 and one active embedded/helper
+execution. Its ordinary judge accepted all 18 runs of the six CSES programs
+below. Its HTTP API rejected `work_measurement` as an unknown field. A
+candidate image retained all 53 base layers and added the current Aonohako
+server, reference collector and Durante v7. Both images produced identical
+ELF bytes for each of the six solutions.
+
+### Transferring the GCE weights
+
+The candidate first used the frozen GCE instruction, MOVS-byte and STOS-byte
+coefficients, bound to the candidate image digest. On a single Cloud Run
+revision, each program ran three native-before / Durante / native-after
+triplets. At each of two whole-millisecond cutoffs the same ELF and input ran
+once with the live Durante clock and three times through the ordinary native
+judge. The live clock enforced the nominal limit inside Durante. Its external
+watchdogs allowed 60 s CPU and 90 s wall. Native CPU normalization and
+short-case sampling were disabled.
+
+| Program | Native median (ms) | Durante estimate (ms) | Low / high limit (ms) | Native low / high | Durante low / high |
+|---|---:|---:|---:|---|---|
+| Edit Distance | 105.488 | 84.036 | 84 / 127 | TLE / AC | TLE / AC |
+| Counting Rooms | 48.724 | 53.323 | 38 / 59 | TLE / AC | TLE / AC |
+| Factory Machines | 25.114 | 30.209 | 20 / 31 | TLE / AC | TLE / AC |
+| Towers | 37.254 | 36.476 | 29 / 45 | TLE / AC | TLE / AC |
+| Removal Game | 104.852 | 20.625 | 83 / 126 | TLE / mixed | AC / AC |
+| Counting Divisors | 26.079 | 13.161 | 20 / 32 | TLE / AC | AC / AC |
+
+The estimates shown are the median of the three predictions, rounded to
+0.001 ms. Native verdicts are unanimous unless marked mixed. At 126 ms
+Removal Game returned TLE, AC, AC. At 83 ms it timed out on every native
+run and passed under Durante. Counting Divisors showed the same disagreement
+at 20 ms. Six of 18 predictions were within 20% of the native median. No
+program passed every timing and stability gate. None of the six predictions
+on the two programs with stable, sufficiently long native controls was within
+20% of its median.
+
+### Fitting on Cloud Run
+
+The authenticated reference collector completed a five-family smoke run and a
+full collection on the managed service. The full dataset contains three
+triplets at each of three scales for five built-in programs, 45 triplets in
+total. The collector reported an Intel Xeon Platinum 8481C and g++ 16.2.0.
+Cloud Run controlled CPU placement across revisions.
+
+The ordinary `durante-reference fit` instruction/REP candidate was within
+20% for all 18 training repetitions and zero of 27 built-in validation
+repetitions. It exited 2. A separate diagnostic experiment fitted the three
+live instruction/MOVS/STOS weights on all 45 built-in observations to minimize
+the largest relative error. Its largest error was 57.78%, with zero of 45
+predictions within 20%.
+
+Two programs bound the accuracy achievable with these three weights. During
+branch at scale 2, Durante counted at least 458,748,163 application
+instructions. During sort at scale 4 it counted at most 375,782,402. Both
+had zero MOVS bytes and 3,624 STOS bytes. Any fixed
+nonnegative weighting must predict at least as much time for branch as for
+sort. Even the slowest native branch (77.387 ms) was faster than the fastest
+native sort (192.500 ms). At those favorable extremes at least one prediction
+must miss by 42.65% or more, from
+`(192.500 − 77.387) / (192.500 + 77.387)`.
+
+The three-weight candidate was frozen before collecting three external
+problems reserved in advance. All nine estimates missed the 20% gate. All 18
+native controls cleared the 20 ms duration minimum. Only Shortest Routes II
+also passed the 10% native spread gate. It took a median of 159.178 ms, while
+Durante estimated 274.604 ms (+72.51%). Book Shop took 96.049 ms and was
+estimated at 189.124 ms (+96.91%). Subarray Sums II took 79.575 ms and was
+estimated at 36.428 ms (−54.22%).
+
+The same Cloud Run revision then judged the three programs at both nominal
+cutoffs. Each native cell below represents three unanimous native executions.
+
+| Program | Low / high limit (ms) | Native low / high | Durante low / high |
+|---|---:|---|---|
+| Shortest Routes II | 127 / 192 | TLE / AC | TLE / TLE |
+| Book Shop | 76 / 116 | TLE / AC | TLE / TLE |
+| Subarray Sums II | 63 / 96 | TLE / AC | AC / AC |
+
+Both judges agreed at three of six limits. At the other three, Durante timed
+out two accepted programs and accepted one program that exceeded native CPU
+time in all three runs. Every live timeout carried evidence that the weighted
+work budget was exhausted. The wide watchdogs did not fire. Native CPU time
+remains the supported judging clock for this profile. Per-repetition counts,
+native controls, policies and verdicts are in the [Cloud Run measurement
+record](durante/cloud-run-cpp20-v7-qualification.json).
+
+To regenerate the holdout from the author-published solutions, run the
+following from the Aonohako checkout with Python 3.
+
+```sh
+git clone https://github.com/ks-iitjmu/MyCSES
+git -C MyCSES checkout --detach eeaf7b164735a4747493b0555edf688479014448
+python3 scripts/durante_cloudrun_cpp20_manifest.py MyCSES -o cloudrun-refit.json
+sha256sum cloudrun-refit.json
+```
+
+The expected SHA-256 is
+`1f7332ffa7f0df1a519cf1b39d859617263a1b459c8d329a673737d257063aa0`.
+The generator checks the three upstream source hashes and computes each
+stdout oracle independently.
+
 ## GCE CPP20 qualification, 2026-11-19
 
 A temporary Google Compute Engine `n2d-standard-4` VM ran the v7 collector
