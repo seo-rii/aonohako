@@ -112,9 +112,9 @@ WORKLOADS = (
 )
 
 
-def manifest(checkout):
+def manifest(checkout, workload_specs=WORKLOADS, expected_sha256=MANIFEST_SHA256):
     workloads = []
-    for name, path, source_hash, generate in WORKLOADS:
+    for name, path, source_hash, generate in workload_specs:
         source = (checkout / path).read_bytes()
         digest = hashlib.sha256(source).hexdigest()
         if digest != source_hash:
@@ -125,18 +125,18 @@ def manifest(checkout):
     document = {"schema": 1, "language": "CPP20", "workloads": workloads}
     data = (json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
     digest = hashlib.sha256(data).hexdigest()
-    if digest != MANIFEST_SHA256:
-        raise ValueError(f"manifest: expected SHA-256 {MANIFEST_SHA256}, got {digest}")
+    if digest != expected_sha256:
+        raise ValueError(f"manifest: expected SHA-256 {expected_sha256}, got {digest}")
     return data
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(description=__doc__, workload_specs=WORKLOADS, expected_sha256=MANIFEST_SHA256):
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("checkout", type=Path, help="local ks-iitjmu/MyCSES checkout")
     parser.add_argument("-o", "--output", default="-", help="output file (default: stdout)")
     args = parser.parse_args()
     try:
-        data = manifest(args.checkout)
+        data = manifest(args.checkout, workload_specs, expected_sha256)
         if args.output == "-":
             sys.stdout.buffer.write(data)
         else:
