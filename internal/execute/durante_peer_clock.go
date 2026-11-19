@@ -14,9 +14,9 @@ func (plan *peerTimePlan) enableClock(req, roleReq *model.RunRequest, cfg durant
 		return fmt.Errorf("requires a schema-2 bound instruction/REP judge model and enabled family with integrity off")
 	}
 	wall := roleReq.Limits.TimeMs
-	if req.Interactor != nil {
+	if req.Interactor != nil || plan.role.interactive {
 		wall = interactiveWallTimeMs(roleReq.Limits)
-	} else if req.SPJ != nil {
+	} else if req.SPJ != nil || stagedPeerClocksRequested(req) {
 		wall = wallTimeLimitMs(roleReq.Limits)
 	}
 	plan.rawLimits = durante.ResourceLimits{CPUTimeMs: roleReq.Limits.TimeMs, WallTimeMs: wall, MemoryMB: roleReq.Limits.MemoryMB}
@@ -140,7 +140,7 @@ func peerClockResult(plan peerTimePlan, observed model.WorkMeasurementProcess) (
 	}
 	result.Clock, result.RawUsage, result.RawSource = input.Clock, input.RawUsage, input.RawSource
 	c := result.Clock
-	if c == nil || c.Version != 1 || c.Metric != plan.clock.MetricName() || c.Budget != plan.clock.Budget || c.ModelBinding != plan.clock.ModelBinding() {
+	if plan.clock.TimePolicy == nil || c == nil || c.Version != 1 || c.Metric != plan.clock.MetricName() || c.Budget != plan.clock.Budget || c.ModelBinding != plan.clock.ModelBinding() {
 		return nil, fmt.Errorf("role clock model or budget mismatch")
 	}
 	if c.Progress == nil {
@@ -185,14 +185,17 @@ func peerClockResult(plan peerTimePlan, observed model.WorkMeasurementProcess) (
 		}
 		return result, nil
 	}
-	if observed.ExitCode == nil || *observed.ExitCode < 0 || !terminalWorkClockMatches(req, plan.clock, report, p) || result.RawSource != "" {
+	if observed.ExitCode == nil || *observed.ExitCode < 0 || result.RawSource != "" {
 		return nil, fmt.Errorf("missing terminal role clock evidence")
 	}
-	estimate, err := plan.policy.Estimate(plan.runtimeID, *report)
-	if err != nil {
-		return nil, err
+	estimate, valid := terminalWorkClockEstimate(req, plan.clock, report, p, plan.runtimeID)
+	if !valid {
+		return nil, fmt.Errorf("invalid terminal role clock evidence")
 	}
-	result.Estimate = &estimate
+	result.Estimate = estimate
+	if estimate == nil {
+		result.Unavailable = durante.TimeNumericOverflow
+	}
 	if exceeded && !(peerClockGuest(plan.role.role) && *observed.ExitCode != 0) {
 		if observed.ExecutionStatus != model.RunStatusTLE || observed.TerminationSource != "durante_work_clock_final" {
 			return nil, fmt.Errorf("missing terminal role cutoff")
@@ -211,7 +214,7 @@ func forwardedPeerClockRequest(req *model.RunRequest, plans map[peerTimeIdentity
 	peer := *req.WorkMeasurementPeerTime
 	peer.Budgets = append([]model.PeerTimeBudget(nil), peer.Budgets...)
 	for i, budget := range peer.Budgets {
-		plan := plans[peerTimeKey(budget.Role, budget.ProgramID, budget.ParticipantIndex)]
+		plan := plans[peerTimeKey(budget.Role, budget.ProgramID, budget.ParticipantIndex, budget.StepID)]
 		peer.Budgets[i].ModelBinding = plan.clock.ModelBinding()
 	}
 	out.WorkMeasurementPeerTime = &peer

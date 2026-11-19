@@ -47,7 +47,7 @@ func TestJSONCollectionAdmissionBounds(t *testing.T) {
 		{name: "programs.binaries", prefix: `{"programs":[{"binaries":[`, suffix: `]}]}`, limit: runvalidation.MaxBinaryFiles},
 		{name: "steps.stdin_parts", prefix: `{"steps":[{"stdin_parts":[`, suffix: `]}]}`, limit: runvalidation.MaxStdinParts},
 		{name: "interactor.binaries", prefix: `{"interactor":{"binaries":[`, suffix: `]}}`, limit: runvalidation.MaxBinaryFiles},
-		{name: "work_measurement_peer_time.budgets", prefix: `{"work_measurement_peer_time":{"budgets":[`, suffix: `]}}`, limit: runvalidation.MaxCommunicationParticipants + 1},
+		{name: "work_measurement_peer_time.budgets", prefix: `{"work_measurement_peer_time":{"budgets":[`, suffix: `]}}`, limit: max(runvalidation.MaxCommunicationParticipants+1, 2*runvalidation.MaxPipelineSteps+1)},
 		{name: "spj.sidecar_outputs", prefix: `{"spj":{"sidecar_outputs":[`, suffix: `]}}`, limit: runvalidation.MaxSidecarOutputs},
 		{name: "pipeline.resources", prefix: `{"pipeline":{"resources":{`, suffix: `}}}`, limit: runvalidation.MaxPipelineResources, object: true},
 		{name: "pipeline.programs", prefix: `{"pipeline":{"programs":[`, suffix: `]}}`, limit: runvalidation.MaxPrograms},

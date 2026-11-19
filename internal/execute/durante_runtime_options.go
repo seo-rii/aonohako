@@ -120,6 +120,9 @@ func ordinaryTimePolicy(req *model.RunRequest, cfg durante.Config, tuning config
 }
 
 func peerRuntimeRequest(req *model.RunRequest, role workMeasurementRole) (*model.RunRequest, error) {
+	if role.stageRequest != nil {
+		return role.stageRequest, nil
+	}
 	if req.Communication == nil {
 		if role.role == "checker" && req.SPJ != nil {
 			return spjRunRequest(req), nil
@@ -145,6 +148,7 @@ func peerRuntimeRequest(req *model.RunRequest, role workMeasurementRole) (*model
 }
 
 type WorkMeasurementRuntimeOptionsDescription struct {
+	StepID           string                 `json:"step_id,omitempty"`
 	Role             string                 `json:"role"`
 	ProgramID        string                 `json:"program_id"`
 	ParticipantIndex *int                   `json:"participant_index,omitempty"`
@@ -198,7 +202,7 @@ func DescribeWorkMeasurementRuntimeOptions(req *model.RunRequest, execution conf
 		}
 		profile, _ := profiles.Resolve(role.language) // Supported launchers have a canonical profile.
 		descriptions = append(descriptions, WorkMeasurementRuntimeOptionsDescription{
-			Role: role.role, ProgramID: role.programID, ParticipantIndex: role.participantIndex,
+			StepID: role.stepID, Role: role.role, ProgramID: role.programID, ParticipantIndex: role.participantIndex,
 			SourceLanguage: profile.SourceLang, RuntimeOptions: options, RuntimeOptionsID: id,
 		})
 	}

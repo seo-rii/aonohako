@@ -54,6 +54,12 @@ func timeEligibility(reasons ...string) TimeEligibility {
 	return TimeEligibility{Version: 1, Eligible: len(reasons) == 0, ReasonCodes: append([]string{}, reasons...)}
 }
 
+// NumericOverflow reports a representational failure after all observation and
+// runtime checks passed. The exact work total still supports clock comparisons.
+func (e TimeEligibility) NumericOverflow() bool {
+	return !e.Eligible && len(e.ReasonCodes) == 1 && e.ReasonCodes[0] == TimeNumericOverflow
+}
+
 func (e TimeEligibility) Validate() error {
 	if e.Version != 1 || e.ReasonCodes == nil || e.Eligible != (len(e.ReasonCodes) == 0) {
 		return fmt.Errorf("invalid time estimate eligibility state")

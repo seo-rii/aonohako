@@ -19,8 +19,9 @@ cost. Do not compare its verdict near a resource limit as if it were uninstrumen
 
 Both operator configuration and an individual request are required. Default
 images and requests do not enable this path. Standalone special judges can request separate
-contestant and checker clocks through peer-time version 2. Pipelines, Entry
-modes and legacy multi-step requests retain native time authority. An instrumented request executes once;
+contestant and checker clocks through peer-time version 2. Pipeline V1 and legacy
+two-step requests can use the same contract with a separate budget per stage.
+Entry modes keep their native time and logical tick limits. An instrumented request executes once;
 short-case repeat sampling is bypassed
 so one counter report does not silently stand in for several executions.
 
@@ -537,7 +538,7 @@ configuration. The legacy single policy retains its C/C++ scope. The shared-mode
 registry below can approve compatible families such as CPython and PyPy. JVM
 execution remains unavailable pending sandbox qualification. Ambiguous `binary`,
 SPJs, pipelines, entry modes, and steps do not support time conversion.
-Interactive, communication and standalone SPJ runs use the separate
+Interactive, communication, SPJ and multi-step runs use the separate
 [`work_measurement_peer_time` option](#per-role-diagnostic-time-budgets) rather
 than this ordinary envelope flag. Without this flag, the existing measurement admission
 rules remain unchanged.

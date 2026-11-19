@@ -139,3 +139,24 @@ func TestPeerTimeHTTPRejectsInvalidRequestBeforeExecution(t *testing.T) {
 		})
 	}
 }
+
+func TestStagedClockHTTPRejectsUnqualifiedRolesBeforeExecution(t *testing.T) {
+	single := apiPeerTimeRequest("interactive")
+	req := &model.RunRequest{WorkMeasurement: true, Programs: []model.RunProgram{{ID: "a", Lang: single.Lang, Binaries: single.Binaries}, {ID: "b", Lang: single.Lang, Binaries: single.Binaries}},
+		Steps: []model.RunStep{{ID: "write", ProgramID: "a", Limits: single.Limits, Handoff: &model.StepHandoff{ID: "pass", From: "stdout"}}, {ID: "read", ProgramID: "b", Limits: single.Limits, StdinFrom: "pass"}},
+		WorkMeasurementPeerTime: &model.PeerTimeRequest{Version: 2, Budgets: []model.PeerTimeBudget{
+			{StepID: "write", Role: "contestant", ProgramID: "a", TimeMs: 1}, {StepID: "read", Role: "contestant", ProgramID: "b", TimeMs: 1}}}}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewWithServices(configForTest(t), compileRunnerStub{}, executeRunnerStub{run: func(context.Context, *model.RunRequest, execute.Hooks) model.RunResponse {
+		t.Fatal("unqualified staged clock reached runner")
+		return model.RunResponse{}
+	}})
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/execute", bytes.NewReader(body)))
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "work_measurement_peer_time") || strings.Contains(rec.Header().Get("Content-Type"), "event-stream") {
+		t.Fatalf("expected staged model rejection before execution, got %d %s", rec.Code, rec.Body.String())
+	}
+}

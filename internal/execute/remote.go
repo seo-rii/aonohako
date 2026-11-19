@@ -558,7 +558,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			// with one contestant's allowance would change a valid verdict.
 			// A validated Durante judgment compares model time to the nominal
 			// allowance. Its raw CPU belongs to the independent safety envelope.
-			if !req.WorkMeasurementJudge && !spjPeerClocksRequested(req) && req.Interactor == nil && req.Communication == nil {
+			if !req.WorkMeasurementJudge && !spjPeerClocksRequested(req) && !stagedPeerClocksRequested(req) && req.Interactor == nil && req.Communication == nil {
 				remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
 			}
 			policy := r.workMeasurement

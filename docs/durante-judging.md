@@ -267,13 +267,19 @@ options. Both raw time ceilings must exceed `limits.time_ms`. Operators should
 allow enough headroom for instrumentation overhead, idle programs and blocked
 pipes. The controller forwards the effective limits to the worker and verifies
 them against `work_measurement_execution.raw_limits` in the response.
+
+A verified terminal crossing can exceed the range of a signed 64-bit
+nanosecond estimate. The ordinary and role clocks record the crossing and
+`numeric_overflow`, and omit the estimate. Role clocks preserve the verdict
+rules for nonzero exit codes and trusted checker failures.
+
 Schema 1 and legacy time policies, latency-bound models, shadow collection and
 plausibility checks continue to use their terminal observations.
 
 | Outcome | Execution evidence |
 |---|---|
 | The virtual clock crossed during execution | `budget_exceeded`, source `durante_work_clock`, TLE with an observed prefix and no complete counts or total time estimate. |
-| The program exited over budget between samples | `budget_exceeded`, source `durante_work_clock_final` with a complete report and estimate after all three live counts match the terminal counts. |
+| The program exited over budget between samples | `budget_exceeded`, source `durante_work_clock_final` with a complete report after all three live counts match the terminal counts. |
 | The program finished within budget | The existing output and eligibility checks decide the verdict using the complete terminal report. |
 | A raw CPU, wall or memory watchdog fired | `resource_exhausted` with the watchdog's termination source and an unscored result. |
 
@@ -363,6 +369,42 @@ The controller verifies the two receipts and checks any emitted score against
 the parsed checker score. The checker files and its raw output stay on the worker.
 [Special-judge HTTP verification](../scripts/verify_durante_spj_clocks.py)
 
+### Pipeline V1 and legacy two-step grading
+
+To opt in, set `work_measurement` and supply a version 2 budget for every
+stage process. Use the declared step ID and program ID for each contestant and
+interactor. A final special judge uses role and program ID `checker` and omits
+`step_id`. A built-in diff runs without a process or a clock. For example,
+these budgets cover two sequential uses of the same solver and one final SPJ.
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 2,
+    "budgets": [
+      {"step_id": "prepare", "role": "contestant", "program_id": "solver", "time_ms": 100},
+      {"step_id": "finish", "role": "contestant", "program_id": "solver", "time_ms": 500},
+      {"role": "checker", "program_id": "checker", "time_ms": 250}
+    ]
+  }
+}
+```
+
+Each role keeps its step's effective raw CPU, wall and memory ceilings. Set the
+raw time ceilings generously enough to accommodate instrumentation. Admission
+checks the model, raw ceilings and peak concurrent memory before launching the
+first stage. An interactive pair shares one stage and needs memory for both
+roles simultaneously.
+
+The stage that exhausts its virtual budget reports the responsible role.
+Execution stops before writing the next handoff or invoking the final checker.
+Later roles have `termination_source: stage_not_started` and no measured
+CPU, work progress or time estimate. The controller checks the ordered stage
+receipts against the executed steps. Pipeline V1 keeps the contents of its
+resources, handoffs, checker files and diagnostic output private.
+[Stage-clock HTTP verification](../scripts/verify_durante_stage_clocks.py)
+
 ## Verdict rules
 
 The verdict uses the finalized execution state and, for completed observations,
@@ -381,7 +423,7 @@ the output comparison and time estimate.
 - **Wrong Answer** uses the existing output oracle (stdout or the single file
   output), before any time comparison. A nonzero exit on an output match is a
   runtime error at the ordinary layer and produces `Runtime Error` here too.
-- **Time estimate unavailable → Runtime Error.** A complete, output-matching run
+- **Terminal-only time estimate unavailable → Runtime Error.** A complete, output-matching run
   whose counts cannot be converted — signals observed, partial REP coverage,
   numeric overflow, or an incompatible report — is reported as `Runtime Error`
   with the eligibility reason, not silently accepted and not called TLE. This is
@@ -603,6 +645,6 @@ live cutoff carries a partial work count and no final time estimate.
 | Pipeline | Match each executing participant to its step, program and step limit. Interactive steps also need a separate interactor observation. | Record artifact transfer and the final judge separately. Mark later, unstarted steps as such. |
 | Multi-step | Compare each executed step with its effective step limit. A displayed total may sum completed sequential steps while retaining their individual outcomes. | Account for handoff and coordination separately. Omit a credited total if any required step lacks an estimate. |
 
-Interactive, communication and standalone SPJ clocks use the operator's
-qualified models on embedded and forwarded runs. Pipeline and multi-step
-judgments currently retain native time authority.
+All these clock paths require an operator-enabled, runtime-specific model on
+both embedded and forwarded runs. Requests can still use native judging and
+post-judgment observations during qualification.
