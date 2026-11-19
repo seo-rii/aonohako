@@ -363,6 +363,42 @@ The controller verifies the two receipts and checks any emitted score against
 the parsed checker score. The checker files and its raw output stay on the worker.
 [Special-judge HTTP verification](../scripts/verify_durante_spj_clocks.py)
 
+### Pipeline V1 and legacy two-step grading
+
+To opt in, set `work_measurement` and supply a version 2 budget for every
+stage process. Use the declared step ID and program ID for each contestant and
+interactor. A final special judge uses role and program ID `checker` and omits
+`step_id`. A built-in diff runs without a process or a clock. For example,
+these budgets cover two sequential uses of the same solver and one final SPJ.
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 2,
+    "budgets": [
+      {"step_id": "prepare", "role": "contestant", "program_id": "solver", "time_ms": 100},
+      {"step_id": "finish", "role": "contestant", "program_id": "solver", "time_ms": 500},
+      {"role": "checker", "program_id": "checker", "time_ms": 250}
+    ]
+  }
+}
+```
+
+Each role keeps its step's effective raw CPU, wall and memory ceilings. Set the
+raw time ceilings generously enough to accommodate instrumentation. Admission
+checks the model, raw ceilings and peak concurrent memory before launching the
+first stage. An interactive pair shares one stage and needs memory for both
+roles simultaneously.
+
+The stage that exhausts its virtual budget reports the responsible role.
+Execution stops before writing the next handoff or invoking the final checker.
+Later roles have `termination_source: stage_not_started` and no measured
+CPU, work progress or time estimate. The controller checks the ordered stage
+receipts against the executed steps. Pipeline V1 keeps the contents of its
+resources, handoffs, checker files and diagnostic output private.
+[Stage-clock HTTP verification](../scripts/verify_durante_stage_clocks.py)
+
 ## Verdict rules
 
 The verdict uses the finalized execution state and, for completed observations,
@@ -603,6 +639,6 @@ live cutoff carries a partial work count and no final time estimate.
 | Pipeline | Match each executing participant to its step, program and step limit. Interactive steps also need a separate interactor observation. | Record artifact transfer and the final judge separately. Mark later, unstarted steps as such. |
 | Multi-step | Compare each executed step with its effective step limit. A displayed total may sum completed sequential steps while retaining their individual outcomes. | Account for handoff and coordination separately. Omit a credited total if any required step lacks an estimate. |
 
-Interactive, communication and standalone SPJ clocks use the operator's
-qualified models on embedded and forwarded runs. Pipeline and multi-step
-judgments currently retain native time authority.
+All these clock paths require an operator-enabled, runtime-specific model on
+both embedded and forwarded runs. Requests can still use native judging and
+post-judgment observations during qualification.

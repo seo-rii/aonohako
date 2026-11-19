@@ -14,9 +14,9 @@ func (plan *peerTimePlan) enableClock(req, roleReq *model.RunRequest, cfg durant
 		return fmt.Errorf("requires a schema-2 bound instruction/REP judge model and enabled family with integrity off")
 	}
 	wall := roleReq.Limits.TimeMs
-	if req.Interactor != nil {
+	if req.Interactor != nil || plan.role.interactive {
 		wall = interactiveWallTimeMs(roleReq.Limits)
-	} else if req.SPJ != nil {
+	} else if req.SPJ != nil || stagedPeerClocksRequested(req) {
 		wall = wallTimeLimitMs(roleReq.Limits)
 	}
 	plan.rawLimits = durante.ResourceLimits{CPUTimeMs: roleReq.Limits.TimeMs, WallTimeMs: wall, MemoryMB: roleReq.Limits.MemoryMB}
@@ -211,7 +211,7 @@ func forwardedPeerClockRequest(req *model.RunRequest, plans map[peerTimeIdentity
 	peer := *req.WorkMeasurementPeerTime
 	peer.Budgets = append([]model.PeerTimeBudget(nil), peer.Budgets...)
 	for i, budget := range peer.Budgets {
-		plan := plans[peerTimeKey(budget.Role, budget.ProgramID, budget.ParticipantIndex)]
+		plan := plans[peerTimeKey(budget.Role, budget.ProgramID, budget.ParticipantIndex, budget.StepID)]
 		peer.Budgets[i].ModelBinding = plan.clock.ModelBinding()
 	}
 	out.WorkMeasurementPeerTime = &peer

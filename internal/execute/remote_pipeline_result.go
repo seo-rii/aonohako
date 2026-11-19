@@ -26,7 +26,7 @@ func validateRemotePipelineResult(req *model.RunRequest, resp *model.RunResponse
 			program = expected.Executor.ParticipantProgramID
 		}
 		if step.ID != expected.ID || step.ProgramID != strings.TrimSpace(program) ||
-			!publicPipelineStepSource(step, interactive) {
+			!(publicPipelineStepSource(step, interactive) || (stagedPeerClocksRequested(req) && publicStageClockSource(step.VerdictSource, interactive))) {
 			return errors.New("remote pipeline step identity or verdict source is inconsistent")
 		}
 		if roles := step.CPUTimeByRole; roles != nil {
@@ -47,7 +47,7 @@ func validateRemotePipelineResult(req *model.RunRequest, resp *model.RunResponse
 			return errors.New("remote pipeline handoff size is inconsistent")
 		}
 	}
-	if !remotePipelineOutcomeMatches(plan, resp) {
+	if !remotePipelineOutcomeMatches(plan, resp) && !stageFinalCheckerFailure(req, resp) {
 		return errors.New("remote pipeline outcome does not match its execution prefix")
 	}
 

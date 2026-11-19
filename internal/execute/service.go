@@ -240,14 +240,7 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 		rawService := *s
 		rawService.cpuNormalizer = timing.CPUNormalizer{}
 		s = &rawService
-		memoryMB := 0
-		for _, plan := range peerPlans {
-			if req.SPJ != nil {
-				memoryMB = max(memoryMB, plan.rawLimits.MemoryMB)
-			} else {
-				memoryMB += plan.rawLimits.MemoryMB
-			}
-		}
+		memoryMB := peakPeerMemoryMB(req, peerPlans)
 		if err := s.workMeasurement.ResourcePolicy.ValidatePeerAdmission(s.maxActiveRuns, s.workRootMaxBytes, memoryMB); err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
@@ -301,20 +294,24 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
+	var stages *stagedWorkClocks
+	if stagedPeerClocksRequested(req) {
+		stages = newStagedWorkClocks(peerPlans, s.workMeasurement)
+	}
 	var response model.RunResponse
 	switch {
 	case req.WorkMeasurementLimits != nil:
 		return s.runWorkMeasurementDiagnostic(ctx, req, hooks, tuning)
-	case req.SPJ != nil && req.WorkMeasurementPeerTime != nil:
+	case stages == nil && spjPeerClocksRequested(req):
 		response = s.runSPJClockJudgment(ctx, req, hooks, tuning, peerPlans)
 	case req.Communication != nil:
 		response = s.runCommunication(ctx, req, hooks, tuning, peerPlans)
 	case req.Pipeline != nil:
-		response = s.runPipelineV1(ctx, req, hooks, tuning)
+		response = s.runPipelineV1(ctx, req, hooks, tuning, stages)
 	case req.Interactor != nil:
 		response = s.runInteractive(ctx, req, hooks, tuning, peerPlans)
 	case runvalidation.UsesSteps(req):
-		response = s.runStepPipeline(ctx, req, hooks, tuning)
+		response = s.runStepPipeline(ctx, req, hooks, tuning, stages)
 	default:
 		if s.shortCaseSampling && s.cpuNormalizer.Enabled() && !req.WorkMeasurement {
 			response = runShortCaseBatch(ctx, req, hooks, func(ctx context.Context, req *model.RunRequest, stdin io.Reader, maxBytes int64, hooks Hooks) model.RunResponse {
@@ -324,7 +321,16 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 			response = s.runOne(ctx, req, hooks, tuning, true).response
 		}
 	}
+	if stages != nil {
+		if stages.err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: stages.err.Error()}
+		}
+		response.WorkMeasurements = stages.rows
+	}
 	response = finishWorkMeasurementPeerTime(req, response, s.workMeasurement, tuning)
+	if stages != nil && req.Pipeline != nil {
+		redactStagedClockRows(response.WorkMeasurements)
+	}
 	return s.decorateCPUTimeNormalization(response)
 }
 
@@ -573,7 +579,7 @@ func (s *Service) networkRequestRejection(enabled bool) string {
 	return ""
 }
 
-func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) (response model.RunResponse) {
+func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, clocks *stagedWorkClocks) (response model.RunResponse) {
 	if err := runvalidation.ValidateStepPipeline(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
@@ -621,7 +627,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			replay, stdinReader = prepareLegacyReplay(stepReq, stdinReader, stdinMaxBytes)
 		}
 		captureStdout := observe && len(stepReq.FileOutputs) > 0
-		run := s.runOneWithStdin(ctx, stepReq, stdinReader, stdinMaxBytes, hooks, tuning, finalStep, captureStdout)
+		run := s.runClockedStage(ctx, stepReq, stdinReader, stdinMaxBytes, hooks, tuning, finalStep, captureStdout, clocks, step.ID, step.ProgramID)
 		if closeStdin != nil {
 			_ = closeStdin()
 		}

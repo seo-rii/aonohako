@@ -605,6 +605,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	if err := execute.ValidateStagedClockAdmission(&req, s.cfg.Execution); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
 	if (req.EnableNetwork || runvalidation.ProgramsEnableNetwork(&req)) && !s.cfg.AllowRequestNetwork {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "network_not_allowed", "enable_network is not allowed by server policy")
 		return
