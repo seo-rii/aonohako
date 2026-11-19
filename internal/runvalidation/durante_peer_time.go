@@ -22,8 +22,8 @@ func ValidateWorkMeasurementPeerTime(req *model.RunRequest) error {
 		return fmt.Errorf("work_measurement_peer_time requires an interactive or communication run")
 	}
 	request := req.WorkMeasurementPeerTime
-	if request.Version != 1 || len(request.Budgets) < 2 || len(request.Budgets) > MaxCommunicationParticipants+1 {
-		return fmt.Errorf("work_measurement_peer_time requires version 1 and a budget for every role")
+	if (request.Version != 1 && request.Version != 2) || len(request.Budgets) < 2 || len(request.Budgets) > MaxCommunicationParticipants+1 {
+		return fmt.Errorf("work_measurement_peer_time requires version 1 or 2 and a budget for every role")
 	}
 	type key struct {
 		role, program string
@@ -32,6 +32,9 @@ func ValidateWorkMeasurementPeerTime(req *model.RunRequest) error {
 	}
 	seen := make(map[key]bool, len(request.Budgets))
 	for _, budget := range request.Budgets {
+		if budget.ModelBinding != "" && (request.Version != 2 || len(budget.ModelBinding) > 128) {
+			return fmt.Errorf("invalid peer clock model_binding")
+		}
 		if budget.ProgramID == "" || budget.TimeMs < 1 || budget.TimeMs > 600000 {
 			return fmt.Errorf("work_measurement_peer_time requires program_id and time_ms between 1 and 600000")
 		}

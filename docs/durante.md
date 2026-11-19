@@ -311,6 +311,9 @@ every peer's resource allowance.
 
 ### Per-role diagnostic time budgets
 
+Peer time version 2 also supports online enforcement of operator-bound role
+budgets. [Live role clocks](durante-judging.md#live-clocks-for-interactive-and-communication-roles)
+
 Interactive and communication v1/v2 requests can additionally set
 `work_measurement_peer_time`. It requires `work_measurement: true` and a version-1
 budget for **every actual role**, identified by `role`, `program_id`, and the

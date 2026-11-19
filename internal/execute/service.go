@@ -134,6 +134,7 @@ type Service struct {
 	communicationMemoryBudgetMB  int
 	communicationCPUCount        int
 	communicationWallBudgetMs    int
+	maxActiveRuns                int
 	workRootMaxBytes             int
 	networkEgressIsolated        bool
 	stdinURLTimeout              time.Duration
@@ -184,6 +185,7 @@ func NewWithConfig(cfg config.Config) *Service {
 		communicationMemoryBudgetMB:  cfg.CommunicationMemoryBudgetMB,
 		communicationCPUCount:        cfg.CommunicationCPUCount,
 		communicationWallBudgetMs:    cfg.CommunicationWallBudgetMs,
+		maxActiveRuns:                cfg.MaxActiveRuns,
 		workRootMaxBytes:             cfg.WorkRootMaxBytes,
 		networkEgressIsolated:        cfg.NetworkEgressIsolated,
 		stdinURLTimeout:              stdinURLDownloadTimeout,
@@ -222,9 +224,25 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
-	if _, err := workMeasurementPeerTimePlans(req, s.workMeasurement, tuning); err != nil {
+	peerPlans, err := workMeasurementPeerTimePlans(req, s.workMeasurement, tuning)
+	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
+	if req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2 {
+		// The per-role safety envelopes are raw; all coordinators and their
+		// response metadata must use that same CPU accounting.
+		rawService := *s
+		rawService.cpuNormalizer = timing.CPUNormalizer{}
+		s = &rawService
+		memoryMB := 0
+		for _, plan := range peerPlans {
+			memoryMB += plan.rawLimits.MemoryMB
+		}
+		if err := s.workMeasurement.ResourcePolicy.ValidatePeerAdmission(s.maxActiveRuns, s.workRootMaxBytes, memoryMB); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+
 	if req.WorkMeasurementLimits != nil {
 		if s.workMeasurementPolicyError != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: s.workMeasurementPolicyError.Error()}
@@ -278,11 +296,11 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 	case req.WorkMeasurementLimits != nil:
 		return s.runWorkMeasurementDiagnostic(ctx, req, hooks, tuning)
 	case req.Communication != nil:
-		response = s.runCommunication(ctx, req, hooks, tuning)
+		response = s.runCommunication(ctx, req, hooks, tuning, peerPlans)
 	case req.Pipeline != nil:
 		response = s.runPipelineV1(ctx, req, hooks, tuning)
 	case req.Interactor != nil:
-		response = s.runInteractive(ctx, req, hooks, tuning)
+		response = s.runInteractive(ctx, req, hooks, tuning, peerPlans)
 	case runvalidation.UsesSteps(req):
 		response = s.runStepPipeline(ctx, req, hooks, tuning)
 	default:

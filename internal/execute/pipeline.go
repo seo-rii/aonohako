@@ -443,7 +443,7 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 				transcript = &interactiveTranscript{}
 				nativeCtx = context.WithValue(ctx, interactiveTranscriptKey{}, transcript)
 			}
-			run := s.runInteractiveExecution(nativeCtx, stepReq, stdin, stdinMaxBytes, interactorOutputFile, interactorOutputMax, true, Hooks{}, tuning)
+			run := s.runInteractiveExecution(nativeCtx, stepReq, stdin, stdinMaxBytes, interactorOutputFile, interactorOutputMax, true, Hooks{}, tuning, nil)
 			if interactorOutputFile != nil {
 				if closeErr := interactorOutputFile.Close(); closeErr != nil && run.interactorOutputErr == nil {
 					run.interactorOutputErr = closeErr

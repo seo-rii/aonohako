@@ -22,7 +22,7 @@ func TestWorkMeasurementPeerTimeRequiresExplicitPeerBudgets(t *testing.T) {
 	for name, edit := range map[string]func(*model.RunRequest){
 		"missing flag":      func(r *model.RunRequest) { r.WorkMeasurement = false },
 		"missing version":   func(r *model.RunRequest) { r.WorkMeasurementPeerTime.Version = 0 },
-		"unknown version":   func(r *model.RunRequest) { r.WorkMeasurementPeerTime.Version = 2 },
+		"unknown version":   func(r *model.RunRequest) { r.WorkMeasurementPeerTime.Version = 3 },
 		"ordinary":          func(r *model.RunRequest) { r.Interactor = nil },
 		"both peer modes":   func(r *model.RunRequest) { r.Communication = &model.CommunicationSpec{} },
 		"ordinary time":     func(r *model.RunRequest) { r.WorkMeasurementTime = true },

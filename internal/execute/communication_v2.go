@@ -130,7 +130,7 @@ func communicationMatchFailure(req *model.RunRequest, message string) *model.Mat
 }
 
 func communicationParticipantInfrastructureFailure(process communicationProcessResult) bool {
-	return process.result.Status == model.RunStatusInitFail ||
+	return (process.result.Status == model.RunStatusInitFail && process.result.VerdictSource != "durante_peer_cancelled") ||
 		process.result.VerdictSource == "sandbox_helper_oom" ||
 		process.result.VerdictSource == "sandbox_init"
 }
@@ -154,6 +154,9 @@ func communicationFinalProcessStatus(process communicationProcessResult) (string
 func communicationIndependentParticipantFault(process communicationProcessResult, canceledAt time.Time) bool {
 	status, _, source := communicationFinalProcessStatus(process)
 	if (status == "OK" && process.result.ExitCode != nil && *process.result.ExitCode == 0) || communicationParticipantInfrastructureFailure(process) {
+		return false
+	}
+	if source == "durante_peer_cancelled" {
 		return false
 	}
 	if process.result.ExitCode != nil && *process.result.ExitCode != 0 {
@@ -218,7 +221,8 @@ func buildCommunicationMatchResponse(req *model.RunRequest, processes []communic
 		!manager.resultProtocolAt.IsZero() && !manager.resultProtocolAt.Before(participantCancellationAt)
 	managerCanceledForForfeit := firstFailure != nil && !participantCancellationAt.IsZero() &&
 		!manager.completedAt.Before(participantCancellationAt) && (manager.result.ExitCode == nil || *manager.result.ExitCode == 0) &&
-		managerStatus == model.RunStatusTLE && managerSource == "wall_time" && !managerIndependentDeadline &&
+		((managerStatus == model.RunStatusTLE && managerSource == "wall_time") ||
+			(managerStatus == model.RunStatusInitFail && managerSource == "durante_peer_cancelled")) && !managerIndependentDeadline &&
 		((managerResultErr == nil && managerResult != nil) || managerInterruptedProtocol)
 	if !managerValid && !managerCanceledForForfeit {
 		return fail("competitive manager process or result protocol failed independently", "manager:runtime")
@@ -235,7 +239,7 @@ func buildCommunicationMatchResponse(req *model.RunRequest, processes []communic
 	}
 	managerFinishedBeforeFailure := managerValid && (firstFailure == nil ||
 		(!communicationIndependentParticipantFault(*firstFailure, participantCancellationAt) &&
-			(firstFailure.result.VerdictSource == "stream_io" || !manager.completedAt.After(firstFailure.completedAt))))
+			(firstFailure.result.VerdictSource == "stream_io" || firstFailure.result.VerdictSource == "durante_peer_cancelled" || !manager.completedAt.After(firstFailure.completedAt))))
 	if managerFinishedBeforeFailure {
 		response.Status = model.RunStatusAccepted
 		response.Match.Outcome, response.Match.Retriable = "completed", false

@@ -15,7 +15,8 @@ static void wait_forever(void) {
 static int contestant(void) {
     char mode[32];
     if (scanf("%31s", mode) != 1) return 2;
-    if (!strcmp(mode, "burn") || !strcmp(mode, "wait")) {
+    if (!strcmp(mode, "burn") || !strcmp(mode, "wait") ||
+        !strcmp(mode, "accept_cancel") || !strcmp(mode, "wrong_cancel")) {
         puts("ready");
         if (!strcmp(mode, "burn")) burn();
         wait_forever();
@@ -35,6 +36,8 @@ static int interactor(const char *input_path) {
 
     char answer[32];
     if (!fgets(answer, sizeof(answer), stdin)) return 3;
+    if (!strcmp(mode, "accept_cancel") || !strcmp(mode, "wrong_cancel"))
+        return strcmp(answer, "ready\n") ? 3 : !strcmp(mode, "wrong_cancel");
     if (!strcmp(mode, "burn") || !strcmp(mode, "wait")) {
         if (strcmp(answer, "ready\n")) return 3;
         wait_forever();

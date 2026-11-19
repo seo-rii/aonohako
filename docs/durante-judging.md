@@ -286,13 +286,54 @@ An ordinary diagnostic request can instead set `"work_measurement_clock":
 `work_measurement_limits`. This budget counts instructions plus requested MOVS
 and STOS bytes directly. An exhausted diagnostic budget supplies execution
 evidence and an unscored diagnostic result. Judge requests always derive their
-clock from the operator's model. Each clock covers one owned role and its
-process tree. Peer requests currently use their per-role terminal observations.
+clock from the operator's model. Each clock covers one owned role and its process tree. An interactive or
+communication request can select the role clocks below.
 
 The HTTP harness grades a real compiled C++ program through embedded and
 forwarded execution using test-only coefficients. It checks normal completion,
 a busy loop, a sleeping process and a mismatched downstream model.
 [Work clock HTTP verification](../scripts/verify_durante_work_clock.py)
+
+### Live clocks for interactive and communication roles
+
+Set `work_measurement: true` and `work_measurement_peer_time.version: 2`.
+Supply one `time_ms` virtual budget for each role. Interactive roles are
+`contestant` and `interactor`; communication roles are `participant` with a
+zero-based `participant_index`, and `manager`. The program ID must match the
+request, including when the same executable runs in multiple seats.
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 2,
+    "budgets": [
+      {"role": "contestant", "program_id": "contestant", "time_ms": 100},
+      {"role": "interactor", "program_id": "interactor", "time_ms": 500}
+    ]
+  }
+}
+```
+
+The worker resolves the schema 2 model for each role's actual language,
+image, dispatch, virtual processor and runtime options before launch.
+Every role must be enabled for deciding judgments with integrity mode
+`off` and an instruction/REP model. Give the role's ordinary CPU and wall
+limits enough headroom to run the instrumented process. Both must exceed
+that role's virtual budget and fit the operator's resource policy. The
+worker also reserves the sum of concurrent role memory allocations.
+
+Each `work_measurements[].time_budget` receipt includes the virtual limit,
+model binding, raw safety limits, raw usage and role clock evidence.
+A proven contestant cutoff can decide TLE. An interactor or manager clock
+failure leaves the result unscored. In a competitive match an independent
+participant fault can forfeit that seat under the match protocol. A peer
+cancelled by the coordinator gets a separate reason; its cancellation
+cannot establish a budget crossing. The controller verifies the per-role
+evidence when a worker executes the exchange remotely. Version 1 remains
+available for post-exit diagnostic comparisons.
+
+[Peer-clock HTTP verification](../scripts/verify_durante_peer_clocks.py)
 
 ## Verdict rules
 
@@ -515,7 +556,7 @@ with reference-time conversion.
 5. Keep raw CPU/wall/memory limits active as independent safety nets; a work
    verdict never removes them.
 
-Memory judging, interactive/communication judge modes, and runtimes whose counts do not convert (signal-driven, e.g. Go) are out
+Memory judging and runtimes whose counts do not convert (signal-driven, e.g. Go) are out
 of scope for this path and remain documented limitations.
 
 ## Time attribution by execution mode

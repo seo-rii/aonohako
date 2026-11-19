@@ -13,15 +13,20 @@ func collectPeerWorkMeasurement(meter *durante.Session, result execResult, inter
 	// Native CPU policy may already have collected the same report before
 	// interactive verdict selection. Reuse it without parsing or hashing twice.
 	report := result.WorkMeasurement
-	if report == nil && meter != nil {
+	if report == nil && meter != nil && result.workClockReceipt == nil {
 		report = meter.Collect(result.targetPID)
 	}
-	if report != nil {
+	if report != nil && result.workClockReceipt == nil {
 		if interrupted || result.Status != "OK" || result.ExitCode == nil || *result.ExitCode < 0 {
 			report = report.WithoutTotals("measurement execution did not complete normally")
 		}
 	}
+	var budget *model.PeerTimeBudgetResult
+	if result.workClockReceipt != nil {
+		budget = &model.PeerTimeBudgetResult{Clock: result.workClockReceipt, RawUsage: result.peerClockUsage, RawSource: result.peerClockRawSource}
+	}
 	return model.WorkMeasurementProcess{
+		TimeBudget:        budget,
 		Role:              role,
 		ProgramID:         programID,
 		ParticipantIndex:  participantIndex,

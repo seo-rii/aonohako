@@ -108,6 +108,50 @@ func TestDuranteInteractiveIntegration(t *testing.T) {
 			assertPeerTimeIntegrationBudgets(t, req, response, timeCfg)
 		})
 	}
+	for _, tc := range []struct {
+		mode, status, source string
+		limited              string
+	}{
+		{"accept", model.RunStatusAccepted, "interactor", ""},
+		{"wrong", model.RunStatusWA, "interactor:exit_code", ""},
+		{"final_accept", model.RunStatusAccepted, "interactor", ""},
+		{"final_wrong", model.RunStatusWA, "interactor:exit_code", ""},
+		{"burn", model.RunStatusTLE, "contestant:durante_work_clock", "contestant"},
+		{"interactor_burn", model.RunStatusInitFail, "interactor:durante_work_clock", "interactor"},
+		{"wait", model.RunStatusInitFail, "contestant:durante_peer_clock_error", ""},
+		{"accept_cancel", model.RunStatusInitFail, "contestant:durante_peer_cancelled", ""},
+		{"wrong_cancel", model.RunStatusWA, "interactor:exit_code", ""},
+	} {
+		t.Run("online_"+tc.mode, func(t *testing.T) {
+			req := request(tc.mode, true)
+			if tc.mode == "wait" {
+				req.Limits.TimeMs, req.Limits.WallTimeMs = 500, 700
+			}
+			addPeerTimeIntegrationBudgets(t, req)
+			req.WorkMeasurementPeerTime.Version = 2
+			for i := range req.WorkMeasurementPeerTime.Budgets {
+				req.WorkMeasurementPeerTime.Budgets[i].TimeMs = 5
+			}
+			measurement := bindIntegrationRuntimeOptions(t, peerTimeIntegrationConfig(t, cfg, false), req)
+			measurement.Judge = durante.JudgePolicy{Enabled: true, VerdictsAllowed: true, Integrity: durante.JudgeIntegrityOff, Families: []string{"cpp"}}
+			service := NewWithConfig(config.Config{MaxActiveRuns: 1, WorkRootMaxBytes: 128 << 20, Execution: config.ExecutionConfig{WorkMeasurement: measurement}})
+			response := service.Run(context.Background(), req, Hooks{})
+			if response.Status != tc.status || response.VerdictSource != tc.source || (response.Score == nil) != (tc.status == model.RunStatusInitFail) {
+				t.Fatalf("unexpected clock verdict: %+v; roles=%+v", response, response.WorkMeasurements)
+			}
+			if err := validateRemoteWorkMeasurementPeerTime(req, response, measurement); err != nil {
+				t.Fatal(err)
+			}
+			for _, r := range response.WorkMeasurements {
+				if r.TimeBudget == nil || r.TimeBudget.Clock == nil {
+					t.Fatalf("missing clock for %s", r.Role)
+				}
+				if r.Role == tc.limited && (r.TimeBudget.Exceeded == nil || !*r.TimeBudget.Exceeded || !r.Report.ValidUnavailableResult()) {
+					t.Fatalf("unverified live cutoff for %s: %+v", r.Role, r)
+				}
+			}
+		})
+	}
 	t.Run("contestant CPU limit", func(t *testing.T) {
 		req := request("burn", true)
 		req.Limits.TimeMs = 200

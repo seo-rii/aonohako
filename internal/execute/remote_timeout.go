@@ -72,6 +72,11 @@ func remoteExecutionTimeout(req *model.RunRequest, uploadTimeout time.Duration) 
 		// the manager's longer limit and Cloud Run contention slack.
 		managerTimeMs := timing.MaximumCPURawLimitMillis(communicationManagerLimits(limits).TimeMs)
 		wallMs, _ := communicationWallAllowanceMs(platform.DeploymentTargetCloudRun, "", count, 1, managerTimeMs)
+		if req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2 {
+			// Communication owns wall grants. The manager's independent raw
+			// CPU limit supplies the longest v2 wall grant on either platform.
+			wallMs = int64(communicationManagerLimits(limits).TimeMs)
+		}
 		budget += stdinURLDownloadTimeout + time.Duration(wallMs)*time.Millisecond
 	} else {
 		wallMs := executionWallTimeMs(req.Limits, req.Interactor != nil, timing.MaximumCPUWallLimitMillis)

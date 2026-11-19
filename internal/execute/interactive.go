@@ -98,11 +98,11 @@ func (w *interactivePipeWriter) Err() error {
 	return w.err
 }
 
-func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
-	return s.runInteractiveExecution(ctx, req, nil, 0, nil, 0, false, hooks, tuning).response
+func (s *Service) runInteractive(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, plans map[peerTimeIdentity]peerTimePlan) model.RunResponse {
+	return s.runInteractiveExecution(ctx, req, nil, 0, nil, 0, false, hooks, tuning, plans).response
 }
 
-func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, interactorOutputDest io.Writer, interactorOutputMaxBytes int64, captureParticipantStdout bool, hooks Hooks, tuning config.RuntimeTuningConfig) interactiveRunResult {
+func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, interactorOutputDest io.Writer, interactorOutputMaxBytes int64, captureParticipantStdout bool, hooks Hooks, tuning config.RuntimeTuningConfig, plans map[peerTimeIdentity]peerTimePlan) interactiveRunResult {
 	startWall := timing.MonotonicNow()
 	if req.Interactor == nil {
 		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "interactor is required"}}
@@ -123,13 +123,20 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		return interactiveRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "no binaries"}}
 	}
 
+	interactorReq := interactorRunRequest(req)
+	clocked := req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2
+	if clocked {
+		contestantReq := *req
+		req = &contestantReq
+		applyPeerWorkClock(req, plans[peerTimeKey("contestant", "contestant", nil)])
+		applyPeerWorkClock(interactorReq, plans[peerTimeKey("interactor", "interactor", nil)])
+	}
 	contestantWorkDir, contestantWS, contestantArgs, contestantInit := prepareInteractiveCommand(req, tuning, "contestant")
 	if contestantInit != nil {
 		return interactiveRunResult{response: *contestantInit}
 	}
 	defer os.RemoveAll(contestantWorkDir)
 
-	interactorReq := interactorRunRequest(req)
 	interactorWorkDir, interactorWS, interactorArgs, interactorInit := prepareInteractiveCommand(interactorReq, tuning, "interactor")
 	if interactorInit != nil {
 		return interactiveRunResult{response: *interactorInit}
@@ -196,8 +203,14 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	defer contestantIn.Close()
 	defer interactorIn.Close()
 
-	contestantCtx, cancelContestant := context.WithCancel(ctx)
-	interactorCtx, cancelInteractor := context.WithCancel(ctx)
+	contestantCtx, stopContestant := context.WithCancelCause(ctx)
+	interactorCtx, stopInteractor := context.WithCancelCause(ctx)
+	cancelContestant := func() { stopContestant(context.Canceled) }
+	cancelInteractor := func() { stopInteractor(context.Canceled) }
+	deadlineCause := error(context.Canceled)
+	if clocked {
+		deadlineCause = context.DeadlineExceeded
+	}
 	defer cancelContestant()
 	defer cancelInteractor()
 
@@ -217,7 +230,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			return
 		}
 		contestantDeadlineHit.Store(true)
-		cancelContestant()
+		stopContestant(deadlineCause)
 		cancelInteractor()
 	}, func() {
 		if interactorFinished.Load() {
@@ -226,11 +239,11 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		if !contestantFinished.Load() {
 			contestantCanceledByInteractor.Store(true)
 		}
-		cancelInteractor()
+		stopInteractor(deadlineCause)
 		cancelContestant()
 	}, func() {
-		cancelContestant()
-		cancelInteractor()
+		stopContestant(deadlineCause)
+		stopInteractor(deadlineCause)
 	})
 	defer timers.stop()
 
@@ -239,6 +252,7 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	// Each channel synchronizes the corresponding completion flag. Capture
 	// cancellation before coordination cancels already-finished peers.
 	var contestantInterrupted, interactorInterrupted bool
+	var contestantCause, interactorCause error
 	go func() {
 		res := executeSandboxCommandWithStreams(
 			contestantCtx,
@@ -261,8 +275,17 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			s.cgroupParentDir,
 		)
 		contestantInterrupted = contestantCtx.Err() != nil
+		contestantCause = peerWorkClockCause(ctx, contestantCtx)
 		contestantFinished.Store(true)
 		timers.finish(0)
+		if clocked {
+			if len(req.DisallowedCPUFeatures) > 0 && res.VerdictSource != "durante_work_clock_cleanup" {
+				res.WorkMeasurement = collectCPUFeatureResult(req.DisallowedCPUFeatures, &res, contestantMeter)
+			}
+			if !pendingInteractiveRelay(&res) {
+				finishPeerWorkClock(req, contestantMeter, &res, contestantCause, "contestant")
+			}
+		}
 		contestantCh <- res
 	}()
 	go func() {
@@ -291,8 +314,14 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			s.cgroupParentDir,
 		)
 		interactorInterrupted = interactorCtx.Err() != nil
+		interactorCause = peerWorkClockCause(ctx, interactorCtx)
 		interactorFinished.Store(true)
 		timers.finish(1)
+		if clocked {
+			if !pendingInteractiveRelay(&res) {
+				finishPeerWorkClock(interactorReq, interactorMeter, &res, interactorCause, "interactor")
+			}
+		}
 		interactorCh <- res
 	}()
 
@@ -307,13 +336,16 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 			gotContestant = true
 			contestantIn.Close()
 			contestantStatus, _, _ := classifyRunStatusWithoutOutput(req, res)
-			if contestantStatus != "OK" {
+			if contestantStatus != "OK" && !(clocked && pendingInteractiveRelay(&res)) {
 				cancelInteractor()
 			}
 		case res := <-interactorCh:
 			interactorRes = res
 			gotInteractor = true
 			interactorIn.Close()
+			if clocked && pendingInteractiveRelay(&res) {
+				res.Status, res.VerdictSource = "OK", "" // Reconcile the final reply after both exits.
+			}
 			interactorStatus, _, _ := classifyInteractorStatus(interactorReq, res)
 			if interactorStatus == model.RunStatusAccepted {
 				time.AfterFunc(interactiveAcceptedGrace, func() {
@@ -335,11 +367,22 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 	contestantIn.Close()
 	interactorIn.Close()
 	reconcileInteractiveRelayResults(&contestantRes, &interactorRes, interactorIn.Err(), contestantIn.Err())
+	if clocked {
+		// Expected pipe closure can be confirmed only after both exit codes are known.
+		if contestantRes.workClockReceipt == nil || contestantRes.VerdictSource == "stream_io" {
+			finishPeerWorkClock(req, contestantMeter, &contestantRes, contestantCause, "contestant")
+		}
+		if interactorRes.workClockReceipt == nil || interactorRes.VerdictSource == "stream_io" {
+			finishPeerWorkClock(interactorReq, interactorMeter, &interactorRes, interactorCause, "interactor")
+		}
+	}
 	// Peer timers and cancellation have already stopped. Native policy parsing
 	// cannot delay peer teardown or consume an execution budget.
-	policyReport := collectCPUFeatureResult(req.DisallowedCPUFeatures, &contestantRes, contestantMeter)
-	if req.WorkMeasurement {
-		contestantRes.WorkMeasurement = policyReport
+	if !clocked {
+		policyReport := collectCPUFeatureResult(req.DisallowedCPUFeatures, &contestantRes, contestantMeter)
+		if req.WorkMeasurement {
+			contestantRes.WorkMeasurement = policyReport
+		}
 	}
 
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(contestantWS, req.SidecarOutputs)
@@ -370,6 +413,28 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		resp.WorkMeasurements = []model.WorkMeasurementProcess{
 			collectPeerWorkMeasurement(contestantMeter, contestantRes, contestantInterrupted, "contestant", "contestant", nil),
 			collectPeerWorkMeasurement(interactorMeter, interactorRes, interactorInterrupted, "interactor", "interactor", nil),
+		}
+	}
+	if clocked {
+		status, source := interactivePeerClockVerdict(resp.WorkMeasurements, resp.Steps)
+		if resp.Status != status || resp.VerdictSource != source {
+			resp.Reason = resp.Steps[0].Reason
+			if strings.HasPrefix(source, "interactor") {
+				resp.Reason = resp.Steps[1].Reason
+			}
+			if status == model.RunStatusWA && strings.TrimSpace(resp.Reason) == "" {
+				resp.Reason = "wrong answer"
+			}
+			resp.Status, resp.VerdictSource = status, source
+		}
+		if status == model.RunStatusInitFail {
+			resp.Score = nil
+		} else {
+			score := 0.0
+			if status == model.RunStatusAccepted {
+				score = 1
+			}
+			resp.Score = &score
 		}
 	}
 	var participantFileOutput []byte
@@ -403,6 +468,11 @@ func (s *Service) runInteractiveExecution(ctx context.Context, req *model.RunReq
 		interactorOutputBytes: interactorOutputBytes,
 		interactorOutputErr:   interactorOutputErr,
 	}
+}
+
+func pendingInteractiveRelay(res *execResult) bool {
+	return res.ExitCode != nil && res.Status == model.RunStatusRE && res.VerdictSource == "stream_io" &&
+		isExpectedPostExitStdinRelayError(res.streamRelayErr)
 }
 
 // reconcileInteractiveRelayResults preserves a completed interactor verdict

@@ -426,19 +426,31 @@ type PeerTimeRequest struct {
 }
 
 type PeerTimeBudget struct {
+	ModelBinding     string `json:"model_binding,omitempty"`
 	Role             string `json:"role"`
 	ProgramID        string `json:"program_id"`
 	ParticipantIndex *int   `json:"participant_index,omitempty"`
 	TimeMs           int    `json:"time_ms"`
 }
 
+type PeerClockUsage struct {
+	StdoutLimitExceeded bool    `json:"stdout_limit_exceeded,omitempty"`
+	CPUTimeNs           *uint64 `json:"cpu_time_ns"`
+	WallTimeMs          *int64  `json:"wall_time_ms"`
+	MemoryKB            *int64  `json:"memory_kb"`
+}
+
 type PeerTimeBudgetResult struct {
-	Version     int                   `json:"version"`
-	Authority   string                `json:"authority"`
-	BudgetMs    int                   `json:"budget_ms"`
-	Estimate    *durante.TimeEstimate `json:"estimate,omitempty"`
-	Exceeded    *bool                 `json:"exceeded,omitempty"`
-	Unavailable string                `json:"unavailable,omitempty"`
+	Clock       *durante.WorkClockReceipt `json:"clock,omitempty"`
+	RawLimits   *durante.ResourceLimits   `json:"raw_limits,omitempty"`
+	RawUsage    *PeerClockUsage           `json:"raw_usage,omitempty"`
+	RawSource   string                    `json:"raw_source,omitempty"`
+	Version     int                       `json:"version"`
+	Authority   string                    `json:"authority"`
+	BudgetMs    int                       `json:"budget_ms"`
+	Estimate    *durante.TimeEstimate     `json:"estimate,omitempty"`
+	Exceeded    *bool                     `json:"exceeded,omitempty"`
+	Unavailable string                    `json:"unavailable,omitempty"`
 }
 
 // WorkMeasurementExecution describes an opt-in diagnostic execution. Its

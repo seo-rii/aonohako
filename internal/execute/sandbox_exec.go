@@ -55,6 +55,10 @@ type execResult struct {
 	// The typed stdout/stderr copy error from cmd.Wait, if any. Only interactive
 	// verdict reconciliation may discount an expected peer shutdown.
 	streamRelayErr error
+
+	workClockReceipt   *durante.WorkClockReceipt
+	peerClockUsage     *model.PeerClockUsage
+	peerClockRawSource string
 }
 
 func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (uint64, bool) {
