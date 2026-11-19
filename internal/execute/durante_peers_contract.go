@@ -22,11 +22,14 @@ func workMeasurementRequestRoles(req *model.RunRequest) ([]workMeasurementRole, 
 	if req == nil {
 		return nil, fmt.Errorf("nil work measurement request")
 	}
-	if req.Pipeline != nil || req.SPJ != nil || req.EntryMode != "" || len(req.Steps) != 0 || (req.Communication == nil && len(req.Programs) != 0) {
+	if req.Pipeline != nil || (req.SPJ != nil && (!spjPeerClocksRequested(req) || req.Interactor != nil || req.Communication != nil)) || req.EntryMode != "" || len(req.Steps) != 0 || (req.Communication == nil && len(req.Programs) != 0) {
 		return nil, fmt.Errorf("work_measurement does not support spj, pipelines, entry modes, or steps")
 	}
 	if req.Communication == nil {
 		roles := []workMeasurementRole{{role: "contestant", programID: "contestant", language: req.Lang}}
+		if req.SPJ != nil {
+			return append(roles, workMeasurementRole{role: "checker", programID: "checker", language: req.SPJ.Lang}), nil
+		}
 		if req.Interactor != nil {
 			roles = append(roles, workMeasurementRole{role: "interactor", programID: "interactor", language: req.Interactor.Lang})
 		}
@@ -96,7 +99,7 @@ func validateWorkMeasurementRequest(req *model.RunRequest, cfg durante.Config) e
 }
 
 func validateRemotePeerWorkMeasurements(req *model.RunRequest, response model.RunResponse) error {
-	peerRequest := req.Interactor != nil || req.Communication != nil
+	peerRequest := req.Interactor != nil || req.Communication != nil || spjPeerClocksRequested(req)
 	if !req.WorkMeasurement || !peerRequest {
 		if len(response.WorkMeasurements) != 0 {
 			return fmt.Errorf("invalid remote result: unsolicited per-role work measurements")
@@ -118,6 +121,9 @@ func validateRemotePeerWorkMeasurements(req *model.RunRequest, response model.Ru
 	}
 	for i, expected := range roles {
 		observed := response.WorkMeasurements[i]
+		if observed.CheckerScore != nil && (expected.role != "checker" || req.SPJ == nil || !req.SPJ.EmitScore) {
+			return fmt.Errorf("invalid remote result: unsolicited checker score")
+		}
 		if observed.Role != expected.role || observed.ProgramID != expected.programID ||
 			(observed.ParticipantIndex == nil) != (expected.participantIndex == nil) ||
 			(observed.ParticipantIndex != nil && *observed.ParticipantIndex != *expected.participantIndex) {

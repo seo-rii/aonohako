@@ -121,6 +121,9 @@ func ordinaryTimePolicy(req *model.RunRequest, cfg durante.Config, tuning config
 
 func peerRuntimeRequest(req *model.RunRequest, role workMeasurementRole) (*model.RunRequest, error) {
 	if req.Communication == nil {
+		if role.role == "checker" && req.SPJ != nil {
+			return spjRunRequest(req), nil
+		}
 		if role.role == "interactor" && req.Interactor != nil {
 			return interactorRunRequest(req), nil
 		}
@@ -179,13 +182,13 @@ func DescribeWorkMeasurementRuntimeOptions(req *model.RunRequest, execution conf
 			return nil, err
 		}
 		if req.WorkMeasurementLimits != nil {
-			if req.Interactor != nil || req.Communication != nil {
+			if req.Interactor != nil || req.Communication != nil || req.SPJ != nil {
 				return nil, fmt.Errorf("peer runtime options cannot use an ordinary raw envelope")
 			}
 			raw := workMeasurementRawRequest(roleReq)
 			roleReq = &raw
 		}
-		options, err := effectiveRuntimeOptions(roleReq, execution.WorkMeasurement, tuning)
+		options, err := peerRuntimeOptions(role, roleReq, execution.WorkMeasurement, tuning)
 		if err != nil {
 			return nil, fmt.Errorf("%s %q: %w", role.role, role.programID, err)
 		}

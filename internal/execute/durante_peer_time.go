@@ -64,7 +64,7 @@ func workMeasurementPeerTimePlans(req *model.RunRequest, cfg durante.Config, run
 		if err != nil {
 			return nil, err
 		}
-		policy, runtimeID, err := timePolicyForRequest(roleReq, cfg, optionalRuntimeTuning(runtimeTuning))
+		policy, runtimeID, err := peerTimePolicy(role, roleReq, cfg, optionalRuntimeTuning(runtimeTuning))
 		if err != nil {
 			return nil, fmt.Errorf("work_measurement_peer_time %s %q: %w", role.role, role.programID, err)
 		}
@@ -143,6 +143,9 @@ func finishWorkMeasurementPeerTime(req *model.RunRequest, response model.RunResp
 func validatePeerClockOutcome(req *model.RunRequest, response model.RunResponse) error {
 	if response.CPUTimeNormalization != nil {
 		return fmt.Errorf("invalid peer clock result: normalized CPU accounting")
+	}
+	if spjPeerClocksRequested(req) {
+		return validateSPJPeerClockVerdict(req, response)
 	}
 	if req.Interactor != nil {
 		return validateInteractivePeerClockVerdict(response)
