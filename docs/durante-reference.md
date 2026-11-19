@@ -259,6 +259,70 @@ setting retains its C/C++ restriction.
 For API configuration and unchanged verdict semantics, see
 [Durante integration](durante.md#explicit-reference-time-calculator).
 
+## Validate a frozen policy on external C++ solutions
+
+Use an external manifest to check an existing candidate on programs that were
+kept out of model development. Choose the programs, inputs, independently
+computed stdout and policy before running them. Keep the exact files, their
+provenance and the host reservation with the measurement record.
+
+The manifest is a single UTF-8 JSON document. Each workload contains the full
+CPP20 source and one or more numbered cases. For example, this short program
+illustrates the format. Accuracy validation uses inputs long enough to pass
+the native duration gate.
+
+```json
+{
+  "schema": 1,
+  "language": "CPP20",
+  "workloads": [{
+    "id": "sum-pair",
+    "source": "#include <iostream>\nint main() { long long a,b; std::cin >> a >> b; std::cout << a+b; }",
+    "cases": [{"scale": 1, "input": "5 8\n", "expected_stdout": "13\n"}]
+  }]
+}
+```
+
+Use a unique workload ID (1–64 ASCII letters, digits, dots, hyphens or
+underscores, starting with a letter or digit), positive distinct scales per
+workload, and a nonblank stdout oracle. An explicit empty input is supported.
+The manifest allows up to 64 workloads, 128 total cases and 16 MiB of JSON.
+Source and input each have a 1 MiB limit and each oracle has a 64 KiB limit.
+
+Supply a standalone diagnostic policy with the exact runtime image, v7 engine,
+dispatch and CPUID profile. The command supports the instruction/REP, split
+MOVS/STOS and latency/REP formulas. The latency formula needs the v1 latency
+counter enabled during collection. Keep the policy outside the judge
+configuration. In the collection container shown above, mount the two input
+files read-only and keep the output directory private.
+
+```sh
+/validation/reference-tool collect --language CPP20 \
+  --validation-manifest /inputs/manifest.json --frozen-policy /inputs/frozen-policy.json \
+  --repetitions 3 --metered-cpu-ms 60000 --metered-wall-ms 90000 --output /output/heldout
+```
+
+The collector hashes the exact bytes of both files before compiling. Each
+case reuses its compiled artifact for all native-before, Durante and native-after
+executions. Every external observation belongs to the validation split.
+Evaluate the collected dataset offline with the same files.
+
+```sh
+/tmp/durante-reference validate --input "$output/heldout/dataset.json" \
+  --validation-manifest "$inputs/manifest.json" --frozen-policy "$inputs/frozen-policy.json" \
+  --output "$output/evaluation"
+```
+
+`validate` checks the default gates in the table above on every case, including
+the prediction error on every repetition. Its only output file is
+`evaluation.json`, which records the dataset, manifest and policy digests. Exit
+0 means the frozen policy passed on this cohort, 2 means a measured quality or
+error gate failed, and 1 means the inputs or execution could not be validated.
+A changed input file requires a fresh collection. `fit` accepts only the
+built-in training corpora. For operating decisions, record the host CPU,
+affinity, competing load and how the selected programs represent the intended
+submission population.
+
 ## Paired CPP20 qualification, 2026-11-18
 
 A shared AMD EPYC 7B12 KVM host ran the v6 engine with fixed `x86-64-v2`

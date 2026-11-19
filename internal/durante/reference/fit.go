@@ -27,13 +27,17 @@ type referenceCase struct {
 // Invalid observations return an error; measured instability or an unsuitable
 // two-coefficient model returns a failed evaluation with explicit reasons.
 func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
+	return evaluateReference(dataset, options, nil, nil)
+}
+
+func evaluateReference(dataset Dataset, options FitOptions, external *ValidationCorpus, frozen *durante.TimePolicy) (Evaluation, error) {
 	evaluation := Evaluation{Schema: Schema, Authority: durante.Authority, Options: options}
 	invalid := func(err error) (Evaluation, error) {
 		evaluation.Failures = append(evaluation.Failures, err.Error())
 		return evaluation, err
 	}
 	useLatency := options.Method == durante.TimeMethodLatencyBoundREP
-	if options.Method != "" && options.Method != durante.TimeMethod && !useLatency {
+	if frozen == nil && options.Method != "" && options.Method != durante.TimeMethod && !useLatency {
 		return invalid(fmt.Errorf("reference fitting supports only %s and %s", durante.TimeMethod, durante.TimeMethodLatencyBoundREP))
 	}
 	if options.MinRepetitions < 3 || options.MinRepetitions > 9 || options.MinNativeNs == 0 {
@@ -42,7 +46,19 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 	if dataset.Schema != Schema || !dataset.Complete || len(dataset.Failures) != 0 {
 		return invalid(fmt.Errorf("reference dataset is incomplete, failed, or has an incompatible schema/corpus"))
 	}
-	profile, err := referenceDatasetProfile(dataset)
+	var profile CorpusProfile
+	var err error
+	if frozen == nil {
+		profile, err = referenceDatasetProfile(dataset)
+	} else {
+		if external == nil || dataset.CorpusID != ExternalCorpusID || dataset.CorpusSHA256 != external.SHA256() {
+			return invalid(fmt.Errorf("dataset does not match the external CPP20 validation corpus digest"))
+		}
+		if err := frozen.Validate(); err != nil {
+			return invalid(fmt.Errorf("frozen time policy: %w", err))
+		}
+		profile, err = referenceCollectionProfile(dataset)
+	}
 	if err != nil {
 		return invalid(err)
 	}
@@ -76,6 +92,15 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 		contract.InstructionNSNumerator = 0
 		contract.LatencyX16NSNumerator = 1
 	}
+	if options.Method == durante.TimeMethodREPBreakdown {
+		contract.Method = options.Method
+		contract.REPByteNSNumerator = 0
+		contract.MOVSByteNSNumerator, contract.STOSByteNSNumerator = 1, 1
+	}
+	if frozen != nil && (frozen.RuntimeID != runtimeID || frozen.Family != profile.Family || frozen.EngineProfile != durante.EngineProfile ||
+		frozen.DispatchProfile != dataset.DispatchProfile || frozen.CPUIDProfile != dataset.CPUIDProfile) {
+		return invalid(fmt.Errorf("frozen policy does not match the collected runtime or measurement profile"))
+	}
 	if err := contract.Validate(); err != nil {
 		return invalid(fmt.Errorf("fit options: %w", err))
 	}
@@ -91,7 +116,16 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 		return invalid(fmt.Errorf("dataset limits: %w", err))
 	}
 
-	cases, err := referenceCases(dataset, contract)
+	var corpus []Workload
+	if frozen == nil {
+		corpus, err = CorpusForLanguage(dataset.SourceLanguage, false)
+	} else {
+		corpus, err = external.snapshot()
+	}
+	if err != nil {
+		return invalid(err)
+	}
+	cases, err := referenceCases(dataset, corpus, contract)
 	if err != nil {
 		return invalid(err)
 	}
@@ -99,8 +133,12 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 		native := make([]uint64, 0, 2*len(item.samples))
 		minimumNative := uint64(math.MaxUint64)
 		instructions, rep := make([]uint64, 0, len(item.samples)), make([]uint64, 0, len(item.samples))
-		var latency []uint64
+		var latency, movs, stos []uint64
 		for _, sample := range item.samples {
+			if contract.Formula() == durante.TimeMethodREPBreakdown {
+				part := sample.Metered.WorkMeasurement.REPBreakdown
+				movs, stos = append(movs, part.MOVSBytes), append(stos, part.STOSBytes)
+			}
 			if bound := sample.Metered.WorkMeasurement.LatencyBound; bound != nil {
 				latency = append(latency, bound.CyclesX16)
 			}
@@ -126,6 +164,14 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 				evaluation.Failures = append(evaluation.Failures, label+": latency bound spread exceeds max_work_spread_ppm")
 			}
 		}
+		if len(movs) != 0 {
+			if referenceExceedsPPM(referenceRange(movs), referenceMedian(movs), options.MaxWorkSpreadPPM) {
+				evaluation.Failures = append(evaluation.Failures, label+": MOVS byte spread exceeds max_work_spread_ppm")
+			}
+			if referenceExceedsPPM(referenceRange(stos), referenceMedian(stos), options.MaxWorkSpreadPPM) {
+				evaluation.Failures = append(evaluation.Failures, label+": STOS byte spread exceeds max_work_spread_ppm")
+			}
+		}
 		evaluation.Cases = append(evaluation.Cases, row)
 		if minimumNative < options.MinNativeNs {
 			evaluation.Failures = append(evaluation.Failures, label+": native observation below min_native_ns")
@@ -140,12 +186,17 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 			evaluation.Failures = append(evaluation.Failures, label+": REP spread exceeds max_work_spread_ppm")
 		}
 	}
-	policy, err := fitReferenceCoefficients(cases, contract)
-	if err != nil {
-		evaluation.Failures = append(evaluation.Failures, err.Error())
-		return evaluation, nil
+	var policy durante.TimePolicy
+	if frozen == nil {
+		policy, err = fitReferenceCoefficients(cases, contract)
+		if err != nil {
+			evaluation.Failures = append(evaluation.Failures, err.Error())
+			return evaluation, nil
+		}
+		evaluation.CandidatePolicy = &policy
+	} else {
+		policy = *frozen
 	}
-	evaluation.CandidatePolicy = &policy
 	for index, item := range cases {
 		row := &evaluation.Cases[index]
 		for repetition, sample := range item.samples {
@@ -182,17 +233,13 @@ func Fit(dataset Dataset, options FitOptions) (Evaluation, error) {
 	return evaluation, nil
 }
 
-func referenceCases(dataset Dataset, contract durante.TimePolicy) ([]*referenceCase, error) {
+func referenceCases(dataset Dataset, corpus []Workload, contract durante.TimePolicy) ([]*referenceCase, error) {
 	type key struct {
 		workload string
 		scale    int
 	}
 	cases := []*referenceCase{}
 	byKey := map[key]*referenceCase{}
-	corpus, err := CorpusForLanguage(dataset.SourceLanguage, false)
-	if err != nil {
-		return nil, err
-	}
 	for _, workload := range corpus {
 		for _, fixture := range workload.Cases {
 			item := &referenceCase{workload: workload, fixture: fixture}
@@ -296,7 +343,7 @@ func validateReferenceCPU(response model.RunResponse, cpuLimitMs, wallLimitMs in
 }
 
 func validateReferenceNative(response model.RunResponse, limits model.Limits) error {
-	if response.Status != model.RunStatusAccepted || response.ExitCode == nil || *response.ExitCode != 0 || response.VerdictSource != "stdout" || response.WorkMeasurement != nil || response.WorkMeasurementExecution != nil || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil {
+	if response.Status != model.RunStatusAccepted || response.ExitCode == nil || *response.ExitCode != 0 || response.VerdictSource != "stdout" || response.Score != nil || response.WorkMeasurement != nil || response.WorkMeasurementExecution != nil || len(response.WorkMeasurements) != 0 || len(response.Steps) != 0 || response.Match != nil {
 		return fmt.Errorf("requires an accepted, normally exited unmetered ordinary run with matching output")
 	}
 	return validateReferenceCPU(response, limits.TimeMs, limits.WallTimeMs)
@@ -316,6 +363,9 @@ func validateReferenceMetered(response model.RunResponse, dataset Dataset, contr
 	report := response.WorkMeasurement
 	if report == nil || !report.ValidInstallationIdentity() {
 		return fmt.Errorf("missing or incompatible Durante installation identity")
+	}
+	if report.RuntimeDeterminism != dataset.RuntimeDeterminism {
+		return fmt.Errorf("metered runtime determinism disagrees with dataset")
 	}
 	if err := validateReferenceLatencyBound(report, dataset.LatencyBoundVersion); err != nil {
 		return err

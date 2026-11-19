@@ -40,7 +40,7 @@ func main() {
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: durante-reference collect|fit|describe-runtime-options [options]")
+		fmt.Fprintln(stderr, "usage: durante-reference collect|fit|validate|describe-runtime-options [options]")
 		return 1
 	}
 	switch args[0] {
@@ -48,10 +48,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return collect(ctx, args[1:], stdout, stderr)
 	case "fit":
 		return fit(ctx, args[1:], stdout, stderr)
+	case "validate":
+		return validateFrozen(ctx, args[1:], stdout, stderr)
 	case "describe-runtime-options":
 		return describeRuntimeOptions(ctx, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintln(stderr, "expected collect, fit or describe-runtime-options")
+		fmt.Fprintln(stderr, "expected collect, fit, validate or describe-runtime-options")
 		return 1
 	}
 }
@@ -61,6 +63,8 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	output := flags.String("output", "", "new private output directory (required)")
 	language := flags.String("language", "CPP20", "source profile: CPP20, PYTHON3, PYPY3 or RUST2024")
+	manifest := flags.String("validation-manifest", "", "external held-out CPP20 workloads (requires --frozen-policy)")
+	frozen := flags.String("frozen-policy", "", "standalone diagnostic policy fixed before external collection")
 	memoryMB := flags.Int("memory-mb", 0, "native/raw RSS limit in MiB (0: corpus default, CPP20 256; other profiles 512)")
 	meteredCPU := flags.Int("metered-cpu-ms", 0, "instrumented CPU limit in ms (0 uses 10000)")
 	meteredWall := flags.Int("metered-wall-ms", 0, "instrumented wall limit in ms (0 uses 30000)")
@@ -88,6 +92,15 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	var validationCorpus *reference.ValidationCorpus
+	var policy *reference.FrozenPolicy
+	if *manifest != "" || *frozen != "" {
+		validationCorpus, policy, err = readValidationInputs(*manifest, *frozen)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
 	if err := os.Mkdir(*output, 0700); err != nil {
 		fmt.Fprintln(stderr, "create fresh output directory:", err)
 		return 1
@@ -97,6 +110,7 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	path := filepath.Join(*output, "dataset.json")
 	dataset, collectErr := reference.Collect(ctx, cfg, reference.CollectOptions{
 		Language: profile.SourceLanguage, MemoryMB: *memoryMB, Smoke: *smoke, Repetitions: *repetitions,
+		ValidationCorpus: validationCorpus, FrozenPolicy: policy,
 		MeteredCPUTimeMs: *meteredCPU, MeteredWallTimeMs: *meteredWall,
 		OnSample: func(snapshot reference.Dataset) error { return writeJSON(path, snapshot) },
 	})
@@ -128,16 +142,16 @@ func fit(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	input := flags.String("input", "", "collected dataset.json (required)")
 	output := flags.String("output", "", "new private output directory (required)")
-	var options reference.FitOptions
+	options := reference.DefaultFitOptions()
 	flags.StringVar(&options.Method, "method", durante.TimeMethod, "conversion method ("+durante.TimeMethod+" or "+durante.TimeMethodLatencyBoundREP+")")
 	flags.StringVar(&options.ModelID, "model-id", "", "explicit diagnostic model identity (required)")
 	flags.Uint64Var(&options.ModelVersion, "model-version", 0, "positive model version (required)")
 	flags.StringVar(&options.ReferenceID, "reference-id", "", "reference collection identity (required)")
-	flags.IntVar(&options.MinRepetitions, "min-repetitions", 3, "minimum complete repetitions per case")
-	minimumMS := flags.Uint64("min-native-ms", 20, "minimum native CPU time for every observation")
-	flags.Uint64Var(&options.MaxNativeSpreadPPM, "max-native-spread-ppm", 100000, "maximum native range/median (100000 = 10%)")
-	flags.Uint64Var(&options.MaxWorkSpreadPPM, "max-work-spread-ppm", 1000, "maximum counter range/median (1000 = 0.1%)")
-	flags.Uint64Var(&options.MaxErrorPPM, "max-error-ppm", 200000, "maximum per-observation prediction error (200000 = 20%)")
+	flags.IntVar(&options.MinRepetitions, "min-repetitions", options.MinRepetitions, "minimum complete repetitions per case")
+	minimumMS := flags.Uint64("min-native-ms", options.MinNativeNs/1_000_000, "minimum native CPU time for every observation")
+	flags.Uint64Var(&options.MaxNativeSpreadPPM, "max-native-spread-ppm", options.MaxNativeSpreadPPM, "maximum native range/median (100000 = 10%)")
+	flags.Uint64Var(&options.MaxWorkSpreadPPM, "max-work-spread-ppm", options.MaxWorkSpreadPPM, "maximum counter range/median (1000 = 0.1%)")
+	flags.Uint64Var(&options.MaxErrorPPM, "max-error-ppm", options.MaxErrorPPM, "maximum per-observation prediction error (200000 = 20%)")
 	if err := flags.Parse(args); err != nil {
 		return 1
 	}
