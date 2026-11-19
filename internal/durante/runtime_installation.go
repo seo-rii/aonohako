@@ -22,7 +22,7 @@ const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32
 const releaseCore = "lib64/release/libdynamorio.so"
 
 // Updated together with the complete third_party/durante snapshot.
-const sourceCommit = "238193f90f5896b300563180e7939088ac8c346c"
+const sourceCommit = "3d070ca527263bf3b1bb6bb074f1d8726923063c"
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
 // Matching hashes do not attest application counters or an adversarial host.
@@ -83,6 +83,8 @@ func (r *Report) ValidShadowInstallationIdentity() bool {
 	switch r.EngineProfile {
 	case EngineProfile:
 		return r.ValidInstallationIdentity()
+	case "dynamorio-11.3-durante-v6-vm32m":
+		return r.Installation.validForSource("238193f90f5896b300563180e7939088ac8c346c")
 	case "dynamorio-11.3-durante-v5-vm32m":
 		// The first worker with shadow support used the same runtime patches
 		// as v6 and a client that did not emit latency bounds.
