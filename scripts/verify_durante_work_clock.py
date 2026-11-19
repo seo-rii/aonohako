@@ -6,8 +6,9 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import urllib.error
 
-from verify_durante_observation import compile_cpp, post, require, server
+from verify_durante_observation import RESOURCE_POLICY, compile_cpp, post, require, server
 
 
 PROGRAM = """#include <cstdio>
@@ -62,15 +63,23 @@ def main():
     operator = {"AONOHAKO_DURANTE_JUDGE_MODE": "on", "AONOHAKO_DURANTE_JUDGE_FAMILIES": "cpp",
                 "AONOHAKO_DURANTE_TIME_MODELS": json.dumps(registry)}
 
-    def run(url, mode, status, state):
-        raw = hard if mode != "w" else {**hard, "cpu_time_ms": 1000, "wall_time_ms": 1000}
+    worker_max = {**hard, "cpu_time_ms": 12000, "wall_time_ms": 30000}
+    controller_max = {**hard, "cpu_time_ms": 9000, "wall_time_ms": 20000}
+
+    def with_limits(maximum):
+        return {**operator, "AONOHAKO_DURANTE_RESOURCE_POLICY": json.dumps({**RESOURCE_POLICY, "max_limits": maximum})}
+
+    def run(url, mode, status, state, raw, *, omitted=False):
         request = {**template, "stdin": mode, "work_measurement_judge": True,
                    "work_measurement_time": True, "work_measurement_limits": raw}
+        if omitted:
+            del request["work_measurement_limits"]
         result, _ = post(url, "/execute", request)
         print(json.dumps({"case": mode, "url": url, "result": result}), flush=True)
         require(result.get("status") == status and result["work_measurement_judgment"]["state"] == state,
                 f"{mode}: {result.get('reason')}")
         envelope = result["work_measurement_execution"]
+        require(envelope["raw_limits"] == raw, f"{mode}: wrong raw watchdog envelope")
         clock = envelope["clock"]
         require(clock["budget"] == 3_000_000 and clock["model_binding"] and
                 clock["metric"] == "model_weighted_nanoseconds_v1", f"{mode}: model binding")
@@ -86,12 +95,27 @@ def main():
             require("wall" in envelope["termination_source"] and not result.get("score"),
                     "idle watchdog misattributed to measured work")
 
-    with server(args, 18764, False, operator_env=operator) as worker:
-        with server(args, 18765, False, remote=worker, operator_env=operator) as controller:
-            for url in (worker, controller):
-                run(url, "f", "Accepted", "complete")
-                run(url, "b", "Time Limit Exceeded", "budget_exceeded")
-                run(url, "w", "Container Initialization Failed", "resource_exhausted")
+    with server(args, 18764, False, operator_env=with_limits(worker_max)) as worker:
+        with server(args, 18765, False, remote=worker, operator_env=with_limits(controller_max)) as controller:
+            for url, maximum in ((worker, worker_max), (controller, controller_max)):
+                run(url, "f", "Accepted", "complete", maximum, omitted=True)
+                run(url, "b", "Time Limit Exceeded", "budget_exceeded", maximum, omitted=True)
+                run(url, "f", "Accepted", "complete", hard)
+                run(url, "w", "Container Initialization Failed", "resource_exhausted",
+                    {**hard, "cpu_time_ms": 1000, "wall_time_ms": 1000})
+                for omitted in (True, False):
+                    nominal = (maximum if omitted else hard)["cpu_time_ms"]
+                    request = {**template, "work_measurement_judge": True, "work_measurement_time": True,
+                               "limits": {**template["limits"], "time_ms": nominal, "wall_time_ms": nominal}}
+                    if omitted:
+                        del request["work_measurement_limits"]
+                    try:
+                        post(url, "/execute", request)
+                    except urllib.error.HTTPError as error:
+                        require(error.code == 400 and "greater than nominal" in json.load(error)["message"],
+                                "wrong HTTP admission error for tight raw watchdog")
+                    else:
+                        raise RuntimeError("admitted a raw watchdog equal to the nominal clock")
         model["coefficients"]["instruction_ns_numerator"] += 1
         other = {**operator, "AONOHAKO_DURANTE_TIME_MODELS": json.dumps(registry)}
         with server(args, 18765, False, remote=worker, operator_env=other) as controller:
