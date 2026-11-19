@@ -129,10 +129,14 @@ func (s *Service) supportsCommunicationV1() bool {
 	}, s.cgroupParentDir, s.communicationEnabled)
 }
 
-func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) (response model.RunResponse) {
+func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, plans map[peerTimeIdentity]peerTimePlan) (response model.RunResponse) {
 	startedAt := timing.MonotonicNow()
 	competitive := req.Communication != nil && req.Communication.Version == 2
+	online := req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2
 	defer func() {
+		if online && (response.StartedParticipants == 0 || (response.Match != nil && response.Match.Outcome == "judge_error")) {
+			response.Status, response.Score = model.RunStatusInitFail, nil
+		}
 		if req.WorkMeasurement && len(response.WorkMeasurements) == 0 && response.StartedParticipants == 0 {
 			if roles, err := workMeasurementRequestRoles(req); err == nil {
 				for _, role := range roles {
@@ -250,6 +254,15 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		}
 	}
 
+	if online {
+		firstSeat := 0
+		seatWall := int64(plans[peerTimeKey("participant", participantProgram.ID, &firstSeat)].rawLimits.WallTimeMs)
+		managerWall := int64(plans[peerTimeKey("manager", managerProgram.ID, nil)].rawLimits.WallTimeMs)
+		if seatWall <= 0 || managerWall <= 0 || seatWall > participantWallMs || managerWall > managerWallMs {
+			return communicationFailure("peer work clock wall allowance exceeds runner budget", "communication:admission", 0)
+		}
+		participantWallMs, managerWallMs = seatWall, managerWall
+	}
 	participantTemplate, initFailure := prepareCommunicationProcess(participantReq, tuning, "participant")
 	if initFailure != nil {
 		return communicationFailure(initFailure.Reason, "communication:participant:init", 0)
@@ -291,11 +304,25 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	if req.WorkMeasurement {
 		for i := range participants {
 			identity := communicationParticipantIdentity(i)
+			if online {
+				id := participantProgram.ID
+				if competitive {
+					id = participantPrograms[i].ID
+				}
+				// Legacy communication clones a program and request, but each
+				// seat must own its request, clock file and allowance.
+				seatReq := *participants[i].request
+				applyPeerWorkClock(&seatReq, plans[peerTimeKey("participant", id, &i)])
+				participants[i].request = &seatReq
+			}
 			meter, err := durante.Prepare(ctx, participants[i].ws.RootDir, s.workMeasurement, participants[i].request.Lang, int(identity.uid), int(identity.gid))
 			if err != nil {
 				return communicationFailure("participant durante preparation failed: "+err.Error(), "communication:participant:durante", 0)
 			}
 			participants[i].meter = meter
+		}
+		if online {
+			applyPeerWorkClock(manager.request, plans[peerTimeKey("manager", managerProgram.ID, nil)])
 		}
 		meter, err := durante.Prepare(ctx, manager.ws.RootDir, s.workMeasurement, manager.request.Lang, int(security.CommunicationManagerUID), int(security.CommunicationManagerGID))
 		if err != nil {
@@ -345,7 +372,15 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		slog.Warn("communication cgroup creation failed", "err", err)
 		return communicationFailure("communication aggregate cgroup setup failed", "communication:cgroup", 0)
 	}
-	defer cleanupSandboxCgroup("communication", aggregate)
+	defer func() {
+		if err := cleanupSandboxCgroup("communication", aggregate); err != nil && online {
+			response.Status, response.Score = model.RunStatusInitFail, nil
+			response.Reason, response.VerdictSource = "communication process group cleanup failed", "communication:aggregate_cleanup"
+			if competitive {
+				response.Match = communicationMatchFailure(req, response.Reason)
+			}
+		}
+	}()
 
 	communicationCtx, cancelCommunication := context.WithCancel(ctx)
 	killDone := make(chan struct{})
@@ -471,7 +506,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		cancelCommunication()
 		<-managerFilesMonitorDone
 	}()
-	participantCancels := make([]context.CancelFunc, len(participants))
+	participantCancels := make([]context.CancelCauseFunc, len(participants))
 	participantTimers := make([]*time.Timer, len(participants))
 	participantDeadlineNano := make([]atomic.Int64, len(participants))
 	var startedParticipants atomic.Int32
@@ -482,7 +517,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	var participantCancellationNano atomic.Int64
 
 	for i := range participants {
-		participantCtx, cancelParticipant := context.WithCancel(communicationCtx)
+		participantCtx, cancelParticipant := context.WithCancelCause(communicationCtx)
 		participantCancels[i] = cancelParticipant
 		process := participants[i]
 		process.args = append(process.args, strconv.Itoa(i))
@@ -490,7 +525,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		participantOutput := &communicationOutputWriter{
 			target:    pipe.stdoutWrite,
 			remaining: int64(communicationOutputLimitBytes(process.request)),
-			onLimit:   cancelParticipant,
+			onLimit:   func() { cancelParticipant(context.Canceled) },
 		}
 		go func(index int, prepared communicationPreparedProcess) {
 			started := false
@@ -528,15 +563,20 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				res.Reason = "participant output limit exceeded"
 				res.VerdictSource = "output_limit"
 			}
+			completedAt := time.Now()
+			interrupted := participantCtx.Err() != nil
+			if online {
+				finishPeerWorkClock(prepared.request, prepared.meter, &res, peerWorkClockCause(ctx, participantCtx), "participant")
+			}
 			process := communicationProcessResult{
 				started:     started,
 				entryPoint:  prepared.entryPoint,
 				participant: index,
 				request:     prepared.request,
 				result:      res,
-				completedAt: time.Now(),
+				completedAt: completedAt,
 				meter:       prepared.meter,
-				interrupted: participantCtx.Err() != nil,
+				interrupted: interrupted,
 			}
 			if deadlineAt := participantDeadlineNano[index].Load(); deadlineAt != 0 {
 				process.wallDeadlineAt = time.Unix(0, deadlineAt)
@@ -546,8 +586,8 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	}
 
 	var managerDeadlineNano atomic.Int64
-	managerCtx, cancelManager := context.WithCancel(communicationCtx)
-	defer cancelManager()
+	managerCtx, cancelManager := context.WithCancelCause(communicationCtx)
+	defer cancelManager(context.Canceled)
 	go func() {
 		started := false
 		res := executeSandboxCommandWithStreams(
@@ -576,7 +616,13 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			tuning,
 			aggregate.Path,
 		)
+		completedAt := time.Now()
+		interrupted := managerCtx.Err() != nil
+		if online {
+			finishPeerWorkClock(manager.request, manager.meter, &res, peerWorkClockCause(ctx, managerCtx), "manager")
+		}
 		process := communicationProcessResult{
+			completedAt: completedAt,
 			started:     started,
 			entryPoint:  manager.entryPoint,
 			manager:     true,
@@ -584,7 +630,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			request:     manager.request,
 			result:      res,
 			meter:       manager.meter,
-			interrupted: managerCtx.Err() != nil,
+			interrupted: interrupted,
 		}
 		if deadlineAt := managerDeadlineNano.Load(); deadlineAt != 0 {
 			process.wallDeadlineAt = time.Unix(0, deadlineAt)
@@ -651,20 +697,24 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	if !released {
 		close(releaseTargets)
 		released = true
+		wallCause := context.Canceled
+		if online {
+			wallCause = context.DeadlineExceeded
+		}
 		for i := range participantTimers {
 			cancel := participantCancels[i]
 			participantTimers[i] = time.AfterFunc(time.Duration(participantWallMs)*time.Millisecond, func() {
-				if competitive {
+				if competitive || online {
 					participantDeadlineNano[i].CompareAndSwap(0, time.Now().UnixNano())
 				}
-				cancel()
+				cancel(wallCause)
 			})
 		}
 		managerTimer := time.AfterFunc(time.Duration(managerWallMs)*time.Millisecond, func() {
-			if competitive {
+			if competitive || online {
 				managerDeadlineNano.CompareAndSwap(0, time.Now().UnixNano())
 			}
-			cancelManager()
+			cancelManager(wallCause)
 		})
 		defer managerTimer.Stop()
 	}
@@ -676,7 +726,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		}
 		for _, cancel := range participantCancels {
 			if cancel != nil {
-				cancel()
+				cancel(context.Canceled)
 			}
 		}
 	}()
@@ -733,7 +783,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		managerProtocol = <-managerResultCh
 	}
 
-	if competitive {
+	if competitive || online {
 		for i := range results {
 			if results[i].manager {
 				results[i].resultProtocolAt = managerProtocol.completedAt
@@ -742,6 +792,8 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		if canceledAt := participantCancellationNano.Load(); canceledAt != 0 {
 			participantCancellationAt = time.Unix(0, canceledAt)
 		}
+	}
+	if competitive {
 		response = buildCommunicationMatchResponse(req, results, managerProtocol.result.match, managerProtocol.err,
 			int(startedParticipants.Load()), timing.SinceMillis(startedAt), firstParticipantFailure, participantCancellationAt, ctx.Err())
 	} else {
@@ -750,28 +802,39 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			timing.SinceMillis(startedAt), firstParticipantFailure,
 		)
 	}
+	if online && !competitive {
+		finalizeLegacyCommunicationClock(req, &response, results, managerProtocol, firstParticipantFailure, participantCancellationAt, ctx.Err())
+	}
 	if aggregate.Path != "" {
 		stats, statErr := cgroup.ReadStats(aggregate.Path)
 		if statErr != nil {
 			slog.Warn("communication aggregate cgroup stats failed", "path", aggregate.Path, "err", statErr)
-			if competitive {
-				response.Status = model.RunStatusRE
-				response.Reason = "competitive aggregate resource accounting failed"
+			if competitive || online {
+				response.Status = model.RunStatusInitFail
+				if competitive {
+					response.Status = model.RunStatusRE
+				}
+				response.Reason = "communication aggregate resource accounting failed"
 				response.VerdictSource = "communication:aggregate_accounting"
-				response.Match = communicationMatchFailure(req, response.Reason)
+				if competitive {
+					response.Match = communicationMatchFailure(req, response.Reason)
+				}
 				response.Score = nil
 			}
 		} else {
 			if peakKB := (stats.MemoryPeakBytes + 1023) / 1024; peakKB > response.MemoryKB {
 				response.MemoryKB = peakKB
 			}
-			if response.Status == model.RunStatusAccepted || response.Status == model.RunStatusWA {
+			if online || response.Status == model.RunStatusAccepted || response.Status == model.RunStatusWA {
 				if stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.PidsMaxEvents() > 0 {
 					response.Status = model.RunStatusRE
 					response.Reason = "communication aggregate resource limit exceeded"
 					response.VerdictSource = "communication:aggregate"
 					zero := 0.0
 					response.Score = &zero
+					if online {
+						response.Status, response.Score = model.RunStatusInitFail, nil
+					}
 					if competitive {
 						response.Match = communicationMatchFailure(req, response.Reason)
 						response.Score = nil
@@ -1216,7 +1279,9 @@ func communicationProcessFailed(process communicationProcessResult) bool {
 }
 
 func publishCommunicationManagerProcess(processCh chan<- communicationProcessResult, process communicationProcessResult, closeManagerFiles func()) {
-	process.completedAt = time.Now()
+	if process.completedAt.IsZero() {
+		process.completedAt = time.Now()
+	}
 	processCh <- process
 	closeManagerFiles()
 }
@@ -1231,6 +1296,9 @@ func cancelCommunicationAfterStartupBoundary(cancel context.CancelFunc, allParti
 }
 
 func communicationParticipantFailureOverridesManager(process communicationProcessResult, managerCompletedAt time.Time) bool {
+	if process.request != nil && process.request.WorkMeasurementClock != nil {
+		return process.result.VerdictSource != "durante_peer_cancelled"
+	}
 	if process.result.VerdictSource == "sandbox_helper_oom" || process.result.VerdictSource == "sandbox_init" {
 		return true
 	}

@@ -211,6 +211,98 @@ func TestDuranteCommunicationIntegration(t *testing.T) {
 		checkComplete(t, response)
 	})
 	for _, version := range []int{1, 2} {
+		for _, tc := range []struct {
+			name, seat0, seat1, manager string
+			smallSeat, smallManager     bool
+		}{
+			{"complete", "stream", "stream", "stream", false, false},
+			{"participant", "burn", "wait", "wait", true, false},
+			{"manager", "wait", "wait", "burn", false, true},
+			{"wall", "wait", "wait", "wait", false, false},
+			{"output", "stream", "stream", "stream", false, false},
+			{"manager_shutdown", "wait", "wait", "early", false, false},
+		} {
+			t.Run(fmt.Sprintf("online_peer_clock_v%d_%s", version, tc.name), func(t *testing.T) {
+				req := request(version, tc.seat0, tc.seat1, tc.manager)
+				if tc.name == "output" {
+					req.Limits.OutputBytes = 128
+				}
+				if tc.name == "wall" {
+					req.Limits.TimeMs = 800
+				}
+				addPeerTimeIntegrationBudgets(t, req)
+				clockCfg := bindIntegrationRuntimeOptions(t, peerTimeIntegrationConfig(t, cfg, false), req)
+				clockCfg.ResourcePolicy.MaxLimits.CPUTimeMs = 10000
+				clockCfg.CPUIDProfile = "x86-64-v2"
+				for i := range clockCfg.TimeModels.Profiles {
+					clockCfg.TimeModels.Profiles[i].CPUIDProfile = clockCfg.CPUIDProfile
+				}
+				clockCfg.Judge = durante.JudgePolicy{Enabled: true, VerdictsAllowed: true, Families: []string{"cpp"}, Integrity: durante.JudgeIntegrityOff}
+				req.WorkMeasurementPeerTime.Version = 2
+				for i := range req.WorkMeasurementPeerTime.Budgets {
+					b := &req.WorkMeasurementPeerTime.Budgets[i]
+					b.TimeMs = 200
+					if (tc.smallManager && b.Role == "manager") || (tc.smallSeat && b.ParticipantIndex != nil && *b.ParticipantIndex == 0) {
+						b.TimeMs = 3
+					}
+				}
+				setup := serviceConfig
+				setup.MaxActiveRuns = 1
+				setup.Execution.WorkMeasurement = clockCfg
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				defer cancel()
+				response := NewWithConfig(setup).Run(ctx, req, Hooks{})
+				if err := validateRemoteWorkMeasurementPeerTime(req, response, clockCfg); err != nil {
+					t.Fatalf("role evidence rejected: %v; %+v; roles: %+v", err, response, response.WorkMeasurements)
+				}
+				if err := validateCommunicationPeerClockVerdict(req, response); err != nil {
+					t.Fatalf("incorrect clock outcome: %v; %+v; roles: %+v", err, response, response.WorkMeasurements)
+				}
+				if response.StartedParticipants != 2 || len(response.WorkMeasurements) != 3 {
+					t.Fatalf("role clocks did not run: %+v", response)
+				}
+				for _, role := range response.WorkMeasurements {
+					rawWall := req.Limits.TimeMs
+					if role.Role == "manager" {
+						rawWall = communicationManagerLimits(req.Limits).TimeMs
+					}
+					if role.TimeBudget == nil || role.TimeBudget.Version != 2 || role.TimeBudget.Clock == nil || role.TimeBudget.RawLimits == nil || role.TimeBudget.RawLimits.WallTimeMs != rawWall {
+						t.Fatalf("%s/%v: missing bound role clock or wrong safety limit: %+v", role.Role, role.ParticipantIndex, role.TimeBudget)
+					}
+				}
+				switch tc.name {
+				case "complete", "manager_shutdown":
+					if response.Status != model.RunStatusAccepted || version == 2 && (response.Match == nil || response.Match.Outcome != "completed") {
+						t.Fatalf("manager result was lost: %+v; roles: %+v", response, response.WorkMeasurements)
+					}
+				case "participant":
+					seat := response.WorkMeasurements[0]
+					if seat.ExecutionStatus != model.RunStatusTLE || seat.TerminationSource != "durante_work_clock" || seat.Report == nil || !seat.Report.ValidUnavailableResult() ||
+						version == 1 && (response.Status != model.RunStatusTLE || response.VerdictSource != "participant:0:durante_work_clock") ||
+						version == 2 && (response.Match == nil || response.Match.Outcome != "forfeit" || response.Match.Wins == nil || *response.Match.Wins != [2]int{0, 20}) {
+						t.Fatalf("wrong participant clock stop: %+v; roles: %+v", response, response.WorkMeasurements)
+					}
+				default:
+					if response.Status != model.RunStatusInitFail || response.Score != nil || response.Match != nil && (response.Match.Outcome != "judge_error" || response.Match.Wins != nil) {
+						t.Fatalf("manager or watchdog failure was scored: %+v", response)
+					}
+					if tc.name == "output" {
+						observed := false
+						for _, role := range response.WorkMeasurements {
+							observed = observed || role.TimeBudget.RawSource == "output_limit"
+						}
+						if !observed {
+							t.Fatalf("output quota was lost: %+v", response.WorkMeasurements)
+						}
+					}
+					if tc.name == "manager" && response.WorkMeasurements[2].TerminationSource != "durante_work_clock" {
+						t.Fatalf("manager loop did not hit its own budget: %+v", response.WorkMeasurements)
+					}
+				}
+			})
+		}
+	}
+	for _, version := range []int{1, 2} {
 		for _, variant := range []string{"", "_bound_options", "_latency"} {
 			name := fmt.Sprintf("v%d_diagnostic_time_budgets%s", version, variant)
 			t.Run(name, func(t *testing.T) {

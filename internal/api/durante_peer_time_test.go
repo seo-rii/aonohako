@@ -113,7 +113,7 @@ func TestPeerTimeHTTPRejectsInvalidRequestBeforeExecution(t *testing.T) {
 	for name, edit := range map[string]func(map[string]any){
 		"no measurement":      func(r map[string]any) { r["work_measurement"] = false },
 		"ordinary time mixed": func(r map[string]any) { r["work_measurement_time"] = true },
-		"unknown version":     func(r map[string]any) { r["work_measurement_peer_time"].(map[string]any)["version"] = 2 },
+		"unknown version":     func(r map[string]any) { r["work_measurement_peer_time"].(map[string]any)["version"] = 3 },
 		"caller coefficients": func(r map[string]any) {
 			r["work_measurement_peer_time"].(map[string]any)["coefficients"] = map[string]any{"instruction_ns_numerator": 0}
 		},

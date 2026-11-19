@@ -29,6 +29,8 @@ type peerTimePlan struct {
 	budgetMs  int
 	policy    durante.TimePolicy
 	runtimeID string
+	clock     *durante.WorkClockRequest
+	rawLimits durante.ResourceLimits
 }
 
 // Resolve every role before execution or remote upload. Budget array order has
@@ -47,9 +49,9 @@ func workMeasurementPeerTimePlans(req *model.RunRequest, cfg durante.Config, run
 	if len(req.WorkMeasurementPeerTime.Budgets) != len(roles) {
 		return nil, fmt.Errorf("work_measurement_peer_time requires exactly one budget for every role")
 	}
-	budgets := make(map[peerTimeIdentity]int, len(roles))
+	budgets := make(map[peerTimeIdentity]model.PeerTimeBudget, len(roles))
 	for _, budget := range req.WorkMeasurementPeerTime.Budgets {
-		budgets[peerTimeKey(budget.Role, budget.ProgramID, budget.ParticipantIndex)] = budget.TimeMs
+		budgets[peerTimeKey(budget.Role, budget.ProgramID, budget.ParticipantIndex)] = budget
 	}
 	plans := make(map[peerTimeIdentity]peerTimePlan, len(roles))
 	for _, role := range roles {
@@ -66,7 +68,13 @@ func workMeasurementPeerTimePlans(req *model.RunRequest, cfg durante.Config, run
 		if err != nil {
 			return nil, fmt.Errorf("work_measurement_peer_time %s %q: %w", role.role, role.programID, err)
 		}
-		plans[key] = peerTimePlan{role: role, budgetMs: budget, policy: policy, runtimeID: runtimeID}
+		plan := peerTimePlan{role: role, budgetMs: budget.TimeMs, policy: policy, runtimeID: runtimeID}
+		if req.WorkMeasurementPeerTime.Version == 2 {
+			if err := plan.enableClock(req, roleReq, cfg, budget); err != nil {
+				return nil, fmt.Errorf("peer clock %s %q: %w", role.role, role.programID, err)
+			}
+		}
+		plans[key] = plan
 	}
 	return plans, nil
 }
@@ -113,10 +121,33 @@ func finishWorkMeasurementPeerTime(req *model.RunRequest, response model.RunResp
 	for i, observed := range response.WorkMeasurements {
 		plan, found := plans[peerTimeKey(observed.Role, observed.ProgramID, observed.ParticipantIndex)]
 		if found {
-			response.WorkMeasurements[i].TimeBudget = evaluatePeerTimeBudget(plan, observed)
+			if plan.clock != nil {
+				result, err := peerClockResult(plan, observed)
+				if err != nil {
+					return model.RunResponse{Status: model.RunStatusInitFail, VerdictSource: "durante_peer_clock_error", Reason: "inconsistent role clock evidence: " + err.Error()}
+				}
+				response.WorkMeasurements[i].TimeBudget = result
+			} else {
+				response.WorkMeasurements[i].TimeBudget = evaluatePeerTimeBudget(plan, observed)
+			}
+		}
+	}
+	if req.WorkMeasurementPeerTime.Version == 2 {
+		if err := validatePeerClockOutcome(req, response); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, VerdictSource: "durante_peer_clock_error", Reason: "inconsistent peer clock verdict: " + err.Error()}
 		}
 	}
 	return response
+}
+
+func validatePeerClockOutcome(req *model.RunRequest, response model.RunResponse) error {
+	if response.CPUTimeNormalization != nil {
+		return fmt.Errorf("invalid peer clock result: normalized CPU accounting")
+	}
+	if req.Interactor != nil {
+		return validateInteractivePeerClockVerdict(response)
+	}
+	return validateCommunicationPeerClockVerdict(req, response)
 }
 
 func validateRemoteWorkMeasurementPeerTime(req *model.RunRequest, response model.RunResponse, cfg durante.Config, runtimeTuning ...config.RuntimeTuningConfig) error {
@@ -133,6 +164,10 @@ func validateRemoteWorkMeasurementPeerTime(req *model.RunRequest, response model
 		return fmt.Errorf("invalid remote result: incompatible per-role time configuration")
 	}
 	if len(response.WorkMeasurements) == 0 && response.Status == model.RunStatusInitFail {
+		if req.WorkMeasurementPeerTime.Version == 2 && (response.Score != nil || response.StartedParticipants != 0 ||
+			(response.Match != nil && (response.Match.Outcome != "judge_error" || response.Match.Wins != nil))) {
+			return fmt.Errorf("invalid remote result: missing clock evidence after peer execution")
+		}
 		return nil // Admission or preparation failed before targets started.
 	}
 	if len(response.WorkMeasurements) != len(plans) {
@@ -140,9 +175,24 @@ func validateRemoteWorkMeasurementPeerTime(req *model.RunRequest, response model
 	}
 	for _, observed := range response.WorkMeasurements {
 		plan, found := plans[peerTimeKey(observed.Role, observed.ProgramID, observed.ParticipantIndex)]
-		if !found || observed.TimeBudget == nil || !reflect.DeepEqual(observed.TimeBudget, evaluatePeerTimeBudget(plan, observed)) {
+		if !found || observed.TimeBudget == nil {
+			return fmt.Errorf("invalid remote result: missing per-role time budget")
+		}
+		var want *model.PeerTimeBudgetResult
+		if plan.clock != nil {
+			want, err = peerClockResult(plan, observed)
+			if err != nil {
+				return fmt.Errorf("invalid remote result: %w", err)
+			}
+		} else {
+			want = evaluatePeerTimeBudget(plan, observed)
+		}
+		if !reflect.DeepEqual(observed.TimeBudget, want) {
 			return fmt.Errorf("invalid remote result: per-role time budget mismatch")
 		}
+	}
+	if req.WorkMeasurementPeerTime.Version == 2 {
+		return validatePeerClockOutcome(req, response)
 	}
 	return nil
 }

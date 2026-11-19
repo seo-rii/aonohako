@@ -119,7 +119,8 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
-	if _, err := workMeasurementPeerTimePlans(checked, r.workMeasurement, tuning); err != nil {
+	peerPlans, err := workMeasurementPeerTimePlans(checked, r.workMeasurement, tuning)
+	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := validateJudgeRequest(ctx, checked, r.workMeasurement); err != nil {
@@ -131,14 +132,14 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if err := runvalidation.ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	forward := req
+	forward := forwardedPeerClockRequest(req, peerPlans)
 	if err := validateJudgeClockBinding(req, r.workMeasurement, tuning); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if clock := effectiveWorkClock(req, r.workMeasurement, tuning); clock != nil && clock.TimePolicy != nil {
 		// An earlier worker rejects the versioned request field before execution.
 		// A current worker checks the model binding against its own configuration.
-		copy := *req
+		copy := *forward
 		copy.JudgeClockBinding = clock.ModelBinding()
 		forward = &copy
 	}
@@ -538,6 +539,11 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				}
 			}
 
+			if req.Communication != nil && req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2 && remoteResult.Status != model.RunStatusInitFail {
+				if err := validatePeerClockCPU(remoteResult); err != nil {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+				}
+			}
 			var truncated bool
 			remoteResult.Stdout, truncated = capturedOutputValue([]byte(remoteResult.Stdout), stdoutResponseLimit)
 			if truncated {

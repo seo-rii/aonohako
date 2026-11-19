@@ -158,6 +158,22 @@ func (p *ResourcePolicy) ValidateAdmission(maxActiveRuns, workRootMaxBytes int) 
 	if maxActiveRuns <= 0 || workRootMaxBytes < 0 {
 		return fmt.Errorf("resource policy requires positive max_active_runs and nonnegative work_root_max_bytes")
 	}
+	return p.validateActiveMemory(maxActiveRuns, workRootMaxBytes, p.MaxLimits.MemoryMB)
+}
+
+// ValidatePeerAdmission reserves the combined declared memory for all concurrent
+// roles of a match or interactive execution, including its manager/interactor.
+func (p *ResourcePolicy) ValidatePeerAdmission(maxActiveRuns, workRootMaxBytes, roleMemoryMB int) error {
+	if err := p.ValidateAdmission(maxActiveRuns, workRootMaxBytes); err != nil {
+		return err
+	}
+	if roleMemoryMB <= 0 {
+		return fmt.Errorf("missing raw role memory")
+	}
+	return p.validateActiveMemory(maxActiveRuns, workRootMaxBytes, roleMemoryMB)
+}
+
+func (p *ResourcePolicy) validateActiveMemory(maxActiveRuns, workRootMaxBytes, perRunMB int) error {
 	const mib = 1 << 20
 	workRootMB := workRootMaxBytes / mib
 	if workRootMaxBytes%mib != 0 {
@@ -168,7 +184,7 @@ func (p *ResourcePolicy) ValidateAdmission(maxActiveRuns, workRootMaxBytes int) 
 		return fmt.Errorf("durante memory budget exhausted by work root and reserved memory")
 	}
 	remainingMB -= workRootMB
-	if maxActiveRuns > remainingMB/p.MaxLimits.MemoryMB {
+	if maxActiveRuns > remainingMB/perRunMB {
 		return fmt.Errorf("durante max_active_runs and max_limits.memory_mb exceed memory budget after work root and reserved memory")
 	}
 	return nil

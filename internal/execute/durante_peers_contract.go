@@ -151,7 +151,8 @@ func validateRemotePeerWorkMeasurements(req *model.RunRequest, response model.Ru
 		if !validDiagnosticWorkReport(expected.language, report) {
 			return fmt.Errorf("invalid remote result: inconsistent per-role diagnostic observation")
 		}
-		if observed.ExecutionStatus != "OK" || observed.ExitCode == nil || *observed.ExitCode < 0 || observed.TerminationSource != "" {
+		finalClock := req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2 && observed.ExecutionStatus == model.RunStatusTLE && observed.TerminationSource == "durante_work_clock_final"
+		if (!finalClock && (observed.ExecutionStatus != "OK" || observed.TerminationSource != "")) || observed.ExitCode == nil || *observed.ExitCode < 0 {
 			return fmt.Errorf("invalid remote result: interrupted role returned complete diagnostic totals")
 		}
 	}

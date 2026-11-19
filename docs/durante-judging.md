@@ -206,9 +206,9 @@ supplies explicit raw safety limits.
   must be a schema 2 binding of the pinned descriptor, and the observation
   must carry `runtime_determinism`; otherwise the estimate is unavailable and
   the verdict is `Runtime Error`.
-- Judge mode reuses the raw resource envelope. Only an ordinary single-program
-  request is accepted; SPJ, interactive, communication, pipeline, entry and
-  multi-step requests are rejected, as the envelope already requires.
+- The `work_measurement_judge` flag uses the ordinary single-program resource
+  envelope. Interactive and communication requests can select a deciding clock
+  for each role. [Live role clocks](#live-clocks-for-interactive-and-communication-roles)
 - `work_measurement_judge` requires `work_measurement_time: true` and
   a matching time model. Terminal-only judgments also require explicit
   `work_measurement_limits`.
@@ -289,13 +289,59 @@ An ordinary diagnostic request can instead set `"work_measurement_clock":
 `work_measurement_limits`. This budget counts instructions plus requested MOVS
 and STOS bytes directly. An exhausted diagnostic budget supplies execution
 evidence and an unscored diagnostic result. Judge requests always derive their
-clock from the operator's model. Each clock covers one owned role and its
-process tree. Peer requests currently use their per-role terminal observations.
+clock from the operator's model. Each clock covers one owned role and its process tree. An interactive or
+communication request can select the role clocks below.
 
 The HTTP harness grades a real compiled C++ program through embedded and
 forwarded execution using test-only coefficients. It checks normal completion,
 a busy loop, a sleeping process and a mismatched downstream model.
 [Work clock HTTP verification](../scripts/verify_durante_work_clock.py)
+
+### Live clocks for interactive and communication roles
+
+Set `work_measurement: true` and `work_measurement_peer_time.version: 2`.
+Supply one `time_ms` virtual budget for each role. Interactive roles are
+`contestant` and `interactor`; communication roles are `participant` with a
+zero-based `participant_index`, and `manager`. The program ID must match the
+request, including when the same executable runs in multiple seats.
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 2,
+    "budgets": [
+      {"role": "contestant", "program_id": "contestant", "time_ms": 100},
+      {"role": "interactor", "program_id": "interactor", "time_ms": 500}
+    ]
+  }
+}
+```
+
+The worker resolves the schema 2 model for each role's actual language,
+image, dispatch, virtual processor and runtime options before launch.
+Every role must be enabled for deciding judgments with integrity mode
+`off` and an instruction/REP model. Give the role's ordinary CPU and wall
+limits enough headroom to run the instrumented process. Both must exceed
+that role's virtual budget and fit the operator's resource policy. Interactive
+requests can set an explicit wall limit on each role. Communication uses the
+runner's wall policy, with each online clock's wall allowance set to its
+role's raw CPU limit in milliseconds. Admission checks the sum of role memory
+limits against the runner's capacity at its configured concurrency.
+
+Each `work_measurements[].time_budget` receipt includes the virtual limit,
+model binding, raw safety limits, raw usage and role clock evidence.
+A proven contestant cutoff can decide TLE. An interactor or manager clock
+failure leaves the result unscored. An interactive AC requires both roles to
+complete within budget. A verified interactor WA can stand when the coordinator
+subsequently cancels the contestant. In a competitive match an independent
+participant fault can forfeit that seat under the match protocol. A peer
+cancelled by the coordinator gets a separate reason; its cancellation
+cannot establish a budget crossing. The controller verifies the per-role
+evidence when a worker executes the exchange remotely. Version 1 remains
+available for post-exit diagnostic comparisons.
+
+[Peer-clock HTTP verification](../scripts/verify_durante_peer_clocks.py)
 
 ## Verdict rules
 
@@ -518,16 +564,16 @@ with reference-time conversion.
 5. Keep raw CPU/wall/memory limits active as independent safety nets; a work
    verdict never removes them.
 
-Memory judging, interactive/communication judge modes, and runtimes whose counts do not convert (signal-driven, e.g. Go) are out
+Memory judging and runtimes whose counts do not convert (signal-driven, e.g. Go) are out
 of scope for this path and remain documented limitations.
 
 ## Time attribution by execution mode
 
 Ordinary C++ shadow comparisons are the first qualification cohort. Interactive
-and communication runs already produce independent diagnostic role estimates.
-A completed role is compared against its own limit in nanoseconds. A stopped
-role has an unavailable estimate. Use the following attribution rules when
-extending the deciding path after qualification.
+and communication requests support two versions of `work_measurement_peer_time`.
+Version 1 compares each eligible completed role's estimated time with its budget
+after exit. Version 2 also checks the role's clock during execution. A verified
+live cutoff carries a partial work count and no final time estimate.
 
 | Mode | Submission time to compare | Operator or helper work |
 |---|---|---|
@@ -537,9 +583,6 @@ extending the deciding path after qualification.
 | Pipeline | Match each executing participant to its step, program and step limit. Interactive steps also need a separate interactor observation. | Record artifact transfer and the final judge separately. Mark later, unstarted steps as such. |
 | Multi-step | Compare each executed step with its effective step limit. A displayed total may sum completed sequential steps while retaining their individual outcomes. | Account for handoff and coordination separately. Omit a credited total if any required step lacks an estimate. |
 
-The current API supports role time diagnostics for interactive and communication
-requests. SPJ, pipeline and multi-step Durante verdicts require dedicated
-execution-path and remote revalidation support. Before enabling a deciding
-path, verify which role exceeded its limit with an exact-boundary case, one
-where only the helper exceeds its limit, and one where the coordinator stops
-a peer before collection completes.
+The interactive and communication clocks use the operator's qualified models on
+both embedded and forwarded runs. Deciding SPJ, pipeline and multi-step time
+verdicts still require execution support and remote validation for those modes.
