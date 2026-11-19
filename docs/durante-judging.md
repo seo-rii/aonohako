@@ -172,8 +172,8 @@ their configured budget. [HTTP qualification harness](../scripts/verify_durante_
 
 ## When it applies
 
-A request opts in with `work_measurement_judge: true`, which requires the same
-fields as the reference-time path:
+An ordinary request opts in with `work_measurement_judge: true`. This example
+supplies explicit raw safety limits.
 
 ```json
 {
@@ -210,8 +210,8 @@ fields as the reference-time path:
   request is accepted; SPJ, interactive, communication, pipeline, entry and
   multi-step requests are rejected, as the envelope already requires.
 - `work_measurement_judge` requires `work_measurement_time: true` and
-  `work_measurement_limits`. Without a time model there is no millisecond value
-  to compare, so the request is rejected before execution.
+  a matching time model. Terminal-only judgments also require explicit
+  `work_measurement_limits`.
 - The family must be both measurement-enabled and judge-enabled. A
   `work_measurement_judge` request for a family that is measured but not listed
   in `AONOHAKO_DURANTE_JUDGE_FAMILIES`, or when judge mode is off, is rejected at
@@ -260,10 +260,13 @@ compares the published lower bound directly against
 `limits.time_ms * 1,000,000 * ns_denominator` before rounding. An exact tie
 can continue. The model may use distinct MOVS and STOS weights.
 
-Configure `work_measurement_limits` with enough CPU and wall headroom for
-the instrumented process to reach its virtual budget. These independently
-bounded limits also cover idle programs, blocked pipes, unavailable counters
-and instrumentation overhead. Select the safety envelope per deployment.
+Omitting `work_measurement_limits` uses `AONOHAKO_DURANTE_RESOURCE_POLICY.max_limits`
+for CPU, wall time and memory. A request can supply a smaller explicit envelope
+within these caps. The model must match the effective raw memory and runtime
+options. Both raw time ceilings must exceed `limits.time_ms`. Operators should
+allow enough headroom for instrumentation overhead, idle programs and blocked
+pipes. The controller forwards the effective limits to the worker and verifies
+them against `work_measurement_execution.raw_limits` in the response.
 Schema 1 and legacy time policies, latency-bound models, shadow collection and
 plausibility checks continue to use their terminal observations.
 

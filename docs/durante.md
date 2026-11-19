@@ -478,8 +478,10 @@ interactive and communication modes use the bool option described above:
 }
 ```
 
-All three actual limits are explicit, must cover the nominal limits, and must fit
-operator caps. CPU/wall are bounded to 600,000 ms and RSS to 4,096 MiB. Actual wall
+An explicit envelope includes all three actual limits. The
+[deciding online judge clock](durante-judging.md#online-durante-clock) also accepts
+the operator maximum as its default envelope. Actual limits must cover the
+nominal limits and fit operator caps. CPU/wall are bounded to 600,000 ms and RSS to 4,096 MiB. Actual wall
 must be at least actual CPU. The envelope accepts registered compatible families,
 including stock CPython and PyPy; JVM execution remains rejected pending
 qualification in aonohako's sandbox. Family registration alone is not runtime qualification.
@@ -522,7 +524,8 @@ trusted credited-time or credited-memory policy is enabled by this change.
 
 `work_measurement_time: true` asks the execution API to apply the operator's
 `internal/durante.TimePolicy` to a completed diagnostic observation. This option
-requires both `work_measurement: true` and `work_measurement_limits`, and accepts
+requires `work_measurement: true` and an effective raw envelope. Diagnostic
+requests supply `work_measurement_limits` explicitly. Time conversion accepts
 ordinary registered source profiles explicitly covered by the operator's time
 configuration. The legacy single policy retains its C/C++ scope. The shared-model
 registry below can approve compatible families such as CPython and PyPy. JVM

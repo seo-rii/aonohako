@@ -207,11 +207,17 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
-	}
 	tuning, err := resolveRuntimeTuning(req, s.runtimeTuning, s.runtimeTuningProfiles)
 	if err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if !isShadowJudge(ctx) {
+		req, err = resolveJudgeWorkLimits(req, s.workMeasurement, tuning)
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := validateJudgeClockBinding(req, s.workMeasurement, tuning); err != nil {
