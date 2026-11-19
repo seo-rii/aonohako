@@ -46,7 +46,7 @@ before downloading the separately SHA-256-pinned engine SDK. CI needs no private
 cross-repository checkout token.
 
 The launcher fixes `-disable_traces -vm_size 32M -vmheap_size 32M` and reports engine profile
-`dynamorio-11.3-durante-v6-vm32m`. Before launch, installation validation checks
+`dynamorio-11.3-durante-v7-vm32m`. Before launch, installation validation checks
 the runtime manifest's source, process-lifetime patch, code-replay patch and
 actual release-core digest.
 Missing or mismatched provenance refuses measurement. This is a trusted local
@@ -126,7 +126,7 @@ Selected fields of a successful lifecycle aggregate resemble:
   "metric": "bb_entry_app_instructions",
   "scope": "process_tree_user_code",
   "rep_bytes_enabled": true,
-  "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
   "authority": "diagnostic_only",
   "integrity_verified": false,
   "measurement_contract": {
@@ -574,7 +574,7 @@ records supporting each intended execution profile before configuring estimates.
     "source_language": "CPP20",
     "family": "cpp",
     "runtime_image": "<actual-overlay-image-digest>",
-    "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+    "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
     "dispatch_profile": "default",
     "model_id": "shared-arithmetic-example",
     "model_version": 1,
@@ -583,7 +583,7 @@ records supporting each intended execution profile before configuring estimates.
     "source_language": "PYTHON3",
     "family": "cpython",
     "runtime_image": "<actual-overlay-image-digest>",
-    "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+    "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
     "dispatch_profile": "default",
     "model_id": "shared-arithmetic-example",
     "model_version": 1,
@@ -663,7 +663,7 @@ only; production coefficients have not been selected or calibrated.**
   "reference_id": "arithmetic-fixture-only",
   "runtime_id": "CPP20@<actual-overlay-image-digest>",
   "family": "cpp",
-  "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
   "dispatch_profile": "default",
   "instruction_ns_numerator": 1,
   "rep_byte_ns_numerator": 1,
@@ -722,7 +722,7 @@ response fields would be:
       "reference_id": "arithmetic-fixture-only",
       "runtime_id": "CPP20@<actual-overlay-image-digest>",
       "family": "cpp",
-      "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+      "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
       "dispatch_profile": "default",
       "nanoseconds": 131648,
       "milliseconds": 1
