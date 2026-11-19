@@ -301,6 +301,10 @@ communication request can select the role clocks below.
 The HTTP harness grades a real compiled C++ program through embedded and
 forwarded execution using test-only coefficients. It checks normal completion,
 a busy loop, a sleeping process and a mismatched downstream model.
+Both the work clock and peer-clock HTTP verifiers enable the v1 latency bound by
+default. Run them again with `--no-latency-bound` to exercise the ordinary
+instruction and REP clock. Each verifier checks the selected mode in completed
+measurement reports.
 [Work clock HTTP verification](../scripts/verify_durante_work_clock.py)
 
 ### Live clocks for interactive and communication roles
