@@ -38,7 +38,8 @@ func finishWorkMeasurementTime(req *model.RunRequest, response model.RunResponse
 	unavailable := func(code string) {
 		d.TimeEstimateEligibility = &durante.TimeEligibility{Version: 1, ReasonCodes: []string{code}}
 	}
-	if d.State != "complete" {
+	terminalClock := d.State == "budget_exceeded" && d.TerminationSource == "durante_work_clock_final"
+	if d.State != "complete" && !terminalClock {
 		d.TimeEstimateUnavailable = "execution_" + d.State
 		switch d.State {
 		case "cancelled", "resource_exhausted", "failed", "incomplete":

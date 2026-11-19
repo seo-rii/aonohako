@@ -2,6 +2,10 @@ package execute
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -248,5 +252,37 @@ func TestJudgeConfigParsesFromEnv(t *testing.T) {
 	}
 	if !policy.JudgesFamily("cpp") || policy.JudgesFamily("cpython") {
 		t.Fatalf("family gating wrong: %+v", policy)
+	}
+}
+
+func TestRemoteWorkJudgmentUsesIndependentRawLimits(t *testing.T) {
+	cfg, req := judgeMeasurementConfig(), judgeRequest()
+	accepted := finishWorkMeasurementJudge(req, judgeResponse(req, cfg, model.RunStatusAccepted, 5_000_000, "stdout"), cfg)
+	if accepted.CPUTimeMs <= int64(req.Limits.TimeMs) {
+		t.Fatal("fixture requires raw CPU beyond the nominal work limit")
+	}
+	for _, overRaw := range []bool{false, true} {
+		response := accepted
+		want := model.RunStatusAccepted
+		if overRaw {
+			response.CPUTimeMs = int64(req.WorkMeasurementLimits.CPUTimeMs + 1)
+			response.CPUTimeNs = uint64(response.CPUTimeMs) * 1_000_000
+			want = model.RunStatusInitFail
+		}
+		wire, err := json.Marshal(response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		worker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "event: result\ndata: %s\n\n", wire)
+		}))
+		controller := &remoteRunner{client: worker.Client(), executeURL: worker.URL, workMeasurement: cfg}
+		got := controller.Run(context.Background(), req, Hooks{})
+		worker.Close()
+		if got.Status != want || (!overRaw && got.VerdictSource != "durante_judge") ||
+			(overRaw && !strings.Contains(got.Reason, "raw limit")) {
+			t.Fatalf("over raw limit = %v, status = %q, source = %q, reason = %q", overRaw, got.Status, got.VerdictSource, got.Reason)
+		}
 	}
 }

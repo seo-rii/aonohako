@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"aonohako/internal/cpupolicy"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/runvalidation"
 )
@@ -80,6 +81,11 @@ var requestJSONSchemas = func() map[reflect.Type]*jsonDecodeSchema {
 func buildJSONDecodeSchema(typ reflect.Type, limit int) (*jsonDecodeSchema, error) {
 	if typ.Kind() == reflect.Pointer {
 		return buildJSONDecodeSchema(typ.Elem(), limit)
+	}
+	// The clock decoder bounds its own object and accepts exactly two numeric
+	// fields. Its internal operator policy is never decoded from a request.
+	if typ == reflect.TypeFor[durante.WorkClockRequest]() {
+		return &jsonDecodeSchema{}, nil
 	}
 	if reflect.PointerTo(typ).Implements(reflect.TypeFor[json.Unmarshaler]()) || reflect.PointerTo(typ).Implements(reflect.TypeFor[encoding.TextUnmarshaler]()) {
 		return nil, fmt.Errorf("request JSON type %s has an unreviewed custom decoder", typ)

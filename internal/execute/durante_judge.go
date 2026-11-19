@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 )
@@ -44,7 +45,7 @@ func judgeRawCPUTimeNs(response model.RunResponse) *uint64 {
 // judgment, its run status, whether that status is Accepted, and whether judge
 // mode applies at all (requested, judged family, envelope execution present).
 // It reads only already-decided inputs and never mutates the response.
-func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg durante.Config) (*model.WorkMeasurementJudgment, string, bool, bool) {
+func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg durante.Config, tuning ...config.RuntimeTuningConfig) (*model.WorkMeasurementJudgment, string, bool, bool) {
 	if !req.WorkMeasurementJudge {
 		return nil, "", false, false
 	}
@@ -65,6 +66,22 @@ func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg dura
 		NominalTimeMs:       int64(req.Limits.TimeMs),
 		RawCPUTimeNs:        judgeRawCPUTimeNs(response),
 	})
+	// The worker and remote verifier both check strict crossing and the
+	// operator binding before a budget stop can decide a verdict.
+	if exec.State == "budget_exceeded" {
+		plan := effectiveWorkClock(req, cfg, optionalRuntimeTuning(tuning))
+		report := response.WorkMeasurement
+		if plan != nil && plan.TimePolicy != nil && report != nil && report.DispatchProfile == plan.TimePolicy.DispatchProfile &&
+			(report.DispatchProfile != durante.DispatchGLIBC241 || report.HostLibc == "2.41") &&
+			withinRawMeasurementLimits(response, exec.RawLimits) && validateRemoteWorkClock(req, response, plan) == nil {
+			result.Verdict = durante.JudgeTimeLimitExceeded
+			result.Reason = "Durante work clock exceeded the nominal time limit"
+			if estimate := exec.TimeEstimate; estimate != nil {
+				result.EstimateNs = &estimate.Nanoseconds
+				result.EstimateMs = &estimate.Milliseconds
+			}
+		}
+	}
 	status, accepted := judgeVerdictStatus(result.Verdict)
 	judgment := &model.WorkMeasurementJudgment{
 		Authority:         durante.Authority,
@@ -87,8 +104,8 @@ func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg dura
 // execution state, output match and time estimate are already decided. Requests
 // that did not ask for judge mode, or that the operator policy does not judge,
 // are returned unchanged (still the diagnostic InitFail response).
-func finishWorkMeasurementJudge(req *model.RunRequest, response model.RunResponse, cfg durante.Config) model.RunResponse {
-	judgment, status, accepted, applicable := computeJudgment(req, response, cfg)
+func finishWorkMeasurementJudge(req *model.RunRequest, response model.RunResponse, cfg durante.Config, tuning ...config.RuntimeTuningConfig) model.RunResponse {
+	judgment, status, accepted, applicable := computeJudgment(req, response, cfg, tuning...)
 	if !applicable {
 		return response
 	}
@@ -110,7 +127,7 @@ func finishWorkMeasurementJudge(req *model.RunRequest, response model.RunRespons
 // rejects a result whose judgment, status, score or envelope does not match, or
 // that an older runner returned without a judgment block. The time estimate the
 // recomputation relies on is itself re-verified by validateRemoteWorkMeasurementTime.
-func validateRemoteWorkMeasurementJudge(req *model.RunRequest, response model.RunResponse, cfg durante.Config) error {
+func validateRemoteWorkMeasurementJudge(req *model.RunRequest, response model.RunResponse, cfg durante.Config, tuning ...config.RuntimeTuningConfig) error {
 	j := response.WorkMeasurementJudgment
 	if !req.WorkMeasurementJudge {
 		if j != nil {
@@ -118,7 +135,7 @@ func validateRemoteWorkMeasurementJudge(req *model.RunRequest, response model.Ru
 		}
 		return nil
 	}
-	expected, status, accepted, applicable := computeJudgment(req, response, cfg)
+	expected, status, accepted, applicable := computeJudgment(req, response, cfg, tuning...)
 	if !applicable {
 		// Judge was requested but this control plane cannot judge it (no envelope
 		// execution, or family/policy mismatch). A judgment would be unverifiable.

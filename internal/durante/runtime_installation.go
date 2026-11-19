@@ -17,12 +17,13 @@ const runtimeSourceSHA256 = "e2b7d3f1917ff64e644b81efd96a610a3c622f4857c75593fef
 // Updated with the reviewed runtime patch. This is installation consistency,
 // not a signature or attestation against an adversarial image administrator.
 const runtimePatchSHA256 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
-const runtimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
+const runtimeCodeReplayPatchSHA256 = "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b"
+const archivedV5V6CodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32a100bf48788c"
 const releaseCore = "lib64/release/libdynamorio.so"
 
 // Updated together with the complete third_party/durante snapshot.
-const sourceCommit = "238193f90f5896b300563180e7939088ac8c346c"
+const sourceCommit = "41743068ef9070b6e04195bf7822c5ee513660ff"
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
 // Matching hashes do not attest application counters or an adversarial host.
@@ -71,7 +72,7 @@ func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
 }
 
 func (r *Report) ValidInstallationIdentity() bool {
-	return r != nil && r.Installation.validForSource(sourceCommit)
+	return r != nil && r.Installation.validForSource(sourceCommit, runtimeCodeReplayPatchSHA256)
 }
 
 // ValidShadowInstallationIdentity checks archived observations against the
@@ -83,17 +84,19 @@ func (r *Report) ValidShadowInstallationIdentity() bool {
 	switch r.EngineProfile {
 	case EngineProfile:
 		return r.ValidInstallationIdentity()
+	case "dynamorio-11.3-durante-v6-vm32m":
+		return r.Installation.validForSource("238193f90f5896b300563180e7939088ac8c346c", archivedV5V6CodeReplayPatchSHA256)
 	case "dynamorio-11.3-durante-v5-vm32m":
 		// The first worker with shadow support used the same runtime patches
 		// as v6 and a client that did not emit latency bounds.
-		return r.LatencyBound == nil && r.Installation.validForSource("4016b33fc69b93d36a13efbd00953213b8f6317f")
+		return r.LatencyBound == nil && r.Installation.validForSource("4016b33fc69b93d36a13efbd00953213b8f6317f", archivedV5V6CodeReplayPatchSHA256)
 	default:
 		return false
 	}
 }
 
-func (i *InstallationIdentity) validForSource(commit string) bool {
-	if i == nil || !i.Unchanged || i.SourceCommit != commit || i.RuntimeSourceCommit != runtimeSourceCommit || i.RuntimePatchSHA256 != runtimePatchSHA256 || i.RuntimeCodeReplayPatchSHA256 != runtimeCodeReplayPatchSHA256 {
+func (i *InstallationIdentity) validForSource(commit, replayPatch string) bool {
+	if i == nil || !i.Unchanged || i.SourceCommit != commit || i.RuntimeSourceCommit != runtimeSourceCommit || i.RuntimePatchSHA256 != runtimePatchSHA256 || i.RuntimeCodeReplayPatchSHA256 != replayPatch {
 		return false
 	}
 	for _, digest := range []string{i.LauncherSHA256, i.ClientSHA256, i.CoreSHA256} {

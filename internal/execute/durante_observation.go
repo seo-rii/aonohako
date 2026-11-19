@@ -16,7 +16,7 @@ import (
 func automaticObservationRequested(req *model.RunRequest, cfg durante.Config) bool {
 	return cfg.Observe && req != nil && !req.WorkMeasurement && !req.WorkMeasurementTime &&
 		!req.WorkMeasurementJudge && !req.WorkMeasurementShadow && req.WorkMeasurementLimits == nil &&
-		req.WorkMeasurementPeerTime == nil
+		req.WorkMeasurementPeerTime == nil && req.WorkMeasurementClock == nil
 }
 
 func observationRequest(req *model.RunRequest, limits durante.ResourceLimits) model.RunRequest {

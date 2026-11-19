@@ -172,8 +172,8 @@ their configured budget. [HTTP qualification harness](../scripts/verify_durante_
 
 ## When it applies
 
-A request opts in with `work_measurement_judge: true`, which requires the same
-fields as the reference-time path:
+An ordinary request opts in with `work_measurement_judge: true`. This example
+supplies explicit raw safety limits.
 
 ```json
 {
@@ -210,8 +210,8 @@ fields as the reference-time path:
   request is accepted; SPJ, interactive, communication, pipeline, entry and
   multi-step requests are rejected, as the envelope already requires.
 - `work_measurement_judge` requires `work_measurement_time: true` and
-  `work_measurement_limits`. Without a time model there is no millisecond value
-  to compare, so the request is rejected before execution.
+  a matching time model. Terminal-only judgments also require explicit
+  `work_measurement_limits`.
 - The family must be both measurement-enabled and judge-enabled. A
   `work_measurement_judge` request for a family that is measured but not listed
   in `AONOHAKO_DURANTE_JUDGE_FAMILIES`, or when judge mode is off, is rejected at
@@ -249,10 +249,58 @@ requires re-deriving limits or re-qualifying the model. The model is not
 calibrated yet (see [reference-time qualification](durante-reference.md)); until
 it is, judge mode must not be enabled in production.
 
+## Online Durante clock
+
+For an ordinary `work_measurement_judge` request, the worker enforces the
+problem's nominal time limit during execution when the operator has enabled
+deciding verdicts, selected integrity mode `off`, and bound an instruction/REP
+time model to the effective runtime options (registry schema 2). The worker
+applies the same weights and denominator used in the final estimate. It
+compares the published lower bound directly against
+`limits.time_ms * 1,000,000 * ns_denominator` before rounding. An exact tie
+can continue. The model may use distinct MOVS and STOS weights.
+
+Omitting `work_measurement_limits` uses `AONOHAKO_DURANTE_RESOURCE_POLICY.max_limits`
+for CPU, wall time and memory. A request can supply a smaller explicit envelope
+within these caps. The model must match the effective raw memory and runtime
+options. Both raw time ceilings must exceed `limits.time_ms`. Operators should
+allow enough headroom for instrumentation overhead, idle programs and blocked
+pipes. The controller forwards the effective limits to the worker and verifies
+them against `work_measurement_execution.raw_limits` in the response.
+Schema 1 and legacy time policies, latency-bound models, shadow collection and
+plausibility checks continue to use their terminal observations.
+
+| Outcome | Execution evidence |
+|---|---|
+| The virtual clock crossed during execution | `budget_exceeded`, source `durante_work_clock`, TLE with an observed prefix and no complete counts or total time estimate. |
+| The program exited over budget between samples | `budget_exceeded`, source `durante_work_clock_final` with a complete report and estimate after all three live counts match the terminal counts. |
+| The program finished within budget | The existing output and eligibility checks decide the verdict using the complete terminal report. |
+| A raw CPU, wall or memory watchdog fired | `resource_exhausted` with the watchdog's termination source and an unscored result. |
+
+The clock receipt identifies the metric, nanosecond budget and resolved model
+binding. The remote controller sends this binding before execution and checks
+the returned component counters against its own model. The worker rejects a
+different binding. Operators must qualify models for the current engine
+profile and runtime image. The client batches work publications, and detection,
+signalling and reaping take time; a stop can overshoot its budget.
+
+An ordinary diagnostic request can instead set `"work_measurement_clock":
+{"version": 1, "budget": 2000000}` together with `work_measurement: true` and
+`work_measurement_limits`. This budget counts instructions plus requested MOVS
+and STOS bytes directly. An exhausted diagnostic budget supplies execution
+evidence and an unscored diagnostic result. Judge requests always derive their
+clock from the operator's model. Each clock covers one owned role and its
+process tree. Peer requests currently use their per-role terminal observations.
+
+The HTTP harness grades a real compiled C++ program through embedded and
+forwarded execution using test-only coefficients. It checks normal completion,
+a busy loop, a sleeping process and a mismatched downstream model.
+[Work clock HTTP verification](../scripts/verify_durante_work_clock.py)
+
 ## Verdict rules
 
-The verdict is computed only after the diagnostic execution state and the time
-estimate are final. Original output comparison is unchanged.
+The verdict uses the finalized execution state and, for completed observations,
+the output comparison and time estimate.
 
 | Envelope state | Output | Time estimate | Verdict |
 |---|---|---|---|
@@ -260,6 +308,7 @@ estimate are final. Original output comparison is unchanged.
 | `complete` | matches | available, `estimated_ns > limit` | **Time Limit Exceeded** |
 | `complete` | mismatch | (not evaluated) | **Wrong Answer** |
 | `complete` | matches | unavailable | **Runtime Error** |
+| `budget_exceeded` | — | validated clock crossing | **Time Limit Exceeded** |
 | `resource_exhausted` | — | — | **Container Initialization Failed**, unscored |
 | `incomplete` / `failed` / `cancelled` | — | — | **Runtime Error** |
 
@@ -279,8 +328,8 @@ estimate are final. Original output comparison is unchanged.
   unscored `Container Initialization Failed` status with
   `work_measurement_judgment.state = "resource_exhausted"`. The termination
   source identifies the resource to review. Shadow comparisons record this
-  case as unavailable. Only a completed, eligible, over-budget estimate can
-  yield a virtual TLE.
+  case as unavailable. A virtual TLE requires a validated work-clock crossing
+  or an eligible, over-budget terminal estimate.
 - **`incomplete` / `failed` / `cancelled` → Runtime Error.** Launch failure,
   client/collection failure, a forced stop, or cancellation cannot yield a
   trusted count, so the verdict is a (retryable) `Runtime Error`, never AC/TLE.
@@ -469,8 +518,7 @@ with reference-time conversion.
 5. Keep raw CPU/wall/memory limits active as independent safety nets; a work
    verdict never removes them.
 
-Memory judging, online (mid-run) work budgets, interactive/communication judge
-modes, and runtimes whose counts do not convert (signal-driven, e.g. Go) are out
+Memory judging, interactive/communication judge modes, and runtimes whose counts do not convert (signal-driven, e.g. Go) are out
 of scope for this path and remain documented limitations.
 
 ## Time attribution by execution mode

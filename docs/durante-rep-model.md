@@ -25,7 +25,7 @@ the same identity fields as [the time policy](durante.md#explicit-reference-time
   "reference_id": "arithmetic-fixture-only",
   "runtime_id": "CPP20@<actual-overlay-image-digest>",
   "family": "cpp",
-  "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
   "dispatch_profile": "default",
   "instruction_ns_numerator": 2,
   "movs_byte_ns_numerator": 3,

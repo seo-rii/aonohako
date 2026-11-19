@@ -597,6 +597,10 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "unsupported_capability", "pipeline-v1 is not supported by this execution transport")
 		return
 	}
+	if err := execute.ApplyJudgeWorkLimits(&req, s.cfg.Execution); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
 	if err := runvalidation.Validate(&req); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return

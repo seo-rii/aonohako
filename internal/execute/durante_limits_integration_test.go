@@ -44,6 +44,47 @@ func TestDuranteResourceEnvelopeIntegration(t *testing.T) {
 		return svc.Run(ctx, req, Hooks{})
 	}
 	hard := durante.ResourceLimits{CPUTimeMs: 3000, WallTimeMs: 10000, MemoryMB: 128}
+	// Exercise the real sandbox process group and mmap from the client. The same
+	// nominal limit is tiny in both cases; raw CPU/wall are independent.
+	for _, clockCase := range []struct {
+		name, input, state, source string
+		units                      uint64
+		wallMs                     int
+	}{
+		{"online work cutoff", "burn", "budget_exceeded", "durante_work_clock", 1000000, 10000},
+		{"online work blocked on sleep", "sleep", "resource_exhausted", "wall_time", 1000000000, 1000},
+		{"online work completes", "normal 10000", "complete", "stdout", 1000000000, 10000},
+	} {
+		t.Run(clockCase.name, func(t *testing.T) {
+			limits := hard
+			limits.WallTimeMs = clockCase.wallMs
+			if limits.CPUTimeMs > limits.WallTimeMs {
+				limits.CPUTimeMs = limits.WallTimeMs
+			}
+			plan := &durante.WorkClockRequest{Version: 1, Budget: clockCase.units}
+			req := &model.RunRequest{
+				Lang: "CPP20", WorkMeasurement: true, WorkMeasurementLimits: &limits, WorkMeasurementClock: plan,
+				Binaries: []model.Binary{{Name: "Main", DataB64: base64.StdEncoding.EncodeToString(data), Mode: "exec"}},
+				Limits:   model.Limits{TimeMs: 1, WallTimeMs: 1, MemoryMB: 16}, Stdin: clockCase.input, ExpectedStdout: "49995000",
+			}
+			r := svc.Run(context.Background(), req, Hooks{})
+			d := r.WorkMeasurementExecution
+			if d == nil {
+				t.Fatalf("missing clock execution: %+v", r)
+			}
+			if r.Status != model.RunStatusInitFail || d.State != clockCase.state || d.TerminationSource != clockCase.source ||
+				d.Clock == nil || d.Clock.Progress == nil || r.WorkMeasurement == nil || r.WorkMeasurement.Complete != (clockCase.state == "complete") {
+				t.Fatalf("live work clock: %+v; envelope=%+v clock=%+v", r, d, d.Clock)
+			}
+			if (clockCase.state == "budget_exceeded") != plan.Exceeds(*d.Clock.Progress) {
+				t.Fatalf("unexpected work crossing: %+v", d.Clock)
+			}
+			if err := validateRemoteWorkClock(req, r, plan); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+
 	for _, tc := range []struct{ name, input, expected string }{{"beyond nominal CPU", "normal 10000", "49995000"}, {"beyond nominal RSS", "memory 48", "allocated"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := run(context.Background(), tc.input, tc.expected, hard)

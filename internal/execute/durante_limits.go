@@ -14,17 +14,23 @@ import (
 func (s *Service) runWorkMeasurementDiagnostic(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
 	run := s.runWorkMeasurementWithStdin(ctx, req, nil, 0, hooks, tuning, false)
 	response := finishWorkMeasurementTime(req, run.response, s.workMeasurement, tuning)
-	return finishWorkMeasurementJudge(req, response, s.workMeasurement)
+	return finishWorkMeasurementJudge(req, response, s.workMeasurement, tuning)
 }
 
 func (s *Service) runWorkMeasurementWithStdin(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, captureRawStdout bool) sandboxRunResult {
 	// The watchdog and final resource checks must use the same raw envelope.
 	rawReq := workMeasurementRawRequest(req)
+	if !isShadowJudge(ctx) {
+		rawReq.WorkMeasurementClock = effectiveWorkClock(req, s.workMeasurement, tuning)
+	}
 	rawService := *s
 	rawService.cpuNormalizer = timing.CPUNormalizer{}
 	rawService.shortCaseSampling = false
 	run := rawService.runOneWithStdin(ctx, &rawReq, stdin, stdinMaxBytes, hooks, tuning, true, captureRawStdout)
 	run.response = finishWorkMeasurementDiagnostic(ctx, req, run.response)
+	if rawReq.WorkMeasurementClock != nil {
+		run.response = finishWorkClock(req, rawReq.WorkMeasurementClock, run.response, run.workClockProgress)
+	}
 	return run
 }
 
@@ -111,6 +117,16 @@ func validDiagnosticWorkReport(language string, report *durante.Report) bool {
 		report.UnsupportedREPEntries != nil && report.REPEnabled && report.Processes > 0 && report.Images >= report.Processes
 }
 
+// The nominal clock and the instrumented run's hard resource envelope have
+// independent units. A deciding result must satisfy every supplied raw limit.
+func withinRawMeasurementLimits(response model.RunResponse, raw durante.ResourceLimits) bool {
+	return response.MemoryKB <= int64(raw.MemoryMB)*1024 &&
+		response.CPUTimeNs <= uint64(raw.CPUTimeMs)*1_000_000 &&
+		response.CPUTimeMs <= int64(raw.CPUTimeMs) && response.WallTimeMs <= int64(raw.WallTimeMs) &&
+		(response.RawCPUTimeNs == nil || *response.RawCPUTimeNs == response.CPUTimeNs) &&
+		(response.RawCPUTimeMs == nil || *response.RawCPUTimeMs == response.CPUTimeMs)
+}
+
 // Complete observations from the downstream runner must match the counter
 // selected by the control plane. Interrupted roles may carry no totals.
 func validateRemoteMeasurementCounters(req *model.RunRequest, response model.RunResponse, cfg durante.Config) error {
@@ -181,6 +197,9 @@ func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResp
 	if d.Authority != durante.Authority || d.RawLimits != *req.WorkMeasurementLimits || d.NominalLimits != req.Limits {
 		return fmt.Errorf("invalid remote result: work measurement envelope mismatch")
 	}
+	if (d.State == "complete" || d.State == "budget_exceeded") && !withinRawMeasurementLimits(response, d.RawLimits) {
+		return fmt.Errorf("invalid remote result: work measurement exceeds an independent raw limit")
+	}
 	if !req.WorkMeasurementJudge && response.VerdictSource != "durante_"+d.State {
 		return fmt.Errorf("invalid remote result: work measurement source mismatch")
 	}
@@ -188,6 +207,19 @@ func validateRemoteWorkMeasurement(req *model.RunRequest, response model.RunResp
 	case "complete":
 		if d.OutputMatches == nil || !ordinaryMeasurementOutputSource(d.TerminationSource) || !validDiagnosticWorkReport(req.Lang, response.WorkMeasurement) || response.ExitCode == nil || *response.ExitCode != 0 {
 			return fmt.Errorf("invalid remote result: incomplete work measurement marked complete")
+		}
+	case "budget_exceeded":
+		switch d.TerminationSource {
+		case "durante_work_clock_final":
+			if d.OutputMatches == nil || !validDiagnosticWorkReport(req.Lang, response.WorkMeasurement) || response.ExitCode == nil || *response.ExitCode != 0 {
+				return fmt.Errorf("invalid remote result: final budget crossing requires terminal totals")
+			}
+		case "durante_work_clock":
+			if d.OutputMatches != nil || !response.WorkMeasurement.ValidUnavailableResult() || response.ExitCode != nil {
+				return fmt.Errorf("invalid remote result: interrupted work clock claims terminal output")
+			}
+		default:
+			return fmt.Errorf("invalid remote result: unknown work clock termination source")
 		}
 	case "failed", "incomplete", "cancelled", "resource_exhausted":
 		if d.OutputMatches != nil || (response.WorkMeasurement != nil && response.WorkMeasurement.Complete) {

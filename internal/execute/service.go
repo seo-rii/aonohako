@@ -140,6 +140,7 @@ type Service struct {
 }
 
 type sandboxRunResult struct {
+	workClockProgress   *durante.WorkClockProgress
 	response            model.RunResponse
 	judgeOut            []byte
 	stdoutOut           []byte
@@ -206,11 +207,20 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
+	tuning, err := resolveRuntimeTuning(req, s.runtimeTuning, s.runtimeTuningProfiles)
+	if err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if !isShadowJudge(ctx) {
+		req, err = resolveJudgeWorkLimits(req, s.workMeasurement, tuning)
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
 	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	tuning, err := resolveRuntimeTuning(req, s.runtimeTuning, s.runtimeTuningProfiles)
-	if err != nil {
+	if err := validateJudgeClockBinding(req, s.workMeasurement, tuning); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if req.WorkMeasurementTime {
@@ -508,6 +518,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			SidecarOutputs:   sidecarOutputs,
 			SidecarErrors:    sidecarErrors,
 		},
+		workClockProgress:   res.workClockProgress,
 		judgeOut:            append([]byte(nil), judgeOut...),
 		stdoutOut:           stdoutOut,
 		stdoutLimitExceeded: res.StdoutTruncated,

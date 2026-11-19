@@ -173,7 +173,7 @@ func ValidateWorkMeasurementShadow(req *model.RunRequest) error {
 	if req == nil || !req.WorkMeasurementShadow {
 		return nil
 	}
-	if req.WorkMeasurement || req.WorkMeasurementTime || req.WorkMeasurementJudge || req.WorkMeasurementPeerTime != nil {
+	if req.WorkMeasurement || req.WorkMeasurementTime || req.WorkMeasurementJudge || req.WorkMeasurementPeerTime != nil || req.WorkMeasurementClock != nil {
 		return fmt.Errorf("work_measurement_shadow keeps the primary run unmetered and cannot be combined with other work_measurement options")
 	}
 	if req.WorkMeasurementLimits == nil {
@@ -197,6 +197,14 @@ func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
 	}
 	if err := ValidateWorkMeasurementPeerTime(req); err != nil {
 		return err
+	}
+	if clock := req.WorkMeasurementClock; clock != nil {
+		if err := clock.Validate(); err != nil {
+			return err
+		}
+		if req.WorkMeasurementLimits == nil || req.WorkMeasurementJudge || req.WorkMeasurementPeerTime != nil {
+			return fmt.Errorf("work_measurement_clock requires ordinary diagnostic work_measurement_limits")
+		}
 	}
 	if req.WorkMeasurementTime {
 		if req.WorkMeasurementLimits == nil {

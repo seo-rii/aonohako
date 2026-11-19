@@ -46,7 +46,7 @@ before downloading the separately SHA-256-pinned engine SDK. CI needs no private
 cross-repository checkout token.
 
 The launcher fixes `-disable_traces -vm_size 32M -vmheap_size 32M` and reports engine profile
-`dynamorio-11.3-durante-v6-vm32m`. Before launch, installation validation checks
+`dynamorio-11.3-durante-v7-vm32m`. Before launch, installation validation checks
 the runtime manifest's source, process-lifetime patch, code-replay patch and
 actual release-core digest.
 Missing or mismatched provenance refuses measurement. This is a trusted local
@@ -126,7 +126,7 @@ Selected fields of a successful lifecycle aggregate resemble:
   "metric": "bb_entry_app_instructions",
   "scope": "process_tree_user_code",
   "rep_bytes_enabled": true,
-  "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
   "authority": "diagnostic_only",
   "integrity_verified": false,
   "measurement_contract": {
@@ -478,8 +478,10 @@ interactive and communication modes use the bool option described above:
 }
 ```
 
-All three actual limits are explicit, must cover the nominal limits, and must fit
-operator caps. CPU/wall are bounded to 600,000 ms and RSS to 4,096 MiB. Actual wall
+An explicit envelope includes all three actual limits. The
+[deciding online judge clock](durante-judging.md#online-durante-clock) also accepts
+the operator maximum as its default envelope. Actual limits must cover the
+nominal limits and fit operator caps. CPU/wall are bounded to 600,000 ms and RSS to 4,096 MiB. Actual wall
 must be at least actual CPU. The envelope accepts registered compatible families,
 including stock CPython and PyPy; JVM execution remains rejected pending
 qualification in aonohako's sandbox. Family registration alone is not runtime qualification.
@@ -522,7 +524,8 @@ trusted credited-time or credited-memory policy is enabled by this change.
 
 `work_measurement_time: true` asks the execution API to apply the operator's
 `internal/durante.TimePolicy` to a completed diagnostic observation. This option
-requires both `work_measurement: true` and `work_measurement_limits`, and accepts
+requires `work_measurement: true` and an effective raw envelope. Diagnostic
+requests supply `work_measurement_limits` explicitly. Time conversion accepts
 ordinary registered source profiles explicitly covered by the operator's time
 configuration. The legacy single policy retains its C/C++ scope. The shared-model
 registry below can approve compatible families such as CPython and PyPy. JVM
@@ -574,7 +577,7 @@ records supporting each intended execution profile before configuring estimates.
     "source_language": "CPP20",
     "family": "cpp",
     "runtime_image": "<actual-overlay-image-digest>",
-    "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+    "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
     "dispatch_profile": "default",
     "model_id": "shared-arithmetic-example",
     "model_version": 1,
@@ -583,7 +586,7 @@ records supporting each intended execution profile before configuring estimates.
     "source_language": "PYTHON3",
     "family": "cpython",
     "runtime_image": "<actual-overlay-image-digest>",
-    "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+    "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
     "dispatch_profile": "default",
     "model_id": "shared-arithmetic-example",
     "model_version": 1,
@@ -663,7 +666,7 @@ only; production coefficients have not been selected or calibrated.**
   "reference_id": "arithmetic-fixture-only",
   "runtime_id": "CPP20@<actual-overlay-image-digest>",
   "family": "cpp",
-  "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+  "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
   "dispatch_profile": "default",
   "instruction_ns_numerator": 1,
   "rep_byte_ns_numerator": 1,
@@ -722,7 +725,7 @@ response fields would be:
       "reference_id": "arithmetic-fixture-only",
       "runtime_id": "CPP20@<actual-overlay-image-digest>",
       "family": "cpp",
-      "engine_profile": "dynamorio-11.3-durante-v6-vm32m",
+      "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
       "dispatch_profile": "default",
       "nanoseconds": 131648,
       "milliseconds": 1
