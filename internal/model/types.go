@@ -408,6 +408,7 @@ type RunResponse struct {
 // separate. ExecutionStatus and TerminationSource describe the actual execution
 // before interactive or match coordinator verdicts reinterpret a peer shutdown.
 type WorkMeasurementProcess struct {
+	CheckerScore      *float64              `json:"checker_score,omitempty"`
 	Role              string                `json:"role"`
 	ProgramID         string                `json:"program_id"`
 	ParticipantIndex  *int                  `json:"participant_index,omitempty"`

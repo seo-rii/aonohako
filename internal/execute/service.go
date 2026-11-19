@@ -236,7 +236,11 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 		s = &rawService
 		memoryMB := 0
 		for _, plan := range peerPlans {
-			memoryMB += plan.rawLimits.MemoryMB
+			if req.SPJ != nil {
+				memoryMB = max(memoryMB, plan.rawLimits.MemoryMB)
+			} else {
+				memoryMB += plan.rawLimits.MemoryMB
+			}
 		}
 		if err := s.workMeasurement.ResourcePolicy.ValidatePeerAdmission(s.maxActiveRuns, s.workRootMaxBytes, memoryMB); err != nil {
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -295,6 +299,8 @@ func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks H
 	switch {
 	case req.WorkMeasurementLimits != nil:
 		return s.runWorkMeasurementDiagnostic(ctx, req, hooks, tuning)
+	case req.SPJ != nil && req.WorkMeasurementPeerTime != nil:
+		response = s.runSPJClockJudgment(ctx, req, hooks, tuning, peerPlans)
 	case req.Communication != nil:
 		response = s.runCommunication(ctx, req, hooks, tuning, peerPlans)
 	case req.Pipeline != nil:
@@ -333,6 +339,10 @@ func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks
 }
 
 func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput, captureRawStdout bool) sandboxRunResult {
+	return s.runProgram(ctx, req, stdin, stdinMaxBytes, hooks, tuning, evaluateOutput, captureRawStdout, nil)
+}
+
+func (s *Service) runProgram(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput, captureRawStdout bool, clocks *spjWorkClocks) sandboxRunResult {
 	startWall := timing.MonotonicNow()
 	if reason := s.networkRequestRejection(req.EnableNetwork); reason != "" {
 		return sandboxRunResult{response: model.RunResponse{
@@ -444,8 +454,15 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "durante preparation failed: " + err.Error()}}
 	}
 	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer, meter)
+	if clocks != nil {
+		finishPeerWorkClock(req, meter, &res, peerWorkClockCause(ctx, ctx), "contestant")
+		clocks.contestant = collectPeerWorkMeasurement(meter, res, false, "contestant", "contestant", nil)
+	}
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
+		if clocks != nil {
+			wallMs = res.WallTimeMs
+		}
 		return sandboxRunResult{response: initializationFailureResponse(res, wallMs)}
 	}
 
@@ -476,7 +493,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	status, evalReason, verdictSource := classifyRunStatusWithoutOutput(req, res)
 	var score *float64
 	if evaluateOutput {
-		status, score, evalReason, verdictSource = evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, judgeInputPath, sidecarOutputs, tuning, s.cgroupParentDir, s.cpuNormalizer)
+		status, score, evalReason, verdictSource = evaluateRunStatusWithClocks(ctx, ws, req, res, judgeOut, judgeSource, judgeInputPath, sidecarOutputs, tuning, s.cgroupParentDir, s.cpuNormalizer, clocks)
 	}
 	reason := res.Reason
 	if evalReason != "" {

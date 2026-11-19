@@ -340,6 +340,26 @@ available for post-exit diagnostic comparisons.
 
 [Peer-clock HTTP verification](../scripts/verify_durante_peer_clocks.py)
 
+### Standalone special judges
+
+A standalone SPJ can request version 2 with `contestant` and `checker`
+as both the role and program IDs. Give each role a virtual `time_ms` budget.
+The contestant runs under the request's raw limits and the checker under
+`spj.limits`. Their wall and CPU limits must each exceed their virtual limit.
+They run in sequence, so admission reserves the larger of their two memory
+allowances. Both programs need a declared source language with a qualified
+model. The checker's runtime descriptor includes its input, output and answer
+file operands.
+
+The worker runs the checker once, after the contestant exits successfully
+within budget and supplies its judged output. A verified contestant cutoff
+gives TLE and the checker receipt records `role_not_started`. A checker cutoff,
+raw watchdog stop or invalid score returns an unscored initialization failure.
+A completed checker supplies its normal acceptance, rejection or partial score.
+The controller verifies the two receipts and checks any emitted score against
+the parsed checker score. The checker files and its raw output stay on the worker.
+[Special-judge HTTP verification](../scripts/verify_durante_spj_clocks.py)
+
 ## Verdict rules
 
 The verdict uses the finalized execution state and, for completed observations,
@@ -580,6 +600,6 @@ live cutoff carries a partial work count and no final time estimate.
 | Pipeline | Match each executing participant to its step, program and step limit. Interactive steps also need a separate interactor observation. | Record artifact transfer and the final judge separately. Mark later, unstarted steps as such. |
 | Multi-step | Compare each executed step with its effective step limit. A displayed total may sum completed sequential steps while retaining their individual outcomes. | Account for handoff and coordination separately. Omit a credited total if any required step lacks an estimate. |
 
-The interactive and communication clocks use the operator's qualified models on
-both embedded and forwarded runs. Deciding SPJ, pipeline and multi-step time
-verdicts still require execution support and remote validation for those modes.
+Interactive, communication and standalone SPJ clocks use the operator's
+qualified models on embedded and forwarded runs. Pipeline and multi-step
+judgments currently retain native time authority.

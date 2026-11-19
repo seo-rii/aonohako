@@ -14,8 +14,10 @@ func (plan *peerTimePlan) enableClock(req, roleReq *model.RunRequest, cfg durant
 		return fmt.Errorf("requires a schema-2 bound instruction/REP judge model and enabled family with integrity off")
 	}
 	wall := roleReq.Limits.TimeMs
-	if req.Communication == nil {
+	if req.Interactor != nil {
 		wall = interactiveWallTimeMs(roleReq.Limits)
+	} else if req.SPJ != nil {
+		wall = wallTimeLimitMs(roleReq.Limits)
 	}
 	plan.rawLimits = durante.ResourceLimits{CPUTimeMs: roleReq.Limits.TimeMs, WallTimeMs: wall, MemoryMB: roleReq.Limits.MemoryMB}
 	if err := cfg.ResourcePolicy.ValidateRequest(plan.rawLimits); err != nil {
@@ -63,7 +65,7 @@ func finishPeerWorkClock(req *model.RunRequest, meter *durante.Session, res *exe
 	res.workClockReceipt = plan.Receipt(nil)
 	// The interactive executor's capture buffer enforces its hard stdout
 	// limit. Response-display truncation happens later and is independent.
-	outputExceeded := (role == "contestant" || role == "interactor") && res.StdoutTruncated
+	outputExceeded := (role == "contestant" && len(req.FileOutputs) == 0 || role == "interactor") && res.StdoutTruncated
 	res.peerClockRawSource = res.VerdictSource
 	if res.CPUAccounting != nil {
 		res.peerClockUsage = &model.PeerClockUsage{StdoutLimitExceeded: outputExceeded, CPUTimeNs: &res.CPUTimeNs, WallTimeMs: &res.WallTimeMs, MemoryKB: &res.MemoryKB}

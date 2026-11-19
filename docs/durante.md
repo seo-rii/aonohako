@@ -18,8 +18,9 @@ The ordinary CPU and memory values of an instrumented run include instrumentatio
 cost. Do not compare its verdict near a resource limit as if it were uninstrumented.
 
 Both operator configuration and an individual request are required. Default
-images and requests do not enable this path. SPJs, pipelines, Entry modes and
-multi-step requests are explicitly rejected. An instrumented request executes once;
+images and requests do not enable this path. Standalone special judges can request separate
+contestant and checker clocks through peer-time version 2. Pipelines, Entry
+modes and legacy multi-step requests retain native time authority. An instrumented request executes once;
 short-case repeat sampling is bypassed
 so one counter report does not silently stand in for several executions.
 
@@ -379,9 +380,9 @@ Version 1 compares the estimate after exit and leaves the native verdict,
 score and match outcome in place. Version 2 can enforce each role's virtual
 budget during execution. Both versions use the interactive or communication
 request's per-role CPU, wall and memory safety limits, which include
-instrumentation overhead. The ordinary `work_measurement_time` and
-`work_measurement_limits` options, SPJs, pipelines, entry modes and steps are
-outside the peer-time API.
+instrumentation overhead. Standalone SPJs can use version 2 with roles
+`contestant` and `checker` and two sequential raw limits.
+[SPJ grading and clock receipts](durante-judging.md#standalone-special-judges)
 
 The remote control plane independently selects each role's model and recomputes
 the full result. It rejects different budgets, coefficients, estimates, reasons,
@@ -533,7 +534,7 @@ configuration. The legacy single policy retains its C/C++ scope. The shared-mode
 registry below can approve compatible families such as CPython and PyPy. JVM
 execution remains unavailable pending sandbox qualification. Ambiguous `binary`,
 SPJs, pipelines, entry modes, and steps do not support time conversion.
-Interactive/communication runs use the separate
+Interactive, communication and standalone SPJ runs use the separate
 [`work_measurement_peer_time` option](#per-role-diagnostic-time-budgets) rather
 than this ordinary envelope flag. Without this flag, the existing measurement admission
 rules remain unchanged.

@@ -662,7 +662,7 @@ func (s *Service) runPipelineFinalJudge(ctx context.Context, req *model.RunReque
 		PythonLibraryMode: req.PythonLibraryMode,
 		RuntimeProfile:    req.RuntimeProfile,
 	}
-	ok, score, judgeErr := runSPJ(ctx, ws, judgeReq, string(actual), "", nil, tuning, s.cgroupParentDir, s.cpuNormalizer)
+	ok, score, judgeErr := runSPJ(ctx, ws, judgeReq, string(actual), "", nil, tuning, s.cgroupParentDir, s.cpuNormalizer, nil)
 	if judgeErr != nil {
 		return model.RunResponse{Status: model.RunStatusRE, Reason: judgeErr.Error(), VerdictSource: "final:spj", Score: score}
 	}
