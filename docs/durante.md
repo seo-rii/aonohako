@@ -286,10 +286,11 @@ failure, or initialization failure before coordinator verdict attribution.
 `termination_source` is present when a resource check or interruption supplies
 one. A normal nonzero target exit can retain a complete diagnostic count; a
 resource stop, cancellation, signal, or incomplete stream cannot. A completed
-peer's report remains available when another peer fails. An accepted interactive
-or match result can therefore contain an unavailable participant report when the
+peer's report remains available when another peer fails. With observation alone
+or a version 1 peer time budget, an accepted interactive
+or match result can contain an unavailable participant report when the
 interactor or manager finished first and the coordinator stopped that participant.
-The outer verdict, score, and match outcome keep their existing meaning.
+Version 2 interactive acceptance requires both roles to complete within budget.
 
 These reports are separate observations, with no cross-role total. The singular
 `work_measurement` field is absent for these modes. Remote forwarding checks the
@@ -374,13 +375,13 @@ legacy missing REP detail, and arithmetic overflow yield
 `exceeded`. Other completed roles retain their own estimates when one role fails.
 A pre-execution initialization failure may still omit the entire role array.
 
-This is a **post-execution diagnostic comparison**. It does not stop a program
-when the diagnostic budget is crossed, change CPU/wall/memory limits, create a
-cross-role total, or change status, score, match outcome, or raw CPU/RSS/counts.
-Existing measured peer resource limits still include instrumentation overhead.
-The option cannot be combined with ordinary `work_measurement_time`,
-`work_measurement_limits`, SPJs, pipelines, entry modes, or steps. Peer raw-resource
-envelopes and online budget enforcement are not implemented by this option.
+Version 1 compares the estimate after exit and leaves the native verdict,
+score and match outcome in place. Version 2 can enforce each role's virtual
+budget during execution. Both versions use the interactive or communication
+request's per-role CPU, wall and memory safety limits, which include
+instrumentation overhead. The ordinary `work_measurement_time` and
+`work_measurement_limits` options, SPJs, pipelines, entry modes and steps are
+outside the peer-time API.
 
 The remote control plane independently selects each role's model and recomputes
 the full result. It rejects different budgets, coefficients, estimates, reasons,
@@ -470,8 +471,9 @@ dedicated diagnostic runner rather than sharing it with unrelated workloads or
 ordinary requests with larger allocations. RSS sampling can overshoot between
 polls; the reserve is headroom, not a guarantee against container OOM.
 
-Only an ordinary supported-language request may include this envelope;
-interactive and communication modes use the bool option described above:
+The following envelope applies to ordinary supported-language requests.
+Interactive and communication requests use their own per-role safety limits
+for observation and for live clocks.
 
 ```json
 {
