@@ -310,7 +310,7 @@ def summarize_language(directory, language, protocol, history, reference):
             "fit_produced_coefficients": bool(ev.get("candidate_policy")), "evaluation_sha256": digest(fit)}
 
 
-def check_platform(platform, languages, history):
+def check_platform(platform, languages, history, directory):
     previous = history["arms"]["candidate"]
     request_ids, revisions = set(), set()
     by_language = {lang: [] for lang in languages}
@@ -362,6 +362,19 @@ def check_platform(platform, languages, history):
             if req["complete"]:
                 require(req["triplets"] == 45 and re.fullmatch(r"[0-9a-f]{64}", req["dataset_sha256"]),
                         "incomplete successful collector response")
+            elif languages[req["language"]]["status"] == "collected" and "dataset_sha256" in req:
+                # A retry may succeed on another image. Preserve the original
+                # collection failure independently of the final language fit.
+                sha = req["dataset_sha256"]
+                require(re.fullmatch(r"[0-9a-f]{64}", sha), "invalid failed attempt digest")
+                raw = (directory / "attempts" / f"{sha}.json").read_bytes()
+                attempt = json.loads(raw)
+                require(digest(raw) == sha and attempt["complete"] is False and
+                        attempt["source_language"] == req["language"] and attempt["runtime_image"] == image and
+                        len(attempt["samples"] or []) == req["triplets"] and attempt["failures"] and
+                        attempt["failures"] == req["failures"], "incorrect superseded collector attempt")
+            elif "dataset_sha256" not in req:
+                require(req["triplets"] == 0, "missing partial archive for recorded samples")
             by_language[req["language"]].append((image, req))
         statuses = deployment["receipt_get_status_counts"]
         require(set(statuses) <= {"200", "202"} and all(type(n) is int and n > 0 for n in statuses.values()) and
@@ -397,7 +410,7 @@ def summarize(directory, reference=None):
     languages = {lang: summarize_language(directory / lang, lang, protocol, history, reference)
                  for lang in protocol["languages"]}
     raw_platform = (directory / "platform.json").read_bytes()
-    check_platform(json.loads(raw_platform), languages, history)
+    check_platform(json.loads(raw_platform), languages, history, directory)
     return {"protocol_sha256": PROTOCOL_SHA256, "platform_sha256": digest(raw_platform), "languages": languages}
 
 

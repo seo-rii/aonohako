@@ -163,7 +163,22 @@ class DeploymentChecks(unittest.TestCase):
             self.verify()
 
     def verify(self):
-        check_platform({"deployments": [self.deployment]}, self.results, self.history)
+        check_platform({"deployments": [self.deployment]}, self.results, self.history,
+                       ROOT / "docs/durante/v10-native")
+
+    def test_superseded_collector_failure_matches_original_bytes(self):
+        sha = "780e5e4b0e69b1aed73ac2bd64820e2053640671ab6aab16bca27cba70d9e31a"
+        original = json.loads((ROOT / f"docs/durante/v10-native/attempts/{sha}.json").read_bytes())
+        self.results["RUST2024"] = self.results.pop("CPP20")
+        self.request["language"] = "RUST2024"
+        failed = dict(self.request, collector_exit=1, complete=False, triplets=0, dataset_sha256=sha,
+                      request_id_hash="5" * 64, failures=original["failures"])
+        older = dict(self.deployment, revision="attempt-one", image_digest=original["runtime_image"], requests=[failed])
+        platform = {"deployments": [older, self.deployment]}
+        check_platform(platform, self.results, self.history, ROOT / "docs/durante/v10-native")
+        failed["failures"] = ["different failure"]
+        with self.assertRaisesRegex(RuntimeError, "superseded collector"):
+            check_platform(platform, self.results, self.history, ROOT / "docs/durante/v10-native")
 
     def test_dataset_and_image_must_correspond(self):
         self.verify()
