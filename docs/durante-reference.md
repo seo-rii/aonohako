@@ -37,13 +37,22 @@ not supply a corpus for it.
 | `PYTHON3` | `cpython` | `runtime-reference-v1` | `Main.pyc` from the selected CPython compile handler |
 | `PYPY3` | `pypy` | `runtime-reference-v1` | `Main.pyc` from the selected PyPy compile handler |
 | `RUST2024` | `native` | `runtime-reference-v1` | Normal rustc edition-2024 `Main` executable, which may link dynamically |
+| `RUST2024` | `native` | `rust-long-reference-v1` (opt-in) | Same five Rust sources compiled with the normal rustc handler |
 
-The new runtime corpus uses independent `integer` and `copy` training programs,
+The default runtime corpus uses independent `integer` and `copy` training programs,
 with `branch`, `sort` and `fill` held out. All three runtime profiles use the same
 inputs, algorithm semantics, split and independent checksum oracles. Integer
 results use modulo-2^64 arithmetic. Copy/fill use each runtime's normal memory
 operations; their names do not promise a particular REP instruction or count.
 The exact existing CPP20 sources, input sizes, hashes and splits remain unchanged.
+
+Use `collect --language RUST2024 --corpus-id rust-long-reference-v1` to measure
+longer Rust inputs. At scale 1, integer runs 2²⁸ iterations, branch runs 2²⁶,
+and sort takes 2²¹ elements. Copy and fill use a 256 KiB buffer with 8,192 and
+16,384 repetitions respectively. Scales 2 and 4 multiply the work counts and
+keep the buffer size fixed. The fitter selects the inputs and checksums from
+the recorded corpus ID. Both Rust corpora use the short functional inputs for
+`--smoke`. [Rust calibration protocol](durante/rust-long-v10/protocol.json)
 
 Python compilation uses isolated `compileall` with checked-hash bytecode. The
 collector validates that the returned source matches the fixture, then executes
