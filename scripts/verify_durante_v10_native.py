@@ -256,7 +256,16 @@ def check_platform(platform, languages, history):
             require(re.fullmatch(r"[0-9a-f]{64}", rid) and rid not in request_ids and
                     re.fullmatch(r"[0-9a-f]{64}", req["instance_id_sha256"]), "invalid or duplicate request identity")
             request_ids.add(rid)
-            require(req["language"] in languages and req["status"] == 200 and type(req["triplets"]) is int and
+            require(req["language"] in languages and type(req["status"]) is int and 100 <= req["status"] <= 599,
+                    "invalid logged request language or HTTP status")
+            available = req.get("result_available", True)
+            require(type(available) is bool, "invalid result availability")
+            if not available:
+                require(isinstance(req.get("transport_failure"), str) and req["transport_failure"].strip() and
+                        not ({"complete", "collector_exit", "dataset_sha256", "triplets"} & req.keys()),
+                        "unrecovered response cannot attest a collector outcome")
+                continue
+            require("transport_failure" not in req and req["status"] == 200 and type(req["triplets"]) is int and
                     0 <= req["triplets"] <= 45 and type(req["collector_exit"]) is int and req["collector_exit"] >= 0 and
                     req["complete"] is (req["collector_exit"] == 0), "inconsistent collector outcome")
             if req["complete"]:

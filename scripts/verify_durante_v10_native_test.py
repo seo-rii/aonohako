@@ -118,6 +118,21 @@ class DeploymentChecks(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "does not match"):
             self.verify()
 
+    def test_unrecovered_response_is_preserved_without_becoming_a_result(self):
+        lost = dict(language="CPP20", status=200, request_id_hash="5" * 64, instance_id_sha256="8" * 64,
+                    result_available=False, transport_failure="response not recovered")
+        self.deployment["requests"].insert(0, lost)
+        self.verify()
+        for field, value in (("complete", False), ("collector_exit", 1), ("dataset_sha256", "0" * 64), ("triplets", 0)):
+            with self.subTest(field=field):
+                lost[field] = value
+                with self.assertRaisesRegex(RuntimeError, "unrecovered"):
+                    self.verify()
+                del lost[field]
+        self.deployment["requests"].pop()
+        with self.assertRaisesRegex(RuntimeError, "absent or duplicate successful"):
+            self.verify()
+
     def test_duplicated_request_and_incomplete_deletion(self):
         self.deployment["requests"].append(dict(self.request))
         with self.assertRaisesRegex(RuntimeError, "duplicate request"):
