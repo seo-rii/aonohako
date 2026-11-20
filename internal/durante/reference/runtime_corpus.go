@@ -59,8 +59,25 @@ func ResolveCorpusProfile(language string) (CorpusProfile, error) {
 	return result, nil
 }
 
+// SelectCorpusProfile resolves an explicit built-in corpus, or the language's
+// original corpus when corpusID is empty.
+func SelectCorpusProfile(language, corpusID string) (CorpusProfile, error) {
+	profile, err := ResolveCorpusProfile(language)
+	if err != nil {
+		return CorpusProfile{}, err
+	}
+	if corpusID == "" || corpusID == profile.CorpusID {
+		return profile, nil
+	}
+	if corpusID != RustLongCorpusID || profile.SourceLanguage != "RUST2024" {
+		return CorpusProfile{}, fmt.Errorf("reference corpus %q is not available for %s", corpusID, profile.SourceLanguage)
+	}
+	profile.CorpusID = RustLongCorpusID
+	return profile, nil
+}
+
 func referenceDatasetProfile(dataset Dataset) (CorpusProfile, error) {
-	profile, err := ResolveCorpusProfile(dataset.SourceLanguage)
+	profile, err := SelectCorpusProfile(dataset.SourceLanguage, dataset.CorpusID)
 	if err != nil {
 		return CorpusProfile{}, err
 	}
@@ -75,6 +92,10 @@ func CorpusForLanguage(language string, smoke bool) ([]Workload, error) {
 	if err != nil {
 		return nil, err
 	}
+	return profile.workloads(smoke)
+}
+
+func (profile CorpusProfile) workloads(smoke bool) ([]Workload, error) {
 	if profile.CorpusID == CorpusID {
 		return Corpus(smoke), nil
 	}
@@ -84,10 +105,15 @@ func CorpusForLanguage(language string, smoke bool) ([]Workload, error) {
 	}
 	scales := []int{1, 2, 4}
 	iterations, branches, elements := uint64(1<<18), uint64(1<<18), uint64(1<<16)
-	bufferBytes, repeats := uint64(256<<10), uint64(128)
+	bufferBytes, copyRepeats, fillRepeats := uint64(256<<10), uint64(128), uint64(128)
 	if smoke {
 		scales = []int{1}
-		iterations, branches, elements, bufferBytes, repeats = 8192, 4096, 1024, 16<<10, 8
+		iterations, branches, elements, bufferBytes, copyRepeats, fillRepeats = 8192, 4096, 1024, 16<<10, 8, 8
+	} else if profile.CorpusID == RustLongCorpusID {
+		// Keep the buffers and programs fixed while lengthening each optimized
+		// Rust workload to exceed the reference fitter's native duration floor.
+		iterations, branches, elements = 1<<28, 1<<26, 1<<21
+		copyRepeats, fillRepeats = 8192, 16384
 	}
 	workloads := []Workload{
 		{ID: "integer", Split: SplitTrain}, {ID: "copy", Split: SplitTrain},
@@ -102,13 +128,15 @@ func CorpusForLanguage(language string, smoke bool) ([]Workload, error) {
 		workloads[i].Source = string(data)
 	}
 	for _, scale := range scales {
-		n, branchN, size, repeatN := iterations*uint64(scale), branches*uint64(scale), elements*uint64(scale), repeats*uint64(scale)
+		multiplier := uint64(scale)
+		n, branchN, size := iterations*multiplier, branches*multiplier, elements*multiplier
+		copyN, fillN := copyRepeats*multiplier, fillRepeats*multiplier
 		cases := []Case{
 			{Scale: scale, Input: fmt.Sprintf("%d %d\n", n, integerSeed), ExpectedStdout: checksumOutput(integerChecksum(n, integerSeed))},
-			{Scale: scale, Input: fmt.Sprintf("%d %d\n", bufferBytes, repeatN), ExpectedStdout: checksumOutput(repCopyChecksum(bufferBytes, repeatN))},
+			{Scale: scale, Input: fmt.Sprintf("%d %d\n", bufferBytes, copyN), ExpectedStdout: checksumOutput(repCopyChecksum(bufferBytes, copyN))},
 			{Scale: scale, Input: fmt.Sprintf("%d %d\n", branchN, branchSeed), ExpectedStdout: checksumOutput(branchChecksum(branchN, branchSeed))},
 			{Scale: scale, Input: fmt.Sprintf("%d\n", size), ExpectedStdout: checksumOutput(sumSquares(size))},
-			{Scale: scale, Input: fmt.Sprintf("%d %d\n", bufferBytes, repeatN), ExpectedStdout: checksumOutput(repFillChecksum(bufferBytes, repeatN))},
+			{Scale: scale, Input: fmt.Sprintf("%d %d\n", bufferBytes, fillN), ExpectedStdout: checksumOutput(repFillChecksum(bufferBytes, fillN))},
 		}
 		for i := range workloads {
 			workloads[i].Cases = append(workloads[i].Cases, cases[i])

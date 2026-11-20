@@ -11,6 +11,7 @@ const Schema = 1
 const CorpusID = "cpp-reference-v1"
 const ExternalCorpusID = "external-cpp20-validation-v1"
 const RuntimeCorpusID = "runtime-reference-v1"
+const RustLongCorpusID = "rust-long-reference-v1"
 const SplitTrain = "train"
 const SplitValidation = "validation"
 

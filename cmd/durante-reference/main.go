@@ -63,6 +63,7 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	output := flags.String("output", "", "new private output directory (required)")
 	language := flags.String("language", "CPP20", "source profile: CPP20, PYTHON3, PYPY3 or RUST2024")
+	corpusID := flags.String("corpus-id", "", "built-in corpus ID (default: language's original corpus; Rust also supports "+reference.RustLongCorpusID+")")
 	manifest := flags.String("validation-manifest", "", "external held-out CPP20 workloads (requires --frozen-policy)")
 	frozen := flags.String("frozen-policy", "", "standalone diagnostic policy fixed before external collection")
 	memoryMB := flags.Int("memory-mb", 0, "native/raw RSS limit in MiB (0: corpus default, CPP20 256; other profiles 512)")
@@ -82,7 +83,11 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "require --output, valid repetition count, timeout in (0,1h], and memory-mb in [0,4096]")
 		return 1
 	}
-	profile, err := reference.ResolveCorpusProfile(*language)
+	if *corpusID != "" && (*manifest != "" || *frozen != "") {
+		fmt.Fprintln(stderr, "choose either --corpus-id or an external --validation-manifest/--frozen-policy")
+		return 1
+	}
+	profile, err := reference.SelectCorpusProfile(*language, *corpusID)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -109,7 +114,7 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	path := filepath.Join(*output, "dataset.json")
 	dataset, collectErr := reference.Collect(ctx, cfg, reference.CollectOptions{
-		Language: profile.SourceLanguage, MemoryMB: *memoryMB, Smoke: *smoke, Repetitions: *repetitions,
+		Language: profile.SourceLanguage, CorpusID: *corpusID, MemoryMB: *memoryMB, Smoke: *smoke, Repetitions: *repetitions,
 		ValidationCorpus: validationCorpus, FrozenPolicy: policy,
 		MeteredCPUTimeMs: *meteredCPU, MeteredWallTimeMs: *meteredWall,
 		OnSample: func(snapshot reference.Dataset) error { return writeJSON(path, snapshot) },

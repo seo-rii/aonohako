@@ -118,7 +118,7 @@ func evaluateReference(dataset Dataset, options FitOptions, external *Validation
 
 	var corpus []Workload
 	if frozen == nil {
-		corpus, err = CorpusForLanguage(dataset.SourceLanguage, false)
+		corpus, err = profile.workloads(false)
 	} else {
 		corpus, err = external.snapshot()
 	}

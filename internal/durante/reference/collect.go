@@ -54,6 +54,7 @@ const (
 
 type CollectOptions struct {
 	Language         string
+	CorpusID         string
 	ValidationCorpus *ValidationCorpus
 	FrozenPolicy     *FrozenPolicy
 	// Zero selects the documented corpus default: CPP20 256 MiB, runtime
@@ -71,7 +72,7 @@ type CollectOptions struct {
 // API. Every sample is ordered native-before, metered, native-after, using one
 // compiled artifact. Failed attempts remain in an incomplete returned dataset.
 func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (dataset Dataset, err error) {
-	profile, profileErr := ResolveCorpusProfile(options.Language)
+	profile, profileErr := SelectCorpusProfile(options.Language, options.CorpusID)
 	memoryMB := options.MemoryMB
 	if memoryMB == 0 {
 		memoryMB = profile.DefaultMemoryMB
@@ -106,6 +107,9 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	}
 	var corpus []Workload
 	if options.ValidationCorpus != nil {
+		if options.CorpusID != "" {
+			return dataset, fmt.Errorf("choose either a built-in corpus ID or an external validation manifest")
+		}
 		if profile.SourceLanguage != "CPP20" || options.Smoke || !referenceSHA256(options.FrozenPolicy.SHA256()) {
 			return dataset, fmt.Errorf("external reference collection requires CPP20, full collection and a parsed frozen policy")
 		}
@@ -173,7 +177,7 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 		client.Transport = collectionBearerTransport{transport, httpServer.URL, cfg.InboundAuth.BearerToken}
 	}
 	if options.ValidationCorpus == nil {
-		corpus, err = CorpusForLanguage(profile.SourceLanguage, options.Smoke)
+		corpus, err = profile.workloads(options.Smoke)
 		if err != nil {
 			return dataset, err
 		}
@@ -219,7 +223,7 @@ func (t collectionBearerTransport) RoundTrip(r *http.Request) (*http.Response, e
 }
 
 func validateCollectionConfig(cfg config.Config, options CollectOptions, limits durante.ResourceLimits) error {
-	profile, err := ResolveCorpusProfile(options.Language)
+	profile, err := SelectCorpusProfile(options.Language, options.CorpusID)
 	if err != nil {
 		return err
 	}
@@ -285,9 +289,9 @@ func collectCorpus(ctx context.Context, client *http.Client, baseURL string, cor
 	if err != nil {
 		return err
 	}
-	selected, err := ResolveCorpusProfile(options.Language)
-	if err != nil || selected.SourceLanguage != profile.SourceLanguage {
-		return fmt.Errorf("reference collection options do not match the dataset language")
+	selected, err := SelectCorpusProfile(options.Language, options.CorpusID)
+	if err != nil || selected != profile {
+		return fmt.Errorf("reference collection options do not match the dataset profile")
 	}
 	if len(corpus) == 0 {
 		return fmt.Errorf("reference corpus is empty")
