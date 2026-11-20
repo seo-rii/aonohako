@@ -13,6 +13,7 @@ from verify_durante_native_boundaries import AC, check_native, digest, require
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL_SHA256 = "4348aa0e0dfc254e4097442851b035772329a008860be3537f5be14f03ee331b"
+RUST_LONG_PROTOCOL_SHA256 = "bb88de7b54dbf29f6e9c5afbe2a6f87a0531d634ac69d1a3926a260b41763650"
 FAMILY = {"CPP20": "cpp", "RUST2024": "native", "PYTHON3": "cpython", "PYPY3": "pypy"}
 WEIGHTED = "weighted-work-nanoseconds-v1"
 
@@ -179,7 +180,7 @@ def collect_cases(dataset, language, protocol, history):
     require(dataset["schema"] == 1 and dataset["source_language"] == language and
             dataset["corpus_id"] == protocol["languages"][language] and dataset["smoke"] is False and
             not dataset.get("corpus_sha256") and not dataset.get("frozen_policy_sha256") and
-            dataset["repetitions"] == protocol["repetitions"] and dataset["runner_sha256"] == previous["reference_sha256"] and
+            dataset["repetitions"] == protocol["repetitions"] and dataset["runner_sha256"] == protocol["reference_sha256"] and
             dataset["dispatch_profile"] == "default" and dataset["cpuid_profile"] == "x86-64-v2" and
             not dataset.get("latency_bound_version") and re.fullmatch(r"sha256:[0-9a-f]{64}", dataset["runtime_image"]),
             "incorrect v10 dataset identity")
@@ -196,7 +197,12 @@ def collect_cases(dataset, language, protocol, history):
     rows, groups, binaries = {}, {}, {}
     native_cpu_ns, diagnostic_cpu_ns = 0, 0
     sources = SOURCE_SHA256["PYTHON3" if language == "PYPY3" else language]
-    fixtures = CORPUS_CASES[dataset["corpus_id"]]
+    if "fixtures" in protocol:
+        fixtures = protocol["fixtures"]
+        require(dataset["native_limits"] == protocol["native_limits"] and dataset["metered_limits"] == protocol["metered_limits"],
+                "unexpected collection limits")
+    else:
+        fixtures = CORPUS_CASES[dataset["corpus_id"]]
     for i, sample in enumerate(samples):
         name, scale, _ = observed[i]
         require(sample["split"] == splits[name], "relabelled workload")
@@ -306,12 +312,23 @@ def summarize_language(directory, language, protocol, history, reference):
     ev = check_fit(raw, dataset, receipt, result, groups, protocol, history)
     if reference:
         replay_fit(reference, raw, receipt, ev)
+    if "rust_short_evaluation_sha256" in protocol:
+        previous_fit = (ROOT / "docs/durante/v10-native/RUST2024/evaluation.json").read_bytes()
+        require(language == "RUST2024" and digest(previous_fit) == protocol["rust_short_evaluation_sha256"],
+                "incorrect prior Rust calibration")
+        clock = json.loads(previous_fit)["evaluation"]["candidate_policy"]
+        result["short_rust_transfer"] = {}
+        for label, rows in groups.items():
+            score = score_case(rows, clock, protocol["thresholds"])
+            result["short_rust_transfer"][label] = {key: score[key] for key in
+                ("trial_clock_ns", "worst_signed_error_ns", "worst_error_ppm")}
     return {**result, "status": "collected", "fit_passed": ev["passed"],
             "fit_produced_coefficients": bool(ev.get("candidate_policy")), "evaluation_sha256": digest(fit)}
 
 
-def check_platform(platform, languages, history, directory):
+def check_platform(platform, languages, history, directory, protocol=None):
     previous = history["arms"]["candidate"]
+    reference_sha = protocol["reference_sha256"] if protocol else previous["reference_sha256"]
     request_ids, revisions = set(), set()
     by_language = {lang: [] for lang in languages}
     for deployment in platform["deployments"]:
@@ -324,7 +341,9 @@ def check_platform(platform, languages, history, directory):
                 deployment["cpu"] == deployment["concurrency"] == 1 and deployment["memory_mib"] == 2048 and
                 deployment["private"] is True, "unexpected deployment configuration")
         binaries = deployment["binaries"]
-        require(all(binaries[k] == previous[k] for k in ("reference_sha256", "worker_sha256")) and
+        if protocol and "base_image" in protocol:
+            require(deployment["base_image"] == protocol["base_image"], "unexpected base image")
+        require(binaries["reference_sha256"] == reference_sha and binaries["worker_sha256"] == previous["worker_sha256"] and
                 binaries["client_sha256"] == previous["installation"]["client_sha256"] and
                 binaries["commit"] == previous["installation"]["source_commit"], "incorrect deployed v10 binaries")
         require(all(deployment["cleanup"][k] == 404 for k in ("revision_http", "service_http", "package_http")),
@@ -399,7 +418,8 @@ def check_platform(platform, languages, history, directory):
 
 def summarize(directory, reference=None):
     raw = (directory / "protocol.json").read_bytes()
-    require(digest(raw) == PROTOCOL_SHA256, "unexpected study protocol")
+    protocol_sha = digest(raw)
+    require(protocol_sha in (PROTOCOL_SHA256, RUST_LONG_PROTOCOL_SHA256), "unexpected study protocol")
     protocol = json.loads(raw)
     raw_history = (ROOT / "docs/durante/cloud-run-cpp20-v10-performance.json").read_bytes()
     require(digest(raw_history) == protocol["previous_clock_receipt_sha256"], "incorrect frozen clock receipt")
@@ -410,8 +430,8 @@ def summarize(directory, reference=None):
     languages = {lang: summarize_language(directory / lang, lang, protocol, history, reference)
                  for lang in protocol["languages"]}
     raw_platform = (directory / "platform.json").read_bytes()
-    check_platform(json.loads(raw_platform), languages, history, directory)
-    return {"protocol_sha256": PROTOCOL_SHA256, "platform_sha256": digest(raw_platform), "languages": languages}
+    check_platform(json.loads(raw_platform), languages, history, directory, protocol)
+    return {"protocol_sha256": protocol_sha, "platform_sha256": digest(raw_platform), "languages": languages}
 
 
 if __name__ == "__main__":
