@@ -4,7 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from verify_durante_v10_native import ROOT, check_platform, collect_cases, estimate, median_ns, score_case, spread, summarize_language
+from verify_durante_v10_native import ROOT, check_fit, check_platform, collect_cases, estimate, median_ns, score_case, spread, summarize_language
 
 GATES = {"min_native_ns": 20_000_000, "max_native_spread_ppm": 100_000,
          "max_work_spread_ppm": 1_000, "max_error_ppm": 200_000}
@@ -61,10 +61,20 @@ class PublishedTrialsTests(unittest.TestCase):
         self.history = json.loads((path / "cloud-run-cpp20-v10-performance.json").read_bytes())
         path = path / "v10-native"
         self.protocol = json.loads((path / "protocol.json").read_bytes())
-        self.data = json.loads(gzip.decompress((path / "CPP20/dataset.json.gz").read_bytes()))
+        self.raw = gzip.decompress((path / "CPP20/dataset.json.gz").read_bytes())
+        self.data = json.loads(self.raw)
+        self.receipt = json.loads((path / "CPP20/evaluation.json").read_bytes())
 
     def collect(self):
         return collect_cases(self.data, "CPP20", self.protocol, self.history)[0]
+
+    def test_reported_fit_pass_must_match_measured_gates(self):
+        result, groups = collect_cases(self.data, "CPP20", self.protocol, self.history)
+        self.assertFalse(check_fit(self.raw, self.data, self.receipt, result, groups,
+                                   self.protocol, self.history)["passed"])
+        self.receipt["evaluation"].update(passed=True, failures=[])
+        with self.assertRaisesRegex(RuntimeError, "measured gates"):
+            check_fit(self.raw, self.data, self.receipt, result, groups, self.protocol, self.history)
 
     def test_real_output_and_v10_provenance_are_required(self):
         sample = self.data["samples"][0]
@@ -85,9 +95,32 @@ class PublishedTrialsTests(unittest.TestCase):
         self.assertEqual(result["recorded_triplets"], 5)
         self.assertEqual(result["completed_triplets"], 4)
         self.assertEqual(list(result["cases"]), ["integer/1"])
+        self.data["failures"] = ["native-after interrupted"]
+        with TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "dataset.json.gz").write_bytes(gzip.compress(json.dumps(self.data).encode()))
+            failure = {"phase": "collect", "exit_code": 1, "reason": self.data["failures"][0]}
+            (directory / "failure.json").write_text(json.dumps(failure))
+            summary = summarize_language(directory, "CPP20", self.protocol, self.history, None)
+            self.assertEqual(summary["status"], "collection_failed")
+            self.assertEqual(summary["cases"], result["cases"])
+            self.assertNotIn("fit_passed", summary)
         self.data["samples"][3]["repetition"] = 2
         with self.assertRaisesRegex(RuntimeError, "duplicate trials"):
             self.collect()
+
+    def test_partial_collection_binds_the_original_fixture_and_binary(self):
+        self.data["complete"] = False
+        self.data["samples"] = self.data["samples"][:5]
+        sample = self.data["samples"][-1]
+        sample["native_after"] = {}
+        for field in ("source_sha256", "input_sha256", "expected_sha256", "binary_sha256"):
+            with self.subTest(field=field):
+                original = sample[field]
+                sample[field] = "0" * 64
+                with self.assertRaisesRegex(RuntimeError, "fixture|binary"):
+                    self.collect()
+                sample[field] = original
 
 
 class DeploymentChecks(unittest.TestCase):
@@ -129,6 +162,32 @@ class DeploymentChecks(unittest.TestCase):
             self.verify()
         self.request["dataset_sha256"] = self.results["CPP20"]["dataset_sha256"]
         self.deployment["image_digest"] = "sha256:" + "2" * 64
+        with self.assertRaisesRegex(RuntimeError, "does not match"):
+            self.verify()
+
+    def test_partial_archive_matches_receipt_and_failure_exit(self):
+        result = self.results["CPP20"]
+        result.update(status="collection_failed", recorded_triplets=17, failure={"exit_code": 2})
+        self.request.update(complete=False, collector_exit=2, triplets=17)
+        self.verify()
+        for field, value in (("collector_exit", 1), ("triplets", 0), ("dataset_sha256", "0" * 64)):
+            with self.subTest(field=field):
+                original = self.request[field]
+                self.request[field] = value
+                with self.assertRaisesRegex(RuntimeError, "does not match"):
+                    self.verify()
+                self.request[field] = original
+        del result["dataset_sha256"]
+        del result["recorded_triplets"]
+        del result["image"]
+        with self.assertRaisesRegex(RuntimeError, "missing partial archive"):
+            self.verify()
+        self.request["triplets"] = 0
+        with self.assertRaisesRegex(RuntimeError, "missing partial archive"):
+            self.verify()
+        del self.request["dataset_sha256"]
+        self.verify()
+        self.request["collector_exit"] = 1
         with self.assertRaisesRegex(RuntimeError, "does not match"):
             self.verify()
 

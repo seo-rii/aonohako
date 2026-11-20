@@ -16,6 +16,52 @@ PROTOCOL_SHA256 = "4348aa0e0dfc254e4097442851b035772329a008860be3537f5be14f03ee3
 FAMILY = {"CPP20": "cpp", "RUST2024": "native", "PYTHON3": "cpython", "PYPY3": "pypy"}
 WEIGHTED = "weighted-work-nanoseconds-v1"
 
+# reference.CorpusForLanguage(language, false) at protocol.json's source commit.
+# Keep these independent of future edits to the collector and its fixture files.
+SOURCE_SHA256 = {
+    "CPP20": {
+        "integer": "2bb33dfeec1d2f82fad2075a45e5a1a8c72362e8d61438f6eb147fe9f4c1025d",
+        "rep_copy": "bbe56822498df565555d46c9352af2e5d521e052771e2e1ac89998ef50564691",
+        "branch": "200fa292952892480907001cf1a795984c46a3e53f402d906dadef412b0b16dc",
+        "sort": "ba6464e65deeb8bde261b12d324b91a0bf6f4d456979090e41fa877c28dd3da5",
+        "rep_fill": "2c6a019d195860141be505862f39c081b860130b649a257c0c0a17708d2e5513"},
+    "PYTHON3": {
+        "integer": "6cf08803fab507fc2bb45236cd85ba4eab804188785c739d7f16a3ab49d51b15",
+        "copy": "894a8faa7b7f3e592ab2a039ae66391a0f2a213cce1b072df89e62d15a6685f4",
+        "branch": "65776a4306c9a94e8ab4067520cd2065f5943125866163e721538c9d50ecefc4",
+        "sort": "1f51a18f888757ade1b0007d9dfbfe23a2f2bdc281c0fa04a2580e9e7f3cbfce",
+        "fill": "f836506d77ee9ffbc43924ed69a8f5096ec480a0340e9e53b4edcf0eb7a794c3"},
+    "RUST2024": {
+        "integer": "dcb8ad3d0654e5a531975b07146828161c9f20dfd1a96a39d503dbd10dd297b9",
+        "copy": "6c5b252b1f0135c454c594891969b456db3f9e3e0d419bbb7a48a86702ad2c98",
+        "branch": "468db446e268202968ba0dae4f552eb218ef65dc64f1fb775f41ed9fde7527ce",
+        "sort": "e3f307e0c849aae0598a54a74f89465adfb6393158c06b9f93ca7cda0379f1f5",
+        "fill": "ab2e488cda2708649d80fde97a8de3e64d54cb8f0db406bbdf5a876c7633e2da"},
+}
+# (stdin, expected stdout) at scales 1, 2 and 4. Each value ends in a newline.
+CORPUS_CASES = {
+    "cpp-reference-v1": {
+        "integer": (("33554432 81985529216486895", 7648774604356046319),
+                    ("67108864 81985529216486895", 5095975316794101231),
+                    ("134217728 81985529216486895", 6525099800984800751)),
+        "rep_copy": (("4194304 512", 1121503238200285), ("4194304 1024", 1121503280051933),
+                     ("4194304 2048", 1121503497579741)),
+        "branch": (("16777216 44257", 15692098880723300352), ("33554432 44257", 12937453687737049088),
+                   ("67108864 44257", 7428163301764546560)),
+        "sort": (("524288", 48038533464326144), ("1048576", 384307717958270976), ("2097152", 3074459544641863680)),
+        "rep_fill": (("4194304 512", 1776811231089408), ("4194304 1024", 1776811281491456),
+                     ("4194304 2048", 1776811482565632))},
+    "runtime-reference-v1": {
+        "integer": (("262144 81985529216486895", 16902750251959438831),
+                    ("524288 81985529216486895", 154191601532653039),
+                    ("1048576 81985529216486895", 14675978275453128175)),
+        "copy": (("262144 128", 4380953020189), ("262144 256", 4380956200541), ("262144 512", 4380968524765)),
+        "branch": (("262144 44257", 3415723182680130752), ("524288 44257", 6831446365360261504),
+                   ("1048576 44257", 13662892730720523008)),
+        "sort": (("65536", 93827139731456), ("131072", 750608527851520), ("262144", 6004833862942720)),
+        "fill": (("262144 128", 2542631291968), ("262144 256", 6940697938304), ("262144 512", 6940710605568))},
+}
+
 
 def ceil_div(n, d):
     return (n + d - 1) // d
@@ -125,6 +171,7 @@ def collect_cases(dataset, language, protocol, history):
     previous = history["arms"]["candidate"]
     require(dataset["schema"] == 1 and dataset["source_language"] == language and
             dataset["corpus_id"] == protocol["languages"][language] and dataset["smoke"] is False and
+            not dataset.get("corpus_sha256") and not dataset.get("frozen_policy_sha256") and
             dataset["repetitions"] == protocol["repetitions"] and dataset["runner_sha256"] == previous["reference_sha256"] and
             dataset["dispatch_profile"] == "default" and dataset["cpuid_profile"] == "x86-64-v2" and
             not dataset.get("latency_bound_version") and re.fullmatch(r"sha256:[0-9a-f]{64}", dataset["runtime_image"]),
@@ -139,10 +186,18 @@ def collect_cases(dataset, language, protocol, history):
     observed = [(s["workload_id"], s["scale"], s["repetition"]) for s in samples]
     require(observed == order[:len(samples)] and (not dataset["complete"] or len(samples) == len(order)),
             "missing, reordered or duplicate trials")
-    rows, groups = {}, {}
+    rows, groups, binaries = {}, {}, {}
+    sources = SOURCE_SHA256["PYTHON3" if language == "PYPY3" else language]
+    fixtures = CORPUS_CASES[dataset["corpus_id"]]
     for i, sample in enumerate(samples):
         name, scale, _ = observed[i]
         require(sample["split"] == splits[name], "relabelled workload")
+        stdin, expected = fixtures[name][protocol["scales"].index(scale)]
+        require(sample["source_sha256"] == sources[name] and sample["input_sha256"] == digest(f"{stdin}\n".encode()) and
+                sample["expected_sha256"] == digest(f"{expected}\n".encode()), "incorrect fixed corpus fixture")
+        binary = sample["binary_sha256"]
+        require(re.fullmatch(r"[0-9a-f]{64}", binary) and binaries.setdefault(name, binary) == binary,
+                "invalid or changed workload binary")
         # The collector appends a row before running the phases. A final failed
         # triplet remains in the archive even when native_after was never called.
         if not dataset["complete"] and i == len(samples) - 1 and sample["native_after"].get("status") != AC:
@@ -197,6 +252,17 @@ def check_fit(raw, dataset, receipt, result, groups, protocol, history):
         else:
             require(official["estimated_ns"] == official["absolute_error_ns"] == official["absolute_error_ppm"] == 0,
                     "unsolved fit cannot supply an estimate")
+    # The fitted policy uses aggregate REP bytes and its own prediction, while
+    # the frozen transfer clock also gates the separate MOVS and STOS counts.
+    gates = protocol["thresholds"]
+    passed = bool(candidate) and all(
+        row["native_min_ns"] >= gates["min_native_ns"] and
+        row["native_spread_ppm"] <= gates["max_native_spread_ppm"] and
+        row["instruction_spread_ppm"] <= gates["max_work_spread_ppm"] and
+        row["rep_spread_ppm"] <= gates["max_work_spread_ppm"] and
+        fits[label]["absolute_error_ppm"] <= gates["max_error_ppm"]
+        for label, row in result["cases"].items())
+    require(ev["passed"] is passed, "fit outcome does not match measured gates")
     return ev
 
 
@@ -218,7 +284,8 @@ def summarize_language(directory, language, protocol, history, reference):
             bool(dataset.get("failures")) == failure.exists(), "collection status does not match source dataset")
     result["dataset_sha256"] = digest(raw)
     if failure.exists() and not dataset.get("samples"):
-        return {**result, "recorded_triplets": 0, "completed_triplets": 0, "cases": {}}
+        return {**result, "image": dataset["runtime_image"], "recorded_triplets": 0, "completed_triplets": 0,
+                "cases": {}}
     scored, groups = collect_cases(dataset, language, protocol, history)
     result.update(scored)
     if failure.exists():
@@ -294,11 +361,16 @@ def check_platform(platform, languages, history):
         completed = [(image, req) for image, req in requests if req["complete"]]
         require(requests and len(completed) == int(result["status"] == "collected"),
                 f"{lang}: absent or duplicate successful collection")
-        if result["status"] == "collected" or "dataset_sha256" in result:
-            matches = [(image, req) for image, req in (completed or requests)
-                       if req.get("dataset_sha256") == result["dataset_sha256"] and
-                       req["triplets"] == result["recorded_triplets"] and result.get("image", image) == image]
-            require(len(matches) == 1, f"{lang}: dataset does not match deployed image and collector response")
+        exit_code = 0 if completed else result["failure"]["exit_code"]
+        if "dataset_sha256" in result:
+            matches = [req for image, req in (completed or requests) if req["collector_exit"] == exit_code and
+                       req.get("dataset_sha256") == result["dataset_sha256"] and
+                       req["triplets"] == result["recorded_triplets"] and image == result["image"]]
+        else:
+            require(not completed and all(req["triplets"] == 0 and "dataset_sha256" not in req for _, req in requests),
+                    f"{lang}: missing partial archive for a recorded dataset")
+            matches = [req for _, req in requests if req["collector_exit"] == exit_code]
+        require(len(matches) == 1, f"{lang}: dataset or failure does not match deployed image and collector response")
 
 
 def summarize(directory, reference=None):
