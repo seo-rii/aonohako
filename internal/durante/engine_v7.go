@@ -1,4 +1,4 @@
-//go:build !durante_v8
+//go:build !durante_v8 && !durante_v9
 
 package durante
 

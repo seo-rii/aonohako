@@ -11,9 +11,11 @@ import sys
 import tempfile
 
 
+# Ordered from the full v7 source to each successive patch overlay.
 COMMITS = {
     'v7': '41743068ef9070b6e04195bf7822c5ee513660ff',
     'v8': '614761c18d4735f00e93667c74c099cfdb2800c7',
+    'v9': '27954247e094e682a7cf47504ff13682f970469a',
 }
 
 
@@ -55,13 +57,16 @@ def materialize(root, version, output):
     with tempfile.TemporaryDirectory(dir=output.parent) as temporary:
         tree = Path(temporary) / 'durante'
         shutil.copytree(root, tree)
-        if version == 'v8':
-            overlay = root.with_name('durante-v8')
-            with (overlay / 'changes.patch').open('rb') as diff:
-                subprocess.run(['patch', '--batch', '--forward', '--fuzz=0', '-p1'],
-                               cwd=tree, stdin=diff, check=True)
-            shutil.copyfile(overlay / 'UPSTREAM.json', tree / 'UPSTREAM.json')
-        result = verify(tree, version)
+        for profile in COMMITS:
+            if profile != 'v7':
+                overlay = root.with_name('durante-' + profile)
+                with (overlay / 'changes.patch').open('rb') as diff:
+                    subprocess.run(['patch', '--batch', '--forward', '--fuzz=0', '-p1'],
+                                   cwd=tree, stdin=diff, check=True)
+                shutil.copyfile(overlay / 'UPSTREAM.json', tree / 'UPSTREAM.json')
+            result = verify(tree, profile)
+            if profile == version:
+                break
         tree.rename(output)
         return result
 
@@ -79,7 +84,7 @@ def main():
         elif args.root:
             results = [verify(root, args.version or 'v7')]
         else:
-            # The repository CI entry point checks both profiles by default.
+            # The repository CI entry point checks every profile by default.
             versions = (args.version,) if args.version else COMMITS
             with tempfile.TemporaryDirectory() as tmp:
                 results = [materialize(root, version, Path(tmp) / version) for version in versions]

@@ -66,7 +66,7 @@ func TestSessionRecordsActualInstallationBeforeAndAfterObservation(t *testing.T)
 func runtimeClientFixture(t *testing.T, root string) string {
 	t.Helper()
 	var markers []string
-	if EngineProfile == engineProfileV8 {
+	if EngineProfile != engineProfileV7 {
 		markers = []string{SourceCommit}
 	}
 	path := filepath.Join(root, "client.so")
@@ -112,6 +112,7 @@ func TestClientSourceMustMatchWorker(t *testing.T) {
 	}{
 		{"unmarked v7 package", nil, EngineProfile == engineProfileV7},
 		{"v8 package", []string{sourceCommitV8}, EngineProfile == engineProfileV8},
+		{"v9 package", []string{sourceCommitV9}, EngineProfile == engineProfileV9},
 		{"unknown source", []string{strings.Repeat("a", 40)}, false},
 		{"empty marker", []string{""}, false},
 		{"trailing newline", []string{SourceCommit + "\n"}, false},
@@ -270,22 +271,19 @@ func TestArchivedShadowInstallationUsesItsOriginalReplayPatch(t *testing.T) {
 	}
 }
 
-func TestV7AndV8ShadowRecordsPreserveProfileSourcePair(t *testing.T) {
-	i := InstallationIdentity{RuntimeSourceCommit: runtimeSourceCommit, RuntimePatchSHA256: runtimePatchSHA256,
+func TestShadowRecordsPreserveProfileSourcePair(t *testing.T) {
+	identity := InstallationIdentity{RuntimeSourceCommit: runtimeSourceCommit, RuntimePatchSHA256: runtimePatchSHA256,
 		RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
 		ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
-	for profile, source := range map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8} {
-		r := Report{EngineProfile: profile, Installation: &i}
-		i.SourceCommit = source
-		if !r.ValidShadowInstallationIdentity() || r.ValidInstallationIdentity() != (profile == EngineProfile) {
-			t.Fatalf("wrong identity acceptance for %s", profile)
-		}
-		r.EngineProfile = engineProfileV7
-		if profile == engineProfileV7 {
-			r.EngineProfile = engineProfileV8
-		}
-		if r.ValidShadowInstallationIdentity() || r.ValidInstallationIdentity() {
-			t.Fatal("mismatched engine and source accepted")
+	profiles := map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8, engineProfileV9: sourceCommitV9}
+	for profile, expected := range profiles {
+		for _, source := range profiles {
+			identity.SourceCommit = source
+			r := Report{EngineProfile: profile, Installation: &identity}
+			matches := source == expected
+			if r.ValidShadowInstallationIdentity() != matches || r.ValidInstallationIdentity() != (matches && profile == EngineProfile) {
+				t.Errorf("wrong installation acceptance for %s with source %s", profile, source)
+			}
 		}
 	}
 }
@@ -413,7 +411,7 @@ func TestInstallationIdentityReadsLegacyWithoutQualifyingCurrentRuntime(t *testi
 
 func TestRuntimeInstallationPinsMatchVendoredSource(t *testing.T) {
 	vendor := filepath.Join("..", "..", "third_party")
-	for dir, commit := range map[string]string{"durante": sourceCommitV7, "durante-v8": sourceCommitV8} {
+	for dir, commit := range map[string]string{"durante": sourceCommitV7, "durante-v8": sourceCommitV8, "durante-v9": sourceCommitV9} {
 		data, err := os.ReadFile(filepath.Join(vendor, dir, "UPSTREAM.json"))
 		if err != nil {
 			t.Fatal(err)
