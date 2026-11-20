@@ -67,13 +67,17 @@ func TestRuntimeCorpusLanguagesShareInputsOracleAndHeldOutSplits(t *testing.T) {
 // These are new synthetic observations with the same known arithmetic as the
 // legacy fixture, not relabeled historical collection records or calibration.
 func syntheticRuntimeDataset(language string) Dataset {
+	return syntheticRuntimeCorpusDataset(language, "")
+}
+
+func syntheticRuntimeCorpusDataset(language, corpusID string) Dataset {
 	dataset := syntheticDataset()
-	profile, err := ResolveCorpusProfile(language)
+	profile, err := SelectCorpusProfile(language, corpusID)
 	if err != nil {
 		panic(err)
 	}
 	dataset.CorpusID, dataset.SourceLanguage = profile.CorpusID, profile.SourceLanguage
-	corpus, err := CorpusForLanguage(language, false)
+	corpus, err := profile.workloads(false)
 	if err != nil {
 		panic(err)
 	}
@@ -171,6 +175,70 @@ func TestRuntimeFitRequiresRecordedRuntimeDeterminism(t *testing.T) {
 	} {
 		if result, err := Fit(pinned(tc.language, tc.recorded, tc.observed), syntheticFitOptions()); err == nil && result.Passed {
 			t.Fatalf("%s recorded %q observed %q fitted", tc.language, tc.recorded, tc.observed)
+		}
+	}
+}
+
+func TestRustLongCorpusInputsAndOutputs(t *testing.T) {
+	profile, err := SelectCorpusProfile("RUST2024", RustLongCorpusID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rust, err := CorpusForLanguage("RUST2024", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	long, err := profile.workloads(false)
+	if err != nil || len(long) != len(rust) {
+		t.Fatalf("Rust workloads: %v", err)
+	}
+	want := map[string]struct {
+		inputs        [3]string
+		largestOutput string
+	}{
+		"integer": {[3]string{"268435456 81985529216486895", "536870912 81985529216486895", "1073741824 81985529216486895"}, "610123124510019055"},
+		"copy":    {[3]string{"262144 8192", "262144 16384", "262144 32768"}, "4449395327197"},
+		"branch":  {[3]string{"67108864 44257", "134217728 44257", "268435456 44257"}, "11265909133348634624"},
+		"sort":    {[3]string{"2097152", "4194304", "8388608"}, "12297864566846521344"},
+		"fill":    {[3]string{"262144 16384", "262144 32768", "262144 65536"}, "7214531969024"},
+	}
+	for i, workload := range long {
+		fixture, ok := want[workload.ID]
+		if !ok || workload.ID != rust[i].ID || workload.Split != rust[i].Split || workload.Source != rust[i].Source || len(workload.Cases) != 3 {
+			t.Fatalf("unexpected long Rust workload %q", workload.ID)
+		}
+		for j, c := range workload.Cases {
+			if c.Scale != 1<<j || c.Input != fixture.inputs[j]+"\n" {
+				t.Fatalf("%s: unexpected scale or stdin: %+v", workload.ID, c)
+			}
+		}
+		if got := workload.Cases[2].ExpectedStdout; got != fixture.largestOutput+"\n" {
+			t.Fatalf("%s/4: unexpected output %q", workload.ID, got)
+		}
+	}
+	baseSmoke, err := CorpusForLanguage("RUST2024", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	longSmoke, err := profile.workloads(true)
+	if err != nil || !reflect.DeepEqual(baseSmoke, longSmoke) {
+		t.Fatalf("long Rust smoke must still use the five short integration cases: %v", err)
+	}
+}
+
+func TestRustFitBindsSamplesToSelectedCorpus(t *testing.T) {
+	for _, from := range []string{RuntimeCorpusID, RustLongCorpusID} {
+		data := syntheticRuntimeCorpusDataset("RUST2024", from)
+		for _, to := range []string{RuntimeCorpusID, RustLongCorpusID} {
+			data.CorpusID = to
+			result, err := Fit(data, syntheticFitOptions())
+			if from == to {
+				if err != nil || !result.Passed || result.CandidatePolicy == nil {
+					t.Fatalf("fixture %s: %v", from, err)
+				}
+			} else if err == nil || result.Passed || result.CandidatePolicy != nil {
+				t.Fatalf("samples from %s were accepted as %s", from, to)
+			}
 		}
 	}
 }
