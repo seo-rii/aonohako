@@ -1,0 +1,1868 @@
+{
+  "protocol_sha256": "4348aa0e0dfc254e4097442851b035772329a008860be3537f5be14f03ee331b",
+  "platform_sha256": "1398c738a6204d4b28bd8fe4340e3e9559542c4e13fcaac48caf8479134dd9cb",
+  "languages": {
+    "CPP20": {
+      "dataset_sha256": "f7d4017713d5d2e1fbe24d2e9cc89564614eba15ecd473ad55733dd222869d2d",
+      "image": "sha256:efe44d70b789d2b8a8440efdedcd26d9b17f0337665951326f52ecba9d1dbc1f",
+      "recorded_triplets": 45,
+      "completed_triplets": 45,
+      "cases": {
+        "integer/1": {
+          "split": "train",
+          "native_min_ns": 37835000,
+          "native_median_ns": 38909500,
+          "native_max_ns": 41151000,
+          "native_spread_ppm": 85224,
+          "instruction_spread_ppm": 1,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            39177031,
+            39177015,
+            39177015
+          ],
+          "worst_signed_error_ns": 267531,
+          "worst_error_ppm": 6876,
+          "failed_gates": []
+        },
+        "integer/2": {
+          "split": "train",
+          "native_min_ns": 75563000,
+          "native_median_ns": 76991500,
+          "native_max_ns": 85822000,
+          "native_spread_ppm": 133249,
+          "instruction_spread_ppm": 0,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            78313840,
+            78313840,
+            78313840
+          ],
+          "worst_signed_error_ns": 1322340,
+          "worst_error_ppm": 17176,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "integer/4": {
+          "split": "train",
+          "native_min_ns": 150036000,
+          "native_median_ns": 160045500,
+          "native_max_ns": 177272000,
+          "native_spread_ppm": 170177,
+          "instruction_spread_ppm": 1,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            156587454,
+            156587470,
+            156587470
+          ],
+          "worst_signed_error_ns": -3458046,
+          "worst_error_ppm": 21607,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "rep_copy/1": {
+          "split": "train",
+          "native_min_ns": 215616000,
+          "native_median_ns": 226554000,
+          "native_max_ns": 243478000,
+          "native_spread_ppm": 122982,
+          "instruction_spread_ppm": 0,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            94069294,
+            94069294,
+            94069294
+          ],
+          "worst_signed_error_ns": -132484706,
+          "worst_error_ppm": 584783,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "rep_copy/2": {
+          "split": "train",
+          "native_min_ns": 430281000,
+          "native_median_ns": 461551500,
+          "native_max_ns": 474439000,
+          "native_spread_ppm": 95673,
+          "instruction_spread_ppm": 4,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            177100181,
+            177100220,
+            177100220
+          ],
+          "worst_signed_error_ns": -284451319,
+          "worst_error_ppm": 616294,
+          "failed_gates": [
+            "prediction_error"
+          ]
+        },
+        "rep_copy/4": {
+          "split": "train",
+          "native_min_ns": 802810000,
+          "native_median_ns": 844807000,
+          "native_max_ns": 1099400000,
+          "native_spread_ppm": 351075,
+          "instruction_spread_ppm": 4,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            343162049,
+            343162010,
+            343162049
+          ],
+          "worst_signed_error_ns": -501644990,
+          "worst_error_ppm": 593799,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/1": {
+          "split": "validation",
+          "native_min_ns": 36203000,
+          "native_median_ns": 38543000,
+          "native_max_ns": 40529000,
+          "native_spread_ppm": 112239,
+          "instruction_spread_ppm": 1,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            53527119,
+            53527134,
+            53527134
+          ],
+          "worst_signed_error_ns": 14984134,
+          "worst_error_ppm": 388765,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/2": {
+          "split": "validation",
+          "native_min_ns": 70802000,
+          "native_median_ns": 78707000,
+          "native_max_ns": 81367000,
+          "native_spread_ppm": 134233,
+          "instruction_spread_ppm": 0,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            107014127,
+            107014127,
+            107014127
+          ],
+          "worst_signed_error_ns": 28307127,
+          "worst_error_ppm": 359652,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/4": {
+          "split": "validation",
+          "native_min_ns": 143112000,
+          "native_median_ns": 149996500,
+          "native_max_ns": 151070000,
+          "native_spread_ppm": 53055,
+          "instruction_spread_ppm": 0,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            213988129,
+            213988129,
+            213988129
+          ],
+          "worst_signed_error_ns": 63991629,
+          "worst_error_ppm": 426621,
+          "failed_gates": [
+            "prediction_error"
+          ]
+        },
+        "sort/1": {
+          "split": "validation",
+          "native_min_ns": 33768000,
+          "native_median_ns": 35345000,
+          "native_max_ns": 39690000,
+          "native_spread_ppm": 167549,
+          "instruction_spread_ppm": 2,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            20294538,
+            20294574,
+            20294574
+          ],
+          "worst_signed_error_ns": -15050462,
+          "worst_error_ppm": 425816,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "sort/2": {
+          "split": "validation",
+          "native_min_ns": 71725000,
+          "native_median_ns": 73330500,
+          "native_max_ns": 77656000,
+          "native_spread_ppm": 80881,
+          "instruction_spread_ppm": 1,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            41526775,
+            41526775,
+            41526739
+          ],
+          "worst_signed_error_ns": -31803761,
+          "worst_error_ppm": 433705,
+          "failed_gates": [
+            "prediction_error"
+          ]
+        },
+        "sort/4": {
+          "split": "validation",
+          "native_min_ns": 148029000,
+          "native_median_ns": 154003000,
+          "native_max_ns": 168731000,
+          "native_spread_ppm": 134426,
+          "instruction_spread_ppm": 1,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            87660399,
+            87660363,
+            87660399
+          ],
+          "worst_signed_error_ns": -66342637,
+          "worst_error_ppm": 430788,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "rep_fill/1": {
+          "split": "validation",
+          "native_min_ns": 95179000,
+          "native_median_ns": 100097500,
+          "native_max_ns": 102714000,
+          "native_spread_ppm": 75277,
+          "instruction_spread_ppm": 0,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            159132441,
+            159132441,
+            159132441
+          ],
+          "worst_signed_error_ns": 59034941,
+          "worst_error_ppm": 589775,
+          "failed_gates": [
+            "prediction_error"
+          ]
+        },
+        "rep_fill/2": {
+          "split": "validation",
+          "native_min_ns": 178372000,
+          "native_median_ns": 192769000,
+          "native_max_ns": 210482000,
+          "native_spread_ppm": 166573,
+          "instruction_spread_ppm": 0,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            312242630,
+            312242630,
+            312242630
+          ],
+          "worst_signed_error_ns": 119473630,
+          "worst_error_ppm": 619777,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "rep_fill/4": {
+          "split": "validation",
+          "native_min_ns": 361364000,
+          "native_median_ns": 382918500,
+          "native_max_ns": 444422000,
+          "native_spread_ppm": 216908,
+          "instruction_spread_ppm": 0,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            618462983,
+            618462983,
+            618462983
+          ],
+          "worst_signed_error_ns": 235544483,
+          "worst_error_ppm": 615130,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        }
+      },
+      "native_control_cpu_sum_ns": 18346246000,
+      "diagnostic_cpu_sum_ns": 159790775000,
+      "counter_diagnostics": {
+        "outside_native_range_with_20pct_margin": [
+          {
+            "workload": "branch",
+            "scale": 1,
+            "native_ns": [
+              36203000,
+              40529000
+            ],
+            "estimate_ns": [
+              53527119,
+              53527134
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "branch",
+            "scale": 2,
+            "native_ns": [
+              70802000,
+              81367000
+            ],
+            "estimate_ns": [
+              107014127,
+              107014127
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "branch",
+            "scale": 4,
+            "native_ns": [
+              143112000,
+              151070000
+            ],
+            "estimate_ns": [
+              213988129,
+              213988129
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "rep_copy",
+            "scale": 1,
+            "native_ns": [
+              215616000,
+              243478000
+            ],
+            "estimate_ns": [
+              94069294,
+              94069294
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "rep_copy",
+            "scale": 2,
+            "native_ns": [
+              430281000,
+              474439000
+            ],
+            "estimate_ns": [
+              177100181,
+              177100220
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "rep_copy",
+            "scale": 4,
+            "native_ns": [
+              802810000,
+              1099400000
+            ],
+            "estimate_ns": [
+              343162010,
+              343162049
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "rep_fill",
+            "scale": 1,
+            "native_ns": [
+              95179000,
+              102714000
+            ],
+            "estimate_ns": [
+              159132441,
+              159132441
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "rep_fill",
+            "scale": 2,
+            "native_ns": [
+              178372000,
+              210482000
+            ],
+            "estimate_ns": [
+              312242630,
+              312242630
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "rep_fill",
+            "scale": 4,
+            "native_ns": [
+              361364000,
+              444422000
+            ],
+            "estimate_ns": [
+              618462983,
+              618462983
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "sort",
+            "scale": 1,
+            "native_ns": [
+              33768000,
+              39690000
+            ],
+            "estimate_ns": [
+              20294538,
+              20294574
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "sort",
+            "scale": 2,
+            "native_ns": [
+              71725000,
+              77656000
+            ],
+            "estimate_ns": [
+              41526739,
+              41526775
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "sort",
+            "scale": 4,
+            "native_ns": [
+              148029000,
+              168731000
+            ],
+            "estimate_ns": [
+              87660363,
+              87660399
+            ],
+            "direction": "under"
+          }
+        ],
+        "strongest_pair": {
+          "slow_case": [
+            "sort",
+            4
+          ],
+          "fast_case": [
+            "branch",
+            1
+          ],
+          "slow_min_native_ns": 148029000,
+          "fast_max_native_ns": 40529000,
+          "max_feature_ratio": "187891289/114729804",
+          "minimum_possible_worst_error_ppm": 380849
+        }
+      },
+      "status": "collected",
+      "fit_passed": false,
+      "fit_produced_coefficients": true,
+      "evaluation_sha256": "308a5b9f2ae049f31460f10a85ab7689a685e005c3f5747546c693dd759e222a"
+    },
+    "PYTHON3": {
+      "dataset_sha256": "8f9e2a822e99c13464d4ce8315e4abe6924f12f8f116f3238e5a540451e4ad4d",
+      "image": "sha256:2e5485a5e89f4995c4448f0420eb59d61f0b4147978fe749835889a8303c0e7f",
+      "recorded_triplets": 45,
+      "completed_triplets": 45,
+      "cases": {
+        "integer/1": {
+          "split": "train",
+          "native_min_ns": 48478000,
+          "native_median_ns": 53157000,
+          "native_max_ns": 60383000,
+          "native_spread_ppm": 223960,
+          "instruction_spread_ppm": 2368,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            137008473,
+            137027604,
+            137332904
+          ],
+          "worst_signed_error_ns": 84175904,
+          "worst_error_ppm": 1583534,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "integer/2": {
+          "split": "train",
+          "native_min_ns": 78536000,
+          "native_median_ns": 85402500,
+          "native_max_ns": 87915000,
+          "native_spread_ppm": 109822,
+          "instruction_spread_ppm": 7237,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            258008175,
+            259888866,
+            259883418
+          ],
+          "worst_signed_error_ns": 174486366,
+          "worst_error_ppm": 2043107,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "integer/4": {
+          "split": "train",
+          "native_min_ns": 145267000,
+          "native_median_ns": 157674500,
+          "native_max_ns": 163683000,
+          "native_spread_ppm": 116798,
+          "instruction_spread_ppm": 9763,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            504964341,
+            504969940,
+            500040176
+          ],
+          "worst_signed_error_ns": 347295440,
+          "worst_error_ppm": 2202611,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "copy/1": {
+          "split": "train",
+          "native_min_ns": 60768000,
+          "native_median_ns": 66163000,
+          "native_max_ns": 72612000,
+          "native_spread_ppm": 179013,
+          "instruction_spread_ppm": 91,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            192686164,
+            192703623,
+            192694018
+          ],
+          "worst_signed_error_ns": 126540623,
+          "worst_error_ppm": 1912559,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "copy/2": {
+          "split": "train",
+          "native_min_ns": 60104000,
+          "native_median_ns": 65610500,
+          "native_max_ns": 70529000,
+          "native_spread_ppm": 158893,
+          "instruction_spread_ppm": 9561,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            194458918,
+            192599947,
+            194450068
+          ],
+          "worst_signed_error_ns": 128848418,
+          "worst_error_ppm": 1963839,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "copy/4": {
+          "split": "train",
+          "native_min_ns": 64331000,
+          "native_median_ns": 65775000,
+          "native_max_ns": 72851000,
+          "native_spread_ppm": 129533,
+          "instruction_spread_ppm": 10970,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            195828571,
+            198000437,
+            197990403
+          ],
+          "worst_signed_error_ns": 132225437,
+          "worst_error_ppm": 2010269,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/1": {
+          "split": "validation",
+          "native_min_ns": 72195000,
+          "native_median_ns": 77420500,
+          "native_max_ns": 86132000,
+          "native_spread_ppm": 180017,
+          "instruction_spread_ppm": 10231,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            222825621,
+            222081378,
+            224360991
+          ],
+          "worst_signed_error_ns": 146940491,
+          "worst_error_ppm": 1897954,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/2": {
+          "split": "validation",
+          "native_min_ns": 125659000,
+          "native_median_ns": 127889500,
+          "native_max_ns": 132569000,
+          "native_spread_ppm": 54032,
+          "instruction_spread_ppm": 8819,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            435198231,
+            434489470,
+            431366662
+          ],
+          "worst_signed_error_ns": 307308731,
+          "worst_error_ppm": 2402924,
+          "failed_gates": [
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/4": {
+          "split": "validation",
+          "native_min_ns": 233222000,
+          "native_median_ns": 237546500,
+          "native_max_ns": 248628000,
+          "native_spread_ppm": 64855,
+          "instruction_spread_ppm": 27,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            856856673,
+            856843274,
+            856834146
+          ],
+          "worst_signed_error_ns": 619310173,
+          "worst_error_ppm": 2607112,
+          "failed_gates": [
+            "prediction_error"
+          ]
+        },
+        "sort/1": {
+          "split": "validation",
+          "native_min_ns": 38171000,
+          "native_median_ns": 43250000,
+          "native_max_ns": 51089000,
+          "native_spread_ppm": 298683,
+          "instruction_spread_ppm": 1519,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            79706465,
+            79709999,
+            79588994
+          ],
+          "worst_signed_error_ns": 36459999,
+          "worst_error_ppm": 843006,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "sort/2": {
+          "split": "validation",
+          "native_min_ns": 61053000,
+          "native_median_ns": 68117500,
+          "native_max_ns": 72643000,
+          "native_spread_ppm": 170148,
+          "instruction_spread_ppm": 5557,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            145364774,
+            145341888,
+            146149595
+          ],
+          "worst_signed_error_ns": 78032095,
+          "worst_error_ppm": 1145552,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "sort/4": {
+          "split": "validation",
+          "native_min_ns": 110093000,
+          "native_median_ns": 116167000,
+          "native_max_ns": 134087000,
+          "native_spread_ppm": 206548,
+          "instruction_spread_ppm": 3660,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            280204977,
+            281136252,
+            280110761
+          ],
+          "worst_signed_error_ns": 164969252,
+          "worst_error_ppm": 1420105,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "fill/1": {
+          "split": "validation",
+          "native_min_ns": 60675000,
+          "native_median_ns": 62374500,
+          "native_max_ns": 66561000,
+          "native_spread_ppm": 94366,
+          "instruction_spread_ppm": 20,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            136912787,
+            136910174,
+            136911138
+          ],
+          "worst_signed_error_ns": 74538287,
+          "worst_error_ppm": 1195013,
+          "failed_gates": [
+            "prediction_error"
+          ]
+        },
+        "fill/2": {
+          "split": "validation",
+          "native_min_ns": 84312000,
+          "native_median_ns": 88719000,
+          "native_max_ns": 98066000,
+          "native_spread_ppm": 155029,
+          "instruction_spread_ppm": 8915,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            140013901,
+            141264848,
+            140327547
+          ],
+          "worst_signed_error_ns": 52545848,
+          "worst_error_ppm": 592273,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "fill/4": {
+          "split": "validation",
+          "native_min_ns": 119905000,
+          "native_median_ns": 123999500,
+          "native_max_ns": 133820000,
+          "native_spread_ppm": 112219,
+          "instruction_spread_ppm": 6392,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            149955499,
+            149963379,
+            149005001
+          ],
+          "worst_signed_error_ns": 25963879,
+          "worst_error_ppm": 209387,
+          "failed_gates": [
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        }
+      },
+      "native_control_cpu_sum_ns": 8684673000,
+      "diagnostic_cpu_sum_ns": 730101434000,
+      "counter_diagnostics": {
+        "outside_native_range_with_20pct_margin": [
+          {
+            "workload": "branch",
+            "scale": 1,
+            "native_ns": [
+              72195000,
+              86132000
+            ],
+            "estimate_ns": [
+              222081378,
+              224360991
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "branch",
+            "scale": 2,
+            "native_ns": [
+              125659000,
+              132569000
+            ],
+            "estimate_ns": [
+              431366662,
+              435198231
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "branch",
+            "scale": 4,
+            "native_ns": [
+              233222000,
+              248628000
+            ],
+            "estimate_ns": [
+              856834146,
+              856856673
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "copy",
+            "scale": 1,
+            "native_ns": [
+              60768000,
+              72612000
+            ],
+            "estimate_ns": [
+              192686164,
+              192703623
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "copy",
+            "scale": 2,
+            "native_ns": [
+              60104000,
+              70529000
+            ],
+            "estimate_ns": [
+              192599947,
+              194458918
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "copy",
+            "scale": 4,
+            "native_ns": [
+              64331000,
+              72851000
+            ],
+            "estimate_ns": [
+              195828571,
+              198000437
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "fill",
+            "scale": 1,
+            "native_ns": [
+              60675000,
+              66561000
+            ],
+            "estimate_ns": [
+              136910174,
+              136912787
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "fill",
+            "scale": 2,
+            "native_ns": [
+              84312000,
+              98066000
+            ],
+            "estimate_ns": [
+              140013901,
+              141264848
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "integer",
+            "scale": 1,
+            "native_ns": [
+              48478000,
+              60383000
+            ],
+            "estimate_ns": [
+              137008473,
+              137332904
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "integer",
+            "scale": 2,
+            "native_ns": [
+              78536000,
+              87915000
+            ],
+            "estimate_ns": [
+              258008175,
+              259888866
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "integer",
+            "scale": 4,
+            "native_ns": [
+              145267000,
+              163683000
+            ],
+            "estimate_ns": [
+              500040176,
+              504969940
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "sort",
+            "scale": 1,
+            "native_ns": [
+              38171000,
+              51089000
+            ],
+            "estimate_ns": [
+              79588994,
+              79709999
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "sort",
+            "scale": 2,
+            "native_ns": [
+              61053000,
+              72643000
+            ],
+            "estimate_ns": [
+              145341888,
+              146149595
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "sort",
+            "scale": 4,
+            "native_ns": [
+              110093000,
+              134087000
+            ],
+            "estimate_ns": [
+              280110761,
+              281136252
+            ],
+            "direction": "over"
+          }
+        ],
+        "strongest_pair": {
+          "slow_case": [
+            "fill",
+            4
+          ],
+          "fast_case": [
+            "integer",
+            1
+          ],
+          "slow_min_native_ns": 119905000,
+          "fast_max_native_ns": 60383000,
+          "max_feature_ratio": "4667/3945",
+          "minimum_possible_worst_error_ppm": 253324
+        }
+      },
+      "status": "collected",
+      "fit_passed": false,
+      "fit_produced_coefficients": true,
+      "evaluation_sha256": "2242bfe3b3af963d8461a99bf0b83da9f2835054c2cca700e96eceb033f73078"
+    },
+    "PYPY3": {
+      "dataset_sha256": "11523bb821161d2daf93981ca5711db418152222b9e29d2aaf49195131c24cc7",
+      "image": "sha256:2e5485a5e89f4995c4448f0420eb59d61f0b4147978fe749835889a8303c0e7f",
+      "recorded_triplets": 45,
+      "completed_triplets": 45,
+      "cases": {
+        "integer/1": {
+          "split": "train",
+          "native_min_ns": 93271000,
+          "native_median_ns": 102864000,
+          "native_max_ns": 108464000,
+          "native_spread_ppm": 147700,
+          "instruction_spread_ppm": 326,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            69877688,
+            69886970,
+            69900400
+          ],
+          "worst_signed_error_ns": -32986312,
+          "worst_error_ppm": 320679,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "integer/2": {
+          "split": "train",
+          "native_min_ns": 116210000,
+          "native_median_ns": 128426500,
+          "native_max_ns": 144169000,
+          "native_spread_ppm": 217705,
+          "instruction_spread_ppm": 106,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            103322818,
+            103311958,
+            103318347
+          ],
+          "worst_signed_error_ns": -25114542,
+          "worst_error_ppm": 195556,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "integer/4": {
+          "split": "train",
+          "native_min_ns": 191259000,
+          "native_median_ns": 206591500,
+          "native_max_ns": 214685000,
+          "native_spread_ppm": 113393,
+          "instruction_spread_ppm": 125,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            170171941,
+            170193072,
+            170190195
+          ],
+          "worst_signed_error_ns": -36419559,
+          "worst_error_ppm": 176288,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "copy/1": {
+          "split": "train",
+          "native_min_ns": 103940000,
+          "native_median_ns": 118754500,
+          "native_max_ns": 123104000,
+          "native_spread_ppm": 161375,
+          "instruction_spread_ppm": 162,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            111939190,
+            111951133,
+            111933077
+          ],
+          "worst_signed_error_ns": -6821423,
+          "worst_error_ppm": 57442,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "copy/2": {
+          "split": "train",
+          "native_min_ns": 155259000,
+          "native_median_ns": 158635000,
+          "native_max_ns": 168204000,
+          "native_spread_ppm": 81603,
+          "instruction_spread_ppm": 188,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            178854958,
+            178837941,
+            178821420
+          ],
+          "worst_signed_error_ns": 20219958,
+          "worst_error_ppm": 127463,
+          "failed_gates": []
+        },
+        "copy/4": {
+          "split": "train",
+          "native_min_ns": 238050000,
+          "native_median_ns": 251109000,
+          "native_max_ns": 282481000,
+          "native_spread_ppm": 176940,
+          "instruction_spread_ppm": 103,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            312602564,
+            312616398,
+            312634618
+          ],
+          "worst_signed_error_ns": 61525618,
+          "worst_error_ppm": 245016,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/1": {
+          "split": "validation",
+          "native_min_ns": 55074000,
+          "native_median_ns": 58359500,
+          "native_max_ns": 70431000,
+          "native_spread_ppm": 263145,
+          "instruction_spread_ppm": 973,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            41942576,
+            41926015,
+            41966778
+          ],
+          "worst_signed_error_ns": -16433485,
+          "worst_error_ppm": 281591,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/2": {
+          "split": "validation",
+          "native_min_ns": 55717000,
+          "native_median_ns": 66474000,
+          "native_max_ns": 79912000,
+          "native_spread_ppm": 363977,
+          "instruction_spread_ppm": 130,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            44431811,
+            44426055,
+            44427267
+          ],
+          "worst_signed_error_ns": -22047945,
+          "worst_error_ppm": 331678,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/4": {
+          "split": "validation",
+          "native_min_ns": 76471000,
+          "native_median_ns": 82294000,
+          "native_max_ns": 94195000,
+          "native_spread_ppm": 215375,
+          "instruction_spread_ppm": 32,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            67939804,
+            67941664,
+            67941964
+          ],
+          "worst_signed_error_ns": -14354196,
+          "worst_error_ppm": 174426,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "sort/1": {
+          "split": "validation",
+          "native_min_ns": 56205000,
+          "native_median_ns": 68683500,
+          "native_max_ns": 109564000,
+          "native_spread_ppm": 776883,
+          "instruction_spread_ppm": 384,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            45568427,
+            45556496,
+            45573982
+          ],
+          "worst_signed_error_ns": -23127004,
+          "worst_error_ppm": 336719,
+          "failed_gates": [
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "sort/2": {
+          "split": "validation",
+          "native_min_ns": 58634000,
+          "native_median_ns": 61757500,
+          "native_max_ns": 67978000,
+          "native_spread_ppm": 151302,
+          "instruction_spread_ppm": 723,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            54557083,
+            54517692,
+            54545979
+          ],
+          "worst_signed_error_ns": -7239808,
+          "worst_error_ppm": 117230,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "sort/4": {
+          "split": "validation",
+          "native_min_ns": 68281000,
+          "native_median_ns": 75341500,
+          "native_max_ns": 87069000,
+          "native_spread_ppm": 249372,
+          "instruction_spread_ppm": 453,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            73330407,
+            73359533,
+            73326347
+          ],
+          "worst_signed_error_ns": -2015153,
+          "worst_error_ppm": 26747,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "fill/1": {
+          "split": "validation",
+          "native_min_ns": 83051000,
+          "native_median_ns": 92808500,
+          "native_max_ns": 101542000,
+          "native_spread_ppm": 199239,
+          "instruction_spread_ppm": 105,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            102744295,
+            102733517,
+            102735614
+          ],
+          "worst_signed_error_ns": 9935795,
+          "worst_error_ppm": 107057,
+          "failed_gates": [
+            "native_spread"
+          ]
+        },
+        "fill/2": {
+          "split": "validation",
+          "native_min_ns": 112618000,
+          "native_median_ns": 117407500,
+          "native_max_ns": 122820000,
+          "native_spread_ppm": 86894,
+          "instruction_spread_ppm": 227,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            166505764,
+            166505391,
+            166543106
+          ],
+          "worst_signed_error_ns": 49135606,
+          "worst_error_ppm": 418505,
+          "failed_gates": [
+            "prediction_error"
+          ]
+        },
+        "fill/4": {
+          "split": "validation",
+          "native_min_ns": 170128000,
+          "native_median_ns": 175524000,
+          "native_max_ns": 183106000,
+          "native_spread_ppm": 73939,
+          "instruction_spread_ppm": 106,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            294519118,
+            294536566,
+            294505586
+          ],
+          "worst_signed_error_ns": 119012566,
+          "worst_error_ppm": 678042,
+          "failed_gates": [
+            "prediction_error"
+          ]
+        }
+      },
+      "native_control_cpu_sum_ns": 10728041000,
+      "diagnostic_cpu_sum_ns": 482562426000,
+      "counter_diagnostics": {
+        "outside_native_range_with_20pct_margin": [
+          {
+            "workload": "branch",
+            "scale": 1,
+            "native_ns": [
+              55074000,
+              70431000
+            ],
+            "estimate_ns": [
+              41926015,
+              41966778
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "branch",
+            "scale": 2,
+            "native_ns": [
+              55717000,
+              79912000
+            ],
+            "estimate_ns": [
+              44426055,
+              44431811
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "fill",
+            "scale": 2,
+            "native_ns": [
+              112618000,
+              122820000
+            ],
+            "estimate_ns": [
+              166505391,
+              166543106
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "fill",
+            "scale": 4,
+            "native_ns": [
+              170128000,
+              183106000
+            ],
+            "estimate_ns": [
+              294505586,
+              294536566
+            ],
+            "direction": "over"
+          },
+          {
+            "workload": "integer",
+            "scale": 1,
+            "native_ns": [
+              93271000,
+              108464000
+            ],
+            "estimate_ns": [
+              69877688,
+              69900400
+            ],
+            "direction": "under"
+          }
+        ],
+        "strongest_pair": {
+          "slow_case": [
+            "integer",
+            4
+          ],
+          "fast_case": [
+            "fill",
+            2
+          ],
+          "slow_min_native_ns": 191259000,
+          "fast_max_native_ns": 122820000,
+          "max_feature_ratio": "364784545/356880319",
+          "minimum_possible_worst_error_ppm": 207446
+        }
+      },
+      "status": "collected",
+      "fit_passed": false,
+      "fit_produced_coefficients": true,
+      "evaluation_sha256": "59a0117bb2f6eee58c0e3a12741b4a5ded81e80969c58ad221496134ea56a73a"
+    },
+    "RUST2024": {
+      "dataset_sha256": "9e0680fa60fabb8899548d9116555d9b5b9e30e641a6ad8ea7e8e2e6ec3c9bf3",
+      "image": "sha256:90c1058e64e39100741fb1453fd92280ffc9b318ebb5bfe43d754631514db70c",
+      "recorded_triplets": 45,
+      "completed_triplets": 45,
+      "cases": {
+        "integer/1": {
+          "split": "train",
+          "native_min_ns": 1832000,
+          "native_median_ns": 1884000,
+          "native_max_ns": 2077000,
+          "native_spread_ppm": 130043,
+          "instruction_spread_ppm": 5294,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            163330,
+            162764,
+            162470
+          ],
+          "worst_signed_error_ns": -1721530,
+          "worst_error_ppm": 913764,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "integer/2": {
+          "split": "train",
+          "native_min_ns": 1868000,
+          "native_median_ns": 2290500,
+          "native_max_ns": 2537000,
+          "native_spread_ppm": 292076,
+          "instruction_spread_ppm": 3182,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            192982,
+            193405,
+            193596
+          ],
+          "worst_signed_error_ns": -2097518,
+          "worst_error_ppm": 915747,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "integer/4": {
+          "split": "train",
+          "native_min_ns": 2035000,
+          "native_median_ns": 2131500,
+          "native_max_ns": 2654000,
+          "native_spread_ppm": 290406,
+          "instruction_spread_ppm": 1607,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            254240,
+            253917,
+            254325
+          ],
+          "worst_signed_error_ns": -1877583,
+          "worst_error_ppm": 880875,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "instruction_spread",
+            "prediction_error"
+          ]
+        },
+        "copy/1": {
+          "split": "train",
+          "native_min_ns": 3462000,
+          "native_median_ns": 3745000,
+          "native_max_ns": 4963000,
+          "native_spread_ppm": 400802,
+          "instruction_spread_ppm": 347,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            2135637,
+            2135652,
+            2136376
+          ],
+          "worst_signed_error_ns": -1609363,
+          "worst_error_ppm": 429737,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "copy/2": {
+          "split": "train",
+          "native_min_ns": 4601000,
+          "native_median_ns": 4944500,
+          "native_max_ns": 5276000,
+          "native_spread_ppm": 136516,
+          "instruction_spread_ppm": 71,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            3768248,
+            3768450,
+            3768183
+          ],
+          "worst_signed_error_ns": -1176317,
+          "worst_error_ppm": 237905,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "copy/4": {
+          "split": "train",
+          "native_min_ns": 5424000,
+          "native_median_ns": 6868500,
+          "native_max_ns": 8532000,
+          "native_spread_ppm": 452501,
+          "instruction_spread_ppm": 109,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            7032922,
+            7032159,
+            7032905
+          ],
+          "worst_signed_error_ns": 164422,
+          "worst_error_ppm": 23939,
+          "failed_gates": [
+            "native_duration",
+            "native_spread"
+          ]
+        },
+        "branch/1": {
+          "split": "validation",
+          "native_min_ns": 2105000,
+          "native_median_ns": 2135500,
+          "native_max_ns": 2618000,
+          "native_spread_ppm": 240225,
+          "instruction_spread_ppm": 732,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            865986,
+            866303,
+            865670
+          ],
+          "worst_signed_error_ns": -1269830,
+          "worst_error_ppm": 594629,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/2": {
+          "split": "validation",
+          "native_min_ns": 2505000,
+          "native_median_ns": 2625500,
+          "native_max_ns": 3572000,
+          "native_spread_ppm": 406399,
+          "instruction_spread_ppm": 537,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            1599682,
+            1599051,
+            1598824
+          ],
+          "worst_signed_error_ns": -1026676,
+          "worst_error_ppm": 391041,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "branch/4": {
+          "split": "validation",
+          "native_min_ns": 3005000,
+          "native_median_ns": 3148000,
+          "native_max_ns": 3653000,
+          "native_spread_ppm": 205845,
+          "instruction_spread_ppm": 282,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            3067770,
+            3068016,
+            3067154
+          ],
+          "worst_signed_error_ns": -80846,
+          "worst_error_ppm": 25682,
+          "failed_gates": [
+            "native_duration",
+            "native_spread"
+          ]
+        },
+        "sort/1": {
+          "split": "validation",
+          "native_min_ns": 4190000,
+          "native_median_ns": 4494500,
+          "native_max_ns": 5580000,
+          "native_spread_ppm": 309267,
+          "instruction_spread_ppm": 319,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            2570348,
+            2569853,
+            2569530
+          ],
+          "worst_signed_error_ns": -1924970,
+          "worst_error_ppm": 428295,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "sort/2": {
+          "split": "validation",
+          "native_min_ns": 6984000,
+          "native_median_ns": 7259000,
+          "native_max_ns": 7530000,
+          "native_spread_ppm": 75217,
+          "instruction_spread_ppm": 86,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            5276679,
+            5276225,
+            5276283
+          ],
+          "worst_signed_error_ns": -1982775,
+          "worst_error_ppm": 273148,
+          "failed_gates": [
+            "native_duration",
+            "prediction_error"
+          ]
+        },
+        "sort/4": {
+          "split": "validation",
+          "native_min_ns": 12048000,
+          "native_median_ns": 12812000,
+          "native_max_ns": 16958000,
+          "native_spread_ppm": 383235,
+          "instruction_spread_ppm": 120,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            10949766,
+            10948910,
+            10948454
+          ],
+          "worst_signed_error_ns": -1863546,
+          "worst_error_ppm": 145454,
+          "failed_gates": [
+            "native_duration",
+            "native_spread"
+          ]
+        },
+        "fill/1": {
+          "split": "validation",
+          "native_min_ns": 2698000,
+          "native_median_ns": 3026500,
+          "native_max_ns": 3266000,
+          "native_spread_ppm": 187676,
+          "instruction_spread_ppm": 477,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            1325562,
+            1325602,
+            1324970
+          ],
+          "worst_signed_error_ns": -1701530,
+          "worst_error_ppm": 562211,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "fill/2": {
+          "split": "validation",
+          "native_min_ns": 3411000,
+          "native_median_ns": 3570000,
+          "native_max_ns": 3877000,
+          "native_spread_ppm": 130533,
+          "instruction_spread_ppm": 654,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            2182905,
+            2183310,
+            2181882
+          ],
+          "worst_signed_error_ns": -1388118,
+          "worst_error_ppm": 388829,
+          "failed_gates": [
+            "native_duration",
+            "native_spread",
+            "prediction_error"
+          ]
+        },
+        "fill/4": {
+          "split": "validation",
+          "native_min_ns": 4344000,
+          "native_median_ns": 4491000,
+          "native_max_ns": 4898000,
+          "native_spread_ppm": 123358,
+          "instruction_spread_ppm": 211,
+          "rep_spread_ppm": 0,
+          "trial_clock_ns": [
+            3898238,
+            3897416,
+            3898037
+          ],
+          "worst_signed_error_ns": -593584,
+          "worst_error_ppm": 132172,
+          "failed_gates": [
+            "native_duration",
+            "native_spread"
+          ]
+        }
+      },
+      "native_control_cpu_sum_ns": 401750000,
+      "diagnostic_cpu_sum_ns": 17917283000,
+      "counter_diagnostics": {
+        "outside_native_range_with_20pct_margin": [
+          {
+            "workload": "branch",
+            "scale": 1,
+            "native_ns": [
+              2105000,
+              2618000
+            ],
+            "estimate_ns": [
+              865670,
+              866303
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "branch",
+            "scale": 2,
+            "native_ns": [
+              2505000,
+              3572000
+            ],
+            "estimate_ns": [
+              1598824,
+              1599682
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "copy",
+            "scale": 1,
+            "native_ns": [
+              3462000,
+              4963000
+            ],
+            "estimate_ns": [
+              2135637,
+              2136376
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "fill",
+            "scale": 1,
+            "native_ns": [
+              2698000,
+              3266000
+            ],
+            "estimate_ns": [
+              1324970,
+              1325602
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "fill",
+            "scale": 2,
+            "native_ns": [
+              3411000,
+              3877000
+            ],
+            "estimate_ns": [
+              2181882,
+              2183310
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "integer",
+            "scale": 1,
+            "native_ns": [
+              1832000,
+              2077000
+            ],
+            "estimate_ns": [
+              162470,
+              163330
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "integer",
+            "scale": 2,
+            "native_ns": [
+              1868000,
+              2537000
+            ],
+            "estimate_ns": [
+              192982,
+              193596
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "integer",
+            "scale": 4,
+            "native_ns": [
+              2035000,
+              2654000
+            ],
+            "estimate_ns": [
+              253917,
+              254325
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "sort",
+            "scale": 1,
+            "native_ns": [
+              4190000,
+              5580000
+            ],
+            "estimate_ns": [
+              2569530,
+              2570348
+            ],
+            "direction": "under"
+          },
+          {
+            "workload": "sort",
+            "scale": 2,
+            "native_ns": [
+              6984000,
+              7530000
+            ],
+            "estimate_ns": [
+              5276225,
+              5276679
+            ],
+            "direction": "under"
+          }
+        ],
+        "strongest_pair": {
+          "slow_case": [
+            "sort",
+            1
+          ],
+          "fast_case": [
+            "branch",
+            4
+          ],
+          "slow_min_native_ns": 4190000,
+          "fast_max_native_ns": 3653000,
+          "max_feature_ratio": "1",
+          "minimum_possible_worst_error_ppm": 68468
+        }
+      },
+      "status": "collected",
+      "fit_passed": false,
+      "fit_produced_coefficients": true,
+      "evaluation_sha256": "5f51748dacf1521da2f2db5ec2dfe53632146a9c526a53d18f6f0701c2ffde3a"
+    }
+  }
+}

@@ -1,0 +1,177 @@
+{
+  "deployments": [
+    {
+      "region": "asia-northeast3",
+      "gen": 2,
+      "cpu": 1,
+      "memory_mib": 2048,
+      "concurrency": 1,
+      "private": true,
+      "revision": "aonohako-v10-cal-7efebb76d9-00001-plp",
+      "image_digest": "sha256:efe44d70b789d2b8a8440efdedcd26d9b17f0337665951326f52ecba9d1dbc1f",
+      "base_image": "asia.gcr.io/hancomac/aonohako-jungol@sha256:4300ef9276d94a8fd549e8720c6e47f950829dd8c661bd5a6c51082de3a57f77",
+      "binaries": {
+        "commit": "191858a02666c1406b871e4974b9072b2c91bb34",
+        "profile": "dynamorio-11.3-durante-v10-vm32m",
+        "worker_sha256": "082f83a6456e42469cf31aba5cd44ea4ad53dda29dd616cea7be7f71a40f4864",
+        "reference_sha256": "0778403bbafec22588f41ddf7abaf8b7789794fe3074550c9b825b04f29e7378",
+        "client_sha256": "dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0",
+        "upstream_sha256": "4930e4cd05c2009f495839488507a77ab6101a30e2eb917281c39fbdc048df27"
+      },
+      "layer_sha256": "bd3b1b85ecd6f2e685f48b809cd5b2e43c4e5c23732b4281c7c8984c51516a0b",
+      "bridge_sha256": "f4517b4a41c8b9029a69053f56f5ee0e8c5ec77f58d8efcfa6e171cfcaabfc92",
+      "requests": [
+        {
+          "language": "CPP20",
+          "status": 200,
+          "instance_id_sha256": "7b59f0fe81c0648f3af19eea87d370d7f8a5a8e6b82e425e204ee2d1781f6424",
+          "request_id_hash": "d5743590510a7e00ecc13da455171e592169541955a67b4545884a43a6d76637",
+          "result_available": true,
+          "triplets": 45,
+          "collector_exit": 0,
+          "complete": true,
+          "dataset_sha256": "f7d4017713d5d2e1fbe24d2e9cc89564614eba15ecd473ad55733dd222869d2d"
+        },
+        {
+          "language": "PYTHON3",
+          "status": 200,
+          "instance_id_sha256": "7b59f0fe81c0648f3af19eea87d370d7f8a5a8e6b82e425e204ee2d1781f6424",
+          "request_id_hash": "df7b6e81306b2723bf936f74f5ef5d11bd8dbcfc8fb8f1f9e0019b4bc64fc908",
+          "result_available": false,
+          "transport_failure": "The first synchronous request completed on the server; the idle client connection did not deliver the response body."
+        }
+      ],
+      "cleanup": {
+        "service_http": 404,
+        "revision_http": 404,
+        "package_http": 404
+      },
+      "cpu_always_allocated": false,
+      "receipt_get_count": 0,
+      "receipt_get_status_counts": {}
+    },
+    {
+      "region": "asia-northeast3",
+      "gen": 2,
+      "cpu": 1,
+      "memory_mib": 2048,
+      "concurrency": 1,
+      "private": true,
+      "revision": "aonohako-v10-cal-d424106d4b-00001-pkz",
+      "image_digest": "sha256:2e5485a5e89f4995c4448f0420eb59d61f0b4147978fe749835889a8303c0e7f",
+      "base_image": "asia.gcr.io/hancomac/aonohako-jungol@sha256:4300ef9276d94a8fd549e8720c6e47f950829dd8c661bd5a6c51082de3a57f77",
+      "binaries": {
+        "commit": "191858a02666c1406b871e4974b9072b2c91bb34",
+        "profile": "dynamorio-11.3-durante-v10-vm32m",
+        "worker_sha256": "082f83a6456e42469cf31aba5cd44ea4ad53dda29dd616cea7be7f71a40f4864",
+        "reference_sha256": "0778403bbafec22588f41ddf7abaf8b7789794fe3074550c9b825b04f29e7378",
+        "client_sha256": "dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0",
+        "upstream_sha256": "4930e4cd05c2009f495839488507a77ab6101a30e2eb917281c39fbdc048df27"
+      },
+      "layer_sha256": "d30d797994bf25af3455b5d80548050187c4c6b834bac13d1d3efcc40c84ec21",
+      "bridge_sha256": "ba9a47ee5b1c1181c8ebbb0b0a280d34d8968ff68969112c5b5c19b5813c9133",
+      "requests": [
+        {
+          "language": "PYTHON3",
+          "status": 202,
+          "instance_id_sha256": "89ebc3e232ee13967bb56e5ba5e7253e079a9241e5d2c5081adf92263263f484",
+          "request_id_hash": "6fa1a172bf66db7cf4fdb93a6cce914ae0920af51a169e3af0483523fe230f06",
+          "result_available": true,
+          "receipt_request_id_hash": "a7775bc2a68c06d201f2b5b026f37199774fc6fca561cf8cc6278eab74aa30ec",
+          "response_http": 200,
+          "triplets": 45,
+          "collector_exit": 0,
+          "complete": true,
+          "dataset_sha256": "8f9e2a822e99c13464d4ce8315e4abe6924f12f8f116f3238e5a540451e4ad4d"
+        },
+        {
+          "language": "PYPY3",
+          "status": 202,
+          "instance_id_sha256": "89ebc3e232ee13967bb56e5ba5e7253e079a9241e5d2c5081adf92263263f484",
+          "request_id_hash": "e2f212209f4800e68f8f1eccea7239b90febbe6e2eca17cd978643c43e69b96e",
+          "result_available": true,
+          "receipt_request_id_hash": "88f2c8cfdae3d1fe1fd8b2fbe931bb91f31d1aece58adeb65110295b23b23e1b",
+          "response_http": 200,
+          "triplets": 45,
+          "collector_exit": 0,
+          "complete": true,
+          "dataset_sha256": "11523bb821161d2daf93981ca5711db418152222b9e29d2aaf49195131c24cc7"
+        },
+        {
+          "language": "RUST2024",
+          "status": 202,
+          "instance_id_sha256": "89ebc3e232ee13967bb56e5ba5e7253e079a9241e5d2c5081adf92263263f484",
+          "request_id_hash": "32e31f080681718be0225e02f034299625d270f5a70fe1100b8b2faade694c12",
+          "result_available": true,
+          "receipt_request_id_hash": "c43e071022f8cab324ade74ab45f9d2b838ad85ff5900d229514f90263256302",
+          "response_http": 200,
+          "triplets": 0,
+          "collector_exit": 1,
+          "complete": false,
+          "dataset_sha256": "780e5e4b0e69b1aed73ac2bd64820e2053640671ab6aab16bca27cba70d9e31a",
+          "failures": [
+            "reference environment: executable file not found in $PATH"
+          ]
+        }
+      ],
+      "cleanup": {
+        "service_http": 404,
+        "revision_http": 404,
+        "package_http": 404
+      },
+      "cpu_always_allocated": true,
+      "receipt_get_count": 83,
+      "receipt_get_status_counts": {
+        "202": 80,
+        "200": 3
+      }
+    },
+    {
+      "region": "asia-northeast3",
+      "gen": 2,
+      "cpu": 1,
+      "memory_mib": 2048,
+      "concurrency": 1,
+      "private": true,
+      "revision": "aonohako-v10-cal-cd32ceb758-00001-nsc",
+      "image_digest": "sha256:90c1058e64e39100741fb1453fd92280ffc9b318ebb5bfe43d754631514db70c",
+      "base_image": "asia.gcr.io/hancomac/aonohako@sha256:7af8d4b78ae6d7a9951bee0992a84df8282473bf3faf29cfbfdc56772f18ae51",
+      "binaries": {
+        "commit": "191858a02666c1406b871e4974b9072b2c91bb34",
+        "profile": "dynamorio-11.3-durante-v10-vm32m",
+        "worker_sha256": "082f83a6456e42469cf31aba5cd44ea4ad53dda29dd616cea7be7f71a40f4864",
+        "reference_sha256": "0778403bbafec22588f41ddf7abaf8b7789794fe3074550c9b825b04f29e7378",
+        "client_sha256": "dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0",
+        "upstream_sha256": "4930e4cd05c2009f495839488507a77ab6101a30e2eb917281c39fbdc048df27"
+      },
+      "layer_sha256": "d30d797994bf25af3455b5d80548050187c4c6b834bac13d1d3efcc40c84ec21",
+      "bridge_sha256": "ba9a47ee5b1c1181c8ebbb0b0a280d34d8968ff68969112c5b5c19b5813c9133",
+      "requests": [
+        {
+          "language": "RUST2024",
+          "status": 202,
+          "instance_id_sha256": "5e7b56974b5b31c32cd2c5a5e1f74ffeda0723f388c49bca0e88a0bf78c97942",
+          "request_id_hash": "b758e6e4a4b23ab24fc811069346ef7e77d16f3f7d22777b2cd10dd861199b17",
+          "result_available": true,
+          "receipt_request_id_hash": "fbe64fceff6b89bb422981626fc6fabcc9832ef21c013c6b4402f7ba7fa5a828",
+          "response_http": 200,
+          "triplets": 45,
+          "collector_exit": 0,
+          "complete": true,
+          "dataset_sha256": "9e0680fa60fabb8899548d9116555d9b5b9e30e641a6ad8ea7e8e2e6ec3c9bf3"
+        }
+      ],
+      "cleanup": {
+        "service_http": 404,
+        "revision_http": 404,
+        "package_http": 404
+      },
+      "cpu_always_allocated": true,
+      "receipt_get_count": 3,
+      "receipt_get_status_counts": {
+        "202": 2,
+        "200": 1
+      }
+    }
+  ]
+}
