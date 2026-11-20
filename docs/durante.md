@@ -73,7 +73,8 @@ V10 uses the same inline thresholds as v9. For eligible static executables,
 generated code loads the thread's accounting pointer from a DynamoRIO raw
 thread-local storage slot when charging a block or recording a write
 checkpoint. If DynamoRIO cannot allocate the slot, the client uses the
-existing thread-local lookup.
+existing thread-local lookup. The CPP20 worker comparison includes short input,
+integer, branch and memory workloads. [Cloud Run v9/v10 measurements](durante/CPP20_V10_PERFORMANCE.md)
 
 Qualify time models against the final immutable worker image, engine profile,
 and runtime options, including the selected CPUID profile. Build the reference
