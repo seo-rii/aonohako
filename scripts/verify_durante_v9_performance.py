@@ -21,7 +21,7 @@ def encoded(obj):
     return (json.dumps(obj, indent=2, allow_nan=False) + "\n").encode()
 
 
-def check_arms(data, protocol):
+def check_arms(data, protocol, tags):
     policy = data["shared_policy"]
     clock = protocol["clock"]
     require(all(policy[k] == clock[k] for k in (*WEIGHTS, "ns_denominator", "method"))
@@ -30,7 +30,7 @@ def check_arms(data, protocol):
     require(set(data["arms"]) == set(ARMS) and re.fullmatch(r"sha256:[0-9a-f]{64}", data["image_digest"]),
             "invalid arms or image digest")
     lock = ROOT / "third_party/durante/toolkit/sdk.lock.json"
-    for arm, tag in zip(ARMS, ("v8", "v9")):
+    for arm, tag in zip(ARMS, tags):
         info, expected = data["arms"][arm], protocol[arm]
         vendor = (ROOT / f"third_party/durante-{tag}/UPSTREAM.json").read_bytes()
         manifest = json.loads(vendor)
@@ -56,6 +56,10 @@ def check_arms(data, protocol):
     require(baseline["installation"]["launcher_sha256"] == candidate["installation"]["launcher_sha256"]
             and re.fullmatch(r"runtime-options-v1:sha256:[0-9a-f]{64}", baseline["runtime_options_id"])
             and baseline["runtime_options_id"] == candidate["runtime_options_id"], "different execution options")
+
+
+def check_v9_package(data):
+    baseline, candidate = (data["arms"][arm] for arm in ARMS)
     link = data["package_link"]
     require(link["all_executions_loaded_patched_core"] is True and link["v9_text_identical"] is True
             and link["matching_patched_toolchain_rebuild_v8_sha256"] == baseline["installation"]["client_sha256"]
@@ -96,7 +100,7 @@ def schedule(protocol):
                     yield phase, name, index + 1, arm, limits[name]
 
 
-def check_trials(data, protocol):
+def check_trials(data, protocol, expected, rounds_by_case):
     cases = data["cases"]
     require(set(cases) == set(protocol["full"]["ids"]) and data["trial_columns"] == COLUMNS, "wrong cases or columns")
     check_input_seal(cases, protocol)
@@ -112,6 +116,7 @@ def check_trials(data, protocol):
     observed = {}
     clock, hard = protocol["clock"], protocol["watchdogs"]
     for name, case in cases.items():
+        rounds = rounds_by_case[name]
         full = {arm: {} for arm in ARMS}
         for phase in outcomes:
             for row in case[phase]:
@@ -131,7 +136,7 @@ def check_trials(data, protocol):
                     full[arm][n] = cpu, wall, counts
                 else:
                     require(crossed and estimate is None, f"{name}/{order}: live prefix did not establish cutoff")
-        samples = {arm: [full[arm][n] for n in range(1, protocol["full"]["rounds"] + 1)] for arm in ARMS}
+        samples = {arm: [full[arm][n] for n in range(1, rounds + 1)] for arm in ARMS}
         med = {arm: median(s[0] for s in rows) for arm, rows in samples.items()}
         ranges = {arm: {k: [min(s[2][i] for s in rows), max(s[2][i] for s in rows)]
                         for i, k in enumerate(COUNTERS)} for arm, rows in samples.items()}
@@ -142,23 +147,30 @@ def check_trials(data, protocol):
                 and case["full_counter_ranges"] == ranges and case["exact_counters_across_all_full_runs"] is same
                 and case["median_cpu_change_percent"] == round(100 * (med["candidate"]/med["baseline"] - 1), 4),
                 f"{name}: summary does not match individual pairs")
-    expected = dict(enumerate(schedule(protocol), 1))
-    require(observed == expected and len(observed) == 102, "trial count, order, arms or nominal budgets differ")
+    require(observed == expected, "trial count, order, arms or nominal budgets differ")
 
 
 def verify(data):
     protocol = data["protocol"]
     require(data["schema"] == 1 and digest(encoded(protocol)) == data["protocol_sha256"] == PROTOCOL_SHA256,
             "not the sealed protocol for the primary linked build")
-    check_arms(data, protocol)
-    check_trials(data, protocol)
+    check_arms(data, protocol, ("v8", "v9"))
+    check_v9_package(data)
+    expected = dict(enumerate(schedule(protocol), 1))
+    require(len(expected) == 102, "unexpected v9 trial count")
+    rounds = dict.fromkeys(protocol["full"]["ids"], protocol["full"]["rounds"])
+    check_trials(data, protocol, expected, rounds)
+    check_placement(data, 102, 45, 6)
+
+
+def check_placement(data, total, accepted_per_arm, cutoff_per_arm):
     placement, cleanup = data["placement"], data["cleanup"]
     instances = placement["instance_id_sha256_counts"]
-    require(placement["submitted"] == placement["request_logs"] == 102 and placement["complete"] is True
-            and placement["http_status_counts"] == {"200": 102} and placement["unknown_requests"] == 0
+    require(placement["submitted"] == placement["request_logs"] == total and placement["complete"] is True
+            and placement["http_status_counts"] == {"200": total} and placement["unknown_requests"] == 0
             and placement["distinct_instances"] == len(instances) == 1
-            and all(re.fullmatch(r"[0-9a-f]{64}", k) and v == 102 for k, v in instances.items())
-            and placement["outcomes_by_arm"] == {arm: {AC: 45, TLE: 6} for arm in ARMS}, "incomplete placement evidence")
+            and all(re.fullmatch(r"[0-9a-f]{64}", k) and v == total for k, v in instances.items())
+            and placement["outcomes_by_arm"] == {arm: {AC: accepted_per_arm, TLE: cutoff_per_arm} for arm in ARMS}, "incomplete placement evidence")
     require(placement["revision"] and cleanup["revision"] == placement["revision"]
             and all(cleanup[k] == 404 for k in ("service_http", "revision_http", "artifact_registry_package_http"))
             and datetime.fromisoformat(data["started_utc"]) <= datetime.fromisoformat(data["completed_utc"])

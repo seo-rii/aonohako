@@ -39,12 +39,12 @@ v4 profile. The client and patched runtime share a private replay callback ABI;
 update both from the pinned snapshot rather than reusing an older runtime core.
 
 `docker/durante.Dockerfile` builds a Linux x86-64 worker on a reviewed
-execution image. The default build selects v7. To build an opt-in v8 or v9
-worker, set `RUNTIME_IMAGE` to the immutable digest reference of your language
-image. This example selects v9.
+execution image. The default build selects v7. To build an opt-in v8, v9 or
+v10 worker, set `RUNTIME_IMAGE` to the immutable digest reference of your
+language image. This example selects v10.
 
 ```sh
-DURANTE_VERSION=v9
+DURANTE_VERSION=v10
 docker build --platform linux/amd64 -f docker/durante.Dockerfile --target runtime \
   --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" --build-arg DURANTE_VERSION="$DURANTE_VERSION" \
   -t "aonohako-durante:$DURANTE_VERSION" .
@@ -56,6 +56,7 @@ go build -tags "durante_${DURANTE_VERSION}" ./cmd/durante-reference
 | v7 (default) | `dynamorio-11.3-durante-v7-vm32m` | `41743068ef9070b6e04195bf7822c5ee513660ff` |
 | v8 | `dynamorio-11.3-durante-v8-vm32m` | `614761c18d4735f00e93667c74c099cfdb2800c7` |
 | v9 | `dynamorio-11.3-durante-v9-vm32m` | `27954247e094e682a7cf47504ff13682f970469a` |
+| v10 | `dynamorio-11.3-durante-v10-vm32m` | `191858a02666c1406b871e4974b9072b2c91bb34` |
 
 The build verifies each version's source manifest and pairs the worker with its
 client under `/opt/durante`. V8 enables inline work counting in the original
@@ -68,14 +69,21 @@ Both versions can inline direct self-loops immediately. This optimization
 targets the cost of collecting the instruction and REP byte counters.
 [Cloud Run CPP20 v8/v9 performance measurements](durante/CPP20_V9_PERFORMANCE.md).
 
+V10 uses the same inline thresholds as v9. For eligible static executables,
+generated code loads the thread's accounting pointer from a DynamoRIO raw
+thread-local storage slot when charging a block or recording a write
+checkpoint. If DynamoRIO cannot allocate the slot, the client uses the
+existing thread-local lookup. The CPP20 worker comparison includes short input,
+integer, branch and memory workloads. [Cloud Run v9/v10 measurements](durante/CPP20_V10_PERFORMANCE.md)
+
 Qualify time models against the final immutable worker image, engine profile,
 and runtime options, including the selected CPUID profile. Build the reference
 tool and any control plane that handles model-bound requests with the same
 version tag. Each qualification belongs to its recorded image and profile.
 
-All three builds fix `-disable_traces -vm_size 32M -vmheap_size 32M`. Before
+All builds fix `-disable_traces -vm_size 32M -vmheap_size 32M`. Before
 launch, the worker checks the runtime manifest's source, process-lifetime
-patch, code-replay patch and actual release-core digest. The v8 and v9 clients
+patch, code-replay patch and actual release-core digest. The v8, v9 and v10 clients
 also carry their source commit in the ELF file. A matching worker requires
 that marker on the selected client, including when the operator overrides its
 path. Missing or mismatched provenance refuses measurement.
