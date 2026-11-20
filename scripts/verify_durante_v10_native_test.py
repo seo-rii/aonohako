@@ -13,6 +13,15 @@ CLOCK = {"method": "weighted-rep-operations-nanoseconds-v2", "instruction_ns_num
 
 
 class NativeComparisonTests(unittest.TestCase):
+    def test_relabelled_short_rust_inputs_cannot_enter_long_study(self):
+        directory = ROOT / "docs/durante"
+        data = json.loads(gzip.decompress((directory / "v10-native/RUST2024/dataset.json.gz").read_bytes()))
+        protocol = json.loads((directory / "rust-long-v10/protocol.json").read_bytes())
+        history = json.loads((directory / "cloud-run-cpp20-v10-performance.json").read_bytes())
+        data.update(corpus_id=protocol["languages"]["RUST2024"], runner_sha256=protocol["reference_sha256"])
+        with self.assertRaisesRegex(RuntimeError, "fixed corpus fixture"):
+            collect_cases(data, "RUST2024", protocol, history)
+
     def test_typed_weights_round_once(self):
         self.assertEqual(estimate(CLOCK, (3, 3, 1)), 3)
         self.assertEqual(estimate(CLOCK, (3, 1, 3)), 4)
@@ -148,6 +157,18 @@ class DeploymentChecks(unittest.TestCase):
                                binaries=hashes, requests=[self.request], cleanup=dict(service_http=404, revision_http=404,
                                                                                       package_http=404))
         self.results = {"CPP20": dict(status="collected", dataset_sha256="7" * 64, image=image, recorded_triplets=45)}
+
+    def test_followup_requires_specific_base_and_reference(self):
+        directory = ROOT / "docs/durante/rust-long-v10"
+        protocol = json.loads((directory / "protocol.json").read_bytes())
+        platform = {"deployments": [self.deployment]}
+        with self.assertRaisesRegex(RuntimeError, "unexpected base image"):
+            check_platform(platform, self.results, self.history, directory, protocol)
+        self.deployment["base_image"] = protocol["base_image"]
+        with self.assertRaisesRegex(RuntimeError, "deployed v10 binaries"):
+            check_platform(platform, self.results, self.history, directory, protocol)
+        self.deployment["binaries"]["reference_sha256"] = protocol["reference_sha256"]
+        check_platform(platform, self.results, self.history, directory, protocol)
 
     def test_async_acceptance_needs_matching_retrieval(self):
         self.request.update(status=202, response_http=200, receipt_request_id_hash="a" * 64)
