@@ -17,7 +17,7 @@ index 851160e..3799e5f 100644
 @@ -554,6 +559,13 @@ static inline void record_write_checkpoint(thread_data_t *data, app_pc pc,
  static bool probe_partial_block;
  #endif
- 
+
 +static void set_raw_accounting_state(thread_data_t *d) {
 +  if (raw_tls_enabled) {
 +    byte *base = dr_get_dr_segment_base(raw_tls_register);
@@ -39,7 +39,7 @@ index 851160e..3799e5f 100644
 @@ -832,6 +845,14 @@ static void restore_charge_state(void *ctx, instrlist_t *bb, instr_t *where) {
    dr_restore_arith_flags(ctx, bb, where, SPILL_SLOT_3);
  }
- 
+
 +static void insert_read_accounting_state(void *ctx, instrlist_t *bb, instr_t *where,
 +                                         reg_id_t reg) {
 +  if (raw_tls_enabled)
