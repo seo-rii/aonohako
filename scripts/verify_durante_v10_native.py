@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Compare the frozen v10 trial clock with bracketed native CPU times and replay language fits."""
 import argparse
-from collections import defaultdict
 import gzip
 import json
 from pathlib import Path
@@ -121,77 +120,74 @@ def replay_fit(reference, raw, receipt, evaluation):
         require((out / "policy.json").exists() == evaluation["passed"], "unexpected policy export")
 
 
-def summarize_language(directory, language, protocol, history, reference):
-    source = directory / "dataset.json.gz"
-    failure = directory / "failure.json"
-    if failure.is_file():
-        record = json.loads(failure.read_bytes())
-        require(record["phase"] == "collect" and type(record["exit_code"]) is int and record["exit_code"] > 0 and
-                isinstance(record["reason"], str) and record["reason"].strip() and
-                not (directory / "evaluation.json").exists(), "invalid incomplete collection record")
-        result = {"status": "collection_failed", "failure": record}
-        if source.exists():
-            raw = gzip.decompress(source.read_bytes())
-            dataset = json.loads(raw)
-            require(dataset["source_language"] == language and dataset["complete"] is False and dataset.get("failures"),
-                    "failure receipt does not match incomplete dataset")
-            result.update(dataset_sha256=digest(raw), recorded_triplets=len(dataset.get("samples") or []))
-        return result
-    raw = gzip.decompress(source.read_bytes())
-    dataset = json.loads(raw)
+def collect_cases(dataset, language, protocol, history):
     previous = history["arms"]["candidate"]
     require(dataset["schema"] == 1 and dataset["source_language"] == language and
-            dataset["corpus_id"] == protocol["languages"][language] and dataset["complete"] is True and
-            dataset["smoke"] is False and not dataset.get("failures") and dataset["repetitions"] == protocol["repetitions"] and
-            dataset["runner_sha256"] == previous["reference_sha256"] and dataset["dispatch_profile"] == "default" and
-            dataset["cpuid_profile"] == "x86-64-v2" and not dataset.get("latency_bound_version") and
-            re.fullmatch(r"sha256:[0-9a-f]{64}", dataset["runtime_image"]), "incorrect v10 dataset identity")
+            dataset["corpus_id"] == protocol["languages"][language] and dataset["smoke"] is False and
+            dataset["repetitions"] == protocol["repetitions"] and dataset["runner_sha256"] == previous["reference_sha256"] and
+            dataset["dispatch_profile"] == "default" and dataset["cpuid_profile"] == "x86-64-v2" and
+            not dataset.get("latency_bound_version") and re.fullmatch(r"sha256:[0-9a-f]{64}", dataset["runtime_image"]),
+            "incorrect v10 dataset identity")
     require(dataset["environment"]["runtime_family"] == FAMILY[language] and
             dataset["environment"]["source_language"] == language, "incorrect runtime family")
+    copy, fill = ("rep_copy", "rep_fill") if language == "CPP20" else ("copy", "fill")
+    splits = {"integer": "train", copy: "train", "branch": "validation", "sort": "validation", fill: "validation"}
+    order = [(name, scale, rep) for name in splits for scale in protocol["scales"]
+             for rep in range(1, dataset["repetitions"] + 1)]
+    samples = dataset["samples"] or []
+    observed = [(s["workload_id"], s["scale"], s["repetition"]) for s in samples]
+    require(observed == order[:len(samples)] and (not dataset["complete"] or len(samples) == len(order)),
+            "missing, reordered or duplicate trials")
+    rows, groups = {}, {}
+    for i, sample in enumerate(samples):
+        name, scale, _ = observed[i]
+        require(sample["split"] == splits[name], "relabelled workload")
+        # The collector appends a row before running the phases. A final failed
+        # triplet remains in the archive even when native_after was never called.
+        if not dataset["complete"] and i == len(samples) - 1 and sample["native_after"].get("status") != AC:
+            break
+        pair = trial(sample, dataset, previous)
+        label = f"{name}/{scale}"
+        rows.setdefault(label, []).append(pair)
+        groups.setdefault(label, []).append(sample)
+    complete = {k: v for k, v in rows.items() if len(v) == dataset["repetitions"]}
+    clock = history["protocol"]["clock"]
+    cases = {k: {"split": groups[k][0]["split"], **score_case(v, clock, protocol["thresholds"])}
+             for k, v in complete.items()}
+    weights = tuple(clock[k] for k in ("instruction_ns_numerator", "movs_byte_ns_numerator",
+                                       "stos_byte_ns_numerator", "ns_denominator"))
+    diagnostics = diagnose([s for key in complete for s in groups[key]], weights)
+    return {"image": dataset["runtime_image"], "recorded_triplets": len(samples),
+            "completed_triplets": sum(map(len, rows.values())), "cases": cases,
+            "counter_diagnostics": diagnostics}, complete
 
-    receipt = json.loads((directory / "evaluation.json").read_bytes())
+
+def check_fit(raw, dataset, receipt, result, groups, protocol, history):
     ev = receipt["evaluation"]
+    language = dataset["source_language"]
     runtime_id = f"{language}@{dataset['runtime_image']}"
-    gates = protocol["thresholds"]
     options = ev["options"]
     require(receipt["dataset_sha256"] == digest(raw) and ev["schema"] == 1 and
             ev["authority"] == "diagnostic_only" and ev["runtime_id"] == runtime_id and
             options.get("method", WEIGHTED) == WEIGHTED and options["min_repetitions"] == dataset["repetitions"] and
-            all(options[k] == v for k, v in gates.items()), "incorrect fit input, options or binding")
-    if reference:
-        replay_fit(reference, raw, receipt, ev)
-
-    split = {"integer": "train", "branch": "validation", "sort": "validation"}
-    split.update({"rep_copy": "train", "rep_fill": "validation"} if language == "CPP20"
-                 else {"copy": "train", "fill": "validation"})
-    groups = defaultdict(dict)
-    for sample in dataset["samples"]:
-        name, scale, repetition = sample["workload_id"], sample["scale"], sample["repetition"]
-        require(sample["split"] == split[name] and repetition not in groups[name, scale], "duplicate or relabelled trial")
-        groups[name, scale][repetition] = trial(sample, dataset, previous)
-    expected = {(name, scale) for name in split for scale in protocol["scales"]}
-    fits = {(r["workload_id"], r["scale"]): r for r in ev["cases"]}
-    require(set(groups) == set(fits) == expected and len(fits) == len(ev["cases"]), "incomplete case set")
+            all(options[k] == v for k, v in protocol["thresholds"].items()), "incorrect fit input, options or binding")
+    fits = {f"{r['workload_id']}/{r['scale']}": r for r in ev["cases"]}
+    require(set(groups) == set(fits) and len(fits) == len(ev["cases"]), "incomplete fit case set")
     candidate = ev.get("candidate_policy")
     require(ev["passed"] == (not ev.get("failures")) and (not ev["passed"] or candidate), "invalid fit outcome")
     if candidate:
         require(candidate.get("method", WEIGHTED) == WEIGHTED and candidate["runtime_id"] == runtime_id and
-                candidate["family"] == FAMILY[language] and candidate["engine_profile"] == previous["engine_profile"] and
+                candidate["family"] == FAMILY[language] and candidate["engine_profile"] == history["arms"]["candidate"]["engine_profile"] and
                 candidate["instruction_ns_numerator"] > 0 and candidate["rep_byte_ns_numerator"] > 0 and
                 candidate["ns_denominator"] > 0, "mismatched fitted coefficients")
-    cases = {}
-    for (name, scale), repetitions in sorted(groups.items()):
-        order = range(1, dataset["repetitions"] + 1)
-        require(set(repetitions) == set(order), "incomplete repetitions")
-        rows = [repetitions[n] for n in order]
-        row = score_case(rows, history["protocol"]["clock"], gates)
-        official = fits[name, scale]
-        require(official["split"] == split[name] and all(official[k] == row[k] for k in
-                ("native_median_ns", "native_spread_ppm", "instruction_spread_ppm", "rep_spread_ppm")),
+    for label, official in fits.items():
+        row = result["cases"][label]
+        require(all(official[k] == row[k] for k in
+                    ("split", "native_median_ns", "native_spread_ppm", "instruction_spread_ppm", "rep_spread_ppm")),
                 "fit native or work spread does not reconcile")
         if candidate:
             center = row["native_median_ns"]
-            predictions = [estimate(candidate, counts) for _, counts in rows]
+            predictions = [estimate(candidate, counts) for _, counts in groups[label]]
             worst = max(predictions, key=lambda p: abs(p - center))
             error = abs(worst - center)
             require((worst, error, ppm(error, center), worst < center) ==
@@ -200,14 +196,82 @@ def summarize_language(directory, language, protocol, history, reference):
         else:
             require(official["estimated_ns"] == official["absolute_error_ns"] == official["absolute_error_ppm"] == 0,
                     "unsolved fit cannot supply an estimate")
-        cases[f"{name}/{scale}"] = {"split": split[name], **row}
-    clock = history["protocol"]["clock"]
-    weights = tuple(clock[k] for k in ("instruction_ns_numerator", "movs_byte_ns_numerator",
-                                       "stos_byte_ns_numerator", "ns_denominator"))
-    return {"status": "collected", "image": dataset["runtime_image"], "dataset_sha256": digest(raw),
-            "counter_diagnostics": diagnose(dataset["samples"], weights),
-            "evaluation_sha256": digest((directory / "evaluation.json").read_bytes()),
-            "fit_passed": ev["passed"], "fit_produced_coefficients": candidate is not None, "cases": cases}
+    return ev
+
+
+def summarize_language(directory, language, protocol, history, reference):
+    source = directory / "dataset.json.gz"
+    failure = directory / "failure.json"
+    result = {}
+    if failure.is_file():
+        record = json.loads(failure.read_bytes())
+        require(record["phase"] == "collect" and type(record["exit_code"]) is int and record["exit_code"] > 0 and
+                isinstance(record["reason"], str) and record["reason"].strip() and
+                not (directory / "evaluation.json").exists(), "invalid incomplete collection record")
+        result = {"status": "collection_failed", "failure": record}
+        if not source.exists():
+            return result
+    raw = gzip.decompress(source.read_bytes())
+    dataset = json.loads(raw)
+    require(dataset["source_language"] == language and dataset["complete"] is (not failure.exists()) and
+            bool(dataset.get("failures")) == failure.exists(), "collection status does not match source dataset")
+    result["dataset_sha256"] = digest(raw)
+    if failure.exists() and not dataset.get("samples"):
+        return {**result, "recorded_triplets": 0, "completed_triplets": 0, "cases": {}}
+    scored, groups = collect_cases(dataset, language, protocol, history)
+    result.update(scored)
+    if failure.exists():
+        return result
+    fit = (directory / "evaluation.json").read_bytes()
+    receipt = json.loads(fit)
+    ev = check_fit(raw, dataset, receipt, result, groups, protocol, history)
+    if reference:
+        replay_fit(reference, raw, receipt, ev)
+    return {**result, "status": "collected", "fit_passed": ev["passed"],
+            "fit_produced_coefficients": bool(ev.get("candidate_policy")), "evaluation_sha256": digest(fit)}
+
+
+def check_platform(platform, languages, history):
+    previous = history["arms"]["candidate"]
+    request_ids, revisions = set(), set()
+    by_language = {lang: [] for lang in languages}
+    for deployment in platform["deployments"]:
+        revision = deployment["revision"]
+        image = deployment["image_digest"]
+        require(revision and revision not in revisions and re.fullmatch(r"sha256:[0-9a-f]{64}", image) and
+                re.fullmatch(r".+@sha256:[0-9a-f]{64}", deployment["base_image"]), "missing or duplicate revision identity")
+        revisions.add(revision)
+        require(deployment["region"] == "asia-northeast3" and deployment["gen"] == 2 and
+                deployment["cpu"] == deployment["concurrency"] == 1 and deployment["memory_mib"] == 2048 and
+                deployment["private"] is True, "unexpected deployment configuration")
+        binaries = deployment["binaries"]
+        require(all(binaries[k] == previous[k] for k in ("reference_sha256", "worker_sha256")) and
+                binaries["client_sha256"] == previous["installation"]["client_sha256"] and
+                binaries["commit"] == previous["installation"]["source_commit"], "incorrect deployed v10 binaries")
+        require(all(deployment["cleanup"][k] == 404 for k in ("revision_http", "service_http", "package_http")),
+                "incomplete deployment cleanup")
+        for req in deployment["requests"]:
+            rid = req["request_id_hash"]
+            require(re.fullmatch(r"[0-9a-f]{64}", rid) and rid not in request_ids and
+                    re.fullmatch(r"[0-9a-f]{64}", req["instance_id_sha256"]), "invalid or duplicate request identity")
+            request_ids.add(rid)
+            require(req["language"] in languages and req["status"] == 200 and type(req["triplets"]) is int and
+                    0 <= req["triplets"] <= 45 and type(req["collector_exit"]) is int and req["collector_exit"] >= 0 and
+                    req["complete"] is (req["collector_exit"] == 0), "inconsistent collector outcome")
+            if req["complete"]:
+                require(req["triplets"] == 45 and re.fullmatch(r"[0-9a-f]{64}", req["dataset_sha256"]),
+                        "incomplete successful collector response")
+            by_language[req["language"]].append((image, req))
+    for lang, result in languages.items():
+        requests = by_language[lang]
+        completed = [(image, req) for image, req in requests if req["complete"]]
+        require(requests and len(completed) == int(result["status"] == "collected"),
+                f"{lang}: absent or duplicate successful collection")
+        if result["status"] == "collected" or "dataset_sha256" in result:
+            matches = [(image, req) for image, req in (completed or requests)
+                       if req.get("dataset_sha256") == result["dataset_sha256"] and
+                       req["triplets"] == result["recorded_triplets"] and result.get("image", image) == image]
+            require(len(matches) == 1, f"{lang}: dataset does not match deployed image and collector response")
 
 
 def summarize(directory, reference=None):
@@ -222,7 +286,9 @@ def summarize(directory, reference=None):
         require(digest(reference.read_bytes()) == protocol["reference_sha256"], "incorrect reference executable")
     languages = {lang: summarize_language(directory / lang, lang, protocol, history, reference)
                  for lang in protocol["languages"]}
-    return {"protocol_sha256": PROTOCOL_SHA256, "languages": languages}
+    raw_platform = (directory / "platform.json").read_bytes()
+    check_platform(json.loads(raw_platform), languages, history)
+    return {"protocol_sha256": PROTOCOL_SHA256, "platform_sha256": digest(raw_platform), "languages": languages}
 
 
 if __name__ == "__main__":
