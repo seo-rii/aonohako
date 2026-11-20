@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "purpose": "Compare the frozen v10 trial clock and training-only language fits with uninstrumented process CPU on the same Cloud Run revision.",
+  "platform": {"target": "cloudrun", "region": "asia-northeast3", "generation": 2, "cpu": 1, "request_concurrency": 1},
+  "source_commit": "7dd7c0c107ff6ad2ad1354a2e19eafac17be3543",
+  "engine_profile": "dynamorio-11.3-durante-v10-vm32m",
+  "durante_commit": "191858a02666c1406b871e4974b9072b2c91bb34",
+  "client_sha256": "dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0",
+  "reference_sha256": "0778403bbafec22588f41ddf7abaf8b7789794fe3074550c9b825b04f29e7378",
+  "previous_clock_receipt_sha256": "148b016ba5a63c500158955b3a75b872355fd7efa1de721b37cbb798cfd1ff97",
+  "languages": {"CPP20": "cpp-reference-v1", "PYTHON3": "runtime-reference-v1", "PYPY3": "runtime-reference-v1", "RUST2024": "runtime-reference-v1"},
+  "repetitions": 3,
+  "scales": [1, 2, 4],
+  "triplet": ["native_before", "metered", "native_after"],
+  "thresholds": {"min_native_ns": 20000000, "max_native_spread_ppm": 100000, "max_work_spread_ppm": 1000, "max_error_ppm": 200000},
+  "analyses": [
+    "Use the v9/v10 trial's frozen instruction, MOVS and STOS weights for an offline transfer check on every complete case. Native-before and native-after are uninstrumented CPU observations. Keep CPU duration of metered execution separate.",
+    "Apply the shipped v10 reference fit separately to each complete built-in language cohort using the default weighted-work-nanoseconds-v1 method and default thresholds. Keep failed fits and every held-out algorithm.",
+    "For each workload compare the entire frozen prediction range to the full native range with a 20% margin. Seek same-language pairs whose timing gap exceeds the ratio permitted by any nonnegative instruction/MOVS/STOS coefficients. Use all repetitions and the most favorable native extremes. These retrospective witnesses assess the expressive power of the counters only.",
+    "Report incomplete collections and resource or runtime failures. No configuration or default changes follow from this experiment."
+  ]
+}

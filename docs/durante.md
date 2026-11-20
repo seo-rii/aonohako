@@ -74,7 +74,9 @@ generated code loads the thread's accounting pointer from a DynamoRIO raw
 thread-local storage slot when charging a block or recording a write
 checkpoint. If DynamoRIO cannot allocate the slot, the client uses the
 existing thread-local lookup. The CPP20 worker comparison includes short input,
-integer, branch and memory workloads. [Cloud Run v9/v10 measurements](durante/CPP20_V10_PERFORMANCE.md)
+integer, branch and memory workloads. A separate calibration study checks how closely the v10 work
+clock tracks uninstrumented CPU time across languages. [Cloud Run v9/v10 performance](durante/CPP20_V10_PERFORMANCE.md)
+and [v10 native-time calibration](durante/V10_NATIVE_CALIBRATION.md).
 
 Qualify time models against the final immutable worker image, engine profile,
 and runtime options, including the selected CPUID profile. Build the reference

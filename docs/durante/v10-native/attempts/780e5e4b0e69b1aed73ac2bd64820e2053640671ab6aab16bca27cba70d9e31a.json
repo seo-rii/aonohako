@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "corpus_id": "runtime-reference-v1",
+  "smoke": false,
+  "complete": false,
+  "started_at": "2026-11-20T13:15:49.518861593Z",
+  "runtime_image": "sha256:2e5485a5e89f4995c4448f0420eb59d61f0b4147978fe749835889a8303c0e7f",
+  "source_language": "RUST2024",
+  "dispatch_profile": "default",
+  "cpuid_profile": "x86-64-v2",
+  "runner_sha256": "",
+  "environment": null,
+  "repetitions": 3,
+  "native_limits": {
+    "time_ms": 10000,
+    "wall_time_ms": 30000,
+    "memory_mb": 512
+  },
+  "metered_limits": {
+    "cpu_time_ms": 90000,
+    "wall_time_ms": 120000,
+    "memory_mb": 512
+  },
+  "samples": null,
+  "failures": [
+    "reference environment: executable file not found in $PATH"
+  ]
+}
