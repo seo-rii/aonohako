@@ -103,6 +103,13 @@ def trial(sample, dataset, previous):
         require(control["status"] == AC, "reference CPU requires an accepted native execution")
         native.append(control["cpu_time_ns"])
     run = sample["metered"]
+    cpu_ns = run["cpu_time_ns"]
+    accounting = run["cpu_accounting"]
+    require(type(cpu_ns) is int and cpu_ns > 0 and run["cpu_time_ms"] == ceil_div(cpu_ns, 1_000_000) and
+            accounting["selected_source"] in ("process_clock", "wait_rusage", "cgroup") and
+            (accounting["selected_source"] != "wait_rusage" or accounting["wait_target_ns"] == cpu_ns) and
+            not any(k in run for k in ("cpu_time_normalization", "cpu_time_sampling", "raw_cpu_time_ns", "raw_cpu_time_ms")),
+            "inconsistent diagnostic process CPU")
     execution = run["work_measurement_execution"]
     work = run["work_measurement"]
     require(run["status"] == "Container Initialization Failed" and run["verdict_source"] == "durante_complete" and
@@ -187,6 +194,7 @@ def collect_cases(dataset, language, protocol, history):
     require(observed == order[:len(samples)] and (not dataset["complete"] or len(samples) == len(order)),
             "missing, reordered or duplicate trials")
     rows, groups, binaries = {}, {}, {}
+    native_cpu_ns, diagnostic_cpu_ns = 0, 0
     sources = SOURCE_SHA256["PYTHON3" if language == "PYPY3" else language]
     fixtures = CORPUS_CASES[dataset["corpus_id"]]
     for i, sample in enumerate(samples):
@@ -203,6 +211,8 @@ def collect_cases(dataset, language, protocol, history):
         if not dataset["complete"] and i == len(samples) - 1 and sample["native_after"].get("status") != AC:
             break
         pair = trial(sample, dataset, previous)
+        native_cpu_ns += sum(pair[0])
+        diagnostic_cpu_ns += sample["metered"]["cpu_time_ns"]
         label = f"{name}/{scale}"
         rows.setdefault(label, []).append(pair)
         groups.setdefault(label, []).append(sample)
@@ -215,6 +225,7 @@ def collect_cases(dataset, language, protocol, history):
     diagnostics = diagnose([s for key in complete for s in groups[key]], weights)
     return {"image": dataset["runtime_image"], "recorded_triplets": len(samples),
             "completed_triplets": sum(map(len, rows.values())), "cases": cases,
+            "native_control_cpu_sum_ns": native_cpu_ns, "diagnostic_cpu_sum_ns": diagnostic_cpu_ns,
             "counter_diagnostics": diagnostics}, complete
 
 

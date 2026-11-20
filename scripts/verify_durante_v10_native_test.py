@@ -94,6 +94,10 @@ class PublishedTrialsTests(unittest.TestCase):
         result = self.collect()
         self.assertEqual(result["recorded_triplets"], 5)
         self.assertEqual(result["completed_triplets"], 4)
+        completed = self.data["samples"][:4]
+        self.assertEqual(result["native_control_cpu_sum_ns"], sum(
+            s[phase]["cpu_time_ns"] for s in completed for phase in ("native_before", "native_after")))
+        self.assertEqual(result["diagnostic_cpu_sum_ns"], sum(s["metered"]["cpu_time_ns"] for s in completed))
         self.assertEqual(list(result["cases"]), ["integer/1"])
         self.data["failures"] = ["native-after interrupted"]
         with TemporaryDirectory() as tmp:
@@ -107,6 +111,12 @@ class PublishedTrialsTests(unittest.TestCase):
             self.assertNotIn("fit_passed", summary)
         self.data["samples"][3]["repetition"] = 2
         with self.assertRaisesRegex(RuntimeError, "duplicate trials"):
+            self.collect()
+
+    def test_diagnostic_cost_requires_reported_process_cpu(self):
+        run = self.data["samples"][0]["metered"]
+        run["cpu_time_ns"] = run["cpu_accounting"]["wait_target_ns"] + 1
+        with self.assertRaisesRegex(RuntimeError, "diagnostic process CPU"):
             self.collect()
 
     def test_partial_collection_binds_the_original_fixture_and_binary(self):
