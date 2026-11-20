@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 ARG DURANTE_VERSION
 ENV GOFLAGS="-tags=durante_${DURANTE_VERSION}"
-RUN case "$DURANTE_VERSION" in v7|v8|v9) ;; *) echo 'unsupported Durante version' >&2; exit 1 ;; esac
+RUN case "$DURANTE_VERSION" in v7|v8|v9|v10) ;; *) echo 'unsupported Durante version' >&2; exit 1 ;; esac
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako ./cmd/server
 
 FROM durante-go AS durante-go-test
@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 COPY third_party/durante/ /vendor/durante/
 COPY third_party/durante-v8/ /vendor/durante-v8/
 COPY third_party/durante-v9/ /vendor/durante-v9/
+COPY third_party/durante-v10/ /vendor/durante-v10/
 COPY scripts/verify_durante_vendor.py /verify_durante_vendor.py
 COPY --chmod=0755 scripts/install_durante_runtime.sh /install_durante_runtime.sh
 COPY --chmod=0755 scripts/build_durante_client.sh /build_durante_client.sh
