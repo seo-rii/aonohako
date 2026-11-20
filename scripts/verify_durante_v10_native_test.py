@@ -1,9 +1,10 @@
+import gzip
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from verify_durante_v10_native import ROOT, check_platform, estimate, median_ns, score_case, spread, summarize_language
+from verify_durante_v10_native import ROOT, check_platform, collect_cases, estimate, median_ns, score_case, spread, summarize_language
 
 GATES = {"min_native_ns": 20_000_000, "max_native_spread_ppm": 100_000,
          "max_work_spread_ppm": 1_000, "max_error_ppm": 200_000}
@@ -52,6 +53,41 @@ class NativeComparisonTests(unittest.TestCase):
             (path / "evaluation.json").write_text("{}")
             with self.assertRaisesRegex(RuntimeError, "incomplete"):
                 summarize_language(path, "RUST2024", {}, {}, None)
+
+
+class PublishedTrialsTests(unittest.TestCase):
+    def setUp(self):
+        path = ROOT / "docs/durante"
+        self.history = json.loads((path / "cloud-run-cpp20-v10-performance.json").read_bytes())
+        path = path / "v10-native"
+        self.protocol = json.loads((path / "protocol.json").read_bytes())
+        self.data = json.loads(gzip.decompress((path / "CPP20/dataset.json.gz").read_bytes()))
+
+    def collect(self):
+        return collect_cases(self.data, "CPP20", self.protocol, self.history)[0]
+
+    def test_real_output_and_v10_provenance_are_required(self):
+        sample = self.data["samples"][0]
+        diag = sample["metered"]["work_measurement_execution"]
+        diag["output_matches"] = False
+        with self.assertRaisesRegex(RuntimeError, "diagnostic receipt"):
+            self.collect()
+        diag["output_matches"] = True
+        sample["metered"]["work_measurement"]["installation"]["client_sha256"] = "0" * 64
+        with self.assertRaisesRegex(RuntimeError, "v10 work report"):
+            self.collect()
+
+    def test_partial_collection_scores_only_completed_cases(self):
+        self.data["complete"] = False
+        self.data["samples"] = self.data["samples"][:5]
+        self.data["samples"][-1]["native_after"] = {}
+        result = self.collect()
+        self.assertEqual(result["recorded_triplets"], 5)
+        self.assertEqual(result["completed_triplets"], 4)
+        self.assertEqual(list(result["cases"]), ["integer/1"])
+        self.data["samples"][3]["repetition"] = 2
+        with self.assertRaisesRegex(RuntimeError, "duplicate trials"):
+            self.collect()
 
 
 class DeploymentChecks(unittest.TestCase):
