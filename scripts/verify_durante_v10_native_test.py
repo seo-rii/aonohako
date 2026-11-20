@@ -33,6 +33,15 @@ class NativeComparisonTests(unittest.TestCase):
         case = score_case([([20_000_000, 20_000_000], [96_000_000, 0, 0])] * 3, CLOCK, GATES)
         self.assertEqual(case["failed_gates"], [])
 
+    def test_aggregate_and_typed_rep_spreads(self):
+        rows = [([20_000_000, 20_000_000], [80_000_000, movs, stos]) for movs, stos in
+                ((100, 100), (100, 101), (100, 102))]
+        case = score_case(rows, CLOCK, GATES)
+        self.assertEqual(case["failed_gates"], ["rep_spread", "stos_spread"])
+        rows[-1][1][1:] = [102, 98]
+        rows[1][1][1:] = [101, 99]
+        self.assertEqual(score_case(rows, CLOCK, GATES)["failed_gates"], ["movs_spread", "stos_spread"])
+
     def test_collection_failure_is_visible_and_cannot_be_successful(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp)

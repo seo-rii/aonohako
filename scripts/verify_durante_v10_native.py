@@ -95,6 +95,7 @@ def score_case(rows, clock, thresholds):
         ("native_duration", min(native) < thresholds["min_native_ns"]),
         ("native_spread", spread(native) > thresholds["max_native_spread_ppm"]),
         ("instruction_spread", spread(ins) > thresholds["max_work_spread_ppm"]),
+        ("rep_spread", spread(rep) > thresholds["max_work_spread_ppm"]),
         ("movs_spread", spread([row[1] for row in work]) > thresholds["max_work_spread_ppm"]),
         ("stos_spread", spread([row[2] for row in work]) > thresholds["max_work_spread_ppm"]),
         ("prediction_error", result["worst_error_ppm"] > thresholds["max_error_ppm"]),
