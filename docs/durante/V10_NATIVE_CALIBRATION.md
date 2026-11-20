@@ -70,3 +70,31 @@ durante-reference collect --language PYTHON3 --repetitions 3 \
   --metered-cpu-ms 90000 --metered-wall-ms 120000 --timeout 50m \
   --output /tmp/durante-python3-native
 ```
+
+## Rust follow-up with longer inputs
+
+The first Rust cohort had 90 native controls below 20 ms. The follow-up increased the inputs for the same five Rust programs and froze their 15 expected outputs before collection. Local optimized Rust executions and two independent checksum calculations agreed on every output. Integer and copy supplied the training cases. Branch, sort and fill remained held out. The study kept the same CPU, wall, memory, error and repeatability thresholds. [Long-input protocol](rust-long-v10/protocol.json)
+
+The new collector used the same standard Rust compile and execute handlers, Durante v10 client, type-c base-image digest and rustc 1.95.0 as the first study. The temporary revision used one vCPU and 2 GiB of memory in Seoul. Each metered execution was bracketed by native runs on that same instance. The short and long cohorts ran on separate revisions. The prior short-Rust fit is used here as an offline prediction on new inputs. It was a rejected candidate in the first study.
+
+All 90 native controls exceeded 20 ms, ranging from 46.263 to 426.480 ms. Ten of the 15 cases met the native spread limit of 10%. All 15 met the 0.1% work spread limit. The new instance reported an AMD EPYC 9B14, compared with the earlier EPYC 7B13. The error comparisons below use each long case's own six native controls.
+
+| Clock on long Rust inputs | Held-out cases within ±20% | Worst held-out error | Case |
+|---|---:|---:|---|
+| Frozen v10 instruction/MOVS/STOS clock | 3/9 | +174.65% | branch, scale 4 |
+| Rust instruction/REP fit from the short inputs | 0/9 | +107.35% | branch, scale 4 |
+| Rust instruction/REP fit from the long training inputs | 4/9 | −57.64% | sort, scale 4 |
+
+The frozen clock passed all three sort scales and missed all branch and fill scales. The long-input fit passed the two larger branch and fill scales. The official fitter rejected it and exited with code 2. Diagnostic counter collection used 687.38 CPU seconds. The mean of the two native-control totals was 6.68 CPU seconds, giving a workload-weighted cost of 102.84×. [Raw data and official fit](rust-long-v10/RUST2024/) · [All case scores](rust-long-v10/summary.json)
+
+**The counters cannot explain the native gap between integer and fill.** At scale 4 native integer took at least 183.412 ms. At scale 1 native fill took at most 50.084 ms. Both passed the native spread threshold (8.32% and 5.27%). Across all repetitions the ratio of corresponding counters was at most 1.138, while the native times differed by at least 3.66×. Any fixed nonnegative weighting of instructions, MOVS bytes and STOS bytes must therefore miss one of these cases by at least **52.59%**, even at the most favorable native endpoints. The 45 measured runs all recorded zero MOVS bytes and 3,792 STOS bytes. The long fit consequently added the same 37.01 ms REP contribution to every estimate, including the different copy and fill scales. These two inputs provide a test case for a future counter that distinguishes arithmetic from memory work. [Bound and observed ranges](rust-long-v10/summary.json)
+
+The retained collector completed 45 triplets. All 135 executions used final wait-based CPU accounting, and every measured output matched the expected checksum. Cloud Run logs assigned the launch and receipt retrieval to one instance. The temporary service, its revision and its image package each returned HTTP 404 after deletion. [Placement and cleanup](rust-long-v10/platform.json)
+
+To reproduce the long-input scores and Go fit, use the build commands above with the source commit from the long-input protocol (`594ffa49f611f2c2036e11540d5fdf17c0c12723`). Pass the resulting reference binary and the follow-up directory to the verifier.
+
+```sh
+study=docs/durante/rust-long-v10
+python3 scripts/verify_durante_v10_native.py "$study" \
+  --reference "$build_dir/durante-reference" --verify "$study/summary.json"
+```
