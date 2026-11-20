@@ -251,6 +251,9 @@ def check_platform(platform, languages, history):
                 binaries["commit"] == previous["installation"]["source_commit"], "incorrect deployed v10 binaries")
         require(all(deployment["cleanup"][k] == 404 for k in ("revision_http", "service_http", "package_http")),
                 "incomplete deployment cleanup")
+        instances = {req["instance_id_sha256"] for req in deployment["requests"]}
+        require(len(instances) == 1, "expected one instance for each private revision")
+        retrieved = 0
         for req in deployment["requests"]:
             rid = req["request_id_hash"]
             require(re.fullmatch(r"[0-9a-f]{64}", rid) and rid not in request_ids and
@@ -265,13 +268,27 @@ def check_platform(platform, languages, history):
                         not ({"complete", "collector_exit", "dataset_sha256", "triplets"} & req.keys()),
                         "unrecovered response cannot attest a collector outcome")
                 continue
-            require("transport_failure" not in req and req["status"] == 200 and type(req["triplets"]) is int and
+            if req["status"] == 202:
+                receipt_id = req.get("receipt_request_id_hash", "")
+                require(deployment["cpu_always_allocated"] is True and req.get("response_http") == 200 and
+                        re.fullmatch(r"[0-9a-f]{64}", receipt_id) and receipt_id not in request_ids,
+                        "an accepted job needs its own completed receipt request")
+                request_ids.add(receipt_id)
+                retrieved += 1
+            else:
+                require(req["status"] == 200 and "receipt_request_id_hash" not in req,
+                        "unexpected synchronous collector status")
+            require("transport_failure" not in req and type(req["triplets"]) is int and
                     0 <= req["triplets"] <= 45 and type(req["collector_exit"]) is int and req["collector_exit"] >= 0 and
                     req["complete"] is (req["collector_exit"] == 0), "inconsistent collector outcome")
             if req["complete"]:
                 require(req["triplets"] == 45 and re.fullmatch(r"[0-9a-f]{64}", req["dataset_sha256"]),
                         "incomplete successful collector response")
             by_language[req["language"]].append((image, req))
+        statuses = deployment["receipt_get_status_counts"]
+        require(set(statuses) <= {"200", "202"} and all(type(n) is int and n > 0 for n in statuses.values()) and
+                statuses.get("200", 0) == retrieved and sum(statuses.values()) == deployment["receipt_get_count"],
+                "receipt retrieval counts do not match the completed jobs")
     for lang, result in languages.items():
         requests = by_language[lang]
         completed = [(image, req) for image, req in requests if req["complete"]]

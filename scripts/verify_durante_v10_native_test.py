@@ -101,9 +101,23 @@ class DeploymentChecks(unittest.TestCase):
         image = "sha256:" + "1" * 64
         self.deployment = dict(revision="trial-revision", image_digest=image, base_image="base@sha256:" + "0" * 64,
                                region="asia-northeast3", gen=2, cpu=1, concurrency=1, memory_mib=2048, private=True,
+                               receipt_get_status_counts={}, receipt_get_count=0, cpu_always_allocated=False,
                                binaries=hashes, requests=[self.request], cleanup=dict(service_http=404, revision_http=404,
                                                                                       package_http=404))
         self.results = {"CPP20": dict(status="collected", dataset_sha256="7" * 64, image=image, recorded_triplets=45)}
+
+    def test_async_acceptance_needs_matching_retrieval(self):
+        self.request.update(status=202, response_http=200, receipt_request_id_hash="a" * 64)
+        self.deployment.update(cpu_always_allocated=True, receipt_get_count=3,
+                               receipt_get_status_counts={"202": 2, "200": 1})
+        self.verify()
+        self.request["response_http"] = 202
+        with self.assertRaisesRegex(RuntimeError, "completed receipt"):
+            self.verify()
+        self.request["response_http"] = 200
+        self.deployment["receipt_get_status_counts"]["200"] = 2
+        with self.assertRaisesRegex(RuntimeError, "retrieval counts"):
+            self.verify()
 
     def verify(self):
         check_platform({"deployments": [self.deployment]}, self.results, self.history)
