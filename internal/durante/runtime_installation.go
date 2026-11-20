@@ -28,6 +28,8 @@ const (
 	sourceCommitV7  = "41743068ef9070b6e04195bf7822c5ee513660ff"
 	engineProfileV8 = "dynamorio-11.3-durante-v8-vm32m"
 	sourceCommitV8  = "614761c18d4735f00e93667c74c099cfdb2800c7"
+	engineProfileV9 = "dynamorio-11.3-durante-v9-vm32m"
+	sourceCommitV9  = "27954247e094e682a7cf47504ff13682f970469a"
 )
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
@@ -87,6 +89,8 @@ func (r *Report) ValidShadowInstallationIdentity() bool {
 		return false
 	}
 	switch r.EngineProfile {
+	case engineProfileV9:
+		return r.Installation.validForSource(sourceCommitV9, runtimeCodeReplayPatchSHA256)
 	case engineProfileV8:
 		return r.Installation.validForSource(sourceCommitV8, runtimeCodeReplayPatchSHA256)
 	case engineProfileV7:
@@ -138,8 +142,8 @@ func snapshotInstallation(cfg Config) (InstallationIdentity, error) {
 	return identity, nil
 }
 
-// The v8 image records its reviewed source in the selected DSO, including when
-// the operator overrides the client path. Existing v7 packages have no marker.
+// From v8 on, the selected DSO must carry its reviewed source commit even
+// when the operator overrides the client path. Existing v7 packages have no marker.
 func verifyClientSource(data []byte) error {
 	file, err := elf.NewFile(bytes.NewReader(data))
 	if err != nil || file.Class != elf.ELFCLASS64 || file.Machine != elf.EM_X86_64 || file.Type != elf.ET_DYN {
