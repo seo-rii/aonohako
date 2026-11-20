@@ -29,6 +29,8 @@ All 352 full submissions returned the expected stdout and exit code zero. Each l
 
 All 12 low-budget requests returned TLE from the Durante clock. The integer budget was 63 ms and the REP copy budget was 142 ms. Their CPU and wall safety limits were 90 s and 120 s. Cloud Logging attributed all 364 requests to one instance. The temporary service, revision and image package each returned HTTP 404 after deletion. [Individual budgets, progress and cleanup records](cloud-run-cpp20-v10-performance.json)
 
+With the same v10 client, a separate local sandbox run passed all 67 subtests in the judge (9), interactive (21), communication v1/v2 (27) and time-estimate (10) integration suites. These exercised contestant and manager clock cutoffs, peer shutdown, verdict precedence and a Python runtime-options binding. The integration tests use synthetic coefficients to check the judging paths. Native-time calibration remains specific to a qualified runtime and worker image. [Integration tests](../../internal/execute)
+
 The production-link build reproduced the archived v9 DSO byte for byte. The v10 DSO is pinned at `dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0`. Recompute the comparisons, clock crossings and placement checks with the Python standard library.
 
 ```sh
