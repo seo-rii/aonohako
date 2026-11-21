@@ -58,7 +58,11 @@ For native CPU calibration on Compute Engine, run the collector and its child
 processes in a cgroup restricted to one guest CPU. Use a separate core for
 observation and record the effective CPU mask and actual program launches.
 The pinned Rust comparison includes the commands, placement evidence and
-matched Cloud Run controls. [CPU-pinned GCE study](durante/GCE_PINNED_RUST_V10.md)
+matched Cloud Run controls. Subsequent Durante tests rebuilt the five Rust programs
+from the same sources. The latency and operand-byte model missed three additional algorithms.
+The load-address correction still missed those three at scale one. The follow-up
+records the limits of these coefficients for Rust verdicts.
+[CPU-pinned GCE study](durante/GCE_PINNED_RUST_V10.md) · [Rust qualification results](durante/GCE_PINNED_RUST_V10.md#follow-up-on-rust-grading-accuracy)
 
 Python compilation uses isolated `compileall` with checked-hash bytecode. The
 collector validates that the returned source matches the fixture, then executes
