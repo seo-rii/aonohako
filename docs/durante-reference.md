@@ -54,6 +54,12 @@ keep the buffer size fixed. The fitter selects the inputs and checksums from
 the recorded corpus ID. Both Rust corpora use the short functional inputs for
 `--smoke`. [Rust calibration protocol](durante/rust-long-v10/protocol.json)
 
+For native CPU calibration on Compute Engine, run the collector and its child
+processes in a cgroup restricted to one guest CPU. Use a separate core for
+observation and record the effective CPU mask and actual program launches.
+The pinned Rust comparison includes the commands, placement evidence and
+matched Cloud Run controls. [CPU-pinned GCE study](durante/GCE_PINNED_RUST_V10.md)
+
 Python compilation uses isolated `compileall` with checked-hash bytecode. The
 collector validates that the returned source matches the fixture, then executes
 only the compiled `Main.pyc`, so it cannot silently fall back to source execution.
