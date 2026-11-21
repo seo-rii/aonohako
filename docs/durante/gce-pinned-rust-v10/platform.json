@@ -1,0 +1,92 @@
+{
+  "target": "gce",
+  "zone": "asia-northeast3-a",
+  "region": "asia-northeast3",
+  "machine_type": "n2d-standard-4",
+  "guest_id_sha256": "407752fc4c74c39f1e6c361a2957e74e8a235096523b29606d6ca0d45714cd12",
+  "guest_boot_id_sha256": "b58b4cf34452125b8a54ce8b83c28d7dd88af5f657d887af0aac0e79a896478c",
+  "guest_cpu_platform": "AMD Milan",
+  "threads_per_core": 1,
+  "online_cpus": [
+    0,
+    1
+  ],
+  "topology": [
+    {
+      "cpu": 0,
+      "core_id": 0,
+      "physical_package_id": 0,
+      "thread_siblings_list": "0"
+    },
+    {
+      "cpu": 1,
+      "core_id": 1,
+      "physical_package_id": 0,
+      "thread_siblings_list": "1"
+    }
+  ],
+  "benchmark_cpu": 1,
+  "housekeeping_cpus": [
+    0
+  ],
+  "housekeeping_slice_effective": {
+    "system.slice": "0",
+    "user.slice": "0",
+    "init.scope": "0"
+  },
+  "boot_image": "debian-12-bookworm-v20261117",
+  "kernel": "6.1.0-56-cloud-amd64",
+  "cpu_model": "AMD EPYC 7B13",
+  "private_ipv4_only": true,
+  "guest_service_account": false,
+  "base_image": "asia.gcr.io/hancomac/aonohako@sha256:7af8d4b78ae6d7a9951bee0992a84df8282473bf3faf29cfbfdc56772f18ae51",
+  "image_digest": "sha256:856be473011809c36a32d7ecfb6501c45db07b3204b7e475be515ca4baa6cf95",
+  "image_config_digest": "sha256:23de5e0567295587df1b06740beb848b570518e9189926c41f65d1b676808cab",
+  "layer_sha256": "b3a4896c90ebe13e244f8d9ccf2293d702ac9b0389cdc1c3817c88f21816853c",
+  "container_id_sha256": "638d69de991499bc9cbd1b6962ed637e58bb862208b0203cb1c434450a9a5c84",
+  "binaries": {
+    "commit": "191858a02666c1406b871e4974b9072b2c91bb34",
+    "profile": "dynamorio-11.3-durante-v10-vm32m",
+    "worker_sha256": "082f83a6456e42469cf31aba5cd44ea4ad53dda29dd616cea7be7f71a40f4864",
+    "reference_sha256": "0f103605e5d024eaf3f278b20f4c07674b08d41e3089f25a20ba93acd8a5d361",
+    "client_sha256": "dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0",
+    "upstream_sha256": "4930e4cd05c2009f495839488507a77ab6101a30e2eb917281c39fbdc048df27"
+  },
+  "protocol_sha256": "f72611411891542bd7518f5f5688afbef9362b4dfea63e8c8d79aa48baf6f8c3",
+  "affinity_sha256": "7cd2e0963e83e025b86b2415e920aa442f119f62f910295e83542248b2a20a7f",
+  "attempts": [
+    {
+      "collector_exit": 1,
+      "triplets": 0,
+      "complete": false,
+      "dataset_sha256": "8416d6c50fde32951f1d9920d31146648ed7e8739053c2dd37f1654f8acd389f",
+      "reason": "local reference API requires inbound_auth=none"
+    },
+    {
+      "collector_exit": 0,
+      "triplets": 45,
+      "complete": true,
+      "dataset_sha256": "a1a159aeeea8dc0fbef999ca976a2cdbbbdafefb32e9911af30e76d0034eeb52"
+    }
+  ],
+  "collector_exit": 0,
+  "dataset_sha256": "a1a159aeeea8dc0fbef999ca976a2cdbbbdafefb32e9911af30e76d0034eeb52",
+  "triplets": 45,
+  "benchmark_steal_ticks_before": 0,
+  "benchmark_steal_ticks_after": 0,
+  "clock_ticks_per_second": 100,
+  "acquisition": {
+    "api_target": "dev",
+    "execution_transport": "embedded",
+    "sandbox_backend": "helper",
+    "network": "none",
+    "runtime_image_identity": "Reconstructed the exact prior OCI manifest from its pinned raw base and v10 layer, then loaded it into the temporary VM."
+  },
+  "cleanup": {
+    "instance_http": 404,
+    "boot_disk_http": 404,
+    "disposable_ssh_key_removed": true,
+    "started_at": "2026-11-21T04:35:56.063217+00:00",
+    "verified_at": "2026-11-21T04:37:54.463078+00:00"
+  }
+}
