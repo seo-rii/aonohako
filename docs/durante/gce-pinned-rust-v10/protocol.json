@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "purpose": "Repeat the long Rust native CPU comparison on a dedicated-to-this-study Compute Engine VM with all measured work constrained to a single guest CPU.",
+  "platform": {
+    "target": "gce",
+    "preferred_region": "asia-northeast3",
+    "machine_family": "n2d",
+    "threads_per_core": 1,
+    "benchmark_vcpu_count": 1,
+    "housekeeping_separate": true
+  },
+  "cloud_run_protocol_sha256": "bb88de7b54dbf29f6e9c5afbe2a6f87a0531d634ac69d1a3926a260b41763650",
+  "cloud_run_dataset_sha256": "86b4c20ffd38b763bfb3ba7dff4f796a78ca7126249367984aa02efe59cb7f74",
+  "cloud_run_long_evaluation_sha256": "9310f5b503d13634d929c0bd768c008060219d71460254de76634b0d789bb69e",
+  "cloud_run_summary_sha256": "3daa14f0396f1272ba138802710a277b0b4723d7cca00f221855d8bb90290be0",
+  "cloud_run_platform_sha256": "91909ad1a610c87fa8c9173778fae16cfb5c108bdd7a1a45ac376eef3cd6edb9",
+  "collection": "Use the rust-long-reference-v1 original sources, stdin, expected outputs, repetitions, phase order, hardware CPUID profile, base image, worker, reference and client digests, raw limits and fit gates pinned by the cited Cloud Run protocol. Retain all 45 ordered triplets. Validate the compiled workload hashes or report differences. No changes to any of the four clocks during collection.",
+  "affinity": "One guest logical CPU from a one-thread-per-core VM. The benchmark container and descendant executions must remain constrained to that CPU with a hard cpuset. Independently observe the executed workloads, record effective topology and placement, and retain launch and completed native/metered phase evidence. Observe guest steal time and record limitations of guest-only pinning.",
+  "analyses": [
+    "For every case report native min, median, max, and range divided by median using six native controls, the 20 ms duration floor, and the existing 10% spread gate. Compare case-wise to the fixed Cloud Run archive; summarize each platform by the median of the 15 case spreads and how many pass. The platforms were not randomized, and the CPU models may differ.",
+    "Independently score the frozen common instruction/MOVS/STOS clock, short Rust instruction/REP fit, prior long Cloud Run Rust instruction/REP fit and a new GCE instruction/REP fit learned only on integer and copy. Hold out branch, sort and fill. Count a held-out case only if all three predictions fall within 20% of its native median. Preserve full failed evaluations.",
+    "Retain the strongest retrospective conservative counter-ratio error bound and recheck the prior integer/4 and fill/1 example with the new native extrema. Report diagnostic process CPU overhead separately. Do not change production model or clock selection."
+  ]
+}
