@@ -98,3 +98,5 @@ study=docs/durante/rust-long-v10
 python3 scripts/verify_durante_v10_native.py "$study" \
   --reference "$build_dir/durante-reference" --verify "$study/summary.json"
 ```
+
+The same long Rust inputs and image were subsequently measured with affinity fixed to one guest CPU on Compute Engine. [Pinned GCE comparison](GCE_PINNED_RUST_V10.md)
