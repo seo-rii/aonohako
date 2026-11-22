@@ -367,7 +367,7 @@ func validateReferenceMetered(response model.RunResponse, dataset Dataset, contr
 	if report.RuntimeDeterminism != dataset.RuntimeDeterminism {
 		return fmt.Errorf("metered runtime determinism disagrees with dataset")
 	}
-	if err := validateReferenceLatencyBound(report, dataset.LatencyBoundVersion); err != nil {
+	if err := validateReferenceCounters(report, dataset.LatencyBoundVersion, dataset.MemoryOperandBytesVersion); err != nil {
 		return err
 	}
 	if _, err := contract.Estimate(contract.RuntimeID, *report); err != nil {
@@ -376,12 +376,18 @@ func validateReferenceMetered(response model.RunResponse, dataset Dataset, contr
 	return nil
 }
 
-func validateReferenceLatencyBound(report *durante.Report, version int) error {
-	if version != 0 && version != 1 {
-		return fmt.Errorf("unsupported dataset latency_bound_version %d", version)
+func validateReferenceCounters(report *durante.Report, latencyVersion, memoryVersion int) error {
+	if latencyVersion != 0 && latencyVersion != 1 {
+		return fmt.Errorf("unsupported dataset latency_bound_version %d", latencyVersion)
 	}
-	if (version == 1) != (report.LatencyBound != nil) || !report.ValidLatencyBound() {
+	if (latencyVersion == 1) != (report.LatencyBound != nil) || !report.ValidLatencyBound() {
 		return fmt.Errorf("metered latency bound is invalid or disagrees with dataset latency_bound_version")
+	}
+	if memoryVersion != 0 && memoryVersion != 1 {
+		return fmt.Errorf("unsupported dataset memory_operand_bytes_version %d", memoryVersion)
+	}
+	if (memoryVersion == 1) != (report.MemoryOperandBytes != nil) || !report.ValidMemoryOperandBytes() {
+		return fmt.Errorf("metered memory operand bytes are invalid or disagree with dataset memory_operand_bytes_version")
 	}
 	return nil
 }

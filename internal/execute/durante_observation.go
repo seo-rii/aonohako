@@ -106,7 +106,7 @@ func observationReportMatches(req *model.RunRequest, cfg durante.Config, report 
 	slices.Sort(expectedFeatures)
 	return validDiagnosticWorkReport(req.Lang, report) && slices.Equal(report.DisallowedCPUFeatures, expectedFeatures) &&
 		report.CPUIDProfile == cfg.CPUIDProfile &&
-		report.DispatchProfile == dispatch && (report.LatencyBound != nil) == cfg.LatencyBound &&
+		report.DispatchProfile == dispatch && cfg.ValidateReportCounters(report) == nil &&
 		report.RuntimeDeterminism == cfg.RuntimeDeterminismFor(profiles.NormalizeRunLang(req.Lang))
 }
 

@@ -67,8 +67,9 @@ type Dataset struct {
 	// RuntimeDeterminism is the option set the collection applied to this
 	// source's measured launcher (empty: none).
 	RuntimeDeterminism string `json:"runtime_determinism,omitempty"`
-	// LatencyBoundVersion binds every metered sample to the requested counter.
-	LatencyBoundVersion int `json:"latency_bound_version,omitempty"`
+	// Each declared counter must be present in every metered sample.
+	LatencyBoundVersion       int `json:"latency_bound_version,omitempty"`
+	MemoryOperandBytesVersion int `json:"memory_operand_bytes_version,omitempty"`
 	// External collections bind the held-out workloads and preselected policy.
 	CorpusSHA256       string `json:"corpus_sha256,omitempty"`
 	FrozenPolicySHA256 string `json:"frozen_policy_sha256,omitempty"`

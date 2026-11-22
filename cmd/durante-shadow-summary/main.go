@@ -25,15 +25,16 @@ import (
 
 type cpuCohortIdentity struct {
 	durante.TimePolicy
-	RuntimeOptionsID    string                        `json:"runtime_options_id,omitempty"`
-	RuntimeDeterminism  string                        `json:"runtime_determinism,omitempty"`
-	LatencyBoundVersion int                           `json:"latency_bound_version,omitempty"`
-	HostLibc            string                        `json:"host_glibc_version,omitempty"`
-	DisallowedFeatures  []cpupolicy.Feature           `json:"disallowed_cpu_features,omitempty"`
-	Installation        *durante.InstallationIdentity `json:"installation"`
-	IntegrityMode       string                        `json:"integrity_mode"`
-	NormalizationMethod string                        `json:"native_normalization_method,omitempty"`
-	NativeReferenceNs   uint64                        `json:"native_reference_ns,omitempty"`
+	RuntimeOptionsID          string                        `json:"runtime_options_id,omitempty"`
+	RuntimeDeterminism        string                        `json:"runtime_determinism,omitempty"`
+	LatencyBoundVersion       int                           `json:"latency_bound_version,omitempty"`
+	MemoryOperandBytesVersion int                           `json:"memory_operand_bytes_version,omitempty"`
+	HostLibc                  string                        `json:"host_glibc_version,omitempty"`
+	DisallowedFeatures        []cpupolicy.Feature           `json:"disallowed_cpu_features,omitempty"`
+	Installation              *durante.InstallationIdentity `json:"installation"`
+	IntegrityMode             string                        `json:"integrity_mode"`
+	NormalizationMethod       string                        `json:"native_normalization_method,omitempty"`
+	NativeReferenceNs         uint64                        `json:"native_reference_ns,omitempty"`
 }
 
 type cpuCohort struct {
@@ -235,6 +236,10 @@ func verifiedCPUModel(inner *model.RunResponse) (cpuCohortIdentity, bool) {
 	if report.LatencyBound != nil {
 		latencyVersion = report.LatencyBound.Version
 	}
+	var memoryVersion int
+	if report.MemoryOperandBytes != nil {
+		memoryVersion = int(report.MemoryOperandBytes.Version)
+	}
 	features := slices.Clone(report.DisallowedCPUFeatures)
 	if cpupolicy.Validate(features) != nil {
 		return cpuCohortIdentity{}, false
@@ -242,7 +247,7 @@ func verifiedCPUModel(inner *model.RunResponse) (cpuCohortIdentity, bool) {
 	slices.Sort(features)
 	return cpuCohortIdentity{
 		TimePolicy: policy, RuntimeOptionsID: e.RuntimeOptionsID, RuntimeDeterminism: e.RuntimeDeterminism,
-		LatencyBoundVersion: latencyVersion, HostLibc: report.HostLibc, DisallowedFeatures: features, Installation: report.Installation,
+		LatencyBoundVersion: latencyVersion, MemoryOperandBytesVersion: memoryVersion, HostLibc: report.HostLibc, DisallowedFeatures: features, Installation: report.Installation,
 		IntegrityMode: inner.WorkMeasurementJudgment.IntegrityMode,
 	}, true
 }

@@ -677,6 +677,16 @@ func Load() (Config, error) {
 	default:
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_LATENCY_BOUND must be empty, off or v1")
 	}
+	switch strings.TrimSpace(os.Getenv("AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES")) {
+	case "", "off":
+	case "v1":
+		workMeasurement.MemoryOperandBytes = true
+	default:
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES must be empty, off or v1")
+	}
+	if err := workMeasurement.ValidateCounters(); err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES: %w", err)
+	}
 	workMeasurement.CPUIDProfile, err = durante.ParseCPUIDProfile(os.Getenv("AONOHAKO_DURANTE_CPUID_PROFILE"))
 	if err != nil {
 		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_CPUID_PROFILE: %w", err)

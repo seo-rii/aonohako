@@ -107,7 +107,7 @@ func validDiagnosticWorkReport(language string, report *durante.Report) bool {
 	}
 	return report != nil && report.Schema == 1 && report.ClientVersion == 1 &&
 		report.Complete && report.Reason == "" && report.Authority == durante.Authority &&
-		report.ValidDiagnosticContract() && report.ValidREPTelemetry() && report.ValidLatencyBound() && report.ValidInstallationIdentity() &&
+		report.ValidDiagnosticContract() && report.ValidREPTelemetry() && report.ValidLatencyBound() && report.ValidMemoryOperandBytes() && report.ValidInstallationIdentity() &&
 		((report.SignalsObserved == 0 && report.Quality == "uninterrupted") || (report.SignalsObserved > 0 && report.Quality == "signals_observed")) &&
 		report.EngineProfile == durante.EngineProfile && report.Family == family &&
 		(report.DispatchProfile == durante.DispatchDefault || (family == "cpp" && report.DispatchProfile == durante.DispatchGLIBC241 && report.HostLibc == "2.41")) &&
@@ -133,15 +133,12 @@ func validateRemoteMeasurementCounters(req *model.RunRequest, response model.Run
 	if err := validateRemoteWorkMeasurement(req, response); err != nil {
 		return err
 	}
-	matches := func(r *durante.Report) bool {
-		return r == nil || !r.Complete || (r.LatencyBound != nil) == cfg.LatencyBound
-	}
-	if !matches(response.WorkMeasurement) {
-		return fmt.Errorf("invalid remote result: work measurement latency counter mismatch")
+	if err := cfg.ValidateReportCounters(response.WorkMeasurement); err != nil {
+		return fmt.Errorf("invalid remote result: work measurement %w", err)
 	}
 	for _, role := range response.WorkMeasurements {
-		if !matches(role.Report) {
-			return fmt.Errorf("invalid remote result: %s latency counter mismatch", role.Role)
+		if err := cfg.ValidateReportCounters(role.Report); err != nil {
+			return fmt.Errorf("invalid remote result: %s %w", role.Role, err)
 		}
 	}
 	return nil

@@ -97,6 +97,9 @@ func Collect(ctx context.Context, cfg config.Config, options CollectOptions) (da
 	if cfg.Execution.WorkMeasurement.LatencyBound {
 		dataset.LatencyBoundVersion = 1
 	}
+	if cfg.Execution.WorkMeasurement.MemoryOperandBytes {
+		dataset.MemoryOperandBytesVersion = 1
+	}
 	dataset.RuntimeDeterminism = cfg.Execution.WorkMeasurement.RuntimeDeterminismFor(profiles.NormalizeRunLang(profile.SourceLanguage))
 	defer func() { recordCollectionFailure(&dataset, err) }()
 	if profileErr != nil {
@@ -513,7 +516,7 @@ func validateCollectedMetered(response model.RunResponse, dataset Dataset) error
 		r.RuntimeDeterminism != dataset.RuntimeDeterminism {
 		return fmt.Errorf("metered observation is absent, incomplete, or incompatible")
 	}
-	if err := validateReferenceLatencyBound(r, dataset.LatencyBoundVersion); err != nil {
+	if err := validateReferenceCounters(r, dataset.LatencyBoundVersion, dataset.MemoryOperandBytesVersion); err != nil {
 		return err
 	}
 	if !r.ValidInstallationIdentity() {
