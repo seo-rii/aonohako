@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -178,7 +179,16 @@ func TestCollectorRejectsUnsafeOrMalformedFiles(t *testing.T) {
 // Shared vectors are pinned with the client source so the Go and reference
 // collectors must agree on lifecycle closure, child sums and strict field types.
 func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
-	data, err := os.ReadFile("../../third_party/durante/tests/protocol_vectors.json")
+	vectorsPath := "../../third_party/durante/tests/protocol_vectors.json"
+	if EngineProfile == engineProfileV11 {
+		source := filepath.Join(t.TempDir(), "upstream")
+		cmd := exec.Command("python3", "../../scripts/verify_durante_vendor.py", "--version", "v11", "--output", source)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("materialize v11 protocol vectors: %v: %s", err, output)
+		}
+		vectorsPath = filepath.Join(source, "tests", "protocol_vectors.json")
+	}
+	data, err := os.ReadFile(vectorsPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,15 +200,16 @@ func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 			Files    map[string][]json.RawMessage `json:"files"`
 			Valid    bool                         `json:"valid"`
 			Expected struct {
-				Instructions       *uint64       `json:"instructions"`
-				Processes          *int          `json:"process_count"`
-				Images             *int          `json:"image_count"`
-				Signals            *uint64       `json:"signals_observed"`
-				Quality            string        `json:"quality"`
-				REPBreakdown       *REPBreakdown `json:"rep_breakdown"`
-				LatencyBound       *LatencyBound `json:"latency_bound"`
-				REPTelemetryStatus string        `json:"rep_telemetry_status"`
-				CPUIDProfile       string        `json:"cpuid_profile"`
+				Instructions       *uint64             `json:"instructions"`
+				Processes          *int                `json:"process_count"`
+				Images             *int                `json:"image_count"`
+				Signals            *uint64             `json:"signals_observed"`
+				Quality            string              `json:"quality"`
+				REPBreakdown       *REPBreakdown       `json:"rep_breakdown"`
+				LatencyBound       *LatencyBound       `json:"latency_bound"`
+				MemoryOperandBytes *MemoryOperandBytes `json:"memory_operand_bytes"`
+				REPTelemetryStatus string              `json:"rep_telemetry_status"`
+				CPUIDProfile       string              `json:"cpuid_profile"`
 			} `json:"expected"`
 		} `json:"cases"`
 	}
@@ -234,7 +245,7 @@ func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 				t.Fatalf("completeness mismatch: %+v", r)
 			}
 			if !vector.Valid {
-				if r.Instructions != nil || r.REPBytes != nil || r.REPBreakdown != nil || r.LatencyBound != nil || r.Reason == "" {
+				if r.Instructions != nil || r.REPBytes != nil || r.REPBreakdown != nil || r.LatencyBound != nil || r.MemoryOperandBytes != nil || r.Reason == "" {
 					t.Fatalf("invalid report exposed totals: %+v", r)
 				}
 				return
@@ -252,6 +263,9 @@ func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 			}
 			if r.CPUIDProfile != e.CPUIDProfile {
 				t.Fatalf("CPUID profile receipt %q, want %q", r.CPUIDProfile, e.CPUIDProfile)
+			}
+			if !reflect.DeepEqual(r.MemoryOperandBytes, e.MemoryOperandBytes) {
+				t.Fatalf("memory operand bytes = %+v, want %+v", r.MemoryOperandBytes, e.MemoryOperandBytes)
 			}
 			if !reflect.DeepEqual(r.LatencyBound, e.LatencyBound) || !r.ValidLatencyBound() {
 				t.Fatalf("latency bound = %+v, want %+v", r.LatencyBound, e.LatencyBound)

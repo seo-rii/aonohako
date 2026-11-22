@@ -104,7 +104,7 @@ func (r Report) TimeConversionEligibility(method string) TimeEligibility {
 		return timeEligibility(TimeIncompatibleConfiguration)
 	}
 	var reasons []string
-	if r.Schema != 1 || r.ClientVersion != 1 || r.Metric != Metric || r.Scope != Scope || r.Authority != Authority || !r.ValidDiagnosticContract() {
+	if r.Schema != 1 || r.ClientVersion != 1 || r.Metric != Metric || r.Scope != Scope || r.Authority != Authority || !r.ValidDiagnosticContract() || !r.ValidMemoryOperandBytes() {
 		reasons = append(reasons, TimeReportContractMismatch)
 	}
 	if !r.Complete || r.Reason != "" {

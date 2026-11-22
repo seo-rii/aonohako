@@ -52,6 +52,32 @@ func (b LatencyBound) validFor(instructions uint64) bool {
 	return b.Version == 1 && instructions > 0 && instructions <= b.CyclesX16/4
 }
 
+// MemoryOperandBytes sums nominal read and write operand widths across selected images.
+type MemoryOperandBytes struct {
+	Version uint64 `json:"version"`
+	Bytes   uint64 `json:"bytes"`
+}
+
+func (b *MemoryOperandBytes) UnmarshalJSON(data []byte) error {
+	fields, err := manifestObject(data)
+	if err != nil {
+		return err
+	}
+	if len(fields) != 2 {
+		return fmt.Errorf("invalid memory operand bytes fields")
+	}
+	var version uint64
+	if err := json.Unmarshal(fields["version"], &version); err != nil || version != 1 {
+		return fmt.Errorf("unsupported memory operand bytes version")
+	}
+	var count *uint64
+	if err := json.Unmarshal(fields["bytes"], &count); err != nil || count == nil {
+		return fmt.Errorf("missing or invalid memory operand byte count")
+	}
+	*b = MemoryOperandBytes{Version: version, Bytes: *count}
+	return nil
+}
+
 // REPBreakdown partitions supported REP work by instruction kind. A missing
 // breakdown is legacy, unspecified detail, not four observed zero counters.
 type REPBreakdown struct {
@@ -180,6 +206,7 @@ type Report struct {
 	UnsupportedREPEntries *uint64               `json:"unsupported_rep_entries,omitempty"`
 	REPBreakdown          *REPBreakdown         `json:"rep_breakdown,omitempty"`
 	LatencyBound          *LatencyBound         `json:"latency_bound,omitempty"`
+	MemoryOperandBytes    *MemoryOperandBytes   `json:"memory_operand_bytes,omitempty"`
 	Processes             int                   `json:"processes"`
 	Images                int                   `json:"images"`
 	SignalsObserved       uint64                `json:"signals_observed"`
@@ -221,9 +248,16 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	}
 	// encoding/json accepts case-insensitive aliases. Do not let a second
 	// spelling override an explicit trust or coverage statement.
-	protectedFields := []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown", "latency_bound", "disallowed_cpu_features", "cpuid_profile", "runtime_determinism"}
+	protectedFields := []string{"integrity_verified", "measurement_contract", "rep_telemetry_status", "target_libc_attested", "installation", "rep_breakdown", "latency_bound", "memory_operand_bytes", "disallowed_cpu_features", "cpuid_profile", "runtime_determinism"}
 	if _, present := fields["latency_bound"]; present {
 		protectedFields = append(protectedFields, "complete", "instructions")
+	}
+	if _, present := fields["memory_operand_bytes"]; present {
+		protectedFields = append(protectedFields, "signals_observed", "quality", "engine_profile")
+		signals, exists := fields["signals_observed"]
+		if !exists || bytes.Equal(bytes.TrimSpace(signals), []byte("null")) {
+			return fmt.Errorf("missing signal observation for memory operand bytes")
+		}
 	}
 	for key := range fields {
 		for _, protected := range protectedFields {
@@ -242,6 +276,9 @@ func (r *Report) UnmarshalJSON(data []byte) error {
 	}
 	if _, exists := fields["latency_bound"]; exists && (decoded.LatencyBound == nil || !(*Report)(&decoded).ValidLatencyBound()) {
 		return fmt.Errorf("invalid latency bound on diagnostic report")
+	}
+	if _, exists := fields["memory_operand_bytes"]; exists && (decoded.MemoryOperandBytes == nil || !(*Report)(&decoded).ValidMemoryOperandBytes()) {
+		return fmt.Errorf("invalid memory operand bytes on diagnostic report")
 	}
 	if _, exists := fields["disallowed_cpu_features"]; exists {
 		if len(decoded.DisallowedCPUFeatures) == 0 || cpupolicy.Validate(decoded.DisallowedCPUFeatures) != nil ||
@@ -279,7 +316,7 @@ func (r *Report) WithoutTotals(reason string) *Report {
 
 func (r *Report) ValidUnavailableResult() bool {
 	return r != nil && !r.Complete && r.Reason != "" && r.Quality == "incomplete" && r.REPTelemetryStatus == REPUnavailable &&
-		r.Instructions == nil && r.REPBytes == nil && r.REPEntries == nil && r.UnsupportedREPEntries == nil && r.REPBreakdown == nil && r.LatencyBound == nil &&
+		r.Instructions == nil && r.REPBytes == nil && r.REPEntries == nil && r.UnsupportedREPEntries == nil && r.REPBreakdown == nil && r.LatencyBound == nil && r.MemoryOperandBytes == nil &&
 		r.SignalsObserved == 0 && r.Processes == 0 && r.Images == 0 && len(r.DisallowedCPUFeatures) == 0 && r.CPUIDProfile == "" &&
 		r.RuntimeDeterminism == ""
 }
@@ -287,6 +324,13 @@ func (r *Report) ValidUnavailableResult() bool {
 // ValidLatencyBound checks the optional counter against its instruction total.
 func (r *Report) ValidLatencyBound() bool {
 	return r != nil && (r.LatencyBound == nil || (r.Complete && r.Instructions != nil && r.LatencyBound.validFor(*r.Instructions)))
+}
+
+// ValidMemoryOperandBytes checks the counter's requirements for a published worker report.
+func (r *Report) ValidMemoryOperandBytes() bool {
+	return r != nil && (r.MemoryOperandBytes == nil || (r.MemoryOperandBytes.Version == 1 &&
+		r.EngineProfile == engineProfileV11 && r.LatencyBound != nil && r.ValidLatencyBound() &&
+		r.Quality == "uninterrupted" && r.SignalsObserved == 0))
 }
 
 // ValidDiagnosticContract rejects old, absent or promoted remote contracts.
