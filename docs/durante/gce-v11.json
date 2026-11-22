@@ -1,0 +1,464 @@
+{
+  "schema": 1,
+  "kind": "gce_pinned_client_compatibility_and_cost",
+  "measurement": "subtree CPU from Linux wait4, user plus system, including CLI startup and report collection",
+  "units": "microseconds, except explicitly labeled fields",
+  "authority": "diagnostic_only",
+  "production_verdict_enabled": false,
+  "platform": {
+    "zone": "asia-northeast3-a",
+    "machine_type": "n2d-standard-4",
+    "threads_per_core": 1,
+    "cpu_platform": "AMD Milan",
+    "image": "debian-12-bookworm-v20261117",
+    "disk_auto_delete": true,
+    "external_ip": false,
+    "service_account": false,
+    "kernel": "6.1.0-56-cloud-amd64",
+    "cpu_model": "AMD EPYC 7B13",
+    "measured_cpu": 1,
+    "collector_affinity": [
+      1
+    ],
+    "systemd_allowed_cpus": [
+      1
+    ],
+    "trace_control_cpu": 0,
+    "cpu1_steal_tick_delta": 0,
+    "kernel_exec_trace": {
+      "supervisors": 168,
+      "metered_roots": 168,
+      "matched_cpu": 1,
+      "max_overruns": 0,
+      "max_dropped_events": 0
+    }
+  },
+  "teardown": {
+    "instance_http": 404,
+    "boot_disk_http": 404,
+    "key_removed": true,
+    "verified_at": "2026-11-22T08:02:00.147883+00:00"
+  },
+  "artifacts": {
+    "v10.so": "dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0",
+    "v11.so": "902ac894e62a5a7c88139e7aeffca977719c8d60b514b01e45bb1a2baa80abc9",
+    "durante": "85f47aade91d1a8d390154337d197ce05e5074b963a11f111e313db6bcd383c2",
+    "dynamorio/bin64/drrun": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+    "dynamorio/lib64/release/libdynamorio.so": "fd1c5645b9fc70a7dcb71459b4b94782d2e016a2aa4ceffcfcab2ade962cdf5b",
+    "dynamorio/.durante-runtime.json": "264db0658f5f453a562cf0c702a820cd3c2d1be461ba796c134628d664cc4cde"
+  },
+  "fixtures": {
+    "operand": {
+      "elf_sha256": "bbff391f8f56e3d29e50bcb4151b8ad0292858728ae68b7a0ebbd943def0c9b1",
+      "source_sha256": "d82943e55e39bbb00ee532f6cf6e88d0f146ee4e5f936b009e5c871b500b5cef",
+      "instructions": 44,
+      "rep_bytes": 11,
+      "latency_cycles_x16": 184,
+      "nominal_operand_bytes": 623,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "assembly": "/* A libc-free program with 623 nominal operand bytes. Keep the sentinel live\n * in XMM0 across block entries, store checkpoints and REP observations. */\n.global _start\n.text\n_start:\n    fxsave64 state(%rip)             /* 512 fixed bytes */\n    mov $1, %eax\n    cpuid\n    bt $27, %ecx                     /* OSXSAVE */\n    jnc .Lstart\n    xor %eax, %eax\n    xor %edx, %edx\n    xsave64 state(%rip)              /* runtime-selected width contributes zero */\n.Lstart:\n    lea input(%rip), %rsi\n    lea buffer(%rip), %rdi\n    prefetchnta (%rsi)\n    nopl 0(%rsi)\n    movdqu (%rsi), %xmm0             /* 16 */\n    movb (%rsi), %al\n    movw (%rsi), %ax\n    movl (%rsi), %eax\n    movq (%rsi), %rax                /* reads 1+2+4+8 */\n    movb %al, (%rdi)\n    movw %ax, (%rdi)\n    movl %eax, (%rdi)\n    movq %rax, (%rdi)                /* writes 1+2+4+8 */\n    addl $1, (%rdi)                  /* RMW 4+4 */\n    push %rax\n    pop %rax                         /* implicit stack write/read 8+8 */\n    mov $3, %ecx\n.Lloop:\n    movb (%rsi), %al                 /* 3 visits at 1 byte each */\n    dec %ecx\n    jnz .Lloop\n    rep movsb                        /* 1+1 even at RCX=0 */\n    mov $7, %ecx\n    rep movsb                        /* 1+1, independent of RCX */\n    mov $2, %ecx\n    rep stosw                        /* 2 */\n    movdqu %xmm0, 16(%rdi)          /* 16 */\n    pcmpeqb input(%rip), %xmm0       /* 16, verifies live XMM0 */\n    pmovmskb %xmm0, %edi\n    xor $65535, %edi\n    setne %dil\n    movzbl %dil, %edi\n    mov $60, %eax\n    syscall\n.section .rodata\n.balign 16\ninput:\n    .quad 0x0123456789abcdef, 0xfedcba9876543210\n.bss\n.balign 64\nstate:\n    .skip 4096\nbuffer:\n    .skip 64\n.section .note.GNU-stack,\"\",@progbits\n",
+      "link_object": "cczewsTt.o"
+    },
+    "loop": {
+      "elf_sha256": "e943e4ad2eb09ece590ca381bc660960884cc5fb74420ffde5ff727fe3ac6fcc",
+      "source_sha256": "c1730fbdb4885f1609396ed3429c3e37f598a8c9a72f47f4970ef96ae7e7054e",
+      "instructions": 40000011,
+      "rep_bytes": 0,
+      "latency_cycles_x16": 320000036,
+      "nominal_operand_bytes": 8,
+      "stdout_sha256": "4994180eb4ef97fb84d45c3eb720966472631e9ef6ade000b807e429be7abf5b",
+      "assembly": "/* Linux x86-64, no libc, threads, child processes or generated code.\n * Each fixture writes one independently predictable little-endian uint64.\n * Common write/exit: 8 instructions. REP counts each REP entry once.\n */\n.global _start\n.text\n_start:\n#if FIXTURE == 1\n    /* 2 setup + 2 * 2,000,000 loop + 1 store + 8 common. */\n    mov $20000000, %ecx\n    xor %r8d, %r8d\n1:  add $3, %r8\n    loop 1b\n    mov %r8, payload(%rip)\n#elif FIXTURE == 2\n    /* 2 setup + 10 * 128 body + 2 result + 8 common. */\n    mov $128, %r9d\n    cld\n1:  lea source(%rip), %rdi\n    mov $0x5a, %al\n    mov $65536, %ecx\n    rep stosb\n    lea source(%rip), %rsi\n    lea target(%rip), %rdi\n    mov $65536, %ecx\n    rep movsb\n    dec %r9d\n    jnz 1b\n    mov target+65528(%rip), %r8\n    mov %r8, payload(%rip)\n#elif FIXTURE != 0\n#error Unknown fixed overhead fixture\n#endif\n    mov $1, %eax\n    mov $1, %edi\n    lea payload(%rip), %rsi\n    mov $8, %edx\n    syscall\n    mov $60, %eax\n    xor %edi, %edi\n    syscall\n.data\n.align 8\npayload: .quad 0x0123456789abcdef\n.bss\n.align 64\nsource: .skip 65536\ntarget: .skip 65536\n.section .note.GNU-stack,\"\",@progbits\n",
+      "link_object": "cclMi10g.o"
+    },
+    "store": {
+      "elf_sha256": "a6bb819ba31f1f692e4d91aaa9d5f377ed8d63cb13edb3aeadd85d9e1d197655",
+      "source_sha256": "9d0445e38f985b88749982108b6001fed0832883a814cc97b9a1bb60b7060649",
+      "instructions": 13000012,
+      "rep_bytes": 0,
+      "latency_cycles_x16": 52000048,
+      "nominal_operand_bytes": 32000008,
+      "stdout_sha256": "259bb2ab73047ad2c49496f0ff56b9b3deb0240c3bc270d80641b9e06fd29f9b",
+      "assembly": ".global _start\n.text\n_start:\n    mov $2000000, %ecx\n    xor %r8d, %r8d\n    lea source(%rip), %rdi\n1:  mov %rcx, (%rdi)\n    add (%rdi), %r8\n    test $1, %ecx\n    jnz 2f\n    add $3, %r8\n2:  dec %ecx\n    jnz 1b\n    mov %r8, payload(%rip)\n    mov $1, %eax\n    mov $1, %edi\n    lea payload(%rip), %rsi\n    mov $8, %edx\n    syscall\n    mov $60, %eax\n    xor %edi, %edi\n    syscall\n.bss\n.align 8\nsource: .skip 8\npayload: .skip 8\n.section .note.GNU-stack,\"\",@progbits\n",
+      "link_object": "ccutznxc.o"
+    }
+  },
+  "protocol": {
+    "cases": [
+      "operand",
+      "loop",
+      "store"
+    ],
+    "comparison_order": [
+      "v10-plain:v11-plain",
+      "v10-latency:v11-latency",
+      "v11-latency:v11-bytes",
+      "v10-live:v11-live"
+    ],
+    "warmup_pairs_per_contrast": 1,
+    "measured_pairs_per_contrast": 6,
+    "order": "For zero-based comparison c, fixture f and measured pair k, baseline first if (c+f+k) is even. Warm-up uses the ordering of pair 0.",
+    "runs": 168,
+    "cpuid_profile": "x86-64-v2",
+    "live_work_budget": 1000000000,
+    "cli_timeout_ms": 30000,
+    "status": "All 168 meter reports complete, valid and uninterrupted; every output, exact instruction and REP count, enabled-mode operand bytes and final live count passed. Both latency profiles returned identical cycle totals for each input. All work clocks stayed within budget.",
+    "fixture_build": "gcc -DFIXTURE=1 -c NAME.S -o LINK_OBJECT; gcc -static -nostdlib -no-pie -Wl,--build-id=none LINK_OBJECT -o NAME",
+    "common_argv": [
+      "durante",
+      "run",
+      "--drrun",
+      "dynamorio/bin64/drrun",
+      "--client",
+      "CLIENT",
+      "--report",
+      "FRESH_PRIVATE_REPORT",
+      "--timeout-ms",
+      "30000",
+      "--cpuid-profile",
+      "x86-64-v2",
+      "MODE_FLAGS",
+      "--",
+      "FIXTURE"
+    ],
+    "mode_flags": {
+      "plain": [],
+      "latency": [
+        "--latency-bound"
+      ],
+      "bytes": [
+        "--latency-bound",
+        "--memory-operand-bytes"
+      ],
+      "live": [
+        "--work-budget",
+        "1000000000"
+      ]
+    }
+  },
+  "paired_samples": {
+    "operand/v10-plain:v11-plain": {
+      "base_cpu_us": [
+        13020,
+        13314,
+        13032,
+        12889,
+        12969,
+        12846
+      ],
+      "target_cpu_us": [
+        12920,
+        13052,
+        12974,
+        12934,
+        12865,
+        12830
+      ],
+      "median_baseline_ms": 12.995,
+      "median_candidate_ms": 12.927,
+      "median_paired_ratio": 0.994,
+      "paired_ratio_range": [
+        0.98,
+        1.003
+      ],
+      "base_spread_pct": 3.602,
+      "target_spread_pct": 1.717
+    },
+    "loop/v10-plain:v11-plain": {
+      "base_cpu_us": [
+        562782,
+        561290,
+        562097,
+        561371,
+        561522,
+        562545
+      ],
+      "target_cpu_us": [
+        45031,
+        45133,
+        45002,
+        45248,
+        45165,
+        45316
+      ],
+      "median_baseline_ms": 561.809,
+      "median_candidate_ms": 45.149,
+      "median_paired_ratio": 0.08,
+      "paired_ratio_range": [
+        0.08,
+        0.081
+      ],
+      "base_spread_pct": 0.266,
+      "target_spread_pct": 0.695
+    },
+    "store/v10-plain:v11-plain": {
+      "base_cpu_us": [
+        176951,
+        182346,
+        177009,
+        178051,
+        181434,
+        181212
+      ],
+      "target_cpu_us": [
+        24096,
+        25084,
+        24436,
+        23987,
+        24291,
+        24454
+      ],
+      "median_baseline_ms": 179.631,
+      "median_candidate_ms": 24.363,
+      "median_paired_ratio": 0.136,
+      "paired_ratio_range": [
+        0.134,
+        0.138
+      ],
+      "base_spread_pct": 3.003,
+      "target_spread_pct": 4.503
+    },
+    "operand/v10-latency:v11-latency": {
+      "base_cpu_us": [
+        13429,
+        13414,
+        13560,
+        13487,
+        13397,
+        13385
+      ],
+      "target_cpu_us": [
+        13541,
+        13446,
+        13425,
+        13454,
+        13531,
+        13729
+      ],
+      "median_baseline_ms": 13.421,
+      "median_candidate_ms": 13.492,
+      "median_paired_ratio": 1.005,
+      "paired_ratio_range": [
+        0.99,
+        1.026
+      ],
+      "base_spread_pct": 1.304,
+      "target_spread_pct": 2.253
+    },
+    "loop/v10-latency:v11-latency": {
+      "base_cpu_us": [
+        566125,
+        565707,
+        566681,
+        566535,
+        565617,
+        582893
+      ],
+      "target_cpu_us": [
+        598048,
+        597867,
+        597507,
+        597135,
+        598364,
+        597381
+      ],
+      "median_baseline_ms": 566.33,
+      "median_candidate_ms": 597.687,
+      "median_paired_ratio": 1.055,
+      "paired_ratio_range": [
+        1.025,
+        1.058
+      ],
+      "base_spread_pct": 3.051,
+      "target_spread_pct": 0.206
+    },
+    "store/v10-latency:v11-latency": {
+      "base_cpu_us": [
+        177844,
+        177651,
+        179226,
+        180864,
+        177643,
+        177956
+      ],
+      "target_cpu_us": [
+        186869,
+        184961,
+        185014,
+        186697,
+        184681,
+        184512
+      ],
+      "median_baseline_ms": 177.9,
+      "median_candidate_ms": 184.988,
+      "median_paired_ratio": 1.038,
+      "paired_ratio_range": [
+        1.032,
+        1.051
+      ],
+      "base_spread_pct": 1.811,
+      "target_spread_pct": 1.274
+    },
+    "operand/v11-latency:v11-bytes": {
+      "base_cpu_us": [
+        14028,
+        14111,
+        13989,
+        13492,
+        13478,
+        13546
+      ],
+      "target_cpu_us": [
+        14504,
+        14454,
+        13936,
+        13697,
+        13806,
+        14085
+      ],
+      "median_baseline_ms": 13.768,
+      "median_candidate_ms": 14.011,
+      "median_paired_ratio": 1.024,
+      "paired_ratio_range": [
+        0.996,
+        1.04
+      ],
+      "base_spread_pct": 4.598,
+      "target_spread_pct": 5.76
+    },
+    "loop/v11-latency:v11-bytes": {
+      "base_cpu_us": [
+        598786,
+        599939,
+        600045,
+        597400,
+        597389,
+        598876
+      ],
+      "target_cpu_us": [
+        593361,
+        592945,
+        593457,
+        594446,
+        593145,
+        593636
+      ],
+      "median_baseline_ms": 598.831,
+      "median_candidate_ms": 593.409,
+      "median_paired_ratio": 0.991,
+      "paired_ratio_range": [
+        0.988,
+        0.995
+      ],
+      "base_spread_pct": 0.444,
+      "target_spread_pct": 0.253
+    },
+    "store/v11-latency:v11-bytes": {
+      "base_cpu_us": [
+        185012,
+        185257,
+        184872,
+        185262,
+        186934,
+        184877
+      ],
+      "target_cpu_us": [
+        186529,
+        186635,
+        186352,
+        186446,
+        186918,
+        186446
+      ],
+      "median_baseline_ms": 185.135,
+      "median_candidate_ms": 186.488,
+      "median_paired_ratio": 1.008,
+      "paired_ratio_range": [
+        1.0,
+        1.008
+      ],
+      "base_spread_pct": 1.114,
+      "target_spread_pct": 0.304
+    },
+    "operand/v10-live:v11-live": {
+      "base_cpu_us": [
+        13961,
+        13952,
+        14062,
+        14111,
+        14674,
+        14035
+      ],
+      "target_cpu_us": [
+        13958,
+        13995,
+        14021,
+        14123,
+        14038,
+        13874
+      ],
+      "median_baseline_ms": 14.049,
+      "median_candidate_ms": 14.008,
+      "median_paired_ratio": 0.998,
+      "paired_ratio_range": [
+        0.957,
+        1.003
+      ],
+      "base_spread_pct": 5.139,
+      "target_spread_pct": 1.778
+    },
+    "loop/v10-live:v11-live": {
+      "base_cpu_us": [
+        52063,
+        52143,
+        52220,
+        51630,
+        51744,
+        52233
+      ],
+      "target_cpu_us": [
+        52131,
+        52073,
+        51603,
+        51675,
+        51989,
+        51855
+      ],
+      "median_baseline_ms": 52.103,
+      "median_candidate_ms": 51.922,
+      "median_paired_ratio": 1.0,
+      "paired_ratio_range": [
+        0.988,
+        1.005
+      ],
+      "base_spread_pct": 1.157,
+      "target_spread_pct": 1.017
+    },
+    "store/v10-live:v11-live": {
+      "base_cpu_us": [
+        189685,
+        189802,
+        189582,
+        189891,
+        189653,
+        189627
+      ],
+      "target_cpu_us": [
+        191407,
+        191270,
+        191529,
+        191177,
+        191176,
+        191032
+      ],
+      "median_baseline_ms": 189.669,
+      "median_candidate_ms": 191.224,
+      "median_paired_ratio": 1.008,
+      "paired_ratio_range": [
+        1.007,
+        1.01
+      ],
+      "base_spread_pct": 0.163,
+      "target_spread_pct": 0.26
+    }
+  }
+}
