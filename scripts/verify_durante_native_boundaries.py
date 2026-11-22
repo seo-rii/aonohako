@@ -90,11 +90,24 @@ def classify(durante_status, native_statuses):
     return "mixed"
 
 
-def check_clock(response, req, policy, options_id, determinism, installation):
+def check_optional_counters(report, dataset):
+    for name, value_key in (("latency_bound", "cycles_x16"), ("memory_operand_bytes", "bytes")):
+        if not report["complete"] or not dataset.get(name + "_version"):
+            require(name not in report, f"unexpected {name} counter")
+            continue
+        counter = report.get(name)
+        require(isinstance(counter, dict) and set(counter) == {"version", value_key} and
+                type(counter["version"]) is int and counter["version"] == dataset[name + "_version"] and
+                type(counter[value_key]) is int and 0 <= counter[value_key] < 2**64,
+                f"invalid or missing {name} counter")
+
+
+def check_clock(response, req, policy, options_id, dataset, installation):
     judgment = response["work_measurement_judgment"]
     execution = response["work_measurement_execution"]
     report = response["work_measurement"]
     clock = execution["clock"]
+    determinism = dataset.get("runtime_determinism", "")
     nominal = req["limits"]["time_ms"]
     hard = req["work_measurement_limits"]
     status = response["status"]
@@ -112,6 +125,7 @@ def check_clock(response, req, policy, options_id, determinism, installation):
     require(report["installation"] == installation and report["family"] == policy["family"] and
             report["engine_profile"] == policy["engine_profile"] and report["dispatch_profile"] == policy["dispatch_profile"],
             "different Durante installation or measurement profile")
+    check_optional_counters(report, dataset)
     require(clock["version"] == 1 and clock["metric"] == "model_weighted_nanoseconds_v1" and
             clock["budget"] == nominal * 1_000_000 and clock["state"] == "observed" and
             clock["model_binding"] == model_binding(policy, options_id, determinism), "unverified work-clock binding")
@@ -192,6 +206,7 @@ def judge_config(args, dataset, policy):
     env = {"AONOHAKO_DURANTE_FAMILIES": "cpp", "AONOHAKO_DURANTE_DISPATCH_PROFILE": dataset["dispatch_profile"],
            "AONOHAKO_DURANTE_CPUID_PROFILE": dataset.get("cpuid_profile", ""),
            "AONOHAKO_DURANTE_LATENCY_BOUND": "v1" if dataset.get("latency_bound_version") == 1 else "off",
+           "AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES": "v1" if dataset.get("memory_operand_bytes_version") == 1 else "off",
            "AONOHAKO_DURANTE_RUNTIME_DETERMINISM": dataset.get("runtime_determinism") or "off",
            "AONOHAKO_DURANTE_RESOURCE_POLICY": json.dumps(resources)}
     descriptor_env = {"PATH": os.defpath, "AONOHAKO_DEPLOYMENT_TARGET": "dev", "AONOHAKO_INBOUND_AUTH": "none",
@@ -252,7 +267,6 @@ def experiment(args, summary):
     hard = dataset["metered_limits"]
     native_limits = dataset["native_limits"]
     native_env, judge_env, options_id = judge_config(args, dataset, policy)
-    determinism = dataset.get("runtime_determinism", "")
     installation = dataset["samples"][0]["metered"]["work_measurement"]["installation"]
     # Evidence stays owner-only. The server must create executable workspaces accessible to its sandbox UID.
     with server(args, 18763, False, operator_env=native_env, umask=0o022) as native, \
@@ -292,7 +306,7 @@ def experiment(args, summary):
                     summary["cases"].append(row)
                     prefix = f"{ident}-{scale}-{label}"
                     row["durante"] = execute(judge, measured, args.output / (prefix + "-durante.json"),
-                                             lambda r: check_clock(r, measured, policy, options_id, determinism, installation))
+                                             lambda r: check_clock(r, measured, policy, options_id, dataset, installation))
                     for i in range(1, 4):
                         row["native"].append(execute(native, plain, args.output / f"{prefix}-native-{i}.json",
                                                      lambda r: check_native(r, nominal, limits)))
