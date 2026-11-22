@@ -12,7 +12,7 @@ This table is generated from the constants enforced by the API, compile, and exe
 | Decoded compile source total | — | 48 MiB |
 | Compile stdout / stderr capture | — | 1 MiB each |
 | Execute binary files | — | 512 files |
-| One decoded execute binary | — | 16 MiB |
+| One decoded execute binary | — | 32 MiB |
 | Decoded execute binary total | — | 48 MiB |
 | `stdin` / `expected_stdout` inline text | — | 64 MiB each |
 | Wall time | required | 600000 ms |

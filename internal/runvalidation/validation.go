@@ -33,7 +33,7 @@ const (
 	MaxStdinParts                   = 32
 	MaxSidecarOutputs               = 64
 	MaxStepHandoffBytes             = MaxOutputBytes
-	MaxBinaryFileBytes              = 16 << 20
+	MaxBinaryFileBytes              = 32 << 20
 	MaxBinaryTotalBytes             = 48 << 20
 	MaxPipelineResources            = 16
 	MaxPipelineOutputs              = 16

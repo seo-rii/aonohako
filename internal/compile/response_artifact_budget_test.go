@@ -69,7 +69,7 @@ func TestPrepareCompileResponseRejectsCombinedArtifactCollections(t *testing.T) 
 }
 
 func TestPrepareCompileResponseRejectsAggregateArtifactBytes(t *testing.T) {
-	maximum := base64.StdEncoding.EncodeToString(make([]byte, compilewire.ArtifactBytes))
+	maximum := base64.StdEncoding.EncodeToString(make([]byte, compilewire.ArtifactTotalBytes/3))
 	response := model.CompileResponse{Status: model.CompileStatusOK, Artifacts: []model.Artifact{
 		{Name: "a", DataB64: maximum}, {Name: "b", DataB64: maximum}, {Name: "c", DataB64: maximum}, {Name: "d", DataB64: "AA=="},
 	}}

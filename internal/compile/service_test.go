@@ -798,8 +798,11 @@ func TestCompileCSharpMaterializesProjectSources(t *testing.T) {
 
 func TestCollectArtifactsRejectsOversizedFile(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "big.bin"), bytes.Repeat([]byte("x"), 20<<20), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "big.bin"), nil, 0o644); err != nil {
 		t.Fatalf("write big.bin: %v", err)
+	}
+	if err := os.Truncate(filepath.Join(root, "big.bin"), maxArtifactBytes+1); err != nil {
+		t.Fatalf("resize big.bin: %v", err)
 	}
 	if _, err := collectArtifacts(root, func(string) bool { return true }, ""); err == nil {
 		t.Fatalf("expected oversized artifact error")
