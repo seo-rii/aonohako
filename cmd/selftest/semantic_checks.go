@@ -15,6 +15,33 @@ func languageSemanticCases() map[string][]languageSemanticCase {
 		expectedStdout: "text artifact content\n",
 		sources:        []model.Source{{Name: "Main.txt", DataB64: encodeScript("text artifact content\n")}},
 	}}
+	cases["haskell"] = []languageSemanticCase{{
+		name:           "Text and Map executable fits the artifact limit",
+		stdin:          "지민\nalice\n지민\nbob\nend\n",
+		expectedStdout: "3\nalice 2\nbob 4\n지민 3\n",
+		sources: []model.Source{{Name: "Main.hs", DataB64: encodeScript(`{-# LANGUAGE OverloadedStrings #-}
+
+import Prelude hiding (putStrLn, getLine)
+import Data.Foldable (traverse_)
+import Data.Map.Strict (empty, foldrWithKey, insert, Map(..), size)
+import Data.Text (Text(..), pack)
+import Data.Text.IO (putStrLn, getLine)
+
+main :: IO ()
+main = do
+  result <- snd <$> indexNames (0, empty)
+  print (size result)
+  foldrWithKey (\name nth rest -> putStrLn (name <> " " <> pack (show nth)) >> rest) (pure ()) result
+
+indexNames :: (Int, Map Text Int) -> IO (Int, Map Text Int)
+indexNames (nth, mp) = do
+  input <- getLine
+  case input of
+    "end" -> pure (nth, mp)
+    _ -> let next = nth + 1
+          in indexNames (next, insert input next mp)
+`)}},
+	}}
 	cases["golfscript"] = []languageSemanticCase{
 		{
 			name:           "compact arithmetic parses signed input",

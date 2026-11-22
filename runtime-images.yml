@@ -1090,7 +1090,10 @@ languages:
         - |
           set -euo pipefail
           printf '%s\n' 'main :: IO ()' 'main = do' '  writeFile "same-folder.txt" "ok"' '  readFile "same-folder.txt" >>= putStrLn' > Main.hs
-          ghc -O2 -o Main Main.hs
+          ghc -O2 -optl-s -o Main Main.hs
+          sections="$(readelf -SW Main)"
+          [[ "${sections}" != *'.symtab'* ]]
+          [[ "${sections}" != *'.strtab'* ]]
           output="$(./Main)"
           test "${output}" = 'ok'
 
