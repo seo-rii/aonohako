@@ -67,6 +67,9 @@ type event struct {
 	CPUIDProfile          *string `json:"cpuid_profile,omitempty"`
 	LatencyBoundVersion   *uint64 `json:"latency_bound_version,omitempty"`
 	LatencyBoundX16       *uint64 `json:"latency_bound_x16,omitempty"`
+
+	MemoryOperandBytesVersion *uint64 `json:"memory_operand_bytes_version,omitempty"`
+	MemoryOperandBytes        *uint64 `json:"memory_operand_bytes,omitempty"`
 }
 
 func decodeEvent(data []byte) (event, error) {
@@ -135,9 +138,14 @@ func decodeEvent(data []byte) (event, error) {
 		CPUFeature          json.RawMessage `json:"feature"`
 		CPUIDProfileVersion json.RawMessage `json:"cpuid_profile_version"`
 		CPUIDProfile        json.RawMessage `json:"cpuid_profile"`
+		Signals             json.RawMessage `json:"signals_observed"`
+		Quality             json.RawMessage `json:"quality"`
 		Instructions        json.RawMessage `json:"instructions"`
 		LatencyBoundVersion json.RawMessage `json:"latency_bound_version"`
 		LatencyBoundX16     json.RawMessage `json:"latency_bound_x16"`
+
+		MemoryOperandBytesVersion json.RawMessage `json:"memory_operand_bytes_version"`
+		MemoryOperandBytes        json.RawMessage `json:"memory_operand_bytes"`
 	}{event: &row}
 	if err := json.Unmarshal(data, &legacy); err != nil {
 		return row, errors.New("invalid report field type")
@@ -153,6 +161,7 @@ func decodeEvent(data []byte) (event, error) {
 		"parent_pid": &row.ParentPID, "parent_segment": &row.ParentSegment,
 		"rep_bytes_enabled": &row.REPEnabled,
 		"instructions":      &row.Instructions,
+		"signals_observed":  &row.Signals, "quality": &row.Quality,
 	} {
 		if raw, present := fields[key]; present && json.Unmarshal(raw, target) != nil {
 			return row, errors.New("invalid report field type")
@@ -162,10 +171,12 @@ func decodeEvent(data []byte) (event, error) {
 		"rep_breakdown_version": &row.REPBreakdownVersion,
 		"rep_movs_bytes":        &row.REPMOVSBytes, "rep_stos_bytes": &row.REPSTOSBytes,
 		"rep_movs_entries": &row.REPMOVSEntries, "rep_stos_entries": &row.REPSTOSEntries,
-		"cpu_policy_version":    &row.CPUPolicyVersion,
-		"cpuid_profile_version": &row.CPUIDProfileVersion,
-		"latency_bound_version": &row.LatencyBoundVersion,
-		"latency_bound_x16":     &row.LatencyBoundX16,
+		"cpu_policy_version":           &row.CPUPolicyVersion,
+		"cpuid_profile_version":        &row.CPUIDProfileVersion,
+		"latency_bound_version":        &row.LatencyBoundVersion,
+		"latency_bound_x16":            &row.LatencyBoundX16,
+		"memory_operand_bytes_version": &row.MemoryOperandBytesVersion,
+		"memory_operand_bytes":         &row.MemoryOperandBytes,
 	} {
 		if raw, present := fields[key]; present {
 			var value uint64
@@ -183,6 +194,12 @@ func decodeEvent(data []byte) (event, error) {
 	}
 	if row.LatencyBoundX16 != nil && row.Event != "end" && row.Event != "exec_attempt" {
 		return row, errors.New("latency bound outside terminal")
+	}
+	if row.MemoryOperandBytesVersion != nil && (row.Event != "start" || *row.MemoryOperandBytesVersion != 1 || row.LatencyBoundVersion == nil) {
+		return row, errors.New("invalid memory operand bytes capability")
+	}
+	if row.MemoryOperandBytes != nil && row.Event != "end" && row.Event != "exec_attempt" {
+		return row, errors.New("memory operand bytes outside terminal")
 	}
 	for key, target := range map[string]**string{"cpu_policy": &row.CPUPolicy, "feature": &row.CPUFeature, "cpuid_profile": &row.CPUIDProfile} {
 		if raw, present := fields[key]; present {
@@ -393,6 +410,10 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 	if streams[rootPID][0].LatencyBoundVersion != nil {
 		latency = &LatencyBound{Version: 1}
 	}
+	var operandBytes *MemoryOperandBytes
+	if streams[rootPID][0].MemoryOperandBytesVersion != nil {
+		operandBytes = &MemoryOperandBytes{Version: 1}
+	}
 	images := 0
 	repKnown, repEnabled, breakdownEnabled := false, false, false
 	sum := func(row event, isExec bool) error {
@@ -422,6 +443,18 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 				return errors.New("latency bound aggregate overflow")
 			}
 			latency.CyclesX16 += work
+		}
+		if (row.MemoryOperandBytes != nil) != (operandBytes != nil) {
+			return errors.New("memory operand bytes capability mismatch")
+		}
+		if operandBytes != nil {
+			if row.Signals != 0 {
+				return errors.New("memory operand bytes interrupted by signal")
+			}
+			if *row.MemoryOperandBytes > math.MaxUint64-operandBytes.Bytes {
+				return errors.New("memory operand bytes aggregate overflow")
+			}
+			operandBytes.Bytes += *row.MemoryOperandBytes
 		}
 		for i, value := range counts {
 			if totals[i] > math.MaxUint64-value {
@@ -464,6 +497,9 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 				}
 				if (row.LatencyBoundVersion != nil) != (latency != nil) {
 					return Report{}, errors.New("mixed latency bound capabilities")
+				}
+				if (row.MemoryOperandBytesVersion != nil) != (operandBytes != nil) {
+					return Report{}, errors.New("mixed memory operand bytes capabilities")
 				}
 				repKnown = true
 				repEnabled = row.REPEnabled
@@ -572,7 +608,7 @@ func aggregate(streams map[int][]event, rootPID int) (report Report, err error) 
 		breakdown = &breakdownTotals
 	}
 	return Report{Schema: 1, ClientVersion: 1, Metric: Metric, Authority: Authority, Scope: Scope, REPEnabled: repEnabled, Complete: true, Quality: quality, Instructions: &totals[0], REPBytes: &totals[1], REPEntries: &totals[2], UnsupportedREPEntries: &totals[3], SignalsObserved: totals[4], Processes: len(processes), Images: images,
-		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3]), REPBreakdown: breakdown, LatencyBound: latency, DisallowedCPUFeatures: features, CPUIDProfile: cpuid}, nil
+		IntegrityVerified: diagnosticFalse(), MeasurementContract: DiagnosticContract(), REPTelemetryStatus: repTelemetryStatus(repEnabled, totals[3]), REPBreakdown: breakdown, LatencyBound: latency, MemoryOperandBytes: operandBytes, DisallowedCPUFeatures: features, CPUIDProfile: cpuid}, nil
 }
 
 func CollectDirectory(directory string, rootPID int) Report {

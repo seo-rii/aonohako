@@ -139,7 +139,7 @@ def compile_cpp(url, source, *, timeout=75, max_bytes=8 << 20):
 
 
 def execute(url, name, lang, binaries, *, state, status="Accepted", expected=EXPECTED, spj=None,
-            stdin=STDIN, time_ms=3000):
+            stdin=STDIN, time_ms=3000, native_stdout=EXPECTED):
     payload = {"lang": lang, "binaries": binaries, "stdin": stdin, "expected_stdout": expected,
                "limits": {"time_ms": time_ms, "wall_time_ms": 8000, "memory_mb": 256}}
     if spj:
@@ -155,7 +155,7 @@ def execute(url, name, lang, binaries, *, state, status="Accepted", expected=EXP
         if result.get("exit_code") != 0:
             require(stdout == "", f"{name}: replay output reached the native stream")
     else:
-        require(stdout == EXPECTED and result.get("exit_code") == 0, f"{name}: primary output mismatch")
+        require(stdout == native_stdout and result.get("exit_code") == 0, f"{name}: primary output mismatch")
     require(result.get("cpu_time_ns", 0) > 0 and result["memory_kb"] >= 0 and
             not ({"work_measurement", "work_measurement_execution", "work_measurement_judgment",
                   "work_measurement_shadow"} & result.keys()), f"{name}: expected primary native accounting")
@@ -213,13 +213,53 @@ def special_judge(url, binary):
         os.close(fd)
 
 
+def operand_observations(args):
+    code = args.rep_breakdown_binary.read_bytes()
+    binaries = [{"name": "Main", "mode": "exec", "data_b64": base64.b64encode(code).decode()}]
+    expected = "rep-breakdown-ok\n"
+
+    def check(url, name, enabled):
+        result = execute(url, name, "CPP20", binaries, state="complete", expected=expected,
+                         native_stdout=expected, stdin="")
+        report = result["work_measurement_observation"]["report"]
+        require(report.get("rep_bytes") == 131, f"{name}: REP demand changed")
+        if enabled:
+            # MOVS reads and writes 1, 4 and 8 bytes. STOS writes 2, 8 and 1.
+            # Seven byte comparisons account for the remaining seven bytes.
+            require(report.get("memory_operand_bytes") == {"version": 1, "bytes": 44},
+                    f"{name}: wrong nominal operand byte count")
+        else:
+            require("memory_operand_bytes" not in report, f"{name}: unexpected operand count")
+
+    for enabled in (False, True):
+        setting = "v1" if enabled else "off"
+        matching = {"AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES": setting}
+        mismatch = {"AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES": "off" if enabled else "v1"}
+        with server(args, 18770, True, operator_env=matching) as runner:
+            check(runner, f"embedded-operands-{setting}", enabled)
+            with server(args, 18771, True, remote=runner, operator_env=matching) as control:
+                check(control, f"remote-operands-{setting}", enabled)
+            with server(args, 18771, True, remote=runner, operator_env=mismatch) as control:
+                result = execute(control, f"remote-mismatched-operands-{setting}", "CPP20", binaries,
+                                 state="unavailable", stdin="", expected=expected, native_stdout=expected)
+                reason = result["work_measurement_observation"]["reason"]
+                require(reason == "remote observation is inconsistent with the request or primary verdict",
+                        f"unexpected counter mismatch diagnostic: {reason}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--server", type=Path, required=True)
     parser.add_argument("--runtime-image", required=True)
+    parser.add_argument("--rep-breakdown-binary", type=Path,
+                        help="run the v11 operand-byte checks using the statically linked rep_breakdown.S fixture")
     args = parser.parse_args()
     require(os.geteuid() == 0 and os.listdir("/sys/class/net") == ["lo"],
             "run inside a root network-none validation container")
+    if args.rep_breakdown_binary:
+        operand_observations(args)
+        print(json.dumps({"complete": True}), flush=True)
+        return
     with server(args, 18770, False) as off:
         binary = compile_cpp(off, CPP)
         cpu_loop = compile_cpp(off, CPU_LOOP)

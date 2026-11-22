@@ -84,6 +84,9 @@ func prepare(ctx context.Context, root string, cfg Config, language string, uid,
 }
 
 func prepareSession(ctx context.Context, root string, cfg Config, family string, uid, gid int, libc func(context.Context) (string, error)) (*Session, error) {
+	if err := cfg.ValidateCounters(); err != nil {
+		return nil, err
+	}
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		return nil, fmt.Errorf("durante requires Linux x86-64")
 	}
@@ -151,6 +154,9 @@ func (s *Session) WrapWithWorkClock(command []string, clockPath string) []string
 	if s.config.LatencyBound {
 		args = append(args, "-latency_bound")
 	}
+	if s.config.MemoryOperandBytes {
+		args = append(args, "-memory_operand_bytes")
+	}
 	args = append(args, "--")
 	return append(args, command...)
 }
@@ -193,8 +199,8 @@ func (s *Session) Collect(rootPID int) *Report {
 		// A legacy client, host CPUID or another profile cannot satisfy the
 		// configured virtual processor; never publish those totals.
 		report = incomplete("durante CPUID profile receipt does not match the configuration")
-	} else if report.Complete && (report.LatencyBound != nil) != s.config.LatencyBound {
-		report = incomplete("durante latency bound receipt does not match the configuration")
+	} else if err := s.config.ValidateReportCounters(&report); err != nil {
+		report = incomplete("durante " + err.Error())
 	}
 	report.Installation = &identity
 	report.Family = s.family

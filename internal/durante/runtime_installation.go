@@ -32,6 +32,8 @@ const (
 	sourceCommitV9   = "27954247e094e682a7cf47504ff13682f970469a"
 	engineProfileV10 = "dynamorio-11.3-durante-v10-vm32m"
 	sourceCommitV10  = "191858a02666c1406b871e4974b9072b2c91bb34"
+	engineProfileV11 = "dynamorio-11.3-durante-v11-vm32m"
+	sourceCommitV11  = "74d9188f9fd86c75f079277e6e5278b379a0a1d7"
 )
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
@@ -93,6 +95,8 @@ func (r *Report) ValidShadowInstallationIdentity() bool {
 	switch r.EngineProfile {
 	case engineProfileV9:
 		return r.Installation.validForSource(sourceCommitV9, runtimeCodeReplayPatchSHA256)
+	case engineProfileV11:
+		return r.Installation.validForSource(sourceCommitV11, runtimeCodeReplayPatchSHA256)
 	case engineProfileV10:
 		return r.Installation.validForSource(sourceCommitV10, runtimeCodeReplayPatchSHA256)
 	case engineProfileV8:

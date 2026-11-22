@@ -607,3 +607,26 @@ func TestReferenceRequiresConsistentLatencyCapability(t *testing.T) {
 		})
 	}
 }
+
+func TestReferenceMemoryOperandBytesMatchDataset(t *testing.T) {
+	dataset := syntheticDataset()
+	report := dataset.Samples[0].Metered.WorkMeasurement
+	report.EngineProfile = "dynamorio-11.3-durante-v11-vm32m"
+	report.LatencyBound = &durante.LatencyBound{Version: 1, CyclesX16: 4 * *report.Instructions}
+	report.MemoryOperandBytes = &durante.MemoryOperandBytes{Version: 1, Bytes: 0}
+	if err := validateReferenceCounters(report, 1, 1); err != nil {
+		t.Fatalf("observed zero must survive collection and fit: %v", err)
+	}
+	for _, version := range []int{0, 2} {
+		if err := validateReferenceCounters(report, 1, version); err == nil {
+			t.Fatalf("accepted unexpected memory counter with dataset version %d", version)
+		}
+	}
+	report.MemoryOperandBytes = nil
+	if err := validateReferenceCounters(report, 1, 1); err == nil {
+		t.Fatal("accepted absent memory count in a v1 dataset")
+	}
+	if err := validateReferenceCounters(report, 1, 0); err != nil {
+		t.Fatalf("rejected historical latency-only sample: %v", err)
+	}
+}

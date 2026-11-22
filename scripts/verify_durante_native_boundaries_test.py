@@ -2,7 +2,11 @@
 
 import json
 from pathlib import Path
+import subprocess
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import verify_durante_native_boundaries as boundaries
 
@@ -82,6 +86,47 @@ class NativeBoundaryTests(unittest.TestCase):
         self.assertEqual(boundaries.model_binding(policy, options), expected)
         changed = {**policy, "instruction_ns_numerator": policy["instruction_ns_numerator"] + 1}
         self.assertNotEqual(boundaries.model_binding(changed, options), expected)
+
+    def test_boundary_replay_preserves_dataset_counters(self):
+        limits = {"memory_mb": 256, "wall_time_ms": 500, "cpu_time_ms": 300}
+        policy = {"model_id": "test", "model_version": 1, "reference_id": "dataset",
+                  "family": "cpp", "engine_profile": "test-engine", "dispatch_profile": "default"}
+        role = {"role": "contestant", "source_language": "CPP20", "runtime_options": {}, "runtime_options_id": "id"}
+        description = subprocess.CompletedProcess([], 0, json.dumps({"runtime_options": [role]}).encode(), b"")
+        for latency, memory in ((False, False), (True, False), (True, True)):
+            with self.subTest(latency=latency, memory=memory), TemporaryDirectory() as directory:
+                args = SimpleNamespace(output=Path(directory), reference="reference", runtime_image="test-image")
+                dataset = {"metered_limits": limits, "native_limits": limits, "dispatch_profile": "default"}
+                report = {"complete": True}
+                if latency:
+                    dataset["latency_bound_version"] = 1
+                    report["latency_bound"] = {"version": 1, "cycles_x16": 64}
+                if memory:
+                    dataset["memory_operand_bytes_version"] = 1
+                    report["memory_operand_bytes"] = {"version": 1, "bytes": 0}
+                with patch.object(boundaries.subprocess, "run", return_value=description) as descriptor:
+                    native_env, judge_env, _ = boundaries.judge_config(args, dataset, policy)
+                for env in (native_env, judge_env, descriptor.call_args.kwargs["env"]):
+                    self.assertEqual(env["AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES"], "v1" if memory else "off")
+                    self.assertEqual(env["AONOHAKO_DURANTE_LATENCY_BOUND"], "v1" if latency else "off")
+                boundaries.check_optional_counters(report, dataset)
+                boundaries.check_optional_counters({"complete": False}, dataset)
+                if memory:
+                    del report["memory_operand_bytes"]
+                else:
+                    report["memory_operand_bytes"] = {"version": 1, "bytes": 0}
+                with self.assertRaises(RuntimeError):
+                    boundaries.check_optional_counters(report, dataset)
+
+    def test_boundary_receipt_rejects_partial_or_malformed_operands(self):
+        dataset = {"latency_bound_version": 1, "memory_operand_bytes_version": 1}
+        report = {"complete": True, "latency_bound": {"version": 1, "cycles_x16": 64}}
+        for mem in (None, {"version": 2, "bytes": 0}, {"version": 1},
+                    {"version": 1, "bytes": True}, {"version": 1, "bytes": 2**64}):
+            with self.subTest(mem=mem), self.assertRaises(RuntimeError):
+                boundaries.check_optional_counters({**report, "memory_operand_bytes": mem}, dataset)
+        with self.assertRaises(RuntimeError):
+            boundaries.check_optional_counters({"complete": False, "memory_operand_bytes": {"version": 1, "bytes": 0}}, dataset)
 
 
 if __name__ == "__main__":

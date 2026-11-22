@@ -208,7 +208,7 @@ func TestTimeEstimateUsesEntireCollectedProcessTree(t *testing.T) {
 }
 
 func TestTimePolicyRejectsOtherEngineProfiles(t *testing.T) {
-	for _, profile := range []string{"dynamorio-11.3-vm32m-v1", "dynamorio-11.3-durante-v2-vm32m", "dynamorio-11.3-durante-v3-vm32m", engineProfileV7, engineProfileV8, engineProfileV9, engineProfileV10} {
+	for _, profile := range []string{"dynamorio-11.3-vm32m-v1", "dynamorio-11.3-durante-v2-vm32m", "dynamorio-11.3-durante-v3-vm32m", engineProfileV7, engineProfileV8, engineProfileV9, engineProfileV10, engineProfileV11} {
 		if profile == EngineProfile {
 			continue
 		}

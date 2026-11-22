@@ -114,6 +114,7 @@ func TestClientSourceMustMatchWorker(t *testing.T) {
 		{"v8 package", []string{sourceCommitV8}, EngineProfile == engineProfileV8},
 		{"v9 package", []string{sourceCommitV9}, EngineProfile == engineProfileV9},
 		{"v10 package", []string{sourceCommitV10}, EngineProfile == engineProfileV10},
+		{"v11 package", []string{sourceCommitV11}, EngineProfile == engineProfileV11},
 		{"unknown source", []string{strings.Repeat("a", 40)}, false},
 		{"empty marker", []string{""}, false},
 		{"trailing newline", []string{SourceCommit + "\n"}, false},
@@ -276,7 +277,7 @@ func TestShadowRecordsPreserveProfileSourcePair(t *testing.T) {
 	identity := InstallationIdentity{RuntimeSourceCommit: runtimeSourceCommit, RuntimePatchSHA256: runtimePatchSHA256,
 		RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
 		ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
-	profiles := map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8, engineProfileV9: sourceCommitV9, engineProfileV10: sourceCommitV10}
+	profiles := map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8, engineProfileV9: sourceCommitV9, engineProfileV10: sourceCommitV10, engineProfileV11: sourceCommitV11}
 	for profile, expected := range profiles {
 		for _, source := range profiles {
 			identity.SourceCommit = source
@@ -412,7 +413,7 @@ func TestInstallationIdentityReadsLegacyWithoutQualifyingCurrentRuntime(t *testi
 
 func TestRuntimeInstallationPinsMatchVendoredSource(t *testing.T) {
 	vendor := filepath.Join("..", "..", "third_party")
-	for dir, commit := range map[string]string{"durante": sourceCommitV7, "durante-v8": sourceCommitV8, "durante-v9": sourceCommitV9, "durante-v10": sourceCommitV10} {
+	for dir, commit := range map[string]string{"durante": sourceCommitV7, "durante-v8": sourceCommitV8, "durante-v9": sourceCommitV9, "durante-v10": sourceCommitV10, "durante-v11": sourceCommitV11} {
 		data, err := os.ReadFile(filepath.Join(vendor, dir, "UPSTREAM.json"))
 		if err != nil {
 			t.Fatal(err)

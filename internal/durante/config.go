@@ -30,6 +30,8 @@ type Config struct {
 	CPUIDProfile string
 	// LatencyBound requests the client's version-1 block latency counter.
 	LatencyBound bool
+	// MemoryOperandBytes adds the nominal widths of logical memory operands.
+	MemoryOperandBytes bool
 	// RuntimeDeterminism selects the option set that pins runtime-internal
 	// nondeterminism of measured executions (see RuntimeDeterminismV1). Empty
 	// leaves every launcher unchanged.
@@ -77,6 +79,28 @@ func ParseCPUIDProfile(raw string) (string, error) {
 		return "", fmt.Errorf("unknown durante CPUID profile %q", profile)
 	}
 	return profile, nil
+}
+
+// ValidateCounters checks whether the selected worker can collect the requested counters.
+func (c Config) ValidateCounters() error {
+	if c.MemoryOperandBytes && (EngineProfile != engineProfileV11 || !c.LatencyBound || len(c.Families) == 0) {
+		return fmt.Errorf("memory operand bytes require a v11 worker, an enabled family and latency bound v1")
+	}
+	return nil
+}
+
+// ValidateReportCounters binds a complete result to the operator's requested counters.
+func (c Config) ValidateReportCounters(r *Report) error {
+	if r == nil || !r.Complete {
+		return nil
+	}
+	if (r.LatencyBound != nil) != c.LatencyBound {
+		return fmt.Errorf("latency counter mismatch")
+	}
+	if (r.MemoryOperandBytes != nil) != c.MemoryOperandBytes {
+		return fmt.Errorf("memory operand byte counter mismatch")
+	}
+	return nil
 }
 
 func (c Config) Family(language string) (string, error) {

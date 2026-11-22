@@ -95,7 +95,13 @@ metered sample must carry the matching process-tree `latency_bound.cycles_x16`
 receipt. Both time models use the same compiled binaries, native observations
 and training/held-out partition.
 
-The current collector uses `dynamorio-11.3-durante-v7-vm32m` and pins both runtime
+On v11, add `AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES=v1` alongside
+`AONOHAKO_DURANTE_LATENCY_BOUND=v1` to collect paired latency and operand-byte
+observations. The dataset records `memory_operand_bytes_version: 1`. Collection
+and fitting check this version against every sample. Existing time formulas
+continue to use their own instruction, latency or REP terms.
+
+The default collector uses `dynamorio-11.3-durante-v7-vm32m` and pins both runtime
 patches. A collection made with `AONOHAKO_DURANTE_CPUID_PROFILE` records that
 profile as the dataset's `cpuid_profile`, requires every metered receipt to match
 it, and the fitted candidate policy carries the same `cpuid_profile`, so it
