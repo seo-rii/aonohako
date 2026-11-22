@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "question": "Can any no-intercept nonnegative clock using just the selected counters cover every observed held-out case within 20%?",
+  "models": ["instruction_rep", "instruction_movs_stos", "latency", "latency_memory"],
+  "population": "All ordered pairs of different held-out programs across all recorded input sizes. Exclude training programs and warmups.",
+  "method": "For slower A and faster B, upper-bound the ratio of any weighted counter sums by the largest max(A_feature)/min(B_feature) across the two metered observations. Skip a pair if a positive numerator has a zero denominator. Ignore columns zero on both sides. Use the minimum native time of A and maximum native time of B across the seven timed runs. Use the existing pair_bound calculation, including the one nanosecond allowance for final rounding.",
+  "selection": "Publish the strongest positive lower bound per model. Break ties by lexicographic order of the ordered case identifiers. A bound exceeding 20% falsifies the target even after allowing each case its entire observed native timing range. Failure to find a witness is inconclusive.",
+  "reference": "scripts/durante_native_envelope.py at Aonohako 9e821fe977e92ee02ba9efdca05054d092279d7a",
+  "authority": "diagnostic_only"
+}

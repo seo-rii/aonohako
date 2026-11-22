@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "authority": "diagnostic_only",
+  "primary_question": "Does adding nominal memory operand bytes to the v11 static latency estimate improve held-out CPP20 native CPU prediction on one pinned AMD Milan CPU?",
+  "training_programs": [
+    "integer",
+    "rep_copy"
+  ],
+  "training_cases_per_program": 3,
+  "original_holdouts": [
+    "branch",
+    "sort",
+    "rep_fill"
+  ],
+  "original_cases_per_program": 3,
+  "additional_holdouts": [
+    "cycle_walk",
+    "mod_inverse",
+    "branch_scan"
+  ],
+  "additional_cases_per_program": 2,
+  "native_repetitions": 7,
+  "metered_repetitions": 2,
+  "columns": {
+    "instruction_rep": [
+      "instructions",
+      "rep_bytes"
+    ],
+    "latency": [
+      "latency_cycles"
+    ],
+    "latency_memory": [
+      "latency_cycles",
+      "memory_bytes"
+    ]
+  },
+  "fit": "Fit each model to CPP20 training cases only, with no intercept. One row per program/input, componentwise median counter values and median of seven native CPU times in ns. Minimize the unweighted sum across training cases of squared (prediction/target - 1), coefficients nonnegative. Enumerate independent active-column subsets and solve their normal equations exactly, prefer fewer nonzero coefficients on ties, then earlier feature order. Report training matrix rank and all-zero/collinear columns. A boundary coefficient fixed to zero in an underdetermined model does not identify its true cost.",
+  "secondary_weights": {
+    "instruction_rep": {
+      "instructions": "5299214309903326471253438437675338440478960982015878975000/65085337715975561433067283273699354978461325819844361418473",
+      "rep_bytes": "15216066967184389562589704802064273582224793016582530167012184375/1692218780615364597259749365116183229439994471315953396880298"
+    },
+    "latency": {
+      "latency_cycles": "61526328679866981530641910632083916358701670120762378991414000000/169428694611254165096584651022110434277564678771754953325043039529"
+    },
+    "latency_memory": {
+      "latency_cycles": "38594630777421673993327230336214834941202136156398653722895070246982136060000/120823800691208141759480149677879410517507322737589887557123968840459227316181",
+      "memory_bytes": "16867383511564202169546073663118301058947456345479598942320717815109839185000/4953775828339533812138686136793055831217800232241185389842082722458828319963421"
+    }
+  },
+  "secondary_source": {
+    "repo": "seo-rii/durante",
+    "revision": "74d9188f9fd86c75f079277e6e5278b379a0a1d7",
+    "path": "experiments/results/gce-rust-operand-bytes/evaluation.json",
+    "sha256": "47a796dab8be0f9abb827b4252ed68e20e029d74d0546e5a4bbddf847e5a45ae",
+    "field": "models_on_medians",
+    "training": "Previously fitted on three scales each of Rust integer and copy. Apply frozen rational ns coefficients to CPP20 without refitting; this tests transfer across binaries, languages and sessions."
+  },
+  "feature_units": {
+    "instructions": "count",
+    "rep_bytes": "requested repeated MOVS + STOS bytes",
+    "latency_cycles": "cycles_x16 divided by 16",
+    "memory_bytes": "nominal memory operand bytes",
+    "movs_bytes": "requested repeated MOVS bytes",
+    "stos_bytes": "requested repeated STOS bytes"
+  },
+  "native": {
+    "unit": "1000 * (wait4 user_us + sys_us) nanoseconds",
+    "target": "median of seven retained native controls",
+    "sensitivity": "minimum native time using the same median-target-fitted coefficients (no refit)",
+    "min_duration_ns": 20000000,
+    "max_spread_ppm": 100000,
+    "spread": "(max - min)/median; retain and flag every failed floor or spread gate"
+  },
+  "accuracy": {
+    "max_abs_error_ppm": 200000,
+    "case_pass": "Both metered predictions must fall within the inclusive tolerance. Use the exact rational prediction and target for classification. Report signed relative errors per repetition, median/min/max native controls, counter ranges, worst absolute error and counts by split. All non-training cases are held out. Report the original and additional subsets separately.",
+    "training_support": "For all counter columns report min/max case medians across training; flag each held-out feature outside its training range. The MOVS/STOS model uses the live-compatible formula but locally fitted diagnostic coefficients, never a deployed policy."
+  },
+  "implied_boundaries": {
+    "low": "max(1, floor(0.8 * native_median_ms))",
+    "high": "ceil(1.2 * native_median_ms)",
+    "strictness": "TLE iff time_ns > limit_ms * 1000000; equality passes. Do not simulate a limit unless the median lies strictly between the two integer-ms limits.",
+    "aggregation": "For each boundary compare the two predictions and seven observed native CPU durations. A mixture of native outcomes is ambiguous. Any disagreement with unanimous native controls marks that case-limit as incorrect. Split into false TLE and false pass, record repetition counts and mixed predicted results. Time budgets are calculated offline from uncapped runs; no live stopped verdicts are measured."
+  },
+  "qualification": "Not a production verdict qualification. One host, eight programs, repeated sizes within each algorithm; present absolute counts, native variability and observed extrema; do not pool repetitions as independent cases or select a model on the held-out cases.",
+  "cpp20_only_columns": {
+    "instruction_movs_stos": [
+      "instructions",
+      "movs_bytes",
+      "stos_bytes"
+    ]
+  }
+}
