@@ -99,7 +99,10 @@ On v11, add `AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES=v1` alongside
 `AONOHAKO_DURANTE_LATENCY_BOUND=v1` to collect paired latency and operand-byte
 observations. The dataset records `memory_operand_bytes_version: 1`. Collection
 and fitting check this version against every sample. Existing time formulas
-continue to use their own instruction, latency or REP terms.
+continue to use their own instruction, latency or REP terms. The pinned v11 C++20
+comparison covered 1 of 15 held-out cases within ±20% with latency plus nominal
+operand bytes. The same binary took 11.49 times as long with a larger pointer-walk
+footprint. [C++20 accuracy study and raw data](durante/gce-v11-cpp20-accuracy/README.md)
 
 The default collector uses `dynamorio-11.3-durante-v7-vm32m` and pins both runtime
 patches. A collection made with `AONOHAKO_DURANTE_CPUID_PROFILE` records that

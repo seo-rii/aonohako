@@ -89,7 +89,7 @@ separate REP counters measure requested repeated bytes. A run interrupted by
 a signal cannot supply a complete operand-byte report. The live judging clock
 uses its existing instruction and REP weights. Timings for ordinary counting,
 latency, operand bytes and the live clock were compared separately on one
-CPU-pinned Compute Engine VM. [GCE measurements](durante/GCE_V11_OPERAND_BYTES.md) · [Upstream counter definition](https://github.com/seo-rii/durante/blob/74d9188f9fd86c75f079277e6e5278b379a0a1d7/docs/LATENCY_BOUND.md)
+CPU-pinned Compute Engine VM. [GCE instrumentation cost](durante/GCE_V11_OPERAND_BYTES.md) · [C++20 clock accuracy](durante/gce-v11-cpp20-accuracy/README.md) · [Upstream counter definition](https://github.com/seo-rii/durante/blob/74d9188f9fd86c75f079277e6e5278b379a0a1d7/docs/LATENCY_BOUND.md)
 
 Qualify time models against the final immutable worker image, engine profile,
 and runtime options, including the selected CPUID profile. Build the reference
