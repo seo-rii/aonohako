@@ -3149,7 +3149,7 @@ func TestMaterializeRejectsOversizedBinary(t *testing.T) {
 		Lang: "binary",
 		Binaries: []model.Binary{{
 			Name:    "big.bin",
-			DataB64: b64Raw(bytes.Repeat([]byte("x"), 17<<20)),
+			DataB64: b64Raw(make([]byte, maxBinaryFileBytes+1)),
 			Mode:    "exec",
 		}},
 	}

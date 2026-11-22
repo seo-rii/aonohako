@@ -3,7 +3,7 @@
 package compilewire
 
 const (
-	ArtifactBytes      = 16 << 20
+	ArtifactBytes      = 32 << 20
 	ArtifactTotalBytes = 48 << 20
 	ArtifactCount      = 512
 	ArtifactNameBytes  = 4096

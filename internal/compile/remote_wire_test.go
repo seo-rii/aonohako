@@ -34,7 +34,7 @@ func TestRemoteCompileRejectsMalformedAndOversizedArtifacts(t *testing.T) {
 			return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: []model.Artifact{{Name: "a", DataB64: data}}}
 		}},
 		{"artifact total", "artifact total size exceeded", func() model.CompileResponse {
-			data := base64.StdEncoding.EncodeToString(make([]byte, compilewire.ArtifactBytes))
+			data := base64.StdEncoding.EncodeToString(make([]byte, compilewire.ArtifactTotalBytes/3))
 			return model.CompileResponse{Status: model.CompileStatusOK, Artifacts: []model.Artifact{
 				{Name: "a", DataB64: data}, {Name: "b", DataB64: data}, {Name: "c", DataB64: data}, {Name: "d", DataB64: "AA=="},
 			}}

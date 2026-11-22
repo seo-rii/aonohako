@@ -394,15 +394,15 @@ func TestResolveRunPayloadURLsSharesBinaryBudgetAcrossPrograms(t *testing.T) {
 	defer server.Close()
 	setPayloadURLHTTPClientForTest(t, server.URL)
 
-	halfMaxSizeBinary := base64.StdEncoding.EncodeToString(make([]byte, runvalidation.MaxBinaryFileBytes/2))
+	inlineBinary := base64.StdEncoding.EncodeToString(make([]byte, runvalidation.MaxBinaryTotalBytes/6))
 	req := &model.RunRequest{Programs: []model.RunProgram{
 		{Binaries: []model.Binary{{Name: "url", DataURL: "http://payload.example/url"}}},
-		{Binaries: []model.Binary{{Name: "inline-1", DataB64: halfMaxSizeBinary}}},
-		{Binaries: []model.Binary{{Name: "inline-2", DataB64: halfMaxSizeBinary}}},
-		{Binaries: []model.Binary{{Name: "inline-3", DataB64: halfMaxSizeBinary}}},
-		{Binaries: []model.Binary{{Name: "inline-4", DataB64: halfMaxSizeBinary}}},
-		{Binaries: []model.Binary{{Name: "inline-5", DataB64: halfMaxSizeBinary}}},
-		{Binaries: []model.Binary{{Name: "inline-6", DataB64: halfMaxSizeBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-1", DataB64: inlineBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-2", DataB64: inlineBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-3", DataB64: inlineBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-4", DataB64: inlineBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-5", DataB64: inlineBinary}}},
+		{Binaries: []model.Binary{{Name: "inline-6", DataB64: inlineBinary}}},
 	}}
 
 	err := resolveRunPayloadURLs(context.Background(), req)

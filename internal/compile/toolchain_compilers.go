@@ -78,7 +78,7 @@ func compileHaskell(ctx context.Context, workDir, target string, sources []model
 	if len(hs) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no haskell sources"}
 	}
-	args := []string{"-O2", "-o", target}
+	args := []string{"-O2", "-optl-s", "-o", target}
 	args = append(args, hs...)
 	stdout, stderr, status, reason := runCommand(ctx, workDir, "ghc", args, nil)
 	if status != model.CompileStatusOK {

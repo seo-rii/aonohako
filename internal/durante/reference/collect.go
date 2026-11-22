@@ -46,7 +46,7 @@ const (
 	referenceNativeWallTimeMs  = 30000
 	collectionRequestTimeout   = 90 * time.Second
 	collectionCompileBytes     = 16 << 20
-	collectionRustCompileBytes = 24 << 20
+	collectionRustCompileBytes = 48 << 20
 	collectionExecuteBytes     = 2 << 20
 	collectionArtifactBytes    = 8 << 20
 	collectionCompilerFlags    = "-O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=c++20"
@@ -312,7 +312,7 @@ func collectCorpus(ctx context.Context, client *http.Client, baseURL string, cor
 		compileBytes := int64(collectionCompileBytes)
 		if profile.SourceLanguage == "RUST2024" {
 			// A normal rustc artifact can exceed the original 8 MiB C++
-			// collector cap. Keep the API's 16 MiB single-file contract,
+			// collector cap. Keep the API's 32 MiB single-file contract,
 			// with room for its base64 encoding and response metadata.
 			compileBytes = collectionRustCompileBytes
 		}
