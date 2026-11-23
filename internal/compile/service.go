@@ -15,6 +15,7 @@ import (
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
+	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/rustpolicy"
 	"aonohako/internal/security"
@@ -101,6 +102,9 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	profile, ok := resolveProfile(req.Lang)
 	if !ok {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "unsupported lang: " + req.Lang}
+	}
+	if err := pythonpolicy.ValidateArtifactMode(req.PythonArtifactMode, profile.SourceLang); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 	}
 	if err := ValidateDisallowedCPUFeatures(req.Lang, req.DisallowedCPUFeatures); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}

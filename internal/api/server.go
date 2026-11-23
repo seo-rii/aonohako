@@ -331,6 +331,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_rust_crate_mode", err.Error())
 		return
 	}
+	if err := pythonpolicy.ValidateArtifactMode(req.PythonArtifactMode, req.Lang); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_python_artifact_mode", err.Error())
+		return
+	}
 	if err := compile.ValidateDisallowedCPUFeatures(req.Lang, req.DisallowedCPUFeatures); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_disallowed_cpu_features", err.Error())
 		return
