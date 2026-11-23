@@ -5,6 +5,20 @@
 judge or change its configuration. A successful fit is a reference-cohort result,
 not authorization to use the estimate as an official verdict.
 
+## Replay an input-specific live deadline
+
+Use `replay-input-deadline` to compare Aonohako's Go work clock with a completed Durante live observation. Supply the operator-generated `aonohako_input_deadline_projection` from Durante's `experiments/shape_calibration/aonohako_clock.py`, the wrapped `result.json` from `shape_calibration/run.py`, and the original binary and stdin.
+
+```bash
+durante-reference replay-input-deadline \
+  --projection projection.json --live limits/footprint/00/result.json \
+  --elf bin/fenwick --stdin input.txt --limit-ms 75
+```
+
+The command hashes the binary and input, matches the selected capture and policy identities, and checks the requested limit against the certified millisecond limits. It applies `WorkClockRequest.Exceeds` to the observed instruction, MOVS and STOS counts. An exact tie is within budget. A consistent replay prints a JSON receipt with `authority: "diagnostic_only"`, `status` and `exceeded`, and exits zero for either decision. Invalid evidence or a disagreement exits nonzero. The Durante progress schema requires unsigned 64-bit `instructions`, `movs_bytes` and `stos_bytes` and their exact combined REP byte count. A snapshot with an overflow mask is ineligible. The inner `live/result.json` lacks the selection identity required for this comparison.
+
+The projection and wrapped result are trusted operator files. Their SHA-256 identities link the evidence. Authenticity relies on how the operator obtains it. This command reads the files offline. A successful comparison establishes agreement at the specified deadline for the supplied progress. The [pinned footprint replay](durante/footprint-replay/README.md) runs this comparison on all 104 recorded observations.
+
 ## Collection contract
 
 Every program is compiled once using its normal source-language registry. CPP20

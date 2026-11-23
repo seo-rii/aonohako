@@ -40,7 +40,7 @@ func main() {
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: durante-reference collect|fit|validate|describe-runtime-options [options]")
+		fmt.Fprintln(stderr, "usage: durante-reference collect|fit|validate|describe-runtime-options|replay-input-deadline [options]")
 		return 1
 	}
 	switch args[0] {
@@ -50,10 +50,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return fit(ctx, args[1:], stdout, stderr)
 	case "validate":
 		return validateFrozen(ctx, args[1:], stdout, stderr)
+	case "replay-input-deadline":
+		return replayInputDeadline(args[1:], stdout, stderr)
 	case "describe-runtime-options":
 		return describeRuntimeOptions(ctx, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintln(stderr, "expected collect, fit, validate or describe-runtime-options")
+		fmt.Fprintln(stderr, "expected collect, fit, validate, describe-runtime-options or replay-input-deadline")
 		return 1
 	}
 }
