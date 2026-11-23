@@ -13,6 +13,11 @@ import (
 
 const maxRedirects = 10
 
+// policyError contains only fixed messages that are safe to expose to callers.
+type policyError string
+
+func (e policyError) Error() string { return string(e) }
+
 var deniedPublicPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),       // current network
 	netip.MustParsePrefix("100.64.0.0/10"),   // shared address space (CGNAT)
@@ -73,14 +78,14 @@ func NewHTTPClientWithOptions(options ClientOptions) *http.Client {
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(address)
 			if err != nil {
-				return nil, fmt.Errorf("invalid url address: %w", err)
+				return nil, policyError("invalid url address")
 			}
 			resolved, err := resolver.LookupIPAddr(ctx, host)
 			if err != nil {
 				return nil, fmt.Errorf("resolve url host: %w", err)
 			}
 			if len(resolved) == 0 {
-				return nil, fmt.Errorf("url host resolved to no addresses")
+				return nil, policyError("url host resolved to no addresses")
 			}
 
 			var lastErr error
@@ -92,7 +97,6 @@ func NewHTTPClientWithOptions(options ClientOptions) *http.Client {
 				}
 				addr = addr.Unmap().WithZone("")
 				if !isPublicAddress(addr) {
-					lastErr = fmt.Errorf("url host resolved to a non-public address")
 					continue
 				}
 				sawPublic = true
@@ -103,7 +107,7 @@ func NewHTTPClientWithOptions(options ClientOptions) *http.Client {
 				lastErr = dialErr
 			}
 			if !sawPublic {
-				return nil, fmt.Errorf("url host has no public addresses: %w", lastErr)
+				return nil, policyError("url host has no public addresses")
 			}
 			return nil, fmt.Errorf("dial url host: %w", lastErr)
 		},
@@ -120,7 +124,7 @@ func NewHTTPClientWithOptions(options ClientOptions) *http.Client {
 		Timeout:   options.Timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= maxRedirects {
-				return fmt.Errorf("too many redirects")
+				return policyError("too many redirects")
 			}
 			return Validate(req.URL.String())
 		},
@@ -130,18 +134,18 @@ func NewHTTPClientWithOptions(options ClientOptions) *http.Client {
 func Validate(rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return err
+		return policyError("invalid url")
 	}
 	switch strings.ToLower(parsed.Scheme) {
 	case "http", "https":
 	default:
-		return fmt.Errorf("url scheme must be http or https")
+		return policyError("url scheme must be http or https")
 	}
 	if parsed.Hostname() == "" {
-		return fmt.Errorf("url host is required")
+		return policyError("url host is required")
 	}
 	if parsed.User != nil {
-		return fmt.Errorf("url credentials are not allowed")
+		return policyError("url credentials are not allowed")
 	}
 	return nil
 }
