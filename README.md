@@ -228,7 +228,7 @@ language-specific commands keep their declared order.
   ceiling with `--ponymaxthreads=1`, and physical memory remains cgroup/RSS
   bounded while Pony's reserved virtual arena is exempted from `RLIMIT_AS`.
 - Shell submissions use Debian Bash 5.2.37-2+b9, dash 0.5.12-12, Zsh
-  5.9-8+b23, or Fish 4.0.2-1 as runtime variants of one shell language family.
+  5.9-8+b25, or Fish 4.0.2-1 as runtime variants of one shell language family.
   Zsh and Fish keep native `.zsh` and `.fish` artifacts while sharing the same
   bounded runtime contract. Syntax checks and execution disable
   startup files, while the dedicated type-x pack permits bounded child
