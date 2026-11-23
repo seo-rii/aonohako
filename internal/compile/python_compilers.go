@@ -53,6 +53,7 @@ func (c pythonLikeCompiler) Compile(ctx context.Context, job CompileJob) model.C
 		}
 		sources = append(sources, ".")
 	}
+	args = append(args, "--")
 	args = append(args, sources...)
 	result := runner.Run(ctx, job.WorkDir, c.interpreter, args, nil)
 	if result.Status != model.CompileStatusOK {

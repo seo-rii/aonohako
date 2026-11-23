@@ -27,6 +27,7 @@ func TestPythonBytecodeModeReturnsCanonicalArtifacts(t *testing.T) {
 				{Name: "helper.py", DataB64: util.EncodeB64([]byte("VALUE = 40 " + comment + "\n"))},
 				{Name: "pkg/__init__.py", DataB64: util.EncodeB64([]byte("from .value import VALUE " + comment + "\n"))},
 				{Name: "pkg/value.py", DataB64: util.EncodeB64([]byte("VALUE = 2 " + comment + "\n"))},
+				{Name: "-solution.py", DataB64: util.EncodeB64([]byte("print(42) " + comment + "\n"))},
 			}
 			request := &model.CompileRequest{Sources: sources, PythonArtifactMode: pythonpolicy.ArtifactModeBytecodeV1}
 			artifacts := compilePythonArtifactsForTest(t, interpreter, t.TempDir(), sources, mtime.Add(time.Duration(i)*time.Hour), request)
