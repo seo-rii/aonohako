@@ -14,13 +14,20 @@ import (
 	"unicode/utf8"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
+	"aonohako/internal/entrypolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/runvalidation"
+	"aonohako/internal/timing"
 	"aonohako/internal/util"
 )
 
-func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource, judgeInputPath string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (string, *float64, string, string) {
+func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource, judgeInputPath string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer) (string, *float64, string, string) {
+	return evaluateRunStatusWithClocks(ctx, ws, req, res, judgeOut, judgeSource, judgeInputPath, spjSidecars, tuning, cgroupParentDir, cpuNormalizer, nil)
+}
+
+func evaluateRunStatusWithClocks(ctx context.Context, ws Workspace, req *model.RunRequest, res execResult, judgeOut []byte, judgeSource, judgeInputPath string, spjSidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer, clocks *spjWorkClocks) (string, *float64, string, string) {
 	status, reason, source := classifyRunStatusWithoutOutput(req, res)
 	stdoutLimitExceeded := judgeSource == "stdout" && res.StdoutTruncated
 	status, reason, source = applyStdoutLimitVerdict(status, reason, source, stdoutLimitExceeded)
@@ -33,12 +40,25 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	judgeOutputAvailable := len(req.FileOutputs) == 0 || judgeSource == "file_output"
 	evaluateOutputs := status == "OK" || (status == model.RunStatusTLE && req.IgnoreTLE)
 	if evaluateOutputs && judgeOutputAvailable && !stdoutLimitExceeded {
-		if hasSPJ(req) {
-			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir)
+		if req.EntryMode == "state" {
+			var err error
+			outputOK, err = entrypolicy.CompareState([]byte(req.ExpectedStdout), judgeOut)
+			if err != nil {
+				return model.RunStatusInitFail, nil, "invalid Entry state expectation", "entry_state"
+			}
+		} else if hasSPJ(req) {
+			ok, sc, spjErr := runSPJ(ctx, ws, req, string(judgeOut), judgeInputPath, spjSidecars, tuning, cgroupParentDir, cpuNormalizer, clocks)
 			if sc != nil {
 				score = sc
 			}
 			if spjErr != nil {
+				if clocks != nil {
+					source := clocks.checker.TerminationSource
+					if source == "" || source == "spj_checker_not_started" {
+						source = "spj"
+					}
+					return model.RunStatusInitFail, nil, spjErr.Error(), "checker:" + source
+				}
 				if status == "OK" {
 					status = model.RunStatusRE
 					reason = spjErr.Error()
@@ -56,7 +76,9 @@ func evaluateRunStatus(ctx context.Context, ws Workspace, req *model.RunRequest,
 	}
 
 	if status == "OK" && evaluateOutputs {
-		if hasSPJ(req) {
+		if req.EntryMode == "state" {
+			source = "entry_state"
+		} else if hasSPJ(req) {
 			source = "spj"
 		} else if judgeSource != "" {
 			source = judgeSource
@@ -89,6 +111,9 @@ func classifyRunStatusWithoutOutput(req *model.RunRequest, res execResult) (stri
 		status = model.RunStatusMLE
 		source = "memory_reported"
 	}
+	if profiles.NormalizeRunLang(req.Lang) == "entry" && status == "OK" && res.ExitCode != nil && *res.ExitCode == 124 {
+		return model.RunStatusTLE, "Entry instruction or logical tick limit exceeded", "entry_limit"
+	}
 	if status == "OK" && res.ExitCode != nil && *res.ExitCode != 0 {
 		status = model.RunStatusRE
 		source = "exit_code"
@@ -97,7 +122,15 @@ func classifyRunStatusWithoutOutput(req *model.RunRequest, res execResult) (stri
 }
 
 func applyFinalCPUTimeStatus(status, reason, source string, cpuTimeMs int64, limitMs int, cgroupBacked bool) (string, string, string) {
-	if limitMs <= 0 || cpuTimeMs <= int64(limitMs) {
+	return applyCPUTimeLimitStatus(status, reason, source, limitMs > 0 && cpuTimeMs > int64(limitMs), cgroupBacked)
+}
+
+func applyFinalCPUTimeStatusNs(status, reason, source string, cpuTimeNs, limitNs uint64, cgroupBacked bool) (string, string, string) {
+	return applyCPUTimeLimitStatus(status, reason, source, cpuTimeNs > limitNs, cgroupBacked)
+}
+
+func applyCPUTimeLimitStatus(status, reason, source string, exceeded, cgroupBacked bool) (string, string, string) {
+	if !exceeded {
 		return status, reason, source
 	}
 	if status != "OK" && status != model.RunStatusAccepted {
@@ -169,7 +202,35 @@ func hasSPJ(req *model.RunRequest) bool {
 	return req != nil && req.SPJ != nil
 }
 
-func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout, judgeInputPath string, sidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string) (bool, *float64, error) {
+// Bind and launch the checker with the same effective language and limits.
+func spjRunRequest(req *model.RunRequest) *model.RunRequest {
+	spjLimits := model.Limits{
+		TimeMs:         defaultSPJTimeMs,
+		MemoryMB:       defaultSPJMemoryMB,
+		OutputBytes:    req.Limits.OutputBytes,
+		WorkspaceBytes: defaultWorkspaceBytes,
+	}
+	if req.SPJ.Limits != nil {
+		spjLimits = *req.SPJ.Limits
+		if spjLimits.TimeMs <= 0 {
+			spjLimits.TimeMs = defaultSPJTimeMs
+		}
+		if spjLimits.MemoryMB <= 0 {
+			spjLimits.MemoryMB = defaultSPJMemoryMB
+		}
+		if spjLimits.WorkspaceBytes <= 0 {
+			spjLimits.WorkspaceBytes = defaultWorkspaceBytes
+		}
+	}
+	return &model.RunRequest{
+		Lang:              req.SPJ.Lang,
+		Limits:            spjLimits,
+		PythonLibraryMode: req.PythonLibraryMode,
+		EnableNetwork:     false,
+	}
+}
+
+func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout, judgeInputPath string, sidecars []model.SidecarOutput, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer, clocks *spjWorkClocks) (bool, *float64, error) {
 	if req == nil || req.SPJ == nil {
 		return false, nil, fmt.Errorf("spj is required")
 	}
@@ -218,37 +279,30 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 		return false, nil, err
 	}
 
-	spjLang := profiles.NormalizeRunLang(req.SPJ.Lang)
-	if spjLang == "" || spjLang == "binary" {
+	spjReq := spjRunRequest(req)
+	spjLang := profiles.NormalizeRunLang(spjReq.Lang)
+	if spjLang == "" {
 		spjLang = "binary"
-	}
-	spjLimits := model.Limits{
-		TimeMs:         defaultSPJTimeMs,
-		MemoryMB:       defaultSPJMemoryMB,
-		OutputBytes:    req.Limits.OutputBytes,
-		WorkspaceBytes: defaultWorkspaceBytes,
-	}
-	if req.SPJ.Limits != nil {
-		spjLimits = *req.SPJ.Limits
-		if spjLimits.TimeMs <= 0 {
-			spjLimits.TimeMs = defaultSPJTimeMs
-		}
-		if spjLimits.MemoryMB <= 0 {
-			spjLimits.MemoryMB = defaultSPJMemoryMB
-		}
-		if spjLimits.WorkspaceBytes <= 0 {
-			spjLimits.WorkspaceBytes = defaultWorkspaceBytes
-		}
-	}
-	spjReq := &model.RunRequest{
-		Lang:              spjLang,
-		Limits:            spjLimits,
-		PythonLibraryMode: req.PythonLibraryMode,
-		EnableNetwork:     false,
 	}
 	args := buildCommandWithRuntimeTuning(spjPath, spjLang, spjReq, tuning)
 	args = append(args, inputPath, outputPath, solutionPath)
-	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, nil, 0, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir)
+	var meter *durante.Session
+	if clocks != nil {
+		applyPeerWorkClock(spjReq, clocks.checkerPlan)
+		spjReq.WorkMeasurement = true
+		meter, err = durante.Prepare(ctx, spjWS.RootDir, clocks.config, spjReq.Lang, int(defaultSandboxUID), int(defaultSandboxGID))
+		if err != nil {
+			return false, nil, fmt.Errorf("checker measurement preparation failed")
+		}
+	}
+	res := runCommandWithSandbox(ctx, spjWS, args, spjReq, nil, 0, Hooks{}, outputLimitBytes(spjReq), tuning, cgroupParentDir, cpuNormalizer, meter)
+	if clocks != nil {
+		finishPeerWorkClock(spjReq, meter, &res, peerWorkClockCause(ctx, ctx), "checker")
+		clocks.checker = collectPeerWorkMeasurement(meter, res, false, "checker", "checker", nil)
+		if res.Status != "OK" || res.ExitCode == nil {
+			return false, nil, fmt.Errorf("checker execution failed: %s", res.VerdictSource)
+		}
+	}
 	if res.Status == model.RunStatusTLE || res.Status == model.RunStatusMLE || res.Status == model.RunStatusWLE || res.Status == model.RunStatusInitFail {
 		return false, nil, fmt.Errorf("spj failed: %s", res.Status)
 	}
@@ -268,6 +322,9 @@ func runSPJ(ctx context.Context, ws Workspace, req *model.RunRequest, userStdout
 					return false, nil, fmt.Errorf("spj score out of range")
 				}
 				scoreVal = parsed
+			}
+			if clocks != nil {
+				clocks.checker.CheckerScore = &scoreVal
 			}
 			return true, &scoreVal, nil
 		}
@@ -528,7 +585,7 @@ func addressSpaceLimitBytes(commandBase string, memMB int) uint64 {
 
 func isJVMRunLang(runLang string) bool {
 	switch profiles.NormalizeRunLang(runLang) {
-	case "clojure", "groovy", "java", "kotlin-jvm", "scala":
+	case "clojure", "groovy", "java", "java25", "kotlin-jvm", "scala", "scala3":
 		return true
 	default:
 		return false

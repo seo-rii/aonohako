@@ -2,12 +2,43 @@ package runtimepacks
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestOctaveImageCaptureRuntime(t *testing.T) {
+	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := catalog.Languages["octave"]
+	for _, dependency := range []string{"octave", "gnuplot-nox", "ghostscript", "fonts-freefont-otf"} {
+		if !slices.Contains(spec.Install.Apt, dependency) {
+			t.Fatalf("Octave image rendering needs %s", dependency)
+		}
+	}
+	helper := strings.Join(spec.Install.Script, "\n")
+	for _, contract := range []string{
+		"/usr/local/lib/aonohako/octave/plot_capture.m", `source (entry, "base")`,
+		`getenv ("IMG_CAPTURE")`, `getenv ("IMG_OUT_DIR")`, `"-S1280,720"`,
+		`min (numel (figures), 20 - existing_events)`, `total_bytes + numel (line) > 8388608`,
+	} {
+		if !strings.Contains(helper, contract) {
+			t.Fatalf("Octave capture install is missing %q", contract)
+		}
+	}
+	smoke := strings.Join(spec.Smoke.Command, "\n")
+	for _, contract := range []string{`isempty (argv ())`, `fscanf (stdin`, `numel (lines) == 2`, `uint8 ([137 80 78 71 13 10 26 10])`} {
+		if !strings.Contains(smoke, contract) {
+			t.Fatalf("Octave smoke is missing %q", contract)
+		}
+	}
+}
 
 func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
@@ -23,13 +54,13 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		t.Fatalf("expected 25 production images, got %d", len(production))
 	}
 
-	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "j", "janet", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "perl", "php", "picolisp", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "smalltalk", "sml", "smlnj", "sqlite", "tcl", "uiua", "wasm", "whitespace"}) {
+	if production[0].Name != "type-a" || !reflect.DeepEqual(production[0].Languages, []string{"aheui", "algol68", "apecode", "apl", "awk", "bc", "befunge", "bf", "bqn", "chez-scheme", "chicken-scheme", "elixir", "erlang", "fennel", "forth", "gforth", "gleam", "gnu-prolog", "golfscript", "guile", "haskell", "idris2", "intercal", "j", "janet", "lazyk", "lisp", "lolcode", "lua", "luajit", "malbolge", "mercury", "mlton", "ocaml", "pari-gp", "perl", "php", "picat", "picolisp", "piet", "plain", "prolog", "pypy", "r", "racket", "raku", "ruby", "scheme", "sed", "shakespeare", "smalltalk", "sml", "smlnj", "sqlite", "squirrel", "tcl", "uiua", "unlambda", "wasm", "whitespace", "wren"}) {
 		t.Fatalf("type-a production image = %+v", production[0])
 	}
-	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "graphql", "groovy", "haxe", "java", "javascript", "purescript", "quickjs", "rescript", "scala", "typescript"}) {
+	if production[1].Name != "type-b" || !reflect.DeepEqual(production[1].Languages, []string{"assemblyscript", "bun", "clojure", "coffeescript", "deno", "elm", "entry", "graphql", "groovy", "haxe", "java", "java25", "javascript", "purescript", "quickjs", "rescript", "scala", "scala3", "typescript"}) {
 		t.Fatalf("type-b production image = %+v", production[1])
 	}
-	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
+	if production[2].Name != "type-c" || !reflect.DeepEqual(production[2].Languages, []string{"ada", "asm", "c3", "classic-basic", "cobol", "crystal", "cython", "d", "delphi", "fortran", "freebasic", "gnucobol", "go", "hare", "koka", "mojo", "moonbit", "nasm", "nim", "nimony", "objective-c", "objective-cpp", "objectpascal", "odin", "pascal", "qbasic", "rust", "vala", "vlang", "zerolang", "zig"}) {
 		t.Fatalf("type-c production image = %+v", production[2])
 	}
 	if production[3].Name != "type-d" || !reflect.DeepEqual(production[3].Languages, []string{"kotlin", "kotlin-jvm"}) {
@@ -47,7 +78,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 	if production[7].Name != "type-h" || !reflect.DeepEqual(production[7].Languages, []string{"swift"}) {
 		t.Fatalf("type-h production image = %+v", production[7])
 	}
-	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"c", "cpp", "java", "plain", "pypy", "python"}) {
+	if production[8].Name != "type-i" || !reflect.DeepEqual(production[8].Languages, []string{"c", "cpp", "java", "java25", "plain", "pypy", "python"}) {
 		t.Fatalf("type-i production image = %+v", production[8])
 	}
 	if production[9].Name != "type-j" || !reflect.DeepEqual(production[9].Languages, []string{"agda", "coq", "rocq", "tla", "why3"}) {
@@ -149,6 +180,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-duckdb",
 		"ci-elixir",
 		"ci-elm",
+		"ci-entry",
 		"ci-erlang",
 		"ci-factor",
 		"ci-fennel",
@@ -172,16 +204,19 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-haskell",
 		"ci-haxe",
 		"ci-idris2",
+		"ci-intercal",
 		"ci-isabelle",
 		"ci-j",
 		"ci-janet",
 		"ci-java",
+		"ci-java25",
 		"ci-javascript",
 		"ci-julia",
 		"ci-kframework",
 		"ci-koka",
 		"ci-kotlin",
 		"ci-kotlin-jvm",
+		"ci-lazyk",
 		"ci-lean4",
 		"ci-lisp",
 		"ci-lolcode",
@@ -194,16 +229,20 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-moonbit",
 		"ci-nasm",
 		"ci-nim",
+		"ci-nimony",
 		"ci-objective-c",
 		"ci-objective-cpp",
 		"ci-objectpascal",
 		"ci-ocaml",
 		"ci-octave",
 		"ci-odin",
+		"ci-pari-gp",
 		"ci-pascal",
 		"ci-perl",
 		"ci-php",
+		"ci-picat",
 		"ci-picolisp",
+		"ci-piet",
 		"ci-plain",
 		"ci-pony",
 		"ci-posix-sh",
@@ -222,12 +261,15 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-ruby",
 		"ci-rust",
 		"ci-scala",
+		"ci-scala3",
 		"ci-scheme",
 		"ci-sed",
+		"ci-shakespeare",
 		"ci-smalltalk",
 		"ci-sml",
 		"ci-smlnj",
 		"ci-sqlite",
+		"ci-squirrel",
 		"ci-swift",
 		"ci-systemverilog",
 		"ci-tcl",
@@ -235,6 +277,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-typescript",
 		"ci-uhmlang",
 		"ci-uiua",
+		"ci-unlambda",
 		"ci-vala",
 		"ci-vb6",
 		"ci-vbnet",
@@ -244,6 +287,7 @@ func TestRepositoryCatalogIncludesPlainRuntime(t *testing.T) {
 		"ci-wasm",
 		"ci-whitespace",
 		"ci-why3",
+		"ci-wren",
 		"ci-zerolang",
 		"ci-zig",
 		"ci-zsh",
@@ -399,13 +443,19 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"kotlin-jvm":    {"KOTLIN_JVM_VERSION=2.3.21", "default-jdk-headless", "kotlinc -jvm-target 1.8 Main.kt Helper.java -include-runtime -d Main.jar", "javac --release 8 -cp Main.jar Helper.java", "jar uf Main.jar Helper.class", "java -Xms64m -Xmx128m -Xss1m -XX:+UseSerialGC -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=32m -DONLINE_JUDGE=1 -jar Main.jar"},
 		"lean4":         {"LEAN_VERSION=4.29.1", "curl --retry 6", "wget --tries=6", "lean Main.lean"},
 		"lolcode":       {"LCI_VERSION=0.11.2", "cb1065936d3a7463928dcddfc345a8d7d8602678394efc0e54981f9dd98c27d2", "lci Main.lol", `VISIBLE "ok"`},
+		"shakespeare":   {"python3 -m venv /opt/shakespeare", "--no-deps shakespearelang==1.0.0 click==7.1.2 tatsu==5.6.1", "/opt/shakespeare/bin/pip uninstall -y pip", "shakespeare_run.py --check Main.spl", "'-4 17'", "= 13", "Broken.spl"},
+		"piet":          {"NPIET_VERSION=1.3f", "NPIET_SHA256=2ded856062abd73599e85e1e768ce6bc60ba2db22dc7d6a9b62763dca04b855a", "sha256sum -c -", "ac_cv_lib_gd_gdImageCreate=no", "make npiet CFLAGS='-O2 -std=gnu17 -DHAVE_CONFIG_H'", "with PNG support", "npiet -q Main.ppm", "= 42"},
+		"unlambda":      {"python3 /usr/local/lib/aonohako/unlambda.py Main.unl", `test "${output}" = 'ok!'`},
+		"lazyk":         {"LAZYK_VERSION=1.0.0", "LAZYK_SHA256=c57edaab448f84eda2c98411e0fb4192e36113df49461db9285a62ca1f613d42", "sha256sum -c -", "lazyk Main.lazy"},
+		"intercal":      {"intercal=30:0.30-6", "dpkg-query -W", "CC='gcc -std=gnu17' ick -b Main.i", `test "${output}" = ok`, "Broken.i"},
 		"lua":           {"lua5.4=5.4.7-1+b2", "dpkg-query -W", "lua5.4", "-E"},
 		"luajit":        {"luajit=2.1.0+openresty20250117-2", "dpkg-query -W", "luajit -b -t raw", "LUA_INIT=", "aonohako-luajit-compile-leak", "Broken.lua"},
 		"malbolge":      {"python3 /usr/local/lib/aonohako/malbolge.py Main.mal", "Hello World!"},
 		"mercury":       {"dl.mercurylang.org/deb/ trixie main", "mercury-recommended", "mmc --make --grade hlc.gc main"},
 		"mojo":          {"mojo==1.0.0", "mojo build Main.mojo"},
-		"moonbit":       {"MOONBIT_VERSION=0.10.9+6e6c44045", "MOONBIT_ARCHIVE_SHA256=0e81deb35eca29e892415cf954ea42b48a43bcf277ad36a3ae1e97d2d1dfe732", "MOONBIT_CORE_SHA256=d92b84ea0bc11ec9a9fe57d313416a6694a5826f4307e8e65d5075079ee913ca", "sha256sum -c -", "bundle --warn-list -a --all --target native", "moon build --target-dir .aonohako-moonbit-build --target native --release --strip --frozen --jobs 1", "Broken"},
+		"moonbit":       {"MOONBIT_VERSION=0.10.17+d971670cd", "MOONBIT_ARCHIVE_SHA256=d0a96eaf91c77cfcdd7b7df75390c5a1a95d0b8a328b1a5ed6fee050cfbf8d50", "MOONBIT_CORE_SHA256=2d837ecbef5933c09726d63682a7695123d622e6aee13525fbc98c4b49433714", "sha256sum -c -", "bundle --warn-list -a --all --target native", "moon build --target-dir .aonohako-moonbit-build --target native --release --strip --frozen --jobs 1", "Broken"},
 		"nim":           {"nim c", "Broken.nim"},
+		"nimony":        {"nim-lang/nimony/tar.gz/d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca", "62b75e7dabe548ff4f14641330fc75c9cbccb811d8826a45e54745f23a79e07e", "sha256sum -c -", "nimony c", "XDG_CACHE_HOME=", "--parallelBuild:1", "--nimcache:", "17 25", "7 13", "Broken.nim", "test ! -e Broken"},
 		"objective-c":   {"clang -x objective-c -O2 -pipe Main.m -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objective-cpp": {"clang++ -x objective-c++ -O2 -pipe Main.mm -o Main -L/usr/lib/gcc/x86_64-linux-gnu/16 -lobjc", "libobjc-16-dev"},
 		"objectpascal":  {"fpc -Mobjfpc -O2 -Xs -oMain Main.pas", "TOk = class", "Broken.pas"},
@@ -426,7 +476,7 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"sed":           {"sed -f Main.sed", `s/^\([0-9]*\) \([0-9]*\)$/\2 \1/`, `test "${output}" = $'22 20\n13 7'`},
 		"sml":           {"MLTON_VERSION=20241230", "mlton -output Main Main.sml"},
 		"mlton":         {"MLTON_VERSION=20241230", "mlton -output Main Main.sml", "20 22", "7 13", "Broken.sml"},
-		"smlnj":         {"SMLNJ_VERSION=110.99.9", "SMLNJ_CONFIG_SHA256=bf479ba518652fc193ac0954e46c72c5356a33c6980f9fcb6bcf6e55c7731418", "SMLNJ_RUNTIME_SHA256=216e0193a193ae2e59296d27c42e61a3aa7a16ddda936d3a06a2b9459276b792", "SMLNJ_BOOT_SHA256=2b4c23bb4e49be040043ab70a3df8e92c26ffe1cba652ed80348cd3fe2d19c63", "smlnj.cs.uchicago.edu/dist/working", "URLGETTER=/bin/false", "-default 64 -nolib", "/opt/smlnj/bin/.run/run.amd64-linux", "@SMLload=/usr/local/lib/aonohako/smlnj-run", "20 22", "7 13", "Broken.sml", "broken.stderr"},
+		"smlnj":         {"SMLNJ_VERSION=110.99.9", "SMLNJ_CONFIG_SHA256=bf479ba518652fc193ac0954e46c72c5356a33c6980f9fcb6bcf6e55c7731418", "SMLNJ_RUNTIME_SHA256=216e0193a193ae2e59296d27c42e61a3aa7a16ddda936d3a06a2b9459276b792", "SMLNJ_BOOT_SHA256=2b4c23bb4e49be040043ab70a3df8e92c26ffe1cba652ed80348cd3fe2d19c63", "distfiles.macports.org/smlnj/${SMLNJ_VERSION}_0", "URLGETTER=/bin/false", "-default 64 -nolib", "/opt/smlnj/bin/.run/run.amd64-linux", "@SMLload=/usr/local/lib/aonohako/smlnj-run", "20 22", "7 13", "Broken.sml", "broken.stderr"},
 		"smalltalk":     {"GST_VERSION=3.2.5", "mirrors.kernel.org/gnu/smalltalk", "sed -i 's/const char \\*inbuf;/char *inbuf;/'", "CC=/usr/bin/gcc-14 ./configure", "make -j1", "gst -q Main.st"},
 		"systemverilog": {"iverilog -g2012", "Main.sv"},
 		"tcl":           {"tclsh Main.tcl", "puts \"ok\""},
@@ -445,8 +495,10 @@ func TestRepositoryCatalogStrengthensNewLanguageSmokeCoverage(t *testing.T) {
 		"rescript":      {"rescript@12.3.0", "rescript build", "node --disable-wasm-trap-handler --max-old-space-size=64 --max-semi-space-size=1 --stack-size=2048 lib/js/Main.js"},
 		"fortran":       {"Broken.f90", "gfortran"},
 		"d":             {"Broken.d", "ldc2"},
+		"picat":         {"PICAT_VERSION=39_12", "PICAT_SHA256=f053b11cccabfb69a3ccd779f2dc1c24cdf889805799bc8c779e6c56da703e4a", "sha256sum -c -", "picat_compile.pi", "17 25", "7 13", "COMPILE LEAK", "Broken.pi"},
 		"prolog":        {"Broken.pl", "swipl"},
 		"gnu-prolog":    {"gprolog=1.4.5.0-3", "GNU Prolog.*1\\.4\\.5", "gplc --no-top-level --no-debugger -o Main Main.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl", "20 22", "7 13", "CompileOnly.pl", "aonohako-gnu-prolog-compile-leak", "Broken.pl", "Failure.pl", "if ./Failure"},
+		"scala3":        {"SCALA3_VERSION=3.3.9", "SCALA3_SHA256=ba96214801ea01b0d0aee45f00c94d3f61ed40d0f2aa748aff11c7f136737d7c", "sha256sum -c -", "dotty.tools.dotc.Main", "enum Operation:", "17 25", "7 13", "test ! -e Broken.class"},
 		"scala":         {"scalac Main.scala", "java -Xmx128m -Xss1m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=64m -Dfile.encoding=UTF-8 -DONLINE_JUDGE=1 -cp \"${scala_cp}\" Main"},
 		"lisp":          {"Broken.lisp", "sbcl"},
 		"nasm":          {"Main.asm", "Broken.asm", "nasm -felf64"},
@@ -565,9 +617,11 @@ func TestRepositoryCatalogPinsMoonBitToolchainAndOfflineBuild(t *testing.T) {
 	}
 	install := strings.Join(spec.Install.Script, "\n")
 	for _, marker := range []string{
-		"MOONBIT_VERSION=0.10.9+6e6c44045",
-		"MOONBIT_ARCHIVE_SHA256=0e81deb35eca29e892415cf954ea42b48a43bcf277ad36a3ae1e97d2d1dfe732",
-		"MOONBIT_CORE_SHA256=d92b84ea0bc11ec9a9fe57d313416a6694a5826f4307e8e65d5075079ee913ca",
+		"MOONBIT_VERSION=0.10.17+d971670cd",
+		"MOONBIT_ARCHIVE_SHA256=d0a96eaf91c77cfcdd7b7df75390c5a1a95d0b8a328b1a5ed6fee050cfbf8d50",
+		"MOONBIT_CORE_SHA256=2d837ecbef5933c09726d63682a7695123d622e6aee13525fbc98c4b49433714",
+		`https://cli.moonbitlang.com/binaries/${MOONBIT_URL_VERSION}/moonbit-linux-x86_64.tar.gz`,
+		`https://cli.moonbitlang.com/cores/core-${MOONBIT_URL_VERSION}.tar.gz`,
 		"sha256sum -c -",
 		"bundle --warn-list -a --all --target native",
 	} {
@@ -575,7 +629,7 @@ func TestRepositoryCatalogPinsMoonBitToolchainAndOfflineBuild(t *testing.T) {
 			t.Fatalf("MoonBit install must contain %q:\n%s", marker, install)
 		}
 	}
-	if strings.Contains(install, "/latest/") || strings.Contains(install, "install/unix.sh") {
+	if strings.Contains(install, "/latest/") || strings.Contains(install, "core-latest") || strings.Contains(install, "install/unix.sh") {
 		t.Fatalf("MoonBit install must not use a drifting installer:\n%s", install)
 	}
 	if !slices.Contains(spec.Install.SandboxTools, "ar") || !strings.Contains(install, "ln -sfn /usr/bin/ar /usr/local/bin/ar") {
@@ -1244,6 +1298,71 @@ func TestRepositoryCatalogHardensDedicatedShellRuntimeVariants(t *testing.T) {
 	}
 }
 
+func TestShellRuntimeHardenerRestrictsGLibHelpers(t *testing.T) {
+	for _, tool := range []string{"bash", "find", "chmod"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s is unavailable: %v", tool, err)
+		}
+	}
+	hardener, err := os.ReadFile(filepath.Join("..", "..", "scripts", "harden_shell_runtime.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loop := regexp.MustCompile(`(?ms)^for root in ([^\n]+); do\n(.*?)^done\n`).FindStringSubmatch(string(hardener))
+	if loop == nil {
+		t.Fatal("shell hardener executable permission loop is missing")
+	}
+	// Run only the permission loop, with every root mapped inside the fixture.
+	// Ownership changes require root and are independent of these permissions.
+	roots := strings.Fields(loop[1])
+	for i, root := range roots {
+		if !regexp.MustCompile(`^/usr/[a-zA-Z0-9_*/.-]+$`).MatchString(root) || strings.Contains(root, "..") {
+			t.Fatalf("unsafe hardener fixture root %q", root)
+		}
+		roots[i] = "." + root
+	}
+	body := strings.ReplaceAll(loop[2], "-exec chown root:root {} + ", "")
+	if strings.Contains(strings.ReplaceAll(body, "-perm /0111", ""), "/") {
+		t.Fatal("hardener permission loop contains an unmapped path")
+	}
+	root := t.TempDir()
+	permissions := map[string]os.FileMode{
+		"usr/lib/x86_64-linux-gnu/glib-2.0/gio-launch-desktop":   0o750,
+		"usr/lib/x86_64-linux-gnu/glib-2.0/gio-querymodules":     0o750,
+		"usr/lib/x86_64-linux-gnu/glib-2.0/glib-compile-schemas": 0o750,
+		"usr/lib/aarch64-linux-gnu/glib-2.0/gio-launch-desktop":  0o750,
+		"usr/lib/x86_64-linux-gnu/libglib-2.0.so.0":              0o755,
+		"usr/lib/x86_64-linux-gnu/libgio-2.0.so.0":               0o755,
+		"usr/lib/x86_64-linux-gnu/gio/modules/libgio-example.so": 0o755,
+	}
+	for path := range permissions {
+		path = filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("\x7fELFfixture"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command("bash", "-euo", "pipefail", "-c", "for root in "+strings.Join(roots, " ")+"; do\n"+body+"done\n")
+	cmd.Dir = root
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("shell hardener permission loop: %v\n%s", err, output)
+	}
+	for path, want := range permissions {
+		info, err := os.Stat(filepath.Join(root, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s permissions = %04o, want %04o", path, got, want)
+		}
+	}
+}
+
 func TestRepositoryCatalogPinsAndHardensPowerShellInDotnetProfile(t *testing.T) {
 	catalog, err := LoadCatalog(filepath.Join("..", "..", "runtime-images.yml"))
 	if err != nil {
@@ -1547,13 +1666,13 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 		"pandas==3.0.2",
 		"seaborn==0.13.2",
 		"matplotlib==3.10.8",
-		"pillow==12.3.0",
+		"pillow==13.0.0",
 		"six==1.17.0",
 		"qiskit==2.4.0",
 		"pyparsing==3.3.2",
 		"pylatexenc==2.10",
 		"jax[cpu]==0.10.0",
-		"setuptools==80.10.2",
+		"setuptools==84.1.0",
 	} {
 		if !slices.Contains(python.Install.Pip, pkg) {
 			t.Fatalf("python runtime must include %q, got %v", pkg, python.Install.Pip)
@@ -1562,8 +1681,8 @@ func TestRepositoryCatalogPythonIncludesJudgeLibrariesAndPyPy(t *testing.T) {
 	scriptBody := strings.Join(python.Install.Script, "\n")
 	for _, marker := range []string{
 		"download.pytorch.org/whl/cpu",
-		"torch==2.11.0+cpu",
-		"torchvision==0.26.0+cpu",
+		"torch==2.13.0+cpu",
+		"torchvision==0.28.0+cpu",
 	} {
 		if !strings.Contains(scriptBody, marker) {
 			t.Fatalf("python runtime install script must contain %q, got %q", marker, scriptBody)

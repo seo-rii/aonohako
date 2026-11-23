@@ -7,10 +7,20 @@ handoff from combinations such as `interactor` plus legacy `steps`.
 
 `GET /capabilities` advertises the supported version, deployment step limit,
 executors, artifact sources and their byte limits, and final judges. A client
-must not silently fall back when `pipeline-v1` is unavailable. The current
-remote control-plane architecture has no authenticated downstream capability
-negotiation, so remote transports neither advertise nor accept Pipeline V1;
-embedded helper runners fail closed until such negotiation exists.
+must not silently fall back when `pipeline-v1` is unavailable. Embedded helper
+runners support the contract locally. A remote control plane
+advertises and admits it after an authenticated worker confirms the supported
+version, step count, executors, artifact byte limits and final judges. The
+control plane uses its configured runner URL and execution credentials for
+`GET /internal/capabilities/pipeline-v1`. Only an authenticated embedded
+helper serves that route. Discovery has a three-second deadline and shares
+its result for five seconds. Unavailable or older workers yield
+`unsupported_capability` at admission.
+
+The control plane also requests confirmation on the actual `POST /execute`.
+The worker identifies the pipeline protocol in the SSE response headers.
+If a different instance cannot confirm the protocol, the request yields an
+initialization failure. Each submitted execution is forwarded at most once.
 
 ## Request contract
 
@@ -77,6 +87,16 @@ are never accepted. `participant_stdout` and `interactor_output` allow at most
 8 MiB. Interactive stdout truncation is an artifact failure, never a prefix
 handoff.
 
+Interactive steps use a base safety wall-clock allowance of
+`min(600000 ms, max(3 * time_ms, time_ms + 3000 ms))` by default, while
+their CPU limit remains `time_ms`. CPU normalization can extend this default
+to cover a larger calibrated CPU allowance and scheduling slack, including
+beyond 600000 ms on slower hosts. Explicit `limits.wall_time_ms` and
+`executor.interactor_limits.wall_time_ms` override the default without scaling; a missing
+interactor wall limit inherits the participant's explicit wall limit. Batch
+steps and the final judge retain their own wall-time semantics. The remote
+request deadline also includes the larger interactive allowance.
+
 An interactive executor may explicitly bind a resource as
 `interactor_answer`; the runner materializes it as the trusted interactor's
 third file argument. Omitting the reference preserves the legacy empty answer
@@ -118,3 +138,14 @@ The existing network policy and request-wide binary/resource budgets apply to
 all pipeline programs and the final SPJ. Interactive admission should use the
 concurrent participant-plus-interactor peak; sequential batch and final-judge
 peaks are compared rather than summed.
+
+
+## Timing and Durante observations
+
+The `steps` array carries native CPU nanoseconds when available. An operator
+can enable output-checked Durante observations for batch stages and for
+contestants in completed interactive exchanges. Interactive steps expose
+native `cpu_time_by_role` for the contestant and the interactor.
+The response binds each diagnostic report to its executed step and program
+ID. The final judge consumes the original native outputs, including when an
+optional replay fails. [Observation fields and limits](durante-judging.md#pipeline-v1-batch-observations)

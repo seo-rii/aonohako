@@ -12,10 +12,12 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/remoteio"
 	"aonohako/internal/runvalidation"
@@ -25,18 +27,21 @@ import (
 const cloudRunMetadataIdentityURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
 
 type remoteRunner struct {
-	client           *http.Client
-	metadataClient   *http.Client
-	executeURL       string
-	auth             config.RemoteAuthMode
-	bearerToken      string
-	audience         string
-	metadataURL      string
-	idleTimeout      time.Duration
-	absoluteTimeout  time.Duration
-	uploadTimeout    time.Duration
-	errorBodyTimeout time.Duration
-	strictProto      bool
+	runtimeTuning         config.RuntimeTuningConfig
+	runtimeTuningProfiles map[string]config.RuntimeTuningConfig
+	workMeasurement       durante.Config
+	client                *http.Client
+	metadataClient        *http.Client
+	executeURL            string
+	auth                  config.RemoteAuthMode
+	bearerToken           string
+	audience              string
+	metadataURL           string
+	idleTimeout           time.Duration
+	absoluteTimeout       time.Duration
+	uploadTimeout         time.Duration
+	errorBodyTimeout      time.Duration
+	strictProto           bool
 }
 
 func newRemoteRunner(cfg config.Config) Runner {
@@ -45,17 +50,20 @@ func newRemoteRunner(cfg config.Config) Runner {
 		auth = config.RemoteAuthNone
 	}
 	return &remoteRunner{
-		client:           remoteio.NewHTTPClient(),
-		metadataClient:   remoteio.NewMetadataHTTPClient(),
-		executeURL:       normalizeRemoteExecuteURL(cfg.Execution.Remote.URL),
-		auth:             auth,
-		bearerToken:      cfg.Execution.Remote.BearerToken,
-		audience:         cfg.Execution.Remote.Audience,
-		metadataURL:      cloudRunMetadataIdentityURL,
-		idleTimeout:      cfg.Execution.Remote.SSEIdleTimeout,
-		uploadTimeout:    remoteio.DefaultRequestUploadTimeout,
-		errorBodyTimeout: remoteio.DefaultErrorResponseBodyTimeout,
-		strictProto:      cfg.Execution.Remote.StrictProtocol,
+		runtimeTuning:         cfg.Execution.RuntimeTuning.WithSafeDefaults(),
+		runtimeTuningProfiles: cloneRuntimeTuningProfiles(cfg.Execution.RuntimeTuningProfiles),
+		workMeasurement:       snapshotWorkMeasurementConfig(cfg.Execution.WorkMeasurement),
+		client:                remoteio.NewHTTPClient(),
+		metadataClient:        remoteio.NewMetadataHTTPClient(),
+		executeURL:            normalizeRemoteExecuteURL(cfg.Execution.Remote.URL),
+		auth:                  auth,
+		bearerToken:           cfg.Execution.Remote.BearerToken,
+		audience:              cfg.Execution.Remote.Audience,
+		metadataURL:           cloudRunMetadataIdentityURL,
+		idleTimeout:           cfg.Execution.Remote.SSEIdleTimeout,
+		uploadTimeout:         remoteio.DefaultRequestUploadTimeout,
+		errorBodyTimeout:      remoteio.DefaultErrorResponseBodyTimeout,
+		strictProto:           cfg.Execution.Remote.StrictProtocol,
 	}
 }
 
@@ -73,24 +81,97 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	// A shadow request's authoritative portion is an ordinary request; validate
+	// it and its result as such, and the shadow block separately below.
+	if err := runvalidation.ValidateWorkMeasurementShadow(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	checked := shadowPrimaryRequest(req)
+	if req.WorkMeasurementShadow {
+		if reason := shadowGateUnavailable(req, r.workMeasurement); reason != "" {
+			return attachShadow(r.run(ctx, checked, hooks), nil, reason)
+		}
+	}
+	tuning := r.runtimeTuning.WithSafeDefaults()
+	schema2 := r.workMeasurement.TimeModels != nil && r.workMeasurement.TimeModels.Schema == 2
+	if (checked.WorkMeasurementTime || checked.WorkMeasurementPeerTime != nil || req.WorkMeasurementShadow) && schema2 {
+		var err error
+		tuning, err = resolveRuntimeTuning(checked, r.runtimeTuning, r.runtimeTuningProfiles)
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	if !req.WorkMeasurementShadow {
+		admitted, err := resolveJudgeWorkLimits(req, r.workMeasurement, tuning)
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+		req, checked = admitted, admitted
+	}
+	if err := runvalidation.ValidateWorkMeasurementLimits(checked); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if checked.WorkMeasurementTime {
+		if _, _, err := ordinaryTimePolicy(checked, r.workMeasurement, tuning); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	peerPlans, err := workMeasurementPeerTimePlans(checked, r.workMeasurement, tuning)
+	if err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if err := validateJudgeRequest(ctx, checked, r.workMeasurement); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := runvalidation.ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	if err := runvalidation.ValidateRemoteRequestSize(req); err != nil {
+	forward := forwardedPeerClockRequest(req, peerPlans)
+	if err := validateJudgeClockBinding(req, r.workMeasurement, tuning); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-
-	body, err := json.Marshal(req)
+	if clock := effectiveWorkClock(req, r.workMeasurement, tuning); clock != nil && clock.TimePolicy != nil {
+		// An earlier worker rejects the versioned request field before execution.
+		// A current worker checks the model binding against its own configuration.
+		copy := *forward
+		copy.JudgeClockBinding = clock.ModelBinding()
+		forward = &copy
+	}
+	if err := runvalidation.ValidateRemoteRequestSize(forward); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	body, err := json.Marshal(forward)
 	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote request encode failed: " + err.Error()}
 	}
 
+	observationBudget := remoteObservationBudget(req, r.workMeasurement)
+	legacySteps := runvalidation.UsesSteps(req)
+	standaloneInteractive := req.Interactor != nil && req.Pipeline == nil && !legacySteps
+	if legacySteps || standaloneInteractive {
+		if incoming := stepObservationBudgetFromContext(ctx); incoming.bounded {
+			observationBudget = min(observationBudget, incoming.maximum)
+		}
+	}
+	if standaloneInteractive {
+		// The downstream worker receives whole, nonnegative milliseconds.
+		// Use exactly that allowance for the deadline and returned receipt.
+		observationBudget = max(0, observationBudget.Truncate(time.Millisecond))
+	}
 	absoluteTimeout := r.absoluteTimeout
 	if absoluteTimeout <= 0 {
 		absoluteTimeout = remoteExecutionTimeout(req, r.uploadTimeout)
+		absoluteTimeout += observationBudget
+		if (req.Pipeline != nil || legacySteps || standaloneInteractive) && observationBudget > 0 {
+			// Leave time to reap a replay stopped at its deadline and return the native result.
+			absoluteTimeout += remoteio.DefaultOperationOverhead
+		}
 	}
 	streamCtx, cancelStream := context.WithTimeout(ctx, absoluteTimeout)
 	defer cancelStream()
@@ -101,6 +182,18 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
+	if req.Pipeline != nil {
+		httpReq.Header.Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+		if observationBudget > 0 {
+			httpReq.Header.Set(model.PipelineInteractiveObservationHeader, "v1")
+		}
+		httpReq.Header.Set(model.PipelineObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
+	} else if legacySteps {
+		// Older workers ignore this optional ceiling and run their native steps normally.
+		httpReq.Header.Set(model.LegacyObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
+	} else if standaloneInteractive {
+		httpReq.Header.Set(model.InteractiveObservationBudgetHeader, strconv.FormatInt(observationBudget.Milliseconds(), 10))
+	}
 
 	if authHeader, err := r.authorizationHeader(ctx); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote auth failed: " + err.Error()}
@@ -138,6 +231,14 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		}
 		var payload map[string]any
 		if err := json.Unmarshal(raw, &payload); err == nil {
+			// Legacy runners reject unknown JSON fields before queueing. Send the
+			// ordinary request once under the original deadline only for that
+			// explicit admission error; execution and transport errors are final.
+			if req.WorkMeasurementShadow && resp.StatusCode == http.StatusBadRequest &&
+				payload["error"] == "unknown_json_field" && payload["message"] == `invalid json: json: unknown field "work_measurement_shadow"` {
+				primary := r.run(streamCtx, checked, hooks)
+				return attachShadow(primary, nil, "remote runner does not support work_measurement_shadow")
+			}
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
 				reason = msg
 			} else if msg, ok := payload["error"].(string); ok && strings.TrimSpace(msg) != "" {
@@ -151,7 +252,10 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if mediaTypeErr != nil || !strings.EqualFold(mediaType, "text/event-stream") {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: fmt.Sprintf("remote execute returned unexpected content type: %s", contentType)}
 	}
-	if err := remoteio.CheckProtocolVersionWithPolicy(resp.Header, r.strictProto); err != nil {
+	if req.Pipeline != nil && resp.Header.Get(model.PipelineV1WorkerHeader) != model.PipelineV1WorkerProtocol {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote worker did not confirm Pipeline V1 execution"}
+	}
+	if err := remoteio.CheckProtocolVersionWithPolicy(resp.Header, r.strictProto || req.Pipeline != nil); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote execute protocol mismatch: " + err.Error()}
 	}
 
@@ -265,12 +369,56 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				remoteErrorReason = remoteErr.Message
 			}
 		case "result":
-			var remoteResult model.RunResponse
-			if err := json.Unmarshal([]byte(event.Data), &remoteResult); err != nil {
+			// Decode the optional shadow separately. Its receipt can use a newer
+			// wire format even when the ordinary verdict is fully compatible.
+			var wire struct {
+				model.RunResponse
+				Shadow           json.RawMessage `json:"work_measurement_shadow"`
+				Observation      json.RawMessage `json:"work_measurement_observation"`
+				CommunicationCPU json.RawMessage `json:"communication_cpu_by_role"`
+			}
+			if err := json.Unmarshal([]byte(event.Data), &wire); err != nil {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "remote result decode failed: " + err.Error()}
+			}
+			remoteResult := wire.RunResponse
+			if req.Pipeline != nil {
+				if err := validateRemotePipelineResult(req, &remoteResult); err != nil {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+				}
 			}
 			if strings.TrimSpace(remoteResult.Reason) == "" {
 				remoteResult.Reason = remoteErrorReason
+			}
+			if err := validateRemoteMeasurementCounters(checked, remoteResult, r.workMeasurement); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
+			if err := validateRemoteWorkClock(checked, remoteResult, effectiveWorkClock(checked, r.workMeasurement, tuning)); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
+			if err := validateRemoteWorkMeasurementTime(checked, remoteResult, r.workMeasurement, tuning); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
+			if err := validateRemoteWorkMeasurementPeerTime(checked, remoteResult, r.workMeasurement, tuning); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
+			if err := validateRemoteWorkMeasurementJudge(checked, remoteResult, r.workMeasurement, tuning); err != nil {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+			}
+			var shadowErr error
+			if wire.Shadow != nil {
+				shadowErr = json.Unmarshal(wire.Shadow, &remoteResult.WorkMeasurementShadow)
+			}
+			if shadowErr == nil {
+				shadowErr = validateRemoteShadow(req, remoteResult, r.workMeasurement, tuning)
+			}
+			if shadowErr != nil {
+				if !req.WorkMeasurementShadow {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: shadowErr.Error()}
+				}
+				// The shadow never decides: an old runner or an unverifiable
+				// comparison leaves the validated primary verdict intact.
+				remoteResult.WorkMeasurementShadow = nil
+				remoteResult = attachShadow(remoteResult, nil, "remote shadow result rejected: "+shadowErr.Error())
 			}
 			switch remoteResult.Status {
 			case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusMLE, model.RunStatusWLE, model.RunStatusRE, model.RunStatusInitFail:
@@ -279,6 +427,14 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			}
 			if remoteResult.TimeMs < 0 || remoteResult.WallTimeMs < 0 || remoteResult.CPUTimeMs < 0 || remoteResult.ProcessCPUTimeMs < 0 || remoteResult.MemoryKB < 0 {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: negative resource measurement"}
+			}
+			if remoteResult.RawCPUTimeMs != nil && *remoteResult.RawCPUTimeMs < 0 {
+				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: negative raw CPU measurement"}
+			}
+			if normalization := remoteResult.CPUTimeNormalization; normalization != nil {
+				if strings.TrimSpace(normalization.Method) == "" || normalization.ScalePPM <= 0 || normalization.ReferenceTimeNs == 0 || normalization.ObservedTimeNs == 0 {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: malformed CPU normalization metadata"}
+				}
 			}
 			if remoteResult.Score != nil && (math.IsNaN(*remoteResult.Score) || math.IsInf(*remoteResult.Score, 0) || *remoteResult.Score < 0 || *remoteResult.Score > 1) {
 				return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: score out of range"}
@@ -299,6 +455,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			}
 			for i := range remoteResult.Steps {
 				step := &remoteResult.Steps[i]
+				if req.Pipeline == nil {
+					step.CPUTimeByRole = nil
+				}
 				switch step.Status {
 				case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusMLE, model.RunStatusWLE, model.RunStatusRE, model.RunStatusInitFail:
 				default:
@@ -306,6 +465,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				}
 				if step.TimeMs < 0 || step.WallTimeMs < 0 || step.CPUTimeMs < 0 || step.ProcessCPUTimeMs < 0 || step.MemoryKB < 0 || step.HandoffBytes < 0 {
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative measurement"}
+				}
+				if step.RawCPUTimeMs != nil && *step.RawCPUTimeMs < 0 {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote step result: negative raw CPU measurement"}
 				}
 				stepStdoutLimit, stepStderrLimit := stdoutResponseLimit, stderrResponseLimit
 				if runvalidation.UsesSteps(req) && i < len(req.Steps) {
@@ -367,6 +529,21 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 					return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid remote result: unrequested sidecar error path: " + clean}
 				}
 			}
+			if req.Communication != nil && len(wire.CommunicationCPU) != 0 && !bytes.Equal(wire.CommunicationCPU, []byte("null")) {
+				rows := remoteCommunicationCPU(req, &remoteResult, wire.CommunicationCPU)
+				remoteResult.CommunicationCPUByRole = rows
+				if rows == nil {
+					// Drop inconsistent role-derived totals while preserving the native
+					// verdict. Workers omitting the new field retain their native totals.
+					remoteResult.CPUTimeNs, remoteResult.RawCPUTimeNs = 0, nil
+				}
+			}
+
+			if req.Communication != nil && req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2 && remoteResult.Status != model.RunStatusInitFail {
+				if err := validatePeerClockCPU(remoteResult); err != nil {
+					return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+				}
+			}
 			var truncated bool
 			remoteResult.Stdout, truncated = capturedOutputValue([]byte(remoteResult.Stdout), stdoutResponseLimit)
 			if truncated {
@@ -376,7 +553,20 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 			if truncated {
 				remoteResult.StderrTruncated = true
 			}
-			remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
+			// Peer coordinators enforce CPU limits for each role. Their total
+			// also includes the judge and other participants, so comparing it
+			// with one contestant's allowance would change a valid verdict.
+			// A validated Durante judgment compares model time to the nominal
+			// allowance. Its raw CPU belongs to the independent safety envelope.
+			if !req.WorkMeasurementJudge && !spjPeerClocksRequested(req) && !stagedPeerClocksRequested(req) && req.Interactor == nil && req.Communication == nil {
+				remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource = applyFinalCPUTimeStatus(remoteResult.Status, remoteResult.Reason, remoteResult.VerdictSource, remoteResult.CPUTimeMs, req.Limits.TimeMs, strings.HasPrefix(remoteResult.VerdictSource, "cpu_time_cgroup"))
+			}
+			policy := r.workMeasurement
+			if (legacySteps || standaloneInteractive) && observationBudget == 0 {
+				// Retain the native stage identities, but no replay report is eligible.
+				policy.ResourcePolicy = nil
+			}
+			remoteResult.WorkMeasurementObservation = remoteObservation(req, remoteResult, policy, wire.Observation)
 			return remoteResult
 		}
 	}

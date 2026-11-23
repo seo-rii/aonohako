@@ -48,6 +48,28 @@ Proof. reflexivity. Qed.
 	malbolgeEcho := []model.Source{source("Main.mal", "ubO")}
 
 	return map[string][]languageSemanticCase{
+		"unlambda": {
+			{
+				name:           "continuation-reenters-application",
+				sources:        []model.Source{source("Main.unl", "``.a`ci.b\n")},
+				expectedStdout: "aab",
+			},
+			{
+				name:                  "reject-incomplete-application",
+				sources:               []model.Source{source("Main.unl", "`i\n")},
+				expectedCompileStatus: model.CompileStatusCompileError,
+			},
+		},
+		"lazyk": {{
+			name:              "reject-unclosed-expression",
+			sources:           []model.Source{source("Main.lazy", "(\n")},
+			expectedRunStatus: model.RunStatusRE,
+		}},
+		"intercal": {{
+			name:                  "reject-excessive-politeness",
+			sources:               []model.Source{source("Main.i", "PLEASE DO .1 <- #1\nPLEASE DO .2 <- #1\nPLEASE GIVE UP\n")},
+			expectedCompileStatus: model.CompileStatusCompileError,
+		}},
 		"coq": {{
 			name:                  "reject-false-equality-proof",
 			sources:               coqFalseProof,

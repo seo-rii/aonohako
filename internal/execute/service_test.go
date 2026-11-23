@@ -26,6 +26,7 @@ import (
 	"aonohako/internal/platform"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/security"
+	"aonohako/internal/timing"
 	"aonohako/internal/workspacequota"
 )
 
@@ -1380,7 +1381,7 @@ func TestEvaluateRunStatusReportsVerdictSource(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			status, _, _, source := evaluateRunStatus(context.Background(), Workspace{}, &tc.req, tc.res, tc.judgeOut, tc.judgeSource, "", nil, config.DefaultRuntimeTuningConfig(), "")
+			status, _, _, source := evaluateRunStatus(context.Background(), Workspace{}, &tc.req, tc.res, tc.judgeOut, tc.judgeSource, "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 			if status != tc.wantStatus {
 				t.Fatalf("status = %q, want %q", status, tc.wantStatus)
 			}
@@ -3148,7 +3149,7 @@ func TestMaterializeRejectsOversizedBinary(t *testing.T) {
 		Lang: "binary",
 		Binaries: []model.Binary{{
 			Name:    "big.bin",
-			DataB64: b64Raw(bytes.Repeat([]byte("x"), 17<<20)),
+			DataB64: b64Raw(make([]byte, maxBinaryFileBytes+1)),
 			Mode:    "exec",
 		}},
 	}

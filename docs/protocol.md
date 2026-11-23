@@ -14,7 +14,7 @@ control planes fail closed because the current remote protocol does not
 negotiate downstream capabilities. See
 [Pipeline V1](pipeline-v1.md) for the request contract and security invariants.
 
-When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner for legacy modes, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. Pipeline V1 is rejected before forwarding until downstream capability negotiation is available; the remote runner client still defensively redacts Pipeline responses. `/compile` returns the remote compile result with the same buffered `log` and `result` shape, also honoring `emit_logs=false`.
+When `aonohako` is configured with remote execution transport, the local server keeps the same SSE contract for `/compile` and `/execute`. `/execute` forwards `log`, `image`, `error`, and `result` from the remote runner for legacy modes, except that request-level `emit_logs=false` suppresses contestant stdout/stderr `log` events. Pipeline V1 requires an authenticated worker capability check and confirmation on the execution response. Pipeline streams expose the native outcome and verified per-step observations while keeping artifacts and checker output private. `/compile` returns the remote compile result with the same buffered `log` and `result` shape, also honoring `emit_logs=false`.
 
 ## Event Types
 
@@ -136,8 +136,15 @@ not duplicate stdout/stderr before `result`.
   "status": "Accepted",                 // see Status Codes below
   "time_ms": 42,                        // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                   // wall-clock execution time (ms)
-  "cpu_time_ms": 17,                    // finalized target CPU time after helper-baseline subtraction (ms)
-  "process_cpu_time_ms": 24,            // diagnostic raw helper + target process CPU time (ms)
+  "cpu_time_ms": 30,                    // authoritative target CPU time; normalized only when explicitly enabled (ms)
+  "raw_cpu_time_ms": 49,                // scheduled host CPU time before Cloud Run normalization (ms)
+  "process_cpu_time_ms": 55,            // diagnostic raw helper + target process CPU time (ms)
+  "cpu_time_normalization": {           // present when this runner normalized CPU time
+    "method": "go-fixed-int-v1",
+    "scale_ppm": 600000,
+    "reference_time_ns": 60000000,
+    "observed_time_ns": 100000000
+  },
   "memory_kb": 8192,                    // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                       // nullable; process exit code
   "stdout": "",                         // response-clipped stdout (default max `64 KiB`; explicit max `8 MiB`)
@@ -156,6 +163,7 @@ not duplicate stdout/stderr before `result`.
       "status": "Accepted",
       "wall_time_ms": 12,
       "cpu_time_ms": 8,
+      "raw_cpu_time_ms": 13,
       "memory_kb": 4096,
       "handoff_bytes": 128
     },
@@ -165,6 +173,7 @@ not duplicate stdout/stderr before `result`.
       "status": "Accepted",
       "wall_time_ms": 30,
       "cpu_time_ms": 22,
+      "raw_cpu_time_ms": 36,
       "memory_kb": 8192
     }
   ],
@@ -177,11 +186,125 @@ not duplicate stdout/stderr before `result`.
 }
 ```
 
-For helper-backed runs, `cpu_time_ms` is finalized from process wait usage after
-subtracting the CPU baseline captured before target release. This retains fast
-target CPU consumed after the last watchdog sample. `process_cpu_time_ms` is raw
-helper-plus-target diagnostic usage and must not be used for contestant timing
-or verdicts.
+When `work_measurement: true` is requested from a Durante-enabled runner,
+ordinary runs add a singular `work_measurement` report. Interactive and
+communication-v1/v2 runs instead add `work_measurements`: an ordered array of
+`role`, `program_id`, optional `participant_index`, `execution_status`, optional
+`exit_code` and `termination_source`, and `report`. Interactive order is
+contestant then interactor; communication order is participants by zero-based
+index followed by manager. The execution status is the raw sandbox status,
+before a manager/interactor verdict reinterprets coordinator shutdown. Each
+report retains its `diagnostic_only` contract; instruction counts never replace
+CPU or memory fields or determine a verdict. A failed role exposes unavailable
+totals while already completed peers can retain theirs. A pre-execution
+initialization failure may omit the array. Forwarding rejects missing, repeated,
+misidentified, or incompatible role reports after execution.
+An early communication runtime-error response supplies unstarted role entries
+with initialization-failure execution status and no exit code or report, retaining
+the existing outer failure reason.
+See [Durante diagnostics](durante.md#interactive-and-communication-observations).
+The `work_measurement_limits` envelope remains ordinary-only and is rejected for
+interactive and communication requests.
+
+A complete report can include `rep_breakdown` with `version: 1`, `movs_bytes`,
+`stos_bytes`, `movs_entries` and `stos_entries`. It partitions the existing
+`rep_bytes`/`rep_entries` totals using unsigned 64-bit counters and survives
+SSE forwarding for each role. An absent object means legacy unspecified detail;
+explicit zeros remain zeros. Malformed detail is rejected, and unavailable
+reports omit it. This extension keeps report schema 1 and the existing time
+formula. See [the result contract](durante.md#result-contract) for byte semantics
+and current installation/profile compatibility.
+
+With explicit `work_measurement_peer_time` budgets, interactive and communication
+v1/v2 results additionally attach `time_budget` to each role. It contains
+`version: 1`, `authority: "diagnostic_only"`, the matched `budget_ms`, and either
+`estimate` (the full time-estimate model and coefficients) plus `exceeded`, or an
+`unavailable` reason with both estimate/comparison fields absent. The comparison
+is strictly `estimate.nanoseconds > budget_ms * 1000000`, including false at
+equality. Results stay in canonical role order even when request budgets are
+reordered; seats using the same program remain separate.
+
+Only normally exited complete convertible roles receive estimates. Coordinator
+stops and unstarted roles return `execution_not_complete`; missing/incompatible
+observations or signals/partial REP/missing detail/overflow remain unavailable.
+One role's failure does not discard another completed role's estimate. Status,
+score, match outcome, raw counters, CPU, and RSS remain unchanged. These are
+post-execution diagnostics, not online stopping or expanded raw-resource limits.
+The option cannot use the ordinary time flag or resource envelope. Without the
+option, `time_budget` is absent. Remote forwarding requires every requested role's
+budget result and recomputes it from the independently configured operator model;
+unsolicited `time_budget` results, mismatches, and old runners ignoring the option are rejected.
+See [per-role budget configuration](durante.md#per-role-diagnostic-time-budgets).
+
+An ordinary envelope request with an explicitly approved source/runtime profile can opt into
+`work_measurement_time: true`. With a compatible operator model, the final
+`work_measurement_execution` includes `time_estimate` containing the model ID and
+version, reference/runtime identities, family, engine/dispatch profiles, exact
+integer coefficients, method, `diagnostic_only` authority, and estimated
+`nanoseconds`/rounded-up `milliseconds`. `nominal_time_exceeded` is present with
+the estimate and equals `nanoseconds > nominal_limits.time_ms * 1,000,000`;
+equality is false. This field does not change the verdict.
+
+If estimation is unavailable, both fields are absent and
+`time_estimate_unavailable` contains a reason such as `execution_cancelled`,
+`execution_resource_exhausted`, or `observation_not_convertible`. A complete raw
+observation with signals, partial REP coverage, or overflowing estimated time
+can remain complete while conversion is unavailable. An execution rejected before
+initialization may omit the diagnostic execution object. Without the explicit
+flag, no estimate, nominal comparison, conversion-unavailable or eligibility field
+is emitted. With the flag and an execution envelope, the optional additive
+`time_estimate_eligibility` object has `version: 1`, `eligible`, and an ordered
+`reason_codes` array. Success uses an explicit empty array; exclusions such as
+`signals_observed`, `unsupported_rep_entries`, and `rep_breakdown_missing` remain
+ineligible and retain the existing unavailable string. See the
+[eligibility stages and codes](durante.md#structured-conversion-eligibility).
+
+Local execution and remote forwarding require their own matching operator
+policy (legacy or shared-model registry) and downstream execution-image identity. Remote forwarding recomputes and
+verifies the estimate rather than adopting returned coefficients. Present
+eligibility must exactly match its recomputed reasons. Legacy omission is allowed
+without weakening estimate or unavailable-string validation; explicit null and
+ambiguous/malformed objects are rejected. Raw CPU/RSS
+and the envelope's initialization-failure status remain unchanged, with no score
+or CPU normalization. Production coefficients are not supplied by this API.
+See [reference-time configuration and examples](durante.md#explicit-reference-time-calculator).
+
+For helper-backed runs, target CPU time is finalized from process wait usage
+after subtracting the CPU baseline captured before target release. This retains
+fast target CPU consumed after the last watchdog sample. By default,
+`cpu_time_ms` reports scheduled host CPU time without performance normalization.
+The example above illustrates experimental normalization explicitly enabled
+with `AONOHAKO_CPU_NORMALIZATION=true` on a Cloud Run embedded helper. In that
+mode, the helper translates scheduled host time through a startup fixed-work
+calibration. `cpu_time_ms` is then the normalized, verdict-authoritative value;
+`raw_cpu_time_ms` preserves the scheduled host value. The same calibration is
+inverted before process/cgroup watchdog and `RLIMIT_CPU` enforcement, so the
+reported value and the CPU TLE boundary use the same unit.
+
+`cpu_time_normalization` identifies the calibration method and immutable
+per-instance scale. `scale_ppm` is normalized time per raw host time in parts
+per million. A remote control plane passes these fields through and does not
+calibrate them again. `process_cpu_time_ms` remains raw helper-plus-target
+diagnostic usage and must not be used for contestant timing or verdicts.
+
+On a calibrated Cloud Run helper, the wall deadline is an outer supervision
+guardrail. It is never shorter than the public `limits.time_ms` and includes
+enough bounded slack for a CPU-bound target to consume the host CPU budget that
+corresponds to that normalized limit. `wall_time_ms` always reports actual
+elapsed wall time. Sleeping or blocked programs are still terminated by this
+guardrail, but its exact raw duration can be longer on a slower calibrated host.
+
+Remote controllers allow for the maximum supported raw CPU expansion (4x) plus
+the runner's wall slack for every sequential execution/SPJ stage, then add a
+single 30-second operation overhead. Concurrent contestant/interactor limits
+contribute their maximum, not their sum. This keeps the outer deadline from
+preempting a valid calibrated execution before its per-instance scale is known;
+a shorter caller deadline remains authoritative.
+
+Fixed-work calibration attempts to compensate for host-throughput differences.
+Its effect on timing stability and TLE fairness remains experimental; different
+instruction mixes, managed runtimes, memory systems, or later host contention
+may respond differently and can become less stable after calibration.
 
 `capture_limits.stdout_bytes` and `capture_limits.stderr_bytes` optionally
 apply a separate, per-stream cap to `log` events and the top-level and step

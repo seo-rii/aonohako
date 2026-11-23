@@ -21,6 +21,7 @@ The canonical numeric request and capture limits are generated from code in
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
   "go_module_mode": "stdlib",                // optional Go imports: "stdlib" | "installed"
   "rust_crate_mode": "stdlib",               // optional Rust imports: "stdlib" | "installed"
+  "disallowed_cpu_features": ["avx"],         // optional C/C++ object-code restrictions: "avx" | "simd"
   "emit_logs": true                          // optional compiler stdout/stderr log SSE events; defaults to true
 }
 ```
@@ -57,14 +58,34 @@ target by its Cargo name or submitted source path; otherwise `default-run` or a
 sole binary target is used. The server defaults to `stdlib`; a problem mapping
 or the operator's explicit request policy must authorize `installed`.
 
+`disallowed_cpu_features` selects an optional C/C++ compile policy on Linux
+x86-64 workers. `avx` rejects AVX-family instructions, including AVX2 and
+AVX-512; `simd` includes that restriction and rejects packed SIMD computation
+while retaining scalar SSE operations, data movement, and register zeroing.
+Omitting the field or supplying an empty array preserves existing compilation.
+Unknown values, duplicates, and nonempty policies for other languages are
+rejected. The policy inspects submitted object code before linking; it does
+not automatically attach a policy to the resulting artifacts. To enforce the
+restriction while executing them, also supply `disallowed_cpu_features` in
+the `/execute` request. See [CPU feature policy](cpu-feature-policy.md) for
+examples, diagnostics, and the different compile and execution scopes.
+
 `version` is optional and currently applies to C, C++, Java, Kotlin/JVM, and
 Rust compile profiles. C/C++ values select the language standard (`"c99"`,
 `"c23"`, `"17"`, `"gnu++23"`), Java values select `javac --release` (`"8"`,
-`"11"`, `"17"`, `"21"`), Kotlin/JVM values select the matching
+`"11"`, `"17"`, `"21"`, `"25"`), Kotlin/JVM values select the matching
 `kotlinc -jvm-target` and Java-source `javac --release` (`"17"` or
 `"jvm-target=17"`), and Rust values select the edition (`"2018"`, `"2021"`,
 `"2024"`). Existing language aliases such as `C11`, `CPP20`, `JAVA17`,
 `KOTLIN_JVM17`, and `RUST2021` remain supported.
+
+`JAVA25` or a Java profile with `version: "25"` uses the separate JDK 25
+toolchain. Execute those artifacts with `lang: "java25"` (or `"JAVA25"`).
+The generated `type-b` and `type-i` runtime images include this toolchain, as
+does the isolated `ci-java25` smoke image. Java 25 supports compact source files
+and instance `main` methods without preview flags; the default main class is
+still `Main`. Existing Java selections keep their current release targets and
+the `java` runtime. Kotlin/JVM does not accept target 25.
 
 ## `POST /compile` — Response
 
@@ -99,6 +120,11 @@ error.
 ```jsonc
 {
   "lang": "binary",                          // runtime language key (see Supported Languages)
+  "work_measurement": false,                // optional Durante diagnostics; requires source-language profiles when true
+  "work_measurement_time": false,           // optional reference-time estimate; also requires the raw envelope and an approved operator execution profile
+  "work_measurement_judge": false,          // optional work-based verdict (virtual ms); operator-gated, requires work_measurement_time + envelope; see docs/durante-judging.md
+  "work_measurement_shadow": false,         // optional non-deciding comparison: ordinary verdict plus a judge-mode shadow run; requires work_measurement_limits only
+  "work_measurement_peer_time": null,       // optional version-1 per-role diagnostic budgets for interactor/communication; cannot use the ordinary time flag/envelope
   "binaries": [                              // files to place in work directory (max 512 entries)
     {
       "name": "Main",                       // filename
@@ -109,7 +135,8 @@ error.
   "stdin": "hello\n",                        // input fed to process stdin (max 64 MiB)
   "expected_stdout": "hello\n",              // expected output for built-in diff (max 64 MiB)
   "limits": {
-    "time_ms": 2000,                         // wall-clock time limit, 1..600000 ms
+    "time_ms": 2000,                         // CPU time limit, 1..600000 ms; basis for the default wall allowance
+    "wall_time_ms": 6000,                    // optional unscaled wall-clock time limit, 1..600000 ms; 0/omitted uses runner defaults
     "memory_mb": 256,                        // memory limit, 1..4096 MB
     "output_bytes": 65536,                   // optional stdout/stderr capture cap, 0..67108864
     "workspace_bytes": 134217728             // optional workspace cap, 0..1073741824
@@ -121,6 +148,7 @@ error.
   "problem_id": "contest-1/a",               // optional problem policy key for server-selected runtime profile
   "runtime_profile": "low-memory",           // optional operator-defined runtime tuning profile
   "python_library_mode": "stdlib",           // optional request-wide CPython/PyPy imports: "stdlib" | "installed"
+  "disallowed_cpu_features": [],             // optional native contestant execution policy: "avx" | "simd"
   "enable_network": false,                   // outbound network request flag; honored only when server policy allows request-controlled network
   "emit_logs": true,                         // optional contestant stdout/stderr log SSE events; defaults to true
   "entry_point": "src/main.py",              // optional submitted file path to run; some runtimes use a class/module/procedure/top-level name
@@ -169,13 +197,101 @@ manifests or command arguments. Because GDL sources are compiled through its
 interactive command channel, submitted GDL paths are limited to ASCII letters,
 digits, `.`, `_`, `-`, and `/`.
 
+A nonempty `disallowed_cpu_features` list selects instruction-checked execution
+for a native Linux x86-64 ELF contestant whose normalized runtime is `binary`.
+The values and maximum of two entries match `/compile`; omitted, empty, or
+`null` values preserve ordinary execution. The policy is request-wide for
+contestant programs in ordinary execution, interactive execution, legacy
+steps, and Pipeline V1. Trusted interactors and SPJs do not inherit it.
+`communication`, contestant `enable_network`, `file_outputs`,
+`sidecar_outputs`, file
+handoffs, and Pipeline V1 `participant_file` outputs
+are unsupported and rejected before admission. Trusted interactor output files
+remain available to Pipeline V1. Native file, process and thread operations
+remain subject to the existing sandbox.
+
+The packaged Durante/DynamoRIO runtime checks instructions before they execute,
+including application libraries and dynamically generated code. Static and
+dynamic ELF executables are accepted. The policy can share one native run with
+`work_measurement` and its diagnostic limits; policy-only requests do not expose
+work measurements or require measurement opt-in.
+`simd` permits scalar SSE operations and ordinary data movement, but can reject
+packed libc instructions reached by otherwise scalar source. CPU, wall-time,
+and memory accounting include instrumentation costs. Durante's existing
+application-mutable trust level applies: application code may tamper with its
+in-process instrumentation or reporting. A recorded policy violation returns
+`Runtime Error` with `verdict_source: "cpu_feature_policy"`; unavailable backend
+or unsupported executable format returns `Container Initialization Failed`.
+Invalid policy values or unsupported request combinations return HTTP 400
+`invalid_request`. See [CPU feature policy](cpu-feature-policy.md) for the
+execution boundary, pipeline diagnostics, and operator packaging.
+
 `limits.time_ms` and `limits.memory_mb` are required and bounded at the API
-boundary. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
+boundary. `limits.time_ms` is the CPU budget. An optional `limits.wall_time_ms`
+selects an independent hard wall-clock deadline for blocked I/O, deadlocks and
+sandbox stalls. This explicit deadline is never scaled by CPU normalization.
+When it is omitted or zero, ordinary execution uses `time_ms` as its base wall
+allowance. Interactive execution, including Pipeline V1 interactive steps, uses
+`min(600000 ms, max(3 * time_ms, time_ms + 3000 ms))` as its base allowance.
+With CPU normalization enabled, either default is extended to cover the
+calibrated CPU allowance and scheduling slack if that is larger; this effective
+default can exceed 600000 ms on slower hosts. CPU accounting and CPU TLE
+classification continue to use `time_ms`.
+Communication mode uses runner-managed wall allowances and rejects nonzero
+`limits.wall_time_ms`. Optional `limits.output_bytes` and `limits.workspace_bytes` default to
 server-side values when `0` or omitted, but values above the hard API caps are
 rejected before the request enters the run queue. `spj.limits` uses the same
 upper caps; omitted or zero SPJ fields fall back to SPJ defaults.
 `interactor.limits` uses the same caps; omitted values inherit the contestant
 time/output policy and use safe memory/workspace defaults where needed.
+`work_measurement: true` enables configured Durante diagnostics for ordinary,
+interactive, and communication-v1/v2 execution. Every measured role must name an
+enabled source-language profile, such as `CPP20`; `binary` alone is ambiguous.
+Interactive requests name both `lang` and `interactor.lang`; communication names
+each `programs[].lang` and leaves top-level `lang` empty. SPJs, pipelines, entry
+modes, and legacy steps do not support this flag. The separate
+`work_measurement_limits` raw diagnostic envelope supports ordinary runs only.
+`work_measurement_time: true` additionally requests an operator-configured
+reference-time estimate. It requires `work_measurement: true`, a valid
+`work_measurement_limits` envelope, and an ordinary registered source profile.
+The legacy operator policy supports one C/C++ source profile. The optional shared
+model registry can explicitly bind compatible source profiles, including CPython,
+PyPy and other supported families, to the same coefficients. Family registration
+alone never enables a time model; JVM remains unavailable pending qualification.
+Generic `binary`, SPJs, pipelines, entry modes, and steps remain unsupported.
+Peers use the separate `work_measurement_peer_time` object described below.
+Requests cannot select coefficients. The operator binds the model to the canonical
+source profile, engine/dispatch profile and actual immutable Durante execution
+image; a remote control plane uses the downstream image/model.
+Omitting the flag preserves existing measurement behavior. Estimated time remains
+diagnostic and does not change raw resource accounting or grant a student verdict.
+
+`work_measurement_judge: true` turns the diagnostic observation into an actual
+`Accepted`/`Wrong Answer`/`Time Limit Exceeded`/`Runtime Error` verdict, using
+`limits.time_ms` as a virtual-millisecond limit for the configured runtime. It is
+operator-gated (`AONOHAKO_DURANTE_JUDGE_MODE`) per family and requires
+`work_measurement: true`, `work_measurement_time: true` and a valid
+`work_measurement_limits` envelope. Unlike the pure diagnostic envelope, a judge
+response sets `status` to the verdict and may set `score`, and returns a
+`work_measurement_judgment` object. An observation whose counts cannot convert
+(signals, partial REP, overflow) is reported as `Runtime Error`, never silently
+accepted. A raw resource stop returns the unscored `Container Initialization Failed` status with
+`work_measurement_judgment.state = "resource_exhausted"` and its termination source. The
+counts remain `diagnostic_only` and application-mutable; `AONOHAKO_DURANTE_JUDGE_INTEGRITY=plausibility`
+withholds a verdict when the reported work is implausibly small against the
+instrumented run's own raw CPU time. See [work-based judging](durante-judging.md).
+
+`work_measurement_shadow: true` keeps the ordinary verdict authoritative and adds
+a `work_measurement_shadow` comparison with a separate judge-mode execution of the
+same input under `work_measurement_limits`. It cannot be combined with the other
+`work_measurement` options, and operator mode `shadow` or `on` must judge the
+family; otherwise the comparison is reported `unavailable` without affecting the
+verdict. For URL stdin a completed pair includes `work_measurement_shadow.stdin_sha256`,
+the lowercase SHA-256 of the input bytes shared by the two executions. See [shadow comparison](durante-judging.md#shadow-comparison).
+Requested conversion also reports versioned `time_estimate_eligibility` when an
+execution envelope exists, identifying exclusions while preserving the existing
+`time_estimate_unavailable` strings. It does not relax signal or REP coverage checks.
+See [Durante diagnostics](durante.md) for operator configuration and result semantics.
 `capture_limits` is separate from `limits.output_bytes`. An omitted object or
 member retains the legacy response cap of `min(limits.output_bytes, 64 KiB)`;
 an explicit `0` returns no content for that stream. These limits clip
@@ -356,7 +472,9 @@ file/sidecar output capture, and `ignore_tle`. `input`/`input_url` and the
 optional `answer`/`answer_url` pairs are mutually exclusive. `limits` applies
 to every participant. Manager and aggregate ceilings are runner policy: the
 manager currently receives 512 MiB and up to the participant time plus one
-second, within the public time cap.
+second, within the public time cap. Communication wall allowances are derived
+from the CPU limits and runner scheduling policy; an independent nonzero
+`limits.wall_time_ms` is rejected rather than silently ignored.
 
 Every participant receives its zero-based participant ID as the final command
 argument. The manager receives these arguments in order:
@@ -418,7 +536,14 @@ root. Self-hosted cgroup timing is unchanged.
   "status": "Accepted",                     // Accepted|Wrong Answer|Time Limit Exceeded|Memory Limit Exceeded|Workspace Limit Exceeded|Runtime Error|Container Initialization Failed
   "time_ms": 42,                            // compatibility alias for wall_time_ms
   "wall_time_ms": 42,                       // wall-clock time from CLOCK_MONOTONIC (ms)
-  "cpu_time_ms": 17,                        // CPU time from process CPU clock when available (ms)
+  "cpu_time_ms": 30,                        // authoritative CPU time; normalized only when explicitly enabled (ms)
+  "raw_cpu_time_ms": 49,                    // scheduled host CPU time before normalization (ms)
+  "cpu_time_normalization": {               // present when normalization is active
+    "method": "go-fixed-int-v1",
+    "scale_ppm": 600000,
+    "reference_time_ns": 60000000,
+    "observed_time_ns": 100000000
+  },
   "memory_kb": 8192,                        // best observed target peak memory (RSS/cgroup, KB)
   "exit_code": 0,                           // nullable; process exit code
   "stdout": "",                             // truncated stdout (up to capture_limits.stdout_bytes when set, on WA/RE only)
@@ -436,6 +561,7 @@ root. Self-hosted cgroup timing is unchanged.
       "status": "Accepted",
       "wall_time_ms": 12,
       "cpu_time_ms": 8,
+      "raw_cpu_time_ms": 13,
       "memory_kb": 4096,
       "handoff_bytes": 128
     },
@@ -445,6 +571,7 @@ root. Self-hosted cgroup timing is unchanged.
       "status": "Accepted",
       "wall_time_ms": 30,
       "cpu_time_ms": 22,
+      "raw_cpu_time_ms": 36,
       "memory_kb": 8192
     }
   ],
@@ -497,6 +624,47 @@ When `interactor` is provided, `aonohako` starts the contestant and interactor
 at the same time in separate sandbox workspaces. Contestant stdout is streamed
 to interactor stdin, and interactor stdout is streamed to contestant stdin.
 
+With `work_measurement: true`, `work_measurements` returns the contestant and
+interactor reports in that order, using matching `role` and `program_id` values.
+Each entry contains `execution_status`, optional `exit_code`/`termination_source`,
+and its diagnostic `report`. Communication uses the same array for participants
+in index order followed by the manager, with requested program IDs and a
+zero-based `participant_index` only for participants. These modes omit the
+ordinary singular `work_measurement`; the reports do not change verdicts or
+combine the peers' instruction counts. Each complete report may include optional
+`rep_breakdown` MOVS/STOS bytes and entries; absence means unspecified detail,
+and stopped roles omit all totals. See [the per-role contract](durante.md#interactive-and-communication-observations).
+
+To compare each role's completed estimate with an explicit diagnostic budget,
+also set `work_measurement_peer_time`. The object has `version: 1` and `budgets`,
+with one `{role, program_id, participant_index?, time_ms}` entry for every actual
+role. `time_ms` is an integer from 1 through 600000; `participant_index` is required
+only for participants. Request order is irrelevant, and repeated uses of one
+program need distinct seat entries. For example, interactive budgets are:
+
+```json
+{
+  "work_measurement": true,
+  "work_measurement_peer_time": {
+    "version": 1,
+    "budgets": [
+      {"role": "contestant", "program_id": "contestant", "time_ms": 1000},
+      {"role": "interactor", "program_id": "interactor", "time_ms": 2000}
+    ]
+  }
+}
+```
+
+All roles need an operator-approved source/image/dispatch time profile before
+execution or remote upload. This object supplies no model coefficients and
+cannot be mixed with `work_measurement_time`, `work_measurement_limits`, or an
+ordinary/SPJ/pipeline/steps request. The result adds `time_budget` to each role,
+with either the complete `estimate` and strict nanosecond `exceeded` comparison,
+or an `unavailable` reason. It is diagnostic after execution: it does not stop
+peers, expand their resource limits, or alter score/match/verdict/CPU/RSS.
+Omitting the object preserves existing behavior. See
+[per-role budgets and configuration](durante.md#per-role-diagnostic-time-budgets).
+
 The interactor is invoked as:
 
 ```
@@ -538,6 +706,7 @@ The interactor is invoked as:
 | ASM | `binary` | `gcc -nostdlib -static -no-pie` |
 | NASM | `binary` | `nasm -felf64 -dONLINE_JUDGE=1` + `gcc -nostdlib -static -no-pie` |
 | JAVA, JAVA8–21 | `java` | `javac --release <v>` |
+| JAVA25 | `java25` | `/usr/lib/jvm/aonohako-java25/bin/javac --release 25 -encoding UTF-8` |
 | GROOVY | `groovy` | `groovyc -d <dir>` |
 | SCALA | `scala` | `scalac -d <dir>` |
 | CLOJURE | `clojure` | `clojure` reader parse loop |
@@ -642,6 +811,11 @@ The interactor is invoked as:
 | WHITESPACE | `whitespace` | Structural validation (whitespace-only source) |
 | BF | `brainfuck` | Bracket-balance validation |
 | LOLCODE | `lolcode` | Pass-through artifacts (requires `.lol`) |
+| SHAKESPEARE, SPL | `shakespeare` | `shakespeare_run.py --check` parse check (requires `.spl`) |
+| PIET | `piet` | PNG/PPM signature validation (requires `.png` or `.ppm`) |
+| UNLAMBDA | `unlambda` | Single complete expression validation (requires `.unl`) |
+| LAZYK, LAZY_K | `lazyk` | Pass-through artifacts (requires `.lazy`) |
+| INTERCAL | `intercal` | `CC="gcc -std=gnu17" ick -b <target>.i` |
 | WASM | `wasm` | `wat2wasm` or `wasm-validate` |
 | AHEUI | `aheui` | Pass-through artifacts |
 | UHMLANG, TEXT | `none` | Pass-through |
@@ -667,6 +841,7 @@ The interactor is invoked as:
 | `groovy` | `java <JVM memory flags> -cp <classes:groovy jars> <MainClass>` |
 | `scala` | `java <JVM memory flags> -cp <classes:scala jars> <MainClass>` |
 | `java` | `java <JVM memory flags> -jar <file>` |
+| `java25` | `/usr/lib/jvm/aonohako-java25/bin/java <JVM memory flags> -jar <file>` |
 | `kotlin-jvm` | `java <JVM memory flags> -jar <file>` |
 | `erlang` | `env ERL_AFLAGS=... erlexec/erl +S ... +A ... -noshell -pa <dir> -s <module> <function> -s init stop` |
 | `prolog` | `swipl -q -f <file> -g main -t halt` |
@@ -725,6 +900,10 @@ The interactor is invoked as:
 | `befunge` | `python3 /usr/local/lib/aonohako/befunge.py <file>` |
 | `brainfuck` | `python3 /usr/local/lib/aonohako/brainfuck.py <file>` |
 | `lolcode` | `lci <file>` |
+| `shakespeare` | `/opt/shakespeare/bin/python3 /usr/local/lib/aonohako/shakespeare_run.py <file>` |
+| `piet` | `npiet -q <file>` |
+| `unlambda` | `python3 /usr/local/lib/aonohako/unlambda.py <file>` |
+| `lazyk` | `lazyk <file>` |
 | `wasm` | `wasmtime run --dir=. -O memory-reservation=... -O memory-reservation-for-growth=0 -O memory-guard-size=65536 -W max-memory-size=... -W max-memories=1 -W max-instances=1 -W max-tables=1 -W max-wasm-stack=1048576 <file>` |
 | `aheui` | `python3 -c '<aheui entry_point wrapper>' <file>` |
 | `text` | `cat <file>` |
@@ -752,8 +931,19 @@ for the compile phase and toolchain smoke tests.
 ### Runtime Measurements
 
 - `wall_time_ms` uses `CLOCK_MONOTONIC`
-- `cpu_time_ms` samples the Linux process CPU clock while the submission is
+- target CPU time samples the Linux process CPU clock while the submission is
   running and uses cgroup `cpu.stat` when per-run cgroups are enabled
+- performance normalization is disabled by default; `cpu_time_ms` reports
+  scheduled host CPU time without a performance scale. With the experimental
+  `AONOHAKO_CPU_NORMALIZATION=true` opt-in, Cloud Run embedded helpers calibrate
+  fixed single-thread integer work at startup, publish the scheduled value as
+  `raw_cpu_time_ms`, and scale the verdict-authoritative `cpu_time_ms` to a
+  fixed-work reference (60 ms by default); watchdogs and `RLIMIT_CPU` use the
+  inverse raw-host budget. The response example above illustrates this opt-in
+  mode, not the default
+- `cpu_time_normalization` reports the versioned method, parts-per-million
+  scale, reference duration, and measured per-instance calibration duration;
+  remote control planes pass it through without applying a second scale
 - `time_ms` is retained as a compatibility alias for `wall_time_ms`
 - `verdict_source` is diagnostic and non-authoritative. Local helper runners
   may report values such as `stdout`, `file_output`, `spj`, `exit_code`,

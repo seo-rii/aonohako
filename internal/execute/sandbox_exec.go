@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
@@ -31,35 +33,96 @@ import (
 )
 
 type execResult struct {
-	Status           string
-	ExitCode         *int
-	Stdout           []byte
-	Stderr           []byte
-	StdoutTruncated  bool
-	StderrTruncated  bool
-	MemoryKB         int64
-	WallTimeMs       int64
-	CPUTimeMs        int64
-	ProcessCPUTimeMs int64
-	Reason           string
-	VerdictSource    string
+	WorkMeasurement   *durante.Report
+	workClockProgress *durante.WorkClockProgress
+	targetPID         int
+	Status            string
+	ExitCode          *int
+	Stdout            []byte
+	Stderr            []byte
+	StdoutTruncated   bool
+	StderrTruncated   bool
+	MemoryKB          int64
+	WallTimeMs        int64
+	CPUTimeMs         int64
+	CPUTimeNs         uint64
+	RawCPUTimeMs      *int64
+	RawCPUTimeNs      *uint64
+	CPUAccounting     *model.CPUAccounting
+	ProcessCPUTimeMs  int64
+	Reason            string
+	VerdictSource     string
 	// The typed stdout/stderr copy error from cmd.Wait, if any. Only interactive
 	// verdict reconciliation may discount an expected peer shutdown.
-	streamRelayErr   error
+	streamRelayErr error
+
+	workClockReceipt   *durante.WorkClockReceipt
+	peerClockUsage     *model.PeerClockUsage
+	peerClockRawSource string
 }
 
-func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (int64, bool) {
+func cpuTimeAfterBaseline(usageNs, baselineNs uint64, baselineSet bool) (uint64, bool) {
 	if !baselineSet || usageNs < baselineNs {
 		return 0, false
 	}
-	return timing.MilliFromNanoseconds(usageNs - baselineNs), true
+	return usageNs - baselineNs, true
+}
+
+// A poll is only a lower bound: the final wait sample must account for the
+// unsampled tail before a no-cgroup execution can be considered successful.
+func finalizeWaitCPUTime(result *execResult, usageNs uint64, available bool) {
+	finalCPUNs, ok := cpuTimeAfterBaseline(usageNs, result.CPUAccounting.RusageBaselineNs, available)
+	if !ok {
+		if result.ExitCode != nil && *result.ExitCode != 0 {
+			return // Higher-level classification retains the contestant's RE.
+		}
+		if result.Status == "OK" || result.Status == model.RunStatusAccepted {
+			result.Status = model.RunStatusInitFail
+			result.Reason = "sandbox final CPU accounting unavailable or below baseline"
+			result.VerdictSource = "cpu_accounting"
+		}
+		return
+	}
+	result.CPUAccounting.WaitTargetNs = finalCPUNs
+	if finalCPUNs > result.CPUTimeNs {
+		result.CPUTimeNs = finalCPUNs
+		result.CPUAccounting.SelectedSource = "wait_rusage"
+	}
+}
+
+func normalizeExecResultCPU(result *execResult, normalizer timing.CPUNormalizer) {
+	if result == nil || !normalizer.Enabled() {
+		return
+	}
+	rawCPUTimeMs := result.CPUTimeMs
+	result.RawCPUTimeMs = &rawCPUTimeMs
+	if result.CPUAccounting == nil {
+		// Compatibility for synthetic results that carry only legacy ms.
+		result.CPUTimeMs = normalizer.NormalizeMillis(rawCPUTimeMs)
+		return
+	}
+	rawCPUTimeNs := result.CPUTimeNs
+	result.RawCPUTimeNs = &rawCPUTimeNs
+	result.CPUTimeNs = normalizer.NormalizeNanoseconds(rawCPUTimeNs)
+	result.CPUTimeMs = ceilCPUMilliseconds(result.CPUTimeNs)
+}
+
+func ceilCPUMilliseconds(ns uint64) int64 {
+	ms := ns / uint64(time.Millisecond)
+	if ns%uint64(time.Millisecond) != 0 {
+		ms++
+	}
+	return int64(ms)
 }
 
 type sandboxStreamConfig struct {
+	workMeasurement           *durante.Session
 	stdin                     io.Reader
 	stdinMaxBytes             int64
 	liveStdin                 bool
+	stdinFile                 *os.File
 	stdout                    io.Writer
+	stdoutFile                *os.File
 	onStdoutDone              func()
 	stderr                    io.Writer
 	onStderrDone              func()
@@ -71,6 +134,7 @@ type sandboxStreamConfig struct {
 	startWallTimer            func() bool
 	targetRelease             <-chan struct{}
 	communicationRestricted   bool
+	cpuNormalizer             timing.CPUNormalizer
 }
 
 type sandboxIdentity struct {
@@ -97,6 +161,9 @@ const (
 
 type sandboxPreparedStdin struct {
 	file *os.File
+	// Shared frozen inputs live outside the scanned workspace, but still
+	// consume this run's workspace quota just as materialized stdin does.
+	outsideWorkspaceBytes int64
 }
 
 func (s *sandboxPreparedStdin) Read(p []byte) (int, error) {
@@ -104,6 +171,10 @@ func (s *sandboxPreparedStdin) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 	return s.file.Read(p)
+}
+
+func (s *sandboxPreparedStdin) Close() error {
+	return s.file.Close()
 }
 
 type teeCaptureWriter struct {
@@ -172,17 +243,50 @@ func (w teeCaptureWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
-	timeLimit := time.Duration(max(1, req.Limits.TimeMs)) * time.Millisecond
-	// Match the existing input-download budget, without shortening a longer
-	// execution limit that previously also bounded initialization.
-	startupLimit := max(stdinURLDownloadTimeout, timeLimit)
-	ctx, startTimer, cancel := sandboxExecutionContext(parent, startupLimit, timeLimit)
+func runCommandWithSandbox(parent context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, stdinMaxBytes int64, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string, cpuNormalizer timing.CPUNormalizer, meters ...*durante.Session) execResult {
+	ctx, startTimer, cancel := sandboxRequestContext(parent, req, cpuNormalizer)
 	defer cancel()
+	var meter *durante.Session
+	if len(meters) > 0 {
+		meter = meters[0]
+	}
+	streams := sandboxStreamConfig{stdin: stdinReader, stdinMaxBytes: stdinMaxBytes,
+		startWallTimer: startTimer, cpuNormalizer: cpuNormalizer, workMeasurement: meter}
+	return runCommandWithSandboxStreams(ctx, cancel, ws, command, req, streams, hooks, outputLimitBytes, tuning, cgroupParentDir)
+}
 
-	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{
-		stdin: stdinReader, stdinMaxBytes: stdinMaxBytes, startWallTimer: startTimer,
-	}, hooks, outputLimitBytes, tuning, cgroupParentDir)
+func sandboxRequestContext(parent context.Context, req *model.RunRequest, normalizer timing.CPUNormalizer) (context.Context, func() bool, context.CancelFunc) {
+	wall := time.Duration(executionWallTimeMs(req.Limits, false, normalizer.WallLimitMillis)) * time.Millisecond
+	return sandboxExecutionContext(parent, max(stdinURLDownloadTimeout, wall), wall)
+}
+
+// Both ordinary and live replay contestants use the same instrumentation and
+// CPU-feature lifecycle after the sandbox has stopped.
+func runCommandWithSandboxStreams(ctx context.Context, cancel context.CancelFunc, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+	result := executeSandboxCommandWithStreams(ctx, ws, command, req, streams, hooks, outputLimitBytes, tuning, cgroupParentDir)
+	if result.VerdictSource == "durante_work_clock_cleanup" {
+		// The lifecycle collector requires a stopped tree.
+		cancel()
+		return result
+	}
+
+	meter := streams.workMeasurement
+	if meter != nil {
+		if len(req.DisallowedCPUFeatures) == 0 {
+			result = collectCompletedSandboxWorkMeasurement(ctx, cancel, result, meter.Collect)
+		} else {
+			// Stop the completed target's budget before bounded report parsing
+			// and installation hashing. Policy-only runs publish no work totals.
+			interrupted := ctx.Err() != nil
+			cancel()
+			report := collectCPUFeatureResult(req.DisallowedCPUFeatures, &result, meter)
+			if req.WorkMeasurement {
+				result.WorkMeasurement = report
+				discardIncompleteWorkMeasurement(interrupted, &result)
+			}
+		}
+	}
+	return result
 }
 
 // Ordinary runs have separate initialization and target-execution budgets. The
@@ -208,6 +312,35 @@ func sandboxExecutionContext(parent context.Context, startup, execution time.Dur
 	}
 }
 
+// The helper may stop reading before a large request fits in its pipe. Closing
+// the write end interrupts that write; join it before the caller kills/reaps
+// the helper so no request goroutine outlives sandbox initialization.
+func writeSandboxRequest(ctx context.Context, writer *os.File, request []byte) error {
+	if ctx.Err() != nil {
+		_ = writer.Close()
+		return context.Cause(ctx)
+	}
+	done := make(chan error, 1)
+	go func() {
+		n, err := writer.Write(request)
+		if err == nil && n != len(request) {
+			err = io.ErrShortWrite
+		}
+		if closeErr := writer.Close(); err == nil {
+			err = closeErr
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		_ = writer.Close()
+		<-done
+		return context.Cause(ctx)
+	}
+}
+
 func executeSandboxCommand(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, stdinReader io.Reader, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
 	return executeSandboxCommandWithStdinLimit(ctx, ws, command, req, stdinReader, 0, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
@@ -216,9 +349,16 @@ func executeSandboxCommandWithStdinLimit(ctx context.Context, ws Workspace, comm
 	return executeSandboxCommandWithStreams(ctx, ws, command, req, sandboxStreamConfig{stdin: stdinReader, stdinMaxBytes: stdinMaxBytes}, hooks, outputLimitBytes, tuning, cgroupParentDir)
 }
 
-func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) execResult {
+func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command []string, req *model.RunRequest, streams sandboxStreamConfig, hooks Hooks, outputLimitBytes int, tuning config.RuntimeTuningConfig, cgroupParentDir string) (finished execResult) {
 	if len(command) == 0 {
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox command is empty"}
+	}
+	if len(req.DisallowedCPUFeatures) > 0 && streams.workMeasurement == nil {
+		return execResult{
+			Status:        model.RunStatusInitFail,
+			Reason:        "CPU feature enforcement requires a prepared Durante session",
+			VerdictSource: "cpu_feature_policy",
+		}
 	}
 	tuning = tuning.WithSafeDefaults()
 	if os.Geteuid() != 0 {
@@ -229,7 +369,10 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		restricted.EnableNetwork = false
 		req = &restricted
 	}
-	timeLimitMs := max(1, req.Limits.TimeMs)
+	cpuNormalizer := streams.cpuNormalizer
+	cpuTimeLimitNs := cpuNormalizer.RawLimitNanoseconds(max(1, req.Limits.TimeMs))
+	// RLIMIT_CPU takes whole seconds; round its raw-ms input up, not down.
+	helperCPUTimeLimitMs := int(ceilCPUMilliseconds(cpuTimeLimitNs))
 	memoryLimitKB := int64(0)
 	if req.Limits.MemoryMB > 0 {
 		memoryLimitKB = int64(req.Limits.MemoryMB) * 1024
@@ -248,16 +391,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	if workspaceLimitBytes > hardMaxWorkspaceBytes {
 		workspaceLimitBytes = hardMaxWorkspaceBytes
 	}
-	baseEnv := util.BaseEnv()
-	innerEnv := append(append(baseEnv[:0:0], baseEnv...), security.ThreadLimitEnv()...)
-	innerEnv = append(innerEnv, security.WorkspaceScopedEnv(ws.RootDir)...)
-	if !req.EnableNetwork {
-		innerEnv = append(innerEnv, "http_proxy=", "https_proxy=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=*", "no_proxy=*")
+	workspaceAvailableBytes := workspaceLimitBytes
+	if prepared, ok := streams.stdin.(*sandboxPreparedStdin); ok && prepared.file != nil {
+		workspaceAvailableBytes -= prepared.outsideWorkspaceBytes
 	}
+	innerEnv := sandboxBaseEnvironment(ws, req)
 	imgPath := firstImagePath(req.SidecarOutputs)
-	if imgPath != "" {
-		innerEnv = append(innerEnv, "IMG_CAPTURE=1")
-	}
 
 	runLang := profiles.NormalizeRunLang(req.Lang)
 	isC3 := runLang == "c3"
@@ -336,6 +475,9 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 	runtimeBase := sandboxCommandBase(finalCommand, ws.RootDir)
+	if err := prepareCPUFeatureExecution(ws, finalCommand, req.DisallowedCPUFeatures, streams.workMeasurement); err != nil {
+		return execResult{Status: model.RunStatusInitFail, Reason: err.Error(), VerdictSource: "cpu_feature_policy"}
+	}
 	if streams.communicationRestricted {
 		// Communication-v1 accepts native binaries only. Never let a submitted
 		// basename select a managed-runtime exception or shared runtime state.
@@ -377,11 +519,17 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		threadLimit = shellSandboxThreadLimit
 	}
 	allowProcesses := false
+	allowFIFOs := false
 	switch runtimeBase {
 	case "aonohako-duckdb-run", "aonohako-gdl-run", "aonohako-gleam-run", "aonohako-tla-run", "aonohako-vhdl-run", "aonohako-why3-prove", "ghdl", "vvp":
 		allowProcesses = true
 	case "bash", "dash", "zsh", "fish":
 		allowProcesses = trustedShellRuntime
+	case "octave-cli":
+		// Headless gnuplot needs child processes and FIFOs for capability queries.
+		// Ordinary Octave keeps both denied; sockets remain denied by default.
+		allowProcesses = runLang == "octave" && octaveImageCaptureEnabled(req)
+		allowFIFOs = allowProcesses
 	}
 	if isDotnet || isPowerShell {
 		if heapLimit := dotnetGCHeapHardLimitHex(req.Limits.MemoryMB, tuning); heapLimit != "" {
@@ -392,6 +540,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		allowUnixSockets = false
 		allowMemfdCreate = false
 		allowProcesses = false
+		allowFIFOs = false
 	}
 	runtimeState, err := security.AcquireRuntimeState(ws.RootDir, runtimeBase, int(identity.uid), int(identity.gid))
 	if err != nil {
@@ -432,11 +581,47 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		}
 	}
 
+	// Select every sandbox permission and resource limit from the original
+	// runtime before wrapping it. Instrumentation grants no extra capability.
+	var clock *durante.WorkClock
+	var clockPath string
+	if req.WorkMeasurementClock != nil {
+		if streams.workMeasurement == nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "work clock requires a Durante session"}
+		}
+		clock, err = durante.OpenWorkClock(ws.RootDir, int(identity.gid))
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "prepare Durante work clock: " + err.Error()}
+		}
+		defer clock.Close()
+		// Registered before cgroup cleanup, so the final publication is read
+		// only after both the target and its owned execution scope have stopped.
+		defer func() {
+			if finished.targetPID <= 0 || finished.VerdictSource == "durante_work_clock_cleanup" {
+				return
+			}
+			if !workClockGroupStopped(finished.targetPID) {
+				rejectWorkClockCleanup(&finished)
+				return
+			}
+			finished.workClockProgress = clock.Snapshot()
+		}()
+		clockPath = clock.Path()
+	}
+	if streams.workMeasurement != nil {
+		var err error
+		finalCommand, innerEnv, err = streams.workMeasurement.Runtime(runLang, finalCommand, innerEnv)
+		if err != nil {
+			return execResult{Status: model.RunStatusInitFail, Reason: "durante runtime options: " + err.Error()}
+		}
+		finalCommand = streams.workMeasurement.WrapWithWorkClock(finalCommand, clockPath)
+	}
 	helperReq := sandbox.ExecRequest{
 		Command:                  finalCommand,
 		Dir:                      ws.BoxDir,
 		Env:                      innerEnv,
 		Limits:                   req.Limits,
+		CPUTimeLimitMs:           helperCPUTimeLimitMs,
 		ThreadLimit:              threadLimit,
 		OpenFileLimit:            openFileLimit,
 		StackLimitBytes:          security.StackLimitForCommand(runtimeBase),
@@ -446,6 +631,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		AllowUnixSockets:         allowUnixSockets,
 		AllowUnixSocketMessages:  false,
 		AllowProcesses:           allowProcesses,
+		AllowFIFOs:               allowFIFOs,
 		DenyThreads:              streams.communicationRestricted,
 		AllowPositiveKillProbe:   trustedShellRuntime && runLang == "zsh",
 		AllowThreadSignals:       isFactor,
@@ -489,12 +675,19 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 
 	cmd := exec.CommandContext(ctx, helperPath)
+	// This supervisor owns process-group cancellation and its verdict source.
+	// CommandContext still checks cancellation before Start, but its default
+	// watcher would race our kill/wait paths and lose the shutdown reason.
+	cmd.Cancel = nil
 	cmd.Dir = ws.BoxDir
 	var stdinLiveReader io.Reader
 	var stdinLiveWrite *os.File
 	var stdinCopyDone chan struct{}
 	var stdinCopyErr chan error
-	if streams.liveStdin {
+	if streams.stdinFile != nil {
+		// A real fd avoids os/exec's stdin copy goroutine.
+		cmd.Stdin = streams.stdinFile
+	} else if streams.liveStdin {
 		stdinLiveReader = streams.stdin
 		if stdinLiveReader == nil {
 			stdinLiveReader = strings.NewReader("")
@@ -567,9 +760,26 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			cmd.Stdin = readonlyStdin
 		}
 	}
+	if runLang == "wren" && runtimeBase == "wren_cli" {
+		if file, ok := cmd.Stdin.(*os.File); ok {
+			info, err := file.Stat()
+			if err != nil {
+				return execResult{Status: model.RunStatusInitFail, Reason: "inspect Wren stdin failed: " + err.Error()}
+			}
+			if info.Mode().IsRegular() {
+				// Wren CLI's libuv reader handles pipes and TTYs, not regular files.
+				// Preserve the bounded, immutable input while os/exec feeds a pipe.
+				cmd.Stdin = struct{ io.Reader }{file}
+			}
+		}
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid:   true,
 		Pdeathsig: syscall.SIGKILL,
+	}
+	clockRootFD := -1
+	if clock != nil {
+		cmd.SysProcAttr.PidFD = &clockRootFD
 	}
 	if os.Geteuid() == 0 {
 		cmd.SysProcAttr.Credential = &syscall.Credential{
@@ -580,7 +790,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	}
 	cmd.ExtraFiles = append([]*os.File{requestRead, targetReadyWrite, targetReleaseRead}, streams.extraFiles...)
 	cmd.Env = append(
-		append(baseEnv[:0:0], baseEnv...),
+		util.BaseEnv(),
 		sandbox.HelperModeEnv+"="+sandbox.HelperModeExec,
 		sandbox.RequestFDEnv+"=3",
 		sandbox.TargetReadyFDEnv+"=4",
@@ -598,10 +808,30 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		stderrWriter = teeCaptureWriter{capture: &stderrBuf, forward: streams.stderr}
 	}
 	cmd.Stdout = stdoutWriter
+	if streams.stdoutFile != nil {
+		cmd.Stdout = streams.stdoutFile
+	}
 	cmd.Stderr = stderrWriter
 	sandbox.TrimParentMemoryBeforeSandbox()
 	if err := cmd.Start(); err != nil {
 		return execResult{Status: model.RunStatusInitFail, Reason: "start failed: " + err.Error()}
+	}
+	if clock != nil {
+		if clockRootFD < 0 {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return execResult{Status: model.RunStatusInitFail, Reason: "work clock requires a kernel pidfd for its target"}
+		}
+		defer syscall.Close(clockRootFD)
+	}
+	if streams.stdinFile != nil {
+		// Child owns its copy. Holding this read end would suppress EPIPE
+		// after the receiving peer exits.
+		_ = streams.stdinFile.Close()
+	}
+	if streams.stdoutFile != nil {
+		// The replay peer reads the target pipe directly and needs its EOF.
+		_ = streams.stdoutFile.Close()
 	}
 	if streams.closeExtraFilesAfterStart {
 		for _, file := range streams.extraFiles {
@@ -660,21 +890,14 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			cgroupLimitBaselineSet = true
 		}
 		defer func() {
-			cleanupSandboxCgroup("execute", runGroup)
+			if err := cleanupSandboxCgroup("execute", runGroup); err != nil && clock != nil {
+				rejectWorkClockCleanup(&finished)
+			}
 		}()
 	}
 	_ = os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", cmd.Process.Pid), []byte("1000\n"), 0o644)
 	_ = requestRead.Close()
-	if n, err := requestWrite.Write(rawReq); err != nil {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_ = cmd.Wait()
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
-	} else if n != len(rawReq) {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_ = cmd.Wait()
-		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: short write"}
-	}
-	if err := requestWrite.Close(); err != nil {
+	if err := writeSandboxRequest(ctx, requestWrite, rawReq); err != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		_ = cmd.Wait()
 		return execResult{Status: model.RunStatusInitFail, Reason: "sandbox request write failed: " + err.Error()}
@@ -685,9 +908,12 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		waitCh <- cmd.Wait()
 	}()
 	readyCh := make(chan error, 1)
+	var ready [sandbox.TargetReadyMessageSize]byte
 	go func() {
-		var ready [1]byte
 		_, err := io.ReadFull(targetReadyRead, ready[:])
+		if err == nil && ready[0] != 1 {
+			err = fmt.Errorf("unsupported target synchronization version")
+		}
 		readyCh <- err
 	}()
 	select {
@@ -732,6 +958,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 			Stderr: stderrBuf.Bytes(),
 		}
 	}
+	rusageBaselineNs := binary.LittleEndian.Uint64(ready[1:])
 	if runGroup.Path != "" {
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			cgroupLimitBaseline = stats
@@ -834,7 +1061,8 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 	watchdog := time.NewTicker(1 * time.Millisecond)
 	defer watchdog.Stop()
 	lastWorkspaceScan := time.Time{}
-	maxCPUTimeMs := int64(0)
+	maxCPUTimeNs := uint64(0)
+	processClockPeakNs := uint64(0)
 	maxRSSKB := int64(0)
 	maxVmSizeKB := int64(0)
 	var waitErr error
@@ -909,11 +1137,11 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 						if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
 							cpuUsageMicros -= cgroupCPUBaselineMicros
 						}
-						cpuTimeMs := cpuUsageMicros / 1000
-						if cpuTimeMs > maxCPUTimeMs {
-							maxCPUTimeMs = cpuTimeMs
+						cpuNs := uint64(max(0, cpuUsageMicros)) * 1000
+						if cpuNs > maxCPUTimeNs {
+							maxCPUTimeNs = cpuNs
 						}
-						if targetStarted && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+						if targetStarted && result.Status == "OK" && cpuNs > cpuTimeLimitNs {
 							result.Status = model.RunStatusTLE
 							result.Reason = "cpu time limit exceeded"
 							result.VerdictSource = "cpu_time_cgroup"
@@ -942,17 +1170,19 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 
 			if targetStarted {
 				if cpuNs, err := timing.ProcessCPUTimeNs(cmd.Process.Pid); err == nil {
-					cpuTimeMs := timing.MilliFromNanoseconds(cpuNs)
 					cpuTimeAvailable := true
-					if targetCPUTimeMs, ok := cpuTimeAfterBaseline(cpuNs, cpuBaselineNs, cpuBaselineSet); ok {
-						cpuTimeMs = targetCPUTimeMs
+					if cpuBaselineSet && cpuNs >= cpuBaselineNs {
+						cpuNs -= cpuBaselineNs
 					} else if cpuBaselineSet {
 						cpuTimeAvailable = false
 					}
-					if cpuTimeAvailable && cpuTimeMs > maxCPUTimeMs {
-						maxCPUTimeMs = cpuTimeMs
+					if cpuTimeAvailable && cpuNs > processClockPeakNs {
+						processClockPeakNs = cpuNs
 					}
-					if cpuTimeAvailable && result.Status == "OK" && cpuTimeMs > int64(timeLimitMs) {
+					if cpuTimeAvailable && cpuNs > maxCPUTimeNs {
+						maxCPUTimeNs = cpuNs
+					}
+					if cpuTimeAvailable && result.Status == "OK" && cpuNs > cpuTimeLimitNs {
 						result.Status = model.RunStatusTLE
 						result.Reason = "cpu time limit exceeded"
 						result.VerdictSource = "cpu_time"
@@ -985,11 +1215,30 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 					killTarget(result.VerdictSource)
 					continue
 				}
-				if usage.Bytes > workspaceLimitBytes {
+				if usage.Bytes > workspaceAvailableBytes {
 					result.Status = model.RunStatusWLE
 					result.Reason = "workspace quota exceeded"
 					result.VerdictSource = "workspace_bytes"
 					killTarget(result.VerdictSource)
+				}
+			}
+			if clock != nil && targetStarted && result.Status == "OK" && parentKillReason == "" && ctx.Err() == nil {
+				if progress := clock.Snapshot(); progress != nil && req.WorkMeasurementClock.Exceeds(*progress) {
+					select {
+					case err := <-waitCh:
+						waitErr = err
+						goto done
+					default:
+					}
+					delivered, err := signalWorkClockRoot(clockRootFD)
+					if err != nil {
+						result.Status, result.Reason, result.VerdictSource = model.RunStatusInitFail, "could not deliver Durante work clock stop", "durante_work_clock_signal"
+						killTarget(result.VerdictSource)
+					} else if delivered {
+						// The kernel accepted the signal for this root lifetime. Also
+						// stop every peer in the sandbox's process group.
+						killTarget("durante_work_clock")
+					}
 				}
 			}
 		}
@@ -1028,7 +1277,13 @@ done:
 	}
 
 	result.WallTimeMs = timing.SinceMillis(wallStart)
-	result.CPUTimeMs = maxCPUTimeMs
+	result.CPUTimeNs = maxCPUTimeNs
+	result.CPUAccounting = &model.CPUAccounting{
+		ProcessClockBaselineNs: cpuBaselineNs,
+		RusageBaselineNs:       rusageBaselineNs,
+		ProcessClockPeakNs:     processClockPeakNs,
+		SelectedSource:         "process_clock",
+	}
 	result.Stdout = stdoutBuf.Bytes()
 	result.Stderr = stderrBuf.Bytes()
 	result.StdoutTruncated = stdoutBuf.Truncated()
@@ -1036,6 +1291,9 @@ done:
 	result.MemoryKB = maxRSSKB
 
 	if runGroup.Path != "" {
+		if maxCPUTimeNs > processClockPeakNs {
+			result.CPUAccounting.SelectedSource = "cgroup"
+		}
 		if stats, err := cgroup.ReadStats(runGroup.Path); err == nil {
 			if stats.MemoryPeakBytes > 0 {
 				peakKB := stats.MemoryPeakBytes / 1024
@@ -1051,8 +1309,9 @@ done:
 				if cgroupCPUBaselineMicros > 0 && cpuUsageMicros > cgroupCPUBaselineMicros {
 					cpuUsageMicros -= cgroupCPUBaselineMicros
 				}
-				if cpuTimeMs := cpuUsageMicros / 1000; cpuTimeMs > result.CPUTimeMs {
-					result.CPUTimeMs = cpuTimeMs
+				if cpuNs := uint64(max(0, cpuUsageMicros)) * 1000; cpuNs > result.CPUTimeNs {
+					result.CPUTimeNs = cpuNs
+					result.CPUAccounting.SelectedSource = "cgroup"
 				}
 			}
 			if result.Status == "OK" {
@@ -1088,20 +1347,23 @@ done:
 			result.Status = model.RunStatusWLE
 			result.Reason = "workspace scan failed"
 			result.VerdictSource = "workspace_scan_final"
-		case usage.Bytes > workspaceLimitBytes:
+		case usage.Bytes > workspaceAvailableBytes:
 			result.Status = model.RunStatusWLE
 			result.Reason = "workspace quota exceeded"
 			result.VerdictSource = "workspace_bytes_final"
 		}
 	}
 
+	clockKilledTarget := false
 	if ps := cmd.ProcessState; ps != nil {
 		if ws, ok := ps.Sys().(syscall.WaitStatus); ok {
 			if ws.Exited() {
 				c := ws.ExitStatus()
 				result.ExitCode = &c
 			}
-			if ws.Signaled() {
+			if ws.Signaled() && ws.Signal() == syscall.SIGKILL && parentKillReason == "durante_work_clock" && result.Status == "OK" {
+				clockKilledTarget = true
+			} else if ws.Signaled() {
 				result.Status, result.Reason, result.VerdictSource = classifySandboxSignal(
 					result.Status,
 					result.Reason,
@@ -1125,18 +1387,20 @@ done:
 		}
 		if processCPU := ps.UserTime() + ps.SystemTime(); processCPU > 0 {
 			result.ProcessCPUTimeMs = timing.MilliFromDuration(processCPU)
+			result.CPUAccounting.WaitUserNs = uint64(max(0, ps.UserTime().Nanoseconds()))
+			result.CPUAccounting.WaitSystemNs = uint64(max(0, ps.SystemTime().Nanoseconds()))
 			if targetStarted && runGroup.Path == "" {
 				usageCPUNs := uint64(processCPU.Nanoseconds())
-				if finalCPUTimeMs, ok := cpuTimeAfterBaseline(usageCPUNs, cpuBaselineNs, cpuBaselineSet); ok {
-					if finalCPUTimeMs > result.CPUTimeMs {
-						result.CPUTimeMs = finalCPUTimeMs
-					}
-				}
+				finalizeWaitCPUTime(&result, usageCPUNs, true)
 			}
-			if !targetStarted && result.CPUTimeMs <= 0 {
-				result.CPUTimeMs = result.ProcessCPUTimeMs
+			if !targetStarted && result.CPUTimeNs == 0 {
+				result.CPUTimeNs = uint64(processCPU.Nanoseconds())
 			}
+		} else if targetStarted && runGroup.Path == "" {
+			finalizeWaitCPUTime(&result, 0, ps.UserTime() >= 0 && ps.SystemTime() >= 0)
 		}
+	} else if targetStarted && runGroup.Path == "" {
+		finalizeWaitCPUTime(&result, 0, false)
 	}
 	helperRuntimeOOM := bytes.Contains(result.Stderr, []byte("fatal error: runtime: out of memory"))
 	helperPageSummaryOOM := bytes.Contains(result.Stderr, []byte("fatal error: failed to reserve page summary memory"))
@@ -1155,7 +1419,8 @@ done:
 		result.Reason = "memory limit exceeded"
 		result.VerdictSource = "address_space"
 	}
-	result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatus(result.Status, result.Reason, result.VerdictSource, result.CPUTimeMs, timeLimitMs, runGroup.Path != "")
+	result.CPUTimeMs = ceilCPUMilliseconds(result.CPUTimeNs)
+	result.Status, result.Reason, result.VerdictSource = applyFinalCPUTimeStatusNs(result.Status, result.Reason, result.VerdictSource, result.CPUTimeNs, cpuTimeLimitNs, runGroup.Path != "")
 	if result.ExitCode != nil && *result.ExitCode == 120 && bytes.Contains(result.Stderr, []byte("sandbox-init:")) {
 		result.Status = model.RunStatusInitFail
 		result.Reason = clipUTF8(result.Stderr, responseStderrLimitBytes(req))
@@ -1168,6 +1433,18 @@ done:
 		result.Status = model.RunStatusTLE
 		result.VerdictSource = "wall_time"
 	}
+	if clock != nil && result.Status == "OK" {
+		switch {
+		case memoryLimitKB > 0 && result.MemoryKB > memoryLimitKB:
+			result.Status, result.Reason, result.VerdictSource = model.RunStatusMLE, "memory limit exceeded", "memory_reported"
+		case result.WallTimeMs > int64(req.Limits.WallTimeMs):
+			result.Status, result.Reason, result.VerdictSource = model.RunStatusTLE, "wall time limit exceeded", "wall_time"
+		case clockKilledTarget:
+			result.Status, result.Reason, result.VerdictSource = model.RunStatusTLE, "Durante work budget exceeded", "durante_work_clock"
+		}
+	}
+	result.targetPID = cmd.Process.Pid
+	normalizeExecResultCPU(&result, cpuNormalizer)
 	return result
 }
 
@@ -1235,13 +1512,15 @@ func cgroupLimitBreachSince(stats, baseline cgroup.Stats, hasBaseline bool) cgro
 	return cgroup.LimitBreachNone
 }
 
-func cleanupSandboxCgroup(scope string, group cgroup.Group) {
+func cleanupSandboxCgroup(scope string, group cgroup.Group) error {
 	if strings.TrimSpace(group.Path) == "" {
-		return
+		return nil
 	}
-	if err := group.KillAndRemoveWithRetry(250 * time.Millisecond); err != nil {
+	err := group.KillAndRemoveWithRetry(250 * time.Millisecond)
+	if err != nil {
 		slog.Warn("sandbox cgroup cleanup failed", "scope", scope, "path", group.Path, "err", err)
 	}
+	return err
 }
 
 func ioCopy(dst interface{ Write([]byte) (int, error) }, src any) (int64, error) {

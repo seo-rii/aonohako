@@ -1,12 +1,15 @@
 package runvalidation
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
 	"unicode/utf8"
 
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/payloadurl"
 	"aonohako/internal/profiles"
@@ -30,7 +33,7 @@ const (
 	MaxStdinParts                   = 32
 	MaxSidecarOutputs               = 64
 	MaxStepHandoffBytes             = MaxOutputBytes
-	MaxBinaryFileBytes              = 16 << 20
+	MaxBinaryFileBytes              = 32 << 20
 	MaxBinaryTotalBytes             = 48 << 20
 	MaxPipelineResources            = 16
 	MaxPipelineOutputs              = 16
@@ -52,7 +55,16 @@ var supportedRunLangs = func() map[string]struct{} {
 }()
 
 func Validate(req *model.RunRequest) error {
+	if err := ValidateDisallowedCPUFeatures(req); err != nil {
+		return err
+	}
+	if err := ValidateWorkMeasurementLimits(req); err != nil {
+		return err
+	}
 	if err := ValidateTextEncoding(req); err != nil {
+		return err
+	}
+	if err := ValidateEntry(req); err != nil {
 		return err
 	}
 	if len(req.Stdin) > MaxTextFieldBytes {
@@ -135,6 +147,106 @@ func Validate(req *model.RunRequest) error {
 	return nil
 }
 
+// ShadowRequests splits a work_measurement_shadow request into the authoritative
+// ordinary request (no measurement fields) and the judge-mode shadow request
+// that reuses the supplied raw envelope. Both are independent copies.
+func ShadowRequests(req *model.RunRequest) (primary, shadow model.RunRequest) {
+	primary = *req
+	primary.WorkMeasurementShadow = false
+	primary.WorkMeasurementLimits = nil
+	shadow = *req
+	shadow.WorkMeasurementShadow = false
+	shadow.WorkMeasurement = true
+	shadow.WorkMeasurementTime = true
+	shadow.WorkMeasurementJudge = true
+	if req.WorkMeasurementLimits != nil {
+		limits := *req.WorkMeasurementLimits
+		shadow.WorkMeasurementLimits = &limits
+	}
+	return primary, shadow
+}
+
+// ValidateWorkMeasurementShadow checks the request shape only. The primary run
+// must stay an ordinary, unmetered request; the shadow must be a valid judge
+// envelope request. Operator gates are checked separately and never reject.
+func ValidateWorkMeasurementShadow(req *model.RunRequest) error {
+	if req == nil || !req.WorkMeasurementShadow {
+		return nil
+	}
+	if req.WorkMeasurement || req.WorkMeasurementTime || req.WorkMeasurementJudge || req.WorkMeasurementPeerTime != nil || req.WorkMeasurementClock != nil {
+		return fmt.Errorf("work_measurement_shadow keeps the primary run unmetered and cannot be combined with other work_measurement options")
+	}
+	if req.WorkMeasurementLimits == nil {
+		return fmt.Errorf("work_measurement_shadow requires work_measurement_limits for the shadow execution")
+	}
+	_, shadow := ShadowRequests(req)
+	if err := ValidateWorkMeasurementLimits(&shadow); err != nil {
+		return fmt.Errorf("work_measurement_shadow: %w", err)
+	}
+	return nil
+}
+
+// ValidateWorkMeasurementLimits checks the opt-in envelope without changing
+// the nominal judge limits. Operator caps are enforced separately by the runner.
+func ValidateWorkMeasurementLimits(req *model.RunRequest) error {
+	if req == nil {
+		return nil
+	}
+	if req.WorkMeasurementShadow {
+		return ValidateWorkMeasurementShadow(req)
+	}
+	if err := ValidateWorkMeasurementPeerTime(req); err != nil {
+		return err
+	}
+	if clock := req.WorkMeasurementClock; clock != nil {
+		if err := clock.Validate(); err != nil {
+			return err
+		}
+		if req.WorkMeasurementLimits == nil || req.WorkMeasurementJudge || req.WorkMeasurementPeerTime != nil {
+			return fmt.Errorf("work_measurement_clock requires ordinary diagnostic work_measurement_limits")
+		}
+	}
+	if req.WorkMeasurementTime {
+		if req.WorkMeasurementLimits == nil {
+			return fmt.Errorf("work_measurement_time requires work_measurement_limits")
+		}
+		if _, ok := profiles.Resolve(req.Lang); !ok {
+			return fmt.Errorf("work_measurement_time requires a registered source-language profile")
+		}
+	}
+	if req.WorkMeasurementJudge {
+		if !req.WorkMeasurement || !req.WorkMeasurementTime || req.WorkMeasurementLimits == nil {
+			return fmt.Errorf("work_measurement_judge requires work_measurement, work_measurement_time and work_measurement_limits")
+		}
+	}
+	if req.WorkMeasurementLimits == nil {
+		return nil
+	}
+	if !req.WorkMeasurement {
+		return fmt.Errorf("work_measurement_limits requires work_measurement=true")
+	}
+	family, ok := durante.FamilyForLanguage(req.Lang)
+	if !ok {
+		return fmt.Errorf("work_measurement_limits requires a registered source-language profile")
+	}
+	if err := durante.ValidateMeasurementFamily(family); err != nil {
+		return fmt.Errorf("work_measurement_limits: %w", err)
+	}
+	if req.Communication != nil || req.Pipeline != nil || req.Interactor != nil || req.SPJ != nil || len(req.Programs) != 0 || len(req.Steps) != 0 || req.EntryMode != "" {
+		return fmt.Errorf("work_measurement_limits supports only an ordinary single-program run")
+	}
+	if err := ValidateRequiredLimits("limits", req.Limits); err != nil {
+		return err
+	}
+	if err := req.WorkMeasurementLimits.Validate(); err != nil {
+		return fmt.Errorf("work_measurement_limits: %w", err)
+	}
+	if req.WorkMeasurementLimits.CPUTimeMs < req.Limits.TimeMs || req.WorkMeasurementLimits.MemoryMB < req.Limits.MemoryMB || req.WorkMeasurementLimits.WallTimeMs < req.Limits.WallTimeMs {
+		return fmt.Errorf("work_measurement_limits must not be smaller than nominal limits")
+	}
+	return nil
+}
+
 // ValidateTextEncoding rejects text that encoding/json would silently replace
 // during remote forwarding. Base64 payloads and streamed URL bodies remain byte
 // preserving and are not subject to this text-only contract.
@@ -194,31 +306,60 @@ func ValidateCommunication(req *model.RunRequest) error {
 	if spec == nil {
 		return nil
 	}
-	if spec.Version != 1 {
-		return fmt.Errorf("communication.version must be 1")
+	if spec.Version != 1 && spec.Version != 2 {
+		return fmt.Errorf("communication.version must be 1 or 2")
 	}
 	if req.Pipeline != nil {
 		return fmt.Errorf("communication cannot be combined with pipeline")
 	}
-	if spec.ResultProtocol != "manager-result-v1" {
-		return fmt.Errorf("communication.result_protocol must be manager-result-v1")
+	protocol := "manager-result-v1"
+	if spec.Version == 2 {
+		protocol = "match-result-v1"
+	}
+	if spec.ResultProtocol != protocol {
+		return fmt.Errorf("communication.result_protocol must be %s", protocol)
 	}
 	if spec.ParticipantCount < MinCommunicationParticipants || spec.ParticipantCount > MaxCommunicationParticipants {
 		return fmt.Errorf("communication.participant_count must be between %d and %d", MinCommunicationParticipants, MaxCommunicationParticipants)
 	}
-	participantID := strings.TrimSpace(spec.ParticipantProgramID)
 	managerID := strings.TrimSpace(spec.ManagerProgramID)
-	if participantID == "" || managerID == "" {
+	participantIDs := []string{spec.ParticipantProgramID}
+	if spec.Version == 1 && (len(spec.ParticipantProgramIDs) != 0 || spec.MatchSeed != "" || spec.InputSHA256 != "" || spec.RuntimeFingerprint != "") {
+		return fmt.Errorf("communication-v1 cannot use participant_program_ids, match_seed, input_sha256, or runtime_fingerprint")
+	}
+	if spec.Version == 2 {
+		if spec.ParticipantProgramID != "" || len(spec.ParticipantProgramIDs) != 2 || spec.ParticipantCount != 2 {
+			return fmt.Errorf("communication-v2 requires exactly two participant_program_ids, participant_count 2, and no participant_program_id")
+		}
+		participantIDs = spec.ParticipantProgramIDs
+		if !validSHA256(spec.InputSHA256) {
+			return fmt.Errorf("communication.input_sha256 must be a lowercase SHA-256 hex string")
+		}
+		if !validSHA256(spec.RuntimeFingerprint) {
+			return fmt.Errorf("communication.runtime_fingerprint must be a lowercase SHA-256 hex string")
+		}
+		if spec.MatchSeed != "" && !validSHA256(spec.MatchSeed) {
+			return fmt.Errorf("communication.match_seed must be a lowercase SHA-256 hex string")
+		}
+	}
+	if participantIDs[0] == "" || managerID == "" {
 		return fmt.Errorf("communication participant_program_id and manager_program_id are required")
 	}
-	if participantID != spec.ParticipantProgramID || managerID != spec.ManagerProgramID {
+	if managerID != spec.ManagerProgramID {
 		return fmt.Errorf("communication program ids must not contain surrounding whitespace")
 	}
-	if participantID == managerID {
-		return fmt.Errorf("communication participant and manager program ids must differ")
+	referenced := map[string]bool{managerID: true}
+	for _, id := range participantIDs {
+		if strings.TrimSpace(id) == "" || id != strings.TrimSpace(id) {
+			return fmt.Errorf("communication participant program ids are required and must not contain surrounding whitespace")
+		}
+		if referenced[id] {
+			return fmt.Errorf("communication participant and manager program ids must differ")
+		}
+		referenced[id] = true
 	}
-	if len(req.Programs) != 2 || len(req.Steps) != 0 {
-		return fmt.Errorf("communication requires exactly two programs and no steps")
+	if len(req.Programs) != len(referenced) || len(req.Steps) != 0 {
+		return fmt.Errorf("communication requires exactly %d programs and no steps", len(referenced))
 	}
 	if req.Lang != "" || len(req.Binaries) > 0 || req.Stdin != "" || req.StdinURL != "" || req.ExpectedStdout != "" || req.ExpectedStdoutURL != "" || req.EntryPoint != "" || req.EnableNetwork {
 		return fmt.Errorf("communication cannot be combined with legacy execute fields")
@@ -235,6 +376,9 @@ func ValidateCommunication(req *model.RunRequest) error {
 	if err := validateRequiredLimits("limits", req.Limits, MaxCommunicationOutputBytes); err != nil {
 		return err
 	}
+	if req.Limits.WallTimeMs != 0 {
+		return fmt.Errorf("communication does not support limits.wall_time_ms; wall allowances are runner policy")
+	}
 
 	seen := make(map[string]struct{}, len(req.Programs))
 	for i, program := range req.Programs {
@@ -249,7 +393,7 @@ func ValidateCommunication(req *model.RunRequest) error {
 			return fmt.Errorf("duplicate program id: %s", id)
 		}
 		seen[id] = struct{}{}
-		if id != participantID && id != managerID {
+		if !referenced[id] {
 			return fmt.Errorf("communication contains unreferenced program: %s", id)
 		}
 		if program.EnableNetwork {
@@ -259,7 +403,7 @@ func ValidateCommunication(req *model.RunRequest) error {
 			return err
 		}
 		if profiles.NormalizeRunLang(program.Lang) != "binary" {
-			return fmt.Errorf("communication-v1 supports native binary programs only: %s", id)
+			return fmt.Errorf("communication-v%d supports native binary programs only: %s", spec.Version, id)
 		}
 		if len(program.Binaries) == 0 {
 			return fmt.Errorf("program %s has no binaries", id)
@@ -267,14 +411,45 @@ func ValidateCommunication(req *model.RunRequest) error {
 		if err := ValidateBinaries("program "+id+" binaries", program.Binaries); err != nil {
 			return err
 		}
+		if spec.Version == 2 {
+			if !validSHA256(program.SourceSHA256) {
+				return fmt.Errorf("program %s source_sha256 must be a lowercase SHA-256 hex string", id)
+			}
+			for _, binary := range program.Binaries {
+				if binary.DataURL != "" || !validSHA256(binary.SHA256) {
+					return fmt.Errorf("program %s communication-v2 requires inline binaries with sha256", id)
+				}
+				hash := sha256.New()
+				if _, err := io.Copy(hash, base64.NewDecoder(base64.StdEncoding, strings.NewReader(binary.DataB64))); err != nil {
+					return fmt.Errorf("program %s binary %s base64 is invalid", id, binary.Name)
+				}
+				if hex.EncodeToString(hash.Sum(nil)) != binary.SHA256 {
+					return fmt.Errorf("program %s binary %s sha256 does not match decoded bytes", id, binary.Name)
+				}
+			}
+		}
 	}
-	if _, ok := seen[participantID]; !ok {
-		return fmt.Errorf("communication references unknown participant program: %s", participantID)
+	for _, id := range participantIDs {
+		if _, ok := seen[id]; !ok {
+			return fmt.Errorf("communication references unknown participant program: %s", id)
+		}
 	}
 	if _, ok := seen[managerID]; !ok {
 		return fmt.Errorf("communication references unknown manager program: %s", managerID)
 	}
 	return nil
+}
+
+func validSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func ValidateBinaryBudget(req *model.RunRequest) (int, error) {
@@ -973,6 +1148,9 @@ func validateOptionalLimits(name string, limits model.Limits, maxOutputBytes int
 	if limits.MemoryMB < 0 || limits.MemoryMB > MaxMemoryMB {
 		return fmt.Errorf("%s.memory_mb must be between 0 and %d", name, MaxMemoryMB)
 	}
+	if limits.WallTimeMs < 0 || limits.WallTimeMs > MaxTimeMs {
+		return fmt.Errorf("%s.wall_time_ms must be between 0 and %d", name, MaxTimeMs)
+	}
 	if limits.OutputBytes < 0 || limits.OutputBytes > maxOutputBytes {
 		return fmt.Errorf("%s.output_bytes must be between 0 and %d", name, maxOutputBytes)
 	}
@@ -1053,5 +1231,5 @@ func UsesPython(req *model.RunRequest) bool {
 }
 
 func LimitsAreZero(l model.Limits) bool {
-	return l.TimeMs == 0 && l.MemoryMB == 0 && l.OutputBytes == 0 && l.WorkspaceBytes == 0
+	return l.TimeMs == 0 && l.WallTimeMs == 0 && l.MemoryMB == 0 && l.OutputBytes == 0 && l.WorkspaceBytes == 0
 }

@@ -1,6 +1,7 @@
 package execute
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
 	"aonohako/internal/pythonpolicy"
 )
 
@@ -57,6 +59,20 @@ sys.path.insert(0, os.path.dirname(path))
 ` + pythonRunMain
 
 const pythonTrustedSitecustomizePath = "/usr/local/lib/aonohako/python/sitecustomize.py"
+
+// Octave only captures plots for the canonical image sidecar explicitly
+// requested by the control plane. Other sidecar files do not opt in.
+func octaveImageCaptureEnabled(req *model.RunRequest) bool {
+	if req == nil {
+		return false
+	}
+	for _, output := range req.SidecarOutputs {
+		if output.Path == "__img__/images.jsonl" {
+			return true
+		}
+	}
+	return false
+}
 
 const pythonInstalledRunner = `import importlib.machinery, importlib.util, os, runpy, site, sys, types
 path = sys.argv.pop(1)
@@ -182,6 +198,13 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		}
 		return []string{"aonohako-gdl-run", primaryPath, entry}
 	case "octave":
+		if octaveImageCaptureEnabled(req) {
+			// Pass the path as data and invoke a script, preserving empty argv.
+			// Plotting needs the installed function path, but no startup files.
+			return []string{"env", "AONOHAKO_OCTAVE_ENTRY=" + base64.StdEncoding.EncodeToString([]byte(primaryPath)),
+				"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-site-file",
+				"/usr/local/lib/aonohako/octave/plot_capture.m"}
+		}
 		return []string{"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-init-path", primaryPath}
 	case "vhdl":
 		top := strings.TrimSpace(req.EntryPoint)
@@ -240,6 +263,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{erlangRuntime, "+S", schedulerArg, "+A", asyncThreadsArg, "-noshell", "-pa", primaryPath, "-s", module, function, "-s", "init", "stop"}
 	case "prolog":
 		return []string{"swipl", "-q", "-f", primaryPath, "-g", "main", "-t", "halt"}
+	case "picat":
+		return []string{"env", "PICATPATH=", "picat", primaryPath}
 	case "lisp":
 		dynamicSpaceMB := max(64, req.Limits.MemoryMB/2)
 		if dynamicSpaceMB > 512 {
@@ -304,13 +329,15 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			strings.Join(groovyClasspath, string(os.PathListSeparator)),
 			mainClass,
 		}
-	case "scala":
+	case "scala", "scala3":
 		mainClass, err := normalizeJVMMainClass(req.EntryPoint, "Main")
 		if err != nil {
 			return nil
 		}
 		scalaClasspath := []string{primaryPath}
-		if matches, err := filepath.Glob("/usr/share/java/scala*.jar"); err == nil {
+		if lang == "scala3" {
+			scalaClasspath = append(scalaClasspath, profiles.Scala3RuntimeClasspath)
+		} else if matches, err := filepath.Glob("/usr/share/java/scala*.jar"); err == nil {
 			scalaClasspath = append(scalaClasspath, matches...)
 		}
 		if len(scalaClasspath) == 1 {
@@ -333,14 +360,22 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			strings.Join(scalaClasspath, string(os.PathListSeparator)),
 			mainClass,
 		}
-	case "java":
+	case "java", "java25":
 		xmx := jvmHeapMB(req.Limits.MemoryMB, tuning)
 		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
 		metaspaceMB := jvmMetaspaceMB(req.Limits.MemoryMB)
+		java := "java"
+		classSpace := "-XX:-UseCompressedClassPointers"
+		if lang == "java25" {
+			java = filepath.Join(profiles.Java25Home, "bin", "java")
+			// JDK 25's CDS archive expects compressed class pointers. Bound
+			// their space instead of disabling them and warning on stdout.
+			classSpace = "-XX:CompressedClassSpaceSize=64m"
+		}
 		return []string{
-			"java",
+			java,
 			"-XX:ReservedCodeCacheSize=64m",
-			"-XX:-UseCompressedClassPointers",
+			classSpace,
 			fmt.Sprintf("-Xmx%dm", xmx),
 			fmt.Sprintf("-Xss%dk", tuning.JavaStackSizeKB),
 			fmt.Sprintf("-XX:MaxDirectMemorySize=%dm", directMB),
@@ -351,7 +386,7 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			"-jar",
 			primaryPath,
 		}
-	case "javascript", "apl":
+	case "javascript", "apl", "entry":
 		limitMB := max(64, req.Limits.MemoryMB)
 		oldSpaceMB := max(32, (limitMB*tuning.NodeOldSpacePercent)/100)
 		semiSpaceMB := limitMB / 64
@@ -369,6 +404,8 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 			fmt.Sprintf("--stack-size=%d", tuning.NodeStackSizeKB),
 		}
 		switch lang {
+		case "entry":
+			return append(args, "--disallow-code-generation-from-strings", "--no-addons", "/usr/local/lib/aonohako/entry-runner.mjs", primaryPath, req.EntryMode)
 		case "apl":
 			return append(args, "/usr/local/bin/apl", "--script", "-f", primaryPath)
 		default:
@@ -441,6 +478,14 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{primaryPath}
 	case "smalltalk":
 		return []string{"gst", "-q", primaryPath}
+	case "wren":
+		return []string{"wren_cli", primaryPath}
+
+	case "squirrel":
+		return []string{"aonohako-squirrel", primaryPath}
+
+	case "pari-gp":
+		return []string{"aonohako-pari-gp", "-f", "-q", primaryPath}
 	case "golfscript":
 		// GolfScript string literals must not interpolate arbitrary Ruby code.
 		return []string{"ruby", "/usr/local/lib/aonohako/golfscript.rb", "-n", primaryPath}
@@ -526,6 +571,14 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		return []string{"python3", "/usr/local/lib/aonohako/brainfuck.py", primaryPath}
 	case "malbolge":
 		return []string{"python3", "/usr/local/lib/aonohako/malbolge.py", primaryPath}
+	case "unlambda":
+		return []string{"python3", "/usr/local/lib/aonohako/unlambda.py", primaryPath}
+	case "shakespeare":
+		return []string{"/opt/shakespeare/bin/python3", "/usr/local/lib/aonohako/shakespeare_run.py", primaryPath}
+	case "piet":
+		return []string{"npiet", "-q", primaryPath}
+	case "lazyk":
+		return []string{"lazyk", primaryPath}
 	case "wasm":
 		limitMB := max(16, req.Limits.MemoryMB)
 		guestMemoryMB := max(1, limitMB-64)

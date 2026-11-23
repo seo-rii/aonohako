@@ -9,6 +9,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/profiles"
 )
 
 type groovyCompiler struct{}
@@ -74,12 +75,9 @@ func (clojureCompiler) Compile(ctx context.Context, job CompileJob) model.Compil
 type javaCompiler struct{}
 
 func (javaCompiler) Compile(ctx context.Context, job CompileJob) model.CompileResponse {
-	return compileJava(ctx, job.WorkDir, job.Request.Sources, job.Profile.JavaRelease)
-}
-
-func compileJava(ctx context.Context, workDir string, sources []model.Source, release string) model.CompileResponse {
+	workDir := job.WorkDir
 	var javaPaths []string
-	for _, src := range sources {
+	for _, src := range job.Request.Sources {
 		if strings.HasSuffix(strings.ToLower(src.Name), ".java") {
 			javaPaths = append(javaPaths, filepath.Join(workDir, filepath.Clean(src.Name)))
 		}
@@ -87,9 +85,18 @@ func compileJava(ctx context.Context, workDir string, sources []model.Source, re
 	if len(javaPaths) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no java sources"}
 	}
-	args := []string{"--release", release, "-encoding", "UTF-8"}
+	args := []string{"--release", job.Profile.JavaRelease, "-encoding", "UTF-8"}
 	args = append(args, javaPaths...)
-	stdout, stderr, status, reason := runCommand(ctx, workDir, "javac", args, javaCompileEnv(workDir, 768))
+	compiler := "javac"
+	if job.Profile.JavaRelease == "25" {
+		compiler = filepath.Join(profiles.Java25Home, "bin", "javac")
+	}
+	runner := job.Runner
+	if runner == nil {
+		runner = sandboxCommandRunner{}
+	}
+	result := runner.Run(ctx, workDir, compiler, args, javaCompileEnv(workDir, 768))
+	stdout, stderr, status, reason := result.Stdout, result.Stderr, result.Status, result.Reason
 	if status != model.CompileStatusOK {
 		return model.CompileResponse{Status: status, Stdout: stdout, Stderr: stderr, Reason: reason}
 	}

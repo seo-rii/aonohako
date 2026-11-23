@@ -499,7 +499,7 @@ reported as runtime failure instead of silently falling back to process stdout.
 | Metric | Source | Why |
 | --- | --- | --- |
 | `wall_time_ms` | `CLOCK_MONOTONIC` | stable wall clock, not affected by time jumps |
-| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec` for run-cgroup CPU usage | aggregates all threads inside the process and, when cgroups are enabled, covers the run cgroup rather than only the main PID |
+| `cpu_time_ms` | `CLOCK_PROCESS_CPUTIME_ID` on the target PID; self-hosted cgroup mode also uses `cpu.stat` `usage_usec`; Cloud Run embedded helpers apply startup fixed-work calibration only when explicitly enabled | aggregates all target threads; experimental calibration attempts to compensate for host performance differences, while `raw_cpu_time_ms` preserves scheduled host time |
 | `memory_kb` | `/proc/<pid>/statm` sampled during execution and `/proc/<pid>/smaps_rollup` near the limit or when AS is disabled; cgroup runs additionally use aggregate `memory.peak` | captures target RSS without charging the API server or sandbox helper, and reports the kernel aggregate peak for cgroup process trees |
 
 Important consequence:
@@ -508,6 +508,52 @@ Important consequence:
 - multiprocessing is not allowed by seccomp
 - because `fork`/`vfork`/`clone3` are denied and only thread-form `clone` is
   allowed, `cpu_time_ms` remains meaningful for the whole submission process
+
+Cloud Run does not guarantee a fixed processor model for a vCPU. CPU performance
+normalization is experimental and disabled by default on every deployment
+target. It has not been validated for production timing stability or CPU TLE
+fairness. An embedded Cloud Run helper explicitly opted in with
+`AONOHAKO_CPU_NORMALIZATION=true` warms the calibration loop, then runs five samples
+of versioned, fixed, single-thread integer work before accepting traffic,
+measures them with `CLOCK_THREAD_CPUTIME_ID`, and uses the median to build an
+immutable instance scale. The sorted samples' central-three span must be at
+most 10% of the median. A wider span is treated as transient startup noise and
+the helper repeats a fresh warm-up plus five-sample pass, up to five total
+attempts. Each rejected pass logs all five samples, the median, and the measured
+spread. Only five consecutive unstable passes fail startup, so isolated noise
+does not discard an otherwise healthy Cloud Run instance. The default
+reference is 60 ms and may be changed with
+`AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS`; opting in is supported only for
+`cloudrun + embedded + helper`. With normalization disabled, startup does not
+calibrate and target CPU accounting remains in scheduled host CPU time.
+An existing explicit `true` setting is not overridden by the new default:
+remove it or set `AONOHAKO_CPU_NORMALIZATION=false` to opt out. Switching an
+already normalized fleet to raw timing changes the reporting unit and CPU TLE
+budget, so coordinate that rollout with problem limits and judging policy.
+When opted in, calibration failure or a sample outside the supported
+duration/scale bounds fails startup rather than mixing raw and normalized
+semantics.
+
+With normalization enabled, the public CPU limit is converted back into raw host nanoseconds for process and
+cgroup watchdogs. Reporting scales the raw nanosecond value before rounding up
+to whole milliseconds; the inverse budget uses floor division at nanosecond
+precision, preserving the strict-over-limit boundary without a fractional-ms
+loss. The helper's coarser `RLIMIT_CPU` input is rounded up separately. The wall
+deadline is separate: it is never shortened and receives
+10% or at least 100 ms of supervision slack above the larger of the public
+limit and the calibrated raw CPU allowance. Actual elapsed time remains in
+`wall_time_ms`. Calibration aims to reduce hardware-model variance, but a
+benchmark may not predict a submission's instruction mix, managed runtime,
+memory performance, or later host contention; applying its scale can also
+increase variance. Functional tests alone do not establish its effectiveness.
+
+A remote control plane does not know the selected runner instance's calibration
+before execution. Its absolute deadline therefore budgets for the maximum
+supported raw CPU expansion (4x), including the same wall slack, for each
+sequential execution or special-judge stage. Concurrent contestant/interactor
+pairs use the larger allowance. The control plane adds its fixed 30-second
+operation overhead once; a shorter caller deadline still takes precedence.
+This outer deadline does not change the runner's actual calibrated CPU limits.
 
 Memory enforcement uses several layers:
 
@@ -552,10 +598,14 @@ The stable contract is:
   completed sandbox setup but before the parent releases the target `execve()`;
   because the execute sandbox denies process creation and allows only
   thread-form `clone`, this includes all target threads without charging helper
-  setup time; after process exit, no-cgroup runs finalize the same metric from
-  wait usage minus that helper baseline so the CPU tail after the last watchdog
-  sample is retained; `process_cpu_time_ms` remains the raw helper-plus-target
-  diagnostic and is not a contestant timing value
+  setup time; after process exit, no-cgroup runs finalize CPU from wait usage
+  minus a separate helper `getrusage(RUSAGE_SELF)` baseline, never a baseline from
+  a different clock. The maximum of that final delta and process-clock polling
+  retains the CPU tail after the last watchdog sample. An unavailable or
+  underflowing final counter cannot produce a successful verdict. Optional
+  `cpu_accounting` and nanosecond fields describe one sandbox, not pipeline
+  totals. `process_cpu_time_ms` remains the raw helper-plus-target diagnostic
+  and is not a contestant timing value
 - RSS and virtual size are sampled from procfs only after the ready pipe reports
   the close-on-exec target transition and are refined with `smaps_rollup` near
   the limit or when address-space limits are disabled; cgroup runs additionally
@@ -813,6 +863,11 @@ The following checks are enforced before the HTTP server starts:
 - `AONOHAKO_REMOTE_STRICT_PROTOCOL` is a strict boolean; it defaults to `true`
   outside `dev` so remote responses without `X-Aonohako-Protocol-Version` are
   rejected in production remote fleets
+- `AONOHAKO_CPU_NORMALIZATION` defaults to `false` everywhere. Explicit
+  experimental opt-in is supported only for `cloudrun + embedded + helper`;
+  enabling it for another execution shape is
+  rejected, and `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS` must be between 1
+  and 5000
 - non-dev deployments also reject `0` for pending queue, global and
   per-principal upload, global stream, and per-principal stream caps so
   unlimited queue, upload, or open-stream settings stay development-only
@@ -901,6 +956,9 @@ Recommended Cloud Run deployment baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
+- `AONOHAKO_CPU_NORMALIZATION=false` (experimental calibration stays disabled)
+- `AONOHAKO_CPU_SHORT_CASE_SAMPLING=false`
+- `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS=60`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, unless
   `AONOHAKO_INBOUND_AUTH=platform` is set because Cloud Run IAM, mTLS, private
   ingress, or a gateway enforces inbound authentication; use
@@ -989,15 +1047,15 @@ Production profiles currently group languages like this:
 
 | Profile | Languages |
 | --- | --- |
-| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `j`, `janet`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `perl`, `php`, `picolisp`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `tcl`, `uiua`, `wasm`, `whitespace` |
-| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `typescript` |
-| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
+| `type-a` | `aheui`, `algol68`, `apecode`, `apl`, `awk`, `bc`, `befunge`, `bf`, `bqn`, `chez-scheme`, `chicken-scheme`, `elixir`, `erlang`, `fennel`, `forth`, `gforth`, `gleam`, `gnu-prolog`, `golfscript`, `guile`, `haskell`, `idris2`, `intercal`, `j`, `janet`, `lazyk`, `lisp`, `lolcode`, `lua`, `luajit`, `malbolge`, `mercury`, `mlton`, `ocaml`, `pari-gp`, `perl`, `php`, `picat`, `picolisp`, `piet`, `plain`, `prolog`, `pypy`, `r`, `racket`, `raku`, `ruby`, `scheme`, `sed`, `shakespeare`, `smalltalk`, `sml`, `smlnj`, `sqlite`, `squirrel`, `tcl`, `uiua`, `unlambda`, `wasm`, `whitespace`, `wren` |
+| `type-b` | `assemblyscript`, `bun`, `clojure`, `coffeescript`, `deno`, `elm`, `graphql`, `groovy`, `haxe`, `java`, `java25`, `javascript`, `purescript`, `quickjs`, `rescript`, `scala`, `scala3`, `typescript` |
+| `type-c` | `ada`, `asm`, `c3`, `classic-basic`, `cobol`, `crystal`, `cython`, `d`, `delphi`, `fortran`, `freebasic`, `gnucobol`, `go`, `hare`, `koka`, `mojo`, `moonbit`, `nasm`, `nim`, `nimony`, `objective-c`, `objective-cpp`, `objectpascal`, `odin`, `pascal`, `qbasic`, `rust`, `vala`, `vlang`, `zerolang`, `zig` |
 | `type-d` | `kotlin`, `kotlin-jvm` |
 | `type-e` | `csharp`, `fsharp`, `powershell`, `vbnet` |
 | `type-f` | `uhmlang` |
 | `type-g` | `julia` |
 | `type-h` | `swift` |
-| `type-i` | `c`, `cpp`, `java`, `plain`, `pypy`, `python` |
+| `type-i` | `c`, `cpp`, `java`, `java25`, `plain`, `pypy`, `python` |
 | `type-j` | `agda`, `coq`, `rocq`, `tla`, `why3` |
 | `type-k` | `dart` |
 | `type-l` | `python` |
@@ -1012,6 +1070,53 @@ Production profiles currently group languages like this:
 | `type-w` | `pony` |
 | `type-x` | `bash`, `fish`, `posix-sh`, `zsh` |
 | `type-y` | `factor` |
+
+The `SCALA3` profile pins the official Scala 3.3.9 LTS distribution by SHA256
+and installs only the noninteractive compiler and runtime JAR closure under
+`/opt/aonohako/scala3`. Compilation invokes `dotty.tools.dotc.Main` directly
+with the trusted compiler JAR directory and a separate fixed library classpath,
+UTF-8 source encoding, and Java 17 bytecode target. It publishes only `.class`
+artifacts. Execution uses `java` with the submitted class directory and the
+trusted Scala 3 / Scala 2.13 runtime libraries; it never includes compiler,
+Scala CLI, dependency resolution, or the legacy Scala 2 installation. Entry
+classes use the same validated JVM entry-point contract and bounded JVM memory
+settings as the existing Scala runner. Scala 3 `@main` methods can be selected
+with their generated class name in `entry_point`.
+
+The `PICAT` profile uses the checksum-pinned official Picat 3.9#12 Linux x64
+runtime in type-a. Compilation calls an immutable Picat helper with source paths
+passed as arguments to `compile/1`; this emits temporary bytecode without loading
+it or running `main`. Only submitted sources and data are published, preferring
+`Main.pi` as the entry point, and user-supplied `.qi` bytecode is rejected.
+Execution clears `PICATPATH`, compiles source in memory, and invokes `main/0`.
+Tabling and built-in constraint modules use the ordinary process/network-denying
+sandbox; integrations requiring external solver executables are not installed.
+
+The `WREN` profile preserves `.wren` sources during compilation and runs the
+selected source with the official `wren_cli` in type-a. The checksum-pinned CLI
+archive includes Wren 0.4.0; only its VM/CLI sources are compiled, linking to
+system libuv instead of the archive's old bundled libuv. Relative source imports
+stay available in the submission workspace. Bounded cached stdin is delivered
+through a pipe because the CLI libuv reader does not support regular-file stdin.
+There is no compile-only CLI mode,
+so syntax and import errors become execution errors. Wren numbers are IEEE-754
+doubles, and exact integer arithmetic is limited to the corresponding safe range.
+
+The `NIMONY` profile builds the C backend from checksum-verified Nimony commit
+`d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development) in type-c.
+Its private Nim 2.2.10 bootstrap and pinned parser/runtime dependencies are
+verified before building, and the bootstrap is removed after installation.
+Compilation selects a `.nim` entry point, preferring `Main.nim`, and returns
+only the native executable for the `binary` runtime in `plain`. A source patch
+redirects upstream's installation-local standard-library cache below the
+request's `--nimcache`; shared objects use the workspace's `XDG_CACHE_HOME`.
+The installed toolchain stays read-only and concurrent submissions keep
+separate caches. Its compile sandbox permits chmod on generated macro plugins,
+and a three-minute compile budget covers cold macro and standard-library builds.
+Nimony is under development; its language
+and standard library support differ from Nim's. `echo` requires
+`import std/syncio`; raising input and file-I/O operations require explicit
+error handling such as `try`/`except`.
 
 The `CARBON` profile precompiles the pinned nightly toolchain's Core objects
 inside the runtime image. Submission compilation emits an optimized object and
@@ -1206,6 +1311,31 @@ as 59048), while malformed non-graphical runtime memory terminates safely
 instead of reproducing the reference C implementation's undefined access or
 busy loop.
 
+The `SHAKESPEARE` profile runs plays with the pinned `shakespearelang` 1.0.0
+interpreter installed into the isolated `/opt/shakespeare` virtual environment,
+so its `click<8` pin never reaches the system Python. Compile performs a parse
+check through the bundled `shakespeare_run.py --check`. At runtime the same
+runner replaces the interpreter's console I/O: numeric input skips leading
+whitespace and accepts an optional sign (like the reference `spl2c`), character
+I/O is byte-exact, and interpreter errors exit non-zero instead of zero.
+
+The `PIET` profile accepts `.png` and netpbm `.ppm` (P3/P6) programs and runs
+them with npiet 1.3f built against libpng only, without GD and its large image
+codec dependency tree; GIF input is therefore not supported. `npiet -q`
+suppresses the interactive `? ` input prompts.
+
+The `UNLAMBDA` profile uses a bundled Unlambda 2.0 interpreter whose explicit
+CPS machine keeps `c` constant-time and avoids Python recursion limits. Debian's
+`unlambda` package is not used because it reads the program from stdin and
+treats the remaining bytes as program input. The `LAZYK` profile runs irori's
+Lazy K 1.0.0 interpreter, which accepts combinator, Unlambda-style, Iota, and
+Jot syntax. The `INTERCAL` profile compiles with Debian's C-INTERCAL 0.30
+`ick -b` (random E774 disabled) into a native executable; politeness errors
+fail compilation. Because the profile's GCC 16 defaults to C23, which rejects
+C-INTERCAL's prototype-less runtime declarations, `ick` and the npiet build both
+compile as `-std=gnu17`. The INTERCAL, Unlambda, and Lazy K selftests use non-A+B
+vectors because their native numeric I/O cannot express decimal A+B directly.
+
 CI mode expands the same catalog into one image per language so each smoke job
 validates a single runtime in isolation. A dedicated CI summary job builds the
 production profiles in a parallel matrix and runs
@@ -1363,3 +1493,13 @@ The repository verifies the design through:
 For operational use, keep architecture and security decisions aligned with the
 actual code in `internal/execute`, `internal/sandbox`, and
 `docker/runtime.Dockerfile`.
+
+`SQUIRREL` compiles `.nut` files to Squirrel 3.2 bytecode (`Main.cnut`).
+Execute with `squirrel`. The pinned CLI uses a dedicated `aonohako-squirrel`
+command to avoid system `sq` collisions, and propagates runtime errors as failures.
+
+`PARI_GP` (also `pari-gp`, `pari/gp`, or `gp`) checks `.gp` source with
+the parser from checksum-pinned PARI/GP 2.19.1 without evaluating it. Execute
+with `pari-gp`. The judge driver disables startup configuration, exits after
+the source, preserves stdin for input, and fails on unhandled errors. GP
+backslash metacommands are outside the compile contract; use GP functions.

@@ -19,7 +19,10 @@ func TestCommunicationEndToEndWithDelegatedCgroup(t *testing.T) {
 }
 
 func TestCommunicationEndToEndWithoutCgroup(t *testing.T) {
-	testCommunicationEndToEnd(t, platform.DeploymentTargetCloudRun, "", false)
+	t.Run("64_participants", func(t *testing.T) {
+		testCommunicationEndToEnd(t, platform.DeploymentTargetCloudRun, "", false)
+	})
+	t.Run("large_streams_and_eof", testCommunicationLargeStreamsAndEOF)
 }
 
 func testCommunicationEndToEnd(t *testing.T, deploymentTarget platform.DeploymentTarget, cgroupParent string, requireCgroup bool) {

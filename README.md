@@ -20,8 +20,12 @@ mode preserves code and source locations but changes source inspection and
 - a `box` workspace layout that keeps submitted files immutable while allowing
   new files to be created in the same working directory
 - symlink-safe output capture for file outputs and sidecar artifacts
+- optional [SIMD and AVX restrictions](docs/cpu-feature-policy.md) for C/C++
+  compilation and instruction-checked execution of native x86-64 binaries
 - SPJ and interactive IO judging support for problems that need custom verdict
   logic or bidirectional contestant/interactor communication
+- [Entry block judging](docs/entry-judging.md) with selectable standard I/O or
+  deterministic stage-state comparison, using immutable Entry JSON submissions
 - `communication-v1` execution on explicitly enabled Cloud Run embedded helpers
   and dedicated self-hosted cgroup runners: one private manager process
   coordinates 2–64 isolated launches of one shared, read-only participant binary
@@ -70,16 +74,65 @@ language-specific commands keep their declared order.
   libraries (`numpy`, `pandas`, `seaborn`, `matplotlib`, `Pillow`, `qiskit`,
   `torch`, `torchvision`, `jax[cpu]`, and related dependencies), optional
   custom Python packages supplied at image build time, PyPy, Java/Kotlin/JVM languages,
-  Node/Deno/Bun/QuickJS/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
+  Scala 3, Node/Deno/Bun/QuickJS/TypeScript/CoffeeScript/Elm/ReScript/PureScript, AssemblyScript/WASI, .NET languages and PowerShell, Ruby, PHP, Lua/LuaJIT, Perl,
   Elixir/Erlang/Gleam, Haskell, Idris2, Standard ML with MLton and SML/NJ, OCaml, SQLite/DuckDB, Go, Rust, Zig, Nim,
-  Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
-  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog,
-  Lisp/PicoLisp/Smalltalk/GolfScript, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, WASM, Coq/Rocq, Lean, Agda,
+  Nimony, Pascal, Delphi, Object Pascal, Ada, GNU assembly, NASM, Objective-C/C++, C3, Crystal, D, Hare, Vala,
+  Mojo, MoonBit, Fennel, Factor, Chapel, ALGOL 68, Koka, Pony, Bash/POSIX/Zsh/Fish shell, Zerolang, Odin, V, FreeBASIC/QBasic, Julia, Swift, R, Racket/Chibi Scheme/Chez Scheme/GNU Guile/Chicken Scheme, Mercury, SWI Prolog/GNU Prolog, Picat,
+  Lisp/PicoLisp/Smalltalk/GolfScript/Wren, APECode, Befunge, Brainfuck, Malbolge, LOLCODE, Whitespace, Shakespeare, Piet, Unlambda, Lazy K, INTERCAL, WASM, Coq/Rocq, Lean, Agda,
   TLA+, Why3, Isabelle, Aheui, Dart, GDL/Octave, HDL simulation, CUDA Ocelot,
   Carbon, VB6, Dafny, BQN/APL/J/UIUA/Janet, and UHMLANG. C/C++ and assembly
   submitters compile into binaries and should target the `plain` runtime image
   rather than dedicated native runtime images. Add new languages by extending
   the YAML file instead of editing shell loops or workflow matrices.
+- `JAVA25` selects the checksum-pinned Eclipse Temurin 25.0.5+8 JDK and the
+  `java25` execute runtime in the `type-b` and `type-i` images. It compiles with
+  `--release 25` and supports compact source files and instance `main` methods
+  without preview flags. `JAVA` with `version: "25"` selects the same toolchain;
+  execute the returned classes with `java25` or `JAVA25`. The JDK is installed
+  separately under `/usr/lib/jvm/aonohako-java25`, so existing Java profiles and
+  other JVM languages retain their toolchains. `JAVA` still defaults to release
+  11, and Kotlin/JVM targets remain limited to the existing releases through 21.
+- `SCALA3` selects checksum-pinned Scala 3.3.9 LTS in `type-b`. Compilation
+  calls the compiler directly on a fixed, image-installed classpath and emits
+  JVM classes targeting Java 17. Execute with `scala3` or `SCALA3`; the default
+  main class is `Main`, and `entry_point` can select another class, including
+  a top-level `@main` method's generated class. Both compilation and execution
+  are offline; Scala CLI directives do not fetch dependencies. Existing `SCALA`
+  continues to use its separate Scala toolchain and runtime libraries.
+
+- `PICAT` accepts `.pi` sources using Picat 3.9#12 in `type-a`. A trusted
+  compile helper checks all submitted Picat sources without loading bytecode or
+  invoking `main`. Only immutable submitted sources/data are returned; execution
+  compiles source in memory and invokes `main/0`. Submitted `.qi` bytecode is
+  rejected. Core tabling, list comprehensions, and the bundled constraint modules
+  are available; external solver programs are not installed.
+
+- `WREN` uses the official Wren CLI source pinned to
+  `18553636618a4d33f10af9b5ab92da6431784a8c` (Wren 0.4.0), linked against
+  Debian's system libuv. Compile and execute in `type-a`, or use `ci-wren` for
+  an isolated smoke image. Compilation preserves submitted sources without
+  evaluating them; syntax and import errors are reported during execution.
+  Use `import "io" for Stdin` for input and relative imports such as
+  `import "./addition" for Addition` for submitted helper modules.
+- `NIMONY` compiles `.nim` sources with the C backend of
+  [Nimony](https://github.com/nim-lang/nimony), pinned to source commit
+  `d2e842d6d8eb8e79c0ad610004f5bbb6ddf3eeca` (0.6.3 development). Compile in
+  `type-c` and execute the returned native artifact with `binary` in `plain`.
+  This compiler is still under development and has its own language and standard
+  library contracts; for example, `echo` requires `import std/syncio`, and
+  raising input-parsing and file-I/O calls require explicit error handling.
+  Its project, standard-library, and shared-object caches stay in the request's
+  workspace. Nimony compilation has a three-minute budget for cold macro and
+  standard-library builds. Existing `NIM` submissions continue to use the Nim toolchain.
+- `SQUIRREL` compiles `.nut` files to Squirrel 3.2 bytecode (`Main.cnut`).
+  Execute with `squirrel`. The pinned CLI uses a dedicated `aonohako-squirrel`
+  command to avoid system `sq` collisions, and propagates runtime errors as failures.
+
+- `PARI_GP` (also `pari-gp`, `pari/gp`, or `gp`) checks `.gp` source with
+  the parser from checksum-pinned PARI/GP 2.19.1 without evaluating it. Execute
+  with `pari-gp`. The judge driver disables startup configuration, exits after
+  the source, preserves stdin for input, and fails on unhandled errors. GP
+  backslash metacommands are outside the compile contract; use GP functions.
 - Zerolang is pinned to the official v0.3.4 Linux x64 release. Compilation
   imports canonical `.0` text into a graph and then builds a native executable
   with the `release-fast` profile. Its stable source projection does not yet
@@ -414,6 +467,49 @@ aonohako-selftest cgroup-preflight
   `X-Aonohako-Protocol-Version`. It defaults to `true` outside `dev` and
   `false` in `dev`, so production remote fleets fail closed on unversioned
   runner responses while local compatibility testing can still accept them.
+- `AONOHAKO_CPU_NORMALIZATION` defaults to `false` on every deployment target.
+  It is an experimental opt-in, not validated for production timing stability
+  or CPU TLE fairness. Explicit `true` is supported only for
+  `cloudrun + embedded + helper`. When enabled, before accepting traffic the
+  runner measures versioned fixed single-thread work and uses that immutable
+  per-instance scale for both authoritative `cpu_time_ms` reporting and CPU TLE
+  enforcement. With it disabled, the runner does not calibrate and reports
+  scheduled host CPU time without a performance scale.
+  CPU accounting and limit comparisons retain nanosecond precision; only the
+  reported `cpu_time_ms` is rounded up to whole milliseconds. `cpu_time_ns`,
+  `raw_cpu_time_ns`, `raw_cpu_time_ms`, `cpu_accounting`, and
+  `cpu_time_normalization` retain diagnostics. Without cgroups, process-clock
+  polling subtracts a process-clock baseline and final wait usage subtracts a
+  separate `getrusage` baseline captured by the helper before target release.
+  CPU usage is never clamped to wall time (multithreaded CPU can exceed it).
+  Existing deployments explicitly setting `true` remain opted in; remove that
+  setting or set it to `false` to disable calibration. Switching an already
+  normalized fleet to raw timing changes reported time units and CPU TLE
+  budgets, so coordinate the rollout with the judging policy rather than mixing
+  normalized and raw runners under the same limits.
+- `AONOHAKO_CPU_SHORT_CASE_SAMPLING` defaults to the CPU-normalization setting
+  (therefore `false` unless normalization is explicitly enabled) and takes
+  effect only with an active calibration. An ordinary batch testcase
+  whose first execution is AC and at most 100 ms of normalized CPU is executed
+  twice more in fresh workspaces with identical input and limits. If all three
+  are AC, the reported CPU is their nanosecond-precision median. Any repeated
+  WA/RE/TLE or other failure is returned immediately, never averaged away.
+  `cpu_time_sampling` records actual samples and the selected 1-based sample
+  (0 on failure); raw/accounting diagnostics come from that same sample.
+  Memory is the maximum, while wall and elapsed time include all executions.
+  Network, SPJ, interactive, communication, pipeline, file/sidecar-output,
+  image-emitting, and ignore-TLE requests are not repeated. URL stdin is fetched
+  once into a private file within its existing size bound, then reopened read-only
+  for each sample without buffering it on the Go heap or duplicating its storage.
+  Its bytes still count against each run's workspace quota. Repeated log/image
+  events are suppressed.
+  This can triple execution work for short cases; set the variable to `false`
+  to disable repetition independently. Submission aggregation remains the
+  control plane's existing policy (Jungol uses the maximum testcase CPU).
+- `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS` selects the fixed-work reference
+  duration and defaults to `60`; values from `1` through `5000` are accepted.
+  Changing it changes the effective CPU-time scale and should be rolled out as
+  a judging-policy change.
 - `AONOHAKO_ALLOW_REQUEST_NETWORK` controls whether `/execute` may honor
   client-supplied `enable_network=true`. It defaults to `true` only for `dev`
   and `false` for `cloudrun` or `selfhosted`; public runners should route
@@ -603,6 +699,19 @@ contract:
   entry only when `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`. Public entry
   points should keep this disabled and let a trusted control plane attach the
   profile after applying problem policy.
+- `disallowed_cpu_features`
+  An optional `"avx"` / `"simd"` list on both `/compile` and `/execute`.
+  Compilation checks C/C++ objects before linking. Execution uses the packaged
+  Durante/DynamoRIO native instrumentation for Linux x86-64 contestant binaries;
+  it checks executed instructions, including application library code. Execution
+  currently supports standard I/O, ordinary and interactive contestants, and
+  stdin/stdout pipelines. Network, communication mode, and contestant file
+  outputs are rejected. Trusted interactors and SPJs keep their existing
+  execution path. The policy can share one run with diagnostic work measurement.
+  Instrumentation costs count toward limits, and `simd` can reject packed
+  instructions in libc even for scalar source. This retains Durante's
+  application-mutable trust level. See
+  [CPU feature policy](docs/cpu-feature-policy.md) for scope and packaging.
 
 ## Security notes
 
@@ -682,6 +791,9 @@ For Cloud Run deployments, use this baseline:
 - `AONOHAKO_DEPLOYMENT_TARGET=cloudrun`
 - `AONOHAKO_EXECUTION_TRANSPORT=embedded`
 - `AONOHAKO_SANDBOX_BACKEND=helper`
+- `AONOHAKO_CPU_NORMALIZATION=false` (keep the experimental calibration disabled)
+- `AONOHAKO_CPU_SHORT_CASE_SAMPLING=false`
+- `AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS=60`
 - `AONOHAKO_API_BEARER_TOKEN` set to a strong secret, or
   `AONOHAKO_INBOUND_AUTH=platform` only when an upstream layer enforces
   inbound authentication

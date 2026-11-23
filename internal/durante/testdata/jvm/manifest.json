@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "scope": "fixed compatibility fixtures; not timing/variance qualification",
+  "source_sha256": {
+    "Main.java": "e338e00068fa402a9c16354c5ad9e55a0c84bf0a4751afdd16fb7236c52c97cc"
+  },
+  "cases": [
+    {
+      "id": "jvm",
+      "profile": "JAVA21",
+      "source": "Main.java",
+      "compile": [
+        "javac",
+        "Main.java"
+      ],
+      "command": [
+        "java",
+        "-XX:+UseSerialGC",
+        "-Xmx128m",
+        "Main"
+      ],
+      "stdin": "250000\n",
+      "expected_stdout": "3265584401\n",
+      "required_exit": 0,
+      "purpose": "runtime compatibility and complete accounting only, not speed/determinism qualification",
+      "sandbox_process_permission": "unchanged"
+    }
+  ],
+  "notes": [
+    "Compile/run commands are relative to this directory; generated executables/classes are not checked in.",
+    "Run a direct control first and preserve output and exit status when launching under the pinned Durante client.",
+    "A successful selector test does not qualify an image runtime. Require complete external process-tree collection after every target has exited.",
+    "The shell child fixture requires an explicitly process-enabled diagnostic environment. It does not change ordinary sandbox permissions."
+  ]
+}

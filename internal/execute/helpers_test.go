@@ -18,6 +18,7 @@ import (
 	"aonohako/internal/config"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
+	"aonohako/internal/timing"
 )
 
 type failingWriter struct {
@@ -414,6 +415,10 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 		{"brainfuck", "/tmp/sol.bf", "python3", true},
 		{"malbolge", "/tmp/sol.mal", "python3", true},
 		{"lolcode", "/tmp/sol.lol", "lci", true},
+		{"unlambda", "/tmp/sol.unl", "python3", true},
+		{"shakespeare", "/tmp/sol.spl", "/opt/shakespeare/bin/python3", true},
+		{"piet", "/tmp/sol.png", "npiet", true},
+		{"lazyk", "/tmp/sol.lazy", "lazyk", true},
 		{"wasm", "/tmp/sol.wasm", "wasmtime", true},
 		{"assemblyscript", "/tmp/sol.wasm", "wasmtime", true},
 		{"factor", "/tmp/sol.factor", "/opt/factor/factor", true},
@@ -550,6 +555,27 @@ func TestBuildCommandAllLanguages(t *testing.T) {
 				t.Errorf("buildCommand(%s) missing bundled interpreter path in %v", tc.lang, args)
 			}
 		})
+	}
+}
+
+func TestBuildCommandOctaveImageOptIn(t *testing.T) {
+	path := "/tmp/box/quote' and\nnewline.m"
+	direct := []string{"octave-cli", "--quiet", "--no-gui", "--no-history", "--no-init-file", "--no-init-path", path}
+	for _, outputs := range [][]model.OutputFile{nil, {{Path: "result.png"}}, {{Path: "__img__/other.jsonl"}}} {
+		if got := buildCommand(path, "octave", &model.RunRequest{SidecarOutputs: outputs}); !reflect.DeepEqual(got, direct) {
+			t.Fatalf("non-image Octave command = %v, want %v", got, direct)
+		}
+	}
+	request := &model.RunRequest{SidecarOutputs: []model.OutputFile{{Path: "__img__/images.jsonl"}}}
+	got := buildCommand(path, "octave", request)
+	if len(got) != 9 || got[0] != "env" || got[2] != "octave-cli" || got[8] != "/usr/local/lib/aonohako/octave/plot_capture.m" {
+		t.Fatalf("image command must load the trusted helper without script arguments: %v", got)
+	}
+	if got[1] != "AONOHAKO_OCTAVE_ENTRY="+base64.StdEncoding.EncodeToString([]byte(path)) {
+		t.Fatalf("entry path must be encoded as data in image command: %v", got)
+	}
+	if containsArg(got, "--no-init-path") || containsArg(got, "--eval") {
+		t.Fatalf("image command must allow installed functions and retain script argv: %v", got)
 	}
 }
 
@@ -1220,7 +1246,7 @@ func TestAddressSpaceProximityClassificationOnlyForNativeCommands(t *testing.T) 
 func TestEvaluateRunStatusClassifiesFinalCPUOverrun(t *testing.T) {
 	req := &model.RunRequest{ExpectedStdout: "ok\n", Limits: model.Limits{TimeMs: 100, MemoryMB: 64}}
 	res := execResult{Status: "OK", CPUTimeMs: 101}
-	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("ok\n"), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "")
+	status, _, reason, source := evaluateRunStatus(context.Background(), Workspace{}, req, res, []byte("ok\n"), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 	if status != model.RunStatusTLE {
 		t.Fatalf("status = %q, want TLE", status)
 	}

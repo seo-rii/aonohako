@@ -47,6 +47,7 @@ func TestJSONCollectionAdmissionBounds(t *testing.T) {
 		{name: "programs.binaries", prefix: `{"programs":[{"binaries":[`, suffix: `]}]}`, limit: runvalidation.MaxBinaryFiles},
 		{name: "steps.stdin_parts", prefix: `{"steps":[{"stdin_parts":[`, suffix: `]}]}`, limit: runvalidation.MaxStdinParts},
 		{name: "interactor.binaries", prefix: `{"interactor":{"binaries":[`, suffix: `]}}`, limit: runvalidation.MaxBinaryFiles},
+		{name: "work_measurement_peer_time.budgets", prefix: `{"work_measurement_peer_time":{"budgets":[`, suffix: `]}}`, limit: max(runvalidation.MaxCommunicationParticipants+1, 2*runvalidation.MaxPipelineSteps+1)},
 		{name: "spj.sidecar_outputs", prefix: `{"spj":{"sidecar_outputs":[`, suffix: `]}}`, limit: runvalidation.MaxSidecarOutputs},
 		{name: "pipeline.resources", prefix: `{"pipeline":{"resources":{`, suffix: `}}}`, limit: runvalidation.MaxPipelineResources, object: true},
 		{name: "pipeline.programs", prefix: `{"pipeline":{"programs":[`, suffix: `]}}`, limit: runvalidation.MaxPrograms},
@@ -115,6 +116,29 @@ func TestJSONCollectionSchemaInventory(t *testing.T) {
 	}
 	if _, err := buildJSONDecodeSchema(reflect.TypeFor[struct{ Unbounded []string }](), 0); err == nil {
 		t.Fatal("schema builder accepted an unbounded new request collection")
+	}
+}
+
+func TestCommunicationParticipantIDsAdmissionBounds(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want []string
+	}{
+		{`{"communication":{"participant_program_ids":["seat0","seat1"]}}`, []string{"seat0", "seat1"}},
+		{`{"communication":{"participant_program_ids":["seat0","seat1","seat2"]}}`, nil},
+	} {
+		var req model.RunRequest
+		err := decodeJSONBody(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader(tc.body)), &req)
+		if tc.want != nil {
+			if err != nil || req.Communication == nil || !reflect.DeepEqual(req.Communication.ParticipantProgramIDs, tc.want) {
+				t.Fatalf("valid seat IDs changed: request = %+v, error = %v", req.Communication, err)
+			}
+			continue
+		}
+		var limitErr *jsonCollectionLimitError
+		if !errors.As(err, &limitErr) || limitErr.field != "communication.participant_program_ids" || limitErr.limit != 2 {
+			t.Fatalf("oversized seat IDs did not hit the admission limit: %v", err)
+		}
 	}
 }
 

@@ -139,6 +139,7 @@ func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, arg
 	isSyntaxOnlySchemeReader := commandName == "chezscheme" || commandName == "guile-3.0"
 	isChickenCompiler := commandName == "csc"
 	isBun := commandName == "bun"
+	isPARICheck := commandName == "aonohako-pari-gp"
 	runtimeState, err := security.AcquireRuntimeState(workDir, commandName, 65532, 65532)
 	if err != nil {
 		return "", "", model.CompileStatusInternal, "runtime state preparation failed: " + err.Error()
@@ -158,10 +159,11 @@ func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, arg
 	// because lower file-size rlimits can break CoreCLR/F# startup before user code.
 	disableAddressSpaceLimit := isDotnetLike || isPowerShell || commandName == "aonohako-acl2-check" || commandName == "aonohako-alloy-check" || commandName == "aonohako-assemblyscript-compile" || commandName == "aonohako-kframework-check" || commandName == "c3c" || commandName == "carbon" || commandName == "fstar.exe" || commandName == "kotlinc" || commandName == "kompile" || commandName == "spago" || isIsabelle
 	allowProcessGroups := commandName == "aonohako-kframework-check" || commandName == "swiftc" || commandName == "hare" || commandName == "kompile" || isIsabelle
-	allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isBun
-	allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun
+	allowProcesses := commandName != "aonohako-assemblyscript-compile" && commandName != "deno" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isBun && !isPARICheck
+	allowUnixSockets := commandName != "aonohako-assemblyscript-compile" && commandName != "factor" && commandName != "luajit" && commandName != "qjsc" && !isSyntaxOnlySchemeReader && !isChickenCompiler && !isBun && !isPARICheck
 	allowThreadSignals := isDotnetLike || commandName == "factor"
-	allowChmod := isDotnetLike || commandName == "aonohako-kframework-check" || commandName == "apecc" || commandName == "gleam" || commandName == "hare" || commandName == "idris2" || commandName == "kompile" || commandName == "rescript" || commandName == "zero" || isIsabelle
+	// Nimony plugin compilation needs executable permissions on generated binaries.
+	allowChmod := isDotnetLike || commandName == "aonohako-kframework-check" || commandName == "apecc" || commandName == "gleam" || commandName == "hare" || commandName == "idris2" || commandName == "kompile" || commandName == "nimony" || commandName == "rescript" || commandName == "zero" || isIsabelle
 	allowExecveat := commandName == "hare"
 	openFileLimit := security.OpenFileLimitForCommand(command[0])
 	memoryLimitMB := compileSandboxMemoryMB
@@ -182,7 +184,7 @@ func runSandboxedCommandWithGroups(ctx context.Context, workDir, bin string, arg
 		Dir:     workDir,
 		Env:     helperEnv,
 		Limits: model.Limits{
-			TimeMs:         int(buildTimeout / time.Millisecond),
+			TimeMs:         int(compileTimeoutForKind(commandName) / time.Millisecond),
 			MemoryMB:       memoryLimitMB,
 			WorkspaceBytes: compileWorkspaceBytes,
 		},

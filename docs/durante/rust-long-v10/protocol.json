@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "purpose": "Test whether longer inputs produce adequate uninstrumented Rust CPU observations and improve held-out time prediction on Cloud Run.",
+  "platform": {
+    "target": "cloudrun",
+    "region": "asia-northeast3",
+    "generation": 2,
+    "cpu": 1,
+    "request_concurrency": 1
+  },
+  "base_image": "asia.gcr.io/hancomac/aonohako@sha256:7af8d4b78ae6d7a9951bee0992a84df8282473bf3faf29cfbfdc56772f18ae51",
+  "source_commit": "594ffa49f611f2c2036e11540d5fdf17c0c12723",
+  "engine_profile": "dynamorio-11.3-durante-v10-vm32m",
+  "durante_commit": "191858a02666c1406b871e4974b9072b2c91bb34",
+  "worker_sha256": "082f83a6456e42469cf31aba5cd44ea4ad53dda29dd616cea7be7f71a40f4864",
+  "client_sha256": "dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0",
+  "reference_sha256": "0f103605e5d024eaf3f278b20f4c07674b08d41e3089f25a20ba93acd8a5d361",
+  "previous_clock_receipt_sha256": "148b016ba5a63c500158955b3a75b872355fd7efa1de721b37cbb798cfd1ff97",
+  "rust_short_evaluation_sha256": "5f51748dacf1521da2f2db5ec2dfe53632146a9c526a53d18f6f0701c2ffde3a",
+  "languages": {
+    "RUST2024": "rust-long-reference-v1"
+  },
+  "repetitions": 3,
+  "scales": [
+    1,
+    2,
+    4
+  ],
+  "triplet": [
+    "native_before",
+    "metered",
+    "native_after"
+  ],
+  "thresholds": {
+    "min_native_ns": 20000000,
+    "max_native_spread_ppm": 100000,
+    "max_work_spread_ppm": 1000,
+    "max_error_ppm": 200000
+  },
+  "native_limits": {
+    "time_ms": 10000,
+    "wall_time_ms": 30000,
+    "memory_mb": 512
+  },
+  "metered_limits": {
+    "cpu_time_ms": 90000,
+    "wall_time_ms": 120000,
+    "memory_mb": 512
+  },
+  "fixtures": {
+    "branch": [
+      [
+        "67108864 44257",
+        7428163301764546560
+      ],
+      [
+        "134217728 44257",
+        14856326603529093120
+      ],
+      [
+        "268435456 44257",
+        11265909133348634624
+      ]
+    ],
+    "copy": [
+      [
+        "262144 8192",
+        4385225814237
+      ],
+      [
+        "262144 16384",
+        4398070456541
+      ],
+      [
+        "262144 32768",
+        4449395327197
+      ]
+    ],
+    "fill": [
+      [
+        "262144 16384",
+        6957814931456
+      ],
+      [
+        "262144 32768",
+        7009161756672
+      ],
+      [
+        "262144 65536",
+        7214531969024
+      ]
+    ],
+    "integer": [
+      [
+        "268435456 81985529216486895",
+        17075496932915006959
+      ],
+      [
+        "536870912 81985529216486895",
+        13604651629841993199
+      ],
+      [
+        "1073741824 81985529216486895",
+        610123124510019055
+      ]
+    ],
+    "sort": [
+      [
+        "2097152",
+        3074459544641863680
+      ],
+      [
+        "4194304",
+        6148923487330238464
+      ],
+      [
+        "8388608",
+        12297864566846521344
+      ]
+    ]
+  },
+  "analyses": [
+    "Collect the five unchanged Rust programs at the fixed larger inputs. Count native controls at or above 20 ms and report their range and within-case spread.",
+    "Score three clocks offline: the frozen v10 instruction/MOVS/STOS clock, the prior short Rust instruction/REP candidate, and an official instruction/REP fit using only long integer and copy training cases. Hold out branch, sort and fill at every scale. Use the worst repetition in each case.",
+    "Apply the previous default fit gates. Compare frozen prediction ranges with native extrema, and compute the conservative retrospective pairwise lower bound on fixed nonnegative instruction/MOVS/STOS weights. Report diagnostic process CPU cost separately.",
+    "Preserve any incomplete collection, with no model fit for an incomplete dataset. No observed thresholds or programs will be adjusted during this comparison."
+  ]
+}

@@ -1,0 +1,895 @@
+{
+  "schema": 1,
+  "protocol_sha256": "4ed3974d939d3dcc01dcbf5baa84d7facb59e370ff4c4f0b098b0cbd3004343b",
+  "protocol": {
+    "schema": 1,
+    "question": "Actual ordinary Aonohako live metering speed on one private authenticated Gen2 Seoul Cloud Run instance; stock v8 compared with the nominated ordinary opt-in worker and its real source identity. No model refits.",
+    "baseline": {
+      "durante_source": "614761c18d4735f00e93667c74c099cfdb2800c7",
+      "ordinary_client_sha256": "d708864bc7d3ea0f4d4f8093b30bd5424436bf417e7bf420abd849eaba33d4c0",
+      "client_text_sha256": "ad3caec81104d3ccaa1a52c60fd384d1918895cdd5666a064dd2fd7862ad3ffa"
+    },
+    "candidate": {
+      "durante_source": "27954247e094e682a7cf47504ff13682f970469a",
+      "ordinary_client_sha256": "50238654e1250ad7a46f6fe2f0c4afa674584f8ccc93c445399dcba7bceaec29",
+      "client_text_sha256": "a5dd27b7607a03e4a0e6a1cdf47a026c54a8101352f874d7f420b3316d6c83fe"
+    },
+    "platform": {
+      "region": "asia-northeast3",
+      "generation": 2,
+      "cpu": 1,
+      "memory_gib": 2,
+      "concurrency": 1,
+      "max_instances": 1,
+      "min_instances": 1,
+      "per_arm_work_tmpfs_mib": 128,
+      "dynamorio_core_sha256": "fd1c5645b9fc70a7dcb71459b4b94782d2e016a2aa4ceffcfcab2ade962cdf5b"
+    },
+    "input_manifest_sha256": "36512672537330a9a3326ee3f9de991207e14c9374cbe8eee65aa7716416156e",
+    "allowlist_sha256": "d2560c49ae5d05fdda7ec997919aafd17cd7cb49c9636cb63d94aecd02181232",
+    "order": "Independent of timing results. In each of five full rounds rotate the sorted nine-case sequence left by round-1. Within case baseline/candidate order flips with parity of 1-based round plus 0-based case index. Then three repetitions for each of the two cutoff cases using same alternating-arm rule. Both arms run sequentially on the same CPU allocation.",
+    "full": {
+      "ids": [
+        "branch-2",
+        "distinct-window",
+        "histogram-stack",
+        "integer-2",
+        "libc-short",
+        "rep_copy-2",
+        "short-stream",
+        "sparse-rmq",
+        "tiny"
+      ],
+      "rounds": 5,
+      "nominal_ms": 15000,
+      "expected_live_status": "Accepted",
+      "http_requests": 90
+    },
+    "cutoff": {
+      "nominal_ms": {
+        "integer-2": 63,
+        "rep_copy-2": 142
+      },
+      "rounds": 3,
+      "expect": "Actual Durante internal progress cutoff, no app exit/terminal time estimate",
+      "http_requests": 12
+    },
+    "watchdogs": {
+      "cpu_ms": 90000,
+      "wall_ms": 120000,
+      "nominal_wall_ms": 30000,
+      "memory_mb": 256
+    },
+    "clock": {
+      "method": "weighted-rep-operations-nanoseconds-v2",
+      "instruction_ns_numerator": 233273561,
+      "movs_byte_ns_numerator": 38663059,
+      "stos_byte_ns_numerator": 71296759,
+      "ns_denominator": 1000000000,
+      "authority": "diagnostic_only"
+    },
+    "verification": "Per arm require exact externally known worker/source/client/runtime identity, CPUID x86-64-v2, actual immutable image ID and runtime-options binding, the same weighted budget, ordinary 3 counters, generous outer CPU/wall and score/output/exit at normal completion. Independently compute crossed work from observed progress for every response. Label full inc. any count mismatch separately; no removal of noisy measurements. Live killed work is a progress prefix, not a full program total.",
+    "outcomes": "Record individual Aonohako execution CPU ns and wall ms, final source/status, typed work and timing. Compare per-case median CPU between arms, paired signed differences, including regressions. Same case/ELF/input/oracle both arms. No aggregation as a universal speedup. Include all 102 HTTP responses and verify placement and complete teardown."
+  },
+  "started_utc": "2026-11-20T01:16:14.227239+00:00",
+  "completed_utc": "2026-11-20T01:17:45.610468+00:00",
+  "source_fixture_manifests_sha256": {
+    "historical_cpp20": "7148495309ec653e642aac86e1ed64ea44ee0218bf25f5a7e7f491846b734cf1",
+    "crossed_cpp20": "fb180ab92409852bf24462803e2e3b966eff132bd92b1434bfe5fb9d06dd905b"
+  },
+  "image_digest": "sha256:0f75352e597f7142fb11f640955a31043ca81b14bcd3b7ff39802c288a65cab4",
+  "base_image": "sha256:4300ef9276d94a8fd549e8720c6e47f950829dd8c661bd5a6c51082de3a57f77",
+  "layer_sha256": "387008515fea1112d4f401bab73707073167780770c079f6b50ccb2bd2e40de9",
+  "arms": {
+    "baseline": {
+      "worker_sha256": "a6928c5eeba434f486095e77cca12d14d8b3bc3739763545852e6e017513fcaa",
+      "reference_sha256": "ea33911fb72a33e06c4ddbb53a96d79a8c7da30963a58ca6d83f167c2f215b4a",
+      "upstream_manifest_sha256": "ad39bf2ba8e00a66a364024ad626655e1730d4e690c56d4936cbe6cecb3951ad",
+      "installation": {
+        "source_commit": "614761c18d4735f00e93667c74c099cfdb2800c7",
+        "runtime_source_commit": "6847bb210bea0ca11d1bf47704383d6a075da490",
+        "runtime_patch_sha256": "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c",
+        "runtime_code_replay_patch_sha256": "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b",
+        "launcher_sha256": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+        "client_sha256": "d708864bc7d3ea0f4d4f8093b30bd5424436bf417e7bf420abd849eaba33d4c0",
+        "release_core_sha256": "fd1c5645b9fc70a7dcb71459b4b94782d2e016a2aa4ceffcfcab2ade962cdf5b",
+        "unchanged_before_after": true
+      },
+      "client_text_sha256": "ad3caec81104d3ccaa1a52c60fd384d1918895cdd5666a064dd2fd7862ad3ffa",
+      "engine_profile": "dynamorio-11.3-durante-v8-vm32m",
+      "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+      "aonohako_source_commit": "a04d100f0824d74aaec87bc95b04526d902f311c",
+      "aonohako_build_tag": "durante_v8",
+      "source_marker": "614761c18d4735f00e93667c74c099cfdb2800c7",
+      "model_binding": "work-clock-v1:sha256:12486d015fd50821a3224e65a3b4965f901f9c249445695e3584078b61813b53"
+    },
+    "candidate": {
+      "worker_sha256": "e47753e85c8d550939ceef370fc86ff444b5f2c52653f49dff284fa0edbf3840",
+      "reference_sha256": "7dec997f4be38823e35848e5ee0bcff41b1d4dfc10a144542d8ef989957a6f17",
+      "upstream_manifest_sha256": "b38671cf00276ddc40dddeab54bef422b8e1128699b637000e690f93f492be87",
+      "installation": {
+        "source_commit": "27954247e094e682a7cf47504ff13682f970469a",
+        "runtime_source_commit": "6847bb210bea0ca11d1bf47704383d6a075da490",
+        "runtime_patch_sha256": "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c",
+        "runtime_code_replay_patch_sha256": "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b",
+        "launcher_sha256": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+        "client_sha256": "50238654e1250ad7a46f6fe2f0c4afa674584f8ccc93c445399dcba7bceaec29",
+        "release_core_sha256": "fd1c5645b9fc70a7dcb71459b4b94782d2e016a2aa4ceffcfcab2ade962cdf5b",
+        "unchanged_before_after": true
+      },
+      "client_text_sha256": "a5dd27b7607a03e4a0e6a1cdf47a026c54a8101352f874d7f420b3316d6c83fe",
+      "engine_profile": "dynamorio-11.3-durante-v9-vm32m",
+      "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+      "aonohako_source_commit": "2207fb4fd4106fc2f8863ffccc932d0ef99fe040",
+      "aonohako_build_tag": "durante_v9",
+      "source_marker": "27954247e094e682a7cf47504ff13682f970469a",
+      "model_binding": "work-clock-v1:sha256:3a7f1e09cbdfbc3b8093f9c98a140d11710de6242ccad3f11713f32bbbccad25"
+    }
+  },
+  "shared_policy": {
+    "method": "weighted-rep-operations-nanoseconds-v2",
+    "model_id": "cloud-v8-diagnostic-transfer",
+    "model_version": 1,
+    "reference_id": "integration",
+    "family": "cpp",
+    "dispatch_profile": "default",
+    "cpuid_profile": "x86-64-v2",
+    "instruction_ns_numerator": 233273561,
+    "movs_byte_ns_numerator": 38663059,
+    "stos_byte_ns_numerator": 71296759,
+    "ns_denominator": 1000000000
+  },
+  "fields_identical_for_every_trial_in_group": {
+    "full": {
+      "status": "Accepted",
+      "verdict_source": "durante_judge",
+      "state": "complete",
+      "termination": "stdout",
+      "authority": "diagnostic_only",
+      "quality": "uninterrupted",
+      "complete": true,
+      "output_matches": true,
+      "exit_code": 0,
+      "score": 1,
+      "cpuid_profile": "x86-64-v2",
+      "clock_version": 1,
+      "clock_metric": "model_weighted_nanoseconds_v1",
+      "progress_overflow": 0
+    },
+    "cutoff": {
+      "status": "Time Limit Exceeded",
+      "verdict_source": "durante_judge",
+      "state": "budget_exceeded",
+      "termination": "durante_work_clock",
+      "authority": "diagnostic_only",
+      "quality": "incomplete",
+      "complete": false,
+      "output_matches": null,
+      "exit_code": null,
+      "score": null,
+      "cpuid_profile": null,
+      "clock_version": 1,
+      "clock_metric": "model_weighted_nanoseconds_v1",
+      "progress_overflow": 0
+    }
+  },
+  "trial_columns": [
+    "order",
+    "round",
+    "arm",
+    "nominal_ms",
+    "aonohako_cpu_ns",
+    "aonohako_wall_ms",
+    "instructions",
+    "movs_bytes",
+    "stos_bytes",
+    "estimated_ns"
+  ],
+  "timing": "Aonohako cpu_time_ns and wall_time_ms for one submitted metered execution. Signed differences are candidate minus baseline in matching case and round. Aborted work is a progress prefix.",
+  "cases": {
+    "branch-2": {
+      "full": [
+        [1, 1, "baseline", 15000, 2500276000, 2724, 458749300, 0, 3624, 107014342],
+        [2, 1, "candidate", 15000, 2509185000, 2706, 458749300, 0, 3624, 107014342],
+        [35, 2, "candidate", 15000, 2533944000, 2826, 458749300, 0, 3624, 107014342],
+        [36, 2, "baseline", 15000, 2508936000, 2775, 458749300, 0, 3624, 107014342],
+        [51, 3, "baseline", 15000, 2528034000, 2779, 458749300, 0, 3624, 107014342],
+        [52, 3, "candidate", 15000, 2520622000, 2771, 458749300, 0, 3624, 107014342],
+        [67, 4, "candidate", 15000, 2633871000, 2932, 458749332, 0, 3624, 107014349],
+        [68, 4, "baseline", 15000, 2650992000, 3022, 458749300, 0, 3624, 107014342],
+        [83, 5, "baseline", 15000, 2491882000, 2711, 458749300, 0, 3624, 107014342],
+        [84, 5, "candidate", 15000, 2487688000, 2683, 458749300, 0, 3624, 107014342]
+      ],
+      "cutoff": [],
+      "median_cpu_ns": {
+        "baseline": 2508936000,
+        "candidate": 2520622000
+      },
+      "median_wall_ms": {
+        "baseline": 2775,
+        "candidate": 2771
+      },
+      "paired_cpu_differences_ns": [
+        8909000,
+        25008000,
+        -7412000,
+        -17121000,
+        -4194000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            458749300,
+            458749300
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            3624,
+            3624
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            458749300,
+            458749332
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            3624,
+            3624
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": false,
+      "median_cpu_change_percent": 0.4658,
+      "identity": {
+        "elf_sha256": "d383e4da2a1953bc72d54fccac0fe98fe575fef2474e469edcf2567d18ece37c",
+        "stdin_sha256": "ae7a13222abd483670b1f3b55d2f9f42790bfcbfdad8356a1c717f37feb59661",
+        "stdout_sha256": "875dae9442036ac9f7d91f17b8007467cda85c61daa09872b262292cb15c6a71",
+        "request_sha256": {
+          "15000": "ce25fe0d43ef51c0ff1b974f2d093db43ad9b0798712254f2be29e730301f662"
+        }
+      }
+    },
+    "integer-2": {
+      "full": [
+        [7, 1, "candidate", 15000, 832840000, 911, 335716567, 0, 3624, 78314058],
+        [8, 1, "baseline", 15000, 826106000, 893, 335716535, 0, 3624, 78314050],
+        [23, 2, "baseline", 15000, 826568000, 890, 335716535, 0, 3624, 78314050],
+        [24, 2, "candidate", 15000, 830225000, 907, 335716567, 0, 3624, 78314058],
+        [39, 3, "candidate", 15000, 838188000, 918, 335716535, 0, 3624, 78314050],
+        [40, 3, "baseline", 15000, 834821000, 910, 335716535, 0, 3624, 78314050],
+        [55, 4, "baseline", 15000, 871867000, 983, 335716535, 0, 3624, 78314050],
+        [56, 4, "candidate", 15000, 883253000, 999, 335716535, 0, 3624, 78314050],
+        [89, 5, "candidate", 15000, 835966000, 896, 335716535, 0, 3624, 78314050],
+        [90, 5, "baseline", 15000, 823982000, 895, 335716535, 0, 3624, 78314050]
+      ],
+      "cutoff": [
+        [91, 1, "candidate", 63, 667105000, 728, 270214164, 0, 3624, null],
+        [92, 1, "baseline", 63, 667885000, 733, 270341264, 0, 3624, null],
+        [97, 2, "baseline", 63, 672651000, 733, 270661064, 0, 3624, null],
+        [98, 2, "candidate", 63, 659559000, 720, 270099332, 0, 3624, null],
+        [99, 3, "candidate", 63, 677954000, 762, 270132132, 0, 3624, null],
+        [100, 3, "baseline", 63, 667642000, 732, 270558532, 0, 3624, null]
+      ],
+      "median_cpu_ns": {
+        "baseline": 826568000,
+        "candidate": 835966000
+      },
+      "median_wall_ms": {
+        "baseline": 895,
+        "candidate": 911
+      },
+      "paired_cpu_differences_ns": [
+        6734000,
+        3657000,
+        3367000,
+        11386000,
+        11984000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            335716535,
+            335716535
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            3624,
+            3624
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            335716535,
+            335716567
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            3624,
+            3624
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": false,
+      "median_cpu_change_percent": 1.137,
+      "identity": {
+        "elf_sha256": "13b1e1ba33375676c1c6071b2d0bb41c0148e2ee7d90f1c4085d3eb95124f29d",
+        "stdin_sha256": "9902ec78038acf436285ea163ff7b72ec7d4674a2510e8c881a63abe151a4f49",
+        "stdout_sha256": "e38d7255181f8787ee1acc901a9ed5f9364fa2bfa006853fbfd327f1d1b6198d",
+        "request_sha256": {
+          "15000": "8c3c01eb0cf8c903f4328212760621e2f2d445ce3f42f5cbb4e974b618fff976",
+          "63": "74dc5a7fb1c4ce2f288c51f8f75f9ecdd9159526649657c436920f4a7fc8fca4"
+        }
+      }
+    },
+    "rep_copy-2": {
+      "full": [
+        [11, 1, "candidate", 15000, 405119000, 460, 47343331, 4294967296, 3624, 177100780],
+        [12, 1, "baseline", 15000, 407380000, 459, 47343276, 4294967296, 3624, 177100767],
+        [27, 2, "baseline", 15000, 433754000, 486, 47343331, 4294967296, 3624, 177100780],
+        [28, 2, "candidate", 15000, 429631000, 463, 47343276, 4294967296, 3624, 177100767],
+        [43, 3, "candidate", 15000, 433233000, 477, 47343276, 4294967296, 3624, 177100767],
+        [44, 3, "baseline", 15000, 426985000, 461, 47343276, 4294967296, 3624, 177100767],
+        [59, 4, "baseline", 15000, 435083000, 479, 47343276, 4294967296, 3624, 177100767],
+        [60, 4, "candidate", 15000, 438710000, 506, 47343276, 4294967296, 3624, 177100767],
+        [75, 5, "candidate", 15000, 421409000, 455, 47343276, 4294967296, 3624, 177100767],
+        [76, 5, "baseline", 15000, 402461000, 460, 47343331, 4294967296, 3624, 177100780]
+      ],
+      "cutoff": [
+        [93, 1, "candidate", 142, 332732000, 374, 22170793, 3539992576, 3624, null],
+        [94, 1, "baseline", 142, 312472000, 335, 22170914, 3573547008, 3624, null],
+        [95, 2, "baseline", 142, 319756000, 342, 22170804, 3552575488, 3624, null],
+        [96, 2, "candidate", 142, 323051000, 357, 22170881, 3556769792, 3624, null],
+        [101, 3, "candidate", 142, 304344000, 327, 22170826, 3556769792, 3624, null],
+        [102, 3, "baseline", 142, 311771000, 334, 22170815, 3544186880, 3624, null]
+      ],
+      "median_cpu_ns": {
+        "baseline": 426985000,
+        "candidate": 429631000
+      },
+      "median_wall_ms": {
+        "baseline": 461,
+        "candidate": 463
+      },
+      "paired_cpu_differences_ns": [
+        -2261000,
+        -4123000,
+        6248000,
+        3627000,
+        18948000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            47343276,
+            47343331
+          ],
+          "movs_bytes": [
+            4294967296,
+            4294967296
+          ],
+          "stos_bytes": [
+            3624,
+            3624
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            47343276,
+            47343331
+          ],
+          "movs_bytes": [
+            4294967296,
+            4294967296
+          ],
+          "stos_bytes": [
+            3624,
+            3624
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": false,
+      "median_cpu_change_percent": 0.6197,
+      "identity": {
+        "elf_sha256": "255445d9e1311d5872c4da62e12df42c199012cfbc9b8c5dc6e8a8646cab2100",
+        "stdin_sha256": "034ae8e96eee99a30067d2f7c7b8055992ffb028e1a8309df36a17183c72b95e",
+        "stdout_sha256": "14b4ccf54a685e2b88965fc5f93815b5eb94b8946f65452c7f059ae8239959ac",
+        "request_sha256": {
+          "15000": "293feca43991bac1da8c3ac778e35b5d442b020732deb409b2b1494a31219912",
+          "142": "19afc3d5cc1a792ed87fe9f0d7afd589d6b9540f1a27f8dd197e97e7f00590f4"
+        }
+      }
+    },
+    "distinct-window": {
+      "full": [
+        [3, 1, "candidate", 15000, 259305000, 274, 184719484, 0, 632, 43090217],
+        [4, 1, "baseline", 15000, 271043000, 293, 184719484, 0, 632, 43090217],
+        [19, 2, "baseline", 15000, 270243000, 300, 184719515, 0, 632, 43090225],
+        [20, 2, "candidate", 15000, 267253000, 302, 184719484, 0, 632, 43090217],
+        [53, 3, "candidate", 15000, 278129000, 316, 184719515, 0, 632, 43090225],
+        [54, 3, "baseline", 15000, 275040000, 298, 184719515, 0, 632, 43090225],
+        [69, 4, "baseline", 15000, 262764000, 290, 184719515, 0, 632, 43090225],
+        [70, 4, "candidate", 15000, 283879000, 309, 184719484, 0, 632, 43090217],
+        [85, 5, "candidate", 15000, 263744000, 298, 184719484, 0, 632, 43090217],
+        [86, 5, "baseline", 15000, 271004000, 282, 184719484, 0, 632, 43090217]
+      ],
+      "cutoff": [],
+      "median_cpu_ns": {
+        "baseline": 271004000,
+        "candidate": 267253000
+      },
+      "median_wall_ms": {
+        "baseline": 293,
+        "candidate": 302
+      },
+      "paired_cpu_differences_ns": [
+        -11738000,
+        -2990000,
+        3089000,
+        21115000,
+        -7260000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            184719484,
+            184719515
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            632,
+            632
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            184719484,
+            184719515
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            632,
+            632
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": false,
+      "median_cpu_change_percent": -1.3841,
+      "identity": {
+        "elf_sha256": "7246aab53e4ffc5fca459b697c207075ae1b497a04c27b3a127e42cabc8797aa",
+        "stdin_sha256": "d7b0f1fa8808fde7b69bb562ac1adb6ce96fc6ed4f6fa67cf946acd9a1db4350",
+        "stdout_sha256": "f9d7e16d0f69203212abb94f7ed100827a12a44ea51c7133534bd5122839e24d",
+        "request_sha256": {
+          "15000": "23f5e39c36cf59031153a4c92f5a38fef38a60968d896ea8c34e39d48c77402e"
+        }
+      }
+    },
+    "histogram-stack": {
+      "full": [
+        [5, 1, "baseline", 15000, 2644156000, 2885, 220253918, 0, 656, 51379463],
+        [6, 1, "candidate", 15000, 743474000, 814, 220253918, 0, 656, 51379463],
+        [21, 2, "candidate", 15000, 733719000, 782, 220253918, 0, 656, 51379463],
+        [22, 2, "baseline", 15000, 2601550000, 2815, 220253918, 0, 656, 51379463],
+        [37, 3, "baseline", 15000, 2660888000, 2961, 220253918, 0, 656, 51379463],
+        [38, 3, "candidate", 15000, 778500000, 858, 220253918, 0, 656, 51379463],
+        [71, 4, "candidate", 15000, 765446000, 845, 220253918, 0, 656, 51379463],
+        [72, 4, "baseline", 15000, 2625293000, 2868, 220253918, 0, 656, 51379463],
+        [87, 5, "baseline", 15000, 2593767000, 2812, 220253918, 0, 656, 51379463],
+        [88, 5, "candidate", 15000, 727106000, 787, 220253918, 0, 656, 51379463]
+      ],
+      "cutoff": [],
+      "median_cpu_ns": {
+        "baseline": 2625293000,
+        "candidate": 743474000
+      },
+      "median_wall_ms": {
+        "baseline": 2868,
+        "candidate": 814
+      },
+      "paired_cpu_differences_ns": [
+        -1900682000,
+        -1867831000,
+        -1882388000,
+        -1859847000,
+        -1866661000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            220253918,
+            220253918
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            656,
+            656
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            220253918,
+            220253918
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            656,
+            656
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": true,
+      "median_cpu_change_percent": -71.6803,
+      "identity": {
+        "elf_sha256": "30bcf282f11f83cb5c6886e2ffae8bea98abe02277e238f76a8ac4e748a02ab6",
+        "stdin_sha256": "7a2a3e28431a412953d30d342f740c1d49437734598cb042894e4ec987f5cde0",
+        "stdout_sha256": "01fd10299dd4be83994a4c5de871d7e3cc4d4d31f0141f770b6399f2e278fb96",
+        "request_sha256": {
+          "15000": "024555fd78de45e324942cb25bdc83d3934d2eb280a65039fd7b5c132188fca5"
+        }
+      }
+    },
+    "sparse-rmq": {
+      "full": [
+        [15, 1, "candidate", 15000, 312593000, 335, 165331290, 0, 632, 38567464],
+        [16, 1, "baseline", 15000, 294784000, 326, 165331259, 0, 632, 38567457],
+        [31, 2, "baseline", 15000, 288790000, 315, 165331290, 0, 632, 38567464],
+        [32, 2, "candidate", 15000, 324965000, 343, 165331259, 0, 632, 38567457],
+        [47, 3, "candidate", 15000, 318273000, 349, 165331290, 0, 632, 38567464],
+        [48, 3, "baseline", 15000, 304482000, 335, 165331259, 0, 632, 38567457],
+        [63, 4, "baseline", 15000, 349300000, 411, 165331259, 0, 632, 38567457],
+        [64, 4, "candidate", 15000, 354463000, 420, 165331259, 0, 632, 38567457],
+        [79, 5, "candidate", 15000, 312501000, 351, 165331259, 0, 632, 38567457],
+        [80, 5, "baseline", 15000, 282261000, 304, 165331290, 0, 632, 38567464]
+      ],
+      "cutoff": [],
+      "median_cpu_ns": {
+        "baseline": 294784000,
+        "candidate": 318273000
+      },
+      "median_wall_ms": {
+        "baseline": 326,
+        "candidate": 349
+      },
+      "paired_cpu_differences_ns": [
+        17809000,
+        36175000,
+        13791000,
+        5163000,
+        30240000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            165331259,
+            165331290
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            632,
+            632
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            165331259,
+            165331290
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            632,
+            632
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": false,
+      "median_cpu_change_percent": 7.9682,
+      "identity": {
+        "elf_sha256": "b8f080857fb7a5ae98513b0712eafec9c3d0ede279c7bddb51b3e44f539585a5",
+        "stdin_sha256": "c9bd9c685d235c6784237eb5378382219e65028c912e0a321991da7dc7443ad3",
+        "stdout_sha256": "fbee43565dc5c2cc1d6f41416a900795ace4d877595d28b1d6997d6911d4bed6",
+        "request_sha256": {
+          "15000": "6aa8f219b098f4e5c028c377daa1a1dfdb8d58bff661b45bdc041b2a710330ac"
+        }
+      }
+    },
+    "tiny": {
+      "full": [
+        [17, 1, "baseline", 15000, 8403000, 8, 8, 0, 0, 2],
+        [18, 1, "candidate", 15000, 8636000, 8, 8, 0, 0, 2],
+        [33, 2, "candidate", 15000, 9116000, 9, 8, 0, 0, 2],
+        [34, 2, "baseline", 15000, 9508000, 9, 8, 0, 0, 2],
+        [49, 3, "baseline", 15000, 9689000, 9, 8, 0, 0, 2],
+        [50, 3, "candidate", 15000, 9773000, 9, 8, 0, 0, 2],
+        [65, 4, "candidate", 15000, 9442000, 9, 8, 0, 0, 2],
+        [66, 4, "baseline", 15000, 9678000, 10, 8, 0, 0, 2],
+        [81, 5, "baseline", 15000, 8903000, 8, 8, 0, 0, 2],
+        [82, 5, "candidate", 15000, 10690000, 10, 8, 0, 0, 2]
+      ],
+      "cutoff": [],
+      "median_cpu_ns": {
+        "baseline": 9508000,
+        "candidate": 9442000
+      },
+      "median_wall_ms": {
+        "baseline": 9,
+        "candidate": 9
+      },
+      "paired_cpu_differences_ns": [
+        233000,
+        -392000,
+        84000,
+        -236000,
+        1787000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            8,
+            8
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            0,
+            0
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            8,
+            8
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            0,
+            0
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": true,
+      "median_cpu_change_percent": -0.6942,
+      "identity": {
+        "elf_sha256": "b756afd115e30871f5120838762fe6e19928640008ec413da5f9d02df165ac59",
+        "stdin_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22",
+        "request_sha256": {
+          "15000": "2f93fa4e061bc086caa7560b4612380bb4431606c6d4d5a72057eb575fbf5d6a"
+        },
+        "source_sha256": "7ca367f1fb73412686c747c8f04d64ff63a101f0e3fd48ef54c3fd0493e0557d",
+        "source": ".global _start\n.text\n_start:\n    mov $1, %eax\n    mov $1, %edi\n    lea message(%rip), %rsi\n    mov $3, %edx\n    syscall\n    mov $60, %eax\n    xor %edi, %edi\n    syscall\n.section .rodata\nmessage: .ascii \"ok\\n\"\n.section .note.GNU-stack,\"\",@progbits\n\n",
+        "stdin": "",
+        "stdout": "ok\n"
+      }
+    },
+    "libc-short": {
+      "full": [
+        [9, 1, "baseline", 15000, 59208000, 59, 51322, 0, 632, 12018],
+        [10, 1, "candidate", 15000, 52015000, 52, 51291, 0, 632, 12010],
+        [25, 2, "candidate", 15000, 58862000, 58, 51291, 0, 632, 12010],
+        [26, 2, "baseline", 15000, 56704000, 56, 51291, 0, 632, 12010],
+        [41, 3, "baseline", 15000, 62873000, 62, 51291, 0, 632, 12010],
+        [42, 3, "candidate", 15000, 58110000, 65, 51322, 0, 632, 12018],
+        [57, 4, "candidate", 15000, 57963000, 58, 51291, 0, 632, 12010],
+        [58, 4, "baseline", 15000, 57092000, 57, 51322, 0, 632, 12018],
+        [73, 5, "baseline", 15000, 54072000, 57, 51291, 0, 632, 12010],
+        [74, 5, "candidate", 15000, 58091000, 65, 51291, 0, 632, 12010]
+      ],
+      "cutoff": [],
+      "median_cpu_ns": {
+        "baseline": 57092000,
+        "candidate": 58091000
+      },
+      "median_wall_ms": {
+        "baseline": 57,
+        "candidate": 58
+      },
+      "paired_cpu_differences_ns": [
+        -7193000,
+        2158000,
+        -4763000,
+        871000,
+        4019000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            51291,
+            51322
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            632,
+            632
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            51291,
+            51322
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            632,
+            632
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": false,
+      "median_cpu_change_percent": 1.7498,
+      "identity": {
+        "elf_sha256": "28c8fa4f08aa0a7a79572abde2ddb75f766ed496770b7ed3647ba9aeaff77983",
+        "stdin_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22",
+        "request_sha256": {
+          "15000": "140897eb6f356cb54882b0872514a2fe0b633b966c72619ef1a9301ae98ceb0f"
+        },
+        "source_sha256": "23061d35d92e74d07671090c44216de975cd4ff5910eb3ab0bb881516485952b",
+        "source": "#include <stdio.h>\n\nint main(void) {\n    return puts(\"ok\") < 0;\n}\n\n",
+        "stdin": "",
+        "stdout": "ok\n"
+      }
+    },
+    "short-stream": {
+      "full": [
+        [13, 1, "baseline", 15000, 106986000, 115, 99766, 0, 1984, 23415],
+        [14, 1, "candidate", 15000, 117569000, 125, 99735, 0, 1984, 23407],
+        [29, 2, "candidate", 15000, 125161000, 132, 99735, 0, 1984, 23407],
+        [30, 2, "baseline", 15000, 113656000, 125, 99735, 0, 1984, 23407],
+        [45, 3, "baseline", 15000, 114244000, 118, 99766, 0, 1984, 23415],
+        [46, 3, "candidate", 15000, 130766000, 134, 99766, 0, 1984, 23415],
+        [61, 4, "candidate", 15000, 144483000, 167, 99735, 0, 1984, 23407],
+        [62, 4, "baseline", 15000, 133517000, 149, 99766, 0, 1984, 23415],
+        [77, 5, "baseline", 15000, 107932000, 115, 99735, 0, 1984, 23407],
+        [78, 5, "candidate", 15000, 122218000, 153, 99735, 0, 1984, 23407]
+      ],
+      "cutoff": [],
+      "median_cpu_ns": {
+        "baseline": 113656000,
+        "candidate": 125161000
+      },
+      "median_wall_ms": {
+        "baseline": 118,
+        "candidate": 134
+      },
+      "paired_cpu_differences_ns": [
+        10583000,
+        11505000,
+        16522000,
+        10966000,
+        14286000
+      ],
+      "full_counter_ranges": {
+        "baseline": {
+          "instructions": [
+            99735,
+            99766
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            1984,
+            1984
+          ]
+        },
+        "candidate": {
+          "instructions": [
+            99735,
+            99766
+          ],
+          "movs_bytes": [
+            0,
+            0
+          ],
+          "stos_bytes": [
+            1984,
+            1984
+          ]
+        }
+      },
+      "exact_counters_across_all_full_runs": false,
+      "median_cpu_change_percent": 10.1227,
+      "identity": {
+        "elf_sha256": "3852323cec6294c734617d14a94994d8703ed8b7b491df27048a5b4d9e9c1469",
+        "stdin_sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58",
+        "stdout_sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58",
+        "request_sha256": {
+          "15000": "a980d40e26929fd766f33d25ac11ebbcab76fea126ed0ba7eba68b8309c3348d"
+        },
+        "source": "#include <iostream>\nint main(){unsigned n; if(!(std::cin >> n))return 1; std::cout << n << '\\n';}\n",
+        "source_sha256": "5624f0b9c012e683127775937db60a986ef3ee41e04ac9fc81bed19b99625b27",
+        "stdin": "7\n",
+        "stdout": "7\n"
+      }
+    }
+  },
+  "placement": {
+    "schema": 1,
+    "revision": "aonohako-live-ab-9fe0531371-00001-ggx",
+    "submitted": 102,
+    "request_logs": 102,
+    "complete": true,
+    "http_status_counts": {
+      "200": 102
+    },
+    "distinct_instances": 1,
+    "unknown_requests": 0,
+    "instance_id_sha256_counts": {
+      "ca1a1746799faf61f44d855c563a993dc4925d5a6cd51eb6997f06821202e2cb": 102
+    },
+    "outcomes_by_arm": {
+      "baseline": {
+        "Accepted": 45,
+        "Time Limit Exceeded": 6
+      },
+      "candidate": {
+        "Accepted": 45,
+        "Time Limit Exceeded": 6
+      }
+    }
+  },
+  "cleanup": {
+    "service_http": 404,
+    "revision_http": 404,
+    "artifact_registry_package_http": 404,
+    "verified_utc": "2026-11-20T01:17:52.515648+00:00",
+    "revision": "aonohako-live-ab-9fe0531371-00001-ggx"
+  },
+  "package_link": {
+    "compiler": "GCC (Debian 14.2.0-19) 14.2.0",
+    "candidate_link_input": "stock SDK link input",
+    "all_executions_loaded_patched_core": true,
+    "matching_patched_toolchain_rebuild_v8_sha256": "d708864bc7d3ea0f4d4f8093b30bd5424436bf417e7bf420abd849eaba33d4c0",
+    "matched_candidate_sha256": "a3e79f03f1f1d894b1850bb874e61bd67b63c6280d9e455b19baaf8c36ae6ac4",
+    "initial_candidate_sha256": "50238654e1250ad7a46f6fe2f0c4afa674584f8ccc93c445399dcba7bceaec29",
+    "v9_variant_byte_differences": {
+      "gnu_build_id": 20,
+      "dynsym": 3,
+      "symtab": 3
+    },
+    "v9_text_identical": true
+  }
+}

@@ -27,7 +27,9 @@ func populateRemoteRequestValue(v reflect.Value, s string) {
 	switch v.Kind() {
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
-			populateRemoteRequestValue(v.Field(i), s)
+			if v.Field(i).CanSet() && v.Type().Field(i).Tag.Get("json") != "-" {
+				populateRemoteRequestValue(v.Field(i), s)
+			}
 		}
 	case reflect.Pointer:
 		v.Set(reflect.New(v.Type().Elem()))
@@ -45,6 +47,8 @@ func populateRemoteRequestValue(v reflect.Value, s string) {
 		}
 	case reflect.String:
 		v.SetString(s)
+	case reflect.Uint64:
+		v.SetUint(^uint64(0))
 	case reflect.Bool:
 		v.SetBool(true)
 	case reflect.Int, reflect.Int64:

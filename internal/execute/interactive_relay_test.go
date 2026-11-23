@@ -3,6 +3,7 @@ package execute
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -60,6 +61,15 @@ func TestReconcileInteractiveRelayResults(t *testing.T) {
 			contestant:            execResult{Status: "OK", ExitCode: &ok},
 			interactor:            closedRelay(&ok, io.ErrClosedPipe),
 			toContestantErr:       io.ErrClosedPipe,
+			wantContestant:        "OK",
+			wantInteractor:        "OK",
+			wantInteractorVerdict: model.RunStatusAccepted,
+		},
+		{
+			name:                  "native pipe EPIPE after final reply",
+			contestant:            execResult{Status: "OK", ExitCode: &ok},
+			interactor:            closedRelay(&ok, syscall.EPIPE),
+			toContestantErr:       syscall.EPIPE,
 			wantContestant:        "OK",
 			wantInteractor:        "OK",
 			wantInteractorVerdict: model.RunStatusAccepted,
@@ -209,5 +219,49 @@ func TestRunInteractiveIOFinalReplyAfterContestantExit(t *testing.T) {
 				t.Fatalf("interactor score = %+v, want %v", resp.Score, tc.wantScore)
 			}
 		})
+	}
+}
+
+// Kernel-pipe relays must propagate bytes and EOF without a Go io.Pipe copy.
+func TestInteractiveOSPipeWriter(t *testing.T) {
+	readEnd, writeEnd, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readEnd.Close()
+	writer := &interactivePipeWriter{w: writeEnd}
+	const message = "? 123 7\n"
+	if _, err := writer.Write([]byte(message)); err != nil {
+		t.Fatal(err)
+	}
+	got := make([]byte, len(message))
+	if _, err := io.ReadFull(readEnd, got); err != nil || string(got) != message {
+		t.Fatalf("read = %q, err = %v", got, err)
+	}
+	writer.Close()
+	if rest, err := io.ReadAll(readEnd); err != nil || len(rest) != 0 {
+		t.Fatalf("after close = %q, err = %v", rest, err)
+	}
+	if writer.Err() != nil {
+		t.Fatalf("unexpected close error: %v", writer.Err())
+	}
+}
+
+func TestInteractiveOSPipePeerClose(t *testing.T) {
+	readEnd, writeEnd, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := &interactivePipeWriter{w: writeEnd}
+	defer writer.Close()
+	if err := readEnd.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = writer.Write([]byte("correct\n"))
+	if !errors.Is(err, syscall.EPIPE) {
+		t.Fatalf("expected EPIPE from exited peer, got %v", err)
+	}
+	if !errors.Is(writer.Err(), syscall.EPIPE) {
+		t.Fatalf("expected recorded EPIPE, got %v", writer.Err())
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 
 	"aonohako/internal/compile"
 	"aonohako/internal/config"
+	"aonohako/internal/entrypolicy"
 	"aonohako/internal/execute"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
@@ -31,6 +33,7 @@ import (
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/queue"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runtimeidentity"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/rustpolicy"
@@ -85,13 +88,14 @@ type Server struct {
 	compile interface {
 		Run(context.Context, *model.CompileRequest) model.CompileResponse
 	}
-	execute      execute.Runner
-	queue        *queue.Manager
-	work         workLifecycle
-	seq          atomic.Uint64
-	streams      atomic.Int64
-	uploads      atomic.Int64
-	requestBytes requestByteBudget
+	execute            execute.Runner
+	queue              *queue.Manager
+	work               workLifecycle
+	seq                atomic.Uint64
+	streams            atomic.Int64
+	uploads            atomic.Int64
+	requestBytes       requestByteBudget
+	pipelineCapability pipelineCapabilityCache
 
 	principalMu      sync.Mutex
 	principalStreams map[string]int
@@ -133,14 +137,15 @@ func NewWithServices(cfg config.Config, compileService interface {
 	}
 	payloadURLFetchSlots = max(1, payloadURLFetchSlots)
 	return &Server{
-		cfg:              cfg,
-		compile:          compileService,
-		execute:          executeRunner,
-		queue:            queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
-		requestBytes:     requestByteBudget{limit: cfg.MaxRetainedRequestBytes},
-		principalStreams: map[string]int{},
-		principalUploads: map[string]int{},
-		principalRates:   map[string]principalRateWindow{},
+		cfg:                cfg,
+		compile:            compileService,
+		execute:            executeRunner,
+		queue:              queue.New(cfg.MaxActiveRuns, cfg.MaxPendingQueue),
+		pipelineCapability: pipelineCapabilityCache{lock: make(chan struct{}, 1)},
+		requestBytes:       requestByteBudget{limit: cfg.MaxRetainedRequestBytes},
+		principalStreams:   map[string]int{},
+		principalUploads:   map[string]int{},
+		principalRates:     map[string]principalRateWindow{},
 		platformBodyHashSlots: make(
 			chan struct{},
 			platformBodyHashConcurrency(cfg),
@@ -172,6 +177,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/healthz", s.readyz)
 	mux.HandleFunc("/capabilities", s.capabilities)
+	mux.HandleFunc(model.PipelineV1WorkerPath, s.pipelineWorkerCapability)
 	mux.Handle("/compile", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.compileHandler)))))
 	mux.Handle("/execute", s.withWorkLifecycle(s.withUploadAdmission(s.requireAuth(http.HandlerFunc(s.executeHandler)))))
 	return mux
@@ -183,8 +189,13 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	capabilities := make([]string, 0, 3)
-	if platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled) {
+	communicationSupported := platform.SupportsCommunicationV1(s.cfg.Execution.Platform, s.cfg.Execution.Cgroup.ParentDir, s.cfg.CommunicationEnabled)
+	competitiveIdentity, competitiveIdentityErr := runtimeidentity.Competitive(s.cfg.CompetitiveRuntimeFingerprint)
+	if communicationSupported {
 		capabilities = append(capabilities, "communication-v1")
+		if competitiveIdentityErr == nil {
+			capabilities = append(capabilities, "communication-v2")
+		}
 	}
 	installedModeAllowed := s.cfg.AllowRequestPythonInstalledLibraries ||
 		s.cfg.DefaultPythonLibraryMode == pythonpolicy.LibraryModeInstalled
@@ -204,33 +215,63 @@ func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 			capabilities = append(capabilities, pythonpolicy.InstalledCapability)
 		}
 	}
-	pipelineSupported := s.supportsPipelineV1()
+	pipelineSupported := s.supportsPipelineV1(r.Context())
 	if pipelineSupported {
 		capabilities = append(capabilities, "pipeline-v1")
+	}
+	entrySupported := s.supportsEntryV1()
+	if entrySupported {
+		capabilities = append(capabilities, entrypolicy.Capability)
 	}
 	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	w.Header().Set("Content-Type", "application/json")
 	body := map[string]any{"capabilities": capabilities}
-	if pipelineSupported {
-		body["pipeline"] = map[string]any{
-			"versions":         []int{1},
-			"max_steps":        runvalidation.MaxPipelineSteps,
-			"executors":        []string{"batch", "interactive"},
-			"artifact_sources": []string{"participant_stdout", "participant_file", "interactor_output"},
-			"artifact_source_max_bytes": map[string]int64{
-				"participant_stdout": runvalidation.MaxStepHandoffBytes,
-				"participant_file":   runvalidation.MaxPipelineParticipantFileBytes,
-				"interactor_output":  runvalidation.MaxStepHandoffBytes,
-			},
-			"final_judges": []string{"diff", "spj"},
+	if communicationSupported && competitiveIdentityErr == nil {
+		body["communication_v2"] = map[string]any{
+			"participant_count": 2, "games_per_match": 20,
+			"result_protocol": "match-result-v1", "inline_artifact_sha256_required": true,
+			"runtime_fingerprint": competitiveIdentity.RuntimeFingerprint,
+			"runner_sha256":       competitiveIdentity.RunnerSHA256,
+			"image_digest":        competitiveIdentity.ImageDigest,
 		}
+	}
+	if entrySupported {
+		body["entry"] = map[string]any{"engine_version": "4.0.23", "grader_version": entrypolicy.Capability, "modes": []string{"stdio", "state"}}
+	}
+	if pipelineSupported {
+		body["pipeline"] = runvalidation.PipelineV1Contract()
 	}
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-func (s *Server) supportsPipelineV1() bool {
-	return s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded &&
-		s.cfg.Execution.Platform.SandboxBackend == platform.SandboxBackendHelper
+func (s *Server) supportsEntryV1() bool {
+	if !s.isEmbeddedHelper() {
+		return false
+	}
+	installed := false
+	for _, language := range strings.Split(os.Getenv("AONOHAKO_LANGUAGES"), ",") {
+		if language == "entry" {
+			installed = true
+		}
+	}
+	if !installed {
+		return false
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		return false
+	}
+	for _, path := range []string{entrypolicy.RunnerPath, "/usr/local/lib/aonohako/entry-runtime.mjs"} {
+		file, err := os.Open(path)
+		if err != nil {
+			return false
+		}
+		info, err := file.Stat()
+		_ = file.Close()
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) nextID(prefix string) string {
@@ -292,6 +333,10 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := pythonpolicy.ValidateArtifactMode(req.PythonArtifactMode, req.Lang); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_python_artifact_mode", err.Error())
+		return
+	}
+	if err := compile.ValidateDisallowedCPUFeatures(req.Lang, req.DisallowedCPUFeatures); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_disallowed_cpu_features", err.Error())
 		return
 	}
 	if len(req.Sources) == 0 {
@@ -479,6 +524,17 @@ func (s *Server) compileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func parseStepObservationBudget(header []string, maximum time.Duration) (time.Duration, bool) {
+	if len(header) != 1 {
+		return 0, false
+	}
+	ms, err := strconv.ParseUint(header[0], 10, 64)
+	if err != nil || strconv.FormatUint(ms, 10) != header[0] || ms > uint64(maximum.Milliseconds()) {
+		return 0, false
+	}
+	return time.Duration(ms) * time.Millisecond, true
+}
+
 func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSONErrorMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
@@ -507,11 +563,53 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_python_library_mode", err.Error())
 		return
 	}
-	if req.Pipeline != nil && !s.supportsPipelineV1() {
+	workerProtocol := r.Header.Values(model.PipelineV1WorkerHeader)
+	budgetHeader := r.Header.Values(model.PipelineObservationBudgetHeader)
+	if len(workerProtocol) != 0 || len(budgetHeader) != 0 {
+		if len(workerProtocol) != 1 || workerProtocol[0] != model.PipelineV1WorkerProtocol || req.Pipeline == nil || !s.canAttestPipelineWorker() {
+			writeJSONError(w, http.StatusBadRequest, "unsupported_capability")
+			return
+		}
+		budget, ok := parseStepObservationBudget(budgetHeader, execute.MaxPipelineObservationBudget)
+		if !ok {
+			writeJSONError(w, http.StatusBadRequest, "invalid_pipeline_observation_budget")
+			return
+		}
+		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), budget))
+		if r.Header.Get(model.PipelineInteractiveObservationHeader) != "v1" {
+			// Older controllers budgeted only for batch stages.
+			r = r.WithContext(execute.WithoutInteractivePipelineReplay(r.Context()))
+		}
+	}
+	if legacy := r.Header.Values(model.LegacyObservationBudgetHeader); len(legacy) > 0 {
+		budget, ok := parseStepObservationBudget(legacy, execute.MaxLegacyObservationBudget)
+		if !ok || !runvalidation.UsesSteps(&req) {
+			writeJSONError(w, http.StatusBadRequest, "invalid_legacy_observation_budget")
+			return
+		}
+		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), budget))
+	}
+	if interactive := r.Header.Values(model.InteractiveObservationBudgetHeader); len(interactive) > 0 {
+		budget, ok := parseStepObservationBudget(interactive, execute.MaxInteractiveObservationBudget)
+		if !ok || req.Interactor == nil || req.Pipeline != nil || runvalidation.UsesSteps(&req) {
+			writeJSONError(w, http.StatusBadRequest, "invalid_interactive_observation_budget")
+			return
+		}
+		r = r.WithContext(execute.WithPipelineObservationBudget(r.Context(), budget))
+	}
+	if req.Pipeline != nil && !s.supportsPipelineV1(r.Context()) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "unsupported_capability", "pipeline-v1 is not supported by this execution transport")
 		return
 	}
+	if err := execute.ApplyJudgeWorkLimits(&req, s.cfg.Execution); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
 	if err := runvalidation.Validate(&req); err != nil {
+		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	if err := execute.ValidateStagedClockAdmission(&req, s.cfg.Execution); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
@@ -584,6 +682,9 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	releaseUploadAdmission(r.Context())
 
+	if len(workerProtocol) != 0 {
+		w.Header().Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
+	}
 	w.Header().Set(remoteio.ProtocolVersionHeader, remoteio.ProtocolVersion)
 	stream, err := sse.New(w, s.sseWriteTimeout)
 	if err != nil {

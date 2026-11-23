@@ -37,7 +37,7 @@ func TestValidateCommunicationContract(t *testing.T) {
 		edit func(*model.RunRequest)
 		want string
 	}{
-		{name: "version", edit: func(req *model.RunRequest) { req.Communication.Version = 2 }, want: "version must be 1"},
+		{name: "version", edit: func(req *model.RunRequest) { req.Communication.Version = 3 }, want: "version must be 1 or 2"},
 		{name: "minimum participants", edit: func(req *model.RunRequest) { req.Communication.ParticipantCount = 1 }, want: "between 2 and 64"},
 		{name: "maximum participants", edit: func(req *model.RunRequest) { req.Communication.ParticipantCount = 65 }, want: "between 2 and 64"},
 		{name: "protocol", edit: func(req *model.RunRequest) { req.Communication.ResultProtocol = "legacy" }, want: "manager-result-v1"},
@@ -50,6 +50,7 @@ func TestValidateCommunicationContract(t *testing.T) {
 		}, want: "cannot combine"},
 		{name: "program network", edit: func(req *model.RunRequest) { req.Programs[0].EnableNetwork = true }, want: "cannot enable network"},
 		{name: "managed runtime", edit: func(req *model.RunRequest) { req.Programs[0].Lang = "python" }, want: "native binary"},
+		{name: "explicit wall limit", edit: func(req *model.RunRequest) { req.Limits.WallTimeMs = 600000 }, want: "does not support limits.wall_time_ms"},
 		{name: "unreferenced program", edit: func(req *model.RunRequest) { req.Programs[1].ID = "other" }, want: "unreferenced program"},
 	}
 	for _, tc := range tests {

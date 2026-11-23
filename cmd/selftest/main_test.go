@@ -126,12 +126,15 @@ func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
 		"fstar":      {},
 		"gdl":        {},
 		"graphql":    {},
+		"intercal":   {},
 		"isabelle":   {},
 		"kframework": {},
+		"lazyk":      {},
 		"lean4":      {},
 		"malbolge":   {},
 		"rocq":       {},
 		"tla":        {},
+		"unlambda":   {},
 		"vb6":        {},
 		"why3":       {},
 		"zerolang":   {},
@@ -200,7 +203,7 @@ func TestCompileExecuteCasesExerciseAPlusBJudgeIO(t *testing.T) {
 func TestRuntimeStartupMemoryCoversResourceSensitiveLanguages(t *testing.T) {
 	limits := runtimeStartupMemoryMB()
 	compileCases := compileExecuteCases()
-	for _, language := range []string{"go", "rust", "pony", "powershell", "zig", "java", "kotlin-jvm", "erlang", "julia", "swift", "dart", "bun"} {
+	for _, language := range []string{"go", "rust", "pony", "powershell", "zig", "java", "java25", "kotlin-jvm", "erlang", "julia", "swift", "dart", "bun"} {
 		memoryMB, ok := limits[language]
 		if !ok || memoryMB <= 0 {
 			t.Fatalf("runtime startup memory is missing language %q", language)
@@ -281,6 +284,7 @@ func TestLanguageSecurityCasesCoverRiskyRuntimeFamilies(t *testing.T) {
 		"smlnj",
 		"gnu-prolog",
 		"java",
+		"java25",
 		"ruby",
 		"golfscript",
 		"perl",

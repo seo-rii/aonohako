@@ -30,6 +30,9 @@ func (c nativeCompiler) Compile(ctx context.Context, job CompileJob) model.Compi
 	if len(srcRel) == 0 {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "no compilable sources"}
 	}
+	if len(job.Request.DisallowedCPUFeatures) != 0 {
+		return c.compileWithCPUFeaturePolicy(ctx, job, srcRel)
+	}
 
 	args := make([]string, 0, len(srcRel)+8)
 	for _, rel := range srcRel {

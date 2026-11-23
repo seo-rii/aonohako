@@ -11,6 +11,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/timing"
 )
 
 func TestSandboxExecutionBudgetStartsAtRelease(t *testing.T) {
@@ -105,7 +106,7 @@ func TestRunSandboxSetupNotChargedToTimeLimit(t *testing.T) {
 	input := &delayedSandboxInput{reader: strings.NewReader("ready\n"), delay: 750 * time.Millisecond}
 	result := runCommandWithSandbox(context.Background(), ws, []string{"/bin/cat"},
 		&model.RunRequest{Lang: "binary", Limits: model.Limits{TimeMs: 500, MemoryMB: 256}},
-		input, 1024, Hooks{}, 1024, config.DefaultRuntimeTuningConfig(), "")
+		input, 1024, Hooks{}, 1024, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 	if result.Status != "OK" || result.ExitCode == nil || *result.ExitCode != 0 || string(result.Stdout) != "ready\n" {
 		t.Fatalf("750 ms input preparation consumed 500 ms execution budget: %+v", result)
 	}
@@ -123,7 +124,7 @@ func TestRunSandboxExecutionStillEnforcesWallTimeLimit(t *testing.T) {
 	}
 	result := runCommandWithSandbox(context.Background(), ws, []string{"/bin/sleep", "5"},
 		&model.RunRequest{Lang: "binary", Limits: model.Limits{TimeMs: 500, MemoryMB: 256}},
-		nil, 0, Hooks{}, 1024, config.DefaultRuntimeTuningConfig(), "")
+		nil, 0, Hooks{}, 1024, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 	if result.Status != model.RunStatusTLE || result.VerdictSource != "wall_time" {
 		t.Fatalf("execution deadline was not enforced: %+v", result)
 	}
@@ -131,4 +132,103 @@ func TestRunSandboxExecutionStillEnforcesWallTimeLimit(t *testing.T) {
 		t.Fatalf("unexpected wall-time enforcement: %d ms", result.WallTimeMs)
 	}
 	t.Logf("5000 ms target killed at wall=%d ms, source=%s", result.WallTimeMs, result.VerdictSource)
+}
+
+func TestWallTimeLimitMs(t *testing.T) {
+	for _, tc := range []struct {
+		limits model.Limits
+		want   int
+	}{
+		{model.Limits{TimeMs: 1000}, 1000},
+		{model.Limits{TimeMs: 1000, WallTimeMs: 30_000}, 30_000},
+		{model.Limits{TimeMs: 1000, WallTimeMs: 300}, 300},
+		{model.Limits{}, 1},
+	} {
+		if got := wallTimeLimitMs(tc.limits); got != tc.want {
+			t.Fatalf("wall time = %d, want %d for %+v", got, tc.want, tc.limits)
+		}
+	}
+}
+
+func TestRunSandboxCPUWaitingDoesNotExhaustExplicitWallBudget(t *testing.T) {
+	requireSandboxSupport(t)
+	ws, err := prepareWorkspaceDirs(sandboxAccessibleTempDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runCommandWithSandbox(context.Background(), ws, []string{"/bin/sleep", "0.4"},
+		&model.RunRequest{Lang: "binary", Limits: model.Limits{TimeMs: 100, WallTimeMs: 2500, MemoryMB: 256}},
+		nil, 0, Hooks{}, 1024, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
+	if result.Status != "OK" || result.ExitCode == nil || *result.ExitCode != 0 {
+		t.Fatalf("sleep should fit a separate wall allowance despite exceeding the CPU limit in elapsed time: %+v", result)
+	}
+	if result.WallTimeMs < 400 || result.CPUTimeMs >= 100 {
+		t.Fatalf("wall=%d, CPU=%d; want elapsed wait with low CPU", result.WallTimeMs, result.CPUTimeMs)
+	}
+}
+
+func TestRunSandboxExplicitWallGuardStillStopsDeadlock(t *testing.T) {
+	requireSandboxSupport(t)
+	ws, err := prepareWorkspaceDirs(sandboxAccessibleTempDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runCommandWithSandbox(context.Background(), ws, []string{"/bin/sleep", "5"},
+		&model.RunRequest{Lang: "binary", Limits: model.Limits{TimeMs: 1000, WallTimeMs: 350, MemoryMB: 256}},
+		nil, 0, Hooks{}, 1024, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
+	if result.Status != model.RunStatusTLE || result.VerdictSource != "wall_time" {
+		t.Fatalf("explicit wall guard did not stop sleeping target: %+v", result)
+	}
+}
+
+func TestInteractiveWallTimeDefaultSlack(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		limits model.Limits
+		want   int
+	}{
+		{"ten second interactive", model.Limits{TimeMs: 10_000}, 30_000},
+		{"minimum wait slack", model.Limits{TimeMs: 500}, 3500},
+		{"explicit smaller wall limit", model.Limits{TimeMs: 10_000, WallTimeMs: 12_000}, 12_000},
+		{"explicit sub-CPU deadline", model.Limits{TimeMs: 1000, WallTimeMs: 500}, 500},
+		{"cap unvalidated big values", model.Limits{TimeMs: 600_000}, 600_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := interactiveWallTimeMs(tc.limits); got != tc.want {
+				t.Fatalf("wall allowance = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExecutionWallTimeCombinesCalibrationAndProtocolSlack(t *testing.T) {
+	slow := testCPUNormalizer(t, 1, 4)
+	fast := testCPUNormalizer(t, 4, 1)
+	for _, tc := range []struct {
+		name        string
+		limits      model.Limits
+		interactive bool
+		normalizer  timing.CPUNormalizer
+		want        int
+	}{
+		{"ordinary uncalibrated", model.Limits{TimeMs: 1000}, false, timing.CPUNormalizer{}, 1000},
+		{"ordinary calibrated", model.Limits{TimeMs: 1000}, false, slow, 4400},
+		{"interactive uncalibrated", model.Limits{TimeMs: 1000}, true, timing.CPUNormalizer{}, 4000},
+		{"CPU guard covers slow host", model.Limits{TimeMs: 1000}, true, slow, 4400},
+		{"minimum wait slack is not normalized", model.Limits{TimeMs: 500}, true, slow, 3500},
+		{"fast host retains protocol slack", model.Limits{TimeMs: 10_000}, true, fast, 30_000},
+		{"explicit ordinary deadline", model.Limits{TimeMs: 1000, WallTimeMs: 300}, false, slow, 300},
+		{"explicit interactive deadline", model.Limits{TimeMs: 1000, WallTimeMs: 300}, true, slow, 300},
+		{"explicit larger deadline", model.Limits{TimeMs: 1000, WallTimeMs: 20_000}, true, slow, 20_000},
+		{"normalized maximum CPU allowance", model.Limits{TimeMs: 600_000}, true, slow, 2_640_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := executionWallTimeMs(tc.limits, tc.interactive, tc.normalizer.WallLimitMillis); got != tc.want {
+				t.Fatalf("execution wall allowance = %d, want %d", got, tc.want)
+			}
+			if remote := executionWallTimeMs(tc.limits, tc.interactive, timing.MaximumCPUWallLimitMillis); remote < tc.want {
+				t.Fatalf("remote allowance %d is below instance allowance %d", remote, tc.want)
+			}
+		})
+	}
 }

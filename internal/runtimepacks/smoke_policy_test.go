@@ -131,7 +131,8 @@ func TestConfiguredSmokesRejectFailedOrNoisyRuntimes(t *testing.T) {
 					if err := os.Mkdir(binDir, 0o755); err != nil {
 						t.Fatal(err)
 					}
-					runtimeBody := "#!/bin/sh\nprintf '%s' \"${AONOHAKO_TEST_STDOUT}\"\nexit \"${AONOHAKO_TEST_RUNTIME_EXIT}\"\n"
+					// Drain piped smoke input so its producer can finish before the mock exits.
+					runtimeBody := "#!/bin/sh\ncat > /dev/null\nprintf '%s' \"${AONOHAKO_TEST_STDOUT}\"\nexit \"${AONOHAKO_TEST_RUNTIME_EXIT}\"\n"
 					writeTool := func(name, body string) {
 						t.Helper()
 						if err := os.WriteFile(filepath.Join(binDir, name), []byte(body), 0o755); err != nil {

@@ -189,7 +189,22 @@ for profile_dir in profile_dirs:
     if image_id != summary_image_id:
         fail(f"{summary_path} image ID does not match {provenance_path}")
     if target.get("imageID") != image_id:
-        fail(f"{grype_path} image ID does not match {provenance_path}")
+        # Docker's containerd store exposes a manifest digest as .Id, while
+        # Grype's imageID remains the config digest. Bind that store ID through
+        # the exact repository-qualified digest and the CI image platform.
+        config_id = target.get("imageID")
+        repo_digests = target.get("repoDigests")
+        expected_repo_digest = f"{expected_image.rsplit(':', 1)[0]}@{image_id}"
+        if (
+            not isinstance(config_id, str)
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", config_id) is None
+            or not isinstance(repo_digests, list)
+            or any(not isinstance(digest, str) for digest in repo_digests)
+            or expected_repo_digest not in repo_digests
+            or target.get("os") != "linux"
+            or target.get("architecture") != "amd64"
+        ):
+            fail(f"{grype_path} image ID does not match {provenance_path}")
     provenance_artifacts = provenance.get("artifacts")
     expected_provenance_artifacts = {
         "summary.md": summary_path,

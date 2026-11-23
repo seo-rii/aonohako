@@ -10,6 +10,8 @@ import (
 func resolveProfile(lang string) (profiles.Profile, bool) {
 	l := strings.TrimSpace(lang)
 	switch strings.ToLower(l) {
+	case "pari-gp", "pari/gp", "gp":
+		l = "PARI_GP"
 	case "asm", "asm64", "assembly", "gas":
 		l = "ASM"
 	case "aheui":
@@ -272,6 +274,16 @@ func resolveProfile(lang string) (profiles.Profile, bool) {
 		l = "MALBOLGE"
 	case "lolcode", "lol":
 		l = "LOLCODE"
+	case "shakespeare", "spl":
+		l = "SHAKESPEARE"
+	case "piet":
+		l = "PIET"
+	case "unlambda":
+		l = "UNLAMBDA"
+	case "lazyk", "lazy-k", "lazy_k":
+		l = "LAZYK"
+	case "intercal", "ick", "c-intercal":
+		l = "INTERCAL"
 	case "wasm", "webassembly":
 		l = "WASM"
 	case "assemblyscript":
@@ -295,6 +307,10 @@ func applyRequestedVersion(profile profiles.Profile, raw string) (profiles.Profi
 	}
 
 	switch profile.CompileKind {
+	case "entry":
+		if version != "entry-v1" {
+			return profile, fmt.Errorf("unsupported Entry grader version")
+		}
 	case "c":
 		std, ok := cStandardVersion(version)
 		if !ok {
@@ -313,9 +329,13 @@ func applyRequestedVersion(profile profiles.Profile, raw string) (profiles.Profi
 			return profile, fmt.Errorf("unsupported Java version: %s", raw)
 		}
 		profile.JavaRelease = release
+		profile.RunLang = "java"
+		if release == "25" {
+			profile.RunLang = "java25"
+		}
 	case "kotlin-jvm":
 		release, ok := javaReleaseVersion(version)
-		if !ok {
+		if !ok || release == "25" {
 			return profile, fmt.Errorf("unsupported Kotlin/JVM target: %s", raw)
 		}
 		profile.JavaRelease = release
@@ -427,7 +447,7 @@ func javaReleaseVersion(version string) (string, bool) {
 	switch version {
 	case "1.8":
 		return "8", true
-	case "8", "11", "15", "17", "21":
+	case "8", "11", "15", "17", "21", "25":
 		return version, true
 	default:
 		return "", false

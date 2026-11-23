@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-ARG GO_IMAGE=golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
+ARG GO_IMAGE=golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0
 ARG RUNTIME_BASE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS go-toolchain
 
@@ -30,6 +30,20 @@ FROM scratch AS ci-runtime-artifacts
 COPY --from=aonohako-runtime-binaries / /
 COPY --chmod=0755 --from=ci-artifact-builder /out/aonohako-runtime-builder /aonohako-runtime-builder
 
+FROM ${RUNTIME_BASE} AS durante-build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates gcc g++ libc6-dev make cmake patch python3 && rm -rf /var/lib/apt/lists/*
+COPY third_party/durante/ /durante/
+COPY scripts/verify_durante_vendor.py /verify_durante_vendor.py
+COPY --chmod=0755 scripts/install_durante_runtime.sh /install_durante_runtime.sh
+RUN python3 /verify_durante_vendor.py --root /durante && \
+    python3 /durante/toolkit/fetch_sdk.py && \
+    cmake -S /durante/client -B /build -DCMAKE_BUILD_TYPE=Release \
+      -DDynamoRIO_DIR=/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/cmake && \
+    cmake --build /build --target durante -j2 && \
+    /install_durante_runtime.sh /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1 \
+      /build/libdurante.so /durante /out/durante
+
 FROM ${RUNTIME_BASE} AS runtime-foundation
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -38,6 +52,9 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends && \
     apt-get install -y --no-install-recommends ca-certificates coreutils tini util-linux && \
     rm -rf /var/lib/apt/lists/*
+
+COPY --from=durante-build /out/durante/ /opt/durante/
+RUN /opt/durante/dynamorio/bin64/drrun -version
 
 FROM runtime-foundation AS runtime-toolchain
 
@@ -127,9 +144,12 @@ COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako /usr/local/bin/aono
 COPY --chmod=0755 --from=aonohako-runtime-binaries /aonohako-selftest /usr/local/bin/aonohako-selftest
 COPY scripts/smoke_runtime.sh /usr/local/bin/aonohako-smoke
 COPY --chmod=0644 scripts/brainfuck.py /usr/local/lib/aonohako/brainfuck.py
+COPY --chmod=0444 scripts/entry-runner.mjs scripts/entry-runtime.mjs scripts/entry-supported-blocks.json /usr/local/lib/aonohako/
 COPY --chmod=0644 scripts/whitespace.py /usr/local/lib/aonohako/whitespace.py
 COPY --chmod=0644 scripts/befunge.py /usr/local/lib/aonohako/befunge.py
 COPY --chmod=0644 scripts/malbolge.py /usr/local/lib/aonohako/malbolge.py
+COPY --chmod=0644 scripts/unlambda.py /usr/local/lib/aonohako/unlambda.py
+COPY --chmod=0644 scripts/shakespeare_run.py /usr/local/lib/aonohako/shakespeare_run.py
 COPY --chmod=0755 scripts/apl_kanapl_runner.js /usr/local/bin/apl
 COPY --chmod=0755 scripts/acl2_check.sh /usr/local/bin/aonohako-acl2-check
 COPY --chmod=0755 scripts/alloy_check.py /usr/local/bin/aonohako-alloy-check
@@ -152,6 +172,7 @@ COPY --chmod=0644 scripts/chez_scheme_check.scm /usr/local/lib/aonohako/chez_sch
 COPY --chmod=0644 scripts/guile_check.scm /usr/local/lib/aonohako/guile_check.scm
 COPY --chmod=0644 scripts/smlnj_runner.sml /usr/local/lib/aonohako/smlnj_runner.sml
 COPY --chmod=0444 scripts/gnu_prolog_entry.pl /usr/local/lib/aonohako/gnu_prolog_entry.pl
+COPY --chmod=0444 scripts/picat_compile.pi /usr/local/lib/aonohako/picat_compile.pi
 COPY --chmod=0755 scripts/fennel_compile.sh /usr/local/bin/aonohako-fennel-compile
 COPY --chmod=0644 scripts/fennel_writer.fnl /usr/local/lib/aonohako/fennel_writer.fnl
 COPY --chmod=0700 scripts/harden_shell_runtime.sh /usr/local/lib/aonohako/harden_shell_runtime.sh
@@ -174,7 +195,7 @@ RUN if [[ ",${LANGUAGES}," == *",smlnj,"* ]]; then \
 
 RUN chmod 0755 /usr/local/lib/aonohako && \
     rm -f /usr/local/lib/aonohako/python/.empty && \
-    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py && \
+    chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py /usr/local/lib/aonohako/unlambda.py /usr/local/lib/aonohako/shakespeare_run.py && \
     find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
     find /usr/local/lib/aonohako/python -type f -exec chmod 0644 {} + && \
     install -d -m 0700 /var/aonohako /var/aonohako/protected && \

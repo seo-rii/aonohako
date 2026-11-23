@@ -10,6 +10,7 @@ import (
 
 	"aonohako/internal/config"
 	"aonohako/internal/model"
+	"aonohako/internal/timing"
 )
 
 func TestRequiredFileOutputNeverFallsBackToStdout(t *testing.T) {
@@ -91,7 +92,7 @@ func TestRequiredFileOutputNeverFallsBackToStdout(t *testing.T) {
 				if (captureErr == nil) != wantAvailable {
 					t.Fatalf("capture error = %v, want available %t", captureErr, wantAvailable)
 				}
-				status, score, reason, verdictSource := evaluateRunStatus(context.Background(), ws, req, res, output, source, "", nil, config.DefaultRuntimeTuningConfig(), "")
+				status, score, reason, verdictSource := evaluateRunStatus(context.Background(), ws, req, res, output, source, "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 				if status != res.Status || reason != res.Reason || verdictSource != res.VerdictSource {
 					t.Fatalf("capture changed original TLE: (%q, %q, %q)", status, reason, verdictSource)
 				}
@@ -138,7 +139,7 @@ func TestUnavailableRequiredFileOutputDoesNotStartSPJ(t *testing.T) {
 		},
 	}
 	res := execResult{Status: model.RunStatusTLE, Reason: "time limit exceeded", VerdictSource: "wall_time"}
-	status, score, reason, source := evaluateRunStatus(context.Background(), ws, req, res, []byte(req.ExpectedStdout), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "")
+	status, score, reason, source := evaluateRunStatus(context.Background(), ws, req, res, []byte(req.ExpectedStdout), "stdout", "", nil, config.DefaultRuntimeTuningConfig(), "", timing.CPUNormalizer{})
 	if status != res.Status || score == nil || *score != 0 || reason != res.Reason || source != res.VerdictSource {
 		t.Fatalf("unavailable checker input = (%q, %v, %q, %q)", status, score, reason, source)
 	}

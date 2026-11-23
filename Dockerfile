@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-ARG GO_IMAGE=golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
+ARG GO_IMAGE=golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0
 ARG RUNTIME_BASE=debian:trixie-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
 ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:8.0@sha256:4b1cdaa57eed2cecabcf29bdb9bce11e8ca1c287d39dfd2c8b534663ea94d493
 ARG PYTHON_IMAGE=python:3.13-slim-trixie@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280
@@ -14,9 +14,42 @@ ARG TARGETOS TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags='-s -w -buildid=' -o /out/aonohako ./cmd/server
 
+FROM ${RUNTIME_BASE} AS durante-build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates gcc g++ libc6-dev make cmake patch python3 && rm -rf /var/lib/apt/lists/*
+COPY third_party/durante/ /durante/
+COPY scripts/verify_durante_vendor.py /verify_durante_vendor.py
+COPY --chmod=0755 scripts/install_durante_runtime.sh /install_durante_runtime.sh
+RUN python3 /verify_durante_vendor.py --root /durante && \
+    python3 /durante/toolkit/fetch_sdk.py && \
+    cmake -S /durante/client -B /build -DCMAKE_BUILD_TYPE=Release \
+      -DDynamoRIO_DIR=/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/cmake && \
+    cmake --build /build --target durante -j2 && \
+    /install_durante_runtime.sh /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1 \
+      /build/libdurante.so /durante /out/durante
+
+# Build against the independent legacy Python image as well.
+FROM ${PYTHON_IMAGE} AS durante-python-build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates gcc g++ libc6-dev make cmake patch python3 && rm -rf /var/lib/apt/lists/*
+COPY third_party/durante/ /durante/
+COPY scripts/verify_durante_vendor.py /verify_durante_vendor.py
+COPY --chmod=0755 scripts/install_durante_runtime.sh /install_durante_runtime.sh
+RUN python3 /verify_durante_vendor.py --root /durante && \
+    python3 /durante/toolkit/fetch_sdk.py && \
+    cmake -S /durante/client -B /build -DCMAKE_BUILD_TYPE=Release \
+      -DDynamoRIO_DIR=/durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1/cmake && \
+    cmake --build /build --target durante -j2 && \
+    /install_durante_runtime.sh /durante/toolkit/sdk/DynamoRIO-Linux-11.3.0-1 \
+      /build/libdurante.so /durante /out/durante
+
 FROM ${RUNTIME_BASE} AS base
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tini && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates tini && \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
+COPY --from=durante-build /out/durante/ /opt/durante/
+RUN /opt/durante/dynamorio/bin64/drrun -version
 ENV PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENTRYPOINT ["/usr/bin/tini","--"]
 CMD ["aonohako"]
@@ -56,19 +89,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 FROM ${PYTHON_IMAGE} AS execute-python
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     tini pypy3 openjdk-21-jre-headless \
     ca-certificates curl bzip2 \
     && rm -rf /var/lib/apt/lists/*
+# Install patched filelock from PyPI before using the CPU PyTorch index.
 RUN python -m pip install --no-cache-dir --upgrade pip && \
     python -m pip install --no-cache-dir \
-      setuptools==80.10.2 \
-      numpy==2.4.4 pandas==3.0.2 seaborn==0.13.2 matplotlib==3.10.8 pillow==12.3.0 \
+      setuptools==84.1.0 filelock==4.2.1 \
+      numpy==2.4.4 pandas==3.0.2 seaborn==0.13.2 matplotlib==3.10.8 pillow==13.0.0 \
       six==1.17.0 qiskit==2.4.0 pyparsing==3.3.2 pylatexenc==2.10 jax[cpu]==0.10.0 && \
     python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
-      torch==2.11.0+cpu torchvision==0.26.0+cpu
+      torch==2.13.0+cpu torchvision==0.28.0+cpu
 RUN install -d -m 0755 /usr/local/lib/aonohako/python
 COPY --from=builder /out/aonohako /usr/local/bin/aonohako
+COPY --from=durante-python-build /out/durante/ /opt/durante/
+RUN /opt/durante/dynamorio/bin64/drrun -version
 ENV PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/usr/local/lib/aonohako/python
 ENTRYPOINT ["/usr/bin/tini","--"]
 CMD ["aonohako"]

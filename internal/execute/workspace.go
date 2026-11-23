@@ -59,13 +59,16 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	var tclPath string
 	var gdlPath string
 	var octavePath string
+	var pietPath string
 	var verilogPath string
 	var sourcePath string
+	var wrenPath string
 	var malbolgePath string
+	var picatPath string
 	classFiles := make([]string, 0)
 	entryPointPath := ""
 	switch lang {
-	case "java", "scala", "groovy":
+	case "java", "java25", "scala", "scala3", "groovy":
 		if _, err := normalizeJVMMainClass(req.EntryPoint, "Main"); err != nil {
 			return "", "", err
 		}
@@ -161,6 +164,16 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			clojurePath = dest
 		}
 		lowerClean := strings.ToLower(clean)
+		if lang == "picat" && strings.HasSuffix(lowerClean, ".pi") {
+			isMain := strings.EqualFold(filepath.Base(clean), "Main.pi")
+			wasMain := strings.EqualFold(filepath.Base(picatPath), "Main.pi")
+			if picatPath == "" || isMain && !wasMain || isMain == wasMain && dest < picatPath {
+				picatPath = dest
+			}
+		}
+		if strings.HasSuffix(lowerClean, ".wren") && (wrenPath == "" || lowerClean == "main.wren") {
+			wrenPath = dest
+		}
 		if strings.HasSuffix(lowerClean, ".v") && rocqPath == "" {
 			rocqPath = dest
 		}
@@ -185,6 +198,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		if strings.HasSuffix(lowerClean, ".m") && octavePath == "" {
 			octavePath = dest
 		}
+		if lang == "piet" && pietPath == "" && (strings.HasSuffix(lowerClean, ".png") || strings.HasSuffix(lowerClean, ".ppm")) {
+			pietPath = dest
+		}
 		if strings.HasSuffix(lowerClean, ".vvp") && verilogPath == "" {
 			verilogPath = dest
 		}
@@ -195,7 +211,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		} else if strings.HasSuffix(lowerClean, ".mb") && malbolgePath == "" {
 			malbolgePath = dest
 		}
-		for _, ext := range []string{".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".sml", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
+		for _, ext := range []string{".gp", ".bas", ".graphql", ".lean", ".agda", ".dfy", ".tla", ".mlw", ".fst", ".fsti", ".als", ".lisp", ".lsp", ".acl2", ".k", ".st", ".gs", ".sml", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".bqn", ".apl", ".ijs", ".ua", ".janet", ".coffee", ".raku", ".rakumod", ".p6", ".pl6", ".sed", ".bc", ".bef", ".bf93", ".lol", ".spl", ".unl", ".lazy", ".ape", ".fs", ".fth", ".4th", ".a68", ".sh", ".zsh", ".fish", ".ps1"} {
 			if strings.HasSuffix(lowerClean, ext) && sourcePath == "" {
 				sourcePath = dest
 				break
@@ -217,7 +233,36 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 	}
 
 	switch lang {
+	case "picat":
+		if picatPath == "" {
+			return "", "", fmt.Errorf("Picat requires a .pi source")
+		}
+		return picatPath, lang, nil
+
+	case "wren":
+		if wrenPath == "" {
+			return "", "", fmt.Errorf("Wren requires a .wren source")
+		}
+		return wrenPath, lang, nil
 	case "binary", "go-binary", "mojo-binary", "pony-binary", "chapel-binary", "chicken-scheme", "c3", "javascript", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "csharp", "fsharp", "vbnet", "text", "ocaml", "elixir", "sqlite", "julia", "r", "prolog", "lisp", "whitespace", "brainfuck", "wasm", "assemblyscript", "factor", "aheui", "apecode", "cuda-ocelot":
+		return primaryPath, lang, nil
+	case "squirrel":
+		return primaryPath, lang, nil
+
+	case "pari-gp":
+		selected := ""
+		for _, binary := range req.Binaries {
+			if strings.EqualFold(filepath.Ext(binary.Name), ".gp") {
+				if selected == "" || filepath.Clean(binary.Name) == "Main.gp" {
+					selected = filepath.Clean(binary.Name)
+				}
+			}
+		}
+		if selected == "" {
+			return "", "", fmt.Errorf("pari-gp requires .gp sources")
+		}
+		return submittedPaths[selected], lang, nil
+	case "entry":
 		return primaryPath, lang, nil
 	case "smlnj":
 		if sourcePath == "" {
@@ -279,6 +324,11 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			octavePath = primaryPath
 		}
 		return octavePath, lang, nil
+	case "piet":
+		if pietPath == "" {
+			pietPath = primaryPath
+		}
+		return pietPath, lang, nil
 	case "vhdl", "gleam", "isabelle":
 		return ws.BoxDir, lang, nil
 	case "verilog":
@@ -298,7 +348,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", fmt.Errorf("erlang requires .beam files")
 		}
 		return ws.BoxDir, lang, nil
-	case "java":
+	case "java", "java25":
 		if jarPath != "" {
 			return jarPath, lang, nil
 		}
@@ -307,9 +357,9 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 			return "", "", err
 		}
 		return jar, lang, nil
-	case "scala":
+	case "scala", "scala3":
 		if len(classFiles) == 0 {
-			return "", "", fmt.Errorf("scala requires .class files")
+			return "", "", fmt.Errorf("%s requires .class files", lang)
 		}
 		return ws.BoxDir, lang, nil
 	case "groovy":
@@ -324,7 +374,7 @@ func materializeFiles(ws Workspace, req *model.RunRequest) (primaryPath string, 
 		return rocqPath, lang, nil
 	case "haxe":
 		return primaryPath, lang, nil
-	case "vb6", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "forth", "bun", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "algol68":
+	case "vb6", "graphql", "lean4", "agda", "dafny", "tla", "why3", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "coffeescript", "raku", "sed", "bc", "befunge", "lolcode", "shakespeare", "unlambda", "lazyk", "forth", "bun", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "algol68":
 		if sourcePath == "" {
 			sourcePath = primaryPath
 		}

@@ -12,10 +12,11 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
-	"aonohako/internal/runtimepolicy"
+	"aonohako/internal/runtimeidentity"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/timing"
 )
@@ -102,8 +103,29 @@ func emitCapturedLog(hooks Hooks, stream string, output []byte, limit int) {
 	}
 }
 
+func sumRawCPUTime(values ...*int64) *int64 {
+	var total int64
+	found := false
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		total += *value
+		found = true
+	}
+	if !found {
+		return nil
+	}
+	return &total
+}
+
 type Service struct {
+	workMeasurement              durante.Config
+	workMeasurementPolicyError   error
+	competitiveRuntimeIdentity   runtimeidentity.CompetitiveIdentity
 	deploymentTarget             platform.DeploymentTarget
+	cpuNormalizer                timing.CPUNormalizer
+	shortCaseSampling            bool
 	runtimeTuning                config.RuntimeTuningConfig
 	runtimeTuningProfiles        map[string]config.RuntimeTuningConfig
 	cgroupParentDir              string
@@ -112,12 +134,14 @@ type Service struct {
 	communicationMemoryBudgetMB  int
 	communicationCPUCount        int
 	communicationWallBudgetMs    int
+	maxActiveRuns                int
 	workRootMaxBytes             int
 	networkEgressIsolated        bool
 	stdinURLTimeout              time.Duration
 }
 
 type sandboxRunResult struct {
+	workClockProgress   *durante.WorkClockProgress
 	response            model.RunResponse
 	judgeOut            []byte
 	stdoutOut           []byte
@@ -133,6 +157,7 @@ func New() *Service {
 }
 
 func NewWithConfig(cfg config.Config) *Service {
+	competitiveIdentity, _ := runtimeidentity.Competitive(cfg.CompetitiveRuntimeFingerprint)
 	profiles := make(map[string]config.RuntimeTuningConfig, len(cfg.Execution.RuntimeTuningProfiles))
 	for name, tuning := range cfg.Execution.RuntimeTuningProfiles {
 		profiles[name] = tuning.WithSafeDefaults()
@@ -141,8 +166,17 @@ func NewWithConfig(cfg config.Config) *Service {
 	if communicationMaxParticipants <= 0 {
 		communicationMaxParticipants = runvalidation.MaxCommunicationParticipants
 	}
+	measurement := snapshotWorkMeasurementConfig(cfg.Execution.WorkMeasurement)
+	var measurementPolicyError error
+	if measurement.ResourcePolicy != nil {
+		measurementPolicyError = measurement.ResourcePolicy.ValidateAdmission(cfg.MaxActiveRuns, cfg.WorkRootMaxBytes)
+	}
 	return &Service{
 		deploymentTarget:             cfg.Execution.Platform.DeploymentTarget,
+		workMeasurement:              measurement,
+		workMeasurementPolicyError:   measurementPolicyError,
+		competitiveRuntimeIdentity:   competitiveIdentity,
+		shortCaseSampling:            cfg.Execution.CPUNormalization.ShortCaseSampling,
 		runtimeTuning:                cfg.Execution.RuntimeTuning.WithSafeDefaults(),
 		runtimeTuningProfiles:        profiles,
 		cgroupParentDir:              cfg.Execution.Cgroup.ParentDir,
@@ -151,6 +185,7 @@ func NewWithConfig(cfg config.Config) *Service {
 		communicationMemoryBudgetMB:  cfg.CommunicationMemoryBudgetMB,
 		communicationCPUCount:        cfg.CommunicationCPUCount,
 		communicationWallBudgetMs:    cfg.CommunicationWallBudgetMs,
+		maxActiveRuns:                cfg.MaxActiveRuns,
 		workRootMaxBytes:             cfg.WorkRootMaxBytes,
 		networkEgressIsolated:        cfg.NetworkEgressIsolated,
 		stdinURLTimeout:              stdinURLDownloadTimeout,
@@ -161,11 +196,84 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if req.WorkMeasurementShadow {
+		return s.runWithShadow(ctx, req, hooks)
+	}
+	if req.Pipeline == nil && !runvalidation.UsesSteps(req) && automaticObservationRequested(req, s.workMeasurement) {
+		return s.runWithObservation(ctx, req, hooks, s.runRequest)
+	}
+	return s.runRequest(ctx, req, hooks)
+}
+
+func (s *Service) runRequest(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
+	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	tuning, err := resolveRuntimeTuning(req, s.runtimeTuning, s.runtimeTuningProfiles)
+	if err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if !isShadowJudge(ctx) {
+		req, err = resolveJudgeWorkLimits(req, s.workMeasurement, tuning)
+		if err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	if err := runvalidation.ValidateWorkMeasurementLimits(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if err := validateJudgeClockBinding(req, s.workMeasurement, tuning); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if req.WorkMeasurementTime {
+		if _, _, err := ordinaryTimePolicy(req, s.workMeasurement, tuning); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	peerPlans, err := workMeasurementPeerTimePlans(req, s.workMeasurement, tuning)
+	if err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2 {
+		// The per-role safety envelopes are raw; all coordinators and their
+		// response metadata must use that same CPU accounting.
+		rawService := *s
+		rawService.cpuNormalizer = timing.CPUNormalizer{}
+		s = &rawService
+		memoryMB := peakPeerMemoryMB(req, peerPlans)
+		if err := s.workMeasurement.ResourcePolicy.ValidatePeerAdmission(s.maxActiveRuns, s.workRootMaxBytes, memoryMB); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+
+	if req.WorkMeasurementLimits != nil {
+		if s.workMeasurementPolicyError != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: s.workMeasurementPolicyError.Error()}
+		}
+		if err := s.workMeasurement.ResourcePolicy.ValidateRequest(*req.WorkMeasurementLimits); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	if req.WorkMeasurement {
+		if err := validateWorkMeasurementRequest(req, s.workMeasurement); err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+		}
+	}
+	if err := validateJudgeRequest(ctx, req, s.workMeasurement); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 	if err := runvalidation.ValidateTextEncoding(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
 	if err := runvalidation.ValidateSidecarOutputs(req.SidecarOutputs); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if err := runvalidation.ValidateEntry(req); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
+	if req.EntryMode == "state" {
+		// Hidden scenario-derived state must never reach response or SSE logs.
+		hooks = Hooks{}
 	}
 	if _, err := runvalidation.ValidateBinaryBudget(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
@@ -186,30 +294,56 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 			return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 		}
 	}
-	tuning := s.runtimeTuning.WithSafeDefaults()
-	if req.RuntimeProfile != "" {
-		if err := runtimepolicy.ValidateProfileName(req.RuntimeProfile); err != nil {
-			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "invalid runtime_profile: " + err.Error()}
+	var stages *stagedWorkClocks
+	if stagedPeerClocksRequested(req) {
+		stages = newStagedWorkClocks(peerPlans, s.workMeasurement)
+	}
+	var response model.RunResponse
+	switch {
+	case req.WorkMeasurementLimits != nil:
+		return s.runWorkMeasurementDiagnostic(ctx, req, hooks, tuning)
+	case stages == nil && spjPeerClocksRequested(req):
+		response = s.runSPJClockJudgment(ctx, req, hooks, tuning, peerPlans)
+	case req.Communication != nil:
+		response = s.runCommunication(ctx, req, hooks, tuning, peerPlans)
+	case req.Pipeline != nil:
+		response = s.runPipelineV1(ctx, req, hooks, tuning, stages)
+	case req.Interactor != nil:
+		response = s.runInteractive(ctx, req, hooks, tuning, peerPlans)
+	case runvalidation.UsesSteps(req):
+		response = s.runStepPipeline(ctx, req, hooks, tuning, stages)
+	default:
+		if s.shortCaseSampling && s.cpuNormalizer.Enabled() && !req.WorkMeasurement {
+			response = runShortCaseBatch(ctx, req, hooks, func(ctx context.Context, req *model.RunRequest, stdin io.Reader, maxBytes int64, hooks Hooks) model.RunResponse {
+				return s.runOneWithStdin(ctx, req, stdin, maxBytes, hooks, tuning, true, false).response
+			})
+		} else {
+			response = s.runOne(ctx, req, hooks, tuning, true).response
 		}
-		profileTuning, ok := s.runtimeTuningProfiles[req.RuntimeProfile]
-		if !ok {
-			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "unknown runtime_profile: " + req.RuntimeProfile}
+	}
+	if stages != nil {
+		if stages.err != nil {
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: stages.err.Error()}
 		}
-		tuning = profileTuning.WithSafeDefaults()
+		response.WorkMeasurements = stages.rows
 	}
-	if req.Communication != nil {
-		return s.runCommunication(ctx, req, hooks, tuning)
+	response = finishWorkMeasurementPeerTime(req, response, s.workMeasurement, tuning)
+	if stages != nil && req.Pipeline != nil {
+		redactStagedClockRows(response.WorkMeasurements)
 	}
-	if req.Pipeline != nil {
-		return s.runPipelineV1(ctx, req, hooks, tuning)
+	return s.decorateCPUTimeNormalization(response)
+}
+
+func (s *Service) decorateCPUTimeNormalization(response model.RunResponse) model.RunResponse {
+	if info, ok := s.cpuNormalizer.Info(); ok {
+		response.CPUTimeNormalization = &model.CPUTimeNormalization{
+			Method:          info.Method,
+			ScalePPM:        info.ScalePPM,
+			ReferenceTimeNs: info.ReferenceTimeNs,
+			ObservedTimeNs:  info.ObservedTimeNs,
+		}
 	}
-	if req.Interactor != nil {
-		return s.runInteractive(ctx, req, hooks, tuning)
-	}
-	if runvalidation.UsesSteps(req) {
-		return s.runStepPipeline(ctx, req, hooks, tuning)
-	}
-	return s.runOne(ctx, req, hooks, tuning, true).response
+	return response
 }
 
 func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput bool) sandboxRunResult {
@@ -217,6 +351,10 @@ func (s *Service) runOne(ctx context.Context, req *model.RunRequest, hooks Hooks
 }
 
 func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput, captureRawStdout bool) sandboxRunResult {
+	return s.runProgram(ctx, req, stdin, stdinMaxBytes, hooks, tuning, evaluateOutput, captureRawStdout, nil)
+}
+
+func (s *Service) runProgram(ctx context.Context, req *model.RunRequest, stdin io.Reader, stdinMaxBytes int64, hooks Hooks, tuning config.RuntimeTuningConfig, evaluateOutput, captureRawStdout bool, clocks *spjWorkClocks) sandboxRunResult {
 	startWall := timing.MonotonicNow()
 	if reason := s.networkRequestRejection(req.EnableNetwork); reason != "" {
 		return sandboxRunResult{response: model.RunResponse{
@@ -264,7 +402,12 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 
 	if stdin == nil && strings.TrimSpace(req.StdinURL) != "" {
 		urlMaxBytes := stdinURLMaxBytes(req.Limits)
-		stdinURLReader, err := openStdinURL(ctx, req.StdinURL, urlMaxBytes, nil)
+		var stdinURLReader io.ReadCloser
+		if snapshot, ok := ctx.Value(shadowStdinKey{}).(*stdinSnapshot); ok {
+			stdinURLReader, err = snapshot.open(ctx, req.StdinURL, urlMaxBytes)
+		} else {
+			stdinURLReader, err = openStdinURL(ctx, req.StdinURL, urlMaxBytes, nil)
+		}
 		if err != nil {
 			return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "stdin_url: " + err.Error()}}
 		}
@@ -318,10 +461,21 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		stdin = &sandboxPreparedStdin{file: readonlyInput}
 	}
 
-	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir)
+	meter, err := s.prepareContestantDurante(ctx, ws, req)
+	if err != nil {
+		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "durante preparation failed: " + err.Error()}}
+	}
+	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer, meter)
+	if clocks != nil {
+		finishPeerWorkClock(req, meter, &res, peerWorkClockCause(ctx, ctx), "contestant")
+		clocks.contestant = collectPeerWorkMeasurement(meter, res, false, "contestant", "contestant", nil)
+	}
 	if res.Status == model.RunStatusInitFail {
 		wallMs := timing.SinceMillis(startWall)
-		return sandboxRunResult{response: model.RunResponse{Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs, CPUTimeMs: 0, Reason: res.Reason, VerdictSource: res.VerdictSource}}
+		if clocks != nil {
+			wallMs = res.WallTimeMs
+		}
+		return sandboxRunResult{response: initializationFailureResponse(res, wallMs)}
 	}
 
 	rawOut := res.Stdout
@@ -344,11 +498,14 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 		}
 	}
 
+	if capture, ok := ctx.Value(observationOutputKey{}).(*observationOutput); ok {
+		capture.record(judgeOut)
+	}
 	sidecarOutputs, sidecarErrors := captureSidecarOutputs(ws, req.SidecarOutputs)
 	status, evalReason, verdictSource := classifyRunStatusWithoutOutput(req, res)
 	var score *float64
 	if evaluateOutput {
-		status, score, evalReason, verdictSource = evaluateRunStatus(ctx, ws, req, res, judgeOut, judgeSource, judgeInputPath, sidecarOutputs, tuning, s.cgroupParentDir)
+		status, score, evalReason, verdictSource = evaluateRunStatusWithClocks(ctx, ws, req, res, judgeOut, judgeSource, judgeInputPath, sidecarOutputs, tuning, s.cgroupParentDir, s.cpuNormalizer, clocks)
 	}
 	reason := res.Reason
 	if evalReason != "" {
@@ -366,6 +523,10 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 	if res.ExitCode != nil && *res.ExitCode != 0 {
 		errResp, stderrResponseTruncated = capturedOutputValue(fullErr, stderrResponseLimit)
 	}
+	if req.EntryMode == "state" {
+		outResp, errResp = "", ""
+		stdoutResponseTruncated, stderrResponseTruncated = false, false
+	}
 
 	emitCapturedLog(hooks, "stdout", rawOut, stdoutResponseLimit)
 	emitCapturedLog(hooks, "stderr", fullErr, stderrResponseLimit)
@@ -380,6 +541,11 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			TimeMs:           res.WallTimeMs,
 			WallTimeMs:       res.WallTimeMs,
 			CPUTimeMs:        res.CPUTimeMs,
+			WorkMeasurement:  res.WorkMeasurement,
+			CPUTimeNs:        res.CPUTimeNs,
+			RawCPUTimeMs:     res.RawCPUTimeMs,
+			RawCPUTimeNs:     res.RawCPUTimeNs,
+			CPUAccounting:    res.CPUAccounting,
 			ProcessCPUTimeMs: res.ProcessCPUTimeMs,
 			MemoryKB:         res.MemoryKB,
 			ExitCode:         res.ExitCode,
@@ -393,6 +559,7 @@ func (s *Service) runOneWithStdin(ctx context.Context, req *model.RunRequest, st
 			SidecarOutputs:   sidecarOutputs,
 			SidecarErrors:    sidecarErrors,
 		},
+		workClockProgress:   res.workClockProgress,
 		judgeOut:            append([]byte(nil), judgeOut...),
 		stdoutOut:           stdoutOut,
 		stdoutLimitExceeded: res.StdoutTruncated,
@@ -412,21 +579,28 @@ func (s *Service) networkRequestRejection(enabled bool) string {
 	return ""
 }
 
-func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
+func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, clocks *stagedWorkClocks) (response model.RunResponse) {
 	if err := runvalidation.ValidateStepPipeline(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
-	programs := make(map[string]model.RunProgram, len(req.Programs))
-	for _, program := range req.Programs {
-		programs[strings.TrimSpace(program.ID)] = program
-	}
-
 	handoffDir, err := createRunWorkDir()
 	if err != nil {
 		slog.Warn("execute step handoff directory creation failed", "err", err)
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "handoff directory creation failed"}
 	}
 	defer os.RemoveAll(handoffDir)
+	var replays map[string]legacyStepReplay
+	if automaticObservationRequested(req, s.workMeasurement) {
+		budget := stepObservationBudgetFromContext(ctx)
+		if budget.allowsReplay() {
+			replays = make(map[string]legacyStepReplay, len(req.Steps))
+		}
+		defer func() {
+			replayCtx, cancel := budget.start(ctx)
+			defer cancel()
+			response.WorkMeasurementObservation = s.observeLegacySteps(replayCtx, response, replays, tuning)
+		}()
+	}
 
 	handoffs := map[string]string{}
 	stepResults := make([]model.StepResult, 0, len(req.Steps))
@@ -436,8 +610,7 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 	}
 	stdinURLBudget := &stdinURLDownloadBudget{remaining: stdinURLTimeout}
 	for i, step := range req.Steps {
-		program := programs[strings.TrimSpace(step.ProgramID)]
-		stdin, stdinReader, closeStdin, stdinVerdictSource, stdinMaxBytes, err := prepareStepStdin(ctx, step, handoffs, handoffDir, stdinURLBudget)
+		_, stdinReader, closeStdin, stdinVerdictSource, stdinMaxBytes, err := prepareStepStdin(ctx, step, handoffs, handoffDir, stdinURLBudget)
 		if err != nil {
 			slog.Warn("execute step stdin preparation failed", "step", step.ID, "err", err)
 			return aggregateStepResponse(model.RunResponse{
@@ -446,33 +619,15 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 				VerdictSource: "step:" + step.ID + ":" + stdinVerdictSource,
 			}, stepResults)
 		}
-		stepReq := &model.RunRequest{
-			Lang:              program.Lang,
-			Binaries:          program.Binaries,
-			Stdin:             stdin,
-			Limits:            effectiveStepLimits(step),
-			CaptureLimits:     req.CaptureLimits,
-			RuntimeProfile:    req.RuntimeProfile,
-			PythonLibraryMode: req.PythonLibraryMode,
-			EnableNetwork:     program.EnableNetwork,
-			EntryPoint:        program.EntryPoint,
-		}
-		if step.Handoff != nil {
-			handoffFrom := strings.ToLower(strings.TrimSpace(step.Handoff.From))
-			if handoffFrom == "file" || handoffFrom == "file_output" {
-				stepReq.FileOutputs = []model.OutputFile{{Path: step.Handoff.Path}}
-			}
-		}
+		stepReq := legacyStepRequest(req, i)
 		finalStep := i == len(req.Steps)-1
-		if finalStep {
-			stepReq.ExpectedStdout = req.ExpectedStdout
-			stepReq.SPJ = req.SPJ
-			stepReq.FileOutputs = req.FileOutputs
-			stepReq.SidecarOutputs = req.SidecarOutputs
-			stepReq.IgnoreTLE = req.IgnoreTLE
+		observe := replays != nil && s.workMeasurementPolicyError == nil && observationEligible(stepReq, s.workMeasurement) == ""
+		var replay legacyStepReplay
+		if observe {
+			replay, stdinReader = prepareLegacyReplay(stepReq, stdinReader, stdinMaxBytes)
 		}
-
-		run := s.runOneWithStdin(ctx, stepReq, stdinReader, stdinMaxBytes, hooks, tuning, finalStep, false)
+		captureStdout := observe && len(stepReq.FileOutputs) > 0
+		run := s.runClockedStage(ctx, stepReq, stdinReader, stdinMaxBytes, hooks, tuning, finalStep, captureStdout, clocks, step.ID, step.ProgramID)
 		if closeStdin != nil {
 			_ = closeStdin()
 		}
@@ -486,6 +641,17 @@ func (s *Service) runStepPipeline(ctx context.Context, req *model.RunRequest, ho
 			stepResult.HandoffBytes = int64(len(run.judgeOut))
 		}
 		stepResults = append(stepResults, stepResult)
+		if observe && !run.stdoutLimitExceeded && legacyNativeStepOutput(stepReq, stepResult, finalStep) {
+			if replay.url != nil {
+				replay.url.source = nil // The native descriptor has closed.
+			}
+			stdout, file := run.judgeOut, []byte(nil)
+			if captureStdout {
+				stdout, file = run.stdoutOut, run.judgeOut
+			}
+			replay.outputs = pipelineOutputDigests(stdout, file)
+			replays[step.ID] = replay
+		}
 
 		if !finalStep {
 			if run.response.Status != "OK" {
@@ -695,6 +861,9 @@ func stepResultFromResponse(id, programID string, resp model.RunResponse) model.
 		TimeMs:           resp.TimeMs,
 		WallTimeMs:       resp.WallTimeMs,
 		CPUTimeMs:        resp.CPUTimeMs,
+		CPUTimeNs:        measuredStepCPUTime(resp.CPUTimeNs, resp.CPUAccounting),
+		RawCPUTimeNs:     resp.RawCPUTimeNs,
+		RawCPUTimeMs:     resp.RawCPUTimeMs,
 		ProcessCPUTimeMs: resp.ProcessCPUTimeMs,
 		MemoryKB:         resp.MemoryKB,
 		ExitCode:         resp.ExitCode,
@@ -725,14 +894,50 @@ func prefixStepVerdictSource(stepID, source string) string {
 	return "step:" + stepID + ":" + source
 }
 
+// Preserve counter diagnostics even when accounting itself fails, while keeping
+// initialization failures out of output judging and captured-output delivery.
+func initializationFailureResponse(res execResult, wallMs int64) model.RunResponse {
+	return model.RunResponse{
+		Status: res.Status, TimeMs: wallMs, WallTimeMs: wallMs,
+		CPUTimeMs: res.CPUTimeMs, CPUTimeNs: res.CPUTimeNs,
+		WorkMeasurement: res.WorkMeasurement,
+		RawCPUTimeMs:    res.RawCPUTimeMs, RawCPUTimeNs: res.RawCPUTimeNs,
+		CPUAccounting: res.CPUAccounting, ProcessCPUTimeMs: res.ProcessCPUTimeMs,
+		MemoryKB: res.MemoryKB, ExitCode: res.ExitCode,
+		Reason: res.Reason, VerdictSource: res.VerdictSource,
+	}
+}
+
+// An older runner or a setup failure can lack a precise CPU sample. Keep that
+// distinct from a measured zero, including in sums over completed stages.
+func measuredStepCPUTime(ns uint64, accounting *model.CPUAccounting) *uint64 {
+	if ns == 0 && accounting == nil {
+		return nil
+	}
+	return &ns
+}
+
+func sumStepNanoseconds(total, sample *uint64) *uint64 {
+	if total == nil || sample == nil || ^uint64(0)-*total < *sample {
+		return nil
+	}
+	value := *total + *sample
+	return &value
+}
+
 func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) model.RunResponse {
 	var wallMs int64
 	var cpuMs int64
+	cpuNs, rawNs := new(uint64), new(uint64)
 	var processCPUTimeMs int64
+	var rawCPUTimeMs *int64
 	var memoryKB int64
 	for _, step := range steps {
 		wallMs += step.WallTimeMs
 		cpuMs += step.CPUTimeMs
+		cpuNs = sumStepNanoseconds(cpuNs, step.CPUTimeNs)
+		rawNs = sumStepNanoseconds(rawNs, step.RawCPUTimeNs)
+		rawCPUTimeMs = sumRawCPUTime(rawCPUTimeMs, step.RawCPUTimeMs)
 		processCPUTimeMs += step.ProcessCPUTimeMs
 		if step.MemoryKB > memoryKB {
 			memoryKB = step.MemoryKB
@@ -741,6 +946,17 @@ func aggregateStepResponse(resp model.RunResponse, steps []model.StepResult) mod
 	resp.TimeMs = wallMs
 	resp.WallTimeMs = wallMs
 	resp.CPUTimeMs = cpuMs
+	resp.RawCPUTimeMs = rawCPUTimeMs
+	// Each stage has its own accounting source. Report exact sums only when all
+	// executed stages supplied the corresponding precise counter.
+	resp.CPUTimeNs, resp.RawCPUTimeNs = 0, nil
+	if len(steps) > 0 {
+		if cpuNs != nil {
+			resp.CPUTimeNs = *cpuNs
+		}
+		resp.RawCPUTimeNs = rawNs
+	}
+	resp.CPUAccounting = nil
 	resp.ProcessCPUTimeMs = processCPUTimeMs
 	if memoryKB > resp.MemoryKB {
 		resp.MemoryKB = memoryKB

@@ -1,0 +1,51 @@
+{
+  "deployments": [
+    {
+      "region": "asia-northeast3",
+      "gen": 2,
+      "cpu": 1,
+      "memory_mib": 2048,
+      "concurrency": 1,
+      "private": true,
+      "revision": "aonohako-v10-rust-bce46a9d8b-00001-hf4",
+      "image_digest": "sha256:856be473011809c36a32d7ecfb6501c45db07b3204b7e475be515ca4baa6cf95",
+      "base_image": "asia.gcr.io/hancomac/aonohako@sha256:7af8d4b78ae6d7a9951bee0992a84df8282473bf3faf29cfbfdc56772f18ae51",
+      "binaries": {
+        "commit": "191858a02666c1406b871e4974b9072b2c91bb34",
+        "profile": "dynamorio-11.3-durante-v10-vm32m",
+        "worker_sha256": "082f83a6456e42469cf31aba5cd44ea4ad53dda29dd616cea7be7f71a40f4864",
+        "reference_sha256": "0f103605e5d024eaf3f278b20f4c07674b08d41e3089f25a20ba93acd8a5d361",
+        "client_sha256": "dfa6bcd57398cda092ea6510d033d738d9104883c0d030a69f9041e661aefcf0",
+        "upstream_sha256": "4930e4cd05c2009f495839488507a77ab6101a30e2eb917281c39fbdc048df27"
+      },
+      "layer_sha256": "b3a4896c90ebe13e244f8d9ccf2293d702ac9b0389cdc1c3817c88f21816853c",
+      "bridge_sha256": "4a1d52a9d6ab047483b4efd68a6dde191116339ef5b509b13458287c674d7520",
+      "requests": [
+        {
+          "language": "RUST2024",
+          "status": 202,
+          "instance_id_sha256": "fc4a292d2d23fec429562ef27de993f53d40aee0603e395d27fb7dd934661dce",
+          "request_id_hash": "e25cd83df523b555526a23f4f62b73b48cb06b8cc14640e8cb5a678da742379c",
+          "result_available": true,
+          "receipt_request_id_hash": "ca0643813e5bff6af56c6f0a50ba60b0e51b06f5779c5c2b548e43b05ddea49c",
+          "response_http": 200,
+          "triplets": 45,
+          "collector_exit": 0,
+          "complete": true,
+          "dataset_sha256": "86b4c20ffd38b763bfb3ba7dff4f796a78ca7126249367984aa02efe59cb7f74"
+        }
+      ],
+      "cleanup": {
+        "service_http": 404,
+        "revision_http": 404,
+        "package_http": 404
+      },
+      "cpu_always_allocated": true,
+      "receipt_get_count": 45,
+      "receipt_get_status_counts": {
+        "202": 44,
+        "200": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,1642 @@
+{
+  "schema": 1,
+  "campaign": "GCE CPP20 v7 frozen time models and judge-boundary experiment, 2026-11-19",
+  "decision": "All three frozen policies failed qualification. No production clock or score policy was enabled.",
+  "environment": {
+    "cloud": "Google Compute Engine",
+    "machine_type": "n2d-standard-4",
+    "cpu_platform": "AMD Rome",
+    "guest_cpu_model": "AMD EPYC 7B12",
+    "guest_logical_cpus": 2,
+    "threads_per_core": 1,
+    "container_cpuset": [
+      1
+    ],
+    "container_quota_cpus": 1,
+    "container_memory_mib": 2048,
+    "collection_and_boundary_container_pids_limit": 512,
+    "container_network": "none",
+    "guest_os": "Container-Optimized OS",
+    "kernel": "6.6.162+",
+    "docker": "27.5.1",
+    "scope": "One temporary guest reserved for the experiment. Physical host tenancy was unspecified.",
+    "cpu_normalization": false,
+    "native_short_case_sampling": false,
+    "max_active_runs": 1
+  },
+  "software": {
+    "aonohako_collector_source_commit": "6bb1ce424aee75346c643e18e4665b6f8e047f1a",
+    "aonohako_merged_server_source_commit": "fdc852519256233d31329339430cfbed8dc842e6",
+    "reference_binary_sha256": "ba89e00308a274bbf633543f7400cae4b2c64fd74edeb9ff39d1f96a8bcdb4eb",
+    "server_binary_sha256": "59787b510f015cea75612e734bf31a701f00cd853aeb34b9de8813473397fb7f",
+    "runtime_oci_index": "sha256:5f1fee5fb589c9494f2155478bab0e01af620f73e99ebf2ff9177a09626d5bf3",
+    "linux_amd64_manifest": "sha256:2a9b4234e1490e1be4742a9b148c0446fa92c5e6f1cc41cad86e74fb3357eb38",
+    "docker_image_config": "sha256:a00c795fae32f91759125648a8c1a042aec7dd6b6f7b78f8488b7bb49583ec57",
+    "rootfs_diff_ids": [
+      "sha256:3edb2192497af6e965b9b7e57dc6dbdce1f3ea721d14a98110419d4ded523298",
+      "sha256:83c85f170d74d019afc9693c5d969c6102819afbff5d80a169704c881a98eb5e"
+    ],
+    "during_execution_installation": {
+      "source_commit": "41743068ef9070b6e04195bf7822c5ee513660ff",
+      "runtime_source_commit": "6847bb210bea0ca11d1bf47704383d6a075da490",
+      "runtime_patch_sha256": "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c",
+      "runtime_code_replay_patch_sha256": "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b",
+      "launcher_sha256": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+      "client_sha256": "3d5d464453d22917856623ec977a23cfd321102580ef050bbfd02ba0929e7297",
+      "release_core_sha256": "1274666f21b2737d90aab37535395e9c4922162c081c89d27bdd3939857c225b",
+      "unchanged_before_after": true
+    },
+    "source_language": "CPP20",
+    "compiler": "g++ (Debian 14.2.0-19) 14.2.0",
+    "compiler_flags": "-O2 -Wall -lm --static -pipe -DONLINE_JUDGE=1 -std=c++20",
+    "dispatch_profile": "default",
+    "cpuid_profile": "x86-64-v2",
+    "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
+    "counter_scope": "process_tree_user_code",
+    "counter_metric": "bb_entry_app_instructions",
+    "integrity": "Application-mutable counters in trusted diagnostic development fixtures.",
+    "common_aonohako_source_tree": "6aff457c5263ac525bdd54a10caaf997fc2e4c5b"
+  },
+  "protocol": {
+    "campaign_plan_sha256": "ad34ddfa4f4290f749d586e9c707b8e956b1b8cacadfe224b93cc09ac3cb627f",
+    "fit_plan_sha256": "ea4faf6aded022f341792a1a14865b85f788519f4dd680d60f08a4c246d2a86b",
+    "combined_manifest_sha256": "6d41c52f5f923f8a2deeba794f6c3f2b58de8f2318ec2559aa1caf7e4c44912a",
+    "manifest_bytes": 3009489,
+    "fresh_cohort_reserved_utc": "2026-11-19T05:19:50.312783+00:00",
+    "fresh_cohort_plan_sha256": "0e92f04a53f9ee5b88d5e6a4e71c88e9a86a20849ecf4b060562313d4588f5e6",
+    "external_scale": 1,
+    "independent_collections": [
+      "baseline-gce",
+      "split-prior",
+      "split-gce"
+    ],
+    "triplets_per_external_policy": 18,
+    "native_limits": {
+      "time_ms": 10000,
+      "wall_time_ms": 30000,
+      "memory_mb": 256
+    },
+    "metered_limits": {
+      "cpu_time_ms": 60000,
+      "wall_time_ms": 90000,
+      "memory_mb": 256
+    },
+    "gates": {
+      "min_repetitions": 3,
+      "min_native_ns": 20000000,
+      "max_native_spread_ppm": 100000,
+      "max_work_spread_ppm": 1000,
+      "max_error_ppm": 200000
+    },
+    "collection": "Within each case and round, each repetition ran one native execution, one complete diagnostic Durante execution and one native execution. Native controls were accepted with matched stdout. All terminal measurements used an unchanged installation and complete, uninterrupted counts with matched stdout and no unsupported REP entries. The minimum native duration applies to every native observation.",
+    "prediction": "Take the ceiling after dividing the sum of coefficient times counter by ns_denominator. The baseline applies its REP coefficient to MOVS + STOS. Split policies apply separate positive coefficients. Signed error is predicted_ns minus the per-round case median of all six native CPU observations, with a half-nanosecond median rounded up.",
+    "gates_and_spread": "Compute native and work spreads as (max - min)/median. Gate native CPU spread, instruction spread, total REP spread and, for split policies, both operation spreads. Compare absolute per-repetition error/native median exactly to the threshold. PPM displays round upward. A passing case satisfies all collection and per-repetition gates.",
+    "runs_fields": [
+      "repetition",
+      "native_before_cpu_ns",
+      "native_after_cpu_ns",
+      "instructions",
+      "movs_bytes",
+      "stos_bytes",
+      "predicted_ns",
+      "signed_error_ns",
+      "within_error_gate"
+    ],
+    "development_runs_fields": [
+      "repetition",
+      "native_before_cpu_ns",
+      "native_after_cpu_ns",
+      "instructions",
+      "movs_bytes",
+      "stos_bytes"
+    ],
+    "scope": "Six fixed author-published programs, one input per program and three repeated executions. Repetitions, boundary pairs and policies measured on the same guest do not constitute independent programs."
+  },
+  "external_workloads": {
+    "cses_edit_distance": {
+      "cohort": "previously exposed",
+      "parent_manifest_sha256": "7f6d09cd3323433d6ab0f3c040b53aebd3e796cbf4b6a606882f81af2911b124",
+      "task_url": "https://cses.fi/problemset/task/1639/",
+      "source_url": "https://github.com/ks-iitjmu/MyCSES/blob/eeaf7b164735a4747493b0555edf688479014448/3_dp/edit_distance.cpp",
+      "input_and_oracle": "5,000 uppercase characters are sampled from A–Y by the fixed LCG. Every 17th character becomes Z in the second string. Each edit can add at most one Z and substitutions achieve this bound.",
+      "source_sha256": "f38ea4d086e8a37be07f75b7729f692c3a1d9879410d4340a8356a44318eaca5",
+      "input_sha256": "c791867e805736b8ae5c4f0daae5b02d641e080b53b0a054807c3ab607c6eda9",
+      "expected_sha256": "fbdc36696a4da1e76493c51bde0d67878dd3a7845771fb5b1af54645210f74de",
+      "binary_sha256": "e17ddbfddaa80d4434d4e4e8f69977fdbabbafd92003a91d8de5d618c5526fda"
+    },
+    "cses_counting_rooms": {
+      "cohort": "previously exposed",
+      "parent_manifest_sha256": "7f6d09cd3323433d6ab0f3c040b53aebd3e796cbf4b6a606882f81af2911b124",
+      "task_url": "https://cses.fi/problemset/task/1192/",
+      "source_url": "https://github.com/ks-iitjmu/MyCSES/blob/eeaf7b164735a4747493b0555edf688479014448/4_graph_algorithms/Counting_Rooms.cpp",
+      "input_and_oracle": "A 1000 by 1000 wall grid separates the floor at each 29th row or 31st column; every maximal pair of remaining row/column bands is one component.",
+      "source_sha256": "8101472e4bb5fca278d1b9387c64cc28c51398c9692339a17270d4cdc57a6fe3",
+      "input_sha256": "f30b67153bfc0e24760069e89ec2b8cc477853dbc4f2da00084d84df51ff62c0",
+      "expected_sha256": "0e5a2620743f8f0accf713cbd4e004e77a484c732f28747e9fa7c402474e516b",
+      "binary_sha256": "edef8afb32cf20a73a94ad7d096be6c2861aa822c7704053c62485a5794cda66"
+    },
+    "cses_factory_machines": {
+      "cohort": "previously exposed",
+      "parent_manifest_sha256": "7f6d09cd3323433d6ab0f3c040b53aebd3e796cbf4b6a606882f81af2911b124",
+      "task_url": "https://cses.fi/problemset/task/1620/",
+      "source_url": "https://github.com/ks-iitjmu/MyCSES/blob/eeaf7b164735a4747493b0555edf688479014448/2_sorting_searching/Factory_Machines.cpp",
+      "input_and_oracle": "200000 machines comprise 50000 of each of four periods. Independent min-heap enumerates completion batches until target 999983721, then proves minimality by capacity at the preceding second.",
+      "source_sha256": "8ef9f167b087e625a709b2863a6fddaa7d1170810d71406cae7c94284f956ab5",
+      "input_sha256": "2255531df29e25371eaa77247074d36eed4cefca149bef045de0b0005bcb2312",
+      "expected_sha256": "663e23b9fdc8527b48a459851f3449b25ba1f5e84327a9b1fca13df1131c2b3a",
+      "binary_sha256": "f7046b9fb863008133722bbe034a7daea1e76c783467344d3974a1ede8201c64"
+    },
+    "gce_cses_towers": {
+      "cohort": "fresh",
+      "parent_manifest_sha256": "487ce499e0209dc1955babbdac872ec295e9bed71ccf663eb38a3d161e72a384",
+      "task_url": "https://cses.fi/problemset/task/1073/",
+      "source_url": "https://github.com/ks-iitjmu/MyCSES/blob/eeaf7b164735a4747493b0555edf688479014448/2_sorting_searching/towers.cpp",
+      "input_design": "200000 values from fixed 32-bit LCG seed 0x46932ce7; value = 1+((state>>10)%7000). Space-separated ASCII. Most current tower tops compete in data-dependent ordered-tree searches. Input length < 1MiB.",
+      "output_oracle": "Fenwick longest nondecreasing subsequence over cube sizes; reconstruct a witness subsequence for lower bound and partition into strictly decreasing rank classes for matching upper bound.",
+      "source_sha256": "910adc7bf6958e3d8eb1238a2c1b6046623812816b3be3f379dbd862a6e3f9e3",
+      "input_sha256": "1e757ad68f7830aa7071bafded1e5236b436ca44030a01d79677129e60bd50a0",
+      "expected_sha256": "3eeb04d111d9f8a0fa434289466516fd226a17cc2a612970e08bbbe13d14e317",
+      "binary_sha256": "ab1bff7e098f46f9590d89af629c2128eff003f5b2532b1e818e0a80150db87c"
+    },
+    "gce_cses_removal_game": {
+      "cohort": "fresh",
+      "parent_manifest_sha256": "487ce499e0209dc1955babbdac872ec295e9bed71ccf663eb38a3d161e72a384",
+      "task_url": "https://cses.fi/problemset/task/1097/",
+      "source_url": "https://github.com/ks-iitjmu/MyCSES/blob/eeaf7b164735a4747493b0555edf688479014448/3_dp/Removal_Game.cpp",
+      "input_design": "2600 signed values, in 1300 adjacent identical pairs. Base values from LCG seed 0x8ac3d91b, value=((state>>4)%2000001)-1000000. Covers diagonal DP access with two 2600x2600 64-bit matrices, roughly 104 MiB in the subject program.",
+      "output_oracle": "Optimal first player can guarantee one parity and both parities sum to the sum of one item from every identical pair; second player can guarantee a tie by immediately taking the just-exposed twin after every move. Exact value is half the total even with negative entries.",
+      "source_sha256": "8c3cee70202324d0f75be410419c058ef72d08867eb0c59ed77f897054781d6e",
+      "input_sha256": "f9d9c5dc942987c80d3895a4930e6a8b988956919d4c7352cf6cfa1997da6c6c",
+      "expected_sha256": "5fffc4b2eb02092d02d05eab08462e96a7c736705ca98f13e2ea2e0f5d32b706",
+      "binary_sha256": "f110983ea6510ddf569a6d602f9a17793990718c49f6a01cb29052aaa46a22fe"
+    },
+    "gce_cses_counting_divisors": {
+      "cohort": "fresh",
+      "parent_manifest_sha256": "487ce499e0209dc1955babbdac872ec295e9bed71ccf663eb38a3d161e72a384",
+      "task_url": "https://cses.fi/problemset/task/1713/",
+      "source_url": "https://github.com/ks-iitjmu/MyCSES/blob/eeaf7b164735a4747493b0555edf688479014448/7_mathematics/counting_divisors.cpp",
+      "input_design": "256 requests: first 8 numbers [1,2,36,64,83160,999983,997*997,1000000], then 248 terms limited to [1,1000000] using fixed LCG seed 0xfd28ab81 and 1+((state>>4)%1000000). The published solution constructs its full divisor sieve on all executions.",
+      "output_oracle": "For each query, multiply the successor exponents in its prime factorization. Independently cross-check by counting divisor pairs up to isqrt.",
+      "source_sha256": "0d85cc2452f058439d58355288a26ab6e8da0dc42fac37c7f1f9fb36d60a70f4",
+      "input_sha256": "4167c1825dc54c8a78af4f703029d0befd0ce561438c3a13c35c497873793d89",
+      "expected_sha256": "9da4bf83207181013400a49301706819aaef95065b8092c63105dce0c4faf513",
+      "binary_sha256": "35e18c0f27d9512c82e78fac0d8664486e968dd720e3f2b8e1d0d580a6f12656"
+    }
+  },
+  "development": {
+    "setup_attempt": {
+      "dataset_sha256": "7db579ec26c64e07ce39898e148bf2c08f75716a3f68d7cbebb7dc0682072cdf",
+      "collection_exit": 1,
+      "triplets": 0,
+      "failure": "The sandbox could not execute the collector helper on its first invocation. Guest mount permissions were corrected before the full repeat."
+    },
+    "corpus_id": "cpp-reference-v1",
+    "successful_collection_started_utc": "2026-11-19T05:23:52.194704833Z",
+    "successful_dataset_sha256": "dbc58b3a61e73ad5be760f634e6c6fc43b7f79158a1fcf3b41330345f45ab645",
+    "triplets": 45,
+    "normal_reference_fit": {
+      "exit": 2,
+      "passed": false,
+      "training_families": [
+        "integer",
+        "rep_copy"
+      ],
+      "validation_families": [
+        "rep_fill",
+        "branch",
+        "sort"
+      ],
+      "candidate_policy": {
+        "model_id": "gce-cpp20-builtin",
+        "model_version": 1,
+        "reference_id": "gce-n2d-20261119",
+        "runtime_id": "CPP20@sha256:5f1fee5fb589c9494f2155478bab0e01af620f73e99ebf2ff9177a09626d5bf3",
+        "family": "cpp",
+        "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
+        "dispatch_profile": "default",
+        "cpuid_profile": "x86-64-v2",
+        "instruction_ns_numerator": 257040492,
+        "rep_byte_ns_numerator": 29428835,
+        "ns_denominator": 1000000000
+      },
+      "raw_evaluation_sha256": "6183778641847d1288d1c0811a3ca20f665c7ebb828298663701bf9c4402755f"
+    },
+    "split_rep_minimax": {
+      "recipe_sha256": "767f4d628f71e467b2619823d6a6d7d27194b9f4a610561e20445acff3e5cff2",
+      "policy_sha256": "cbd74aa4a2edf7d98d00eb86beb517298f8d208e96c1af84680df17dd8b3fd24",
+      "scipy": "1.10.1",
+      "numpy": "1.26.4",
+      "optimal_worst_relative_error": 0.4656856072198915,
+      "quantized_within_20_percent": 9,
+      "quantized_worst_error_percent": 46.56856123825419,
+      "training_scope": "All 45 built-in development triplets. The six external programs were excluded. Minimize maximum absolute relative prediction error, break ties by minimizing the maximum normalized feature exposures weighted by the coefficients, then quantize to integer numerators with denominator 1000000000."
+    },
+    "source_sha256_by_family": {
+      "integer": "2bb33dfeec1d2f82fad2075a45e5a1a8c72362e8d61438f6eb147fe9f4c1025d",
+      "rep_copy": "bbe56822498df565555d46c9352af2e5d521e052771e2e1ac89998ef50564691",
+      "branch": "200fa292952892480907001cf1a795984c46a3e53f402d906dadef412b0b16dc",
+      "sort": "ba6464e65deeb8bde261b12d324b91a0bf6f4d456979090e41fa877c28dd3da5",
+      "rep_fill": "2c6a019d195860141be505862f39c081b860130b649a257c0c0a17708d2e5513"
+    },
+    "cases": {
+      "integer-1": {
+        "input_sha256": "58102257e583a6dd723fbceb404fc82fc66f15117d61e6b80dece1b24e3aa2fd",
+        "expected_sha256": "5a0aaf31936f601967d7515250dac04090be2675b773801836150ae751bedf8d",
+        "binary_sha256": "13b1e1ba33375676c1c6071b2d0bb41c0148e2ee7d90f1c4085d3eb95124f29d",
+        "runs": [
+          [1, 43538000, 43868000, 167944341, 0, 3624],
+          [2, 43682000, 43685000, 167944341, 0, 3624],
+          [3, 43785000, 44120000, 167944341, 0, 3624]
+        ]
+      },
+      "integer-2": {
+        "input_sha256": "9902ec78038acf436285ea163ff7b72ec7d4674a2510e8c881a63abe151a4f49",
+        "expected_sha256": "e38d7255181f8787ee1acc901a9ed5f9364fa2bfa006853fbfd327f1d1b6198d",
+        "binary_sha256": "13b1e1ba33375676c1c6071b2d0bb41c0148e2ee7d90f1c4085d3eb95124f29d",
+        "runs": [
+          [1, 85631000, 86577000, 335716501, 0, 3624],
+          [2, 86341000, 86365000, 335716501, 0, 3624],
+          [3, 85740000, 85838000, 335716501, 0, 3624]
+        ]
+      },
+      "integer-4": {
+        "input_sha256": "09294a6f2c1c6a3a71c766b169af994547992af1099ead8ad61253f648dc08bf",
+        "expected_sha256": "04dc0373990fa65f8d3823b64a8a60836cd19812708bb3a1d01f133c060cad77",
+        "binary_sha256": "13b1e1ba33375676c1c6071b2d0bb41c0148e2ee7d90f1c4085d3eb95124f29d",
+        "runs": [
+          [1, 169748000, 169902000, 671260870, 0, 3624],
+          [2, 170223000, 170100000, 671260804, 0, 3624],
+          [3, 170034000, 170556000, 671260870, 0, 3624]
+        ]
+      },
+      "rep_copy-1": {
+        "input_sha256": "b61d14fabac7a8c4a193c44ce1394bbc7399ff3de0c728f96d280c832632a60b",
+        "expected_sha256": "c5a2caa53f27de21a0a1081f8afd6fddfea30ea90cd8da5a2be91b17f2960d8a",
+        "binary_sha256": "255445d9e1311d5872c4da62e12df42c199012cfbc9b8c5dc6e8a8646cab2100",
+        "runs": [
+          [1, 69162000, 72223000, 47331871, 2147483648, 3624],
+          [2, 69188000, 84247000, 47331871, 2147483648, 3624],
+          [3, 84425000, 82807000, 47332022, 2147483648, 3624]
+        ]
+      },
+      "rep_copy-2": {
+        "input_sha256": "034ae8e96eee99a30067d2f7c7b8055992ffb028e1a8309df36a17183c72b95e",
+        "expected_sha256": "14b4ccf54a685e2b88965fc5f93815b5eb94b8946f65452c7f059ae8239959ac",
+        "binary_sha256": "255445d9e1311d5872c4da62e12df42c199012cfbc9b8c5dc6e8a8646cab2100",
+        "runs": [
+          [1, 155067000, 151838000, 47343335, 4294967296, 3624],
+          [2, 151874000, 132470000, 47343335, 4294967296, 3624],
+          [3, 131136000, 131595000, 47343335, 4294967296, 3624]
+        ]
+      },
+      "rep_copy-4": {
+        "input_sha256": "0fe76953bddd45fec27d8d55ede03f2eab50c90d933c2432900985db384855bd",
+        "expected_sha256": "73607328886253eec5e94bab9f192c471d8dde15612d82f23ce4d32675b4ee50",
+        "binary_sha256": "255445d9e1311d5872c4da62e12df42c199012cfbc9b8c5dc6e8a8646cab2100",
+        "runs": [
+          [1, 252302000, 256442000, 47365712, 8589934592, 3624],
+          [2, 287174000, 254716000, 47365863, 8589934592, 3624],
+          [3, 251157000, 251807000, 47365863, 8589934592, 3624]
+        ]
+      },
+      "branch-1": {
+        "input_sha256": "54e11706f19c1b6db05caecff1822a1481b450adfd659b2a93dcd33929d53b7f",
+        "expected_sha256": "99760e423569984bd0ca4a2e2262681cb542e5c0fec8cadee71b971bbfa560be",
+        "binary_sha256": "d383e4da2a1953bc72d54fccac0fe98fe575fef2474e469edcf2567d18ece37c",
+        "runs": [
+          [1, 33836000, 34009000, 229460562, 0, 3624],
+          [2, 33793000, 33963000, 229460562, 0, 3624],
+          [3, 34085000, 33903000, 229460562, 0, 3624]
+        ]
+      },
+      "branch-2": {
+        "input_sha256": "ae7a13222abd483670b1f3b55d2f9f42790bfcbfdad8356a1c717f37feb59661",
+        "expected_sha256": "875dae9442036ac9f7d91f17b8007467cda85c61daa09872b262292cb15c6a71",
+        "binary_sha256": "d383e4da2a1953bc72d54fccac0fe98fe575fef2474e469edcf2567d18ece37c",
+        "runs": [
+          [1, 66455000, 66131000, 458749266, 0, 3624],
+          [2, 66016000, 66132000, 458749200, 0, 3624],
+          [3, 66211000, 66065000, 458749266, 0, 3624]
+        ]
+      },
+      "branch-4": {
+        "input_sha256": "16c3402cf255887d19eed335f65b177e4c9f57e5111da11ad7fca6806199710e",
+        "expected_sha256": "e35976992cf6245cbcdcd50a983e687be0a6915b46c393238b18c81fc94d91a5",
+        "binary_sha256": "d383e4da2a1953bc72d54fccac0fe98fe575fef2474e469edcf2567d18ece37c",
+        "runs": [
+          [1, 130956000, 131732000, 917326749, 0, 3624],
+          [2, 130503000, 130775000, 917326749, 0, 3624],
+          [3, 131478000, 131523000, 917326749, 0, 3624]
+        ]
+      },
+      "sort-1": {
+        "input_sha256": "4f6635fab154104736e0968c922ca1ecddf0a43758e4bbf89005b1208689251e",
+        "expected_sha256": "cac67249b6f5be38470e1c10b76e921595ace2ef72b52a4a3a7db135a7cd1c33",
+        "binary_sha256": "d96565357cdd163ea7de5eb145aaf915b0b0ba9e238a46718e9e1352e51c4b75",
+        "runs": [
+          [1, 33775000, 33849000, 86545617, 0, 3624],
+          [2, 33688000, 33664000, 86545768, 0, 3624],
+          [3, 33290000, 33848000, 86545768, 0, 3624]
+        ]
+      },
+      "sort-2": {
+        "input_sha256": "be3b3a973edc5f34763d5808c7d0866e068ff309898e83e80bb37674405ce7a7",
+        "expected_sha256": "ac3bae82b8b8660ab74bd85aa2d0685aaea14b95148def632987ef659f44842e",
+        "binary_sha256": "d96565357cdd163ea7de5eb145aaf915b0b0ba9e238a46718e9e1352e51c4b75",
+        "runs": [
+          [1, 69140000, 69234000, 177135363, 0, 3624],
+          [2, 69545000, 69554000, 177135363, 0, 3624],
+          [3, 69465000, 70039000, 177135363, 0, 3624]
+        ]
+      },
+      "sort-4": {
+        "input_sha256": "ef801656107acf2762ce10512091bba7ae297ce0f4bc9be76b789f7ba54a4136",
+        "expected_sha256": "ae623b09f4edbec8846d384b18c43c9978e4275da018ef20dd7a5efdf61de461",
+        "binary_sha256": "d96565357cdd163ea7de5eb145aaf915b0b0ba9e238a46718e9e1352e51c4b75",
+        "runs": [
+          [1, 143025000, 142707000, 373690919, 0, 3624],
+          [2, 142600000, 141534000, 373690919, 0, 3624],
+          [3, 141451000, 141480000, 373690919, 0, 3624]
+        ]
+      },
+      "rep_fill-1": {
+        "input_sha256": "b61d14fabac7a8c4a193c44ce1394bbc7399ff3de0c728f96d280c832632a60b",
+        "expected_sha256": "6a3078dfb84c2caf0f5c45b5ba1d46e5b20a09f51280b1d188b9ce0c057cddda",
+        "binary_sha256": "316549bd773f5dba0b5978f423ba8fc93f9fb881339478e030f22b1b2f9d1bc7",
+        "runs": [
+          [1, 39097000, 38798000, 25823152, 0, 2147487272],
+          [2, 37486000, 37742000, 25823152, 0, 2147487272],
+          [3, 37952000, 38290000, 25823152, 0, 2147487272]
+        ]
+      },
+      "rep_fill-2": {
+        "input_sha256": "034ae8e96eee99a30067d2f7c7b8055992ffb028e1a8309df36a17183c72b95e",
+        "expected_sha256": "2eeb559b1920bcd118e23727ff5bf06499ed939972f79f592afcf0d7dd1945b0",
+        "binary_sha256": "316549bd773f5dba0b5978f423ba8fc93f9fb881339478e030f22b1b2f9d1bc7",
+        "runs": [
+          [1, 71599000, 71484000, 25829706, 0, 4294970920],
+          [2, 71032000, 71824000, 25829857, 0, 4294970920],
+          [3, 70869000, 71293000, 25829857, 0, 4294970920]
+        ]
+      },
+      "rep_fill-4": {
+        "input_sha256": "0fe76953bddd45fec27d8d55ede03f2eab50c90d933c2432900985db384855bd",
+        "expected_sha256": "1558eb8d9fd38f4c06b28fed097f88d4eb10300d5da2d0a094a9752b5f82e4aa",
+        "binary_sha256": "316549bd773f5dba0b5978f423ba8fc93f9fb881339478e030f22b1b2f9d1bc7",
+        "runs": [
+          [1, 137655000, 136766000, 25843169, 0, 8589938216],
+          [2, 135869000, 138265000, 25843169, 0, 8589938216],
+          [3, 136326000, 137784000, 25843169, 0, 8589938216]
+        ]
+      }
+    },
+    "component_order_lower_bound": {
+      "counter_order": [
+        "instructions",
+        "rep_movs_bytes",
+        "rep_stos_bytes"
+      ],
+      "ordered_case_pairs": 210,
+      "dominating_pairs": 42,
+      "argument": "For A.min >= B.max in every counter, all nonnegative affine weights with any common intercept imply p_A >= p_B (also after common ceiling). For native times t_A < t_B the maximum relative error on the pair is at least (t_B - t_A)/(t_B + t_A). The conservative mode takes t_A=max six native A and t_B=min six native B. Case medians use the exact median of six controls, including half nanoseconds where present.",
+      "scope": "Nonnegative affine functions of the three observed counters, with a common intercept, on these measured development cases.",
+      "results": {
+        "case_medians": {
+          "native_order_inversions": 7,
+          "strict_20_percent_counterexamples": [
+            {
+              "A": "branch-2",
+              "B": "sort-4",
+              "native_A_ns": {
+                "numerator": 66131500,
+                "denominator": 1
+              },
+              "native_B_ns": {
+                "numerator": 142067000,
+                "denominator": 1
+              },
+              "min_A_minus_max_B_counts": [85058281, 0, 0],
+              "pair_lower_bound": {
+                "numerator": 151871,
+                "denominator": 416397
+              }
+            },
+            {
+              "A": "branch-1",
+              "B": "sort-2",
+              "native_A_ns": {
+                "numerator": 33933000,
+                "denominator": 1
+              },
+              "native_B_ns": {
+                "numerator": 69505000,
+                "denominator": 1
+              },
+              "min_A_minus_max_B_counts": [52325199, 0, 0],
+              "pair_lower_bound": {
+                "numerator": 17786,
+                "denominator": 51719
+              }
+            }
+          ]
+        },
+        "native_extrema": {
+          "native_order_inversions": 7,
+          "strict_20_percent_counterexamples": [
+            {
+              "A": "branch-2",
+              "B": "sort-4",
+              "native_A_ns": {
+                "numerator": 66455000,
+                "denominator": 1
+              },
+              "native_B_ns": {
+                "numerator": 141451000,
+                "denominator": 1
+              },
+              "min_A_minus_max_B_counts": [85058281, 0, 0],
+              "pair_lower_bound": {
+                "numerator": 37498,
+                "denominator": 103953
+              }
+            },
+            {
+              "A": "branch-1",
+              "B": "sort-2",
+              "native_A_ns": {
+                "numerator": 34085000,
+                "denominator": 1
+              },
+              "native_B_ns": {
+                "numerator": 69140000,
+                "denominator": 1
+              },
+              "min_A_minus_max_B_counts": [52325199, 0, 0],
+              "pair_lower_bound": {
+                "numerator": 7011,
+                "denominator": 20645
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "frozen_external_rounds": {
+    "baseline-gce": {
+      "collection_started_utc": "2026-11-19T05:27:08.950944139Z",
+      "collection_ended_utc": "2026-11-19T05:29:06Z",
+      "pinned_vcpu_steal_ticks_delta": 0,
+      "dataset_sha256": "3a9cb82f712fde958a997725d5efbf383703a7a77ea562493735649c3f12d1ee",
+      "evaluation_sha256": "690e5cc20c21cb36039392cf46e86994360335771924e05574d3cd1946e197b7",
+      "policy_sha256": "5545306feb6e9de49bb2f1f3d386f7f950b3a4759e3cf9ece34ce918d59b1f37",
+      "policy": {
+        "model_id": "cpp-v7-frozen-v6-weight-transfer-probe",
+        "model_version": 1,
+        "reference_id": "shared-epyc-v7-heldout-20261119",
+        "runtime_id": "CPP20@sha256:5f1fee5fb589c9494f2155478bab0e01af620f73e99ebf2ff9177a09626d5bf3",
+        "family": "cpp",
+        "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
+        "dispatch_profile": "default",
+        "cpuid_profile": "x86-64-v2",
+        "instruction_ns_numerator": 257561312,
+        "rep_byte_ns_numerator": 31783895,
+        "ns_denominator": 1000000000
+      },
+      "collect_exit": 0,
+      "validate_exit": 2,
+      "passed": false,
+      "counts_by_cohort": {
+        "all": {
+          "repetitions": 18,
+          "within_error_gate": 3,
+          "cases": 6,
+          "cases_passing_all_gates": 0
+        },
+        "previously exposed": {
+          "repetitions": 9,
+          "within_error_gate": 0,
+          "cases": 3,
+          "cases_passing_all_gates": 0
+        },
+        "fresh": {
+          "repetitions": 9,
+          "within_error_gate": 3,
+          "cases": 3,
+          "cases_passing_all_gates": 0
+        }
+      },
+      "cases": {
+        "cses_edit_distance": {
+          "native_median_ns": 40020500,
+          "native_spread_ppm": 11270,
+          "max_abs_error_ppm": 2706067,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 40075000, 39824000, 575856949, 0, 4976, 148318630, 108298130, false],
+            [2, 39966000, 39857000, 575856949, 0, 4976, 148318630, 108298130, false],
+            [3, 40275000, 40231000, 575856949, 0, 4976, 148318630, 108298130, false]
+          ]
+        },
+        "cses_counting_rooms": {
+          "native_median_ns": 21919500,
+          "native_spread_ppm": 43250,
+          "max_abs_error_ppm": 2088068,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 21744000, 21568000, 262806344, 0, 4976, 67688905, 45769405, false],
+            [2, 21889000, 21950000, 262806344, 0, 4976, 67688905, 45769405, false],
+            [3, 22011000, 22516000, 262806344, 0, 4976, 67688905, 45769405, false]
+          ]
+        },
+        "cses_factory_machines": {
+          "native_median_ns": 19800500,
+          "native_spread_ppm": 27475,
+          "max_abs_error_ppm": 905634,
+          "collection_gate_failures": [
+            "native observation below min_native_ns"
+          ],
+          "runs": [
+            [1, 19895000, 19736000, 146498353, 0, 4976, 37732467, 17931967, false],
+            [2, 19865000, 19613000, 146498450, 0, 4976, 37732492, 17931992, false],
+            [3, 19723000, 20157000, 146498424, 0, 4976, 37732485, 17931985, false]
+          ]
+        },
+        "gce_cses_towers": {
+          "native_median_ns": 26952500,
+          "native_spread_ppm": 16845,
+          "max_abs_error_ppm": 682609,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 26671000, 26673000, 176075943, 0, 4976, 45350510, 18398010, false],
+            [2, 27053000, 26912000, 176075943, 0, 4976, 45350510, 18398010, false],
+            [3, 27125000, 26993000, 176075943, 0, 4976, 45350510, 18398010, false]
+          ]
+        },
+        "gce_cses_removal_game": {
+          "native_median_ns": 59503500,
+          "native_spread_ppm": 33982,
+          "max_abs_error_ppm": 573605,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 58674000, 59274000, 98508302, 0, 4976, 25372086, -34131414, false],
+            [2, 58155000, 59839000, 98508156, 0, 4976, 25372049, -34131451, false],
+            [3, 59733000, 60177000, 98508302, 0, 4976, 25372086, -34131414, false]
+          ]
+        },
+        "gce_cses_counting_divisors": {
+          "native_median_ns": 18066500,
+          "native_spread_ppm": 159190,
+          "max_abs_error_ppm": 104826,
+          "collection_gate_failures": [
+            "native observation below min_native_ns",
+            "native spread exceeds max_native_spread_ppm"
+          ],
+          "runs": [
+            [1, 20165000, 17792000, 62790890, 0, 4976, 16172663, -1893837, true],
+            [2, 17289000, 18868000, 62790890, 0, 4976, 16172663, -1893837, true],
+            [3, 17726000, 18341000, 62790890, 0, 4976, 16172663, -1893837, true]
+          ]
+        }
+      }
+    },
+    "split-prior": {
+      "collection_started_utc": "2026-11-19T05:29:07.437705285Z",
+      "collection_ended_utc": "2026-11-19T05:31:04Z",
+      "pinned_vcpu_steal_ticks_delta": 0,
+      "dataset_sha256": "00e960c80d6a9c04bd271a891f53e9998221a68a4639ae0ba0f2ed0677e15edc",
+      "evaluation_sha256": "44471a03493690762fe80154839eff9e6b07a507b2775ed47e209d494b71168d",
+      "policy_sha256": "53f1a2c5ff40151119ccc2fbfe8aa5ede08d351b1d7e34518e5eaaf74cf5065a",
+      "policy": {
+        "method": "weighted-rep-operations-nanoseconds-v2",
+        "model_id": "cpp-v7-split-rep-minimax-transfer",
+        "model_version": 1,
+        "reference_id": "shared-epyc-20261119-45triplet-v6-transfer",
+        "runtime_id": "CPP20@sha256:5f1fee5fb589c9494f2155478bab0e01af620f73e99ebf2ff9177a09626d5bf3",
+        "family": "cpp",
+        "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
+        "dispatch_profile": "default",
+        "cpuid_profile": "x86-64-v2",
+        "instruction_ns_numerator": 213736688,
+        "movs_byte_ns_numerator": 16109510,
+        "stos_byte_ns_numerator": 27600706,
+        "ns_denominator": 1000000000
+      },
+      "collect_exit": 0,
+      "validate_exit": 2,
+      "passed": false,
+      "counts_by_cohort": {
+        "all": {
+          "repetitions": 18,
+          "within_error_gate": 0,
+          "cases": 6,
+          "cases_passing_all_gates": 0
+        },
+        "previously exposed": {
+          "repetitions": 9,
+          "within_error_gate": 0,
+          "cases": 3,
+          "cases_passing_all_gates": 0
+        },
+        "fresh": {
+          "repetitions": 9,
+          "within_error_gate": 0,
+          "cases": 3,
+          "cases_passing_all_gates": 0
+        }
+      },
+      "cases": {
+        "cses_edit_distance": {
+          "native_median_ns": 39977500,
+          "native_spread_ppm": 9681,
+          "max_abs_error_ppm": 2078780,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 40159000, 39986000, 575856949, 0, 4976, 123081895, 83104395, false],
+            [2, 39874000, 39784000, 575856949, 0, 4976, 123081895, 83104395, false],
+            [3, 39969000, 40171000, 575856949, 0, 4976, 123081895, 83104395, false]
+          ]
+        },
+        "cses_counting_rooms": {
+          "native_median_ns": 21972500,
+          "native_spread_ppm": 14428,
+          "max_abs_error_ppm": 1556446,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 21981000, 21844000, 262806344, 0, 4976, 56171495, 34198995, false],
+            [2, 22057000, 21800000, 262806344, 0, 4976, 56171495, 34198995, false],
+            [3, 21964000, 22117000, 262806344, 0, 4976, 56171495, 34198995, false]
+          ]
+        },
+        "cses_factory_machines": {
+          "native_median_ns": 19790500,
+          "native_spread_ppm": 27185,
+          "max_abs_error_ppm": 582185,
+          "collection_gate_failures": [
+            "native observation below min_native_ns"
+          ],
+          "runs": [
+            [1, 19771000, 19882000, 146498424, 0, 4976, 31312226, 11521726, false],
+            [2, 20182000, 19644000, 146498424, 0, 4976, 31312226, 11521726, false],
+            [3, 19810000, 19693000, 146498424, 0, 4976, 31312226, 11521726, false]
+          ]
+        },
+        "gce_cses_towers": {
+          "native_median_ns": 26924500,
+          "native_spread_ppm": 15191,
+          "max_abs_error_ppm": 397762,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 27040000, 27006000, 176075943, 0, 4976, 37634027, 10709527, false],
+            [2, 27188000, 26779000, 176075943, 0, 4976, 37634027, 10709527, false],
+            [3, 26782000, 26843000, 176075943, 0, 4976, 37634027, 10709527, false]
+          ]
+        },
+        "gce_cses_removal_game": {
+          "native_median_ns": 59030500,
+          "native_spread_ppm": 45807,
+          "max_abs_error_ppm": 643321,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 59317000, 59983000, 98508302, 0, 4976, 21054976, -37975524, false],
+            [2, 57279000, 58744000, 98508172, 0, 4976, 21054948, -37975552, false],
+            [3, 59320000, 58232000, 98508156, 0, 4976, 21054945, -37975555, false]
+          ]
+        },
+        "gce_cses_counting_divisors": {
+          "native_median_ns": 19706000,
+          "native_spread_ppm": 171979,
+          "max_abs_error_ppm": 318948,
+          "collection_gate_failures": [
+            "native observation below min_native_ns",
+            "native spread exceeds max_native_spread_ppm"
+          ],
+          "runs": [
+            [1, 18065000, 20876000, 62790890, 0, 4976, 13420855, -6285145, false],
+            [2, 19868000, 21454000, 62790735, 0, 4976, 13420822, -6285178, false],
+            [3, 19544000, 18648000, 62790735, 0, 4976, 13420822, -6285178, false]
+          ]
+        }
+      }
+    },
+    "split-gce": {
+      "collection_started_utc": "2026-11-19T05:31:05.753270688Z",
+      "collection_ended_utc": "2026-11-19T05:33:03Z",
+      "pinned_vcpu_steal_ticks_delta": 0,
+      "dataset_sha256": "aa941e8350ea5ebc74db4ff8b97635a35b04d9426de3d7baa6cb3b7a0d0a0787",
+      "evaluation_sha256": "262ad030a1cb35d07160ec75fd7606a248da0350598fff0c91e2029a6a0b1c7b",
+      "policy_sha256": "cbd74aa4a2edf7d98d00eb86beb517298f8d208e96c1af84680df17dd8b3fd24",
+      "policy": {
+        "method": "weighted-rep-operations-nanoseconds-v2",
+        "model_id": "cpp-v7-gce-split-rep-minimax",
+        "model_version": 1,
+        "reference_id": "gce-cpp20-dbc58b3a61e73ad5be760f63",
+        "runtime_id": "CPP20@sha256:5f1fee5fb589c9494f2155478bab0e01af620f73e99ebf2ff9177a09626d5bf3",
+        "family": "cpp",
+        "engine_profile": "dynamorio-11.3-durante-v7-vm32m",
+        "dispatch_profile": "default",
+        "cpuid_profile": "x86-64-v2",
+        "instruction_ns_numerator": 209655705,
+        "movs_byte_ns_numerator": 15373585,
+        "stos_byte_ns_numerator": 22748788,
+        "ns_denominator": 1000000000
+      },
+      "collect_exit": 0,
+      "validate_exit": 2,
+      "passed": false,
+      "counts_by_cohort": {
+        "all": {
+          "repetitions": 18,
+          "within_error_gate": 0,
+          "cases": 6,
+          "cases_passing_all_gates": 0
+        },
+        "previously exposed": {
+          "repetitions": 9,
+          "within_error_gate": 0,
+          "cases": 3,
+          "cases_passing_all_gates": 0
+        },
+        "fresh": {
+          "repetitions": 9,
+          "within_error_gate": 0,
+          "cases": 3,
+          "cases_passing_all_gates": 0
+        }
+      },
+      "cases": {
+        "cses_edit_distance": {
+          "native_median_ns": 40125000,
+          "native_spread_ppm": 13384,
+          "max_abs_error_ppm": 2008893,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 40149000, 40028000, 575856949, 0, 4976, 120731808, 80606808, false],
+            [2, 40196000, 39994000, 575856949, 0, 4976, 120731808, 80606808, false],
+            [3, 40101000, 40531000, 575856949, 0, 4976, 120731808, 80606808, false]
+          ]
+        },
+        "cses_counting_rooms": {
+          "native_median_ns": 21935000,
+          "native_spread_ppm": 19786,
+          "max_abs_error_ppm": 1511920,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 21875000, 22130000, 262806344, 0, 4976, 55098963, 33163963, false],
+            [2, 21962000, 21696000, 262806344, 0, 4976, 55098963, 33163963, false],
+            [3, 21917000, 21953000, 262806344, 0, 4976, 55098963, 33163963, false]
+          ]
+        },
+        "cses_factory_machines": {
+          "native_median_ns": 19889000,
+          "native_spread_ppm": 8799,
+          "max_abs_error_ppm": 544288,
+          "collection_gate_failures": [
+            "native observation below min_native_ns"
+          ],
+          "runs": [
+            [1, 19901000, 19877000, 146498424, 0, 4976, 30714344, 10825344, false],
+            [2, 19944000, 19854000, 146498353, 0, 4976, 30714329, 10825329, false],
+            [3, 19769000, 19921000, 146498424, 0, 4976, 30714344, 10825344, false]
+          ]
+        },
+        "gce_cses_towers": {
+          "native_median_ns": 26973500,
+          "native_spread_ppm": 19612,
+          "max_abs_error_ppm": 368582,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 27039000, 26774000, 176075943, 0, 4976, 36915440, 9941940, false],
+            [2, 27070000, 26908000, 176075943, 0, 4976, 36915440, 9941940, false],
+            [3, 26832000, 27303000, 176075943, 0, 4976, 36915440, 9941940, false]
+          ]
+        },
+        "gce_cses_removal_game": {
+          "native_median_ns": 58086000,
+          "native_spread_ppm": 68881,
+          "max_abs_error_ppm": 644443,
+          "collection_gate_failures": [],
+          "runs": [
+            [1, 56796000, 60797000, 98508302, 0, 4976, 20652941, -37433059, false],
+            [2, 57892000, 58280000, 98508302, 0, 4976, 20652941, -37433059, false],
+            [3, 56985000, 58998000, 98508302, 0, 4976, 20652941, -37433059, false]
+          ]
+        },
+        "gce_cses_counting_divisors": {
+          "native_median_ns": 19286000,
+          "native_spread_ppm": 28985,
+          "max_abs_error_ppm": 317404,
+          "collection_gate_failures": [
+            "native observation below min_native_ns"
+          ],
+          "runs": [
+            [1, 19300000, 19492000, 62790844, 0, 4976, 13164572, -6121428, false],
+            [2, 19166000, 19153000, 62790735, 0, 4976, 13164550, -6121450, false],
+            [3, 19272000, 19712000, 62790735, 0, 4976, 13164550, -6121450, false]
+          ]
+        }
+      }
+    }
+  },
+  "online_clock_smoke": {
+    "started_utc": "2026-11-19T05:33:05Z",
+    "summary_sha256": "e9aaba93978761a05ec3ab5b7e74717b24011313d3db114b377a82bd1aa78a52",
+    "test_source": "scripts/verify_durante_work_clock.py",
+    "test_sha256": "34b132927c9618e45b1ed3278f9ec10b230650d0cc2a57f1582766bf49a412c2",
+    "purpose": "Exercise embedded and forwarded HTTP clock authority and watchdog attribution using synthetic coefficients.",
+    "synthetic_coefficients": {
+      "instruction_ns_numerator": 1,
+      "movs_byte_ns_numerator": 2,
+      "stos_byte_ns_numerator": 3,
+      "ns_denominator": 1
+    },
+    "nominal_cpu_ms": 3,
+    "container_pids_limit": 256,
+    "raw_watchdog_field": "raw_watchdog_ms is the raw wall limit.",
+    "progress_fields": [
+      "instructions",
+      "movs_bytes",
+      "stos_bytes"
+    ],
+    "complete": true,
+    "graded_cases": 8,
+    "tight_budget_admission_checks": 4,
+    "mismatched_model_checks": 1,
+    "cases": [
+      {
+        "transport": "embedded",
+        "status": "Accepted",
+        "score": 1,
+        "clock_state": "complete",
+        "termination_source": "stdout",
+        "observed_complete": true,
+        "raw_watchdog_ms": 30000,
+        "observed_wall_ms": 83,
+        "budget": 3000000,
+        "weighted_progress": 173900,
+        "scenario": "finite_default",
+        "raw_cpu_limit_ms": 12000,
+        "progress": [163028, 0, 3624],
+        "clock_model_binding": "work-clock-v1:sha256:e8783650d4e1a9256455c2ec8cc91a9a849fec5ef50c2bbbc5242a792c0815fb"
+      },
+      {
+        "transport": "embedded",
+        "status": "Time Limit Exceeded",
+        "score": null,
+        "clock_state": "budget_exceeded",
+        "termination_source": "durante_work_clock",
+        "observed_complete": false,
+        "raw_watchdog_ms": 30000,
+        "observed_wall_ms": 296,
+        "budget": 3000000,
+        "weighted_progress": 3002485,
+        "scenario": "busy_default",
+        "raw_cpu_limit_ms": 12000,
+        "progress": [2991613, 0, 3624],
+        "clock_model_binding": "work-clock-v1:sha256:e8783650d4e1a9256455c2ec8cc91a9a849fec5ef50c2bbbc5242a792c0815fb"
+      },
+      {
+        "transport": "embedded",
+        "status": "Accepted",
+        "score": 1,
+        "clock_state": "complete",
+        "termination_source": "stdout",
+        "observed_complete": true,
+        "raw_watchdog_ms": 12000,
+        "observed_wall_ms": 81,
+        "budget": 3000000,
+        "weighted_progress": 173900,
+        "scenario": "finite_explicit",
+        "raw_cpu_limit_ms": 5000,
+        "progress": [163028, 0, 3624],
+        "clock_model_binding": "work-clock-v1:sha256:e8783650d4e1a9256455c2ec8cc91a9a849fec5ef50c2bbbc5242a792c0815fb"
+      },
+      {
+        "transport": "embedded",
+        "status": "Container Initialization Failed",
+        "score": null,
+        "clock_state": "resource_exhausted",
+        "termination_source": "wall_time",
+        "observed_complete": false,
+        "raw_watchdog_ms": 1000,
+        "observed_wall_ms": 1001,
+        "budget": 3000000,
+        "weighted_progress": 172129,
+        "scenario": "sleeping_explicit",
+        "raw_cpu_limit_ms": 1000,
+        "progress": [161257, 0, 3624],
+        "clock_model_binding": "work-clock-v1:sha256:e8783650d4e1a9256455c2ec8cc91a9a849fec5ef50c2bbbc5242a792c0815fb"
+      },
+      {
+        "transport": "forwarded",
+        "status": "Accepted",
+        "score": 1,
+        "clock_state": "complete",
+        "termination_source": "stdout",
+        "observed_complete": true,
+        "raw_watchdog_ms": 20000,
+        "observed_wall_ms": 83,
+        "budget": 3000000,
+        "weighted_progress": 173817,
+        "scenario": "finite_default",
+        "raw_cpu_limit_ms": 9000,
+        "progress": [162945, 0, 3624],
+        "clock_model_binding": "work-clock-v1:sha256:e8783650d4e1a9256455c2ec8cc91a9a849fec5ef50c2bbbc5242a792c0815fb"
+      },
+      {
+        "transport": "forwarded",
+        "status": "Time Limit Exceeded",
+        "score": null,
+        "clock_state": "budget_exceeded",
+        "termination_source": "durante_work_clock",
+        "observed_complete": false,
+        "raw_watchdog_ms": 20000,
+        "observed_wall_ms": 299,
+        "budget": 3000000,
+        "weighted_progress": 3002469,
+        "scenario": "busy_default",
+        "raw_cpu_limit_ms": 9000,
+        "progress": [2991597, 0, 3624],
+        "clock_model_binding": "work-clock-v1:sha256:e8783650d4e1a9256455c2ec8cc91a9a849fec5ef50c2bbbc5242a792c0815fb"
+      },
+      {
+        "transport": "forwarded",
+        "status": "Accepted",
+        "score": 1,
+        "clock_state": "complete",
+        "termination_source": "stdout",
+        "observed_complete": true,
+        "raw_watchdog_ms": 12000,
+        "observed_wall_ms": 82,
+        "budget": 3000000,
+        "weighted_progress": 173817,
+        "scenario": "finite_explicit",
+        "raw_cpu_limit_ms": 5000,
+        "progress": [162945, 0, 3624],
+        "clock_model_binding": "work-clock-v1:sha256:e8783650d4e1a9256455c2ec8cc91a9a849fec5ef50c2bbbc5242a792c0815fb"
+      },
+      {
+        "transport": "forwarded",
+        "status": "Container Initialization Failed",
+        "score": null,
+        "clock_state": "resource_exhausted",
+        "termination_source": "wall_time",
+        "observed_complete": false,
+        "raw_watchdog_ms": 1000,
+        "observed_wall_ms": 1000,
+        "budget": 3000000,
+        "weighted_progress": 172212,
+        "scenario": "sleeping_explicit",
+        "raw_cpu_limit_ms": 1000,
+        "progress": [161340, 0, 3624],
+        "clock_model_binding": "work-clock-v1:sha256:e8783650d4e1a9256455c2ec8cc91a9a849fec5ef50c2bbbc5242a792c0815fb"
+      }
+    ]
+  },
+  "online_native_median_boundaries": {
+    "plan_frozen_utc": "2026-11-19T05:24:47.201259+00:00",
+    "started_utc": "2026-11-19T05:33:11Z",
+    "predeclared_plan_sha256": "7dbb0fe2a8670f3aeb51a3f36a86119c1f920fbb1097773651bf0325fd635be5",
+    "thresholds_sha256": "6236fc72c023f4ae149987b195fc4e89fd55a03e3a91a3e9b3234914185df9ac",
+    "raw_summary_sha256": "28def5c5fec4f2994af083376dd6a89f394f64dcac920140644f7b57b87efabc",
+    "native_control_dataset_sha256": "aa941e8350ea5ebc74db4ff8b97635a35b04d9426de3d7baa6cb3b7a0d0a0787",
+    "policy_sha256": "cbd74aa4a2edf7d98d00eb86beb517298f8d208e96c1af84680df17dd8b3fd24",
+    "transport": "embedded HTTP",
+    "thresholds": "For exact median N nanoseconds of six native controls from split-gce, low = max(1, floor(4*N/5000000)) ms and high = ceil(6*N/5000000) ms. Median expectation is TLE at low and AC at high.",
+    "progress_fields": [
+      "instructions",
+      "movs_bytes",
+      "stos_bytes"
+    ],
+    "nominal_wall_ms": 30000,
+    "memory_mib": 256,
+    "raw_limits": {
+      "cpu_time_ms": 60000,
+      "wall_time_ms": 90000,
+      "memory_mb": 256
+    },
+    "against_native_median": {
+      "agreements": 6,
+      "disagreements": 6,
+      "unscored_or_other": 0
+    },
+    "rows": [
+      {
+        "workload_id": "cses_edit_distance",
+        "boundary": "low",
+        "nominal_ms": 32,
+        "expected_from_native_median": "Time Limit Exceeded",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Time Limit Exceeded",
+        "score": null,
+        "termination_source": "durante_work_clock",
+        "judgment_state": "budget_exceeded",
+        "measurement_complete": false,
+        "output_matches": null,
+        "progress": [152663934, 0, 4976],
+        "weighted_progress_ns": 32006978,
+        "final_estimate_ns": null,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 4293580000,
+        "raw_wall_ms": 4427,
+        "median_verdict_comparison": "agrees",
+        "response_sha256": "d0dd1d4fce7838f5d1083b66b482f7c1b8e6ab8450dc03252dec4520b3b5450f"
+      },
+      {
+        "workload_id": "cses_edit_distance",
+        "boundary": "high",
+        "nominal_ms": 49,
+        "expected_from_native_median": "Accepted",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Time Limit Exceeded",
+        "score": null,
+        "termination_source": "durante_work_clock",
+        "judgment_state": "budget_exceeded",
+        "measurement_complete": false,
+        "output_matches": null,
+        "progress": [233716472, 0, 4976],
+        "weighted_progress_ns": 49000105,
+        "final_estimate_ns": null,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 6533672000,
+        "raw_wall_ms": 6757,
+        "median_verdict_comparison": "disagrees",
+        "response_sha256": "6c6a5bde68f1bd85fa04369c8ee9e663e71fa75524422f9a7a4572065d6869c8"
+      },
+      {
+        "workload_id": "cses_counting_rooms",
+        "boundary": "low",
+        "nominal_ms": 17,
+        "expected_from_native_median": "Time Limit Exceeded",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Time Limit Exceeded",
+        "score": null,
+        "termination_source": "durante_work_clock",
+        "judgment_state": "budget_exceeded",
+        "measurement_complete": false,
+        "output_matches": null,
+        "progress": [81095369, 0, 4976],
+        "weighted_progress_ns": 17002220,
+        "final_estimate_ns": null,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 1616260000,
+        "raw_wall_ms": 1676,
+        "median_verdict_comparison": "agrees",
+        "response_sha256": "974b4c6e2cb5a846ad26f28a78c43494d2110aa83df9c48f994592ac1458814b"
+      },
+      {
+        "workload_id": "cses_counting_rooms",
+        "boundary": "high",
+        "nominal_ms": 27,
+        "expected_from_native_median": "Accepted",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Time Limit Exceeded",
+        "score": null,
+        "termination_source": "durante_work_clock",
+        "judgment_state": "budget_exceeded",
+        "measurement_complete": false,
+        "output_matches": null,
+        "progress": [128804813, 0, 4976],
+        "weighted_progress_ns": 27004778,
+        "final_estimate_ns": null,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 2355579000,
+        "raw_wall_ms": 2434,
+        "median_verdict_comparison": "disagrees",
+        "response_sha256": "96318ff94abe1ff83a0afba99b48420a221079f366bf55e04b747239d0c5d69f"
+      },
+      {
+        "workload_id": "cses_factory_machines",
+        "boundary": "low",
+        "nominal_ms": 15,
+        "expected_from_native_median": "Time Limit Exceeded",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Time Limit Exceeded",
+        "score": null,
+        "termination_source": "durante_work_clock",
+        "judgment_state": "budget_exceeded",
+        "measurement_complete": false,
+        "output_matches": null,
+        "progress": [71554427, 0, 4976],
+        "weighted_progress_ns": 15001908,
+        "final_estimate_ns": null,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 1849524000,
+        "raw_wall_ms": 1916,
+        "median_verdict_comparison": "agrees",
+        "response_sha256": "a109ae84c090774ffb55cc990ed5efe964da58c30cdc7f30f71e3a18e4ff5e7e"
+      },
+      {
+        "workload_id": "cses_factory_machines",
+        "boundary": "high",
+        "nominal_ms": 24,
+        "expected_from_native_median": "Accepted",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Time Limit Exceeded",
+        "score": null,
+        "termination_source": "durante_work_clock",
+        "judgment_state": "budget_exceeded",
+        "measurement_complete": false,
+        "output_matches": null,
+        "progress": [114569897, 0, 4976],
+        "weighted_progress_ns": 24020346,
+        "final_estimate_ns": null,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 2679060000,
+        "raw_wall_ms": 2789,
+        "median_verdict_comparison": "disagrees",
+        "response_sha256": "b245b84b67cecd8e0cc1b6f6c6e3ad4d41e5a7509d3aa7332f11fec2b9383472"
+      },
+      {
+        "workload_id": "gce_cses_towers",
+        "boundary": "low",
+        "nominal_ms": 21,
+        "expected_from_native_median": "Time Limit Exceeded",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Time Limit Exceeded",
+        "score": null,
+        "termination_source": "durante_work_clock",
+        "judgment_state": "budget_exceeded",
+        "measurement_complete": false,
+        "output_matches": null,
+        "progress": [100196079, 0, 4976],
+        "weighted_progress_ns": 21006793,
+        "final_estimate_ns": null,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 2582999000,
+        "raw_wall_ms": 2678,
+        "median_verdict_comparison": "agrees",
+        "response_sha256": "15d829e7806969880f2a23f48b9d602a62bd16b7652a03a2c8d836c1c6ca7990"
+      },
+      {
+        "workload_id": "gce_cses_towers",
+        "boundary": "high",
+        "nominal_ms": 33,
+        "expected_from_native_median": "Accepted",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Time Limit Exceeded",
+        "score": null,
+        "termination_source": "durante_work_clock",
+        "judgment_state": "budget_exceeded",
+        "measurement_complete": false,
+        "output_matches": null,
+        "progress": [157411382, 0, 4976],
+        "weighted_progress_ns": 33002308,
+        "final_estimate_ns": null,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 3972981000,
+        "raw_wall_ms": 4115,
+        "median_verdict_comparison": "disagrees",
+        "response_sha256": "ff4f70f8d523d0750a17fd1ad82ba91d1c9cb075e261aa9f4addace6b060caf1"
+      },
+      {
+        "workload_id": "gce_cses_removal_game",
+        "boundary": "low",
+        "nominal_ms": 46,
+        "expected_from_native_median": "Time Limit Exceeded",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Accepted",
+        "score": 1,
+        "termination_source": "stdout",
+        "judgment_state": "complete",
+        "measurement_complete": true,
+        "output_matches": true,
+        "progress": [98508302, 0, 4976],
+        "weighted_progress_ns": 20652941,
+        "final_estimate_ns": 20652941,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 2565742000,
+        "raw_wall_ms": 2661,
+        "median_verdict_comparison": "disagrees",
+        "response_sha256": "6a5aad9d9fc87dde307b0070838613a0cbd5c97a15a6811ba54e3019475fef85"
+      },
+      {
+        "workload_id": "gce_cses_removal_game",
+        "boundary": "high",
+        "nominal_ms": 70,
+        "expected_from_native_median": "Accepted",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Accepted",
+        "score": 1,
+        "termination_source": "stdout",
+        "judgment_state": "complete",
+        "measurement_complete": true,
+        "output_matches": true,
+        "progress": [98508302, 0, 4976],
+        "weighted_progress_ns": 20652941,
+        "final_estimate_ns": 20652941,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 2572157000,
+        "raw_wall_ms": 2667,
+        "median_verdict_comparison": "agrees",
+        "response_sha256": "e5c94e8302725361166863b7b2f58bfe81d95169f02d4e480c229fd3d99e2272"
+      },
+      {
+        "workload_id": "gce_cses_counting_divisors",
+        "boundary": "low",
+        "nominal_ms": 15,
+        "expected_from_native_median": "Time Limit Exceeded",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Accepted",
+        "score": 1,
+        "termination_source": "stdout",
+        "judgment_state": "complete",
+        "measurement_complete": true,
+        "output_matches": true,
+        "progress": [62790890, 0, 4976],
+        "weighted_progress_ns": 13164582,
+        "final_estimate_ns": 13164582,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 2689234000,
+        "raw_wall_ms": 2783,
+        "median_verdict_comparison": "disagrees",
+        "response_sha256": "d168648f86ba9b247f5abbaf4a728d04bec06210a8371067dfe33e98e9b9909e"
+      },
+      {
+        "workload_id": "gce_cses_counting_divisors",
+        "boundary": "high",
+        "nominal_ms": 24,
+        "expected_from_native_median": "Accepted",
+        "supporting_native_controls_out_of_six": 6,
+        "actual_status": "Accepted",
+        "score": 1,
+        "termination_source": "stdout",
+        "judgment_state": "complete",
+        "measurement_complete": true,
+        "output_matches": true,
+        "progress": [62790735, 0, 4976],
+        "weighted_progress_ns": 13164550,
+        "final_estimate_ns": 13164550,
+        "runtime_options_id": "runtime-options-v1:sha256:b88c02807007e4cddc0ea7c3fea34b5e0e11fd5a4dd861162b14341c620de901",
+        "clock_model_binding": "work-clock-v1:sha256:d5f64ea4d1b9e936b5d4d2f37c622029c14899410507c7d7e8b2b10cc96e8680",
+        "raw_cpu_ns": 2693622000,
+        "raw_wall_ms": 2788,
+        "median_verdict_comparison": "agrees",
+        "response_sha256": "a168e37ee5e1413bcaee72f7957d66efec40693b2353814baabf39a0f8c2d341"
+      }
+    ],
+    "original_wrapper_recovery": {
+      "original_wrapper_exit": 2,
+      "docker_removed": true,
+      "recovered_via_root_read": true,
+      "hashes_verified": 15,
+      "measured_http_responses": 12,
+      "repeated_measurements": 0
+    }
+  },
+  "online_observed_native_boundaries": {
+    "plan_frozen_utc": "2026-11-19T05:32:53.505609+00:00",
+    "started_utc": "2026-11-19T05:35:00Z",
+    "predeclared_plan_sha256": "cbbd0f39f94240c21a3b6915ededac343d1e29c04d19ce799ee03692340139df",
+    "raw_summary_sha256": "f24d021635f39da6a38dd09ec466387039e4de776aead0154506f59e51527b66",
+    "source_durante_summary_sha256": "28def5c5fec4f2994af083376dd6a89f394f64dcac920140644f7b57b87efabc",
+    "source_thresholds_sha256": "6236fc72c023f4ae149987b195fc4e89fd55a03e3a91a3e9b3234914185df9ac",
+    "design": "Three new ordinary native HTTP executions per unchanged program and cutoff. During measurement each request used the same compiled artifact and fixed CPU cutoff, 30000 ms wall limit and 256 MiB memory. Ordinary native execution had work measurement, normalization and short-case sampling disabled. Each array contains repetitions 1, 2 and 3, in order. Null records an omitted response field.",
+    "native_cpu_accounting_source": "wait_rusage",
+    "native_http_responses": 36,
+    "verification": "Accepted responses completed with exit zero and the stdout verdict source. Native time-limit responses had the cpu_time verdict source. Every response had a positive CPU observation.",
+    "against_observed_native": {
+      "all_three_agree": 6,
+      "all_three_oppose": 6,
+      "mixed": 0,
+      "unscored_or_invalid": 0
+    },
+    "pairs": [
+      {
+        "workload_id": "cses_edit_distance",
+        "boundary": "low",
+        "nominal_ms": 32,
+        "observed_durante_status": "Time Limit Exceeded",
+        "observed_native_statuses": [
+          "Time Limit Exceeded",
+          "Time Limit Exceeded",
+          "Time Limit Exceeded"
+        ],
+        "cpu_time_ns": [32997000, 32993000, 33213000],
+        "wall_time_ms": [34, 34, 34],
+        "verdict_sources": [
+          "cpu_time",
+          "cpu_time",
+          "cpu_time"
+        ],
+        "exit_codes": [null, null, null],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "2dc64ba916db047b722ebaf3b7f6bbeebe069cf721e34810eefbb58f593b53ea",
+          "a0befccf27aa110f306ca155d8e9259bf81654d3c10b042a9760b8f51e07caa8",
+          "9df4748186b07e7f111e248a79f4ef5755740418de99329292a7345497839fac"
+        ],
+        "comparison": "all_three_agree"
+      },
+      {
+        "workload_id": "cses_edit_distance",
+        "boundary": "high",
+        "nominal_ms": 49,
+        "observed_durante_status": "Time Limit Exceeded",
+        "observed_native_statuses": [
+          "Accepted",
+          "Accepted",
+          "Accepted"
+        ],
+        "cpu_time_ns": [40604000, 40348000, 40645000],
+        "wall_time_ms": [42, 41, 42],
+        "verdict_sources": [
+          "stdout",
+          "stdout",
+          "stdout"
+        ],
+        "exit_codes": [0, 0, 0],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "66af011f718f8d0d53794a818f0757085c7306aac96f2dfdf73b7d6ba96a88de",
+          "1fa61d088f9647737ffe2425529dbe643f856d1029b638abbc91f1177be6bf14",
+          "8ee126cb99e84805a1bb752d1bb084b8a81ea0afaaf8b508fc4afe0c00206ef4"
+        ],
+        "comparison": "all_three_oppose"
+      },
+      {
+        "workload_id": "cses_counting_rooms",
+        "boundary": "low",
+        "nominal_ms": 17,
+        "observed_durante_status": "Time Limit Exceeded",
+        "observed_native_statuses": [
+          "Time Limit Exceeded",
+          "Time Limit Exceeded",
+          "Time Limit Exceeded"
+        ],
+        "cpu_time_ns": [17889000, 17794000, 17965000],
+        "wall_time_ms": [19, 18, 19],
+        "verdict_sources": [
+          "cpu_time",
+          "cpu_time",
+          "cpu_time"
+        ],
+        "exit_codes": [null, null, null],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "4b3334d155ff278b55c2b6943fd4a744294ce027f8a17e317aad62f5c6beaf07",
+          "0a48303afe288755b31b4e3bfd5cd95af21ca5fb1ac6d441fb4ae952f2024a77",
+          "b4fdbe86c0667548d0196b36e1aa3865f2aea7059849e363ce7a38aedacfe6e9"
+        ],
+        "comparison": "all_three_agree"
+      },
+      {
+        "workload_id": "cses_counting_rooms",
+        "boundary": "high",
+        "nominal_ms": 27,
+        "observed_durante_status": "Time Limit Exceeded",
+        "observed_native_statuses": [
+          "Accepted",
+          "Accepted",
+          "Accepted"
+        ],
+        "cpu_time_ns": [21680000, 21751000, 21863000],
+        "wall_time_ms": [22, 22, 22],
+        "verdict_sources": [
+          "stdout",
+          "stdout",
+          "stdout"
+        ],
+        "exit_codes": [0, 0, 0],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "d6fb64df8d13969ce3b4dc63b00a7ec543fabec0d7275d2a90397bec46080387",
+          "08bdcaff10943b0c2d6925518beb73af6ea88ad6c061b89b7620e622119987a5",
+          "e3ee1bbb7766f91449842e4aadefc4d08377b5a08e99d022097fe11c8bf22c5a"
+        ],
+        "comparison": "all_three_oppose"
+      },
+      {
+        "workload_id": "cses_factory_machines",
+        "boundary": "low",
+        "nominal_ms": 15,
+        "observed_durante_status": "Time Limit Exceeded",
+        "observed_native_statuses": [
+          "Time Limit Exceeded",
+          "Time Limit Exceeded",
+          "Time Limit Exceeded"
+        ],
+        "cpu_time_ns": [15679000, 15766000, 15555000],
+        "wall_time_ms": [16, 16, 16],
+        "verdict_sources": [
+          "cpu_time",
+          "cpu_time",
+          "cpu_time"
+        ],
+        "exit_codes": [null, null, null],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "f12ff2a705fe45988c80b4a728a4d97e601cef75b66d6540ad5f6ae96d7dbb85",
+          "b75900646f92f11ea18e43c24295be48b90dd641d3bd65d9b84b4576853eb05e",
+          "a1f7239d46aa9a7adf7ad887718bf19633ea9869649d585650afc336d270f82a"
+        ],
+        "comparison": "all_three_agree"
+      },
+      {
+        "workload_id": "cses_factory_machines",
+        "boundary": "high",
+        "nominal_ms": 24,
+        "observed_durante_status": "Time Limit Exceeded",
+        "observed_native_statuses": [
+          "Accepted",
+          "Accepted",
+          "Accepted"
+        ],
+        "cpu_time_ns": [19713000, 19782000, 20029000],
+        "wall_time_ms": [20, 20, 21],
+        "verdict_sources": [
+          "stdout",
+          "stdout",
+          "stdout"
+        ],
+        "exit_codes": [0, 0, 0],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "0ddd5d7585c31a54f8393f9e34ae2125db7b3a7f92741f1339e29ba0ff2d7b2d",
+          "9269b297223ae75cedb4d0c42eb5aa783cdf0e20c94b2631ee7ec9b049819f0f",
+          "57722c425bea644cb1eb898c1f3eb5047af8302a9f7755d324f1f4608e27d337"
+        ],
+        "comparison": "all_three_oppose"
+      },
+      {
+        "workload_id": "gce_cses_towers",
+        "boundary": "low",
+        "nominal_ms": 21,
+        "observed_durante_status": "Time Limit Exceeded",
+        "observed_native_statuses": [
+          "Time Limit Exceeded",
+          "Time Limit Exceeded",
+          "Time Limit Exceeded"
+        ],
+        "cpu_time_ns": [21987000, 22064000, 21710000],
+        "wall_time_ms": [23, 23, 23],
+        "verdict_sources": [
+          "cpu_time",
+          "cpu_time",
+          "cpu_time"
+        ],
+        "exit_codes": [null, null, null],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "3a74047bc3d28f570140dabf5e9d96ea30b5e8111678a4f9bf2a71f84afc15ea",
+          "fd6ca0d863e1962bc4404ee25f54a3894991d1c724530ece51089b0131523e6a",
+          "21924dda48963e3c8179581fd816ac06da9af89aa3fbf7f4b85500d16b46555b"
+        ],
+        "comparison": "all_three_agree"
+      },
+      {
+        "workload_id": "gce_cses_towers",
+        "boundary": "high",
+        "nominal_ms": 33,
+        "observed_durante_status": "Time Limit Exceeded",
+        "observed_native_statuses": [
+          "Accepted",
+          "Accepted",
+          "Accepted"
+        ],
+        "cpu_time_ns": [27641000, 26951000, 26872000],
+        "wall_time_ms": [29, 28, 28],
+        "verdict_sources": [
+          "stdout",
+          "stdout",
+          "stdout"
+        ],
+        "exit_codes": [0, 0, 0],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "1c459158d4f0e750807f769590dee892d4556b59ec77bf0c5f3ce5e01b268207",
+          "f4f2c2b41d295f33605b74e1e05c7213e57ccbb9bab2e78f99403f8755dd88e1",
+          "ae4b8e8f5bd18fb697e2c0029c72b3827dd1fc2bd6e0ca6002dea56875cc9b81"
+        ],
+        "comparison": "all_three_oppose"
+      },
+      {
+        "workload_id": "gce_cses_removal_game",
+        "boundary": "low",
+        "nominal_ms": 46,
+        "observed_durante_status": "Accepted",
+        "observed_native_statuses": [
+          "Time Limit Exceeded",
+          "Time Limit Exceeded",
+          "Time Limit Exceeded"
+        ],
+        "cpu_time_ns": [49620000, 49430000, 50216000],
+        "wall_time_ms": [51, 52, 52],
+        "verdict_sources": [
+          "cpu_time",
+          "cpu_time",
+          "cpu_time"
+        ],
+        "exit_codes": [null, null, null],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "ba3e2889dac935b609f2fdb175db61136fcffc01d2d8a102b9f6d9f37a3ba70f",
+          "59130bf4cdb3809b9423aa5e9022b9dd042afd1b2bf6392efbb8fef5cf70163f",
+          "81063d295e192994580ad63443903fc4b3c5967f82820927142e53f0a4814f75"
+        ],
+        "comparison": "all_three_oppose"
+      },
+      {
+        "workload_id": "gce_cses_removal_game",
+        "boundary": "high",
+        "nominal_ms": 70,
+        "observed_durante_status": "Accepted",
+        "observed_native_statuses": [
+          "Accepted",
+          "Accepted",
+          "Accepted"
+        ],
+        "cpu_time_ns": [57769000, 58073000, 58653000],
+        "wall_time_ms": [60, 60, 61],
+        "verdict_sources": [
+          "stdout",
+          "stdout",
+          "stdout"
+        ],
+        "exit_codes": [0, 0, 0],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "2c33d3de8e1d0e2918c463d6efb2a35db0e4d3fe49584abb86bb2f704fb08db6",
+          "bca402b14755f890fe7b0b8f731a4c43c1d72c41877e0b5b2caacbb9f98a5c21",
+          "a40b583376e378b7e064bee5682f459bb48bbc254a04a1af5ee3140b33c29d87"
+        ],
+        "comparison": "all_three_agree"
+      },
+      {
+        "workload_id": "gce_cses_counting_divisors",
+        "boundary": "low",
+        "nominal_ms": 15,
+        "observed_durante_status": "Accepted",
+        "observed_native_statuses": [
+          "Time Limit Exceeded",
+          "Time Limit Exceeded",
+          "Time Limit Exceeded"
+        ],
+        "cpu_time_ns": [15842000, 15743000, 15714000],
+        "wall_time_ms": [16, 16, 16],
+        "verdict_sources": [
+          "cpu_time",
+          "cpu_time",
+          "cpu_time"
+        ],
+        "exit_codes": [null, null, null],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "ce6f9f920d01154cffd6e7ba2f68e843326197a640c3d17b079ce46cc886f919",
+          "7bb66256db351744438f523b9d496415c10a1e82a5c1600f7b623726adba070c",
+          "775d62e5638ec0a33f2d5984cc74a7180ccf6d7a21821a9e278d702f20fe8913"
+        ],
+        "comparison": "all_three_oppose"
+      },
+      {
+        "workload_id": "gce_cses_counting_divisors",
+        "boundary": "high",
+        "nominal_ms": 24,
+        "observed_durante_status": "Accepted",
+        "observed_native_statuses": [
+          "Accepted",
+          "Accepted",
+          "Accepted"
+        ],
+        "cpu_time_ns": [17094000, 16952000, 17571000],
+        "wall_time_ms": [18, 18, 18],
+        "verdict_sources": [
+          "stdout",
+          "stdout",
+          "stdout"
+        ],
+        "exit_codes": [0, 0, 0],
+        "signals": [null, null, null],
+        "scores": [null, null, null],
+        "response_sha256": [
+          "ebf96fa89ae5056e31e18092dbf2309328628fdb0b255f6e2aad47dd162d12b2",
+          "f9ae3935c3b5aaff8e4d0219087f14efb1580e9afc07e36ffae2e40062d4251b",
+          "99c391797693200517228d59b0380a60b4eed3aa76126f15a46480109bbe9649"
+        ],
+        "comparison": "all_three_agree"
+      }
+    ]
+  }
+}

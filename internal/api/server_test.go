@@ -681,6 +681,22 @@ func TestExecuteRejectsRequestControlledNetworkWhenPolicyDisabled(t *testing.T) 
 	}
 }
 
+func TestExecuteAdmitsWorkMeasurementShadow(t *testing.T) {
+	s := NewWithServices(configForTest(t), compile.New(), executeRunnerStub{run: func(_ context.Context, req *model.RunRequest, _ execute.Hooks) model.RunResponse {
+		if !req.WorkMeasurementShadow || req.WorkMeasurement || req.WorkMeasurementLimits == nil {
+			t.Errorf("shadow request lost its shape at admission: %+v", req)
+		}
+		return model.RunResponse{Status: model.RunStatusAccepted}
+	}})
+	body := `{"lang":"CPP20","binaries":[{"name":"main","data_b64":"YQ=="}],"limits":{"time_ms":100,"memory_mb":64},
+		"work_measurement_shadow":true,"work_measurement_limits":{"cpu_time_ms":500,"wall_time_ms":1000,"memory_mb":256}}`
+	result := &deadlineResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+	s.Handler().ServeHTTP(result, httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader(body)))
+	if result.Code != http.StatusOK || !strings.Contains(result.Body.String(), `"status":"Accepted"`) {
+		t.Fatalf("shadow /execute response = %d %s", result.Code, result.Body.String())
+	}
+}
+
 func TestExecuteAcceptsTwoStepPipelineShape(t *testing.T) {
 	cfg := configForTest(t)
 	called := false
@@ -1450,9 +1466,10 @@ func TestHealthz(t *testing.T) {
 
 func TestCapabilitiesAdvertiseCommunicationOnSupportedRunners(t *testing.T) {
 	tests := []struct {
-		name string
-		edit func(*config.Config)
-		want bool
+		name   string
+		edit   func(*config.Config)
+		want   bool
+		wantV2 bool
 	}{
 		{
 			name: "self-hosted cgroup helper",
@@ -1463,8 +1480,10 @@ func TestCapabilitiesAdvertiseCommunicationOnSupportedRunners(t *testing.T) {
 					SandboxBackend:     platform.SandboxBackendHelper,
 				}
 				cfg.Execution.Cgroup.ParentDir = "/sys/fs/cgroup/aonohako"
+				cfg.CompetitiveRuntimeFingerprint = "sha256:" + strings.Repeat("a", 64)
 			},
-			want: true,
+			want:   true,
+			wantV2: true,
 		},
 		{
 			name: "Cloud Run embedded helper",
@@ -1476,6 +1495,20 @@ func TestCapabilitiesAdvertiseCommunicationOnSupportedRunners(t *testing.T) {
 					SandboxBackend:     platform.SandboxBackendHelper,
 				}
 				cfg.Execution.Cgroup.ParentDir = ""
+				cfg.CompetitiveRuntimeFingerprint = "sha256:" + strings.Repeat("a", 64)
+			},
+			want:   true,
+			wantV2: true,
+		},
+		{
+			name: "Cloud Run communication without image binding keeps v1 only",
+			edit: func(cfg *config.Config) {
+				cfg.CommunicationEnabled = true
+				cfg.Execution.Platform = platform.RuntimeOptions{
+					DeploymentTarget:   platform.DeploymentTargetCloudRun,
+					ExecutionTransport: platform.ExecutionTransportEmbedded,
+					SandboxBackend:     platform.SandboxBackendHelper,
+				}
 			},
 			want: true,
 		},
@@ -1538,6 +1571,29 @@ func TestCapabilitiesAdvertiseCommunicationOnSupportedRunners(t *testing.T) {
 			hasCapability := strings.Contains(recorder.Body.String(), "communication-v1")
 			if hasCapability != tc.want {
 				t.Fatalf("capabilities = %s, want communication-v1=%v", recorder.Body.String(), tc.want)
+			}
+			hasV2 := strings.Contains(recorder.Body.String(), "communication-v2")
+			if hasV2 != tc.wantV2 {
+				t.Fatalf("capabilities = %s, want communication-v2=%v", recorder.Body.String(), tc.wantV2)
+			}
+			var body struct {
+				CommunicationV2 *struct {
+					ParticipantCount   int    `json:"participant_count"`
+					GamesPerMatch      int    `json:"games_per_match"`
+					ResultProtocol     string `json:"result_protocol"`
+					RuntimeFingerprint string `json:"runtime_fingerprint"`
+					RunnerSHA256       string `json:"runner_sha256"`
+					ImageDigest        string `json:"image_digest"`
+				} `json:"communication_v2"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if (body.CommunicationV2 != nil) != tc.wantV2 {
+				t.Fatalf("capability contract presence mismatch: %s", recorder.Body.String())
+			}
+			if tc.wantV2 && (body.CommunicationV2.ParticipantCount != 2 || body.CommunicationV2.GamesPerMatch != 20 || body.CommunicationV2.ResultProtocol != "match-result-v1" || len(body.CommunicationV2.RuntimeFingerprint) != 64 || len(body.CommunicationV2.RunnerSHA256) != 64 || body.CommunicationV2.ImageDigest != cfg.CompetitiveRuntimeFingerprint) {
+				t.Fatalf("invalid v2 contract: %s", recorder.Body.String())
 			}
 		})
 	}

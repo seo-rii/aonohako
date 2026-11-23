@@ -1,0 +1,1176 @@
+diff --git a/README.md b/README.md
+index 65009cb..7ea267c 100644
+--- a/README.md
++++ b/README.md
+@@ -43,7 +43,8 @@ remaining host-visible inputs.
+
+ `--latency-bound` on `run` and `isolate` also charges a static per-block
+ latency bound (sixteenths of a cycle) at block entry, beside the instruction
+-count, as an additional diagnostic input for time models. See
++count, as an additional diagnostic input for time models. Add
++`--memory-operand-bytes` to record nominal memory operand widths beside it. See
+ [Static latency bound](docs/LATENCY_BOUND.md) for the model and its limits.
+
+ New clients also report versioned `rep_breakdown` counters for MOVS and STOS
+diff --git a/client/README.md b/client/README.md
+index 069742a..bb7268d 100644
+--- a/client/README.md
++++ b/client/README.md
+@@ -10,15 +10,29 @@ Values are exact lowercase spellings and duplicates are rejected. The earlier
+ single-file `drmeter -o REPORT` interface is not used.
+
+ Each application basic block adds its instruction count to thread-local state.
++For ordinary instruction counting, the client can charge every block inline,
++including dynamically linked executables, shared libraries and generated code.
++This path requires client-owned raw TLS slots and runs with the live clock,
++latency model, cache probe and count-location profiling disabled. It also
++supports `-rep_bytes`. With `-latency_bound` or its `-memory_operand_bytes`
++extension, a callback charges each block, even when the live clock is off.
++The inline entry preserves application flags, including values a signal handler
++may inspect. Each memory write records its replay checkpoint with flag-neutral
++moves. Scratch registers spill to client-owned TLS slots.
++A restore-state handler recovers them if the runtime translates a thread inside
++one of these sequences. It also returns a stored entry charge when a relocated
++thread will enter the same block again. The layout depends only on the block, so
++no translations are stored. A retry's first-block checks move from block entry
++to the replay, REP, signal and snapshot callbacks.
++
+ With `-live_work_v1`, the ordinary counter can update that state directly in the
+ original executable text containing a fixed-address, statically linked program's
+ entry point. Between live work publications this avoids a callback on each hot
+ block. It saves and restores its scratch registers
+ and arithmetic flags even when a signal handler is the only code that reads them.
+ The checked callback handles publication boundaries, replay and additions near
+-overflow. Dynamically linked executables, shared libraries and generated code
+-use callbacks throughout. The optional latency model also uses the callback to
+-charge each block's bound.
++overflow. In live runs, dynamically linked executables, shared libraries and
++generated code use callbacks throughout.
+
+ REP MOVS/STOS byte demand is read at the REP instruction after earlier register
+ updates, with one clean call per REP entry. Conditional REP forms are separately
+diff --git a/client/durante.c b/client/durante.c
+index 3799e5f..9addb26 100644
+--- a/client/durante.c
++++ b/client/durante.c
+@@ -71,6 +71,10 @@ typedef struct {
+   uint64_t rep_movs_bytes, rep_stos_bytes, rep_movs_entries, rep_stos_entries;
+   uint64_t published_instructions, published_movs, published_stos;
+   uint64_t fast_until; /* Exclusive pre-charge threshold; zero forces the callback. */
++  /* Flat inline accounting (no live clock): the value of instructions before
++   * the most recent block entry, and its value just after a RETRY rollback. */
++  uint64_t entry_base, restart_base;
++  byte *raw_tls_base; /* This thread's runtime segment base, for state restoration. */
+   bool pending_stdin_read, received_stdin;
+   bool rep_error;
+   bool replay_error;
+@@ -97,6 +101,8 @@ typedef struct {
+   size_t child_bytes;
+   uint64_t child_sequence;
+   bool child_exit_seen, child_policy_exit;
++  uint64_t memory_operand_bytes;
++  uint32_t write_suffix_bytes, write_operand_bytes;
+ } thread_data_t;
+ static int tls_index;
+ /* In ordinary static code the generated accounting runs at every block and
+@@ -104,6 +110,15 @@ static int tls_index;
+ static bool raw_tls_enabled;
+ static reg_id_t raw_tls_register;
+ static uint raw_tls_offset;
++/* Client-owned raw TLS slots: the accounting pointer and two scratch spills.
++ * Private spill slots let restore_state() recognize exactly this client's
++ * sequences; the runtime's shared spill slots are also used by its mangling. */
++enum { RAW_TLS_STATE, RAW_TLS_SPILL_RCX, RAW_TLS_SPILL_R11, RAW_TLS_SLOTS };
++/* Without a live clock nothing is published between syscalls. Every block and
++ * store then uses flag-free inline accounting, including shared libraries and
++ * generated code. Restart validation moves from block entry to the callbacks
++ * that consume restart state (see settle_restart). */
++static bool flat_inline;
+ static void *state_lock;
+ static int report_file = -1;
+ static process_id_t owner_pid;
+@@ -115,8 +130,8 @@ static uint64_t total_rep_movs_bytes, total_rep_stos_bytes,
+     total_rep_movs_entries, total_rep_stos_entries;
+ static bool rep_bytes_enabled, accounting_error, app_exit_seen, report_written;
+ static bool deny_avx, deny_simd;
+-static bool latency_bound_enabled;
+-static uint64_t total_latency_bound_x16;
++static bool latency_bound_enabled, memory_operand_bytes_enabled;
++static uint64_t total_latency_bound_x16, total_memory_operand_bytes;
+ static app_pc cpu_policy_exit_pc;
+ /* A replay callback must never do I/O or take a lock, even on a broken TLS
+  * invariant.  This sticky process/shared-VM flag invalidates every snapshot. */
+@@ -317,6 +332,36 @@ static void publish_live_work(thread_data_t *d, bool flush) {
+   d->published_stos = d->rep_stos_bytes;
+ }
+
++/* Flat inline blocks cannot run a callback at entry. Reconstruct what
++ * charge_block() would have decided for those entries from two counter values:
++ * no entry since the retry leaves the instruction count at restart_base, and
++ * exactly one entry leaves entry_base at restart_base (every block charges at
++ * least one instruction). Call before reading restart state. A non-REP retry
++ * needs no first-block check for its counts: its unexecuted suffix was already
++ * returned and the resumed block charges itself. */
++static void settle_restart(thread_data_t *d) {
++  if (!flat_inline || !d->restart_pc || d->instructions == d->restart_base)
++    return;
++  bool one_entry = d->entry_base == d->restart_base;
++  if (d->restart_rep && one_entry) {
++    d->restart_entered = true;
++    return;
++  }
++  /* A REP restart must observe its REP in the first resumed block. */
++  if (d->restart_rep)
++    counter_error(&d->replay_error);
++  d->restart_pc = NULL;
++}
++
++/* Settle the last flat charge before aggregation or replay. Later block
++ * entries latch earlier wraps before overwriting entry_base. */
++static void check_flat_counter(thread_data_t *d) {
++  if (flat_inline && d->instructions < d->entry_base) {
++    d->counter_overflows = 1;
++    invalidate_live_work();
++  }
++}
++
+ /* Caller holds state_lock, except before application execution/fork resume. */
+ static void write_event(int fd, size_t *bytes, uint64_t *sequence,
+                         process_id_t process, const char *image,
+@@ -417,10 +462,10 @@ static void start_record(thread_data_t *d, const char *origin,
+               ",\"origin\":\"%s\",\"parent_pid\":%d,"
+               "\"parent_segment\":\"%s\",\"rep_bytes_enabled\":%s,"
+               "\"rep_breakdown_version\":1,\"sdk_"
+-              "version\":\"11.3.0\"%s%s%s",
++              "version\":\"11.3.0\"%s%s%s%s",
+               origin, (int)parent, parent_segment,
+               rep_bytes_enabled ? "true" : "false", policy_fields, cpuid_fields,
+-              latency_fields);
++              latency_fields, memory_operand_bytes_enabled ? ",\"memory_operand_bytes_version\":1" : "");
+   route_event(d, "start", fields);
+ }
+ static void open_stream(const char *origin, process_id_t parent,
+@@ -432,10 +477,15 @@ static void open_stream(const char *origin, process_id_t parent,
+ }
+
+ static bool add_thread(thread_data_t *d) {
++  if (d) {
++    settle_restart(d);
++    check_flat_counter(d);
++  }
+   if (!d || d->rep_error || d->replay_error || d->cpuid_error || d->restart_pc ||
+       d->counter_overflows || d->latency_error ||
+       UINT64_MAX - total_instructions < d->instructions ||
+       UINT64_MAX - total_latency_bound_x16 < d->latency_bound_x16 ||
++      UINT64_MAX - total_memory_operand_bytes < d->memory_operand_bytes ||
+       UINT64_MAX - total_signals < d->signals ||
+       UINT64_MAX - total_rep_bytes < d->rep_bytes ||
+       UINT64_MAX - total_rep_entries < d->rep_entries ||
+@@ -447,6 +497,7 @@ static bool add_thread(thread_data_t *d) {
+     return false;
+   total_instructions += d->instructions;
+   total_latency_bound_x16 += d->latency_bound_x16;
++  total_memory_operand_bytes += d->memory_operand_bytes;
+   total_signals += d->signals;
+   total_rep_bytes += d->rep_bytes;
+   total_rep_entries += d->rep_entries;
+@@ -460,9 +511,14 @@ static bool add_thread(thread_data_t *d) {
+
+ static void snapshot_event(const char *kind, void *ctx, bool is_exec) {
+   thread_data_t *d = ctx ? drmgr_get_tls_field(ctx, tls_index) : NULL;
++  if (d) {
++    settle_restart(d);
++    check_flat_counter(d);
++  }
+   bool child = d && d->child_pid;
+   uint64_t instructions = child ? 0 : total_instructions,
+            latency = child ? 0 : total_latency_bound_x16,
++           operand_bytes = child ? 0 : total_memory_operand_bytes,
+            signals = child ? 0 : total_signals,
+            bytes = child ? 0 : total_rep_bytes,
+            entries = child ? 0 : total_rep_entries,
+@@ -482,6 +538,7 @@ static void snapshot_event(const char *kind, void *ctx, bool is_exec) {
+     if (d) {
+       if (UINT64_MAX - instructions < d->instructions ||
+           UINT64_MAX - latency < d->latency_bound_x16 ||
++          UINT64_MAX - operand_bytes < d->memory_operand_bytes ||
+           UINT64_MAX - signals < d->signals ||
+           UINT64_MAX - bytes < d->rep_bytes ||
+           UINT64_MAX - entries < d->rep_entries ||
+@@ -494,6 +551,7 @@ static void snapshot_event(const char *kind, void *ctx, bool is_exec) {
+       else {
+         instructions += d->instructions;
+         latency += d->latency_bound_x16;
++        operand_bytes += d->memory_operand_bytes;
+         signals += d->signals;
+         bytes += d->rep_bytes;
+         entries += d->rep_entries;
+@@ -506,6 +564,10 @@ static void snapshot_event(const char *kind, void *ctx, bool is_exec) {
+     }
+     ++ended;
+   }
++  /* An interrupted block may have charged operands after the last instruction
++   * that actually ran. Only the runtime's authenticated replay has a precise suffix. */
++  if (memory_operand_bytes_enabled && signals)
++    error = true;
+   bool complete = started > 0 && started == ended;
+   bool exit_seen = child ? d->child_exit_seen : app_exit_seen;
+   int exit_code = child ? d->child_exit_code : app_exit_code;
+@@ -535,6 +597,11 @@ static void snapshot_event(const char *kind, void *ctx, bool is_exec) {
+     dr_snprintf(fields + used, sizeof(fields) - used, ",\"latency_bound_x16\":%llu",
+                 (unsigned long long)latency);
+   }
++  if (memory_operand_bytes_enabled) {
++    size_t used = strlen(fields);
++    dr_snprintf(fields + used, sizeof(fields) - used, ",\"memory_operand_bytes\":%llu",
++                (unsigned long long)operand_bytes);
++  }
+   route_event(d, kind, fields);
+ }
+
+@@ -562,7 +629,8 @@ static bool probe_partial_block;
+ static void set_raw_accounting_state(thread_data_t *d) {
+   if (raw_tls_enabled) {
+     byte *base = dr_get_dr_segment_base(raw_tls_register);
+-    *(thread_data_t **)(base + raw_tls_offset) = d;
++    *(thread_data_t **)(base + raw_tls_offset + RAW_TLS_STATE * sizeof(void *)) = d;
++    d->raw_tls_base = base;
+   }
+ }
+
+@@ -602,6 +670,9 @@ static void thread_exit(void *ctx) {
+       (d->instructions != d->published_instructions ||
+        d->rep_movs_bytes != d->published_movs || d->rep_stos_bytes != d->published_stos))
+     invalidate_live_work();
++  if (memory_operand_bytes_enabled && d && !d->child_pid &&
++      d->pending_syscall != SYS_exit && d->pending_syscall != SYS_exit_group)
++    d->latency_error = true; /* Another thread may have stopped this one mid-block. */
+   if (d && d->child_pid) {
+     /* This callback can run in the parent after child exec. Its fd number
+      * refers to the child's descriptor table, so NEVER close that number in the
+@@ -651,6 +722,54 @@ static dr_emit_flags_t analyze_block(void *drcontext, void *tag,
+   return DR_EMIT_DEFAULT;
+ }
+
++/* Version 1 sums fixed-size data operands from the decoded logical application
++ * stream. Read-modify-write has both a source and destination; REP, predicated
++ * and masked operations contribute nominal decoded widths once at block entry.
++ * XSAVE's runtime-selected area has no fixed width. FXSAVE's 512 bytes do.
++ * An address operand (LEA, NOP, prefetch, cache-line controls) carries no data. */
++static uint32_t fixed_memory_bytes(opnd_t operand) {
++  if (!opnd_is_memory_reference(operand))
++    return 0;
++  opnd_size_t size = opnd_get_size(operand);
++  if (size == OPSZ_0 || size == OPSZ_NA || size == OPSZ_xsave)
++    return 0;
++  uint width = opnd_size_in_bytes(size);
++  return width && opnd_size_from_bytes(width) == size ? width : 0;
++}
++
++static uint32_t instruction_memory_bytes(instr_t *ins) {
++  int op = instr_get_opcode(ins);
++  if (op == OP_lea || op == OP_nop_modrm || instr_is_prefetch(ins) ||
++      op == OP_clflush || op == OP_clflushopt || op == OP_clwb ||
++      op == OP_cldemote || op == OP_invlpg || op == OP_bndmk ||
++      op == OP_bndcl || op == OP_bndcu || op == OP_bndcn)
++    return 0;
++  uint32_t bytes = 0;
++  for (int i = 0; i < instr_num_srcs(ins); ++i)
++    bytes += fixed_memory_bytes(instr_get_src(ins, i));
++  for (int i = 0; i < instr_num_dsts(ins); ++i)
++    bytes += fixed_memory_bytes(instr_get_dst(ins, i));
++  return bytes;
++}
++
++static uint32_t suffix_memory_bytes(instr_t *start) {
++  uint64_t bytes = 0;
++  bool in_emulation = false;
++  for (instr_t *ins = start; ins; ins = instr_get_next(ins)) {
++    if (drmgr_is_emulation_start(ins)) {
++      emulated_instr_t logical = {.size = sizeof(logical)};
++      if (!drmgr_get_emulated_instr_data(ins, &logical) || !logical.instr)
++        return UINT32_MAX;
++      bytes += instruction_memory_bytes(logical.instr);
++      in_emulation = true;
++    } else if (drmgr_is_emulation_end(ins))
++      in_emulation = false;
++    else if (!in_emulation && instr_is_app(ins))
++      bytes += instruction_memory_bytes(ins);
++  }
++  return bytes < UINT32_MAX ? (uint32_t)bytes : UINT32_MAX;
++}
++
+ /* Optional byte demand is deliberately separate from instruction count.  A
+  * clean call only at REP MOVS/STOS observes the architectural repeat register
+  * at that instruction, after any application instructions earlier in the BB.
+@@ -663,6 +782,7 @@ static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
+   thread_data_t *data = drmgr_get_tls_field(drcontext, tls_index);
+   if (data == NULL)
+     fail("REP observation without thread state");
++  settle_restart(data);
+   data->fast_until = 0;
+   uint64_t repeats = 0;
+   if (bytes != 0) {
+@@ -839,6 +959,123 @@ static void charge_boundary(int count, app_pc first_pc) {
+     d->fast_until = d->published_instructions + LIVE_WORK_BATCH;
+ }
+
++static opnd_t raw_slot(uint slot) {
++  return opnd_create_far_base_disp(raw_tls_register, DR_REG_NULL, DR_REG_NULL, 0,
++                                   (int)(raw_tls_offset + slot * sizeof(void *)), OPSZ_PTR);
++}
++
++static opnd_t state_field(size_t offset) {
++  return opnd_create_base_disp(DR_REG_R11, DR_REG_NULL, 0, (int)offset, OPSZ_8);
++}
++
++/* MOV, MOVZX, LEA and these branches preserve all arithmetic flags. The
++ * scratch registers are restored before the first application instruction.
++ * Both guard paths precede the charge store and the final RCX restore, so
++ * restore_state() can recognize partial entries by those two instructions. */
++static void insert_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int count) {
++  opnd_t value = opnd_create_reg(DR_REG_RCX), state = opnd_create_reg(DR_REG_R11);
++  opnd_t low_reg = opnd_create_reg(DR_REG_ECX);
++  instr_t *wrapped = INSTR_CREATE_label(ctx), *checked = INSTR_CREATE_label(ctx);
++#define INSERT(i) instrlist_meta_preinsert(bb, where, (i))
++  INSERT(INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_SPILL_RCX), value));
++  INSERT(INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_SPILL_R11), state));
++  INSERT(INSTR_CREATE_mov_ld(ctx, state, raw_slot(RAW_TLS_STATE)));
++  /* A block adds at most INT_MAX. On x86-64 its most significant byte
++   * can increase by at most one, and goes from nonzero to zero only on wrap.
++   * Check the completed entry before replacing its base. This keeps the new
++   * charge reversible if restore_state() relocates this thread mid-entry. */
++  INSERT(INSTR_CREATE_movzx(ctx, low_reg,
++                            OPND_CREATE_MEM8(DR_REG_R11, offsetof(thread_data_t, entry_base) + 7)));
++  INSERT(INSTR_CREATE_jecxz(ctx, opnd_create_instr(checked)));
++  INSERT(INSTR_CREATE_movzx(ctx, low_reg,
++                            OPND_CREATE_MEM8(DR_REG_R11, offsetof(thread_data_t, instructions) + 7)));
++  INSERT(INSTR_CREATE_jecxz(ctx, opnd_create_instr(wrapped)));
++  INSERT(INSTR_CREATE_jmp_short(ctx, opnd_create_instr(checked)));
++  INSERT(wrapped);
++  INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, counter_overflows)),
++                             OPND_CREATE_INT32(1)));
++  INSERT(checked);
++  INSERT(INSTR_CREATE_mov_ld(ctx, value, state_field(offsetof(thread_data_t, instructions))));
++  INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, entry_base)), value));
++  INSERT(INSTR_CREATE_lea(ctx, value,
++                          opnd_create_base_disp(DR_REG_RCX, DR_REG_NULL, 0, count, OPSZ_lea)));
++  INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, instructions)), value));
++  INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, write_pc)),
++                             OPND_CREATE_INT32(0)));
++  INSERT(INSTR_CREATE_mov_ld(ctx, state, raw_slot(RAW_TLS_SPILL_R11)));
++  INSERT(INSTR_CREATE_mov_ld(ctx, value, raw_slot(RAW_TLS_SPILL_RCX)));
++#undef INSERT
++}
++
++static bool is_raw_slot(opnd_t opnd, uint slot) {
++  int offset = (int)(raw_tls_offset + slot * sizeof(void *));
++  if (!opnd_is_far_memory_reference(opnd) || opnd_get_segment(opnd) != raw_tls_register)
++    return false;
++  if (opnd_is_far_base_disp(opnd))
++    return opnd_get_base(opnd) == DR_REG_NULL && opnd_get_index(opnd) == DR_REG_NULL &&
++           opnd_get_disp(opnd) == offset;
++  return opnd_is_abs_addr(opnd) && opnd_get_addr(opnd) == (void *)(ptr_int_t)offset;
++}
++
++static bool is_reg(opnd_t opnd, reg_id_t reg) {
++  return opnd_is_reg(opnd) && opnd_get_reg(opnd) == reg;
++}
++
++/* The runtime can translate a thread stopped inside this client's inline
++ * sequences (synchronization, relocation). Recover rcx/r11 from the private
++ * spill slots. If a relocated thread will re-enter a flat block whose charge
++ * has already been stored, return the counter to its pre-entry value: the
++ * re-entry charges the block again. Restoration is idempotent. */
++static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state_info_t *info) {
++  if (!raw_tls_enabled || !info || !info->raw_mcontext || !info->mcontext ||
++      !info->fragment_info.cache_start_pc)
++    return true;
++  thread_data_t *d = drmgr_get_tls_field(drcontext, tls_index);
++  if (!d || !d->raw_tls_base)
++    return true;
++  byte *pc = info->fragment_info.cache_start_pc, *stop = info->raw_mcontext->pc;
++  bool spilled_rcx = false, spilled_r11 = false, charged = false;
++  instr_t ins;
++  instr_init(drcontext, &ins);
++  for (uint n = 0; pc != NULL && pc < stop && n < 4096; ++n) {
++    instr_reset(drcontext, &ins);
++    byte *next = decode(drcontext, pc, &ins);
++    if (next == NULL)
++      break;
++    int op = instr_get_opcode(&ins);
++    if (op == OP_mov_st && instr_num_dsts(&ins) == 1 && instr_num_srcs(&ins) == 1) {
++      opnd_t dst = instr_get_dst(&ins, 0), src = instr_get_src(&ins, 0);
++      if (is_raw_slot(dst, RAW_TLS_SPILL_RCX) && is_reg(src, DR_REG_RCX))
++        spilled_rcx = true;
++      else if (is_raw_slot(dst, RAW_TLS_SPILL_R11) && is_reg(src, DR_REG_R11))
++        spilled_r11 = true;
++      else if (flat_inline && spilled_rcx && spilled_r11 && is_reg(src, DR_REG_RCX) &&
++               opnd_is_base_disp(dst) && opnd_get_base(dst) == DR_REG_R11 &&
++               opnd_get_index(dst) == DR_REG_NULL &&
++               opnd_get_disp(dst) == (int)offsetof(thread_data_t, instructions))
++        charged = true;
++    } else if (op == OP_mov_ld && instr_num_dsts(&ins) == 1 && instr_num_srcs(&ins) == 1) {
++      opnd_t dst = instr_get_dst(&ins, 0), src = instr_get_src(&ins, 0);
++      if (is_raw_slot(src, RAW_TLS_SPILL_RCX) && is_reg(dst, DR_REG_RCX)) {
++        spilled_rcx = false;
++        charged = false; /* The entry sequence is complete. */
++      } else if (is_raw_slot(src, RAW_TLS_SPILL_R11) && is_reg(dst, DR_REG_R11)) {
++        spilled_r11 = false;
++      }
++    }
++    pc = next;
++  }
++  instr_free(drcontext, &ins);
++  reg_t *slots = (reg_t *)(d->raw_tls_base + raw_tls_offset);
++  if (spilled_rcx)
++    info->mcontext->xcx = slots[RAW_TLS_SPILL_RCX];
++  if (spilled_r11)
++    info->mcontext->r11 = slots[RAW_TLS_SPILL_R11];
++  if (charged && restore_memory)
++    d->instructions = d->entry_base;
++  return true;
++}
++
+ static void restore_charge_state(void *ctx, instrlist_t *bb, instr_t *where) {
+   dr_restore_reg(ctx, bb, where, DR_REG_R11, SPILL_SLOT_2);
+   dr_restore_reg(ctx, bb, where, DR_REG_R10, SPILL_SLOT_1);
+@@ -848,7 +1085,9 @@ static void restore_charge_state(void *ctx, instrlist_t *bb, instr_t *where) {
+ static void insert_read_accounting_state(void *ctx, instrlist_t *bb, instr_t *where,
+                                          reg_id_t reg) {
+   if (raw_tls_enabled)
+-    dr_insert_read_raw_tls(ctx, bb, where, raw_tls_register, raw_tls_offset, reg);
++    instrlist_meta_preinsert(bb, where,
++                             INSTR_CREATE_mov_ld(ctx, opnd_create_reg(reg),
++                                                 raw_slot(RAW_TLS_STATE)));
+   else if (!drmgr_insert_read_tls_field(ctx, tls_index, bb, where, reg))
+     fail("cannot load accounting TLS");
+ }
+@@ -888,10 +1127,11 @@ static void insert_charge(void *ctx, instrlist_t *bb, instr_t *where, int count,
+
+ /* The bound is charged at the same point as the count, so a block's bound is
+  * counted exactly when its instructions are. */
+-static void count_block_latency(int instructions, app_pc first_pc, int bound_x16) {
++__attribute__((target("general-regs-only")))
++static thread_data_t *count_block_latency(int instructions, app_pc first_pc, int bound_x16) {
+   thread_data_t *data = charge_block(instructions, first_pc);
+   if (data == NULL)
+-    return;
++    return NULL;
+   data->block_instructions = (uint32_t)instructions;
+   data->block_bound_x16 = (uint32_t)bound_x16;
+   if (bound_x16 < 0)
+@@ -900,17 +1140,42 @@ static void count_block_latency(int instructions, app_pc first_pc, int bound_x16
+     data->counter_overflows = 1;
+   else
+     data->latency_bound_x16 += (uint64_t)bound_x16;
++  return data;
++}
++
++/* Keep the incremental charge scalar even if the compiler coalesces adjacent
++ * counters. The standard clean call also preserves application XMM/YMM/ZMM,
++ * including across helpers. save_fpstate is only needed for x87/MMX. */
++__attribute__((target("general-regs-only")))
++static void count_block_memory(int instructions, app_pc pc, int bound_x16, uint32_t bytes) {
++  thread_data_t *d = count_block_latency(instructions, pc, bound_x16);
++  if (d != NULL) {
++    if (bytes == UINT32_MAX || UINT64_MAX - d->memory_operand_bytes < bytes)
++      counter_error(&d->latency_error);
++    else
++      d->memory_operand_bytes += bytes;
++  }
+ }
+
+ /* A fault can leave the middle of a BB whose entire length was charged at
+  * entry. Save its unexecuted suffix at the write, not a whole-counter snapshot:
+  * already executed prefixes and intervening signal work must remain charged.
+  */
+-static void before_write(app_pc pc, app_pc next_pc, int suffix) {
++__attribute__((target("general-regs-only")))
++static thread_data_t *before_write(app_pc pc, app_pc next_pc, int suffix) {
+   thread_data_t *data = accounting_thread_data();
+   if (data == NULL)
+     fail("write checkpoint without thread state");
+   record_write_checkpoint(data, pc, next_pc, suffix);
++  return data;
++}
++
++__attribute__((target("general-regs-only")))
++static void before_write_memory(app_pc pc, app_pc next_pc, int suffix,
++                                uint32_t suffix_bytes, uint32_t operand_bytes) {
++  thread_data_t *d = before_write(pc, next_pc, suffix);
++  d->write_suffix_bytes = suffix_bytes;
++  d->write_operand_bytes = operand_bytes;
+ }
+
+ /* The ordinary clock has no latency share at replay. Save its checkpoint
+@@ -920,7 +1185,11 @@ static void before_write(app_pc pc, app_pc next_pc, int suffix) {
+ static void insert_write_checkpoint(void *ctx, instrlist_t *bb, instr_t *where,
+                                     app_pc pc, app_pc next_pc, int suffix) {
+   const reg_id_t data = DR_REG_R11;
+-  dr_save_reg(ctx, bb, where, data, SPILL_SLOT_1);
++  if (raw_tls_enabled)
++    instrlist_meta_preinsert(bb, where, INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_SPILL_R11),
++                                                            opnd_create_reg(data)));
++  else
++    dr_save_reg(ctx, bb, where, data, SPILL_SLOT_1);
+   insert_read_accounting_state(ctx, bb, where, data);
+   opnd_t address = opnd_create_base_disp(data, DR_REG_NULL, 0,
+                                          offsetof(thread_data_t, write_pc), OPSZ_PTR);
+@@ -933,7 +1202,11 @@ static void insert_write_checkpoint(void *ctx, instrlist_t *bb, instr_t *where,
+   opnd_set_disp(&address, offsetof(thread_data_t, write_rep));
+   opnd_set_size(&address, OPSZ_1);
+   instrlist_meta_preinsert(bb, where, INSTR_CREATE_mov_st(ctx, address, OPND_CREATE_INT8(0)));
+-  dr_restore_reg(ctx, bb, where, data, SPILL_SLOT_1);
++  if (raw_tls_enabled)
++    instrlist_meta_preinsert(bb, where, INSTR_CREATE_mov_ld(ctx, opnd_create_reg(data),
++                                                            raw_slot(RAW_TLS_SPILL_R11)));
++  else
++    dr_restore_reg(ctx, bb, where, data, SPILL_SLOT_1);
+ }
+
+ static void code_replay(void *ctx, int reason, app_pc source_pc,
+@@ -948,6 +1221,8 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
+     __atomic_store_n(&replay_without_tls, 1, __ATOMIC_RELAXED);
+     return;
+   }
++  check_flat_counter(d);
++  settle_restart(d);
+   d->fast_until = 0;
+   if (reason == DR_DURANTE_REPLAY_ENTRY) {
+     /* Cache validation ran before client entry instrumentation. Nothing was
+@@ -988,12 +1263,21 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
+     else
+       d->latency_bound_x16 -= share;
+   }
++  if (memory_operand_bytes_enabled) {
++    uint32_t suffix = d->write_suffix_bytes;
++    uint32_t retain = completed ? d->write_operand_bytes : 0;
++    if (suffix == UINT32_MAX || retain > suffix || d->memory_operand_bytes < suffix - retain)
++      counter_error(&d->latency_error);
++    else
++      d->memory_operand_bytes -= suffix - retain;
++  }
+   d->instructions -= rollback;
+ #ifdef DURANTE_TEST_COUNT_LOCATIONS
+   profile_replay(rollback);
+ #endif
+   if (retry) {
+     d->restart_pc = target_pc;
++    d->restart_base = d->instructions;
+     d->restart_entered = false;
+     d->restart_rep = d->write_rep;
+     d->restart_rep_opcode = d->write_rep_opcode;
+@@ -1009,6 +1293,7 @@ static void kernel_xfer(void *ctx, const dr_kernel_xfer_info_t *info) {
+   thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
+   if (!d)
+     return;
++  settle_restart(d);
+   /* Signal handlers can call the same code at the same PC with another BB
+    * suffix. PC equality cannot authenticate an interrupted TLS checkpoint.
+    * An unrelated earlier signal does not make later JIT work invalid. */
+@@ -1133,11 +1418,19 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+     instr_t *first = instrlist_first_app(bb);
+     uint64_t packed = (uint64_t)(ptr_uint_t)user_data;
+     int count = (int)(uint32_t)packed;
+-    if (latency_bound_enabled)
++    if (memory_operand_bytes_enabled)
++      dr_insert_clean_call(drcontext, bb, where, (void *)count_block_memory, false, 4,
++                           OPND_CREATE_INT32(count),
++                           OPND_CREATE_INTPTR(first ? instr_get_app_pc(first) : NULL),
++                           OPND_CREATE_INT32((int)(uint32_t)(packed >> 32)),
++                           OPND_CREATE_INT32((int)suffix_memory_bytes(where)));
++    else if (latency_bound_enabled)
+       dr_insert_clean_call(drcontext, bb, where, (void *)count_block_latency, false, 3,
+                            OPND_CREATE_INT32(count),
+                            OPND_CREATE_INTPTR(first ? instr_get_app_pc(first) : NULL),
+                            OPND_CREATE_INT32((int)(uint32_t)(packed >> 32)));
++    else if (flat_inline)
++      insert_flat_charge(drcontext, bb, where, count);
+     else if (inline_block) {
+       insert_charge(drcontext, bb, where, count, first ? instr_get_app_pc(first) : NULL);
+       if (!cache_probe_enabled())
+@@ -1157,21 +1450,29 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+   }
+   bool checkpoint = instr_is_app(where) && instr_writes_memory(where);
+ #ifdef DURANTE_L1D_PROBE
+-  if (probe_l1d && probe_instrument(drcontext, bb, where, checkpoint))
++  if (probe_l1d && probe_instrument(drcontext, bb, where, checkpoint) &&
++      !memory_operand_bytes_enabled)
+     checkpoint = false;
+ #endif
+   if (checkpoint) {
+     app_pc pc = instr_get_app_pc(where);
+     app_pc next_pc = pc ? pc + instr_length(drcontext, where) : NULL;
+     int suffix = (int)write_suffix(bb, where);
+-    bool inline_write = cache_probe_enabled();
++    bool inline_write = cache_probe_enabled() || flat_inline;
+ #ifndef DURANTE_TEST_COUNT_LOCATIONS
+     if (!inline_write && !latency_bound_enabled && static_text_site(pc))
+       inline_write = select_inline_block(drcontext, bb, translating, &flags);
+ #endif
+-    if (!latency_bound_enabled && inline_write) {
++    if (memory_operand_bytes_enabled) {
++      dr_insert_clean_call(drcontext, bb, where, (void *)before_write_memory, false, 5,
++                           OPND_CREATE_INTPTR(pc), OPND_CREATE_INTPTR(next_pc),
++                           OPND_CREATE_INT32(suffix),
++                           OPND_CREATE_INT32((int)suffix_memory_bytes(where)),
++                           OPND_CREATE_INT32((int)instruction_memory_bytes(where)));
++    } else if (!latency_bound_enabled && inline_write) {
+       insert_write_checkpoint(drcontext, bb, where, pc, next_pc, suffix);
+-      if (!cache_probe_enabled())
++      /* Flat layouts depend only on the block, so retranslation reproduces them. */
++      if (!cache_probe_enabled() && !flat_inline)
+         flags = DR_EMIT_STORE_TRANSLATIONS;
+     } else
+       dr_insert_clean_call(drcontext, bb, where, (void *)before_write, false, 3,
+@@ -1374,6 +1675,7 @@ static void post_syscall(void *ctx, int number) {
+                 number, (long long)result);
+     route_event(d, "exec_failed", fields);
+   }
++  d->pending_syscall = -1;
+   d->pending_spawn = false;
+   d->pending_exec = false;
+   d->pending_unsupported = false;
+@@ -1404,7 +1706,7 @@ static void fork_init(void *ctx) {
+    * other-thread counters must still be reset. DR restores surviving TLS. */
+   owner_pid = dr_get_process_id();
+   total_instructions = total_signals = total_rep_bytes = total_rep_entries =
+-      total_unsupported_rep_entries = total_latency_bound_x16 = 0;
++      total_unsupported_rep_entries = total_latency_bound_x16 = total_memory_operand_bytes = 0;
+   total_rep_movs_bytes = total_rep_stos_bytes = total_rep_movs_entries =
+       total_rep_stos_entries = 0;
+   threads_started = 1;
+@@ -1415,8 +1717,8 @@ static void fork_init(void *ctx) {
+   thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
+   if (!d)
+     fail("fork without surviving TLS");
+-  set_raw_accounting_state(d);
+   memset(d, 0, sizeof(*d));
++  set_raw_accounting_state(d);
+   open_stream("fork", parent, previous);
+ }
+ static void pre_detach(void) {
+@@ -1452,8 +1754,10 @@ static void process_exit(void) {
+   drmgr_unregister_signal_event(signal_event);
+   drmgr_unregister_kernel_xfer_event(kernel_xfer);
+   dr_unregister_durante_code_replay_event(code_replay);
+-  if (raw_tls_enabled)
+-    dr_raw_tls_cfree(raw_tls_offset, 1);
++  if (raw_tls_enabled) {
++    drmgr_unregister_restore_state_ex_event(restore_state);
++    dr_raw_tls_cfree(raw_tls_offset, RAW_TLS_SLOTS);
++  }
+   drmgr_unregister_tls_field(tls_index);
+ #ifdef DURANTE_L1D_PROBE
+   if (probe_l1d) {
+@@ -1482,7 +1786,7 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+   if (argc < 3 || strcmp(argv[1], "-outdir"))
+     fail("usage: -c libdurante.so -outdir NEW_PRIVATE_DIRECTORY [-rep_bytes] "
+          "[-disallow_cpu_feature avx|simd] [-cpuid_profile x86-64-v1|x86-64-v2] "
+-         "[-latency_bound] [-live_work_v1 OWNER_FILE] -- program");
++         "[-latency_bound [-memory_operand_bytes]] [-live_work_v1 OWNER_FILE] -- program");
+   if (strlen(argv[2]) >= sizeof(outdir) || argv[2][0] != '/')
+     fail("report directory must be absolute");
+   memcpy(outdir, argv[2], strlen(argv[2]) + 1);
+@@ -1499,6 +1803,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+       live_path = argv[++i];
+     } else if (strcmp(argv[i], "-latency_bound") == 0 && !latency_bound_enabled) {
+       latency_bound_enabled = true;
++    } else if (strcmp(argv[i], "-memory_operand_bytes") == 0 && !memory_operand_bytes_enabled) {
++      memory_operand_bytes_enabled = true;
+     } else if (strcmp(argv[i], "-disallow_cpu_feature") == 0 && i + 1 < argc) {
+       const char *feature = argv[++i];
+       if (strcmp(feature, "avx") == 0 && !deny_avx)
+@@ -1516,6 +1822,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+       fail("unknown or duplicate client option");
+     }
+   }
++  if (memory_operand_bytes_enabled && !latency_bound_enabled)
++    fail("memory operand bytes require -latency_bound");
+   if (live_path) {
+     if (!rep_bytes_enabled)
+       fail("live work requires -rep_bytes");
+@@ -1554,8 +1862,14 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+     fail("test module lifetime registration failed");
+ #endif
+   state_lock = dr_mutex_create();
+-  raw_tls_enabled = static_text_end != 0 &&
+-                    dr_raw_tls_calloc(&raw_tls_register, &raw_tls_offset, 1, 0);
++#ifdef DURANTE_TEST_COUNT_LOCATIONS
++  const bool flat_candidate = false; /* The location profile needs entry callbacks. */
++#else
++  const bool flat_candidate = !live_work && !latency_bound_enabled && !cache_probe_enabled();
++#endif
++  raw_tls_enabled = (static_text_end != 0 || flat_candidate) &&
++                    dr_raw_tls_calloc(&raw_tls_register, &raw_tls_offset, RAW_TLS_SLOTS, 0);
++  flat_inline = flat_candidate && raw_tls_enabled;
+   tls_index = drmgr_register_tls_field();
+   if (!state_lock || tls_index < 0 ||
+       (cpuid_profile != DURANTE_CPUID_NONE &&
+@@ -1567,7 +1881,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+       !drmgr_register_pre_syscall_event(pre_syscall) ||
+       !drmgr_register_post_syscall_event(post_syscall) ||
+       !drmgr_register_signal_event(signal_event) ||
+-      !drmgr_register_kernel_xfer_event(kernel_xfer))
++      !drmgr_register_kernel_xfer_event(kernel_xfer) ||
++      (raw_tls_enabled && !drmgr_register_restore_state_ex_event(restore_state)))
+     fail("event registration failed");
+   dr_register_durante_code_replay_event(code_replay);
+   open_stream("initial", 0, "");
+diff --git a/docs/LATENCY_BOUND.md b/docs/LATENCY_BOUND.md
+index 10214df..d9378b0 100644
+--- a/docs/LATENCY_BOUND.md
++++ b/docs/LATENCY_BOUND.md
+@@ -64,8 +64,45 @@ measurement without the object (or with it when it was not requested) is
+ reported as unavailable (`client latency bound does not match the request`).
+ Combined instruction and REP counters are unchanged by the option.
+
++## Memory operand bytes
++
++Run `durante run --latency-bound --memory-operand-bytes -- PROGRAM` to
++collect two inputs for a time model in one diagnostic pass. The same option
++pair is available on `isolate`. The memory metric sums **nominal decoded
++operand widths**. A 16-byte SIMD load contributes 16 bytes, its 16-byte
++store contributes another 16, and an 8-byte read-modify-write contributes
++16. Implicit stack operands contribute their width when exposed by the
++decoder. The client computes block constants while translating code and
++charges them at block entry in the same callback as the latency bound.
++
++Address calculations, NOPs, prefetches and cache-line management instructions
++contribute zero. Emulated instructions use the original application operands.
++For example, a virtualized CPUID has no memory operand. Operands without a fixed
++decoded width, including XSAVE's variable-sized area, also contribute zero.
++Predicated and masked operations contribute their nominal width on block
++entry. String operations contribute one decoded element width for each
++source or destination memory operand. Use `rep_breakdown` separately for the
++requested repetition count times element size. The memory metric describes
++the program's decoded references. Cache-line fills, cache hits and misses,
++DRAM traffic and actual active lanes are outside its scope.
++
++An observed application signal or a thread stopped by a sibling before its
++own exit syscall invalidates the byte measurement. On an internal replay the write checkpoint records the
++byte widths in the unexecuted suffix. The client retains any completed
++write and rolls back the remaining bytes. Overflow or an inconsistent
++checkpoint invalidates the measurement.
++
+ ## Evidence
+
++The hand-counted fixture in `tests/latency_bound/memory_operand_bytes.S`
++must report exactly 623 bytes. Across its block and store callbacks it
++checks an application XMM register against a sentinel. The fixture covers
++scalar, SIMD and stack operands, read-modify-write, address-only instructions,
++fixed and variable save areas, and REP with zero and nonzero repeat counts.
++The pinned Rust comparison measures the runtime cost of enabling this counter
++and tests its contribution to estimated native CPU time.
++[Measurements and archived receipts](GCE_RUST_OPERAND_BYTES.md)
++
+ `tests/latency_bound.py` builds five libc-free loop fixtures in
+ `tests/latency_bound/kernels.S`. They cover a dependent multiply chain (6 cycles per
+ iteration), an L1 pointer chase (5), independent ALU work limited by issue
+diff --git a/docs/PROTOCOL.md b/docs/PROTOCOL.md
+index 09719ee..78c4470 100644
+--- a/docs/PROTOCOL.md
++++ b/docs/PROTOCOL.md
+@@ -82,6 +82,16 @@ outside `start`, the counter outside a terminal, a missing or unadvertised
+ counter, a counter below `4 * instructions`, or an aggregate overflow is
+ unavailable. See [Static latency bound](LATENCY_BOUND.md).
+
++The optional memory operand metric (`-memory_operand_bytes`, CLI
++`--memory-operand-bytes`) requires the latency bound. A participating image
++adds `memory_operand_bytes_version: 1` to its start and
++`memory_operand_bytes` (an unsigned 64-bit integer) to every end and exec
++checkpoint. Collectors require matching capabilities throughout the tree
++and a checked sum at each level. A successful measurement includes
++`"memory_operand_bytes": {"version": 1, "bytes": N}` on the tree, each
++process and each selected image segment. The option and the resulting
++field are additive to schema 1. [Counter semantics](LATENCY_BOUND.md#memory-operand-bytes)
++
+ An executed forbidden instruction produces `cpu_feature_violation` with
+ `feature: "avx"` or `"simd"` in its live image, with the normal next sequence
+ number, before process exit 126. The feature must belong to the announced
+diff --git a/tests/protocol_vectors.json b/tests/protocol_vectors.json
+index 88856f8..db317b9 100644
+--- a/tests/protocol_vectors.json
++++ b/tests/protocol_vectors.json
+@@ -5720,7 +5720,8 @@
+             "parent_segment": "",
+             "rep_bytes_enabled": false,
+             "sdk_version": "11.3.0",
+-            "latency_bound_version": 1
++            "latency_bound_version": 1,
++            "memory_operand_bytes_version": 1
+           },
+           {
+             "schema": 1,
+@@ -5757,7 +5758,8 @@
+             "app_exit_code": 0,
+             "valid": true,
+             "quality": "uninterrupted",
+-            "latency_bound_x16": 407
++            "latency_bound_x16": 407,
++            "memory_operand_bytes": 0
+           }
+         ],
+         "process-2.jsonl": [
+@@ -5775,7 +5777,8 @@
+             "parent_segment": "1-1",
+             "rep_bytes_enabled": false,
+             "sdk_version": "11.3.0",
+-            "latency_bound_version": 1
++            "latency_bound_version": 1,
++            "memory_operand_bytes_version": 1
+           },
+           {
+             "schema": 1,
+@@ -5799,7 +5802,8 @@
+             "app_exit_code": 0,
+             "valid": true,
+             "quality": "uninterrupted",
+-            "latency_bound_x16": 134
++            "latency_bound_x16": 134,
++            "memory_operand_bytes": 16
+           },
+           {
+             "schema": 1,
+@@ -5815,7 +5819,8 @@
+             "parent_segment": "",
+             "rep_bytes_enabled": false,
+             "sdk_version": "11.3.0",
+-            "latency_bound_version": 1
++            "latency_bound_version": 1,
++            "memory_operand_bytes_version": 1
+           },
+           {
+             "schema": 1,
+@@ -5839,7 +5844,8 @@
+             "app_exit_code": 0,
+             "valid": true,
+             "quality": "uninterrupted",
+-            "latency_bound_x16": 121
++            "latency_bound_x16": 121,
++            "memory_operand_bytes": 48
+           }
+         ]
+       },
+@@ -5851,6 +5857,10 @@
+         "latency_bound": {
+           "version": 1,
+           "cycles_x16": 662
++        },
++        "memory_operand_bytes": {
++          "version": 1,
++          "bytes": 64
+         }
+       }
+     },
+@@ -6026,7 +6036,8 @@
+             "parent_segment": "",
+             "rep_bytes_enabled": false,
+             "sdk_version": "11.3.0",
+-            "latency_bound_version": 1
++            "latency_bound_version": 1,
++            "memory_operand_bytes_version": 1
+           },
+           {
+             "schema": 1,
+@@ -6050,7 +6061,8 @@
+             "app_exit_code": 0,
+             "valid": true,
+             "quality": "uninterrupted",
+-            "latency_bound_x16": 407
++            "latency_bound_x16": 407,
++            "memory_operand_bytes": 18446744073709551615
+           },
+           {
+             "schema": 1,
+@@ -6086,7 +6098,8 @@
+             "app_exit_code": 0,
+             "valid": true,
+             "quality": "uninterrupted",
+-            "latency_bound_x16": 514
++            "latency_bound_x16": 514,
++            "memory_operand_bytes": 8
+           }
+         ]
+       },
+@@ -6098,6 +6111,10 @@
+         "latency_bound": {
+           "version": 1,
+           "cycles_x16": 514
++        },
++        "memory_operand_bytes": {
++          "version": 1,
++          "bytes": 8
+         }
+       }
+     },
+@@ -6796,6 +6813,268 @@
+       },
+       "valid": false,
+       "expected_reason": "latency bound aggregate overflow"
++    },
++    {
++      "name": "memory-operand-bytes-missing-counter",
++      "root_pid": 1,
++      "files": {
++        "process-1.jsonl": [
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 1,
++            "event": "start",
++            "origin": "initial",
++            "parent_pid": 0,
++            "parent_segment": "",
++            "rep_bytes_enabled": false,
++            "sdk_version": "11.3.0",
++            "latency_bound_version": 1,
++            "memory_operand_bytes_version": 1
++          },
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 2,
++            "event": "end",
++            "instructions": 100,
++            "rep_bytes": 0,
++            "rep_entries": 0,
++            "unsupported_rep_entries": 0,
++            "signals_observed": 0,
++            "threads_started": 1,
++            "threads_finished": 1,
++            "threads_complete": true,
++            "accounting_error": false,
++            "app_exit_seen": true,
++            "app_exit_code": 0,
++            "valid": true,
++            "quality": "uninterrupted",
++            "latency_bound_x16": 496
++          }
++        ]
++      },
++      "valid": false,
++      "expected_reason": "memory operand bytes capability mismatch"
++    },
++    {
++      "name": "memory-operand-bytes-requires-latency",
++      "root_pid": 1,
++      "files": {
++        "process-1.jsonl": [
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 1,
++            "event": "start",
++            "origin": "initial",
++            "parent_pid": 0,
++            "parent_segment": "",
++            "rep_bytes_enabled": false,
++            "sdk_version": "11.3.0",
++            "memory_operand_bytes_version": 1
++          },
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 2,
++            "event": "end",
++            "instructions": 100,
++            "rep_bytes": 0,
++            "rep_entries": 0,
++            "unsupported_rep_entries": 0,
++            "signals_observed": 0,
++            "threads_started": 1,
++            "threads_finished": 1,
++            "threads_complete": true,
++            "accounting_error": false,
++            "app_exit_seen": true,
++            "app_exit_code": 0,
++            "valid": true,
++            "quality": "uninterrupted",
++            "latency_bound_x16": 496
++          }
++        ]
++      },
++      "valid": false,
++      "expected_reason": "memory operand bytes require latency bound"
++    },
++    {
++      "name": "memory-operand-bytes-aggregate-overflow",
++      "root_pid": 1,
++      "files": {
++        "process-1.jsonl": [
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 1,
++            "event": "start",
++            "origin": "initial",
++            "parent_pid": 0,
++            "parent_segment": "",
++            "rep_bytes_enabled": false,
++            "sdk_version": "11.3.0",
++            "latency_bound_version": 1,
++            "memory_operand_bytes_version": 1
++          },
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 2,
++            "event": "spawn",
++            "child_pid": 2,
++            "syscall": 57,
++            "supported": true
++          },
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 3,
++            "event": "end",
++            "instructions": 100,
++            "rep_bytes": 0,
++            "rep_entries": 0,
++            "unsupported_rep_entries": 0,
++            "signals_observed": 0,
++            "threads_started": 1,
++            "threads_finished": 1,
++            "threads_complete": true,
++            "accounting_error": false,
++            "app_exit_seen": true,
++            "app_exit_code": 0,
++            "valid": true,
++            "quality": "uninterrupted",
++            "latency_bound_x16": 400,
++            "memory_operand_bytes": 18446744073709551615
++          }
++        ],
++        "process-2.jsonl": [
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 2,
++            "segment": "2-1",
++            "seq": 1,
++            "event": "start",
++            "origin": "fork",
++            "parent_pid": 1,
++            "parent_segment": "1-1",
++            "rep_bytes_enabled": false,
++            "sdk_version": "11.3.0",
++            "latency_bound_version": 1,
++            "memory_operand_bytes_version": 1
++          },
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 2,
++            "segment": "2-1",
++            "seq": 2,
++            "event": "end",
++            "instructions": 30,
++            "rep_bytes": 0,
++            "rep_entries": 0,
++            "unsupported_rep_entries": 0,
++            "signals_observed": 0,
++            "threads_started": 1,
++            "threads_finished": 1,
++            "threads_complete": true,
++            "accounting_error": false,
++            "app_exit_seen": true,
++            "app_exit_code": 0,
++            "valid": true,
++            "quality": "uninterrupted",
++            "latency_bound_x16": 120,
++            "memory_operand_bytes": 1
++          }
++        ]
++      },
++      "valid": false,
++      "expected_reason": "memory operand bytes aggregate overflow"
++    },
++    {
++      "name": "memory-operand-bytes-interrupted",
++      "root_pid": 1,
++      "files": {
++        "process-1.jsonl": [
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 1,
++            "event": "start",
++            "origin": "initial",
++            "parent_pid": 0,
++            "parent_segment": "",
++            "rep_bytes_enabled": false,
++            "sdk_version": "11.3.0",
++            "latency_bound_version": 1,
++            "memory_operand_bytes_version": 1
++          },
++          {
++            "schema": 1,
++            "client_version": 1,
++            "authority": "diagnostic_only",
++            "metric": "bb_entry_app_instructions",
++            "pid": 1,
++            "segment": "1-1",
++            "seq": 2,
++            "event": "end",
++            "instructions": 100,
++            "rep_bytes": 0,
++            "rep_entries": 0,
++            "unsupported_rep_entries": 0,
++            "signals_observed": 1,
++            "threads_started": 1,
++            "threads_finished": 1,
++            "threads_complete": true,
++            "accounting_error": false,
++            "app_exit_seen": true,
++            "app_exit_code": 0,
++            "valid": true,
++            "quality": "signals_observed",
++            "latency_bound_x16": 496,
++            "memory_operand_bytes": 16
++          }
++        ]
++      },
++      "valid": false,
++      "expected_reason": "memory operand bytes interrupted by signal"
+     }
+   ]
+ }

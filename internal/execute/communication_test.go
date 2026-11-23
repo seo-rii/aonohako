@@ -515,3 +515,99 @@ func TestCommunicationCloudRunRejectsAggregateBudgetsBeforeExecution(t *testing.
 		})
 	}
 }
+
+func TestCommunicationRoleTimingJoinsOrderedSeatsAndManager(t *testing.T) {
+	for _, version := range []int{1, 2} {
+		req := competitiveRequest()
+		spec := req.Communication
+		spec.Version = version
+		if version == 1 {
+			spec.ParticipantProgramID, spec.ParticipantProgramIDs = "seat0", nil
+		}
+		req.WorkMeasurement = version == 1
+		// All three roles finish in less than a millisecond, in a different
+		// order from the requested seats. Native milliseconds round per role.
+		target := func(index int, ns uint64) communicationProcessResult {
+			zero := 0
+			rawNs, rawMs := ns*2, ceilCPUMilliseconds(ns*2)
+			limits := req.Limits
+			if index < 0 {
+				limits = communicationManagerLimits(limits)
+			}
+			return communicationProcessResult{participant: index, manager: index < 0, started: true,
+				request: &model.RunRequest{Limits: limits},
+				result: execResult{Status: "OK", ExitCode: &zero, CPUTimeMs: 1, CPUTimeNs: ns,
+					RawCPUTimeNs: &rawNs, RawCPUTimeMs: &rawMs}}
+		}
+		processes := []communicationProcessResult{target(-1, 210000), target(1, 72000), target(0, 100000)}
+		score := 0.625
+		var result model.RunResponse
+		if version == 1 {
+			result = buildCommunicationResponse(processes, communicationManagerResult{Verdict: "accepted", Score: &score}, nil, 2, 23, nil)
+		} else {
+			result = buildCommunicationMatchResponse(req, processes, &communicationMatchManagerResult{Version: 1, Games: 20, Wins: []int{11, 9}}, nil, 2, 23, nil, time.Time{}, nil)
+		}
+		attachCommunicationRoleTiming(req, &result, processes)
+		rows := result.CommunicationCPUByRole
+		if result.CPUTimeMs != 3 || result.CPUTimeNs != 382000 || result.RawCPUTimeMs == nil || *result.RawCPUTimeMs != 3 ||
+			result.RawCPUTimeNs == nil || *result.RawCPUTimeNs != 764000 || len(rows) != 3 {
+			t.Fatalf("v%d incorrect totals or roles: %+v", version, result)
+		}
+		for i, ns := range []uint64{100000, 72000, 210000} {
+			row := rows[i]
+			if !row.Started || row.Interrupted || row.ExecutionStatus != "OK" || row.ExitCode == nil || *row.ExitCode != 0 ||
+				row.CPUTimeNs == nil || *row.CPUTimeNs != ns || row.RawCPUTimeNs == nil || *row.RawCPUTimeNs != ns*2 {
+				t.Fatalf("v%d row %d: %+v", version, i, row)
+			}
+			if i == 2 {
+				if row.Role != "manager" || row.ProgramID != "manager" || row.ParticipantIndex != nil || row.CPULimitMs != communicationManagerLimits(req.Limits).TimeMs {
+					t.Fatalf("v%d manager identity or budget: %+v", version, row)
+				}
+			} else {
+				id := spec.ParticipantProgramID
+				if version == 2 {
+					id = spec.ParticipantProgramIDs[i]
+				}
+				if row.Role != "participant" || row.ProgramID != id || row.ParticipantIndex == nil || *row.ParticipantIndex != i || row.CPULimitMs != req.Limits.TimeMs {
+					t.Fatalf("v%d participant identity or budget: %+v", version, row)
+				}
+			}
+			if req.WorkMeasurement {
+				report := result.WorkMeasurements[i]
+				if report.ProgramID != row.ProgramID || !equalPipelineCounter(report.ParticipantIndex, row.ParticipantIndex) || report.Role != row.Role || report.ExecutionStatus != row.ExecutionStatus {
+					t.Fatalf("v%d report %d uses a different identity or execution", version, i)
+				}
+			}
+		}
+		if !req.WorkMeasurement && len(result.WorkMeasurements) != 0 {
+			t.Fatal("native communication run acquired unsolicited Durante reports")
+		}
+	}
+}
+
+func TestCommunicationRoleTimingTracksInterruptedAndUnstartedTargets(t *testing.T) {
+	req := competitiveRequest()
+	req.WorkMeasurement = false
+	participant := communicationProcessResult{participant: 0, started: true, interrupted: true,
+		request: req, result: execResult{Status: model.RunStatusTLE, CPUTimeMs: 1, CPUTimeNs: 13000}}
+	unstarted := communicationProcessResult{participant: 1, request: req, interrupted: true, result: execResult{Status: model.RunStatusInitFail}}
+	manager := communicationProcessResult{manager: true, started: true, request: req,
+		result: execResult{Status: "OK", CPUAccounting: &model.CPUAccounting{}}}
+	processes := []communicationProcessResult{unstarted, manager, participant}
+	result := model.RunResponse{Status: model.RunStatusTLE, StartedParticipants: 1}
+	attachCommunicationRoleTiming(req, &result, processes)
+	rows := result.CommunicationCPUByRole
+	if len(rows) != 3 || result.Status != model.RunStatusTLE || result.CPUTimeNs != 13000 || result.RawCPUTimeNs != nil ||
+		!rows[0].Interrupted || !rows[0].Started || rows[0].CPUTimeNs == nil ||
+		rows[1].Started || rows[1].CPUTimeNs != nil || rows[2].CPUTimeNs == nil || *rows[2].CPUTimeNs != 0 {
+		t.Fatalf("unstarted peer, genuine zero or interrupted timing lost: %+v", result)
+	}
+	// A target started but its exact accounting sample is missing. Keep
+	// other peers' measurements and suppress the incomplete precise total.
+	processes[1].result.CPUAccounting = nil
+	result = model.RunResponse{}
+	attachCommunicationRoleTiming(req, &result, processes)
+	if result.CPUTimeNs != 0 || result.CommunicationCPUByRole[0].CPUTimeNs == nil || result.CommunicationCPUByRole[2].CPUTimeNs != nil {
+		t.Fatalf("partial CPU sample treated as exact: %+v", result)
+	}
+}

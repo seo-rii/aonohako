@@ -3,10 +3,13 @@ package profiles
 import "strings"
 
 const (
-	asProfileKey = "ASSEMBLYSCRIPT"
-	denoJSKey    = "JAVASCRIPT_DENO"
-	denoTSKey    = "TYPESCRIPT_DENO"
-	quickJSKey   = "JAVASCRIPT_QUICKJS"
+	Scala3Home             = "/opt/aonohako/scala3"
+	Scala3RuntimeClasspath = Scala3Home + "/lib/scala3-library.jar:" + Scala3Home + "/lib/scala-library.jar"
+	Java25Home             = "/usr/lib/jvm/aonohako-java25"
+	asProfileKey           = "ASSEMBLYSCRIPT"
+	denoJSKey              = "JAVASCRIPT_DENO"
+	denoTSKey              = "TYPESCRIPT_DENO"
+	quickJSKey             = "JAVASCRIPT_QUICKJS"
 )
 
 type Profile struct {
@@ -25,6 +28,10 @@ type Profile struct {
 }
 
 var profiles = map[string]Profile{
+	"SQUIRREL": {SourceLang: "SQUIRREL", Extension: "nut", DefaultTarget: "Main.cnut", CompileKind: "squirrel", RunLang: "squirrel", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+
+	"PARI_GP":       {SourceLang: "PARI_GP", Extension: "gp", DefaultTarget: "Main.gp", CompileKind: "pari-gp", RunLang: "pari-gp", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"ENTRY":         {SourceLang: "ENTRY", Extension: "entry.json", DefaultTarget: "Main.entry.json", CompileKind: "entry", RunLang: "entry", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"C":             {SourceLang: "C", Extension: "c", DefaultTarget: "Main", CompileKind: "c", CompileStd: "c11", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"C89":           {SourceLang: "C89", Extension: "c", DefaultTarget: "Main", CompileKind: "c", CompileStd: "c90", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
 	"C99":           {SourceLang: "C99", Extension: "c", DefaultTarget: "Main", CompileKind: "c", CompileStd: "c99", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1},
@@ -67,6 +74,7 @@ var profiles = map[string]Profile{
 	"JAVA15":        {SourceLang: "JAVA15", Extension: "java", CompileKind: "java", JavaRelease: "15", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"JAVA17":        {SourceLang: "JAVA17", Extension: "java", CompileKind: "java", JavaRelease: "17", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"JAVA21":        {SourceLang: "JAVA21", Extension: "java", CompileKind: "java", JavaRelease: "21", RunLang: "java", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
+	"JAVA25":        {SourceLang: "JAVA25", Extension: "java", CompileKind: "java", JavaRelease: "25", RunLang: "java25", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1280},
 	"GROOVY":        {SourceLang: "GROOVY", Extension: "groovy", CompileKind: "groovy", RunLang: "groovy", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"KOTLIN":        {SourceLang: "KOTLIN", Extension: "kt", DefaultTarget: "Main", CompileKind: "kotlin", RunLang: "binary", TimeMultiplier: 1, MemoryMultiplier: 1, MemoryOffsetMB: 16},
 	"ASM":           {SourceLang: "ASM", Extension: "s", DefaultTarget: "Main", CompileKind: "asm", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
@@ -76,6 +84,7 @@ var profiles = map[string]Profile{
 	"DELPHI":        {SourceLang: "DELPHI", Extension: "dpr", DefaultTarget: "Main", CompileKind: "delphi", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"OBJECTPASCAL":  {SourceLang: "OBJECTPASCAL", Extension: "pas", DefaultTarget: "Main", CompileKind: "objectpascal", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"NIM":           {SourceLang: "NIM", Extension: "nim", DefaultTarget: "Main", CompileKind: "nim", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"NIMONY":        {SourceLang: "NIMONY", Extension: "nim", DefaultTarget: "Main", CompileKind: "nimony", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"CLOJURE":       {SourceLang: "CLOJURE", Extension: "clj", CompileKind: "clojure", RunLang: "clojure", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"RACKET":        {SourceLang: "RACKET", Extension: "rkt", CompileKind: "racket", RunLang: "racket", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"SCHEME":        {SourceLang: "SCHEME", Extension: "scm", CompileKind: "scheme", RunLang: "scheme", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 256},
@@ -147,7 +156,9 @@ var profiles = map[string]Profile{
 	"ERLANG":        {SourceLang: "ERLANG", Extension: "erl", CompileKind: "erlang", RunLang: "erlang", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"MERCURY":       {SourceLang: "MERCURY", Extension: "m", DefaultTarget: "Main", CompileKind: "mercury", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"PROLOG":        {SourceLang: "PROLOG", Extension: "pl", CompileKind: "prolog", RunLang: "prolog", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"PICAT":         {SourceLang: "PICAT", Extension: "pi", CompileKind: "picat", RunLang: "picat", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"GNU_PROLOG":    {SourceLang: "GNU_PROLOG", Extension: "pl", DefaultTarget: "Main", CompileKind: "gnu-prolog", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"SCALA3":        {SourceLang: "SCALA3", Extension: "scala", CompileKind: "scala3", RunLang: "scala3", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"SCALA":         {SourceLang: "SCALA", Extension: "scala", CompileKind: "scala", RunLang: "scala", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"FSHARP":        {SourceLang: "FSHARP", Extension: "fs", CompileKind: "fsharp", RunLang: "fsharp", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
 	"WHITESPACE":    {SourceLang: "WHITESPACE", Extension: "ws", CompileKind: "whitespace", RunLang: "whitespace", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
@@ -155,6 +166,11 @@ var profiles = map[string]Profile{
 	"BF":            {SourceLang: "BF", Extension: "bf", CompileKind: "brainfuck", RunLang: "brainfuck", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"MALBOLGE":      {SourceLang: "MALBOLGE", Extension: "mal", CompileKind: "malbolge", RunLang: "malbolge", TimeMultiplier: 5, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"LOLCODE":       {SourceLang: "LOLCODE", Extension: "lol", CompileKind: "lolcode", RunLang: "lolcode", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"SHAKESPEARE":   {SourceLang: "SHAKESPEARE", Extension: "spl", CompileKind: "shakespeare", RunLang: "shakespeare", TimeMultiplier: 5, TimeOffsetMs: 2000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"PIET":          {SourceLang: "PIET", Extension: "png", CompileKind: "piet", RunLang: "piet", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
+	"UNLAMBDA":      {SourceLang: "UNLAMBDA", Extension: "unl", CompileKind: "unlambda", RunLang: "unlambda", TimeMultiplier: 5, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"LAZYK":         {SourceLang: "LAZYK", Extension: "lazy", CompileKind: "lazyk", RunLang: "lazyk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
+	"INTERCAL":      {SourceLang: "INTERCAL", Extension: "i", DefaultTarget: "Main", CompileKind: "intercal", RunLang: "binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"APECODE":       {SourceLang: "APECODE", Extension: "ape", DefaultTarget: "Main", CompileKind: "apecode", RunLang: "binary", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"WASM":          {SourceLang: "WASM", Extension: "wat", DefaultTarget: "Main.wasm", CompileKind: "wasm", RunLang: "wasm", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	asProfileKey:    {SourceLang: asProfileKey, Extension: "ts", DefaultTarget: "Main.wasm", CompileKind: "assemblyscript", RunLang: "assemblyscript", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
@@ -185,6 +201,7 @@ var profiles = map[string]Profile{
 	"QBASIC":        {SourceLang: "QBASIC", Extension: "bas", DefaultTarget: "Main", CompileKind: "classic-basic", RunLang: "binary", TimeMultiplier: 1, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 128},
 	"SMALLTALK":     {SourceLang: "SMALLTALK", Extension: "st", CompileKind: "smalltalk", RunLang: "smalltalk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"GST":           {SourceLang: "GST", Extension: "st", CompileKind: "smalltalk", RunLang: "smalltalk", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
+	"WREN":          {SourceLang: "WREN", Extension: "wren", DefaultTarget: "Main.wren", CompileKind: "wren", RunLang: "wren", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 64},
 	"GOLFSCRIPT":    {SourceLang: "GOLFSCRIPT", Extension: "gs", CompileKind: "golfscript", RunLang: "golfscript", TimeMultiplier: 3, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"MOJO":          {SourceLang: "MOJO", Extension: "mojo", DefaultTarget: "Main", CompileKind: "mojo", RunLang: "mojo-binary", TimeMultiplier: 2, TimeOffsetMs: 1000, MemoryMultiplier: 1, MemoryOffsetMB: 512},
 	"DENO":          {SourceLang: "DENO", Extension: "ts", CompileKind: "deno", RunLang: "deno", TimeMultiplier: 3, TimeOffsetMs: 2000, MemoryMultiplier: 2, MemoryOffsetMB: 1024},
@@ -243,7 +260,11 @@ func NormalizeRunLang(language string) string {
 	}
 	key := strings.ToLower(raw)
 	switch key {
-	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "bun", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
+	case "pari-gp", "pari/gp", "gp":
+		return "pari-gp"
+	case "entry":
+		return key
+	case "binary", "go-binary", "mojo-binary", "pony-binary", "python", "pypy", "java", "javascript", "bun", "ruby", "php", "lua", "luajit", "perl", "uhmlang", "text", "csharp", "ocaml", "elixir", "sqlite", "julia", "erlang", "prolog", "smlnj", "r", "groovy", "scala", "scala3", "fsharp", "whitespace", "befunge", "brainfuck", "malbolge", "lolcode", "shakespeare", "piet", "unlambda", "lazyk", "apecode", "wasm", "assemblyscript", "factor", "lisp", "picolisp", "rocq", "clojure", "racket", "scheme", "chez-scheme", "guile", "chicken-scheme", "awk", "tcl", "gdl", "octave", "vhdl", "verilog", "c3", "vbnet", "vb6", "gleam", "cuda-ocelot", "graphql", "lean4", "agda", "dafny", "tla", "why3", "isabelle", "fstar", "alloy", "acl2", "kframework", "smalltalk", "golfscript", "deno", "quickjs", "kotlin-jvm", "duckdb", "bqn", "apl", "j", "uiua", "janet", "aheui", "haxe", "raku", "sed", "bc", "forth", "algol68", "bash", "posix-sh", "zsh", "fish", "powershell":
 		return key
 	case "chez", "chezscheme", "chez_scheme":
 		return "chez-scheme"
@@ -279,6 +300,12 @@ func NormalizeRunLang(language string) string {
 		return "smlnj"
 	case "lol":
 		return "lolcode"
+	case "spl":
+		return "shakespeare"
+	case "lazy-k", "lazy_k":
+		return "lazyk"
+	case "intercal", "ick", "c-intercal":
+		return "binary"
 	case "befunge93", "befunge-93", "bf93":
 		return "befunge"
 	case "vb":

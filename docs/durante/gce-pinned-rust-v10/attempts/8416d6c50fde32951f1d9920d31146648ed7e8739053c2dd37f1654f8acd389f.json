@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "corpus_id": "rust-long-reference-v1",
+  "smoke": false,
+  "complete": false,
+  "started_at": "2026-11-21T04:23:01.364978659Z",
+  "runtime_image": "sha256:856be473011809c36a32d7ecfb6501c45db07b3204b7e475be515ca4baa6cf95",
+  "source_language": "RUST2024",
+  "dispatch_profile": "default",
+  "cpuid_profile": "x86-64-v2",
+  "runner_sha256": "",
+  "environment": null,
+  "repetitions": 3,
+  "native_limits": {
+    "time_ms": 10000,
+    "wall_time_ms": 30000,
+    "memory_mb": 512
+  },
+  "metered_limits": {
+    "cpu_time_ms": 90000,
+    "wall_time_ms": 120000,
+    "memory_mb": 512
+  },
+  "samples": null,
+  "failures": [
+    "local reference API requires inbound_auth=none"
+  ]
+}

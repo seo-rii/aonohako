@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	"aonohako/internal/compilewire"
 	"aonohako/internal/config"
+	"aonohako/internal/cpupolicy"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
@@ -58,6 +60,22 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 		request model.CompileRequest
 	}{
 		{
+			name: "cpp-disallowed-cpu-features",
+			request: model.CompileRequest{
+				Lang:                  "CPP17",
+				DisallowedCPUFeatures: []cpupolicy.Feature{cpupolicy.AVX, cpupolicy.SIMD},
+				Sources:               []model.Source{{Name: "Main.cpp", DataB64: "aW50IG1haW4oKSB7IHJldHVybiAwOyB9Cg=="}},
+			},
+		},
+		{
+			name: "cpp-empty-cpu-features-omitted",
+			request: model.CompileRequest{
+				Lang:                  "CPP17",
+				DisallowedCPUFeatures: []cpupolicy.Feature{},
+				Sources:               []model.Source{{Name: "Main.cpp", DataB64: "aW50IG1haW4oKSB7IHJldHVybiAwOyB9Cg=="}},
+			},
+		},
+		{
 			name: "rust-installed-crates",
 			request: model.CompileRequest{
 				Lang:           "RUST2021",
@@ -100,9 +118,24 @@ func TestRemoteRunnerForwardsCompileRequest(t *testing.T) {
 				if r.URL.Path != "/compile" {
 					t.Fatalf("unexpected remote path: %s", r.URL.Path)
 				}
+				raw, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Fatalf("read request: %v", err)
+				}
 				var req model.CompileRequest
-				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				if err := json.Unmarshal(raw, &req); err != nil {
 					t.Fatalf("decode request: %v", err)
+				}
+				var fields map[string]json.RawMessage
+				if err := json.Unmarshal(raw, &fields); err != nil {
+					t.Fatalf("decode request fields: %v", err)
+				}
+				_, hasCPUFeatures := fields["disallowed_cpu_features"]
+				if hasCPUFeatures != (len(tt.request.DisallowedCPUFeatures) != 0) {
+					t.Errorf("disallowed_cpu_features wire presence = %t; wanted features = %v", hasCPUFeatures, tt.request.DisallowedCPUFeatures)
+				}
+				if !slices.Equal(req.DisallowedCPUFeatures, tt.request.DisallowedCPUFeatures) {
+					t.Errorf("disallowed_cpu_features = %v, want %v", req.DisallowedCPUFeatures, tt.request.DisallowedCPUFeatures)
 				}
 				if req.Lang != tt.request.Lang || req.EntryPoint != tt.request.EntryPoint {
 					t.Fatalf("unexpected compile target: %+v", req)
@@ -334,30 +367,45 @@ func TestRemoteRunnerCompileAbsoluteDeadlineCannotBeExtendedByHeartbeats(t *test
 }
 
 func TestRemoteRunnerCompileAbsoluteDeadlineIncludesBuildLimitAndOverhead(t *testing.T) {
-	var remaining time.Duration
-	runner := &remoteRunner{
-		client: &http.Client{Transport: compileRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-			deadline, ok := req.Context().Deadline()
-			if !ok {
-				t.Fatal("remote request context has no deadline")
+	for _, tc := range []struct {
+		name, language string
+		override, want time.Duration
+	}{
+		{name: "normal compiler", language: "PYTHON3", want: buildTimeout + remoteio.DefaultOperationOverhead},
+		{name: "unknown compiler", language: "UNKNOWN", want: buildTimeout + remoteio.DefaultOperationOverhead},
+		{name: "Nimony", language: "NIMONY", want: 3*time.Minute + remoteio.DefaultOperationOverhead},
+		{name: "lowercase Nimony", language: "nimony", want: 3*time.Minute + remoteio.DefaultOperationOverhead},
+		{name: "mixed case Nimony", language: " Nimony ", want: 3*time.Minute + remoteio.DefaultOperationOverhead},
+		{name: "normal compiler override", language: "PYTHON3", override: 12 * time.Second, want: 12 * time.Second},
+		{name: "Nimony override", language: "NIMONY", override: 12 * time.Second, want: 12 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var remaining time.Duration
+			runner := &remoteRunner{
+				client: &http.Client{Transport: compileRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+					deadline, ok := req.Context().Deadline()
+					if !ok {
+						t.Fatal("remote request context has no deadline")
+					}
+					remaining = time.Until(deadline)
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Status:     "200 OK",
+						Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+						Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"OK\"}\n\n")),
+					}, nil
+				})},
+				compileURL:      "http://remote.example/compile",
+				absoluteTimeout: tc.override,
 			}
-			remaining = time.Until(deadline)
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Status:     "200 OK",
-				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-				Body:       io.NopCloser(strings.NewReader("event: result\ndata: {\"status\":\"OK\"}\n\n")),
-			}, nil
-		})},
-		compileURL: "http://remote.example/compile",
-	}
-	resp := runner.Run(context.Background(), &model.CompileRequest{Lang: "PYTHON3"})
-	if resp.Status != model.CompileStatusOK {
-		t.Fatalf("response = %+v", resp)
-	}
-	want := buildTimeout + remoteio.DefaultOperationOverhead
-	if remaining < want-time.Second || remaining > want+time.Second {
-		t.Fatalf("remote deadline remaining = %s, want about %s", remaining, want)
+			resp := runner.Run(context.Background(), &model.CompileRequest{Lang: tc.language})
+			if resp.Status != model.CompileStatusOK {
+				t.Fatalf("response = %+v", resp)
+			}
+			if remaining < tc.want-time.Second || remaining > tc.want+time.Second {
+				t.Fatalf("remote deadline remaining = %s, want about %s", remaining, tc.want)
+			}
+		})
 	}
 }
 

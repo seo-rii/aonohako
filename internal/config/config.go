@@ -14,15 +14,18 @@ import (
 	"syscall"
 	"time"
 
+	"aonohako/internal/durante"
 	"aonohako/internal/gomodulepolicy"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/platform"
 	"aonohako/internal/pythonpolicy"
 	"aonohako/internal/remoteio"
+	"aonohako/internal/runtimeidentity"
 	"aonohako/internal/runtimepolicy"
 	"aonohako/internal/runvalidation"
 	"aonohako/internal/rustpolicy"
 	"aonohako/internal/security"
+	"aonohako/internal/timing"
 )
 
 type RemoteAuthMode string
@@ -59,12 +62,20 @@ type InboundAuthConfig struct {
 }
 
 type ExecutionConfig struct {
+	WorkMeasurement        durante.Config
 	Platform               platform.RuntimeOptions
 	Remote                 RemoteExecutorConfig
+	CPUNormalization       CPUNormalizationConfig
 	RuntimeTuning          RuntimeTuningConfig
 	RuntimeTuningProfiles  map[string]RuntimeTuningConfig
 	ProblemRuntimeProfiles map[string]string
 	Cgroup                 CgroupConfig
+}
+
+type CPUNormalizationConfig struct {
+	Enabled           bool
+	ReferenceTimeNs   uint64
+	ShortCaseSampling bool
 }
 
 type CgroupConfig struct {
@@ -161,6 +172,7 @@ type Config struct {
 	HeartbeatInterval                    time.Duration
 	BodyReadTimeout                      time.Duration
 	CommunicationEnabled                 bool
+	CompetitiveRuntimeFingerprint        string
 	CommunicationMaxParticipants         int
 	CommunicationMemoryBudgetMB          int
 	CommunicationCPUCount                int
@@ -188,6 +200,10 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	competitiveRuntimeFingerprint := os.Getenv("AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT")
+	if competitiveRuntimeFingerprint != "" && !runtimeidentity.ValidImageDigest(competitiveRuntimeFingerprint) {
+		return Config{}, fmt.Errorf("AONOHAKO_COMPETITIVE_RUNTIME_FINGERPRINT must be the deployed immutable sha256 image digest")
+	}
 	port := getenv("PORT", "8080")
 	runtimePlatform, err := platform.CurrentRuntimeOptions()
 	if err != nil {
@@ -264,6 +280,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	remoteStrictProtocol, err := parseBoolEnv("AONOHAKO_REMOTE_STRICT_PROTOCOL", os.Getenv("AONOHAKO_REMOTE_STRICT_PROTOCOL"), defaultRemoteStrictProtocol(runtimePlatform))
+	if err != nil {
+		return Config{}, err
+	}
+	cpuNormalization, err := loadCPUNormalization()
 	if err != nil {
 		return Config{}, err
 	}
@@ -602,8 +622,98 @@ func Load() (Config, error) {
 			problemRustCrateModes[problemID] = mode
 		}
 	}
+	workMeasurement, err := durante.ParseConfig(os.Getenv("AONOHAKO_DURANTE_FAMILIES"), os.Getenv("AONOHAKO_DURANTE_DRRUN"), os.Getenv("AONOHAKO_DURANTE_CLIENT"), os.Getenv("AONOHAKO_DURANTE_DISPATCH_PROFILE"))
+	if err != nil {
+		return Config{}, err
+	}
+	workMeasurement.ResourcePolicy, err = durante.ParseResourcePolicy(os.Getenv("AONOHAKO_DURANTE_RESOURCE_POLICY"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
+	}
+	workMeasurement.Observe, err = parseBoolEnv("AONOHAKO_DURANTE_OBSERVE", os.Getenv("AONOHAKO_DURANTE_OBSERVE"), false)
+	if err != nil {
+		return Config{}, err
+	}
+	if workMeasurement.Observe && workMeasurement.ResourcePolicy == nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_OBSERVE requires AONOHAKO_DURANTE_RESOURCE_POLICY for bounded diagnostic replays")
+	}
+	if workMeasurement.ResourcePolicy != nil {
+		// Raw envelopes apply to every compatible enabled family. Keep the
+		// runtime and dispatch exclusions used during request admission.
+		usableFamily := false
+		for _, family := range workMeasurement.Families {
+			if durante.ValidateMeasurementFamily(family) != nil {
+				continue
+			}
+			if workMeasurement.DispatchProfile == durante.DispatchGLIBC241 && family != "cpp" {
+				continue
+			}
+			usableFamily = true
+			break
+		}
+		if !usableFamily {
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY requires an enabled, supported family compatible with its dispatch profile")
+		}
+		if err := workMeasurement.ResourcePolicy.ValidateAdmission(maxActive, workRootMaxBytes); err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RESOURCE_POLICY: %w", err)
+		}
+	}
+	workMeasurement.TimePolicy, err = durante.ParseTimePolicy(os.Getenv("AONOHAKO_DURANTE_TIME_POLICY"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_POLICY: %w", err)
+	}
+	workMeasurement.TimeModels, err = durante.ParseTimeModels(os.Getenv("AONOHAKO_DURANTE_TIME_MODELS"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_TIME_MODELS: %w", err)
+	}
+	workMeasurement.RuntimeImage = os.Getenv("AONOHAKO_DURANTE_RUNTIME_IMAGE")
+	switch strings.TrimSpace(os.Getenv("AONOHAKO_DURANTE_LATENCY_BOUND")) {
+	case "", "off":
+	case "v1":
+		if len(workMeasurement.Families) == 0 {
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_LATENCY_BOUND requires an enabled measurement family")
+		}
+		workMeasurement.LatencyBound = true
+	default:
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_LATENCY_BOUND must be empty, off or v1")
+	}
+	switch strings.TrimSpace(os.Getenv("AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES")) {
+	case "", "off":
+	case "v1":
+		workMeasurement.MemoryOperandBytes = true
+	default:
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES must be empty, off or v1")
+	}
+	if err := workMeasurement.ValidateCounters(); err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES: %w", err)
+	}
+	workMeasurement.CPUIDProfile, err = durante.ParseCPUIDProfile(os.Getenv("AONOHAKO_DURANTE_CPUID_PROFILE"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_CPUID_PROFILE: %w", err)
+	}
+	if workMeasurement.CPUIDProfile != "" && len(workMeasurement.Families) == 0 {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_CPUID_PROFILE requires an enabled measurement family")
+	}
+	workMeasurement.RuntimeDeterminism, err = durante.ParseRuntimeDeterminism(os.Getenv("AONOHAKO_DURANTE_RUNTIME_DETERMINISM"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RUNTIME_DETERMINISM: %w", err)
+	}
+	if workMeasurement.RuntimeDeterminism != "" && len(workMeasurement.Families) == 0 {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_RUNTIME_DETERMINISM requires an enabled measurement family")
+	}
+	if err := workMeasurement.ValidateTimeConfiguration(); err != nil {
+		return Config{}, fmt.Errorf("durante time configuration (AONOHAKO_DURANTE_TIME_POLICY, AONOHAKO_DURANTE_TIME_MODELS, AONOHAKO_DURANTE_RUNTIME_IMAGE, AONOHAKO_DURANTE_RUNTIME_DETERMINISM): %w", err)
+	}
+	workMeasurement.Judge, err = durante.ParseJudgePolicy(os.Getenv("AONOHAKO_DURANTE_JUDGE_MODE"), os.Getenv("AONOHAKO_DURANTE_JUDGE_FAMILIES"), os.Getenv("AONOHAKO_DURANTE_JUDGE_INTEGRITY"), os.Getenv("AONOHAKO_DURANTE_JUDGE_INTEGRITY_RATIO"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_JUDGE_MODE (AONOHAKO_DURANTE_JUDGE_FAMILIES, AONOHAKO_DURANTE_JUDGE_INTEGRITY, AONOHAKO_DURANTE_JUDGE_INTEGRITY_RATIO): %w", err)
+	}
+	if err := workMeasurement.Judge.Validate(workMeasurement); err != nil {
+		return Config{}, fmt.Errorf("durante judge configuration: %w", err)
+	}
 	execution := ExecutionConfig{
-		Platform: runtimePlatform,
+		WorkMeasurement: workMeasurement,
+		Platform:        runtimePlatform,
 		Remote: RemoteExecutorConfig{
 			URL:            strings.TrimSpace(os.Getenv("AONOHAKO_REMOTE_RUNNER_URL")),
 			Auth:           parseRemoteAuth(os.Getenv("AONOHAKO_REMOTE_RUNNER_AUTH")),
@@ -612,6 +722,7 @@ func Load() (Config, error) {
 			SSEIdleTimeout: time.Duration(remoteSSEIdleTimeoutSec) * time.Second,
 			StrictProtocol: remoteStrictProtocol,
 		},
+		CPUNormalization:       cpuNormalization,
 		RuntimeTuning:          runtimeTuning,
 		RuntimeTuningProfiles:  runtimeTuningProfiles,
 		ProblemRuntimeProfiles: problemRuntimeProfiles,
@@ -628,6 +739,9 @@ func Load() (Config, error) {
 
 	if platform.CloudRunMarkersPresent() && execution.Platform.DeploymentTarget != platform.DeploymentTargetCloudRun {
 		return Config{}, fmt.Errorf("AONOHAKO_DEPLOYMENT_TARGET=cloudrun is required when Cloud Run markers are present")
+	}
+	if execution.CPUNormalization.Enabled && !supportsCPUNormalization(execution.Platform) {
+		return Config{}, fmt.Errorf("AONOHAKO_CPU_NORMALIZATION=true requires cloudrun embedded helper execution")
 	}
 	contract, err := execution.Platform.SecurityContract()
 	if err != nil {
@@ -805,6 +919,7 @@ func Load() (Config, error) {
 		HeartbeatInterval:                    time.Duration(heartbeatSec) * time.Second,
 		BodyReadTimeout:                      time.Duration(bodyReadTimeoutSec) * time.Second,
 		CommunicationEnabled:                 communicationEnabled,
+		CompetitiveRuntimeFingerprint:        competitiveRuntimeFingerprint,
 		CommunicationMaxParticipants:         communicationMaxParticipants,
 		CommunicationMemoryBudgetMB:          communicationMemoryBudgetMB,
 		CommunicationCPUCount:                communicationCPUCount,
@@ -1060,6 +1175,39 @@ func defaultTrustedPlatformHeaders(opts platform.RuntimeOptions) bool {
 
 func defaultRemoteStrictProtocol(opts platform.RuntimeOptions) bool {
 	return opts.DeploymentTarget != platform.DeploymentTargetDev
+}
+
+func loadCPUNormalization() (CPUNormalizationConfig, error) {
+	// CPU normalization is experimental and must be explicitly enabled.
+	enabled, err := parseBoolEnv("AONOHAKO_CPU_NORMALIZATION", os.Getenv("AONOHAKO_CPU_NORMALIZATION"), false)
+	if err != nil {
+		return CPUNormalizationConfig{}, err
+	}
+	shortCaseSampling, err := parseBoolEnv("AONOHAKO_CPU_SHORT_CASE_SAMPLING", os.Getenv("AONOHAKO_CPU_SHORT_CASE_SAMPLING"), enabled)
+	if err != nil {
+		return CPUNormalizationConfig{}, err
+	}
+	referenceMs, err := parseBoundedIntEnv(
+		"AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS",
+		os.Getenv("AONOHAKO_CPU_NORMALIZATION_REFERENCE_MS"),
+		int(timing.DefaultCPUReferenceTimeNs/uint64(time.Millisecond)),
+		int(timing.MinimumCPUCalibrationTimeNs/uint64(time.Millisecond)),
+		int(timing.MaximumCPUCalibrationTimeNs/uint64(time.Millisecond)),
+	)
+	if err != nil {
+		return CPUNormalizationConfig{}, err
+	}
+	return CPUNormalizationConfig{
+		Enabled:           enabled,
+		ReferenceTimeNs:   uint64(referenceMs) * uint64(time.Millisecond),
+		ShortCaseSampling: shortCaseSampling,
+	}, nil
+}
+
+func supportsCPUNormalization(opts platform.RuntimeOptions) bool {
+	return opts.DeploymentTarget == platform.DeploymentTargetCloudRun &&
+		opts.ExecutionTransport == platform.ExecutionTransportEmbedded &&
+		opts.SandboxBackend == platform.SandboxBackendHelper
 }
 
 func DefaultRuntimeTuningConfig() RuntimeTuningConfig {

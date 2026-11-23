@@ -1,0 +1,4 @@
+% compile/1 emits bytecode without loading it or invoking submitted main/0.
+% Pass the source path as an argument, never as Picat goal text.
+main([File]) =>
+    compile(File).

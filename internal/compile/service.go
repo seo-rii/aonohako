@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -21,7 +22,18 @@ import (
 	"aonohako/internal/util"
 )
 
-const buildTimeout = 60 * time.Second
+const (
+	buildTimeout       = 60 * time.Second
+	nimonyBuildTimeout = 3 * time.Minute
+)
+
+func compileTimeoutForKind(kind string) time.Duration {
+	// Nimony builds macro plugins and their standard library in each workspace.
+	if kind == "nimony" {
+		return nimonyBuildTimeout
+	}
+	return buildTimeout
+}
 
 const (
 	MaxDecodedSourceBytes      = 16 << 20
@@ -94,6 +106,12 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 	if err := pythonpolicy.ValidateArtifactMode(req.PythonArtifactMode, profile.SourceLang); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 	}
+	if err := ValidateDisallowedCPUFeatures(req.Lang, req.DisallowedCPUFeatures); err != nil {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
+	}
+	if len(req.DisallowedCPUFeatures) != 0 && (runtime.GOOS != "linux" || runtime.GOARCH != "amd64") {
+		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "disallowed_cpu_features requires a Linux x86-64 compiler worker"}
+	}
 	if err := rustpolicy.ValidateOptionalCrateMode(req.RustCrateMode); err != nil {
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: "invalid rust_crate_mode: " + err.Error()}
 	}
@@ -155,7 +173,7 @@ func (s *Service) Run(parent context.Context, req *model.CompileRequest) model.C
 		return model.CompileResponse{Status: model.CompileStatusInvalid, Reason: err.Error()}
 	}
 
-	ctx, cancel := context.WithTimeout(parent, buildTimeout)
+	ctx, cancel := context.WithTimeout(parent, compileTimeoutForKind(profile.CompileKind))
 	defer cancel()
 	ctx = withCompileCgroupParent(ctx, s.cgroupParentDir)
 

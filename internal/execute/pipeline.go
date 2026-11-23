@@ -8,9 +8,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
+	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/runvalidation"
 )
@@ -288,26 +291,78 @@ func preparePipelineStdin(step executionPlanStep, artifacts *pipelineArtifactSto
 	return file, maxBytes, nil
 }
 
-func (s *Service) runPipelineV1(ctx context.Context, req *model.RunRequest, _ Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
-	return RedactPipelineResponse(s.runPipelineV1Private(ctx, req, tuning))
+// Each replay needs a bounded startup and execution allowance.
+const (
+	maxStepReplayBudget             = max(stdinURLDownloadTimeout, durante.MaxResourceTimeMs*time.Millisecond) + durante.MaxResourceTimeMs*time.Millisecond
+	MaxPipelineObservationBudget    = runvalidation.MaxPipelineSteps * maxStepReplayBudget
+	MaxLegacyObservationBudget      = runvalidation.MaxSteps * maxStepReplayBudget
+	MaxInteractiveObservationBudget = maxStepReplayBudget
+)
+
+type pipelineObservationBudgetKey struct{}
+
+type stepObservationBudget struct {
+	maximum time.Duration
+	bounded bool
 }
 
-func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunRequest, tuning config.RuntimeTuningConfig) model.RunResponse {
+// WithPipelineObservationBudget records a diagnostic ceiling for an observed
+// execution. The worker starts this clock only after native judging finishes.
+func WithPipelineObservationBudget(ctx context.Context, budget time.Duration) context.Context {
+	return context.WithValue(ctx, pipelineObservationBudgetKey{}, stepObservationBudget{maximum: budget, bounded: true})
+}
+
+func stepObservationBudgetFromContext(ctx context.Context) stepObservationBudget {
+	budget, _ := ctx.Value(pipelineObservationBudgetKey{}).(stepObservationBudget)
+	return budget
+}
+
+func (b stepObservationBudget) allowsReplay() bool { return !b.bounded || b.maximum > 0 }
+
+func (b stepObservationBudget) start(ctx context.Context) (context.Context, context.CancelFunc) {
+	if b.bounded && b.maximum > 0 {
+		return context.WithTimeout(ctx, b.maximum)
+	}
+	return context.WithCancel(ctx)
+}
+
+func (s *Service) runPipelineV1(ctx context.Context, req *model.RunRequest, _ Hooks, tuning config.RuntimeTuningConfig, clocks *stagedWorkClocks) model.RunResponse {
+	return RedactPipelineResponse(s.runPipelineV1Private(ctx, req, tuning, clocks))
+}
+
+func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunRequest, tuning config.RuntimeTuningConfig, clocks *stagedWorkClocks) (response model.RunResponse) {
+	var artifacts *pipelineArtifactStore
+	defer func() { artifacts.close() }()
+
+	// Keep references to immutable native resources and artifacts. Rebuild each
+	// replay input only after the entire native judgment has finished.
+	var replays map[string]pipelineStepReplay
+	if automaticObservationRequested(req, s.workMeasurement) {
+		budget := stepObservationBudgetFromContext(ctx)
+		if budget.allowsReplay() {
+			replays = make(map[string]pipelineStepReplay)
+		}
+		defer func() {
+			replayCtx, cancel := budget.start(ctx)
+			defer cancel()
+			response.WorkMeasurementObservation = s.observePipelineSteps(replayCtx, req, response.Steps, replays, artifacts, tuning)
+		}()
+	}
+
 	plan, err := compileExecutionPlan(req)
 	if err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error(), VerdictSource: "pipeline:resource"}
 	}
-	artifacts, err := newPipelineArtifactStore()
+	artifacts, err = newPipelineArtifactStore()
 	if err != nil {
 		slog.Warn("pipeline artifact store creation failed", "err", err)
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "pipeline artifact store creation failed", VerdictSource: "pipeline:artifact"}
 	}
-	defer artifacts.close()
 
 	stepResults := make([]model.StepResult, 0, len(plan.steps))
 	stepStdout := make(map[string][]byte, len(plan.steps))
 
-	for _, step := range plan.steps {
+	for index, step := range plan.steps {
 		stdin, stdinMaxBytes, err := preparePipelineStdin(step, artifacts)
 		if err != nil {
 			return aggregateStepResponse(model.RunResponse{
@@ -317,24 +372,24 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			}, stepResults)
 		}
 
+		var measurement *model.RunRequest
+		if replays != nil && s.workMeasurementPolicyError == nil {
+			single := pipelineObservationRequest(req, req.Pipeline.Steps[index])
+			if single != nil && observationEligible(single, s.workMeasurement) == "" {
+				measurement = single
+			}
+		}
+		var transcript *interactiveTranscript
 		var resp model.RunResponse
 		var stdout []byte
 		var participantFileOutput []byte
 		var interactorOutputPath string
 		var interactorOutputErr error
+		participantFileOK := true
 		if step.kind == "batch" {
-			stepReq := pipelineProgramRequest(req, step.program, step.limits)
-			for _, output := range step.outputs {
-				source := strings.ToLower(strings.TrimSpace(output.Source.Kind))
-				if source == "participant_file" {
-					stepReq.FileOutputs = []model.OutputFile{{Path: output.Source.Path}}
-				}
-				if source == "participant_stdout" && stepReq.Limits.OutputBytes < int(output.MaxBytes) {
-					stepReq.Limits.OutputBytes = int(output.MaxBytes)
-				}
-			}
+			stepReq := pipelineBatchRequest(req, step.program, step.limits, step.outputs)
 			captureRawStdout := len(stepReq.FileOutputs) > 0
-			run := s.runOneWithStdin(ctx, stepReq, stdin, stdinMaxBytes, Hooks{}, tuning, false, captureRawStdout)
+			run := s.runClockedStage(ctx, stepReq, stdin, stdinMaxBytes, Hooks{}, tuning, false, captureRawStdout, clocks, step.id, step.program.ID)
 			resp = run.response
 			stdout = run.judgeOut
 			if captureRawStdout {
@@ -347,30 +402,14 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 				participantFileOutput = run.judgeOut
 			}
 		} else {
-			stepReq := pipelineProgramRequest(req, step.program, step.limits)
+			stepReq := pipelineClockInteractiveRequest(req, step.program, step.interactor, req.Pipeline.Steps[index])
 			if step.hasInteractorAnswer {
 				stepReq.ExpectedStdout = string(step.interactorAnswer)
 			}
-			stepReq.Interactor = &model.InteractorSpec{
-				Lang:       step.interactor.Lang,
-				Binaries:   step.interactor.Binaries,
-				EntryPoint: step.interactor.EntryPoint,
-				Limits:     step.interactorLimits,
-			}
 			interactorOutputMax := int64(0)
 			for _, output := range step.outputs {
-				sourceKind := strings.ToLower(strings.TrimSpace(output.Source.Kind))
-				if sourceKind == "interactor_output" && output.MaxBytes > interactorOutputMax {
-					interactorOutputMax = output.MaxBytes
-				}
-				if sourceKind == "participant_stdout" && stepReq.Limits.OutputBytes < int(output.MaxBytes) {
-					stepReq.Limits.OutputBytes = int(output.MaxBytes)
-				}
-				if sourceKind == "participant_file" {
-					stepReq.FileOutputs = []model.OutputFile{{Path: output.Source.Path}}
-					if stepReq.Limits.OutputBytes < int(output.MaxBytes) {
-						stepReq.Limits.OutputBytes = int(output.MaxBytes)
-					}
+				if strings.EqualFold(strings.TrimSpace(output.Source.Kind), "interactor_output") {
+					interactorOutputMax = max(interactorOutputMax, output.MaxBytes)
 				}
 			}
 			var interactorOutputFile *os.File
@@ -383,7 +422,22 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 				}
 				interactorOutputPath = interactorOutputFile.Name()
 			}
-			run := s.runInteractiveExecution(ctx, stepReq, stdin, stdinMaxBytes, interactorOutputFile, interactorOutputMax, true, Hooks{}, tuning)
+			nativeCtx := ctx
+			if measurement != nil && ctx.Value(skipInteractiveReplayKey{}) != true {
+				transcript = &interactiveTranscript{}
+				nativeCtx = context.WithValue(ctx, interactiveTranscriptKey{}, transcript)
+			}
+			plans := clocks.interactivePlans(stepReq, step.id, step.program.ID, step.interactor.ID)
+			run := s.runInteractiveExecution(nativeCtx, stepReq, stdin, stdinMaxBytes, interactorOutputFile, interactorOutputMax, true, Hooks{}, tuning, plans)
+			for _, row := range run.response.WorkMeasurements {
+				switch row.Role {
+				case "contestant":
+					clocks.record(step.id, row.Role, step.program.ID, row)
+				case "interactor":
+					clocks.record(step.id, row.Role, step.interactor.ID, row)
+				}
+			}
+			run.response.WorkMeasurements = nil
 			if interactorOutputFile != nil {
 				if closeErr := interactorOutputFile.Close(); closeErr != nil && run.interactorOutputErr == nil {
 					run.interactorOutputErr = closeErr
@@ -399,6 +453,7 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			participantFileOutput = run.participantFileOutput
 			interactorOutputErr = run.interactorOutputErr
 			if run.participantFileErr != nil {
+				participantFileOK = false
 				interactorOutputErr = run.participantFileErr
 			}
 		}
@@ -408,8 +463,31 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 		resp.Stdout = "" // Pipeline artifacts and interactive transcripts are private.
 		stepResult := stepResultFromResponse(step.id, step.program.ID, resp)
 		stepResult.Stdout = ""
+		if step.kind == "interactive" && len(resp.Steps) == 2 {
+			roles := &model.PipelineRoleTimes{
+				Contestant: pipelineRoleCPU(step.program.ID, resp.Steps[0]),
+				Interactor: pipelineRoleCPU(step.interactor.ID, resp.Steps[1]),
+			}
+			stepResult.CPUTimeByRole = roles
+			stepResult.CPUTimeNs = sumStepNanoseconds(roles.Contestant.CPUTimeNs, roles.Interactor.CPUTimeNs)
+		}
 		stepResults = append(stepResults, stepResult)
+		var replay *pipelineStepReplay
+		if measurement != nil && resp.ExitCode != nil && *resp.ExitCode == 0 && !resp.StdoutTruncated &&
+			((step.kind == "batch" && stepResult.Status == model.RunStatusAccepted) ||
+				(participantFileOK && transcript.ready() && completedInteractiveExchange(stepResult))) {
+			replay = &pipelineStepReplay{request: measurement, inputs: step, transcript: transcript,
+				outputs: pipelineOutputDigests(stdout, participantFileOutput)}
+		}
 		if resp.Status != "OK" && resp.Status != model.RunStatusAccepted {
+			if clocks != nil {
+				// Only the pipeline final judge can award a score.
+				resp.Score = nil
+			}
+			// A cleanly rejected dialogue still supplies a complete transcript.
+			if replay != nil {
+				replays[step.id] = *replay
+			}
 			return aggregateStepResponse(failedStepResponse(resp, step.id), stepResults)
 		}
 		if interactorOutputErr != nil {
@@ -453,13 +531,28 @@ func (s *Service) runPipelineV1Private(ctx context.Context, req *model.RunReques
 			}
 			artifactBytes += int64(len(data))
 		}
+		if replay != nil {
+			replays[step.id] = *replay
+		}
 		stepResults[len(stepResults)-1].HandoffBytes = artifactBytes
 		stepStdout[step.id] = append([]byte(nil), stdout...)
 	}
 
 	actual := stepStdout[plan.finalJudge.actualStepID]
-	final := s.runPipelineFinalJudge(ctx, req, plan.finalJudge, actual, tuning)
+	final := s.runPipelineFinalJudge(ctx, req, plan.finalJudge, actual, tuning, clocks)
 	return aggregateStepResponse(final, stepResults)
+}
+
+func pipelineRoleCPU(programID string, role model.StepResult) model.PipelineRoleCPU {
+	return model.PipelineRoleCPU{ProgramID: programID, Status: role.Status, ExitCode: role.ExitCode,
+		CPUTimeMs: role.CPUTimeMs, CPUTimeNs: role.CPUTimeNs, RawCPUTimeNs: role.RawCPUTimeNs}
+}
+
+func completedInteractiveExchange(step model.StepResult) bool {
+	roles := step.CPUTimeByRole
+	return roles != nil && roles.Contestant.Status == model.RunStatusAccepted &&
+		roles.Contestant.ExitCode != nil && *roles.Contestant.ExitCode == 0 &&
+		completedInteractorVerdict(step.Status, step.VerdictSource, roles.Interactor.Status, roles.Interactor.ExitCode)
 }
 
 // RedactPipelineResponse applies the public Pipeline V1 diagnostic boundary.
@@ -471,6 +564,7 @@ func RedactPipelineResponse(resp model.RunResponse) model.RunResponse {
 	resp.SidecarOutputs = nil
 	resp.SidecarErrors = nil
 	resp.Reason = pipelinePublicReason(resp.Status, resp.VerdictSource)
+	redactStagedClockRows(resp.WorkMeasurements)
 	for i := range resp.Steps {
 		step := &resp.Steps[i]
 		step.Stdout = ""
@@ -507,21 +601,35 @@ func pipelinePublicReason(status, source string) string {
 	}
 }
 
+func pipelineBatchRequest(req *model.RunRequest, program model.RunProgram, limits model.Limits, outputs []model.PipelineOutput) *model.RunRequest {
+	single := pipelineProgramRequest(req, program, limits)
+	for _, output := range outputs {
+		switch strings.ToLower(strings.TrimSpace(output.Source.Kind)) {
+		case "participant_file":
+			single.FileOutputs = []model.OutputFile{{Path: output.Source.Path}}
+		case "participant_stdout":
+			single.Limits.OutputBytes = max(single.Limits.OutputBytes, int(output.MaxBytes))
+		}
+	}
+	return single
+}
+
 func pipelineProgramRequest(req *model.RunRequest, program model.RunProgram, limits model.Limits) *model.RunRequest {
 	return &model.RunRequest{
-		Lang:              program.Lang,
-		Binaries:          program.Binaries,
-		Limits:            limits,
-		CaptureLimits:     req.CaptureLimits,
-		ProblemID:         req.ProblemID,
-		RuntimeProfile:    req.RuntimeProfile,
-		PythonLibraryMode: req.PythonLibraryMode,
-		EnableNetwork:     program.EnableNetwork,
-		EntryPoint:        program.EntryPoint,
+		Lang:                  program.Lang,
+		Binaries:              program.Binaries,
+		Limits:                limits,
+		CaptureLimits:         req.CaptureLimits,
+		ProblemID:             req.ProblemID,
+		RuntimeProfile:        req.RuntimeProfile,
+		PythonLibraryMode:     req.PythonLibraryMode,
+		DisallowedCPUFeatures: slices.Clone(req.DisallowedCPUFeatures),
+		EnableNetwork:         program.EnableNetwork,
+		EntryPoint:            program.EntryPoint,
 	}
 }
 
-func (s *Service) runPipelineFinalJudge(ctx context.Context, req *model.RunRequest, judge executionPlanFinalJudge, actual []byte, tuning config.RuntimeTuningConfig) model.RunResponse {
+func (s *Service) runPipelineFinalJudge(ctx context.Context, req *model.RunRequest, judge executionPlanFinalJudge, actual []byte, tuning config.RuntimeTuningConfig, clocks *stagedWorkClocks) model.RunResponse {
 	if strings.EqualFold(strings.TrimSpace(judge.spec.Kind), "diff") {
 		status := model.RunStatusWA
 		if compareOutputs(judge.expected, actual) {
@@ -530,19 +638,24 @@ func (s *Service) runPipelineFinalJudge(ctx context.Context, req *model.RunReque
 		return model.RunResponse{Status: status, VerdictSource: "final:diff"}
 	}
 
+	checker := clocks.checkerClocks()
+	setupSource := "final:spj"
+	if checker != nil {
+		setupSource = "final:checker:spj"
+	}
 	workDir, err := createRunWorkDir()
 	if err != nil {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "final judge workspace creation failed", VerdictSource: "final:spj"}
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "final judge workspace creation failed", VerdictSource: setupSource}
 	}
 	defer os.RemoveAll(workDir)
 	ws, err := prepareWorkspaceDirs(workDir)
 	if err != nil {
-		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "final judge workspace preparation failed", VerdictSource: "final:spj"}
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "final judge workspace preparation failed", VerdictSource: setupSource}
 	}
 	if os.Geteuid() == 0 {
 		identity := sandboxIdentity{uid: defaultSandboxUID, gid: defaultSandboxGID}
 		if err := hardenWorkspaceRootForIdentity(ws.RootDir, identity); err != nil {
-			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "final judge workspace preparation failed", VerdictSource: "final:spj"}
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: "final judge workspace preparation failed", VerdictSource: setupSource}
 		}
 	}
 	judgeReq := &model.RunRequest{
@@ -553,7 +666,18 @@ func (s *Service) runPipelineFinalJudge(ctx context.Context, req *model.RunReque
 		PythonLibraryMode: req.PythonLibraryMode,
 		RuntimeProfile:    req.RuntimeProfile,
 	}
-	ok, score, judgeErr := runSPJ(ctx, ws, judgeReq, string(actual), "", nil, tuning, s.cgroupParentDir)
+	ok, score, judgeErr := runSPJ(ctx, ws, judgeReq, string(actual), "", nil, tuning, s.cgroupParentDir, s.cpuNormalizer, checker)
+	if checker != nil {
+		clocks.record("", "checker", "checker", checker.checker)
+		if judgeErr != nil {
+			source := setupSource
+			switch checker.checker.TerminationSource {
+			case "durante_work_clock", "durante_work_clock_final", "durante_peer_clock_error":
+				source = "final:checker:" + checker.checker.TerminationSource
+			}
+			return model.RunResponse{Status: model.RunStatusInitFail, Reason: judgeErr.Error(), VerdictSource: source}
+		}
+	}
 	if judgeErr != nil {
 		return model.RunResponse{Status: model.RunStatusRE, Reason: judgeErr.Error(), VerdictSource: "final:spj", Score: score}
 	}

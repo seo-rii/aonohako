@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/isolation/cgroup"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
@@ -47,21 +48,36 @@ type communicationManagerResult struct {
 	Verdict string   `json:"verdict"`
 	Score   *float64 `json:"score"`
 	Message string   `json:"message"`
+	match   *communicationMatchManagerResult
 }
 
 type communicationProcessResult struct {
-	manager     bool
-	participant int
-	request     *model.RunRequest
-	result      execResult
+	started          bool
+	entryPoint       string
+	manager          bool
+	participant      int
+	request          *model.RunRequest
+	result           execResult
+	completedAt      time.Time
+	wallDeadlineAt   time.Time
+	resultProtocolAt time.Time
+	meter            *durante.Session
+	interrupted      bool
+}
+
+type communicationManagerProtocol struct {
+	result      communicationManagerResult
+	err         error
 	completedAt time.Time
 }
 
 type communicationPreparedProcess struct {
-	workDir string
-	ws      Workspace
-	args    []string
-	request *model.RunRequest
+	entryPoint string
+	workDir    string
+	ws         Workspace
+	args       []string
+	request    *model.RunRequest
+	meter      *durante.Session
 }
 
 type communicationOutputWriter struct {
@@ -113,13 +129,49 @@ func (s *Service) supportsCommunicationV1() bool {
 	}, s.cgroupParentDir, s.communicationEnabled)
 }
 
-func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig) model.RunResponse {
+func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, hooks Hooks, tuning config.RuntimeTuningConfig, plans map[peerTimeIdentity]peerTimePlan) (response model.RunResponse) {
 	startedAt := timing.MonotonicNow()
+	competitive := req.Communication != nil && req.Communication.Version == 2
+	online := req.WorkMeasurementPeerTime != nil && req.WorkMeasurementPeerTime.Version == 2
+	defer func() {
+		if online && (response.StartedParticipants == 0 || (response.Match != nil && response.Match.Outcome == "judge_error")) {
+			response.Status, response.Score = model.RunStatusInitFail, nil
+		}
+		if req.WorkMeasurement && len(response.WorkMeasurements) == 0 && response.StartedParticipants == 0 {
+			if roles, err := workMeasurementRequestRoles(req); err == nil {
+				for _, role := range roles {
+					response.WorkMeasurements = append(response.WorkMeasurements, model.WorkMeasurementProcess{
+						Role: role.role, ProgramID: role.programID, ParticipantIndex: role.participantIndex,
+						ExecutionStatus: model.RunStatusInitFail, TerminationSource: response.VerdictSource,
+					})
+				}
+			}
+		}
+		if !competitive {
+			return
+		}
+		if response.Match == nil {
+			response.Match = communicationMatchFailure(req, response.Reason)
+		}
+		response.Score = nil
+		response.Match.RuntimeFingerprint = s.competitiveRuntimeIdentity.RuntimeFingerprint
+		response.Match.RunnerSHA256 = s.competitiveRuntimeIdentity.RunnerSHA256
+		response.Match.ImageDigest = s.competitiveRuntimeIdentity.ImageDigest
+		for _, code := range []string{"input_integrity", "runtime_fingerprint"} {
+			if response.VerdictSource == "communication:"+code {
+				response.Match.Retriable = false
+				response.Match.ErrorCode = code
+			}
+		}
+	}()
 	if !s.supportsCommunicationV1() {
 		return communicationFailure("CommunicationJudge unsupported: communication-v1 requires an explicitly enabled Cloud Run embedded helper or a self-hosted cgroup runner", "communication:capability", 0)
 	}
 	if err := runvalidation.ValidateCommunication(req); err != nil {
 		return communicationFailure("invalid communication request: "+err.Error(), "communication:request", 0)
+	}
+	if competitive && (s.competitiveRuntimeIdentity.RuntimeFingerprint == "" || req.Communication.RuntimeFingerprint != s.competitiveRuntimeIdentity.RuntimeFingerprint) {
+		return communicationFailure("competitive runtime fingerprint is unavailable or does not match the pinned runner", "communication:runtime_fingerprint", 0)
 	}
 	if req.Communication.ParticipantCount > s.communicationMaxParticipants {
 		return communicationFailure(
@@ -133,6 +185,8 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		)
 	}
 	participantProgram, managerProgram := communicationPrograms(req)
+	participantPrograms := communicationParticipantPrograms(req)
+	participantProgram = participantPrograms[0]
 	participantLimits := req.Limits
 	if participantLimits.WorkspaceBytes <= 0 || participantLimits.WorkspaceBytes > communicationParticipantWorkspaceBytes {
 		participantLimits.WorkspaceBytes = communicationParticipantWorkspaceBytes
@@ -168,9 +222,11 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				0,
 			)
 		}
-		participantArtifactBytes, err := communicationProgramDecodedBytes(participantProgram)
-		if err != nil || participantArtifactBytes > participantReq.Limits.WorkspaceBytes {
-			return communicationFailure("communication participant artifacts exceed workspace policy", "communication:admission", 0)
+		for _, program := range participantPrograms {
+			participantArtifactBytes, err := communicationProgramDecodedBytes(program)
+			if err != nil || participantArtifactBytes > participantReq.Limits.WorkspaceBytes {
+				return communicationFailure("communication participant artifacts exceed workspace policy", "communication:admission", 0)
+			}
 		}
 		managerArtifactBytes, err := communicationProgramDecodedBytes(managerProgram)
 		if err != nil || managerArtifactBytes > managerReq.Limits.WorkspaceBytes {
@@ -181,7 +237,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			s.cgroupParentDir,
 			req.Communication.ParticipantCount,
 			s.communicationCPUCount,
-			participantReq.Limits.TimeMs,
+			max(participantReq.Limits.TimeMs, s.cpuNormalizer.RawLimitMillis(participantReq.Limits.TimeMs)),
 		)
 		if !admitted || participantWallMs > int64(s.communicationWallBudgetMs) {
 			return communicationFailure("communication participant wall allowance exceeds runner budget", "communication:admission", 0)
@@ -191,13 +247,22 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			s.cgroupParentDir,
 			req.Communication.ParticipantCount,
 			s.communicationCPUCount,
-			managerReq.Limits.TimeMs,
+			max(managerReq.Limits.TimeMs, s.cpuNormalizer.RawLimitMillis(managerReq.Limits.TimeMs)),
 		)
 		if !admitted || managerWallMs > int64(s.communicationWallBudgetMs) {
 			return communicationFailure("communication manager wall allowance exceeds runner budget", "communication:admission", 0)
 		}
 	}
 
+	if online {
+		firstSeat := 0
+		seatWall := int64(plans[peerTimeKey("participant", participantProgram.ID, &firstSeat)].rawLimits.WallTimeMs)
+		managerWall := int64(plans[peerTimeKey("manager", managerProgram.ID, nil)].rawLimits.WallTimeMs)
+		if seatWall <= 0 || managerWall <= 0 || seatWall > participantWallMs || managerWall > managerWallMs {
+			return communicationFailure("peer work clock wall allowance exceeds runner budget", "communication:admission", 0)
+		}
+		participantWallMs, managerWallMs = seatWall, managerWall
+	}
 	participantTemplate, initFailure := prepareCommunicationProcess(participantReq, tuning, "participant")
 	if initFailure != nil {
 		return communicationFailure(initFailure.Reason, "communication:participant:init", 0)
@@ -212,9 +277,20 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	participants := make([]communicationPreparedProcess, req.Communication.ParticipantCount)
 	participants[0] = participantTemplate
 	for i := 1; i < len(participants); i++ {
-		process, err := cloneCommunicationProcess(participantTemplate, participantReq)
-		if err != nil {
-			return communicationFailure("participant workspace preparation failed", "communication:participant:init", 0)
+		var process communicationPreparedProcess
+		if competitive {
+			seatReq := communicationProgramRequest(req, participantPrograms[i], participantLimits)
+			var failure *model.RunResponse
+			process, failure = prepareCommunicationProcess(seatReq, tuning, "participant")
+			if failure != nil {
+				return communicationFailure("participant workspace preparation failed", "communication:participant:init", 0)
+			}
+		} else {
+			var err error
+			process, err = cloneCommunicationProcess(participantTemplate, participantReq)
+			if err != nil {
+				return communicationFailure("participant workspace preparation failed", "communication:participant:init", 0)
+			}
 		}
 		participants[i] = process
 		prepared = append(prepared, process)
@@ -225,6 +301,35 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		return communicationFailure(managerInit.Reason, "communication:manager:init", 0)
 	}
 	prepared = append(prepared, manager)
+	if req.WorkMeasurement {
+		for i := range participants {
+			identity := communicationParticipantIdentity(i)
+			if online {
+				id := participantProgram.ID
+				if competitive {
+					id = participantPrograms[i].ID
+				}
+				// Legacy communication clones a program and request, but each
+				// seat must own its request, clock file and allowance.
+				seatReq := *participants[i].request
+				applyPeerWorkClock(&seatReq, plans[peerTimeKey("participant", id, &i)])
+				participants[i].request = &seatReq
+			}
+			meter, err := durante.Prepare(ctx, participants[i].ws.RootDir, s.workMeasurement, participants[i].request.Lang, int(identity.uid), int(identity.gid))
+			if err != nil {
+				return communicationFailure("participant durante preparation failed: "+err.Error(), "communication:participant:durante", 0)
+			}
+			participants[i].meter = meter
+		}
+		if online {
+			applyPeerWorkClock(manager.request, plans[peerTimeKey("manager", managerProgram.ID, nil)])
+		}
+		meter, err := durante.Prepare(ctx, manager.ws.RootDir, s.workMeasurement, manager.request.Lang, int(security.CommunicationManagerUID), int(security.CommunicationManagerGID))
+		if err != nil {
+			return communicationFailure("manager durante preparation failed: "+err.Error(), "communication:manager:durante", 0)
+		}
+		manager.meter = meter
+	}
 
 	managerRemaining, err := communicationWorkspaceRemaining(manager.ws.RootDir, managerReq.Limits.WorkspaceBytes)
 	if err != nil {
@@ -233,6 +338,15 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	inputPath, err := writeCommunicationDataFile(ctx, filepath.Join(manager.ws.RootDir, ".tmp"), "communication-input-*", req.Communication.Input, req.Communication.InputURL, managerRemaining)
 	if err != nil {
 		return communicationFailure("communication input materialization failed", "communication:input", 0)
+	}
+	if competitive {
+		valid, err := communicationFileMatchesSHA256(inputPath, req.Communication.InputSHA256)
+		if err != nil {
+			return communicationFailure("communication input integrity check failed", "communication:input", 0)
+		}
+		if !valid {
+			return communicationFailure("communication input does not match immutable fixture sha256", "communication:input_integrity", 0)
+		}
 	}
 	managerRemaining, err = communicationWorkspaceRemaining(manager.ws.RootDir, managerReq.Limits.WorkspaceBytes)
 	if err != nil {
@@ -258,7 +372,15 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		slog.Warn("communication cgroup creation failed", "err", err)
 		return communicationFailure("communication aggregate cgroup setup failed", "communication:cgroup", 0)
 	}
-	defer cleanupSandboxCgroup("communication", aggregate)
+	defer func() {
+		if err := cleanupSandboxCgroup("communication", aggregate); err != nil && online {
+			response.Status, response.Score = model.RunStatusInitFail, nil
+			response.Reason, response.VerdictSource = "communication process group cleanup failed", "communication:aggregate_cleanup"
+			if competitive {
+				response.Match = communicationMatchFailure(req, response.Reason)
+			}
+		}
+	}()
 
 	communicationCtx, cancelCommunication := context.WithCancel(ctx)
 	killDone := make(chan struct{})
@@ -348,17 +470,14 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		writeFD := readFD + 1
 		manager.args = append(manager.args, "/proc/self/fd/"+strconv.Itoa(readFD), "/proc/self/fd/"+strconv.Itoa(writeFD))
 	}
+	if competitive {
+		manager.args = append(manager.args, req.Communication.MatchSeed)
+	}
 
-	managerResultCh := make(chan struct {
-		result communicationManagerResult
-		err    error
-	}, 1)
+	managerResultCh := make(chan communicationManagerProtocol, 1)
 	go func() {
-		managerResult, readErr := readCommunicationManagerResult(resultRead)
-		managerResultCh <- struct {
-			result communicationManagerResult
-			err    error
-		}{result: managerResult, err: readErr}
+		managerResult, readErr := readCommunicationResult(resultRead, req.Communication.Version)
+		managerResultCh <- communicationManagerProtocol{result: managerResult, err: readErr, completedAt: time.Now()}
 	}()
 
 	totalProcesses := len(participants) + 1
@@ -366,6 +485,13 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	releaseTargets := make(chan struct{})
 	processCh := make(chan communicationProcessResult, totalProcesses)
 	allParticipantsStarted := make(chan struct{})
+	allTargetsStarted := make(chan struct{})
+	var startedTargets atomic.Int32
+	onTargetStarted := func() {
+		if startedTargets.Add(1) == int32(totalProcesses) {
+			close(allTargetsStarted)
+		}
+	}
 	managerFilesMonitorDone := make(chan struct{})
 	go func() {
 		defer close(managerFilesMonitorDone)
@@ -380,15 +506,18 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		cancelCommunication()
 		<-managerFilesMonitorDone
 	}()
-	participantCancels := make([]context.CancelFunc, len(participants))
+	participantCancels := make([]context.CancelCauseFunc, len(participants))
 	participantTimers := make([]*time.Timer, len(participants))
+	participantDeadlineNano := make([]atomic.Int64, len(participants))
 	var startedParticipants atomic.Int32
 	var firstParticipantFailure *communicationProcessResult
 	var managerCompletedAt time.Time
 	cancellationTriggered := false
+	var participantCancellationAt time.Time
+	var participantCancellationNano atomic.Int64
 
 	for i := range participants {
-		participantCtx, cancelParticipant := context.WithCancel(communicationCtx)
+		participantCtx, cancelParticipant := context.WithCancelCause(communicationCtx)
 		participantCancels[i] = cancelParticipant
 		process := participants[i]
 		process.args = append(process.args, strconv.Itoa(i))
@@ -396,28 +525,33 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		participantOutput := &communicationOutputWriter{
 			target:    pipe.stdoutWrite,
 			remaining: int64(communicationOutputLimitBytes(process.request)),
-			onLimit:   cancelParticipant,
+			onLimit:   func() { cancelParticipant(context.Canceled) },
 		}
 		go func(index int, prepared communicationPreparedProcess) {
+			started := false
 			res := executeSandboxCommandWithStreams(
 				participantCtx,
 				prepared.ws,
 				prepared.args,
 				prepared.request,
 				sandboxStreamConfig{
-					stdin:         pipe.stdinRead,
-					liveStdin:     true,
-					stdout:        participantOutput,
-					onStdoutDone:  func() { _ = pipe.stdoutWrite.Close() },
-					identity:      communicationParticipantIdentity(index),
-					onTargetReady: func() { readyCh <- false },
+					workMeasurement: prepared.meter,
+					stdin:           pipe.stdinRead,
+					liveStdin:       true,
+					stdout:          participantOutput,
+					onStdoutDone:    func() { _ = pipe.stdoutWrite.Close() },
+					identity:        communicationParticipantIdentity(index),
+					onTargetReady:   func() { readyCh <- false },
 					onTargetStarted: func() {
+						started = true
 						if startedParticipants.Add(1) == int32(len(participants)) {
 							close(allParticipantsStarted)
 						}
+						onTargetStarted()
 					},
 					targetRelease:           releaseTargets,
 					communicationRestricted: true,
+					cpuNormalizer:           s.cpuNormalizer,
 				},
 				Hooks{},
 				communicationDiagnosticBytes,
@@ -429,44 +563,79 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 				res.Reason = "participant output limit exceeded"
 				res.VerdictSource = "output_limit"
 			}
-			processCh <- communicationProcessResult{
+			completedAt := time.Now()
+			interrupted := participantCtx.Err() != nil
+			if online {
+				finishPeerWorkClock(prepared.request, prepared.meter, &res, peerWorkClockCause(ctx, participantCtx), "participant")
+			}
+			process := communicationProcessResult{
+				started:     started,
+				entryPoint:  prepared.entryPoint,
 				participant: index,
 				request:     prepared.request,
 				result:      res,
-				completedAt: time.Now(),
+				completedAt: completedAt,
+				meter:       prepared.meter,
+				interrupted: interrupted,
 			}
+			if deadlineAt := participantDeadlineNano[index].Load(); deadlineAt != 0 {
+				process.wallDeadlineAt = time.Unix(0, deadlineAt)
+			}
+			processCh <- process
 		}(i, process)
 	}
 
-	managerCtx, cancelManager := context.WithCancel(communicationCtx)
-	defer cancelManager()
+	var managerDeadlineNano atomic.Int64
+	managerCtx, cancelManager := context.WithCancelCause(communicationCtx)
+	defer cancelManager(context.Canceled)
 	go func() {
+		started := false
 		res := executeSandboxCommandWithStreams(
 			managerCtx,
 			manager.ws,
 			manager.args,
 			manager.request,
 			sandboxStreamConfig{
+				workMeasurement: manager.meter,
 				identity: sandboxIdentity{
 					uid: security.CommunicationManagerUID,
 					gid: security.CommunicationManagerGID,
 				},
-				extraFiles:              managerFiles,
-				onTargetReady:           func() { readyCh <- true },
+				extraFiles:    managerFiles,
+				onTargetReady: func() { readyCh <- true },
+				onTargetStarted: func() {
+					started = true
+					onTargetStarted()
+				},
 				targetRelease:           releaseTargets,
 				communicationRestricted: true,
+				cpuNormalizer:           s.cpuNormalizer,
 			},
 			Hooks{},
 			communicationDiagnosticBytes,
 			tuning,
 			aggregate.Path,
 		)
-		publishCommunicationManagerProcess(processCh, communicationProcessResult{
+		completedAt := time.Now()
+		interrupted := managerCtx.Err() != nil
+		if online {
+			finishPeerWorkClock(manager.request, manager.meter, &res, peerWorkClockCause(ctx, managerCtx), "manager")
+		}
+		process := communicationProcessResult{
+			completedAt: completedAt,
+			started:     started,
+			entryPoint:  manager.entryPoint,
 			manager:     true,
 			participant: -1,
 			request:     manager.request,
 			result:      res,
-		}, closeManagerFiles)
+			meter:       manager.meter,
+			interrupted: interrupted,
+		}
+		if deadlineAt := managerDeadlineNano.Load(); deadlineAt != 0 {
+			process.wallDeadlineAt = time.Unix(0, deadlineAt)
+		}
+		publishCommunicationManagerProcess(processCh, process, closeManagerFiles)
 	}()
 
 	readyProcesses := 0
@@ -474,6 +643,20 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	released := false
 	startupTimer := time.NewTimer(communicationStartupTimeout)
 	defer startupTimer.Stop()
+	// A fast failing player must not prevent the other separately identified
+	// target from starting. Otherwise a coordinator-created startup failure
+	// would erase a valid twenty-game forfeit.
+	cancelAfterParticipantFailure := func() {
+		if !competitive {
+			participantCancellationAt = time.Now()
+			cancelCommunication()
+			return
+		}
+		go cancelCommunicationAfterStartupBoundary(func() {
+			participantCancellationNano.CompareAndSwap(0, time.Now().UnixNano())
+			cancelCommunication()
+		}, allTargetsStarted, startupTimer.C, communicationCtx.Done())
+	}
 	for readyProcesses < totalProcesses {
 		select {
 		case managerReady := <-readyCh:
@@ -484,6 +667,7 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			if !process.manager && communicationProcessFailed(process) {
 				failure := process
 				firstParticipantFailure = &failure
+				participantCancellationAt = time.Now()
 			}
 			cancellationTriggered = true
 			cancelCommunication()
@@ -513,11 +697,25 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 	if !released {
 		close(releaseTargets)
 		released = true
+		wallCause := context.Canceled
+		if online {
+			wallCause = context.DeadlineExceeded
+		}
 		for i := range participantTimers {
 			cancel := participantCancels[i]
-			participantTimers[i] = time.AfterFunc(time.Duration(participantWallMs)*time.Millisecond, cancel)
+			participantTimers[i] = time.AfterFunc(time.Duration(participantWallMs)*time.Millisecond, func() {
+				if competitive || online {
+					participantDeadlineNano[i].CompareAndSwap(0, time.Now().UnixNano())
+				}
+				cancel(wallCause)
+			})
 		}
-		managerTimer := time.AfterFunc(time.Duration(managerWallMs)*time.Millisecond, cancelManager)
+		managerTimer := time.AfterFunc(time.Duration(managerWallMs)*time.Millisecond, func() {
+			if competitive || online {
+				managerDeadlineNano.CompareAndSwap(0, time.Now().UnixNano())
+			}
+			cancelManager(wallCause)
+		})
 		defer managerTimer.Stop()
 	}
 	defer func() {
@@ -528,15 +726,12 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		}
 		for _, cancel := range participantCancels {
 			if cancel != nil {
-				cancel()
+				cancel(context.Canceled)
 			}
 		}
 	}()
 
-	var managerProtocol struct {
-		result communicationManagerResult
-		err    error
-	}
+	var managerProtocol communicationManagerProtocol
 	managerProtocolReceived := false
 	var managerExitTimer *time.Timer
 	var managerExitWaitDone chan struct{}
@@ -572,8 +767,11 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			failure := process
 			firstParticipantFailure = &failure
 			cancellationTriggered = true
-			cancelCommunication()
+			cancelAfterParticipantFailure()
 		}
+	}
+	if competitive && firstParticipantFailure != nil {
+		participantCancellationNano.CompareAndSwap(0, time.Now().UnixNano())
 	}
 	cancelCommunication()
 	if managerExitTimer != nil {
@@ -585,29 +783,62 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 		managerProtocol = <-managerResultCh
 	}
 
-	response := buildCommunicationResponse(
-		results,
-		managerProtocol.result,
-		managerProtocol.err,
-		int(startedParticipants.Load()),
-		timing.SinceMillis(startedAt),
-		firstParticipantFailure,
-	)
+	if competitive || online {
+		for i := range results {
+			if results[i].manager {
+				results[i].resultProtocolAt = managerProtocol.completedAt
+			}
+		}
+		if canceledAt := participantCancellationNano.Load(); canceledAt != 0 {
+			participantCancellationAt = time.Unix(0, canceledAt)
+		}
+	}
+	if competitive {
+		response = buildCommunicationMatchResponse(req, results, managerProtocol.result.match, managerProtocol.err,
+			int(startedParticipants.Load()), timing.SinceMillis(startedAt), firstParticipantFailure, participantCancellationAt, ctx.Err())
+	} else {
+		response = buildCommunicationResponse(
+			results, managerProtocol.result, managerProtocol.err, int(startedParticipants.Load()),
+			timing.SinceMillis(startedAt), firstParticipantFailure,
+		)
+	}
+	if online && !competitive {
+		finalizeLegacyCommunicationClock(req, &response, results, managerProtocol, firstParticipantFailure, participantCancellationAt, ctx.Err())
+	}
 	if aggregate.Path != "" {
 		stats, statErr := cgroup.ReadStats(aggregate.Path)
 		if statErr != nil {
 			slog.Warn("communication aggregate cgroup stats failed", "path", aggregate.Path, "err", statErr)
+			if competitive || online {
+				response.Status = model.RunStatusInitFail
+				if competitive {
+					response.Status = model.RunStatusRE
+				}
+				response.Reason = "communication aggregate resource accounting failed"
+				response.VerdictSource = "communication:aggregate_accounting"
+				if competitive {
+					response.Match = communicationMatchFailure(req, response.Reason)
+				}
+				response.Score = nil
+			}
 		} else {
 			if peakKB := (stats.MemoryPeakBytes + 1023) / 1024; peakKB > response.MemoryKB {
 				response.MemoryKB = peakKB
 			}
-			if response.Status == model.RunStatusAccepted || response.Status == model.RunStatusWA {
+			if online || response.Status == model.RunStatusAccepted || response.Status == model.RunStatusWA {
 				if stats.OOMEvents() > 0 || stats.MemoryMaxEvents() > 0 || stats.PidsMaxEvents() > 0 {
 					response.Status = model.RunStatusRE
 					response.Reason = "communication aggregate resource limit exceeded"
 					response.VerdictSource = "communication:aggregate"
 					zero := 0.0
 					response.Score = &zero
+					if online {
+						response.Status, response.Score = model.RunStatusInitFail, nil
+					}
+					if competitive {
+						response.Match = communicationMatchFailure(req, response.Reason)
+						response.Score = nil
+					}
 				}
 			}
 		}
@@ -621,8 +852,58 @@ func (s *Service) runCommunication(ctx context.Context, req *model.RunRequest, h
 			break
 		}
 	}
+	attachCommunicationRoleTiming(req, &response, results)
 	emitCapturedLog(hooks, "stderr", []byte(response.Stderr), responseStderrLimitBytes(req))
 	return response
+}
+
+// The coordinator calls this after every process result and pipe close that
+// selects a verdict. Neither precise accounting nor Durante report collection
+// belongs on the path that determines whether a seat forfeited.
+func attachCommunicationRoleTiming(req *model.RunRequest, response *model.RunResponse, processes []communicationProcessResult) {
+	spec := req.Communication
+	response.CommunicationCPUByRole = make([]model.CommunicationRoleCPU, spec.ParticipantCount+1)
+	if req.WorkMeasurement {
+		response.WorkMeasurements = make([]model.WorkMeasurementProcess, len(response.CommunicationCPUByRole))
+	}
+	totalNs, totalRawNs := new(uint64), new(uint64)
+	anyStarted := false
+	for _, process := range processes {
+		index := spec.ParticipantCount
+		row := model.CommunicationRoleCPU{
+			Role: "manager", ProgramID: spec.ManagerProgramID,
+			Started: process.started, Interrupted: process.interrupted,
+			ExecutionStatus: process.result.Status, ExitCode: process.result.ExitCode,
+			CPULimitMs: process.request.Limits.TimeMs, CPUTimeMs: process.result.CPUTimeMs,
+		}
+		if !process.manager {
+			seat := process.participant
+			index = seat
+			row.Role, row.ProgramID, row.ParticipantIndex = "participant", spec.ParticipantProgramID, &seat
+			if spec.Version == 2 {
+				row.ProgramID = spec.ParticipantProgramIDs[seat]
+			}
+		}
+		if process.started {
+			anyStarted = true
+			row.CPUTimeNs = measuredStepCPUTime(process.result.CPUTimeNs, process.result.CPUAccounting)
+			row.RawCPUTimeMs, row.RawCPUTimeNs = process.result.RawCPUTimeMs, process.result.RawCPUTimeNs
+			totalNs = sumStepNanoseconds(totalNs, row.CPUTimeNs)
+			totalRawNs = sumStepNanoseconds(totalRawNs, row.RawCPUTimeNs)
+		}
+		response.CommunicationCPUByRole[index] = row
+		if req.WorkMeasurement {
+			status, _, _ := communicationFinalProcessStatus(process)
+			interrupted := row.Interrupted || status == model.RunStatusTLE || status == model.RunStatusMLE || status == model.RunStatusWLE
+			response.WorkMeasurements[index] = collectPeerWorkMeasurement(process.meter, process.result, interrupted, row.Role, row.ProgramID, row.ParticipantIndex)
+		}
+	}
+	if anyStarted {
+		if totalNs != nil {
+			response.CPUTimeNs = *totalNs
+		}
+		response.RawCPUTimeNs = totalRawNs
+	}
 }
 
 func communicationWallAllowanceMs(deploymentTarget platform.DeploymentTarget, cgroupParent string, participantCount, availableCPUs, timeLimitMs int) (int64, bool) {
@@ -712,13 +993,14 @@ func communicationPrograms(req *model.RunRequest) (model.RunProgram, model.RunPr
 
 func communicationProgramRequest(req *model.RunRequest, program model.RunProgram, limits model.Limits) *model.RunRequest {
 	return &model.RunRequest{
-		Lang:           program.Lang,
-		Binaries:       program.Binaries,
-		EntryPoint:     program.EntryPoint,
-		Limits:         limits,
-		CaptureLimits:  req.CaptureLimits,
-		ProblemID:      req.ProblemID,
-		RuntimeProfile: req.RuntimeProfile,
+		WorkMeasurement: req.WorkMeasurement,
+		Lang:            program.Lang,
+		Binaries:        program.Binaries,
+		EntryPoint:      program.EntryPoint,
+		Limits:          limits,
+		CaptureLimits:   req.CaptureLimits,
+		ProblemID:       req.ProblemID,
+		RuntimeProfile:  req.RuntimeProfile,
 	}
 }
 
@@ -743,12 +1025,16 @@ func prepareCommunicationProcess(req *model.RunRequest, tuning config.RuntimeTun
 	if failure != nil {
 		return communicationPreparedProcess{}, failure
 	}
+	entryPoint := ""
+	if len(args) > 0 {
+		entryPoint, _ = filepath.Rel(ws.BoxDir, args[0])
+	}
 	args, err := canonicalizeCommunicationExecutable(ws, args, label)
 	if err != nil {
 		_ = os.RemoveAll(workDir)
 		return communicationPreparedProcess{}, &model.RunResponse{Status: model.RunStatusInitFail, Reason: label + " executable canonicalization failed"}
 	}
-	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req}, nil
+	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req, entryPoint: entryPoint}, nil
 }
 
 func canonicalizeCommunicationExecutable(ws Workspace, args []string, label string) ([]string, error) {
@@ -807,7 +1093,7 @@ func cloneCommunicationProcess(template communicationPreparedProcess, req *model
 	for i, arg := range template.args {
 		args[i] = strings.Replace(arg, template.ws.RootDir, ws.RootDir, 1)
 	}
-	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req}, nil
+	return communicationPreparedProcess{workDir: workDir, ws: ws, args: args, request: req, entryPoint: template.entryPoint}, nil
 }
 
 func copyReadOnlyArtifacts(sourceRoot, destinationRoot string) error {
@@ -993,7 +1279,9 @@ func communicationProcessFailed(process communicationProcessResult) bool {
 }
 
 func publishCommunicationManagerProcess(processCh chan<- communicationProcessResult, process communicationProcessResult, closeManagerFiles func()) {
-	process.completedAt = time.Now()
+	if process.completedAt.IsZero() {
+		process.completedAt = time.Now()
+	}
 	processCh <- process
 	closeManagerFiles()
 }
@@ -1008,10 +1296,20 @@ func cancelCommunicationAfterStartupBoundary(cancel context.CancelFunc, allParti
 }
 
 func communicationParticipantFailureOverridesManager(process communicationProcessResult, managerCompletedAt time.Time) bool {
+	if process.request != nil && process.request.WorkMeasurementClock != nil {
+		return process.result.VerdictSource != "durante_peer_cancelled"
+	}
 	if process.result.VerdictSource == "sandbox_helper_oom" || process.result.VerdictSource == "sandbox_init" {
 		return true
 	}
 	return managerCompletedAt.IsZero() || process.completedAt.Before(managerCompletedAt)
+}
+
+func addCommunicationProcessUsage(response *model.RunResponse, result execResult) {
+	response.CPUTimeMs += result.CPUTimeMs
+	response.RawCPUTimeMs = sumRawCPUTime(response.RawCPUTimeMs, result.RawCPUTimeMs)
+	response.ProcessCPUTimeMs += result.ProcessCPUTimeMs
+	response.MemoryKB += result.MemoryKB
 }
 
 func buildCommunicationResponse(processes []communicationProcessResult, managerResult communicationManagerResult, managerResultErr error, startedParticipants int, wallTimeMs int64, firstParticipantFailure *communicationProcessResult) model.RunResponse {
@@ -1027,9 +1325,7 @@ func buildCommunicationResponse(processes []communicationProcessResult, managerR
 	var manager *communicationProcessResult
 	for i := range processes {
 		process := processes[i]
-		response.CPUTimeMs += process.result.CPUTimeMs
-		response.ProcessCPUTimeMs += process.result.ProcessCPUTimeMs
-		response.MemoryKB += process.result.MemoryKB
+		addCommunicationProcessUsage(&response, process.result)
 		if process.manager {
 			manager = &process
 		}
