@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"sync"
 	"time"
 
@@ -61,21 +60,10 @@ func openStdinURL(ctx context.Context, rawURL string, maxBytes int64, budget *st
 			cancel()
 		}
 	}
-	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, rawURL, nil)
+	resp, err := payloadurl.FetchGET(downloadCtx, stdinURLHTTPClient, rawURL, "aonohako-stdin-url/1")
 	if err != nil {
 		finishDownload()
 		return nil, err
-	}
-	req.Header.Set("User-Agent", "aonohako-stdin-url/1")
-	resp, err := stdinURLHTTPClient.Do(req)
-	if err != nil {
-		finishDownload()
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_ = resp.Body.Close()
-		finishDownload()
-		return nil, fmt.Errorf("download returned %s", resp.Status)
 	}
 	if maxBytes > 0 && resp.ContentLength > maxBytes {
 		_ = resp.Body.Close()

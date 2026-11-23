@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -375,22 +374,11 @@ func resolveBase64URL(ctx context.Context, label string, inline, rawURL *string,
 }
 
 func downloadPayloadURL(ctx context.Context, rawURL string, maxBytes int) ([]byte, error) {
-	if err := validatePayloadURL(rawURL); err != nil {
-		return nil, err
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("User-Agent", "aonohako-url-payload/1")
-	resp, err := payloadURLHTTPClient.Do(httpReq)
+	resp, err := payloadurl.FetchGET(ctx, payloadURLHTTPClient, rawURL, "aonohako-url-payload/1")
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("download returned %s", resp.Status)
-	}
 	if resp.ContentLength > int64(maxBytes) {
 		return nil, &payloadDownloadTooLargeError{maxBytes: maxBytes}
 	}

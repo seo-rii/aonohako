@@ -362,6 +362,16 @@ SPJ, and interactor fields share one request-wide 48 MiB decoded budget across
 inline base64 and URL-backed payloads; invalid collection counts or paths are
 rejected before any outbound request is made.
 
+Payload GET requests retry transient connection failures and HTTP 408, 429,
+500, 502, 503, and 504 responses up to three total attempts, with 100 ms and
+200 ms backoff. Retries and response reads share the existing download
+deadline; retries do not grant another 60 seconds. Invalid URLs, denied
+destinations, permanent HTTP failures, and size-limit failures are not retried.
+Once a successful response body is exposed, a read failure is returned rather
+than restarting the stream and risking duplicated stdin. Public errors describe
+the failure category or HTTP status code without revealing URLs, object paths,
+query parameters, or upstream response bodies.
+
 JSON text fields must contain valid UTF-8. In particular, `expected_stdout_url`
 is checked immediately after downloading and rejected with HTTP 400
 `invalid_payload_url` if it contains invalid UTF-8, before stream or queue
