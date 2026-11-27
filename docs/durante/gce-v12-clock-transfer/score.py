@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from fractions import Fraction
 import gzip
 import hashlib
+import guest
 import json
 import math
 from pathlib import Path
@@ -42,7 +43,7 @@ def read_placement(root):
     return traces
 
 
-def load_samples(root, plan, cases, files):
+def load_samples(root, plan, cases, files, payload):
     traces = read_placement(root)
     require(len(traces) == len(plan['schedule']), 'missing trace windows')
     digests = {key: files[path] for key, path in (
@@ -51,6 +52,7 @@ def load_samples(root, plan, cases, files):
         ('release_core_sha256', 'durante/dynamorio/lib64/release/libdynamorio.so'))}
     rows = defaultdict(lambda: defaultdict(list))
     seen = set()
+    request_hashes = {}
     with gzip.open(root / 'receipts.jsonl.gz', 'rt') as stream:
         for seq, (line, trial) in enumerate(zip(stream, plan['schedule'], strict=True)):
             r = json.loads(line)
@@ -62,6 +64,14 @@ def load_samples(root, plan, cases, files):
             seen.add(key)
             require(all(r[k] == c[k] for k in ('program', 'binary_sha256', 'stdin_sha256', 'stdout_sha256')),
                     f'workload identity at {seq}')
+            arm = 'native' if kind == 'warmup' else kind
+            key = (case_id, arm)
+            if key not in request_hashes:
+                request_hashes[key] = (hashlib.sha256(guest.make_body(c, arm, payload)).hexdigest()
+                                       if payload is not None else r['request_sha256'])
+            require(re.fullmatch(r'[a-f0-9]{64}', r['request_sha256']) and
+                    r['request_sha256'] == request_hashes[key] and r['service_port'] == guest.PORTS[arm],
+                    f'HTTP request differs at {seq}')
             events = r['execs']
             target = 'Main' if kind in ('warmup', 'native') else 'drrun'
             require(events == traces[seq] and sum(Path(e['path']).name == target for e in events) == 1 and
@@ -73,6 +83,17 @@ def load_samples(root, plan, cases, files):
                 require(result['status'] == 'Accepted' and result['verdict_source'] == 'stdout' and
                         not result.get('work_measurement') and result['cpu_accounting']['selected_source'],
                         f'native result at {seq}')
+                cpu = result['cpu_accounting']
+                require(cpu['wait_target_ns'] == cpu['wait_user_ns'] + cpu['wait_system_ns'] - cpu['rusage_baseline_ns'],
+                        f'wait accounting at {seq}')
+                source = cpu['selected_source']
+                if source in ('process_clock', 'wait_rusage'):
+                    selected = cpu['process_clock_peak_ns'] if source == 'process_clock' else cpu['wait_target_ns']
+                    require(selected == result['cpu_time_ns'] == max(cpu['process_clock_peak_ns'], cpu['wait_target_ns']),
+                            f'selected CPU time at {seq}')
+                else:
+                    require(source == 'cgroup' and result['cpu_time_ns'] >= max(cpu['process_clock_peak_ns'], cpu['wait_target_ns']),
+                            f'unknown CPU accounting at {seq}')
                 rows[case_id][kind].append(result['cpu_time_ns'])
                 continue
             m, env = result['work_measurement'], result['work_measurement_execution']
@@ -147,7 +168,7 @@ def pair_bound(rows, ids):
     return best
 
 
-def evaluate(root):
+def evaluate(root, payload=None):
     plan = json.loads((root / 'plan.json').read_bytes())
     index = (root / 'cases.json').read_bytes()
     require(hashlib.sha256(index).hexdigest() == plan['cases_sha256'], 'case manifest changed')
@@ -171,27 +192,27 @@ def evaluate(root):
             host['steal_ticks_after'] >= host['steal_ticks_before'] and
             host['server_sha256'] == files['server'] and gce['cpu_platform'] == 'AMD Milan' and
             gce['machine_type'] == 'n2d-standard-4' and gce['threads_per_core'] == 1, 'wrong reference platform')
-    rows = load_samples(root, plan, cases, files)
+    rows = load_samples(root, plan, cases, files, payload)
     scores = {}
     for name, c in cases.items():
         native = rows[name]['native']
-        require(tuple(len(rows[name][k]) for k in ('warmup','native','live','counters')) == (1,7,2,2), name)
+        require(tuple(len(rows[name][k]) for k in ('warmup', 'native', 'live', 'counters')) == (1, 7, 2, 2), name)
         ref = median(native)
         spread = Fraction(max(native) - min(native), ref)
         item = dict(group=c['group'], program=c['program'], native_ns=native, minimum_ns=min(native), median_ns=ref, maximum_ns=max(native),
-                    native_spread_ppm=ppm(spread), stable=ref >= 20*MILLION and spread <= Fraction(1,10),
+                    native_spread_ppm=ppm(spread), stable=ref >= 20 * MILLION and spread <= Fraction(1, 10),
                     component_deltas={}, models={})
         for mode in ('live', 'counters'):
             a, b = rows[name][mode]
             item['component_deltas'][mode] = {k: abs(v - b[k]) for k, v in a.items()}
         for model, spec in plan['models'].items():
-            weights = {k: Fraction(v) for k,v in spec['weights_ns'].items()}
-            pred = [math.ceil(sum(w * r[k] for k,w in weights.items())) for r in rows[name][spec['kind']]]
+            weights = {k: Fraction(v) for k, v in spec['weights_ns'].items()}
+            pred = [math.ceil(sum(w * r[k] for k, w in weights.items())) for r in rows[name][spec['kind']]]
             errors = [Fraction(v - ref, ref) for v in pred]
-            low = 4*ref // (5*MILLION)
-            high = math.ceil(Fraction(6*ref, 5*MILLION))
+            low = 4 * ref // (5 * MILLION)
+            high = math.ceil(Fraction(6 * ref, 5 * MILLION))
             item['models'][model] = dict(predicted_ns=pred, errors_ppm=[ppm(e) for e in errors],
-                within_20pct=all(abs(e) <= Fraction(1,5) for e in errors),
+                within_20pct=all(abs(e) <= Fraction(1, 5) for e in errors),
                 boundaries=[classify(native, pred, ms) for ms in (low, high)])
         scores[name] = item
     groups = {}
@@ -201,21 +222,22 @@ def evaluate(root):
         for model in plan['models']:
             results = [s['models'][model] for s in subset]
             votes = Counter(b['outcome'] for r in results for b in r['boundaries'])
-            worst = [max(map(abs,r['errors_ppm'])) for r in results]
+            worst = [max(map(abs, r['errors_ppm'])) for r in results]
             g['models'][model] = dict(within_20pct=sum(r['within_20pct'] for r in results),
                 median_case_max_abs_error_ppm=round(median(worst)), worst_abs_error_ppm=max(worst),
-                boundaries={k:votes[k] for k in ('agree','false_tle','false_pass','mixed_native')})
+                boundaries={k: votes[k] for k in ('agree', 'false_tle', 'false_pass', 'mixed_native')})
         groups[group] = g
     return dict(groups=groups, cases=scores,
-                contest_pair_bound=pair_bound(rows, [k for k,v in cases.items() if v['group'] == 'contest_holdout']))
+                contest_pair_bound=pair_bound(rows, [k for k, v in cases.items() if v['group'] == 'contest_holdout']))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=HERE)
+    parser.add_argument('--payload', type=Path, help='rebuild the exact request digests from a prepared corpus')
     parser.add_argument('--write', action='store_true', help='write the derived summary')
     args = parser.parse_args()
-    result = evaluate(args.root)
+    result = evaluate(args.root, args.payload)
     path = args.root / 'results.json'
     if args.write:
         path.write_text(json.dumps(result, indent=2) + '\n')

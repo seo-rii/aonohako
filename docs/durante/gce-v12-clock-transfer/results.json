@@ -1,0 +1,4651 @@
+{
+  "groups": {
+    "historical_training": {
+      "cases": 6,
+      "stable": 3,
+      "models": {
+        "v7_split_gce": {
+          "within_20pct": 3,
+          "median_case_max_abs_error_ppm": 289822,
+          "worst_abs_error_ppm": 506617,
+          "boundaries": {
+            "agree": 7,
+            "false_tle": 0,
+            "false_pass": 3,
+            "mixed_native": 2
+          }
+        },
+        "v11_latency_memory": {
+          "within_20pct": 4,
+          "median_case_max_abs_error_ppm": 110353,
+          "worst_abs_error_ppm": 710558,
+          "boundaries": {
+            "agree": 8,
+            "false_tle": 0,
+            "false_pass": 2,
+            "mixed_native": 2
+          }
+        },
+        "v11_split": {
+          "within_20pct": 5,
+          "median_case_max_abs_error_ppm": 54278,
+          "worst_abs_error_ppm": 215177,
+          "boundaries": {
+            "agree": 9,
+            "false_tle": 0,
+            "false_pass": 1,
+            "mixed_native": 2
+          }
+        },
+        "v11_wide_live": {
+          "within_20pct": 0,
+          "median_case_max_abs_error_ppm": 299158,
+          "worst_abs_error_ppm": 488832,
+          "boundaries": {
+            "agree": 5,
+            "false_tle": 0,
+            "false_pass": 5,
+            "mixed_native": 2
+          }
+        }
+      }
+    },
+    "historical_holdout": {
+      "cases": 15,
+      "stable": 10,
+      "models": {
+        "v7_split_gce": {
+          "within_20pct": 0,
+          "median_case_max_abs_error_ppm": 446670,
+          "worst_abs_error_ppm": 889563,
+          "boundaries": {
+            "agree": 15,
+            "false_tle": 5,
+            "false_pass": 8,
+            "mixed_native": 2
+          }
+        },
+        "v11_latency_memory": {
+          "within_20pct": 1,
+          "median_case_max_abs_error_ppm": 3584666,
+          "worst_abs_error_ppm": 12487788,
+          "boundaries": {
+            "agree": 14,
+            "false_tle": 11,
+            "false_pass": 3,
+            "mixed_native": 2
+          }
+        },
+        "v11_split": {
+          "within_20pct": 0,
+          "median_case_max_abs_error_ppm": 529878,
+          "worst_abs_error_ppm": 950443,
+          "boundaries": {
+            "agree": 13,
+            "false_tle": 4,
+            "false_pass": 11,
+            "mixed_native": 2
+          }
+        },
+        "v11_wide_live": {
+          "within_20pct": 3,
+          "median_case_max_abs_error_ppm": 418607,
+          "worst_abs_error_ppm": 894022,
+          "boundaries": {
+            "agree": 16,
+            "false_tle": 4,
+            "false_pass": 8,
+            "mixed_native": 2
+          }
+        }
+      }
+    },
+    "contest_holdout": {
+      "cases": 12,
+      "stable": 0,
+      "models": {
+        "v7_split_gce": {
+          "within_20pct": 0,
+          "median_case_max_abs_error_ppm": 785900,
+          "worst_abs_error_ppm": 927754,
+          "boundaries": {
+            "agree": 12,
+            "false_tle": 12,
+            "false_pass": 0,
+            "mixed_native": 0
+          }
+        },
+        "v11_latency_memory": {
+          "within_20pct": 0,
+          "median_case_max_abs_error_ppm": 32072199,
+          "worst_abs_error_ppm": 36849722,
+          "boundaries": {
+            "agree": 12,
+            "false_tle": 12,
+            "false_pass": 0,
+            "mixed_native": 0
+          }
+        },
+        "v11_split": {
+          "within_20pct": 0,
+          "median_case_max_abs_error_ppm": 1122110,
+          "worst_abs_error_ppm": 1290678,
+          "boundaries": {
+            "agree": 12,
+            "false_tle": 12,
+            "false_pass": 0,
+            "mixed_native": 0
+          }
+        },
+        "v11_wide_live": {
+          "within_20pct": 0,
+          "median_case_max_abs_error_ppm": 713780,
+          "worst_abs_error_ppm": 849907,
+          "boundaries": {
+            "agree": 12,
+            "false_tle": 12,
+            "false_pass": 0,
+            "mixed_native": 0
+          }
+        }
+      }
+    }
+  },
+  "cases": {
+    "integer/1": {
+      "group": "historical_training",
+      "program": "integer",
+      "native_ns": [
+        43353000,
+        43571000,
+        43346000,
+        43462000,
+        43759000,
+        43762000,
+        43681000
+      ],
+      "minimum_ns": 43346000,
+      "median_ns": 43571000,
+      "maximum_ns": 43762000,
+      "native_spread_ppm": 9548,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 57,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 228,
+          "memory_operand_bytes": 80
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            35210598,
+            35210598
+          ],
+          "errors_ppm": [
+            -191880,
+            -191880
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 34,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 53,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            42076228,
+            42076349
+          ],
+          "errors_ppm": [
+            -34307,
+            -34304
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 34,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 53,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            41839371,
+            41839371
+          ],
+          "errors_ppm": [
+            -39743,
+            -39743
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 34,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 53,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            33788706,
+            33788706
+          ],
+          "errors_ppm": [
+            -224514,
+            -224514
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 34,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 53,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "rep_copy/1": {
+      "group": "historical_training",
+      "program": "rep_copy",
+      "native_ns": [
+        65628000,
+        65261000,
+        69652000,
+        70133000,
+        86438000,
+        87742000,
+        82760000
+      ],
+      "minimum_ns": 65261000,
+      "median_ns": 70133000,
+      "maximum_ns": 87742000,
+      "native_spread_ppm": 320548,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            42938051,
+            42938051
+          ],
+          "errors_ppm": [
+            -387763,
+            -387763
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 56,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 85,
+              "native_over": 2,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            83205732,
+            83205732
+          ],
+          "errors_ppm": [
+            186399,
+            186399
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 56,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 85,
+              "native_over": 2,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            65306880,
+            65306880
+          ],
+          "errors_ppm": [
+            -68814,
+            -68814
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 56,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 85,
+              "native_over": 2,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            43917118,
+            43917118
+          ],
+          "errors_ppm": [
+            -373802,
+            -373802
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 56,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 85,
+              "native_over": 2,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        }
+      }
+    },
+    "branch/1": {
+      "group": "historical_holdout",
+      "program": "branch",
+      "native_ns": [
+        33658000,
+        33550000,
+        33460000,
+        33719000,
+        33561000,
+        33712000,
+        33746000
+      ],
+      "minimum_ns": 33460000,
+      "median_ns": 33658000,
+      "maximum_ns": 33746000,
+      "native_spread_ppm": 8497,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            48107824,
+            48107824
+          ],
+          "errors_ppm": [
+            429313,
+            429313
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 26,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 41,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            438981277,
+            438981277
+          ],
+          "errors_ppm": [
+            12042405,
+            12042405
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 26,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 41,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            57164675,
+            57164675
+          ],
+          "errors_ppm": [
+            698398,
+            698398
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 26,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 41,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            46165118,
+            46165118
+          ],
+          "errors_ppm": [
+            371594,
+            371594
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 26,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 41,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "sort/1": {
+      "group": "historical_holdout",
+      "program": "sort",
+      "native_ns": [
+        34112000,
+        33780000,
+        34241000,
+        34310000,
+        34172000,
+        34247000,
+        34042000
+      ],
+      "minimum_ns": 33780000,
+      "median_ns": 34172000,
+      "maximum_ns": 34310000,
+      "native_spread_ppm": 15510,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            18144911,
+            18144911
+          ],
+          "errors_ppm": [
+            -469012,
+            -469012
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 27,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 42,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            155751593,
+            155751593
+          ],
+          "errors_ppm": [
+            3557872,
+            3557872
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 27,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 42,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            21560838,
+            21560838
+          ],
+          "errors_ppm": [
+            -369050,
+            -369050
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 27,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 42,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            17412165,
+            17412165
+          ],
+          "errors_ppm": [
+            -490455,
+            -490455
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 27,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 42,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "rep_fill/1": {
+      "group": "historical_holdout",
+      "program": "rep_fill",
+      "native_ns": [
+        46117000,
+        36724000,
+        38860000,
+        42938000,
+        44978000,
+        39313000,
+        44969000
+      ],
+      "minimum_ns": 36724000,
+      "median_ns": 42938000,
+      "maximum_ns": 46117000,
+      "native_spread_ppm": 218757,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 54,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 15,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 60,
+          "memory_operand_bytes": 64
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            54266703,
+            54266714
+          ],
+          "errors_ppm": [
+            263839,
+            263839
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 34,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 52,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            15603340,
+            15603239
+          ],
+          "errors_ppm": [
+            -636608,
+            -636610
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 34,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 52,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            6433223,
+            6433236
+          ],
+          "errors_ppm": [
+            -850174,
+            -850174
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 34,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 52,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            39589742,
+            39589753
+          ],
+          "errors_ppm": [
+            -77979,
+            -77979
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 34,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 52,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "integer/2": {
+      "group": "historical_training",
+      "program": "integer",
+      "native_ns": [
+        85410000,
+        85390000,
+        85340000,
+        85759000,
+        85211000,
+        85501000,
+        85347000
+      ],
+      "minimum_ns": 85211000,
+      "median_ns": 85390000,
+      "maximum_ns": 85759000,
+      "native_spread_ppm": 6418,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 57,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 228,
+          "memory_operand_bytes": 80
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            70384988,
+            70384988
+          ],
+          "errors_ppm": [
+            -175723,
+            -175723
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 68,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 103,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            83751139,
+            83751018
+          ],
+          "errors_ppm": [
+            -19193,
+            -19194
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 68,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 103,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            83635816,
+            83635816
+          ],
+          "errors_ppm": [
+            -20543,
+            -20543
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 68,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 103,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            67542688,
+            67542688
+          ],
+          "errors_ppm": [
+            -209009,
+            -209009
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 68,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 103,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "rep_copy/2": {
+      "group": "historical_training",
+      "program": "rep_copy",
+      "native_ns": [
+        125301000,
+        125904000,
+        125776000,
+        127890000,
+        162908000,
+        158871000,
+        155311000
+      ],
+      "minimum_ns": 125301000,
+      "median_ns": 127890000,
+      "maximum_ns": 162908000,
+      "native_spread_ppm": 294057,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            75954945,
+            75954945
+          ],
+          "errors_ppm": [
+            -406092,
+            -406092
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 102,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 154,
+              "native_over": 3,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            83236385,
+            83236385
+          ],
+          "errors_ppm": [
+            -349156,
+            -349156
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 102,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 154,
+              "native_over": 3,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            118824909,
+            118824909
+          ],
+          "errors_ppm": [
+            -70882,
+            -70882
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 102,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 154,
+              "native_over": 3,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            78313734,
+            78313734
+          ],
+          "errors_ppm": [
+            -387648,
+            -387648
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 102,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 154,
+              "native_over": 3,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        }
+      }
+    },
+    "branch/2": {
+      "group": "historical_holdout",
+      "program": "branch",
+      "native_ns": [
+        65789000,
+        65599000,
+        65925000,
+        65759000,
+        65607000,
+        65818000,
+        66139000
+      ],
+      "minimum_ns": 65599000,
+      "median_ns": 65789000,
+      "maximum_ns": 66139000,
+      "native_spread_ppm": 8208,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            96179509,
+            96179509
+          ],
+          "errors_ppm": [
+            461939,
+            461939
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 52,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 79,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            877561121,
+            877561121
+          ],
+          "errors_ppm": [
+            12339025,
+            12339025
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 52,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 79,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            114286505,
+            114286505
+          ],
+          "errors_ppm": [
+            737167,
+            737167
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 52,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 79,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            92295578,
+            92295578
+          ],
+          "errors_ppm": [
+            402903,
+            402903
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 52,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 79,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "sort/2": {
+      "group": "historical_holdout",
+      "program": "sort",
+      "native_ns": [
+        69929000,
+        69615000,
+        69129000,
+        70002000,
+        69512000,
+        70306000,
+        69396000
+      ],
+      "minimum_ns": 69129000,
+      "median_ns": 69615000,
+      "maximum_ns": 70306000,
+      "native_spread_ppm": 16907,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            37137537,
+            37137537
+          ],
+          "errors_ppm": [
+            -466530,
+            -466530
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 55,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 84,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            319161502,
+            319161502
+          ],
+          "errors_ppm": [
+            3584666,
+            3584666
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 55,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 84,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            44129082,
+            44129082
+          ],
+          "errors_ppm": [
+            -366098,
+            -366098
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 55,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 84,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            35637832,
+            35637832
+          ],
+          "errors_ppm": [
+            -488073,
+            -488073
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 55,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 84,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "rep_fill/2": {
+      "group": "historical_holdout",
+      "program": "rep_fill",
+      "native_ns": [
+        68508000,
+        70016000,
+        68242000,
+        68708000,
+        86335000,
+        83306000,
+        84347000
+      ],
+      "minimum_ns": 68242000,
+      "median_ns": 70016000,
+      "maximum_ns": 86335000,
+      "native_spread_ppm": 258412,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 54,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 15,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 60,
+          "memory_operand_bytes": 64
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            103120759,
+            103120770
+          ],
+          "errors_ppm": [
+            472817,
+            472817
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 56,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 85,
+              "native_over": 1,
+              "predicted_over": 2,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            15618285,
+            15618387
+          ],
+          "errors_ppm": [
+            -776933,
+            -776931
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 56,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 85,
+              "native_over": 1,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            6434893,
+            6434907
+          ],
+          "errors_ppm": [
+            -908094,
+            -908094
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 56,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 85,
+              "native_over": 1,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            73985432,
+            73985443
+          ],
+          "errors_ppm": [
+            56693,
+            56693
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 56,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 85,
+              "native_over": 1,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        }
+      }
+    },
+    "integer/4": {
+      "group": "historical_training",
+      "program": "integer",
+      "native_ns": [
+        169435000,
+        169540000,
+        169920000,
+        169377000,
+        169573000,
+        169567000,
+        169253000
+      ],
+      "minimum_ns": 169253000,
+      "median_ns": 169540000,
+      "maximum_ns": 169920000,
+      "native_spread_ppm": 3934,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            140733779,
+            140733779
+          ],
+          "errors_ppm": [
+            -169908,
+            -169908
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 135,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 204,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            167100800,
+            167100800
+          ],
+          "errors_ppm": [
+            -14387,
+            -14387
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 135,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 204,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            167228719,
+            167228719
+          ],
+          "errors_ppm": [
+            -13633,
+            -13633
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 135,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 204,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            135050662,
+            135050662
+          ],
+          "errors_ppm": [
+            -203429,
+            -203429
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 135,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 204,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "rep_copy/4": {
+      "group": "historical_training",
+      "program": "rep_copy",
+      "native_ns": [
+        277418000,
+        287786000,
+        309593000,
+        236529000,
+        313674000,
+        307959000,
+        253235000
+      ],
+      "minimum_ns": 236529000,
+      "median_ns": 287786000,
+      "maximum_ns": 313674000,
+      "native_spread_ppm": 268064,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 28,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 112,
+          "memory_operand_bytes": 68
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            141988713,
+            141988713
+          ],
+          "errors_ppm": [
+            -506617,
+            -506617
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 230,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 346,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            83297416,
+            83297525
+          ],
+          "errors_ppm": [
+            -710558,
+            -710557
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 230,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 346,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            225860943,
+            225860943
+          ],
+          "errors_ppm": [
+            -215177,
+            -215177
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 230,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 346,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            147106948,
+            147106948
+          ],
+          "errors_ppm": [
+            -488832,
+            -488832
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 230,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 346,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "branch/4": {
+      "group": "historical_holdout",
+      "program": "branch",
+      "native_ns": [
+        129896000,
+        129898000,
+        130608000,
+        130988000,
+        130036000,
+        130097000,
+        130237000
+      ],
+      "minimum_ns": 129896000,
+      "median_ns": 130097000,
+      "maximum_ns": 130988000,
+      "native_spread_ppm": 8394,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 21,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            192322890,
+            192322895
+          ],
+          "errors_ppm": [
+            478304,
+            478304
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 104,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 157,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            1754720736,
+            1754720736
+          ],
+          "errors_ppm": [
+            12487788,
+            12487788
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 104,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 157,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            228530178,
+            228530183
+          ],
+          "errors_ppm": [
+            756614,
+            756614
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 104,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 157,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            184556507,
+            184556511
+          ],
+          "errors_ppm": [
+            418607,
+            418607
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 104,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 157,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "sort/4": {
+      "group": "historical_holdout",
+      "program": "sort",
+      "native_ns": [
+        141256000,
+        140180000,
+        142855000,
+        141034000,
+        140856000,
+        141095000,
+        140265000
+      ],
+      "minimum_ns": 140180000,
+      "median_ns": 141034000,
+      "maximum_ns": 142855000,
+      "native_spread_ppm": 18967,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            78346530,
+            78346530
+          ],
+          "errors_ppm": [
+            -444485,
+            -444485
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 112,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 170,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            669351017,
+            669351017
+          ],
+          "errors_ppm": [
+            3746026,
+            3746026
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 112,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 170,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            93096227,
+            93096227
+          ],
+          "errors_ppm": [
+            -339902,
+            -339902
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 112,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 170,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            75182728,
+            75182728
+          ],
+          "errors_ppm": [
+            -466918,
+            -466918
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 112,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 170,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "rep_fill/4": {
+      "group": "historical_holdout",
+      "program": "rep_fill",
+      "native_ns": [
+        129916000,
+        129509000,
+        128415000,
+        128985000,
+        162530000,
+        157667000,
+        156438000
+      ],
+      "minimum_ns": 128415000,
+      "median_ns": 129916000,
+      "maximum_ns": 162530000,
+      "native_spread_ppm": 262593,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 136,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 544,
+          "memory_operand_bytes": 52
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            200828861,
+            200828861
+          ],
+          "errors_ppm": [
+            545836,
+            545836
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 103,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 156,
+              "native_over": 3,
+              "predicted_over": 2,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            15648313,
+            15648405
+          ],
+          "errors_ppm": [
+            -879551,
+            -879550
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 103,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 156,
+              "native_over": 3,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            6438223,
+            6438223
+          ],
+          "errors_ppm": [
+            -950443,
+            -950443
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 103,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 156,
+              "native_over": 3,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            142776803,
+            142776803
+          ],
+          "errors_ppm": [
+            98993,
+            98993
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 103,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 156,
+              "native_over": 3,
+              "predicted_over": 0,
+              "outcome": "mixed_native"
+            }
+          ]
+        }
+      }
+    },
+    "cycle_walk/1": {
+      "group": "historical_holdout",
+      "program": "cycle_walk",
+      "native_ns": [
+        19613000,
+        19663000,
+        19913000,
+        20129000,
+        19791000,
+        19668000,
+        19647000
+      ],
+      "minimum_ns": 19613000,
+      "median_ns": 19668000,
+      "maximum_ns": 20129000,
+      "native_spread_ppm": 26236,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 106,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 424,
+          "memory_operand_bytes": 44
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            25322450,
+            25322450
+          ],
+          "errors_ppm": [
+            287495,
+            287495
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 15,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 24,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            236935659,
+            236935582
+          ],
+          "errors_ppm": [
+            11046759,
+            11046755
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 15,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 24,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            30089646,
+            30089646
+          ],
+          "errors_ppm": [
+            529878,
+            529878
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 15,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 24,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            24299861,
+            24299861
+          ],
+          "errors_ppm": [
+            235502,
+            235502
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 15,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 24,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "mod_inverse/1": {
+      "group": "historical_holdout",
+      "program": "mod_inverse",
+      "native_ns": [
+        15319000,
+        15343000,
+        15441000,
+        15394000,
+        15434000,
+        15307000,
+        15312000
+      ],
+      "minimum_ns": 15307000,
+      "median_ns": 15343000,
+      "maximum_ns": 15441000,
+      "native_spread_ppm": 8734,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 89,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 356,
+          "memory_operand_bytes": 16
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            9289719,
+            9289719
+          ],
+          "errors_ppm": [
+            -394530,
+            -394530
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 12,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 19,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            20108457,
+            20108439
+          ],
+          "errors_ppm": [
+            310595,
+            310594
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 12,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 19,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            11038537,
+            11038537
+          ],
+          "errors_ppm": [
+            -280549,
+            -280549
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 12,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 19,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            8914562,
+            8914562
+          ],
+          "errors_ppm": [
+            -418982,
+            -418982
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 12,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 19,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "branch_scan/1": {
+      "group": "historical_holdout",
+      "program": "branch_scan",
+      "native_ns": [
+        49977000,
+        50074000,
+        49858000,
+        50081000,
+        50033000,
+        50515000,
+        50154000
+      ],
+      "minimum_ns": 49858000,
+      "median_ns": 50074000,
+      "maximum_ns": 50515000,
+      "native_spread_ppm": 13121,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            28643632,
+            28643632
+          ],
+          "errors_ppm": [
+            -427974,
+            -427974
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 40,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 61,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            237868157,
+            237868157
+          ],
+          "errors_ppm": [
+            3750333,
+            3750333
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 40,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 61,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            34036085,
+            34036085
+          ],
+          "errors_ppm": [
+            -320284,
+            -320284
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 40,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 61,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            27486927,
+            27486927
+          ],
+          "errors_ppm": [
+            -451074,
+            -451074
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 40,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 61,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "cycle_walk/2": {
+      "group": "historical_holdout",
+      "program": "cycle_walk",
+      "native_ns": [
+        246119000,
+        224292000,
+        225766000,
+        229293000,
+        225647000,
+        240743000,
+        237529000
+      ],
+      "minimum_ns": 224292000,
+      "median_ns": 229293000,
+      "maximum_ns": 246119000,
+      "native_spread_ppm": 95193,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 22,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            25322503,
+            25322499
+          ],
+          "errors_ppm": [
+            -889563,
+            -889563
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 183,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 276,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            236935943,
+            236935943
+          ],
+          "errors_ppm": [
+            33333,
+            33333
+          ],
+          "within_20pct": true,
+          "boundaries": [
+            {
+              "limit_ms": 183,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 276,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            30089709,
+            30089704
+          ],
+          "errors_ppm": [
+            -868772,
+            -868772
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 183,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 276,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            24299912,
+            24299907
+          ],
+          "errors_ppm": [
+            -894022,
+            -894022
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 183,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 276,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "mod_inverse/2": {
+      "group": "historical_holdout",
+      "program": "mod_inverse",
+      "native_ns": [
+        29468000,
+        29341000,
+        29386000,
+        29423000,
+        29585000,
+        29362000,
+        29371000
+      ],
+      "minimum_ns": 29341000,
+      "median_ns": 29386000,
+      "maximum_ns": 29585000,
+      "native_spread_ppm": 8303,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 15,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 60,
+          "memory_operand_bytes": 64
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            18540084,
+            18540084
+          ],
+          "errors_ppm": [
+            -369084,
+            -369084
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 23,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 36,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            39809894,
+            39809793
+          ],
+          "errors_ppm": [
+            354723,
+            354720
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 23,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 36,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            22030407,
+            22030407
+          ],
+          "errors_ppm": [
+            -250309,
+            -250309
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 23,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 36,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            17791379,
+            17791379
+          ],
+          "errors_ppm": [
+            -394563,
+            -394563
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 23,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 36,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "branch_scan/2": {
+      "group": "historical_holdout",
+      "program": "branch_scan",
+      "native_ns": [
+        96788000,
+        96168000,
+        96108000,
+        97182000,
+        97744000,
+        96264000,
+        96126000
+      ],
+      "minimum_ns": 96108000,
+      "median_ns": 96264000,
+      "maximum_ns": 97744000,
+      "native_spread_ppm": 16995,
+      "stable": true,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 123,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 492,
+          "memory_operand_bytes": 48
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            53265723,
+            53265723
+          ],
+          "errors_ppm": [
+            -446670,
+            -446670
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 77,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 116,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            470524715,
+            470524630
+          ],
+          "errors_ppm": [
+            3887858,
+            3887857
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 77,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 116,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            63293618,
+            63293618
+          ],
+          "errors_ppm": [
+            -342500,
+            -342500
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 77,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 116,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            51114732,
+            51114732
+          ],
+          "errors_ppm": [
+            -469015,
+            -469015
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 77,
+              "native_over": 7,
+              "predicted_over": 0,
+              "outcome": "false_pass"
+            },
+            {
+              "limit_ms": 116,
+              "native_over": 0,
+              "predicted_over": 0,
+              "outcome": "agree"
+            }
+          ]
+        }
+      }
+    },
+    "rice/duplicate_clusters": {
+      "group": "contest_holdout",
+      "program": "rice",
+      "native_ns": [
+        5161000,
+        5089000,
+        4840000,
+        5105000,
+        5202000,
+        5285000,
+        5376000
+      ],
+      "minimum_ns": 4840000,
+      "median_ns": 5161000,
+      "maximum_ns": 5376000,
+      "native_spread_ppm": 103856,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            9184793,
+            9184793
+          ],
+          "errors_ppm": [
+            779654,
+            779654
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 4,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 7,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            166586026,
+            166586026
+          ],
+          "errors_ppm": [
+            31277858,
+            31277858
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 4,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 7,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            10913900,
+            10913900
+          ],
+          "errors_ppm": [
+            1114687,
+            1114687
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 4,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 7,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            8813882,
+            8813882
+          ],
+          "errors_ppm": [
+            707786,
+            707786
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 4,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 7,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "rice/scattered_gaps": {
+      "group": "contest_holdout",
+      "program": "rice",
+      "native_ns": [
+        4784000,
+        5249000,
+        5153000,
+        5217000,
+        5309000,
+        5213000,
+        5290000
+      ],
+      "minimum_ns": 4784000,
+      "median_ns": 5217000,
+      "maximum_ns": 5309000,
+      "native_spread_ppm": 100633,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 26,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 104,
+          "memory_operand_bytes": 32
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            9530465,
+            9530465
+          ],
+          "errors_ppm": [
+            826809,
+            826809
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 4,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 7,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            168691635,
+            168691687
+          ],
+          "errors_ppm": [
+            31334988,
+            31334998
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 4,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 7,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            11324651,
+            11324651
+          ],
+          "errors_ppm": [
+            1170721,
+            1170721
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 4,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 7,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            9145596,
+            9145596
+          ],
+          "errors_ppm": [
+            753037,
+            753037
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 4,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 7,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "rice/wide_coordinates": {
+      "group": "contest_holdout",
+      "program": "rice",
+      "native_ns": [
+        4087000,
+        4382000,
+        4331000,
+        4482000,
+        4356000,
+        4402000,
+        4706000
+      ],
+      "minimum_ns": 4087000,
+      "median_ns": 4382000,
+      "maximum_ns": 4706000,
+      "native_spread_ppm": 141260,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 26,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 104,
+          "memory_operand_bytes": 32
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            7897042,
+            7897042
+          ],
+          "errors_ppm": [
+            802155,
+            802155
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 3,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 6,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            147085268,
+            147085320
+          ],
+          "errors_ppm": [
+            32565785,
+            32565796
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 3,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 6,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            9383713,
+            9383713
+          ],
+          "errors_ppm": [
+            1141422,
+            1141422
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 3,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 6,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            7578133,
+            7578133
+          ],
+          "errors_ppm": [
+            729378,
+            729378
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 3,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 6,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "wall/crossed_intervals": {
+      "group": "contest_holdout",
+      "program": "wall",
+      "native_ns": [
+        13742000,
+        13677000,
+        13429000,
+        13681000,
+        13581000,
+        13602000,
+        13542000
+      ],
+      "minimum_ns": 13429000,
+      "median_ns": 13602000,
+      "maximum_ns": 13742000,
+      "native_spread_ppm": 23011,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            24516849,
+            24516849
+          ],
+          "errors_ppm": [
+            802444,
+            802444
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 10,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 17,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            463481178,
+            463481178
+          ],
+          "errors_ppm": [
+            33074487,
+            33074487
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 10,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 17,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            29132460,
+            29132460
+          ],
+          "errors_ppm": [
+            1141778,
+            1141778
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 10,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 17,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            23526808,
+            23526808
+          ],
+          "errors_ppm": [
+            729658,
+            729658
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 10,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 17,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "wall/scattered_points": {
+      "group": "contest_holdout",
+      "program": "wall",
+      "native_ns": [
+        10827000,
+        11004000,
+        11206000,
+        11143000,
+        10573000,
+        10895000,
+        10962000
+      ],
+      "minimum_ns": 10573000,
+      "median_ns": 10962000,
+      "maximum_ns": 11206000,
+      "native_spread_ppm": 57745,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            20043851,
+            20043851
+          ],
+          "errors_ppm": [
+            828485,
+            828485
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 8,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 14,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            357126640,
+            357126640
+          ],
+          "errors_ppm": [
+            31578602,
+            31578602
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 8,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 14,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            23817360,
+            23817360
+          ],
+          "errors_ppm": [
+            1172720,
+            1172720
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 8,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 14,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            19234439,
+            19234439
+          ],
+          "errors_ppm": [
+            754647,
+            754647
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 8,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 14,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "wall/nested_ranges": {
+      "group": "contest_holdout",
+      "program": "wall",
+      "native_ns": [
+        11914000,
+        12259000,
+        11776000,
+        12325000,
+        12184000,
+        11827000,
+        12287000
+      ],
+      "minimum_ns": 11776000,
+      "median_ns": 12184000,
+      "maximum_ns": 12325000,
+      "native_spread_ppm": 45059,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 26,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 104,
+          "memory_operand_bytes": 32
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            23487753,
+            23487753
+          ],
+          "errors_ppm": [
+            927754,
+            927754
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 9,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 15,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            442471750,
+            442471802
+          ],
+          "errors_ppm": [
+            35315804,
+            35315808
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 9,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 15,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            27909623,
+            27909623
+          ],
+          "errors_ppm": [
+            1290678,
+            1290678
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 9,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 15,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            22539270,
+            22539270
+          ],
+          "errors_ppm": [
+            849907,
+            849907
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 9,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 15,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "money/dense_scrambled": {
+      "group": "contest_holdout",
+      "program": "money",
+      "native_ns": [
+        6957000,
+        7204000,
+        7159000,
+        7258000,
+        6996000,
+        7394000,
+        6969000
+      ],
+      "minimum_ns": 6957000,
+      "median_ns": 7159000,
+      "maximum_ns": 7394000,
+      "native_spread_ppm": 61042,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 22,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            10008695,
+            10008691
+          ],
+          "errors_ppm": [
+            398058,
+            398057
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 9,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            178480366,
+            178480366
+          ],
+          "errors_ppm": [
+            23930907,
+            23930907
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 9,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            11892913,
+            11892907
+          ],
+          "errors_ppm": [
+            661253,
+            661253
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 9,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            9604514,
+            9604509
+          ],
+          "errors_ppm": [
+            341600,
+            341599
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 9,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "money/mostly_dominated": {
+      "group": "contest_holdout",
+      "program": "money",
+      "native_ns": [
+        6733000,
+        5965000,
+        6273000,
+        6394000,
+        6479000,
+        6230000,
+        6433000
+      ],
+      "minimum_ns": 5965000,
+      "median_ns": 6394000,
+      "maximum_ns": 6733000,
+      "native_spread_ppm": 120113,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            8645741,
+            8645741
+          ],
+          "errors_ppm": [
+            352165,
+            352165
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            162012013,
+            162012013
+          ],
+          "errors_ppm": [
+            24338132,
+            24338132
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            10273363,
+            10273363
+          ],
+          "errors_ppm": [
+            606719,
+            606719
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            8296597,
+            8296597
+          ],
+          "errors_ppm": [
+            297560,
+            297560
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "money/narrow_windows": {
+      "group": "contest_holdout",
+      "program": "money",
+      "native_ns": [
+        7064000,
+        6426000,
+        6776000,
+        6773000,
+        6404000,
+        6871000,
+        6451000
+      ],
+      "minimum_ns": 6404000,
+      "median_ns": 6773000,
+      "maximum_ns": 7064000,
+      "native_spread_ppm": 97446,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 26,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 104,
+          "memory_operand_bytes": 32
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            9552238,
+            9552238
+          ],
+          "errors_ppm": [
+            410341,
+            410341
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 9,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            176795159,
+            176795211
+          ],
+          "errors_ppm": [
+            25102932,
+            25102940
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 9,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            11350521,
+            11350521
+          ],
+          "errors_ppm": [
+            675848,
+            675848
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 9,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            9166489,
+            9166489
+          ],
+          "errors_ppm": [
+            353387,
+            353387
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 9,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "plane/simultaneous": {
+      "group": "contest_holdout",
+      "program": "plane",
+      "native_ns": [
+        6061000,
+        6763000,
+        6433000,
+        5956000,
+        6470000,
+        6033000,
+        6320000
+      ],
+      "minimum_ns": 5956000,
+      "median_ns": 6320000,
+      "maximum_ns": 6763000,
+      "native_spread_ppm": 127690,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 26,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 104,
+          "memory_operand_bytes": 32
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            11326361,
+            11326361
+          ],
+          "errors_ppm": [
+            792146,
+            792146
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            239210190,
+            239210242
+          ],
+          "errors_ppm": [
+            36849714,
+            36849722
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            13458647,
+            13458647
+          ],
+          "errors_ppm": [
+            1129533,
+            1129533
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            10868969,
+            10868969
+          ],
+          "errors_ppm": [
+            719774,
+            719774
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "plane/tight_transfers": {
+      "group": "contest_holdout",
+      "program": "plane",
+      "native_ns": [
+        6115000,
+        6073000,
+        6671000,
+        6102000,
+        6315000,
+        6396000,
+        6590000
+      ],
+      "minimum_ns": 6073000,
+      "median_ns": 6315000,
+      "maximum_ns": 6671000,
+      "native_spread_ppm": 94695,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            10237109,
+            10237109
+          ],
+          "errors_ppm": [
+            621078,
+            621078
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            216392521,
+            216392521
+          ],
+          "errors_ppm": [
+            33266432,
+            33266432
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            12164329,
+            12164329
+          ],
+          "errors_ppm": [
+            926260,
+            926260
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            9823704,
+            9823704
+          ],
+          "errors_ppm": [
+            555614,
+            555614
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 5,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 8,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    },
+    "plane/scattered_services": {
+      "group": "contest_holdout",
+      "program": "plane",
+      "native_ns": [
+        7876000,
+        7529000,
+        7781000,
+        7497000,
+        7281000,
+        7388000,
+        7829000
+      ],
+      "minimum_ns": 7281000,
+      "median_ns": 7529000,
+      "maximum_ns": 7876000,
+      "native_spread_ppm": 79028,
+      "stable": false,
+      "component_deltas": {
+        "live": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0
+        },
+        "counters": {
+          "instructions": 0,
+          "rep_bytes": 0,
+          "movs_bytes": 0,
+          "stos_bytes": 0,
+          "cycles_x16": 0,
+          "memory_operand_bytes": 0
+        }
+      },
+      "models": {
+        "v7_split_gce": {
+          "predicted_ns": [
+            12650683,
+            12650683
+          ],
+          "errors_ppm": [
+            680261,
+            680261
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 6,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 10,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_latency_memory": {
+          "predicted_ns": [
+            267495813,
+            267495813
+          ],
+          "errors_ppm": [
+            34528731,
+            34528731
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 6,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 10,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_split": {
+          "predicted_ns": [
+            15032291,
+            15032291
+          ],
+          "errors_ppm": [
+            996585,
+            996585
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 6,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 10,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        },
+        "v11_wide_live": {
+          "predicted_ns": [
+            12139813,
+            12139813
+          ],
+          "errors_ppm": [
+            612407,
+            612407
+          ],
+          "within_20pct": false,
+          "boundaries": [
+            {
+              "limit_ms": 6,
+              "native_over": 7,
+              "predicted_over": 2,
+              "outcome": "agree"
+            },
+            {
+              "limit_ms": 10,
+              "native_over": 0,
+              "predicted_over": 2,
+              "outcome": "false_tle"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "contest_pair_bound": {
+    "slow": "money/dense_scrambled",
+    "fast": "rice/scattered_gaps",
+    "native_ratio": "6957/5309",
+    "max_counter_ratio": "47738499/45457478",
+    "lower_bound_ppm": 110242
+  }
+}
