@@ -103,3 +103,39 @@ func TestWorkClockStrictWireAndWideUnits(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkClockMatchesTerminalCounts(t *testing.T) {
+	u := func(v uint64) *uint64 { return &v }
+	report := func() *Report {
+		return &Report{Complete: true, Instructions: u(55), UnsupportedREPEntries: u(0),
+			REPBreakdown: &REPBreakdown{Version: 1, MOVSBytes: 20, STOSBytes: 3}}
+	}
+	progress := WorkClockProgress{Instructions: 55, MOVSBytes: 20, STOSBytes: 3}
+	if !progress.Matches(report()) {
+		t.Fatal("equal counts did not match")
+	}
+	// The client keeps publishing through signals and CMPS/SCAS entries.
+	observed := report()
+	observed.SignalsObserved, observed.UnsupportedREPEntries = 2, u(1)
+	if !progress.Matches(observed) {
+		t.Fatal("signals or CMPS/SCAS entries disqualified equal counts")
+	}
+	for name, change := range map[string]func(*Report){
+		"incomplete":   func(r *Report) { r.Complete = false },
+		"instructions": func(r *Report) { r.Instructions = u(54) },
+		"no count":     func(r *Report) { r.Instructions = nil },
+		"movs":         func(r *Report) { r.REPBreakdown.MOVSBytes = 19 },
+		"stos":         func(r *Report) { r.REPBreakdown.STOSBytes = 4 },
+		"no breakdown": func(r *Report) { r.REPBreakdown = nil },
+		"no entries":   func(r *Report) { r.UnsupportedREPEntries = nil },
+	} {
+		r := report()
+		change(r)
+		if progress.Matches(r) {
+			t.Fatalf("%s: matched", name)
+		}
+	}
+	if progress.Matches(nil) {
+		t.Fatal("nil report matched")
+	}
+}

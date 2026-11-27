@@ -41,9 +41,12 @@ func (p WorkClockProgress) Exceeds(budget uint64) bool {
 	return p.OverflowMask != 0 || carry1 != 0 || carry2 != 0 || total > budget
 }
 
+// Matches reports whether a natural exit's live progress equals the complete
+// terminal report. Signals and CMPS/SCAS entries do not disqualify it: the
+// client keeps publishing through both, as the terminal report counts them.
 func (p WorkClockProgress) Matches(r *Report) bool {
 	return r != nil && r.Complete && r.Instructions != nil && r.REPBreakdown != nil &&
-		r.SignalsObserved == 0 && r.UnsupportedREPEntries != nil && *r.UnsupportedREPEntries == 0 &&
+		r.UnsupportedREPEntries != nil &&
 		p == (WorkClockProgress{Instructions: *r.Instructions, MOVSBytes: r.REPBreakdown.MOVSBytes, STOSBytes: r.REPBreakdown.STOSBytes})
 }
 
