@@ -81,6 +81,16 @@ on a shared worker. Current controllers mark native forwards. An embedded
 worker with trusted runner ingress preserves their selected route even when
 its own registry differs.
 
+The mixed-version HTTP test routes ordinary requests from the new controller
+to the worker used in the pinned GCE pilot. All three registered cases
+produced AC for the fast solution, WA for the incorrect solution and an
+in-flight Durante TLE for the slow solution. Six default or unregistered
+requests used native judging, and a worker without the scope refused the
+forward. The test uses the same frozen model as the GCE report.
+[Qualification and eligible deadlines](durante/gce-qualified-judge/README.md) ·
+[Sixteen HTTP receipts](durante/scoped-auto-http/receipts.json.gz) ·
+[Reproducible HTTP test](../scripts/verify_durante_scoped_auto.py)
+
 ## Automatic observations alongside native grading
 
 Set `AONOHAKO_DURANTE_OBSERVE=on` to collect work for supported submissions
