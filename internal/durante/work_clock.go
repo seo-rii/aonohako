@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/bits"
 	"os"
@@ -42,8 +43,8 @@ func (p WorkClockProgress) Exceeds(budget uint64) bool {
 }
 
 // Matches reports whether a natural exit's live progress equals the complete
-// terminal report. Signals and CMPS/SCAS entries do not disqualify it: the
-// client keeps publishing through both, as the terminal report counts them.
+// terminal report. The raw metric counts through signals and CMPS/SCAS.
+// Weighted clocks check time eligibility separately.
 func (p WorkClockProgress) Matches(r *Report) bool {
 	return r != nil && r.Complete && r.Instructions != nil && r.REPBreakdown != nil &&
 		r.UnsupportedREPEntries != nil &&
@@ -89,6 +90,17 @@ func OpenWorkClock(root string, gid int) (*WorkClock, error) {
 func (c *WorkClock) Path() string { return c.file.Name() }
 func (c *WorkClock) Close() error { return c.file.Close() }
 
+// A single read can copy invalid=0 before invalidation and copy counters
+// published afterwards. Confirm the sticky flag after collecting the counters.
+func readValidWorkClock(file io.ReaderAt, record *[48]byte) bool {
+	invalid := record[8:16]
+	if _, err := file.ReadAt(record[:], 0); err != nil || binary.LittleEndian.Uint64(invalid) != 0 {
+		return false
+	}
+	_, err := file.ReadAt(invalid, 8)
+	return err == nil && binary.LittleEndian.Uint64(invalid) == 0
+}
+
 // Snapshot validates the cumulative words from the C client. A mixed snapshot
 // of monotone words is a lower bound. An invalid or regressing observation
 // permanently disables this clock; the sandbox keeps its independent limits.
@@ -103,15 +115,15 @@ func (c *WorkClock) Snapshot() *WorkClockProgress {
 		c.invalid = true
 		return nil
 	}
-	if _, err := c.file.ReadAt(raw[:], 0); err != nil {
+	if !readValidWorkClock(c.file, &raw) {
 		c.invalid = true
 		return nil
 	}
 	word := binary.LittleEndian.Uint64
-	ready, invalid := word(raw[0:8]), word(raw[8:16])
+	ready := word(raw[0:8])
 	p := WorkClockProgress{Instructions: word(raw[16:24]), MOVSBytes: word(raw[24:32]), STOSBytes: word(raw[32:40]), OverflowMask: word(raw[40:48])}
 	prev := c.progress
-	if ready > 1 || invalid != 0 || !p.Valid() ||
+	if ready > 1 || !p.Valid() ||
 		ready == 0 && (c.ready || p != (WorkClockProgress{})) ||
 		prev.Instructions > p.Instructions || prev.MOVSBytes > p.MOVSBytes || prev.STOSBytes > p.STOSBytes ||
 		prev.OverflowMask&p.OverflowMask != prev.OverflowMask {

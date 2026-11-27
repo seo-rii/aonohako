@@ -86,6 +86,57 @@ func TestWorkClockDiagnosticAndRemote(t *testing.T) {
 	}
 }
 
+func TestTerminalWorkClockEligibilityAtStrictCrossing(t *testing.T) {
+	combined := timeMeasurementConfig().TimePolicy
+	split := *combined
+	split.Method = durante.TimeMethodREPBreakdown
+	split.REPByteNSNumerator, split.MOVSByteNSNumerator, split.STOSByteNSNumerator = 0, 2, 3
+	for _, observation := range []string{"uninterrupted", "handled signal", "unsupported REP"} {
+		for _, clock := range []struct {
+			name   string
+			policy *durante.TimePolicy
+		}{{"raw", nil}, {"combined REP", combined}, {"split REP", &split}} {
+			t.Run(observation+"/"+clock.name, func(t *testing.T) {
+				req := envelopeRequest()
+				report := completeEnvelopeReport()
+				report.REPBreakdown = &durante.REPBreakdown{Version: 1}
+				switch observation {
+				case "handled signal":
+					report.SignalsObserved, report.Quality = 1, "signals_observed"
+				case "unsupported REP":
+					one := uint64(1)
+					report.UnsupportedREPEntries, report.REPTelemetryStatus = &one, durante.REPPartial
+				}
+				progress := &durante.WorkClockProgress{Instructions: *report.Instructions}
+				plan := &durante.WorkClockRequest{Version: 1, Budget: progress.Instructions - 1, TimePolicy: clock.policy}
+				response := timeMeasurementDiagnostic(req, model.RunStatusAccepted, report)
+				response = finishWorkClock(req, plan, response, progress)
+				d := response.WorkMeasurementExecution
+				if clock.policy == nil || observation == "uninterrupted" {
+					if d.State != "budget_exceeded" || d.TerminationSource != "durante_work_clock_final" ||
+						d.Clock.State != "observed" || !response.WorkMeasurement.Complete {
+						t.Fatalf("lost eligible terminal crossing: %+v", d)
+					}
+				} else if d.State != "incomplete" || d.Clock.State != "unavailable" || response.WorkMeasurement.Complete {
+					t.Fatalf("credited ineligible terminal crossing: %+v", d)
+				}
+				if err := validateRemoteWorkClock(req, response, plan); err != nil {
+					t.Fatal(err)
+				}
+				if clock.policy != nil && observation != "uninterrupted" {
+					claimed := timeMeasurementDiagnostic(req, model.RunStatusAccepted, report)
+					claimed.WorkMeasurementExecution.State = "budget_exceeded"
+					claimed.WorkMeasurementExecution.TerminationSource = "durante_work_clock_final"
+					claimed.WorkMeasurementExecution.Clock = plan.Receipt(progress)
+					if err := validateRemoteWorkClock(req, claimed, plan); err == nil {
+						t.Fatal("accepted an ineligible terminal crossing from a remote worker")
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestWorkClockAdmission(t *testing.T) {
 	req := envelopeRequest()
 	req.WorkMeasurementClock = &durante.WorkClockRequest{Version: 1, Budget: 0}
