@@ -83,7 +83,7 @@ func ParseCPUIDProfile(raw string) (string, error) {
 
 // ValidateCounters checks whether the selected worker can collect the requested counters.
 func (c Config) ValidateCounters() error {
-	if c.MemoryOperandBytes && (!countsMemoryOperandBytes(EngineProfile) || !c.LatencyBound || len(c.Families) == 0) {
+	if c.MemoryOperandBytes && (!supportsMemoryOperandBytes(EngineProfile) || !c.LatencyBound || len(c.Families) == 0) {
 		return fmt.Errorf("memory operand bytes require a v11 or v12 worker, an enabled family and latency bound v1")
 	}
 	return nil

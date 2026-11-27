@@ -15,23 +15,12 @@ import (
 const runtimeSourceCommit = "6847bb210bea0ca11d1bf47704383d6a075da490"
 const runtimeSourceSHA256 = "e2b7d3f1917ff64e644b81efd96a610a3c622f4857c75593fef5d5e581c231f6"
 
-// Updated with the reviewed runtime patches. This is installation consistency,
+// Updated with the reviewed runtime patch. This is installation consistency,
 // not a signature or attestation against an adversarial image administrator.
-// Profiles v5 through v11 share the first runtime patch; v7 through v11 also
-// share its code-replay patch. v12 carries the runtime fixes in Durante #96.
-// Each engine_vNN.go selects the pair its worker installs.
-const runtimePatchSHA256V7 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
-const runtimeCodeReplayPatchSHA256V7 = "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b"
-const runtimePatchSHA256V12 = "8b82ea0b82b3bfdfa3cf92a5fb46e4a9cc457fc4e52747412adfbcbf18b70251"
-const runtimeCodeReplayPatchSHA256V12 = "aad0137aadca8a0932ca22f67ea95260880eb6bb93a229fd540c01241dc80d9d"
-
-// RuntimePatchSHA256 and RuntimeCodeReplayPatchSHA256 are the runtime patch
-// digests this worker's installation records.
-const (
-	RuntimePatchSHA256           = runtimePatchSHA256
-	RuntimeCodeReplayPatchSHA256 = runtimeCodeReplayPatchSHA256
-)
-
+const legacyRuntimePatchSHA256 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
+const legacyRuntimeCodeReplayPatchSHA256 = "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b"
+const v12RuntimePatchSHA256 = "8b82ea0b82b3bfdfa3cf92a5fb46e4a9cc457fc4e52747412adfbcbf18b70251"
+const v12RuntimeCodeReplayPatchSHA256 = "aad0137aadca8a0932ca22f67ea95260880eb6bb93a229fd540c01241dc80d9d"
 const archivedV5V6CodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32a100bf48788c"
 const releaseCore = "lib64/release/libdynamorio.so"
@@ -48,7 +37,7 @@ const (
 	engineProfileV11 = "dynamorio-11.3-durante-v11-vm32m"
 	sourceCommitV11  = "74d9188f9fd86c75f079277e6e5278b379a0a1d7"
 	engineProfileV12 = "dynamorio-11.3-durante-v12-vm32m"
-	sourceCommitV12  = "66fbf09e065893376e2720af04f9930883161dfa"
+	sourceCommitV12  = "b43685c76b94a365886031359b032899b009cd1b"
 )
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
@@ -98,8 +87,7 @@ func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
 }
 
 func (r *Report) ValidInstallationIdentity() bool {
-	return r != nil && r.EngineProfile == EngineProfile &&
-		r.Installation.validForSource(SourceCommit, runtimePatchSHA256, runtimeCodeReplayPatchSHA256)
+	return r != nil && r.EngineProfile == EngineProfile && r.Installation.validForSource(SourceCommit, RuntimePatchSHA256, RuntimeCodeReplayPatchSHA256)
 }
 
 // ValidShadowInstallationIdentity checks archived observations against the
@@ -108,40 +96,27 @@ func (r *Report) ValidShadowInstallationIdentity() bool {
 	if r == nil {
 		return false
 	}
-	commit, patch, replay, ok := profileInstallation(r.EngineProfile)
-	if !ok {
-		return false
-	}
-	// The first worker with shadow support used the same runtime patches as
-	// v6 and a client that did not emit latency bounds.
-	if r.EngineProfile == "dynamorio-11.3-durante-v5-vm32m" && r.LatencyBound != nil {
-		return false
-	}
-	return r.Installation.validForSource(commit, patch, replay)
-}
-
-// profileInstallation returns the Durante source and runtime patch pair that
-// the worker emitting an engine profile installed.
-func profileInstallation(profile string) (commit, patch, replay string, ok bool) {
-	switch profile {
+	switch r.EngineProfile {
 	case engineProfileV12:
-		return sourceCommitV12, runtimePatchSHA256V12, runtimeCodeReplayPatchSHA256V12, true
+		return r.Installation.validForSource(sourceCommitV12, v12RuntimePatchSHA256, v12RuntimeCodeReplayPatchSHA256)
 	case engineProfileV11:
-		return sourceCommitV11, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+		return r.Installation.validForSource(sourceCommitV11, legacyRuntimePatchSHA256, legacyRuntimeCodeReplayPatchSHA256)
 	case engineProfileV10:
-		return sourceCommitV10, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+		return r.Installation.validForSource(sourceCommitV10, legacyRuntimePatchSHA256, legacyRuntimeCodeReplayPatchSHA256)
 	case engineProfileV9:
-		return sourceCommitV9, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+		return r.Installation.validForSource(sourceCommitV9, legacyRuntimePatchSHA256, legacyRuntimeCodeReplayPatchSHA256)
 	case engineProfileV8:
-		return sourceCommitV8, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+		return r.Installation.validForSource(sourceCommitV8, legacyRuntimePatchSHA256, legacyRuntimeCodeReplayPatchSHA256)
 	case engineProfileV7:
-		return sourceCommitV7, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+		return r.Installation.validForSource(sourceCommitV7, legacyRuntimePatchSHA256, legacyRuntimeCodeReplayPatchSHA256)
 	case "dynamorio-11.3-durante-v6-vm32m":
-		return "238193f90f5896b300563180e7939088ac8c346c", runtimePatchSHA256V7, archivedV5V6CodeReplayPatchSHA256, true
+		return r.Installation.validForSource("238193f90f5896b300563180e7939088ac8c346c", legacyRuntimePatchSHA256, archivedV5V6CodeReplayPatchSHA256)
 	case "dynamorio-11.3-durante-v5-vm32m":
-		return "4016b33fc69b93d36a13efbd00953213b8f6317f", runtimePatchSHA256V7, archivedV5V6CodeReplayPatchSHA256, true
+		// The first worker with shadow support used the same runtime patches
+		// as v6 and a client that did not emit latency bounds.
+		return r.LatencyBound == nil && r.Installation.validForSource("4016b33fc69b93d36a13efbd00953213b8f6317f", legacyRuntimePatchSHA256, archivedV5V6CodeReplayPatchSHA256)
 	default:
-		return "", "", "", false
+		return false
 	}
 }
 
@@ -164,7 +139,7 @@ func snapshotInstallation(cfg Config) (InstallationIdentity, error) {
 		return InstallationIdentity{}, err
 	}
 	identity := InstallationIdentity{SourceCommit: SourceCommit, RuntimeSourceCommit: runtimeSourceCommit,
-		RuntimePatchSHA256: runtimePatchSHA256, RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, CoreSHA256: core}
+		RuntimePatchSHA256: RuntimePatchSHA256, RuntimeCodeReplayPatchSHA256: RuntimeCodeReplayPatchSHA256, CoreSHA256: core}
 	launcher, err := installationFile(cfg.Drrun, 64<<20)
 	if err != nil {
 		return InstallationIdentity{}, err
@@ -292,7 +267,7 @@ func verifyRuntimeInstallation(drrun string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for key, want := range map[string]string{"source_commit": runtimeSourceCommit, "source_sha256": runtimeSourceSHA256, "patch_sha256": runtimePatchSHA256, "code_replay_patch_sha256": runtimeCodeReplayPatchSHA256} {
+	for key, want := range map[string]string{"source_commit": runtimeSourceCommit, "source_sha256": runtimeSourceSHA256, "patch_sha256": RuntimePatchSHA256, "code_replay_patch_sha256": RuntimeCodeReplayPatchSHA256} {
 		var got string
 		if json.Unmarshal(inputs[key], &got) != nil || got != want {
 			return "", fmt.Errorf("durante runtime input %s does not match the reviewed pin", key)

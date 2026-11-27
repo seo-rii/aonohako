@@ -1,0 +1,49 @@
+{
+  "gce": {
+    "zone": "asia-northeast3-a",
+    "machine_type": "n2d-standard-4",
+    "threads_per_core": 1,
+    "cpu_platform": "AMD Milan",
+    "image": "debian-12-bookworm-v20261117",
+    "disk_auto_delete": true,
+    "external_ip": false,
+    "service_account": false,
+    "created_at": "2026-11-27T01:11:00.880-08:00"
+  },
+  "guest": {
+    "preflight": false,
+    "cpu": 1,
+    "affinity": [
+      1
+    ],
+    "workers": {
+      "native": 1110,
+      "live": 1117,
+      "counters": 1124
+    },
+    "worker_affinities": {
+      "native": [
+        1
+      ],
+      "live": [
+        1
+      ],
+      "counters": [
+        1
+      ]
+    },
+    "cgroup": "/sys/fs/cgroup/system.slice/aonohako-v12-study-EgsRUFzP.service",
+    "kernel": "6.1.0-56-cloud-amd64",
+    "cpu_model": "AMD EPYC 7B13",
+    "steal_ticks_before": 0,
+    "plan_sha256": "5a7485523b4b907dc1e18990312eb748ac9658f97f3bfcd12bd5021c0be0c827",
+    "cases_sha256": "090adc4eb9b56a80887ffe75ef608ccfeaac9d4a5cb14a15048f2ba0193ef000",
+    "cpuset_cpus_effective": "1",
+    "boot_id": "f3dfbed1-3d09-4b7c-bc80-d31942d79216",
+    "cpu1_thread_siblings": "1",
+    "server_sha256": "e38ad80effd2623801bec061c602e123cae5403bad02f001e308f4c4398997a4",
+    "steal_ticks_after": 0
+  },
+  "returned_archive_sha256": "509b8e37d20b274e0029c87f476b154d8a787605efcda33359fd307d387b1690",
+  "payload_archive_sha256": "17768a669a60253f7819b11b38083635b3376d62e86eb7531378346370669214"
+}

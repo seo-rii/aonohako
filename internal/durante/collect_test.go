@@ -180,7 +180,11 @@ func TestCollectorRejectsUnsafeOrMalformedFiles(t *testing.T) {
 // collectors must agree on lifecycle closure, child sums and strict field types.
 func TestCollectorMatchesPinnedProtocolVectors(t *testing.T) {
 	vectorsPath := "../../third_party/durante/tests/protocol_vectors.json"
-	if version := map[string]string{engineProfileV11: "v11", engineProfileV12: "v12"}[EngineProfile]; version != "" {
+	if supportsMemoryOperandBytes(EngineProfile) {
+		version := "v11"
+		if EngineProfile == engineProfileV12 {
+			version = "v12"
+		}
 		source := filepath.Join(t.TempDir(), "upstream")
 		cmd := exec.Command("python3", "../../scripts/verify_durante_vendor.py", "--version", version, "--output", source)
 		if output, err := cmd.CombinedOutput(); err != nil {

@@ -8,6 +8,6 @@ const EngineProfile = engineProfileV12
 // SourceCommit pins the reviewed Durante source for EngineProfile.
 const SourceCommit = sourceCommitV12
 
-// The runtime patches this worker installs.
-const runtimePatchSHA256 = runtimePatchSHA256V12
-const runtimeCodeReplayPatchSHA256 = runtimeCodeReplayPatchSHA256V12
+// Runtime source patch digests for this worker's selected installation.
+const RuntimePatchSHA256 = v12RuntimePatchSHA256
+const RuntimeCodeReplayPatchSHA256 = v12RuntimeCodeReplayPatchSHA256

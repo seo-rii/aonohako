@@ -18,10 +18,9 @@ func TestMemoryOperandBytesReceipt(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &report); err != nil || !report.ValidMemoryOperandBytes() || report.MemoryOperandBytes == nil || *report.MemoryOperandBytes != (MemoryOperandBytes{Version: 1}) {
 		t.Fatalf("measured zero: %+v %v", report, err)
 	}
-	// The v12 client counts operand bytes as v11 does.
-	var v12 Report
-	if err := json.Unmarshal([]byte(strings.Replace(raw, engineProfileV11, engineProfileV12, 1)), &v12); err != nil || !v12.ValidMemoryOperandBytes() {
-		t.Fatalf("v12 measured zero: %+v %v", v12, err)
+	wireV12 := strings.Replace(raw, engineProfileV11, engineProfileV12, 1)
+	if err := json.Unmarshal([]byte(wireV12), &report); err != nil || !report.ValidMemoryOperandBytes() {
+		t.Fatalf("v12 memory receipt: %+v %v", report, err)
 	}
 	if stopped := report.WithoutTotals("stopped"); stopped.MemoryOperandBytes != nil || !stopped.ValidUnavailableResult() {
 		t.Fatal("unavailable report retained memory operand bytes")

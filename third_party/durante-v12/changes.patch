@@ -28,7 +28,7 @@ index 7ea267c..7047746 100644
 +([stress modes](docs/JIT_LIFECYCLE.md#code-that-keeps-changing-under-load)).
  Updating this patch requires rebuilding the prepared SDK, client and CLI together;
  `isolate` checks the reviewed patch digest.
- 
+
 diff --git a/client/README.md b/client/README.md
 index bb7268d..f3eb9e8 100644
 --- a/client/README.md
@@ -110,7 +110,7 @@ index bb7268d..f3eb9e8 100644
 +fixed-address, statically linked program's entry point. It saves and restores
 +its scratch registers and arithmetic flags even when a signal handler is the
 +only code that reads them, and other code uses callbacks.
- 
+
  REP MOVS/STOS byte demand is read at the REP instruction after earlier register
  updates, with one clean call per REP entry. Conditional REP forms are separately
 diff --git a/client/cpuid_emulation.h b/client/cpuid_emulation.h
@@ -120,7 +120,7 @@ index 0c5b158..b24fd34 100644
 @@ -74,8 +74,9 @@ static void durante_cpuid_emulate(int is_xgetbv) {
      durante_cpuid_invalid(ctx);
  }
- 
+
 -/* Register with drmgr_register_bb_app2app_event(). Translation (state
 - * recreation) passes produce the same list. */
 +/* Run before the block's analysis and instrumentation, as a drmgr app2app
@@ -130,7 +130,7 @@ index 0c5b158..b24fd34 100644
                                               instrlist_t *bb, bool for_trace,
                                               bool translating) {
 diff --git a/client/durante.c b/client/durante.c
-index 9addb26..ced57ad 100644
+index 9addb26..718460c 100644
 --- a/client/durante.c
 +++ b/client/durante.c
 @@ -70,10 +70,20 @@ typedef struct {
@@ -189,10 +189,18 @@ index 9addb26..ced57ad 100644
  /* Without a live clock nothing is published between syscalls. Every block and
   * store then uses flag-free inline accounting, including shared libraries and
   * generated code. Restart validation moves from block entry to the callbacks
-@@ -246,12 +266,17 @@ static bool cache_probe_enabled(void) {
+@@ -145,6 +165,7 @@ typedef struct {
+ _Static_assert(sizeof(live_work_t) == 48 && __atomic_always_lock_free(8, 0),
+                "live work requires lock-free aligned 64-bit counters");
+ static live_work_t *live_work;
++static bool live_work_require_eligible;
+ static int app_exit_code;
+ static size_t file_bytes;
+ #ifdef DURANTE_TEST_COUNT_LOCATIONS
+@@ -246,12 +267,17 @@ static bool cache_probe_enabled(void) {
  #endif
  }
- 
+
 -static inline void invalidate_live_work(void) {
 +/* The live boundary routine saves only the general registers and the flags
 + * around its callback, so everything that callback can execute is compiled
@@ -203,13 +211,13 @@ index 9addb26..ced57ad 100644
    if (live_work)
      __atomic_store_n(&live_work->invalid, 1, __ATOMIC_RELEASE);
  }
- 
+
 -static inline void counter_error(bool *flag) {
 +SCALAR static inline void counter_error(bool *flag) {
    *flag = true;
    invalidate_live_work();
  }
-@@ -282,7 +307,7 @@ static void open_live_work(const char *path) {
+@@ -282,7 +308,7 @@ static void open_live_work(const char *path) {
  /* Use process-shared atomics rather than inherited process totals. Only the
   * thread owning a TLS baseline adds a delta. There is no snapshot merging at
   * fork/exec and a failed exec can publish the same baseline again for free. */
@@ -218,10 +226,10 @@ index 9addb26..ced57ad 100644
    if (!delta)
      return;
    uint64_t old = __atomic_load_n(counter, __ATOMIC_RELAXED);
-@@ -300,12 +325,61 @@ static void add_live_delta(uint64_t *counter, uint64_t delta, uint64_t overflow_
- 
+@@ -300,12 +326,61 @@ static void add_live_delta(uint64_t *counter, uint64_t delta, uint64_t overflow_
+
  enum { LIVE_WORK_BATCH = 4096 };
- 
+
 -static bool invalid_thread_work(const thread_data_t *d) {
 -  return d->signals || d->rep_error || d->replay_error || d->cpuid_error ||
 -         d->counter_overflows || d->unsupported_rep_entries;
@@ -277,26 +285,26 @@ index 9addb26..ced57ad 100644
 +SCALAR static bool invalid_thread_work(const thread_data_t *d) {
 +  return d->rep_error || d->replay_error || d->cpuid_error || d->counter_overflows;
  }
- 
+
 -static void publish_live_work(thread_data_t *d, bool flush) {
 +SCALAR static void publish_live_work(thread_data_t *d, bool flush) {
 +  settle_live_count(d);
    if (invalid_thread_work(d) || d->instructions < d->published_instructions ||
        d->rep_movs_bytes < d->published_movs || d->rep_stos_bytes < d->published_stos) {
      invalidate_live_work();
-@@ -510,7 +584,7 @@ static bool add_thread(thread_data_t *d) {
+@@ -510,7 +585,7 @@ static bool add_thread(thread_data_t *d) {
  }
- 
+
  static void snapshot_event(const char *kind, void *ctx, bool is_exec) {
 -  thread_data_t *d = ctx ? drmgr_get_tls_field(ctx, tls_index) : NULL;
 +  thread_data_t *d = ctx ? thread_state(ctx) : NULL;
    if (d) {
      settle_restart(d);
      check_flat_counter(d);
-@@ -634,6 +708,70 @@ static void set_raw_accounting_state(thread_data_t *d) {
+@@ -634,6 +709,70 @@ static void set_raw_accounting_state(thread_data_t *d) {
    }
  }
- 
+
 +/* Flat inline code keeps the write checkpoint as one word in RAW_TLS_WRITE,
 + * stored with immediates and no scratch register: the write's address, its
 + * length and its block suffix. A block entry stores zero. Callbacks settle
@@ -364,7 +372,7 @@ index 9addb26..ced57ad 100644
  static void thread_init(void *ctx) {
    thread_data_t *d = dr_thread_alloc(ctx, sizeof(*d));
    if (!d)
-@@ -647,6 +785,8 @@ static void thread_init(void *ctx) {
+@@ -647,6 +786,8 @@ static void thread_init(void *ctx) {
    if (!drmgr_set_tls_field(ctx, tls_index, d))
      fail("TLS init failed");
    set_raw_accounting_state(d);
@@ -373,7 +381,7 @@ index 9addb26..ced57ad 100644
    process_id_t process = dr_get_process_id();
    if (process != owner_pid) {
      /* DR models CLONE_VM/vfork before exec as a separate drcontext sharing the
-@@ -663,13 +803,17 @@ static void thread_init(void *ctx) {
+@@ -663,13 +804,17 @@ static void thread_init(void *ctx) {
    dr_mutex_unlock(state_lock);
  }
  static void thread_exit(void *ctx) {
@@ -398,7 +406,7 @@ index 9addb26..ced57ad 100644
    if (memory_operand_bytes_enabled && d && !d->child_pid &&
        d->pending_syscall != SYS_exit && d->pending_syscall != SYS_exit_group)
      d->latency_error = true; /* Another thread may have stopped this one mid-block. */
-@@ -678,8 +822,7 @@ static void thread_exit(void *ctx) {
+@@ -678,8 +823,7 @@ static void thread_exit(void *ctx) {
       * refers to the child's descriptor table, so NEVER close that number in the
       * parent. Exec/_exit checkpoints close it in child context before the
       * transition. */
@@ -408,7 +416,7 @@ index 9addb26..ced57ad 100644
      return;
    }
    dr_mutex_lock(state_lock);
-@@ -690,8 +833,7 @@ static void thread_exit(void *ctx) {
+@@ -690,8 +834,7 @@ static void thread_exit(void *ctx) {
    ++threads_ended;
    dr_mutex_unlock(state_lock);
    if (d) {
@@ -417,8 +425,8 @@ index 9addb26..ced57ad 100644
 +    free_thread_state(ctx, d);
    }
  }
- 
-@@ -779,11 +921,12 @@ static uint32_t suffix_memory_bytes(instr_t *start) {
+
+@@ -779,11 +922,12 @@ static uint32_t suffix_memory_bytes(instr_t *start) {
   */
  static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
    void *drcontext = dr_get_current_drcontext();
@@ -433,15 +441,17 @@ index 9addb26..ced57ad 100644
    uint64_t repeats = 0;
    if (bytes != 0) {
      dr_mcontext_t mc = {0};
-@@ -822,7 +965,6 @@ static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
+@@ -822,7 +966,8 @@ static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
    if (resumed)
      return;
    if (bytes == 0) {
 -    invalidate_live_work();
++    if (live_work_require_eligible)
++      invalidate_live_work();
      if (data->unsupported_rep_entries == UINT64_MAX)
        counter_error(&data->rep_error);
      else
-@@ -861,7 +1003,7 @@ static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
+@@ -861,7 +1006,7 @@ static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
  static void cpu_policy_exit(void) {
    invalidate_live_work();
    void *ctx = dr_get_current_drcontext();
@@ -450,14 +460,14 @@ index 9addb26..ced57ad 100644
    if (!d)
      fail("CPU policy exit without valid thread state");
    if (d->child_pid) {
-@@ -903,11 +1045,11 @@ static inline thread_data_t *accounting_thread_data(void) {
+@@ -903,11 +1048,11 @@ static inline thread_data_t *accounting_thread_data(void) {
    if (probe_l1d)
      return probe_thread_data;
  #endif
 -  return drmgr_get_tls_field(dr_get_current_drcontext(), tls_index);
 +  return thread_state(dr_get_current_drcontext());
  }
- 
+
 -static thread_data_t *charge_block(int instructions, app_pc first_pc) {
 -  thread_data_t *data = accounting_thread_data();
 +SCALAR static thread_data_t *charge_block_state(thread_data_t *data, int instructions,
@@ -465,7 +475,7 @@ index 9addb26..ced57ad 100644
    if (data == NULL || instructions <= 0)
      fail("instruction count without valid thread state");
    if (data->restart_pc) {
-@@ -920,7 +1062,7 @@ static thread_data_t *charge_block(int instructions, app_pc first_pc) {
+@@ -920,7 +1065,7 @@ static thread_data_t *charge_block(int instructions, app_pc first_pc) {
        data->restart_pc = NULL;
      }
    }
@@ -474,10 +484,10 @@ index 9addb26..ced57ad 100644
    if (live_work)
      publish_live_work(data, false);
    if (UINT64_MAX - data->instructions < (uint64_t)instructions) {
-@@ -936,6 +1078,10 @@ static thread_data_t *charge_block(int instructions, app_pc first_pc) {
+@@ -936,6 +1081,10 @@ static thread_data_t *charge_block(int instructions, app_pc first_pc) {
    return data;
  }
- 
+
 +static thread_data_t *charge_block(int instructions, app_pc first_pc) {
 +  return charge_block_state(accounting_thread_data(), instructions, first_pc);
 +}
@@ -485,7 +495,7 @@ index 9addb26..ced57ad 100644
  static void count_block(int instructions, app_pc first_pc) {
    charge_block(instructions, first_pc);
  }
-@@ -944,19 +1090,30 @@ static void count_block(int instructions, app_pc first_pc) {
+@@ -944,19 +1093,30 @@ static void count_block(int instructions, app_pc first_pc) {
   * and charges its count. REP can introduce a publishable byte delta, and replay
   * can roll back instructions or require a restart. Both callbacks disarm the
   * window. A syscall flush publishes early and can only move the boundary later. */
@@ -519,9 +529,9 @@ index 9addb26..ced57ad 100644
 +static void charge_boundary(int count, app_pc first_pc) {
 +  charge_boundary_state(accounting_thread_data(), count, first_pc);
  }
- 
+
  static opnd_t raw_slot(uint slot) {
-@@ -972,14 +1129,23 @@ static opnd_t state_field(size_t offset) {
+@@ -972,14 +1132,23 @@ static opnd_t state_field(size_t offset) {
   * scratch registers are restored before the first application instruction.
   * Both guard paths precede the charge store and the final RCX restore, so
   * restore_state() can recognize partial entries by those two instructions. */
@@ -548,7 +558,7 @@ index 9addb26..ced57ad 100644
    /* A block adds at most INT_MAX. On x86-64 its most significant byte
     * can increase by at most one, and goes from nonzero to zero only on wrap.
     * Check the completed entry before replacing its base. This keeps the new
-@@ -995,18 +1161,300 @@ static void insert_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int c
+@@ -995,18 +1164,300 @@ static void insert_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int c
    INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, counter_overflows)),
                               OPND_CREATE_INT32(1)));
    INSERT(checked);
@@ -830,7 +840,7 @@ index 9addb26..ced57ad 100644
 +  emit_flat_parts(ctx, bb, where, 1, FLAT_SUFFIX, true);
  #undef INSERT
  }
- 
+
 +/* One encoded entry per block size, with the block's first address patched. */
 +static patched_template_t *flat_live_entries[FLAT_ENTRY_CACHE + 1];
 +
@@ -856,7 +866,7 @@ index 9addb26..ced57ad 100644
  static bool is_raw_slot(opnd_t opnd, uint slot) {
    int offset = (int)(raw_tls_offset + slot * sizeof(void *));
    if (!opnd_is_far_memory_reference(opnd) || opnd_get_segment(opnd) != raw_tls_register)
-@@ -1024,8 +1472,9 @@ static bool is_reg(opnd_t opnd, reg_id_t reg) {
+@@ -1024,8 +1475,9 @@ static bool is_reg(opnd_t opnd, reg_id_t reg) {
  /* The runtime can translate a thread stopped inside this client's inline
   * sequences (synchronization, relocation). Recover rcx/r11 from the private
   * spill slots. If a relocated thread will re-enter a flat block whose charge
@@ -868,7 +878,7 @@ index 9addb26..ced57ad 100644
  static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state_info_t *info) {
    if (!raw_tls_enabled || !info || !info->raw_mcontext || !info->mcontext ||
        !info->fragment_info.cache_start_pc)
-@@ -1034,7 +1483,7 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+@@ -1034,7 +1486,7 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
    if (!d || !d->raw_tls_base)
      return true;
    byte *pc = info->fragment_info.cache_start_pc, *stop = info->raw_mcontext->pc;
@@ -877,7 +887,7 @@ index 9addb26..ced57ad 100644
    instr_t ins;
    instr_init(drcontext, &ins);
    for (uint n = 0; pc != NULL && pc < stop && n < 4096; ++n) {
-@@ -1052,13 +1501,16 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+@@ -1052,13 +1504,16 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
        else if (flat_inline && spilled_rcx && spilled_r11 && is_reg(src, DR_REG_RCX) &&
                 opnd_is_base_disp(dst) && opnd_get_base(dst) == DR_REG_R11 &&
                 opnd_get_index(dst) == DR_REG_NULL &&
@@ -897,7 +907,7 @@ index 9addb26..ced57ad 100644
        } else if (is_raw_slot(src, RAW_TLS_SPILL_R11) && is_reg(dst, DR_REG_R11)) {
          spilled_r11 = false;
        }
-@@ -1071,8 +1523,33 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+@@ -1071,8 +1526,33 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
      info->mcontext->xcx = slots[RAW_TLS_SPILL_RCX];
    if (spilled_r11)
      info->mcontext->r11 = slots[RAW_TLS_SPILL_R11];
@@ -931,8 +941,8 @@ index 9addb26..ced57ad 100644
 +  set_fast_until(d, 0);
    return true;
  }
- 
-@@ -1166,6 +1643,7 @@ static thread_data_t *before_write(app_pc pc, app_pc next_pc, int suffix) {
+
+@@ -1166,6 +1646,7 @@ static thread_data_t *before_write(app_pc pc, app_pc next_pc, int suffix) {
    thread_data_t *data = accounting_thread_data();
    if (data == NULL)
      fail("write checkpoint without thread state");
@@ -940,7 +950,7 @@ index 9addb26..ced57ad 100644
    record_write_checkpoint(data, pc, next_pc, suffix);
    return data;
  }
-@@ -1182,8 +1660,87 @@ static void before_write_memory(app_pc pc, app_pc next_pc, int suffix,
+@@ -1182,8 +1663,87 @@ static void before_write_memory(app_pc pc, app_pc next_pc, int suffix,
   * directly with flag-neutral moves. The scratch register is always restored
   * before the application instruction, even when normal liveness treats it
   * as dead: a synchronous signal handler may read every saved register. */
@@ -1029,15 +1039,15 @@ index 9addb26..ced57ad 100644
    const reg_id_t data = DR_REG_R11;
    if (raw_tls_enabled)
      instrlist_meta_preinsert(bb, where, INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_SPILL_R11),
-@@ -1207,6 +1764,7 @@ static void insert_write_checkpoint(void *ctx, instrlist_t *bb, instr_t *where,
+@@ -1207,6 +1767,7 @@ static void insert_write_checkpoint(void *ctx, instrlist_t *bb, instr_t *where,
                                                              raw_slot(RAW_TLS_SPILL_R11)));
    else
      dr_restore_reg(ctx, bb, where, data, SPILL_SLOT_1);
 +  return true;
  }
- 
+
  static void code_replay(void *ctx, int reason, app_pc source_pc,
-@@ -1215,7 +1773,7 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
+@@ -1215,7 +1776,7 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
    if (probe_l1d && reason != DR_DURANTE_REPLAY_ENTRY)
      probe_partial_block = true;
  #endif
@@ -1046,7 +1056,7 @@ index 9addb26..ced57ad 100644
    if (!d) {
      invalidate_live_work();
      __atomic_store_n(&replay_without_tls, 1, __ATOMIC_RELAXED);
-@@ -1223,7 +1781,8 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
+@@ -1223,7 +1784,8 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
    }
    check_flat_counter(d);
    settle_restart(d);
@@ -1056,8 +1066,8 @@ index 9addb26..ced57ad 100644
    if (reason == DR_DURANTE_REPLAY_ENTRY) {
      /* Cache validation ran before client entry instrumentation. Nothing was
       * charged; a pending retry still belongs to the same logical instruction. */
-@@ -1290,14 +1849,14 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
- 
+@@ -1290,14 +1852,14 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
+
  static void kernel_xfer(void *ctx, const dr_kernel_xfer_info_t *info) {
    (void)info;
 -  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
@@ -1073,7 +1083,7 @@ index 9addb26..ced57ad 100644
    if (d->restart_pc) {
      counter_error(&d->replay_error);
      d->restart_pc = NULL;
-@@ -1330,7 +1889,7 @@ static void cpu_feature_violation(int feature) {
+@@ -1330,7 +1892,7 @@ static void cpu_feature_violation(int feature) {
      cpu_policy_exit();
    }
    void *ctx = dr_get_current_drcontext();
@@ -1082,7 +1092,7 @@ index 9addb26..ced57ad 100644
    if (!d || (feature != CPU_POLICY_AVX && feature != CPU_POLICY_SIMD))
      fail("CPU policy observation without valid thread state");
    /* route_event keeps a shared-VM/vfork child's report out of its parent's
-@@ -1346,7 +1905,7 @@ static void cpu_feature_violation(int feature) {
+@@ -1346,7 +1908,7 @@ static void cpu_feature_violation(int feature) {
  /* The profile has no defined value for this request. Charge the instruction
   * as usual but make the whole measurement unusable. */
  static void cpuid_request_invalid(void *ctx) {
@@ -1091,7 +1101,7 @@ index 9addb26..ced57ad 100644
    if (!d)
      fail("CPUID profile observation without valid thread state");
    counter_error(&d->cpuid_error);
-@@ -1370,7 +1929,7 @@ static bool select_inline_block(void *ctx, instrlist_t *bb, bool translating,
+@@ -1370,7 +1932,7 @@ static bool select_inline_block(void *ctx, instrlist_t *bb, bool translating,
      return true;
    if (translating)
      return false;
@@ -1100,8 +1110,8 @@ index 9addb26..ced57ad 100644
    if (!d)
      return false;
    /* Static programs commonly enter their main loop after parsing input. Keep
-@@ -1386,11 +1945,9 @@ static bool select_inline_block(void *ctx, instrlist_t *bb, bool translating,
- 
+@@ -1386,11 +1948,9 @@ static bool select_inline_block(void *ctx, instrlist_t *bb, bool translating,
+
  static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
                                          instrlist_t *bb, instr_t *where,
 -                                        bool for_trace, bool translating,
@@ -1113,7 +1123,7 @@ index 9addb26..ced57ad 100644
    dr_emit_flags_t flags = DR_EMIT_DEFAULT;
  #ifdef DURANTE_TEST_COUNT_LOCATIONS
    (void)translating;
-@@ -1429,6 +1986,9 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+@@ -1429,6 +1989,9 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
                             OPND_CREATE_INT32(count),
                             OPND_CREATE_INTPTR(first ? instr_get_app_pc(first) : NULL),
                             OPND_CREATE_INT32((int)(uint32_t)(packed >> 32)));
@@ -1123,7 +1133,7 @@ index 9addb26..ced57ad 100644
      else if (flat_inline)
        insert_flat_charge(drcontext, bb, where, count);
      else if (inline_block) {
-@@ -1469,8 +2029,8 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+@@ -1469,8 +2032,8 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
                             OPND_CREATE_INT32(suffix),
                             OPND_CREATE_INT32((int)suffix_memory_bytes(where)),
                             OPND_CREATE_INT32((int)instruction_memory_bytes(where)));
@@ -1134,10 +1144,10 @@ index 9addb26..ced57ad 100644
        /* Flat layouts depend only on the block, so retranslation reproduces them. */
        if (!cache_probe_enabled() && !flat_inline)
          flags = DR_EMIT_STORE_TRANSLATIONS;
-@@ -1517,6 +2077,39 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+@@ -1517,6 +2080,39 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
    return flags;
  }
- 
+
 +/* drmgr.h hides DR's basic-block event so that drmgr can order the phases of
 + * several users.  This client is drmgr's only basic-block user: it links no
 + * other extension.  One DR event therefore runs drmgr's phases in drmgr's
@@ -1174,7 +1184,7 @@ index 9addb26..ced57ad 100644
  static bool lifecycle_syscall(int number) {
    return x32_syscall(number) ||
           number == SYS_fork || number == SYS_vfork || number == SYS_clone ||
-@@ -1541,7 +2134,7 @@ static bool pre_syscall(void *ctx, int number) {
+@@ -1541,7 +2137,7 @@ static bool pre_syscall(void *ctx, int number) {
    if (static_text_end && !__atomic_load_n(&static_text_revoked, __ATOMIC_ACQUIRE) &&
        (x32_syscall(number) || changes_static_text(ctx, number)))
      __atomic_store_n(&static_text_revoked, true, __ATOMIC_RELEASE);
@@ -1183,7 +1193,7 @@ index 9addb26..ced57ad 100644
    if (!d)
      fail("syscall without TLS");
    if (live_work && !lifecycle_syscall(number)) {
-@@ -1620,8 +2213,9 @@ static bool pre_syscall(void *ctx, int number) {
+@@ -1620,8 +2216,9 @@ static bool pre_syscall(void *ctx, int number) {
    d->pending_exec = exec;
    dr_mutex_lock(state_lock);
    if (live_work) {
@@ -1195,7 +1205,7 @@ index 9addb26..ced57ad 100644
        invalidate_live_work();
      publish_live_work(d, true);
    }
-@@ -1651,7 +2245,7 @@ static void post_syscall(void *ctx, int number) {
+@@ -1651,7 +2248,7 @@ static void post_syscall(void *ctx, int number) {
    bool ordinary = live_work && !lifecycle_syscall(number);
    if (ordinary && !static_input_syscall(number))
      return;
@@ -1204,11 +1214,13 @@ index 9addb26..ced57ad 100644
    if (!d)
      fail("post syscall without TLS");
    ptr_int_t result = (ptr_int_t)dr_syscall_get_result(ctx);
-@@ -1683,15 +2277,14 @@ static void post_syscall(void *ctx, int number) {
+@@ -1683,15 +2280,16 @@ static void post_syscall(void *ctx, int number) {
  }
  static dr_signal_action_t signal_event(void *ctx, dr_siginfo_t *info) {
    (void)info;
 -  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  if (live_work_require_eligible)
++    invalidate_live_work();
 +  thread_data_t *d = thread_state(ctx);
    if (!d || d->signals == UINT64_MAX)
      fail("signal accounting overflow");
@@ -1222,7 +1234,7 @@ index 9addb26..ced57ad 100644
    if (inherited && (inherited->pending_clone_flags & CLONE_FILES_FLAG))
      fail("shared-descriptor process clones are unsupported");
    process_id_t parent = owner_pid;
-@@ -1714,11 +2307,16 @@ static void fork_init(void *ctx) {
+@@ -1714,11 +2312,16 @@ static void fork_init(void *ctx) {
    accounting_error = app_exit_seen = report_written = false;
    __atomic_store_n(&replay_without_tls, 0, __ATOMIC_RELAXED);
    app_exit_code = 0;
@@ -1240,7 +1252,7 @@ index 9addb26..ced57ad 100644
    open_stream("fork", parent, previous);
  }
  static void pre_detach(void) {
-@@ -1744,9 +2342,7 @@ static void process_exit(void) {
+@@ -1744,9 +2347,7 @@ static void process_exit(void) {
    profile_dump();
    drmgr_unregister_module_unload_event(profile_module_unload);
  #endif
@@ -1251,7 +1263,7 @@ index 9addb26..ced57ad 100644
    drmgr_unregister_thread_init_event(thread_init);
    drmgr_unregister_thread_exit_event(thread_exit);
    drmgr_unregister_pre_syscall_event(pre_syscall);
-@@ -1769,6 +2365,20 @@ static void process_exit(void) {
+@@ -1769,6 +2370,20 @@ static void process_exit(void) {
  #endif
    drmgr_exit();
    dr_mutex_destroy(state_lock);
@@ -1272,7 +1284,35 @@ index 9addb26..ced57ad 100644
    if (live_work)
      dr_unmap_file(live_work, sizeof(*live_work));
    if (cpu_policy_exit_pc)
-@@ -1865,25 +2475,23 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+@@ -1786,7 +2401,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+   if (argc < 3 || strcmp(argv[1], "-outdir"))
+     fail("usage: -c libdurante.so -outdir NEW_PRIVATE_DIRECTORY [-rep_bytes] "
+          "[-disallow_cpu_feature avx|simd] [-cpuid_profile x86-64-v1|x86-64-v2] "
+-         "[-latency_bound [-memory_operand_bytes]] [-live_work_v1 OWNER_FILE] -- program");
++         "[-latency_bound [-memory_operand_bytes]] "
++         "[-live_work_v1 OWNER_FILE [-live_work_require_eligible]] -- program");
+   if (strlen(argv[2]) >= sizeof(outdir) || argv[2][0] != '/')
+     fail("report directory must be absolute");
+   memcpy(outdir, argv[2], strlen(argv[2]) + 1);
+@@ -1801,6 +2417,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+ #endif
+     } else if (strcmp(argv[i], "-live_work_v1") == 0 && !live_path && i + 1 < argc) {
+       live_path = argv[++i];
++    } else if (strcmp(argv[i], "-live_work_require_eligible") == 0 && !live_work_require_eligible) {
++      live_work_require_eligible = true;
+     } else if (strcmp(argv[i], "-latency_bound") == 0 && !latency_bound_enabled) {
+       latency_bound_enabled = true;
+     } else if (strcmp(argv[i], "-memory_operand_bytes") == 0 && !memory_operand_bytes_enabled) {
+@@ -1824,6 +2442,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+   }
+   if (memory_operand_bytes_enabled && !latency_bound_enabled)
+     fail("memory operand bytes require -latency_bound");
++  if (live_work_require_eligible && !live_path)
++    fail("-live_work_require_eligible requires -live_work_v1");
+   if (live_path) {
+     if (!rep_bytes_enabled)
+       fail("live work requires -rep_bytes");
+@@ -1865,25 +2485,23 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
  #ifdef DURANTE_TEST_COUNT_LOCATIONS
    const bool flat_candidate = false; /* The location profile needs entry callbacks. */
  #else
@@ -1308,7 +1348,7 @@ index abf2d99..e8349f1 100644
 @@ -10,7 +10,7 @@
  extern "C" {
  #endif
- 
+
 -#define DR_DURANTE_RUNTIME_ABI_VERSION 1U
 +#define DR_DURANTE_RUNTIME_ABI_VERSION 2U
  #define DR_DURANTE_REPLAY_RETRY 1
@@ -1317,7 +1357,7 @@ index abf2d99..e8349f1 100644
 @@ -53,6 +53,19 @@ DR_API
  bool
  dr_unregister_durante_code_replay_event(dr_durante_code_replay_cb_t callback);
- 
+
 +/* While this thread runs client code that its instrumentation entered from the
 + * code cache other than through a clean call, *slot must hold the tag (first
 + * application address) of the block that code returns to.  A delayable signal
@@ -1335,26 +1375,36 @@ index abf2d99..e8349f1 100644
  }
  #endif
 diff --git a/docs/ONLINE_WORK_BUDGET.md b/docs/ONLINE_WORK_BUDGET.md
-index d9bcc9b..b2a90e6 100644
+index d9bcc9b..a130224 100644
 --- a/docs/ONLINE_WORK_BUDGET.md
 +++ b/docs/ONLINE_WORK_BUDGET.md
-@@ -55,10 +55,15 @@ only the outstanding delta. A failed exec therefore continues against the
+@@ -55,10 +55,24 @@ only the outstanding delta. A failed exec therefore continues against the
  same baseline. Publication at the next block entry leaves the current block
  available for replay correction. The client batches each component up to a
  4096-unit publication threshold. Before each application syscall it flushes
 -eligible pending work, including when a thread is about to wait, exit or exec. Signals, unsupported REP entries and accounting errors invalidate
+-live eligibility. Missing or inconsistent progress leaves the external deadline
+-active. A budgeted natural completion requires a matching eligible terminal
+-report.
 +eligible pending work, including when a thread is about to wait, exit or exec.
 +A thread that another thread's `exit_group` stops publishes its remainder from
 +its exit event, so the total includes the final block prefix that its terminal
 +record also counts. Signals and CMPS/SCAS entries keep the page usable, as they
 +keep the terminal record valid: a CMPS/SCAS entry charges its one instruction
-+and no bytes, because the unit has no CMPS/SCAS bytes. Accounting errors, a
-+replay that cannot be settled, and exec while other threads still run invalidate
- live eligibility. Missing or inconsistent progress leaves the external deadline
--active. A budgeted natural completion requires a matching eligible terminal
--report.
++and no bytes, because the unit has no CMPS/SCAS bytes.
++
++An owner whose weighted time policy rejects signals and unsupported REP entries
++can add the client option `-live_work_require_eligible` to `-live_work_v1`.
++The first observed signal or CMPS/SCAS entry in any participating thread or
++process sets the shared invalidity word. The owner must then use its external
++deadline. The option affects only the live page. A naturally completed role
++still reports its counters and quality fields for terminal evaluation. A budget
++decision made before such an event covers only the observed execution prefix.
++
++Accounting errors, a replay that cannot be settled, and exec while other
++threads still run also invalidate live eligibility. Missing or inconsistent progress leaves the external deadline
 +active. A budgeted natural completion requires a matching terminal report.
- 
+
  Components may be read at slightly different instants. Their sum provides a
  lower bound at the last sampled instant. Publication batching, the owner poll
 diff --git a/toolkit/patches/dynamorio-code-replay.patch b/toolkit/patches/dynamorio-code-replay.patch
@@ -1364,7 +1414,7 @@ index 9b1d967..a362224 100644
 @@ -5,6 +5,12 @@ fault retry, completed sandbox write, and pre-instrumentation sandbox entry.
  The fault path restores application registers before dispatch instead of leaking
  code-cache scratch values.  Generic restore-state queries remain informational.
- 
+
 +Client code entered from the cache without a clean call can name the block it
 +returns to, so a signal there is delivered as promptly as in a clean callee.
 +
@@ -1563,7 +1613,7 @@ index 49decb9..1d5448e 100644
 +releasing the linking lock; keep reclaiming execve'd non-vfork clone children
 +(i#1010); drop a pending signal only when the heap is full, without returning
 +-EINTR.
- 
+
  --- a/core/dynamo.c
  +++ b/core/dynamo.c
 @@ -1182,3 +1223,1547 @@ index efc1bbb1cd..ad839efb02 100644

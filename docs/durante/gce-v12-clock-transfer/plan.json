@@ -1,0 +1,2092 @@
+{
+  "schema": 1,
+  "authority": "diagnostic_only",
+  "aonohako_commit": "0a64275ddf939d89717274d94a3b5eb357716466",
+  "durante_commit": "b43685c76b94a365886031359b032899b009cd1b",
+  "cases_sha256": "090adc4eb9b56a80887ffe75ef608ccfeaac9d4a5cb14a15048f2ba0193ef000",
+  "groups": {
+    "historical_training": 6,
+    "historical_holdout": 15,
+    "contest_holdout": 12
+  },
+  "sources_sha256": {
+    "aonohako": {
+      "docs/durante/gce-v11-cpp20-accuracy/corpus/elfs.tar.xz": "051251cd87b3119d1d2ddcbfd65e474f8294dc503efadf0871f783d8b5f18999",
+      "docs/durante/gce-v11-cpp20-accuracy/corpus/build.json": "63e39a80534f141a1af62b06df48dfcdf388a9a59dc33528a22f762026b3beeb",
+      "docs/durante/gce-v11-cpp20-accuracy/corpus/cases.json": "809861a02942a7c54dfcc322764b9c39ebee3eb8388756854855ea1d5b0f9e58",
+      "docs/durante/gce-cpp20-v7-qualification.json": "7e49d5dac361a59a6a34159caa51339ee72ece69c61a187bbd8c7fe1e010d5bd",
+      "docs/durante/gce-v11-cpp20-accuracy/evaluation.json.gz": "5525cb0be2d5eee45c3dd23db952238544ee77213bf1c1be0d10ec44ef967f22",
+      "docs/durante/gce-v11-cpp20-accuracy/measurements.json.gz": "1a4448aac68a206896e16746c3776859b1bf66ebb391d623505c42c3b6a05fd0",
+      "docs/durante/gce-v11-cpp20-accuracy/analysis-plan.json": "5380d07f3a5860b54d11039270e263fa34745fce1033e8c04be4f1f06562c58b",
+      "docs/durante/gce-v11-cpp20-accuracy/models.py": "d81f7386f947af2e169bb56816410006c7ef9abb026256d9b0e96c0242eabbfd",
+      "third_party/durante-v12/UPSTREAM.json": "edbde896bbfac655c253530d456dbf0ea332b88b48c33284404d6eae7029ef57"
+    },
+    "durante": {
+      "experiments/contest_accuracy/plan.json": "b6944543bffd6d9500e022109195902b80fae766cec8cdc0a1d0d08decf2f3f7",
+      "experiments/contest_accuracy/rice.py": "a7beaa76f955dd4914230122ac4629d46e27b3f638a4a8158c17ab8c5f2c7a01",
+      "experiments/contest_accuracy/rice.cpp": "965af7a066ddad919b438c5039f41a7c22d176e3723f86a7548cdcdbaba8a730",
+      "experiments/contest_accuracy/wall.py": "bf79228d64bc52a40f7f6c0acf4eca26e7fc8b5b9b3788040da130d4e15d6823",
+      "experiments/contest_accuracy/wall.cpp": "a00651e889a07a0634b51068c1992026d4b297a0d1c2898411ac980a81d616e7",
+      "experiments/contest_accuracy/money.py": "ed7d7ffb10b65d4fc68291ba40df14a7524bdf3c26a9dac9272ed252bb0a91e8",
+      "experiments/contest_accuracy/money.cpp": "892d2912f1bad9cdef3c49756ffa2bbfe6a0e0847fa56ce99dbafe7657008b9a",
+      "experiments/contest_accuracy/plane.py": "fb62bec2e374c8072865a22df045df73abf9973885ab120a3d49ff9806182737",
+      "experiments/contest_accuracy/plane.cpp": "47f013c4815ccbc44441c7bc8e331e2bc52c827fe1b5bdc5903929af87369fda"
+    }
+  },
+  "primary_model": "v7_split_gce",
+  "models": {
+    "v7_split_gce": {
+      "kind": "live",
+      "field": "frozen_external_rounds.split-gce.policy",
+      "weights_ns": {
+        "instructions": "41931141/200000000",
+        "movs_bytes": "3074717/200000000",
+        "stos_bytes": "5687197/250000000"
+      }
+    },
+    "v11_latency_memory": {
+      "kind": "counters",
+      "field": "models.cpp20_train_only.latency_memory.weights_ns",
+      "weights_ns": {
+        "cycles_x16": "487136003224778667993257137886440231724460011145236705560886705124000/25101905128725813306394866699319144848698923740306171229691994626199203",
+        "memory_operand_bytes": "39348045374006158597826450670474644171765713848006688256332520795364000/25101905128725813306394866699319144848698923740306171229691994626199203"
+      }
+    },
+    "v11_split": {
+      "kind": "live",
+      "field": "models.cpp20_train_only.instruction_movs_stos.weights_ns",
+      "weights_ns": {
+        "instructions": "95633317467381144678337970515148139745945867664488000/383874947239330729548061365718852662568127281838390067",
+        "movs_bytes": "106995566354242282912516310350996812416658714139328077952625/4293568604548570230043605275946790928053724081930364830875648",
+        "stos_bytes": "0"
+      }
+    },
+    "v11_wide_live": {
+      "kind": "live",
+      "method": "weighted-work-nanoseconds-v1",
+      "fit": "Nonnegative no-intercept least squares minimizing equal-case squared relative error over all 21 historical v11 native medians and componentwise metered medians. Round to nearest numerator with ties to even, at least one. All 21 historical inputs are training repeats for this model. Evaluate transfer independently on the 12 contest holdouts.",
+      "training_cases": [
+        "branch/1",
+        "branch/2",
+        "branch/4",
+        "branch_scan/1",
+        "branch_scan/2",
+        "cycle_walk/1",
+        "cycle_walk/2",
+        "integer/1",
+        "integer/2",
+        "integer/4",
+        "mod_inverse/1",
+        "mod_inverse/2",
+        "rep_copy/1",
+        "rep_copy/2",
+        "rep_copy/4",
+        "rep_fill/1",
+        "rep_fill/2",
+        "rep_fill/4",
+        "sort/1",
+        "sort/2",
+        "sort/4"
+      ],
+      "independent_group": "contest_holdout",
+      "ns_denominator": 1000000000,
+      "numerators": {
+        "instructions": 201189411,
+        "rep_bytes": 16016113
+      },
+      "weights_ns": {
+        "instructions": "201189411/1000000000",
+        "rep_bytes": "16016113/1000000000"
+      }
+    }
+  },
+  "native_reference": "Median of seven unnormalized native Aonohako cpu_time_ns receipts, excluding warmup. Retain cpu_accounting.selected_source, wait4 user/system and process-clock evidence.",
+  "prediction": "Ceil the exact dot product in ns for each metered repetition. Freeze all coefficients.",
+  "accuracy": "A case passes at 20 percent only if both predictions lie within the inclusive band.",
+  "deadlines": "Floor 80 percent and ceil 120 percent of the native median to whole milliseconds. Strictly greater than the limit is a timeout. Compare against all seven native votes, report unanimous false passes, unanimous false timeouts and mixed native decisions.",
+  "stability": "Retain every repetition, component deltas, native minimum, median, maximum, and native (maximum minus minimum) divided by median. Describe the subset with a native median of at least 20 ms and spread at most 10 percent. Retain all cases for primary scoring.",
+  "lower_bound": "Among ordered contest holdout pairs, take R = min(native slow) / max(native fast). For instructions, MOVS bytes and STOS bytes on live samples, take C = max over features of max(slow) / min(fast). Ignore 0/0, skip a pair with positive/zero. Report the largest positive (R-C)/(R+C) as a retrospective lower bound on worst relative error of a nonnegative homogeneous split clock, without selecting a model.",
+  "schedule_seed": "aonohako-v12-clock-transfer-1",
+  "schedule": [
+    {
+      "case_id": "sort/4",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "branch_scan/2",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "integer/4",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "wall/crossed_intervals",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "mod_inverse/1",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "branch/1",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rep_fill/2",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "branch/2",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "sort/2",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rice/duplicate_clusters",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "wall/nested_ranges",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rice/scattered_gaps",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "cycle_walk/2",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "plane/simultaneous",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rep_fill/1",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "plane/scattered_services",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rice/wide_coordinates",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "money/narrow_windows",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "integer/2",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "money/dense_scrambled",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "wall/scattered_points",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "money/mostly_dominated",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "integer/1",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "branch_scan/1",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "sort/1",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "plane/tight_transfers",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rep_copy/4",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "mod_inverse/2",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rep_copy/1",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rep_fill/4",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "rep_copy/2",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "branch/4",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "sort/4",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "cycle_walk/1",
+      "kind": "native",
+      "rep": 7
+    }
+  ]
+}

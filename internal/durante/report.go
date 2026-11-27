@@ -326,16 +326,14 @@ func (r *Report) ValidLatencyBound() bool {
 	return r != nil && (r.LatencyBound == nil || (r.Complete && r.Instructions != nil && r.LatencyBound.validFor(*r.Instructions)))
 }
 
-// countsMemoryOperandBytes reports whether a profile's client emits version 1
-// memory operand bytes. v12 counts them as v11 does.
-func countsMemoryOperandBytes(profile string) bool {
+func supportsMemoryOperandBytes(profile string) bool {
 	return profile == engineProfileV11 || profile == engineProfileV12
 }
 
 // ValidMemoryOperandBytes checks the counter's requirements for a published worker report.
 func (r *Report) ValidMemoryOperandBytes() bool {
 	return r != nil && (r.MemoryOperandBytes == nil || (r.MemoryOperandBytes.Version == 1 &&
-		countsMemoryOperandBytes(r.EngineProfile) && r.LatencyBound != nil && r.ValidLatencyBound() &&
+		supportsMemoryOperandBytes(r.EngineProfile) && r.LatencyBound != nil && r.ValidLatencyBound() &&
 		r.Quality == "uninterrupted" && r.SignalsObserved == 0))
 }
 

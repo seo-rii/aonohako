@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 )
@@ -112,6 +113,63 @@ func TestFinishJudgeUnavailableIsRuntimeError(t *testing.T) {
 	}
 	if got.WorkMeasurementJudgment.EstimatedTimeMs != nil {
 		t.Fatal("no estimate should be reported for an unconvertible observation")
+	}
+}
+
+func TestJudgeUnavailableWeightedClockAtNaturalExit(t *testing.T) {
+	req := judgeRequest()
+	cfg := boundRuntimeOptionsConfig(t, req, config.ExecutionConfig{}).Execution.WorkMeasurement
+	cfg.Judge = judgeMeasurementConfig().Judge
+	cfg.CPUIDProfile = durante.CPUIDProfileX8664V2
+	cfg.TimeModels.Profiles[0].CPUIDProfile = cfg.CPUIDProfile
+	plan := effectiveWorkClock(req, cfg, config.DefaultRuntimeTuningConfig())
+	if plan == nil {
+		t.Fatal("fixture has no bound weighted clock")
+	}
+	for _, tc := range []struct {
+		name, rawStatus, source string
+		exit                    int
+		completeReport          bool
+		wantStatus, wantSource  string
+	}{
+		{"matching output", model.RunStatusAccepted, "stdout", 0, true, model.RunStatusInitFail, terminalClockUnavailable},
+		{"differing file output", model.RunStatusWA, "file_output", 0, true, model.RunStatusInitFail, terminalClockUnavailable},
+		{"missing terminal report", model.RunStatusAccepted, "stdout", 0, false, model.RunStatusRE, "stdout"},
+		{"nonzero target exit", model.RunStatusRE, "exit_code", 1, true, model.RunStatusRE, "exit_code"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var report *durante.Report
+			if tc.completeReport {
+				report = completeEnvelopeReport()
+				report.REPBreakdown = &durante.REPBreakdown{Version: 1}
+				report.CPUIDProfile = cfg.CPUIDProfile
+				report.SignalsObserved, report.Quality = 1, "signals_observed"
+			}
+			resp := finishWorkMeasurementDiagnostic(context.Background(), req, model.RunResponse{
+				Status: tc.rawStatus, VerdictSource: tc.source, ExitCode: &tc.exit, WorkMeasurement: report,
+			})
+			resp = finishWorkClock(req, plan, resp, nil)
+			resp = finishWorkMeasurementTime(req, resp, cfg)
+			resp = finishWorkMeasurementJudge(req, resp, cfg)
+			j := resp.WorkMeasurementJudgment
+			if resp.Status != tc.wantStatus || resp.Score != nil || j.Verdict != tc.wantStatus ||
+				j.TerminationSource != tc.wantSource || j.EstimatedTimeNs != nil || j.EstimatedTimeMs != nil {
+				t.Fatalf("unexpected judgment: %s %+v", resp.Status, j)
+			}
+			if err := validateRemoteWorkClock(req, resp, plan); err != nil {
+				t.Fatal(err)
+			}
+			if err := validateRemoteWorkMeasurementJudge(req, resp, cfg); err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantSource == terminalClockUnavailable {
+				nonzero := 1
+				resp.ExitCode = &nonzero
+				if validateRemoteWorkClock(req, resp, plan) == nil || validateRemoteWorkMeasurementJudge(req, resp, cfg) == nil {
+					t.Fatal("accepted a nonzero exit as an unavailable terminal clock")
+				}
+			}
+		})
 	}
 }
 

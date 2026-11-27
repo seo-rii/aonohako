@@ -1,13 +1,76 @@
 package durante
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
+
+func TestSessionLiveWorkClockOptions(t *testing.T) {
+	const path = "/work/clock"
+	raw := &WorkClockRequest{Version: 1, Budget: 42}
+	weighted := &WorkClockRequest{Version: 1, Budget: 42, TimePolicy: &TimePolicy{}}
+	for _, tc := range []struct {
+		name, path string
+		plan       *WorkClockRequest
+		wantStrict bool
+	}{
+		{"no live clock", "", nil, false},
+		{"raw work units", path, raw, false},
+		{"model weighted", path, weighted, EngineProfile == engineProfileV12},
+		{"no live file", "", weighted, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			session := &Session{config: Config{Drrun: "drrun", Client: "client.so"}}
+			argv := session.WrapWithWorkClock([]string{"target"}, tc.path, tc.plan)
+			want := []string{"-rep_bytes"}
+			if tc.path != "" {
+				want = append(want, "-live_work_v1", path)
+			}
+			if tc.wantStrict {
+				want = append(want, "-live_work_require_eligible")
+			}
+			want = append(want, "--", "target")
+			i := slices.Index(argv, "-rep_bytes")
+			if i < 0 || !slices.Equal(argv[i:], want) {
+				t.Fatalf("got client arguments %q, want suffix %q", argv, want)
+			}
+		})
+	}
+}
+
+// Simulate invalidation after a bulk read copied the header. The counter
+// subsequently published by the writer can already appear in that same read.
+type invalidatingClockRecord [48]byte
+
+func (r *invalidatingClockRecord) ReadAt(p []byte, off int64) (int, error) {
+	if off == 0 && len(p) == len(r) {
+		copy(p[:16], r[:16])
+		binary.LittleEndian.PutUint64(r[8:16], 1)
+		binary.LittleEndian.PutUint64(r[16:24], 101)
+		copy(p[16:], r[16:])
+		return len(p), nil
+	}
+	return bytes.NewReader(r[:]).ReadAt(p, off)
+}
+
+func TestWorkClockRejectsCrossingDuringInvalidation(t *testing.T) {
+	var live invalidatingClockRecord
+	binary.LittleEndian.PutUint64(live[:8], 1)
+	binary.LittleEndian.PutUint64(live[16:24], 100)
+	var record [48]byte
+	if readValidWorkClock(&live, &record) {
+		t.Fatal("credited a strict crossing published after invalidation")
+	}
+	if binary.LittleEndian.Uint64(record[16:24]) != 101 {
+		t.Fatal("fixture did not copy the crossing counter")
+	}
+}
 
 func TestWorkClockSnapshot(t *testing.T) {
 	open := func(t *testing.T) *WorkClock {

@@ -93,8 +93,8 @@ func TestSummaryRequiresInputProvenanceForHistoricalTimeComparisons(t *testing.T
 	report, d := inner.WorkMeasurement, inner.WorkMeasurementExecution
 	report.EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
 	report.Installation.SourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
-	report.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 	report.Installation.RuntimePatchSHA256 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
+	report.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 	d.TimeEstimate.EngineProfile = report.EngineProfile
 	d.TimeEstimateEligibility = nil
 	d.TerminationSource, inner.WorkMeasurementJudgment.TerminationSource = "file_output", "file_output"
@@ -164,8 +164,8 @@ func TestSummaryCountsDirectionalDisagreementsAndRawStopsSeparately(t *testing.T
 	legacyReport := legacyStop.WorkMeasurementShadow.Response.WorkMeasurement
 	legacyReport.EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
 	legacyReport.Installation.SourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
-	legacyReport.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 	legacyReport.Installation.RuntimePatchSHA256 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
+	legacyReport.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 	add("42", legacyStop)
 	add("42", rawStop(t, "memory_rss", model.RunStatusInitFail))
 	add("42", rawStop(t, "cpu_time_final", model.RunStatusInitFail))
@@ -391,8 +391,8 @@ func TestCPUComparisonRecomputesArchivedCoefficientsAndCalibration(t *testing.T)
 			inner := r.WorkMeasurementShadow.Response
 			inner.WorkMeasurement.EngineProfile = "dynamorio-11.3-durante-v5-vm32m"
 			inner.WorkMeasurement.Installation.SourceCommit = "4016b33fc69b93d36a13efbd00953213b8f6317f"
-			inner.WorkMeasurement.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 			inner.WorkMeasurement.Installation.RuntimePatchSHA256 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
+			inner.WorkMeasurement.Installation.RuntimeCodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 			inner.WorkMeasurementExecution.TimeEstimate.EngineProfile = inner.WorkMeasurement.EngineProfile
 		}},
 	} {

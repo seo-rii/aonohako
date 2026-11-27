@@ -39,12 +39,12 @@ v4 profile. The client and patched runtime share a private replay callback ABI;
 update both from the pinned snapshot rather than reusing an older runtime core.
 
 `docker/durante.Dockerfile` builds a Linux x86-64 worker on a reviewed
-execution image. The default build selects v7. To build an opt-in v8, v9, v10,
-v11 or v12 worker, set `RUNTIME_IMAGE` to the immutable digest reference of your
-language image. This example selects v11.
+execution image. The default build selects v7. To build an opt-in v8 through v12
+worker, set `RUNTIME_IMAGE` to the immutable digest reference of your
+language image. This example selects v12.
 
 ```sh
-DURANTE_VERSION=v11
+DURANTE_VERSION=v12
 docker build --platform linux/amd64 -f docker/durante.Dockerfile --target runtime \
   --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" --build-arg DURANTE_VERSION="$DURANTE_VERSION" \
   -t "aonohako-durante:$DURANTE_VERSION" .
@@ -58,7 +58,7 @@ go build -tags "durante_${DURANTE_VERSION}" ./cmd/durante-reference
 | v9 | `dynamorio-11.3-durante-v9-vm32m` | `27954247e094e682a7cf47504ff13682f970469a` |
 | v10 | `dynamorio-11.3-durante-v10-vm32m` | `191858a02666c1406b871e4974b9072b2c91bb34` |
 | v11 | `dynamorio-11.3-durante-v11-vm32m` | `74d9188f9fd86c75f079277e6e5278b379a0a1d7` |
-| v12 | `dynamorio-11.3-durante-v12-vm32m` | `66fbf09e065893376e2720af04f9930883161dfa` |
+| v12 | `dynamorio-11.3-durante-v12-vm32m` | `b43685c76b94a365886031359b032899b009cd1b` |
 
 The build verifies each version's source manifest and pairs the worker with its
 client under `/opt/durante`. V8 enables inline work counting in the original
@@ -92,15 +92,17 @@ uses its existing instruction and REP weights. Timings for ordinary counting,
 latency, operand bytes and the live clock were compared separately on one
 CPU-pinned Compute Engine VM. [GCE instrumentation cost](durante/GCE_V11_OPERAND_BYTES.md) · [C++20 clock accuracy](durante/gce-v11-cpp20-accuracy/README.md) · [Upstream counter definition](https://github.com/seo-rii/durante/blob/74d9188f9fd86c75f079277e6e5278b379a0a1d7/docs/LATENCY_BOUND.md)
 
-V12 counts the same instructions with a patched runtime and client that
-differ from v11. The runtime fixes stale execution of JIT code that changes
-under load and a JVM safepoint abort. Without the static latency counter, the
-live work clock counts every block inline. The clock also stays valid through
-signals, CMPS/SCAS entries and an `exit_group` with other threads running, so
-a JVM run can complete with a matching terminal receipt. A natural exit with
-signals or CMPS/SCAS entries still has no eligible weighted time estimate. A
-live stop compares only the published counts, because the clock carries no
-eligibility field. v12 has its own runtime patch pins.
+V12 keeps raw instruction and MOVS/STOS budgets available after a handled
+signal or an unsupported REP CMPS/SCAS entry. For a model-weighted clock the
+worker requests a stricter live page. Once either event is observed, the raw
+resource watchdogs bound the rest of the run. The worker also verifies the
+v12 runtime patch identities when it loads the client.
+[Live work budgets](https://github.com/seo-rii/durante/blob/b43685c76b94a365886031359b032899b009cd1b/docs/ONLINE_WORK_BUDGET.md)
+
+On two CPU-pinned Milan guests, a short-contest calibration brought four of
+six longer C++ inputs within ±20% of native CPU time. It underestimated both
+inputs for the Scrivener solution by 47–56%. The v12 study keeps these weights
+diagnostic. [C++20 v12 accuracy and raw HTTP receipts](durante/gce-v12-clock-transfer/README.md)
 
 Qualify time models against the final immutable worker image, engine profile,
 and runtime options, including the selected CPUID profile. Build the reference
@@ -109,7 +111,7 @@ version tag. Each qualification belongs to its recorded image and profile.
 
 All builds fix `-disable_traces -vm_size 32M -vmheap_size 32M`. Before
 launch, the worker checks the runtime manifest's source, process-lifetime
-patch, code-replay patch and actual release-core digest. The v8 through v11 clients
+patch, code-replay patch and actual release-core digest. The v8 through v12 clients
 also carry their source commit in the ELF file. A matching worker requires
 that marker on the selected client, including when the operator overrides its
 path. Missing or mismatched provenance refuses measurement.
