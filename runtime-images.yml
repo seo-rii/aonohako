@@ -3950,6 +3950,8 @@ languages:
       script:
         - export ISABELLE_VERSION=Isabelle2025-2
         - export ISABELLE_SHA256=a20a507bc7c1270d8be96a9f3fbec06345387789d2dc2c4d3df6260d47bfb33c
+        # The publisher's makarius/isabelle:Isabelle2025-2 image stores the original
+        # archive in a COPY layer (manifest sha256:9bd33b183c399327c5d554fc8cde27c29b5d2b20cdc6fe7a604caa3f951018fc).
         - >-
           downloaded=0;
           for url in
@@ -3959,12 +3961,21 @@ languages:
             rm -f /tmp/isabelle.tar.gz;
             if curl --retry 8 --retry-all-errors --retry-delay 3 --connect-timeout 20 -fL "$url" -o /tmp/isabelle.tar.gz ||
                wget --tries=8 --waitretry=3 --timeout=20 -O /tmp/isabelle.tar.gz "$url"; then
-              printf '%s  %s\n' "$ISABELLE_SHA256" /tmp/isabelle.tar.gz | sha256sum -c -;
               downloaded=1;
               break;
             fi;
           done;
-          test "$downloaded" = 1
+          if [[ "$downloaded" = 0 ]]; then
+            layer_sha256=938800551b485f10bfb868661c10df1bdf5725eee60e2ed4cd565cf235665ce7;
+            layer_url="https://registry-1.docker.io/v2/makarius/isabelle/blobs/sha256:$layer_sha256";
+            curl -fsS --retry 3 --connect-timeout 20 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:makarius/isabelle:pull' |
+              perl -MJSON::PP -0777 -ne 'my $t = decode_json($_)->{token} or die "missing public pull token"; print "Authorization: Bearer $t\n"' |
+              curl -fsSL --retry 3 --connect-timeout 20 -H @- "$layer_url" -o /tmp/isabelle-layer.tar.gz;
+            printf '%s  %s\n' "$layer_sha256" /tmp/isabelle-layer.tar.gz | sha256sum -c -;
+            tar -xzOf /tmp/isabelle-layer.tar.gz home/isabelle/Isabelle.tar.gz > /tmp/isabelle.tar.gz;
+            rm -f /tmp/isabelle-layer.tar.gz;
+          fi
+        - printf '%s  %s\n' "$ISABELLE_SHA256" /tmp/isabelle.tar.gz | sha256sum -c -
         - tar -xzf /tmp/isabelle.tar.gz -C /opt
         - ln -sfn "/opt/${ISABELLE_VERSION}/bin/isabelle" /usr/local/bin/isabelle
         - sed -i 's/val channel = System_Channel()/val channel = System_Channel(unix_domain = true)/' "/opt/${ISABELLE_VERSION}/src/Pure/System/isabelle_process.scala"
