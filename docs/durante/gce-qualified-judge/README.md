@@ -6,6 +6,9 @@ implemented submissions to three deterministic algorithm problems. Each
 request supplies a static C++20 executable, an input specifying a problem
 instance, and the organizer's independently computed expected output.
 
+The operator environment now uses the model selected by a second comparison on
+516 real requests at fixed deadlines. [Live clock requalification](refit/README.md)
+
 ## Registered experiment
 
 One disposable AMD Milan guest measures only the three reference solutions.
