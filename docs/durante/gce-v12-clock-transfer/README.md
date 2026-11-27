@@ -47,6 +47,19 @@ The seven native readings agreed at all 12 whole-millisecond boundaries. The cal
 
 The second guest executed all 72 requests on guest CPU 1 with zero recorded steal ticks. It used the same server, patched runtime and static Wall/Money binaries as the first guest. The long panel used a 1 MiB stdout capture on all three worker paths so the verifier could hash Scrivener's 960,000-byte answer. The largest Money stdin was 12,800,014 bytes. Both temporary VMs and their auto-delete boot disks returned HTTP 404 after collection. [Scale payload hashes](scale/inputs.sha256) · [Machine and placement](scale/platform.json) · [Exec events](scale/exec-trace.txt.gz) · [Deletion record](scale/cleanup.json)
 
+## Accuracy limits of the measured counters
+
+A retrospective check of the six long inputs rules out ±20% accuracy for both fixed, zero-intercept models below. The lower bounds allow every input to take its most favorable observed native time and allow the final estimate to round up to a whole nanosecond. They apply to these static C++ executables on the measured Milan guest. [Exact fractions](scale/results.json) · [Replay](score.py)
+
+| Clock features | Lower bound on the worst relative error | Inputs used in the proof |
+|---|---:|---|
+| Instructions, MOVS bytes and STOS bytes | 23.14% | Money – terraced bids, Scrivener – interwoven pages, Wall – phase envelopes |
+| Static latency and nominal memory operand bytes, with nonnegative weights | 42.87% | Scrivener – interwoven pages, Wall – phase envelopes |
+
+For the live clock, the Money counter vector equals `p × Scrivener + q × Wall` in all three components, with `p = 139068037507/156810905382` and `q = 67608818548/156810905382`. The same identity must hold for any unrounded weighted sum of those counters. Even using the fastest Scrivener and Wall readings, their weighted native time is 225.402 ms. The slowest Money reading is 140.671 ms. If all three estimates have relative error at most `e`, they must satisfy `(1+e) × 140671000 ≥ (1−e) × (p × 181155000 + q × 150166000) − (p+q)` in nanoseconds. Against the six native medians, the exact best possible worst error of the unrounded model is 25.6444%. The replay verifies coefficients attaining it on all twelve live readings. [Live and native receipts](scale/receipts.jsonl.gz)
+
+For the diagnostic clock, Scrivener used 46.18% of Wall's modeled latency and 46.70% of its nominal operand bytes. Any nonnegative weighted sum puts Scrivener at most 46.70% of Wall's estimate before rounding. Yet the fastest Scrivener reading was 181.155 ms and the slowest Wall reading was 155.101 ms. The resulting error bound is independent of the fitted coefficients. These receipts contain no measurements of cache misses or branch mispredictions that would distinguish their contributions. [Diagnostic receipts](scale/receipts.jsonl.gz)
+
 ## Measurement and replay
 
 Each panel ran on a separate N2D standard-4 Compute Engine guest in Seoul on AMD Milan with one thread per core. A systemd cpuset and scheduler affinity confine the three embedded HTTP workers and their children to guest CPU 1. The kernel's exec trace locates each ordinary submission or Durante launcher on that CPU. Native, live and diagnostic requests run serially with the same static ELF, stdin, expected stdout and sandbox backend. Native programs use ordinary host dispatch and metered programs use Durante's fixed x86-64-v2 profile. [Guest setup](guest.sh) · [Worker requests and validation](guest.py)
