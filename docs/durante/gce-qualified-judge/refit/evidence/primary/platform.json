@@ -1,0 +1,23 @@
+{
+  "phase": "primary",
+  "boot_sha256": "e70639d781c9a5ec1fe66b39fa7b8b172777be5e660419ee42c6ed02e0948407",
+  "kernel": "6.1.0-56-cloud-amd64",
+  "cpu": 1,
+  "affinity": [
+    1
+  ],
+  "cpuset_cpus_effective": "1",
+  "cpu1_thread_siblings": "1",
+  "steal_ticks_before": 0,
+  "case_manifest_sha256": "30e57d6ee28ef1b857e25948fa280abf3f914476b29cd7682221944de32e9e4c",
+  "plan_sha256": "87cd31962aa5b851df087e926835263c2014b8338c0891b5105e7fbcfd10ded5",
+  "runtime_sha256": "170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+  "server_sha256": "990c60741226efe1e2a1b57bef16f4fc56c3f811b877f5565fb6244efac70e57",
+  "freeze_sha256": "65239f86426584c275a44b15038324dfaeeeb34ce8ebaebda2d43275aeddd862",
+  "workers": {
+    "native": 1161,
+    "baseline": 1172,
+    "candidate": 1183
+  },
+  "steal_ticks_after": 0
+}
