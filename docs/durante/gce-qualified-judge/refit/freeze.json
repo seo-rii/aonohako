@@ -1,0 +1,908 @@
+{
+  "absolute_quantization_error_ns_per_work": {
+    "denominator": 1,
+    "numerator": 0
+  },
+  "baseline": {
+    "calibration_boot_sha256": "d73a4752bc35175a1fee76a6c34fe99ca6891f94a171f45b0e7c7b3b394f0f0c",
+    "calibration_trials_sha256": "10b98729b4ac85bcd2e9d0908448e304287bee83de7b07c6cbc8b0f8508eae93",
+    "cases": {
+      "inversions": {
+        "contest_ms": 203,
+        "high_ms": 61,
+        "low_ms": 40,
+        "native_median_ns": 50696000,
+        "stress_ms": 1,
+        "work_median": 244161820
+      },
+      "range_min": {
+        "contest_ms": 183,
+        "high_ms": 55,
+        "low_ms": 36,
+        "native_median_ns": 45620000,
+        "stress_ms": 1,
+        "work_median": 131010752
+      },
+      "shortest_paths": {
+        "contest_ms": 65,
+        "high_ms": 20,
+        "low_ms": 12,
+        "native_median_ns": 16156000,
+        "stress_ms": 1,
+        "work_median": 63315373
+      }
+    },
+    "judge_cases": {
+      "cases": [
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "45f27faf5623ed5eecf8abb9b540478c7d0c21ba1d1b01c20458d963f90def4e",
+          "time_ms": 35
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "45f27faf5623ed5eecf8abb9b540478c7d0c21ba1d1b01c20458d963f90def4e",
+          "time_ms": 44
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "45f27faf5623ed5eecf8abb9b540478c7d0c21ba1d1b01c20458d963f90def4e",
+          "time_ms": 54
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "45f27faf5623ed5eecf8abb9b540478c7d0c21ba1d1b01c20458d963f90def4e",
+          "time_ms": 67
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "6c2fe91c03fe2827a92ca5ec7e301b25c3143141cf808234ab8fb8f59b5488fc",
+          "time_ms": 20
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "6c2fe91c03fe2827a92ca5ec7e301b25c3143141cf808234ab8fb8f59b5488fc",
+          "time_ms": 25
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "6c2fe91c03fe2827a92ca5ec7e301b25c3143141cf808234ab8fb8f59b5488fc",
+          "time_ms": 31
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "6c2fe91c03fe2827a92ca5ec7e301b25c3143141cf808234ab8fb8f59b5488fc",
+          "time_ms": 39
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+          "time_ms": 1
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+          "time_ms": 40
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+          "time_ms": 61
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+          "time_ms": 203
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0a0a817be2dfa32cd8ee373d83fe9b5ee7d5529424322b57e12655b3476ff63c",
+          "time_ms": 13
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0a0a817be2dfa32cd8ee373d83fe9b5ee7d5529424322b57e12655b3476ff63c",
+          "time_ms": 14
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0a0a817be2dfa32cd8ee373d83fe9b5ee7d5529424322b57e12655b3476ff63c",
+          "time_ms": 21
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0a0a817be2dfa32cd8ee373d83fe9b5ee7d5529424322b57e12655b3476ff63c",
+          "time_ms": 23
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+          "time_ms": 1
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+          "time_ms": 36
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+          "time_ms": 55
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+          "time_ms": 183
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "b79620ecb1bd98608917743393427134073dde98646a724dd3fcbaf50099cb6c",
+          "time_ms": 19
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "b79620ecb1bd98608917743393427134073dde98646a724dd3fcbaf50099cb6c",
+          "time_ms": 20
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "b79620ecb1bd98608917743393427134073dde98646a724dd3fcbaf50099cb6c",
+          "time_ms": 29
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "b79620ecb1bd98608917743393427134073dde98646a724dd3fcbaf50099cb6c",
+          "time_ms": 32
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+          "time_ms": 27
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+          "time_ms": 30
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+          "time_ms": 42
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+          "time_ms": 46
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "63303748b72cf9e2ac7365b36b66a5510b4744a1b8a0ed8f0f7f7a3748c51717",
+          "time_ms": 18
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "63303748b72cf9e2ac7365b36b66a5510b4744a1b8a0ed8f0f7f7a3748c51717",
+          "time_ms": 19
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "63303748b72cf9e2ac7365b36b66a5510b4744a1b8a0ed8f0f7f7a3748c51717",
+          "time_ms": 28
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "63303748b72cf9e2ac7365b36b66a5510b4744a1b8a0ed8f0f7f7a3748c51717",
+          "time_ms": 30
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+          "time_ms": 1
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+          "time_ms": 12
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+          "time_ms": 20
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+          "time_ms": 65
+        }
+      ],
+      "schema": 1
+    },
+    "manifest_sha256": "f67c7471a551bbd3617c1e49a6d0a7cade3e5593e3376d401a663ead46e9c63d",
+    "model_binding": "work-clock-v1:sha256:503faac4a46d02ce60e1519910e16ebf66471d4439a56a0c0196b993e21a356d",
+    "plan_sha256": "87cd31962aa5b851df087e926835263c2014b8338c0891b5105e7fbcfd10ded5",
+    "policy": {
+      "cpuid_profile": "x86-64-v2",
+      "dispatch_profile": "default",
+      "engine_profile": "dynamorio-11.3-durante-v12-vm32m",
+      "family": "cpp",
+      "instruction_ns_numerator": 16156000,
+      "method": "weighted-work-nanoseconds-v1",
+      "model_id": "pinned-judge-pilot",
+      "model_version": 1,
+      "ns_denominator": 63315373,
+      "reference_id": "three-reference-algorithms",
+      "rep_byte_ns_numerator": 16156000,
+      "runtime_id": "CPP20@sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c"
+    },
+    "runtime_options_id": "runtime-options-v1:sha256:862b2a16bdcf34da22e94e26d3e5473bfc9ef103b7d8f72ece0c5fc4cc70436d",
+    "runtime_sha256": "170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+    "schema": 1,
+    "time_models": {
+      "models": [
+        {
+          "coefficients": {
+            "instruction_ns_numerator": 16156000,
+            "ns_denominator": 63315373,
+            "rep_byte_ns_numerator": 16156000
+          },
+          "method": "weighted-work-nanoseconds-v1",
+          "model_id": "pinned-judge-pilot",
+          "model_version": 1,
+          "reference_id": "three-reference-algorithms"
+        }
+      ],
+      "profiles": [
+        {
+          "cpuid_profile": "x86-64-v2",
+          "dispatch_profile": "default",
+          "engine_profile": "dynamorio-11.3-durante-v12-vm32m",
+          "family": "cpp",
+          "model_id": "pinned-judge-pilot",
+          "model_version": 1,
+          "qualification_id": "local-boundary-experiment",
+          "runtime_image": "sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+          "runtime_options": {
+            "argv": [
+              "/__aonohako_program__"
+            ],
+            "env": [
+              "BLIS_NUM_THREADS=1",
+              "CARGO_HOME=/usr/local/cargo",
+              "COMPlus_EnableDiagnostics=0",
+              "DOTNET_CLI_HOME=/__aonohako_workspace__/.dotnet-home",
+              "DOTNET_CLI_TELEMETRY_OPTOUT=1",
+              "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",
+              "DOTNET_EnableDiagnostics=0",
+              "DOTNET_GENERATE_ASPNET_CERTIFICATE=false",
+              "DOTNET_NOLOGO=1",
+              "DOTNET_PROCESSOR_COUNT=1",
+              "DOTNET_ROOT=/opt/dotnet",
+              "DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
+              "GOCACHE=/__aonohako_workspace__/.gocache",
+              "GOENV=off",
+              "GOMAXPROCS=1",
+              "GOMODCACHE=/__aonohako_workspace__/.gomodcache",
+              "GOPATH=/__aonohako_workspace__/.gopath",
+              "GOTELEMETRY=off",
+              "GOTOOLCHAIN=local",
+              "HEX_HOME=/__aonohako_workspace__/.hex",
+              "HOME=/__aonohako_workspace__/.home",
+              "HTTPS_PROXY=",
+              "HTTP_PROXY=",
+              "IMG_OUT_DIR=/__aonohako_workspace__/__img__",
+              "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/__aonohako_workspace__/.tmp",
+              "JULIA_DEPOT_PATH=/__aonohako_workspace__/.julia",
+              "JULIA_NUM_THREADS=1",
+              "JULIA_PROBE_LIBSTDCXX=0",
+              "KONAN_DATA_DIR=/__aonohako_workspace__/.konan",
+              "KONAN_USER_HOME=/__aonohako_workspace__/.konan-home",
+              "LANG=C.UTF-8",
+              "LC_ALL=C.UTF-8",
+              "MIX_HOME=/__aonohako_workspace__/.mix",
+              "MKL_NUM_THREADS=1",
+              "MPLCONFIGDIR=/__aonohako_workspace__/.mpl",
+              "MSBuildEnableWorkloadResolver=false",
+              "NO_PROXY=*",
+              "NUGET_HTTP_CACHE_PATH=/__aonohako_workspace__/.nuget-http-cache",
+              "NUGET_PACKAGES=/__aonohako_workspace__/.nuget",
+              "NUGET_PLUGINS_CACHE_PATH=/__aonohako_workspace__/.nuget-plugins-cache",
+              "NUGET_SCRATCH=/__aonohako_workspace__/.nuget-scratch",
+              "NUMEXPR_NUM_THREADS=1",
+              "OMP_NUM_THREADS=1",
+              "ONLINE_JUDGE=1",
+              "OPENBLAS_NUM_THREADS=1",
+              "PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
+              "PIP_CACHE_DIR=/__aonohako_workspace__/.pip-cache",
+              "PYTHONDONTWRITEBYTECODE=1",
+              "PYTHONPATH=/usr/local/lib/aonohako/python",
+              "RUSTUP_HOME=/usr/local/rustup",
+              "R_DEFAULT_PACKAGES=NULL",
+              "R_DOC_DIR=/usr/share/R/doc",
+              "R_HOME=/usr/lib/R",
+              "R_INCLUDE_DIR=/usr/share/R/include",
+              "R_SHARE_DIR=/usr/share/R/share",
+              "TEMP=/__aonohako_workspace__/.tmp",
+              "TEMPDIR=/__aonohako_workspace__/.tmp",
+              "TF_NUM_INTEROP_THREADS=1",
+              "TF_NUM_INTRAOP_THREADS=1",
+              "TMP=/__aonohako_workspace__/.tmp",
+              "TMPDIR=/__aonohako_workspace__/.tmp",
+              "VECLIB_MAXIMUM_THREADS=1",
+              "XDG_CACHE_HOME=/__aonohako_workspace__/.cache",
+              "XLA_FLAGS=--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1",
+              "http_proxy=",
+              "https_proxy=",
+              "no_proxy=*"
+            ],
+            "memory_mb": 1024,
+            "version": 1
+          },
+          "source_language": "CPP20"
+        }
+      ],
+      "schema": 2
+    }
+  },
+  "candidate": {
+    "calibration_boot_sha256": "e3eb228b28f37633116a390c92b97a886d3e8ab01a630644f864e3dfd5ec334c",
+    "calibration_trials_sha256": "8a0b2376393f5f0d16e0fa261e2b85d09cba5ff03538aef6457a586c6b8d1473",
+    "cases": {
+      "inversions": {
+        "contest_ms": 203,
+        "high_ms": 61,
+        "low_ms": 40,
+        "native_median_ns": 50696000,
+        "stress_ms": 1,
+        "work_median": 244161820
+      },
+      "range_min": {
+        "contest_ms": 183,
+        "high_ms": 55,
+        "low_ms": 36,
+        "native_median_ns": 45620000,
+        "stress_ms": 1,
+        "work_median": 131010752
+      },
+      "shortest_paths": {
+        "contest_ms": 65,
+        "high_ms": 20,
+        "low_ms": 12,
+        "native_median_ns": 16156000,
+        "stress_ms": 1,
+        "work_median": 63315373
+      }
+    },
+    "judge_cases": {
+      "cases": [
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "45f27faf5623ed5eecf8abb9b540478c7d0c21ba1d1b01c20458d963f90def4e",
+          "time_ms": 35
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "45f27faf5623ed5eecf8abb9b540478c7d0c21ba1d1b01c20458d963f90def4e",
+          "time_ms": 44
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "45f27faf5623ed5eecf8abb9b540478c7d0c21ba1d1b01c20458d963f90def4e",
+          "time_ms": 54
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "45f27faf5623ed5eecf8abb9b540478c7d0c21ba1d1b01c20458d963f90def4e",
+          "time_ms": 67
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "6c2fe91c03fe2827a92ca5ec7e301b25c3143141cf808234ab8fb8f59b5488fc",
+          "time_ms": 20
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "6c2fe91c03fe2827a92ca5ec7e301b25c3143141cf808234ab8fb8f59b5488fc",
+          "time_ms": 25
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "6c2fe91c03fe2827a92ca5ec7e301b25c3143141cf808234ab8fb8f59b5488fc",
+          "time_ms": 31
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "6c2fe91c03fe2827a92ca5ec7e301b25c3143141cf808234ab8fb8f59b5488fc",
+          "time_ms": 39
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+          "time_ms": 1
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+          "time_ms": 40
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+          "time_ms": 61
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "inversions",
+          "source_language": "CPP20",
+          "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+          "time_ms": 203
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0a0a817be2dfa32cd8ee373d83fe9b5ee7d5529424322b57e12655b3476ff63c",
+          "time_ms": 13
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0a0a817be2dfa32cd8ee373d83fe9b5ee7d5529424322b57e12655b3476ff63c",
+          "time_ms": 14
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0a0a817be2dfa32cd8ee373d83fe9b5ee7d5529424322b57e12655b3476ff63c",
+          "time_ms": 21
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0a0a817be2dfa32cd8ee373d83fe9b5ee7d5529424322b57e12655b3476ff63c",
+          "time_ms": 23
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+          "time_ms": 1
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+          "time_ms": 36
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+          "time_ms": 55
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+          "time_ms": 183
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "b79620ecb1bd98608917743393427134073dde98646a724dd3fcbaf50099cb6c",
+          "time_ms": 19
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "b79620ecb1bd98608917743393427134073dde98646a724dd3fcbaf50099cb6c",
+          "time_ms": 20
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "b79620ecb1bd98608917743393427134073dde98646a724dd3fcbaf50099cb6c",
+          "time_ms": 29
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "range_min",
+          "source_language": "CPP20",
+          "stdin_sha256": "b79620ecb1bd98608917743393427134073dde98646a724dd3fcbaf50099cb6c",
+          "time_ms": 32
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+          "time_ms": 27
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+          "time_ms": 30
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+          "time_ms": 42
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+          "time_ms": 46
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "63303748b72cf9e2ac7365b36b66a5510b4744a1b8a0ed8f0f7f7a3748c51717",
+          "time_ms": 18
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "63303748b72cf9e2ac7365b36b66a5510b4744a1b8a0ed8f0f7f7a3748c51717",
+          "time_ms": 19
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "63303748b72cf9e2ac7365b36b66a5510b4744a1b8a0ed8f0f7f7a3748c51717",
+          "time_ms": 28
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "63303748b72cf9e2ac7365b36b66a5510b4744a1b8a0ed8f0f7f7a3748c51717",
+          "time_ms": 30
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+          "time_ms": 1
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+          "time_ms": 12
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+          "time_ms": 20
+        },
+        {
+          "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+          "problem_id": "shortest_paths",
+          "source_language": "CPP20",
+          "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+          "time_ms": 65
+        }
+      ],
+      "schema": 1
+    },
+    "manifest_sha256": "f67c7471a551bbd3617c1e49a6d0a7cade3e5593e3376d401a663ead46e9c63d",
+    "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+    "plan_sha256": "87cd31962aa5b851df087e926835263c2014b8338c0891b5105e7fbcfd10ded5",
+    "policy": {
+      "cpuid_profile": "x86-64-v2",
+      "dispatch_profile": "default",
+      "engine_profile": "dynamorio-11.3-durante-v12-vm32m",
+      "family": "cpp",
+      "instruction_ns_numerator": 1139371945900000,
+      "method": "weighted-work-nanoseconds-v1",
+      "model_id": "pinned-judge-absolute-work",
+      "model_version": 1,
+      "ns_denominator": 4752214584908649,
+      "reference_id": "three-reference-absolute-time-ls",
+      "rep_byte_ns_numerator": 1139371945900000,
+      "runtime_id": "CPP20@sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c"
+    },
+    "runtime_options_id": "runtime-options-v1:sha256:862b2a16bdcf34da22e94e26d3e5473bfc9ef103b7d8f72ece0c5fc4cc70436d",
+    "runtime_sha256": "170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+    "schema": 1,
+    "time_models": {
+      "models": [
+        {
+          "coefficients": {
+            "instruction_ns_numerator": 1139371945900000,
+            "ns_denominator": 4752214584908649,
+            "rep_byte_ns_numerator": 1139371945900000
+          },
+          "method": "weighted-work-nanoseconds-v1",
+          "model_id": "pinned-judge-absolute-work",
+          "model_version": 1,
+          "reference_id": "three-reference-absolute-time-ls"
+        }
+      ],
+      "profiles": [
+        {
+          "cpuid_profile": "x86-64-v2",
+          "dispatch_profile": "default",
+          "engine_profile": "dynamorio-11.3-durante-v12-vm32m",
+          "family": "cpp",
+          "model_id": "pinned-judge-absolute-work",
+          "model_version": 1,
+          "qualification_id": "local-boundary-experiment",
+          "runtime_image": "sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+          "runtime_options": {
+            "argv": [
+              "/__aonohako_program__"
+            ],
+            "env": [
+              "BLIS_NUM_THREADS=1",
+              "CARGO_HOME=/usr/local/cargo",
+              "COMPlus_EnableDiagnostics=0",
+              "DOTNET_CLI_HOME=/__aonohako_workspace__/.dotnet-home",
+              "DOTNET_CLI_TELEMETRY_OPTOUT=1",
+              "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",
+              "DOTNET_EnableDiagnostics=0",
+              "DOTNET_GENERATE_ASPNET_CERTIFICATE=false",
+              "DOTNET_NOLOGO=1",
+              "DOTNET_PROCESSOR_COUNT=1",
+              "DOTNET_ROOT=/opt/dotnet",
+              "DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
+              "GOCACHE=/__aonohako_workspace__/.gocache",
+              "GOENV=off",
+              "GOMAXPROCS=1",
+              "GOMODCACHE=/__aonohako_workspace__/.gomodcache",
+              "GOPATH=/__aonohako_workspace__/.gopath",
+              "GOTELEMETRY=off",
+              "GOTOOLCHAIN=local",
+              "HEX_HOME=/__aonohako_workspace__/.hex",
+              "HOME=/__aonohako_workspace__/.home",
+              "HTTPS_PROXY=",
+              "HTTP_PROXY=",
+              "IMG_OUT_DIR=/__aonohako_workspace__/__img__",
+              "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/__aonohako_workspace__/.tmp",
+              "JULIA_DEPOT_PATH=/__aonohako_workspace__/.julia",
+              "JULIA_NUM_THREADS=1",
+              "JULIA_PROBE_LIBSTDCXX=0",
+              "KONAN_DATA_DIR=/__aonohako_workspace__/.konan",
+              "KONAN_USER_HOME=/__aonohako_workspace__/.konan-home",
+              "LANG=C.UTF-8",
+              "LC_ALL=C.UTF-8",
+              "MIX_HOME=/__aonohako_workspace__/.mix",
+              "MKL_NUM_THREADS=1",
+              "MPLCONFIGDIR=/__aonohako_workspace__/.mpl",
+              "MSBuildEnableWorkloadResolver=false",
+              "NO_PROXY=*",
+              "NUGET_HTTP_CACHE_PATH=/__aonohako_workspace__/.nuget-http-cache",
+              "NUGET_PACKAGES=/__aonohako_workspace__/.nuget",
+              "NUGET_PLUGINS_CACHE_PATH=/__aonohako_workspace__/.nuget-plugins-cache",
+              "NUGET_SCRATCH=/__aonohako_workspace__/.nuget-scratch",
+              "NUMEXPR_NUM_THREADS=1",
+              "OMP_NUM_THREADS=1",
+              "ONLINE_JUDGE=1",
+              "OPENBLAS_NUM_THREADS=1",
+              "PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
+              "PIP_CACHE_DIR=/__aonohako_workspace__/.pip-cache",
+              "PYTHONDONTWRITEBYTECODE=1",
+              "PYTHONPATH=/usr/local/lib/aonohako/python",
+              "RUSTUP_HOME=/usr/local/rustup",
+              "R_DEFAULT_PACKAGES=NULL",
+              "R_DOC_DIR=/usr/share/R/doc",
+              "R_HOME=/usr/lib/R",
+              "R_INCLUDE_DIR=/usr/share/R/include",
+              "R_SHARE_DIR=/usr/share/R/share",
+              "TEMP=/__aonohako_workspace__/.tmp",
+              "TEMPDIR=/__aonohako_workspace__/.tmp",
+              "TF_NUM_INTEROP_THREADS=1",
+              "TF_NUM_INTRAOP_THREADS=1",
+              "TMP=/__aonohako_workspace__/.tmp",
+              "TMPDIR=/__aonohako_workspace__/.tmp",
+              "VECLIB_MAXIMUM_THREADS=1",
+              "XDG_CACHE_HOME=/__aonohako_workspace__/.cache",
+              "XLA_FLAGS=--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1",
+              "http_proxy=",
+              "https_proxy=",
+              "no_proxy=*"
+            ],
+            "memory_mb": 1024,
+            "version": 1
+          },
+          "source_language": "CPP20"
+        }
+      ],
+      "schema": 2
+    }
+  },
+  "case_manifest_sha256": "30e57d6ee28ef1b857e25948fa280abf3f914476b29cd7682221944de32e9e4c",
+  "deadlines": {
+    "inversions-a-fast": {
+      "high_ms": 39,
+      "low_ms": 25,
+      "native_median_ns": 31785000
+    },
+    "inversions-a-wrong": {
+      "high_ms": 31,
+      "low_ms": 20,
+      "native_median_ns": 25247000
+    },
+    "inversions-b-fast": {
+      "high_ms": 67,
+      "low_ms": 44,
+      "native_median_ns": 55555000
+    },
+    "inversions-b-wrong": {
+      "high_ms": 54,
+      "low_ms": 35,
+      "native_median_ns": 44570000
+    },
+    "range_min-a-fast": {
+      "high_ms": 21,
+      "low_ms": 13,
+      "native_median_ns": 17174000
+    },
+    "range_min-a-wrong": {
+      "high_ms": 23,
+      "low_ms": 14,
+      "native_median_ns": 18618000
+    },
+    "range_min-b-fast": {
+      "high_ms": 29,
+      "low_ms": 19,
+      "native_median_ns": 23847000
+    },
+    "range_min-b-wrong": {
+      "high_ms": 32,
+      "low_ms": 20,
+      "native_median_ns": 25869000
+    },
+    "shortest_paths-a-fast": {
+      "high_ms": 30,
+      "low_ms": 19,
+      "native_median_ns": 24178000
+    },
+    "shortest_paths-a-wrong": {
+      "high_ms": 28,
+      "low_ms": 18,
+      "native_median_ns": 23000000
+    },
+    "shortest_paths-b-fast": {
+      "high_ms": 46,
+      "low_ms": 30,
+      "native_median_ns": 38008000
+    },
+    "shortest_paths-b-wrong": {
+      "high_ms": 42,
+      "low_ms": 27,
+      "native_median_ns": 34181000
+    }
+  },
+  "exact_ns_per_work": {
+    "denominator": 4752214584908649,
+    "numerator": 1139371945900000
+  },
+  "feature_commit": "357994c1f4cd4fc650848624bc3e355f7bfa06d8",
+  "feature_results_sha256": "ff4aa91067982967c435c17838895916a1b02174c31b6af1590fdaff948453cb",
+  "feature_trials_sha256": "8a0b2376393f5f0d16e0fa261e2b85d09cba5ff03538aef6457a586c6b8d1473",
+  "pilot_commit": "0f11b8c17ff7e1b11072649a1145853f338e6253",
+  "pilot_frozen_sha256": "5cdbf4661f0c547c20a5fd7739729f58ff7b37e112d36c386f66072ce19949cb",
+  "pilot_results_sha256": "19aa5e19d87c6cf5fbf2da859046424b07f64492cd75d85af1620aa4939484b0",
+  "schema": 1,
+  "wire_ns_per_work": {
+    "denominator": 4752214584908649,
+    "numerator": 1139371945900000
+  }
+}
