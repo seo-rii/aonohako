@@ -1,4 +1,4 @@
-//go:build durante_v11
+//go:build durante_v11 || durante_v12
 
 package execute
 
