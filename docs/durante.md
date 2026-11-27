@@ -99,6 +99,11 @@ resource watchdogs bound the rest of the run. The worker also verifies the
 v12 runtime patch identities when it loads the client.
 [Live work budgets](https://github.com/seo-rii/durante/blob/b43685c76b94a365886031359b032899b009cd1b/docs/ONLINE_WORK_BUDGET.md)
 
+On two CPU-pinned Milan guests, a short-contest calibration brought four of
+six longer C++ inputs within ±20% of native CPU time. It underestimated both
+inputs for the Scrivener solution by 47–56%. The v12 study keeps these weights
+diagnostic. [C++20 v12 accuracy and raw HTTP receipts](durante/gce-v12-clock-transfer/README.md)
+
 Qualify time models against the final immutable worker image, engine profile,
 and runtime options, including the selected CPUID profile. Build the reference
 tool and any control plane that handles model-bound requests with the same
