@@ -1,0 +1,18 @@
+{
+  "boot_sha256": "d73a4752bc35175a1fee76a6c34fe99ca6891f94a171f45b0e7c7b3b394f0f0c",
+  "phase": "calibrate",
+  "kernel": "6.1.0-56-cloud-amd64",
+  "cpu": 1,
+  "affinity": [
+    1
+  ],
+  "cpuset_cpus_effective": "1",
+  "cpu1_thread_siblings": "1",
+  "steal_ticks_before": 0,
+  "plan_sha256": "87cd31962aa5b851df087e926835263c2014b8338c0891b5105e7fbcfd10ded5",
+  "workers": {
+    "native": 1134,
+    "raw": 1139
+  },
+  "steal_ticks_after": 0
+}

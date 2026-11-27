@@ -1,0 +1,473 @@
+{
+  "schema": 1,
+  "purpose": "Post-hoc scalar diagnostic from calibration references and completed held-out submissions.",
+  "sample_order": [
+    "min",
+    "median",
+    "max"
+  ],
+  "work_unit": "one instruction or one MOVS/STOS byte",
+  "signed_error": "100 * (coefficient * median work / median native CPU ns - 1)",
+  "lower_bound": "Each solver admits [min CPU / max work, max CPU / min work]. With H the largest lower endpoint and L the smallest upper endpoint, max(0, (H-L)/(H+L)) bounds the best possible maximum relative error even using the most favorable values in those observed intervals.",
+  "frozen_sha256": "5cdbf4661f0c547c20a5fd7739729f58ff7b37e112d36c386f66072ce19949cb",
+  "held_out_contest_errors": {
+    "primary": {
+      "shared": {
+        "groups": 6,
+        "mean_absolute_pct": 21.2047,
+        "median_absolute_pct": 9.4443,
+        "median_signed_pct": 7.1674,
+        "max_absolute_pct": 67.7156
+      },
+      "per_problem": {
+        "groups": 6,
+        "mean_absolute_pct": 24.8085,
+        "median_absolute_pct": 23.4768,
+        "median_signed_pct": 23.4768,
+        "max_absolute_pct": 50.4222
+      }
+    },
+    "repeat": {
+      "shared": {
+        "groups": 6,
+        "mean_absolute_pct": 19.8427,
+        "median_absolute_pct": 7.4745,
+        "median_signed_pct": 7.4745,
+        "max_absolute_pct": 67.5741
+      },
+      "per_problem": {
+        "groups": 6,
+        "mean_absolute_pct": 23.4996,
+        "median_absolute_pct": 23.27,
+        "median_signed_pct": 23.27,
+        "max_absolute_pct": 49.4982
+      }
+    },
+    "both_guests": {
+      "shared": {
+        "groups": 12,
+        "mean_absolute_pct": 20.5237,
+        "median_absolute_pct": 9.1057,
+        "median_signed_pct": 7.4745,
+        "max_absolute_pct": 67.7156
+      },
+      "per_problem": {
+        "groups": 12,
+        "mean_absolute_pct": 24.154,
+        "median_absolute_pct": 23.4193,
+        "median_signed_pct": 23.4193,
+        "max_absolute_pct": 50.4222
+      }
+    }
+  },
+  "shared_coefficient_bounds": {
+    "primary": {
+      "minimax_relative_error_floor_pct": 24.8463,
+      "highest_ratio_lower_endpoint_solver": "shortest_paths/fast",
+      "lowest_ratio_upper_endpoint_solver": "inversions/wrong"
+    },
+    "repeat": {
+      "minimax_relative_error_floor_pct": 24.9996,
+      "highest_ratio_lower_endpoint_solver": "shortest_paths/fast",
+      "lowest_ratio_upper_endpoint_solver": "inversions/wrong"
+    }
+  },
+  "problems": {
+    "range_min": {
+      "reference": {
+        "native_cpu_ns": [
+          45426000,
+          45620000,
+          45709000
+        ],
+        "work_units": [
+          131010752,
+          131010752,
+          131010752
+        ],
+        "ns_per_work_interval": [
+          0.3467349,
+          0.348895028
+        ]
+      },
+      "coefficient_ns_per_work": {
+        "numerator": 1425625,
+        "denominator": 4094086
+      },
+      "guests": {
+        "primary": {
+          "held_out": {
+            "fast": {
+              "native_cpu_ns": [
+                7978000,
+                8121000,
+                8618000
+              ],
+              "work_units": [
+                35081078,
+                35081091,
+                35081104
+              ],
+              "ns_per_work_interval": [
+                0.227415876,
+                0.245659498
+              ],
+              "signed_error_pct": {
+                "shared": 10.2271,
+                "per_problem": 50.4222
+              }
+            },
+            "wrong": {
+              "native_cpu_ns": [
+                8579000,
+                8716000,
+                8788000
+              ],
+              "work_units": [
+                35561104,
+                35561104,
+                35561104
+              ],
+              "ns_per_work_interval": [
+                0.241246728,
+                0.247123936
+              ],
+              "signed_error_pct": {
+                "shared": 4.1077,
+                "per_problem": 42.0713
+              }
+            }
+          },
+          "within_guest_bound": {
+            "minimax_relative_error_floor_pct": 0.0,
+            "highest_ratio_lower_endpoint_solver": "wrong",
+            "lowest_ratio_upper_endpoint_solver": "fast"
+          },
+          "including_calibration_reference_bound": {
+            "minimax_relative_error_floor_pct": 17.0622,
+            "highest_ratio_lower_endpoint_solver": "reference",
+            "lowest_ratio_upper_endpoint_solver": "fast"
+          }
+        },
+        "repeat": {
+          "held_out": {
+            "fast": {
+              "native_cpu_ns": [
+                8158000,
+                8493000,
+                8830000
+              ],
+              "work_units": [
+                35081078,
+                35081091,
+                35081104
+              ],
+              "ns_per_work_interval": [
+                0.232546843,
+                0.251702642
+              ],
+              "signed_error_pct": {
+                "shared": 5.399,
+                "per_problem": 43.8336
+              }
+            },
+            "wrong": {
+              "native_cpu_ns": [
+                8243000,
+                8283000,
+                9036000
+              ],
+              "work_units": [
+                35561104,
+                35561104,
+                35561104
+              ],
+              "ns_per_work_interval": [
+                0.231798203,
+                0.254097848
+              ],
+              "signed_error_pct": {
+                "shared": 9.55,
+                "per_problem": 49.4982
+              }
+            }
+          },
+          "within_guest_bound": {
+            "minimax_relative_error_floor_pct": 0.0,
+            "highest_ratio_lower_endpoint_solver": "fast",
+            "lowest_ratio_upper_endpoint_solver": "fast"
+          },
+          "including_calibration_reference_bound": {
+            "minimax_relative_error_floor_pct": 15.8801,
+            "highest_ratio_lower_endpoint_solver": "reference",
+            "lowest_ratio_upper_endpoint_solver": "fast"
+          }
+        }
+      }
+    },
+    "shortest_paths": {
+      "reference": {
+        "native_cpu_ns": [
+          15960000,
+          16156000,
+          17434000
+        ],
+        "work_units": [
+          63315373,
+          63315373,
+          63315373
+        ],
+        "ns_per_work_interval": [
+          0.252071483,
+          0.27535177
+        ]
+      },
+      "coefficient_ns_per_work": {
+        "numerator": 16156000,
+        "denominator": 63315373
+      },
+      "guests": {
+        "primary": {
+          "held_out": {
+            "fast": {
+              "native_cpu_ns": [
+                12692000,
+                13777000,
+                13834000
+              ],
+              "work_units": [
+                49315559,
+                49315559,
+                49315559
+              ],
+              "ns_per_work_interval": [
+                0.257362996,
+                0.280519988
+              ],
+              "signed_error_pct": {
+                "shared": -8.6615,
+                "per_problem": -8.6615
+              }
+            },
+            "wrong": {
+              "native_cpu_ns": [
+                11802000,
+                12161000,
+                12207000
+              ],
+              "work_units": [
+                48012749,
+                48012749,
+                48012749
+              ],
+              "ns_per_work_interval": [
+                0.245809712,
+                0.254244971
+              ],
+              "signed_error_pct": {
+                "shared": 0.7423,
+                "per_problem": 0.7423
+              }
+            }
+          },
+          "within_guest_bound": {
+            "minimax_relative_error_floor_pct": 0.6095,
+            "highest_ratio_lower_endpoint_solver": "fast",
+            "lowest_ratio_upper_endpoint_solver": "wrong"
+          },
+          "including_calibration_reference_bound": {
+            "minimax_relative_error_floor_pct": 0.6095,
+            "highest_ratio_lower_endpoint_solver": "fast",
+            "lowest_ratio_upper_endpoint_solver": "wrong"
+          }
+        },
+        "repeat": {
+          "held_out": {
+            "fast": {
+              "native_cpu_ns": [
+                12526000,
+                12588000,
+                13059000
+              ],
+              "work_units": [
+                49315559,
+                49315559,
+                49315559
+              ],
+              "ns_per_work_interval": [
+                0.253996918,
+                0.264804866
+              ],
+              "signed_error_pct": {
+                "shared": -0.0341,
+                "per_problem": -0.0341
+              }
+            },
+            "wrong": {
+              "native_cpu_ns": [
+                11776000,
+                12119000,
+                12702000
+              ],
+              "work_units": [
+                48012749,
+                48012762,
+                48012775
+              ],
+              "ns_per_work_interval": [
+                0.245268056,
+                0.264554733
+              ],
+              "signed_error_pct": {
+                "shared": 1.0915,
+                "per_problem": 1.0915
+              }
+            }
+          },
+          "within_guest_bound": {
+            "minimax_relative_error_floor_pct": 0.0,
+            "highest_ratio_lower_endpoint_solver": "fast",
+            "lowest_ratio_upper_endpoint_solver": "wrong"
+          },
+          "including_calibration_reference_bound": {
+            "minimax_relative_error_floor_pct": 0.0,
+            "highest_ratio_lower_endpoint_solver": "fast",
+            "lowest_ratio_upper_endpoint_solver": "wrong"
+          }
+        }
+      }
+    },
+    "inversions": {
+      "reference": {
+        "native_cpu_ns": [
+          50419000,
+          50696000,
+          51425000
+        ],
+        "work_units": [
+          244161820,
+          244161820,
+          244161820
+        ],
+        "ns_per_work_interval": [
+          0.206498297,
+          0.210618515
+        ]
+      },
+      "coefficient_ns_per_work": {
+        "numerator": 2534800,
+        "denominator": 12208091
+      },
+      "guests": {
+        "primary": {
+          "held_out": {
+            "fast": {
+              "native_cpu_ns": [
+                17516000,
+                17714000,
+                17828000
+              ],
+              "work_units": [
+                94256125,
+                94256125,
+                94256125
+              ],
+              "ns_per_work_interval": [
+                0.185834077,
+                0.189144207
+              ],
+              "signed_error_pct": {
+                "shared": 35.7743,
+                "per_problem": 10.4813
+              }
+            },
+            "wrong": {
+              "native_cpu_ns": [
+                14173000,
+                14219000,
+                14479000
+              ],
+              "work_units": [
+                93458283,
+                93458283,
+                93458283
+              ],
+              "ns_per_work_interval": [
+                0.15165055,
+                0.154924738
+              ],
+              "signed_error_pct": {
+                "shared": 67.7156,
+                "per_problem": 36.4724
+              }
+            }
+          },
+          "within_guest_bound": {
+            "minimax_relative_error_floor_pct": 9.0707,
+            "highest_ratio_lower_endpoint_solver": "fast",
+            "lowest_ratio_upper_endpoint_solver": "wrong"
+          },
+          "including_calibration_reference_bound": {
+            "minimax_relative_error_floor_pct": 14.2696,
+            "highest_ratio_lower_endpoint_solver": "reference",
+            "lowest_ratio_upper_endpoint_solver": "wrong"
+          }
+        },
+        "repeat": {
+          "held_out": {
+            "fast": {
+              "native_cpu_ns": [
+                17696000,
+                17762000,
+                17773000
+              ],
+              "work_units": [
+                94256125,
+                94256125,
+                94256125
+              ],
+              "ns_per_work_interval": [
+                0.187743767,
+                0.18856069
+              ],
+              "signed_error_pct": {
+                "shared": 35.4074,
+                "per_problem": 10.1828
+              }
+            },
+            "wrong": {
+              "native_cpu_ns": [
+                14195000,
+                14231000,
+                14243000
+              ],
+              "work_units": [
+                93458257,
+                93458270,
+                93458283
+              ],
+              "ns_per_work_interval": [
+                0.151885949,
+                0.152399589
+              ],
+              "signed_error_pct": {
+                "shared": 67.5741,
+                "per_problem": 36.3573
+              }
+            }
+          },
+          "within_guest_bound": {
+            "minimax_relative_error_floor_pct": 10.391,
+            "highest_ratio_lower_endpoint_solver": "fast",
+            "lowest_ratio_upper_endpoint_solver": "wrong"
+          },
+          "including_calibration_reference_bound": {
+            "minimax_relative_error_floor_pct": 15.0736,
+            "highest_ratio_lower_endpoint_solver": "reference",
+            "lowest_ratio_upper_endpoint_solver": "wrong"
+          }
+        }
+      }
+    }
+  }
+}

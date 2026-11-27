@@ -345,9 +345,16 @@ def summarize_group(rows):
     native = [r["receipt"] for r in rows if r["kind"] == "native"]
     judge = [r["receipt"] for r in rows if r["kind"] == "judge"]
     labels = {AC: "AC", WA: "WA", TLE: "TLE"}
-    counts = lambda samples: dict(sorted(Counter(labels[r["status"]] for r in samples).items()))
+    def counts(samples):
+        return dict(sorted(Counter(labels[r["status"]] for r in samples).items()))
+
     causes = Counter(r["work_measurement_execution"]["termination_source"] for r in judge)
-    result = dict(native=counts(native), durante=counts(judge), live_stops=causes["durante_work_clock"])
+    native_counts, judge_counts = counts(native), counts(judge)
+    if len(native_counts) == len(judge_counts) == 1:
+        agreement = "unanimous_agreement" if native_counts.keys() == judge_counts.keys() else "unanimous_opposition"
+    else:
+        agreement = "mixed"
+    result = dict(native=native_counts, durante=judge_counts, comparison=agreement, live_stops=causes["durante_work_clock"])
     if causes["durante_work_clock_final"]:
         result["exit_time_stops"] = causes["durante_work_clock_final"]
     # CPU-limited native samples are censored. Compare only actual completions.
@@ -365,6 +372,7 @@ def summarize_group(rows):
 
 def summarize(acceptance, frozen):
     results, allowed = {}, []
+    near_limits, held_out_errors = Counter(), []
     for p in corpus.PROBLEMS:
         case = frozen["cases"][p]
         guests = {}
@@ -378,6 +386,10 @@ def summarize(acceptance, frozen):
             for (boundary, role), rows in sorted(grouped.items()):
                 group = summarize_group(rows)
                 summary[role if boundary == "contest" else boundary] = group
+                if boundary in ("low", "high"):
+                    near_limits[group["comparison"]] += 1
+                if boundary == "contest" and "completed" in group:
+                    held_out_errors.append(group["completed"]["signed_error_pct"])
                 if boundary == "contest" or boundary == "stress":
                     expected = TLE if boundary == "stress" else EXPECTED[role]
                     qualifies &= all(r["receipt"]["status"] == expected for r in rows)
@@ -390,7 +402,12 @@ def summarize(acceptance, frozen):
             contest, = [entry for entry in frozen["judge_cases"]["cases"]
                         if entry["problem_id"] == p and entry["time_ms"] == case["contest_ms"]]
             allowed.append(contest)
+    completed = dict(groups=len(held_out_errors))
+    if held_out_errors:
+        completed.update(median_signed_error_pct=round(median(held_out_errors), 2),
+                         max_absolute_error_pct=max(map(abs, held_out_errors)))
     return dict(schema=1, registered_contest_cases=len(corpus.PROBLEMS), qualified_contest_cases=len(allowed),
+                held_out_completed_contest=completed, reference_near_limits=dict(near_limits),
                 judge_cases={"schema": 1, "cases": allowed}, results=results)
 
 

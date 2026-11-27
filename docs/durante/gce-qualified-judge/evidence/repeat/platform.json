@@ -1,0 +1,19 @@
+{
+  "boot_sha256": "398a4a34235f668934e17040ef9669c07facc1824c7b0f12e29d2ccd24f527b5",
+  "phase": "repeat",
+  "kernel": "6.1.0-56-cloud-amd64",
+  "cpu": 1,
+  "affinity": [
+    1
+  ],
+  "cpuset_cpus_effective": "1",
+  "cpu1_thread_siblings": "1",
+  "steal_ticks_before": 0,
+  "plan_sha256": "87cd31962aa5b851df087e926835263c2014b8338c0891b5105e7fbcfd10ded5",
+  "workers": {
+    "native": 1186,
+    "judge": 1191
+  },
+  "frozen_sha256": "5cdbf4661f0c547c20a5fd7739729f58ff7b37e112d36c386f66072ce19949cb",
+  "steal_ticks_after": 0
+}
