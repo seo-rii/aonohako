@@ -39,8 +39,8 @@ v4 profile. The client and patched runtime share a private replay callback ABI;
 update both from the pinned snapshot rather than reusing an older runtime core.
 
 `docker/durante.Dockerfile` builds a Linux x86-64 worker on a reviewed
-execution image. The default build selects v7. To build an opt-in v8, v9, v10 or
-v11 worker, set `RUNTIME_IMAGE` to the immutable digest reference of your
+execution image. The default build selects v7. To build an opt-in v8, v9, v10,
+v11 or v12 worker, set `RUNTIME_IMAGE` to the immutable digest reference of your
 language image. This example selects v11.
 
 ```sh
@@ -58,6 +58,7 @@ go build -tags "durante_${DURANTE_VERSION}" ./cmd/durante-reference
 | v9 | `dynamorio-11.3-durante-v9-vm32m` | `27954247e094e682a7cf47504ff13682f970469a` |
 | v10 | `dynamorio-11.3-durante-v10-vm32m` | `191858a02666c1406b871e4974b9072b2c91bb34` |
 | v11 | `dynamorio-11.3-durante-v11-vm32m` | `74d9188f9fd86c75f079277e6e5278b379a0a1d7` |
+| v12 | `dynamorio-11.3-durante-v12-vm32m` | `66fbf09e065893376e2720af04f9930883161dfa` |
 
 The build verifies each version's source manifest and pairs the worker with its
 client under `/opt/durante`. V8 enables inline work counting in the original
@@ -90,6 +91,16 @@ a signal cannot supply a complete operand-byte report. The live judging clock
 uses its existing instruction and REP weights. Timings for ordinary counting,
 latency, operand bytes and the live clock were compared separately on one
 CPU-pinned Compute Engine VM. [GCE instrumentation cost](durante/GCE_V11_OPERAND_BYTES.md) · [C++20 clock accuracy](durante/gce-v11-cpp20-accuracy/README.md) · [Upstream counter definition](https://github.com/seo-rii/durante/blob/74d9188f9fd86c75f079277e6e5278b379a0a1d7/docs/LATENCY_BOUND.md)
+
+V12 counts the same instructions with a patched runtime and client that
+differ from v11. The runtime fixes stale execution of JIT code that changes
+under load and a JVM safepoint abort. Without the static latency counter, the
+live work clock counts every block inline. The clock also stays valid through
+signals, CMPS/SCAS entries and an `exit_group` with other threads running, so
+a JVM run can complete with a matching terminal receipt. A natural exit with
+signals or CMPS/SCAS entries still has no eligible weighted time estimate. A
+live stop compares only the published counts, because the clock carries no
+eligibility field. v12 has its own runtime patch pins.
 
 Qualify time models against the final immutable worker image, engine profile,
 and runtime options, including the selected CPUID profile. Build the reference
@@ -132,7 +143,7 @@ qualification, and request bodies cannot override these engine options.
 | `AONOHAKO_DURANTE_RUNTIME_IMAGE` | Actual immutable Durante overlay image identity, in `sha256:<64 lowercase hex digits>` form, supplied by the operator from deployment metadata. Required with either time setting, independently of the model's profile bindings. |
 | `AONOHAKO_DURANTE_CPUID_PROFILE` | Empty (default) exposes host CPUID. `x86-64-v1` or `x86-64-v2` makes the client report one fixed virtual processor to every application CPUID/XGETBV, so library and runtime dispatch, and therefore counts, do not follow the Cloud Run instance's processor. Complete reports carry the client's `cpuid_profile` receipt; a missing or different receipt makes the observation unavailable. Requires an enabled family. See [CPUID profiles](https://github.com/seo-rii/durante/blob/main/docs/CPUID_PROFILE.md). |
 | `AONOHAKO_DURANTE_LATENCY_BOUND` | `v1` enables the static block latency counter for measured executions. Empty or `off` disables it. A complete report from an enabled run carries `latency_bound: {"version":1,"cycles_x16":...}` for the process tree. The unit is one sixteenth of a modeled cycle. |
-| `AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES` | Set to `v1` on v11 with an enabled measurement family and `AONOHAKO_DURANTE_LATENCY_BOUND=v1`. Empty or `off` omits the counter. A complete enabled report includes `memory_operand_bytes` with version 1 and the exact nominal byte total, including an observed zero. |
+| `AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES` | Set to `v1` on v11 or v12 with an enabled measurement family and `AONOHAKO_DURANTE_LATENCY_BOUND=v1`. Empty or `off` omits the counter. A complete enabled report includes `memory_operand_bytes` with version 1 and the exact nominal byte total, including an observed zero. |
 | `AONOHAKO_DURANTE_RUNTIME_DETERMINISM` | Empty or `off` (default) runs every launcher unchanged. `v1` pins runtime-internal nondeterminism of measured executions only: Node (`JAVASCRIPT`, and sources that run as JavaScript) gets `--predictable`, and CPython gets hash seed 0 (`-I` is replaced by `-s -P` and every `PYTHON*` variable except `PYTHONHASHSEED=0` is removed, because isolated mode ignores `PYTHONHASHSEED`); PyPy gets `PYTHONHASHSEED=0`, which it reads even under `-I`. Native targets and other launchers are unchanged. The options are part of the effective runtime-options descriptor, complete reports for a pinned launcher carry `runtime_determinism`, and an estimate requires the report to match the configuration. Schema 1 time models cannot bind a pinned launcher; use schema 2. Required by judge mode for `cpython`, `pypy` and `javascript-wasm`. Requires an enabled family. See [Runtime determinism](durante-runtime-options.md#runtime-determinism). |
 | `AONOHAKO_DURANTE_JUDGE_MODE` | `on` enables work-based judging (virtual-millisecond verdicts) and shadow comparisons; `shadow` enables only non-deciding `work_measurement_shadow` comparisons; empty or `off` disables both. See [work-based judging](durante-judging.md). |
 | `AONOHAKO_DURANTE_JUDGE_FAMILIES` | Comma-separated families a judge-mode request may ask to judge. Each must be an enabled, qualified measurement family. |
