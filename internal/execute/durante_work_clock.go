@@ -12,6 +12,8 @@ import (
 	"aonohako/internal/model"
 )
 
+const terminalClockUnavailable = "durante_work_clock_final_unavailable"
+
 func validWorkClockIdentity(req *model.RunRequest, r *durante.Report) bool {
 	family, ok := durante.FamilyForLanguage(req.Lang)
 	return ok && r != nil && r.Family == family && r.EngineProfile == durante.EngineProfile &&
@@ -57,6 +59,9 @@ func finishWorkClock(req *model.RunRequest, plan *durante.WorkClockRequest, resp
 		if !terminalWorkClockMatches(req, plan, response.WorkMeasurement, progress) {
 			d.State = "incomplete"
 			d.Clock = plan.Receipt(nil)
+			if plan.TimePolicy != nil {
+				d.TerminationSource = terminalClockUnavailable
+			}
 			response.Reason = "Durante work clock unavailable or inconsistent with terminal counters"
 		} else if plan.Exceeds(*progress) {
 			d.State = "budget_exceeded"
@@ -95,7 +100,7 @@ func validateRemoteWorkClock(req *model.RunRequest, response model.RunResponse, 
 	}
 	clockSource := d.TerminationSource == "durante_work_clock" || d.TerminationSource == "durante_work_clock_final"
 	if plan == nil {
-		if d.Clock != nil || d.State == "budget_exceeded" || clockSource {
+		if d.Clock != nil || d.State == "budget_exceeded" || clockSource || d.TerminationSource == terminalClockUnavailable {
 			return fmt.Errorf("invalid remote result: unsolicited work clock")
 		}
 		return nil
@@ -107,6 +112,13 @@ func validateRemoteWorkClock(req *model.RunRequest, response model.RunResponse, 
 	if (r.State != "observed" && r.State != "unavailable") || (r.Progress != nil) != (r.State == "observed") ||
 		(r.Progress != nil && (!r.Progress.Valid() || !validWorkClockIdentity(req, response.WorkMeasurement))) {
 		return fmt.Errorf("invalid remote result: invalid Durante work clock progress")
+	}
+	if d.TerminationSource == terminalClockUnavailable {
+		if plan.TimePolicy == nil || d.State != "incomplete" || r.State != "unavailable" ||
+			response.ExitCode == nil || *response.ExitCode != 0 || d.OutputMatches != nil ||
+			!response.WorkMeasurement.ValidUnavailableResult() || !validWorkClockIdentity(req, response.WorkMeasurement) {
+			return fmt.Errorf("invalid remote result: unavailable terminal clock requires a clean exit and an unavailable weighted receipt")
+		}
 	}
 	switch d.State {
 	case "complete":

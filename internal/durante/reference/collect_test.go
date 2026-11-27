@@ -97,8 +97,8 @@ func collectionTestMetered(dataset Dataset) model.RunResponse {
 		IntegrityVerified: &verified, MeasurementContract: durante.DiagnosticContract(),
 		Installation: &durante.InstallationIdentity{
 			SourceCommit: durante.SourceCommit, RuntimeSourceCommit: "6847bb210bea0ca11d1bf47704383d6a075da490",
-			RuntimePatchSHA256:           "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c",
-			RuntimeCodeReplayPatchSHA256: "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b",
+			RuntimePatchSHA256:           durante.RuntimePatchSHA256,
+			RuntimeCodeReplayPatchSHA256: durante.RuntimeCodeReplayPatchSHA256,
 			LauncherSHA256:               strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true,
 		},
 	}

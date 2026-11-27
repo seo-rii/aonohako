@@ -1,0 +1,3166 @@
+diff --git a/README.md b/README.md
+index 7ea267c..7047746 100644
+--- a/README.md
++++ b/README.md
+@@ -280,6 +280,26 @@ restored registers and arithmetic with native, engine-only and client controls.
+ The prepared x86-64 runtime saves, clears and restores guest flags around
+ client clean calls. This lets HotSpot enable alignment checking during CPU
+ detection while the client writes its thread-local counters and checkpoints.
++A signal that arrives while a thread runs a clean callee, or the client's own
++live boundary routine, is delivered when the thread leaves the block it came
++from. The original runtime waited for the thread's next exit from the code
++cache, which a loop of linked blocks may never take.
++A fault in a block that a write to its page has just flushed, such as a JIT's
++safepoint poll, is reported at the faulting instruction; the original runtime
++could report it at pc 0 ([BUG-006](docs/JVM_SAFEPOINT.md)).
++Changing the protection of generated code while other threads run it, as a JIT
++that patches under W^X does, no longer crashes the runtime: the original runtime
++kept a stale pointer when the code's executable area was removed during a lookup.
++Generated code that a JIT patches in place on an RWX page no longer keeps
++running in its old form: the original runtime could check such code against a
++copy taken after the patch, so a block built before the patch passed its check.
++A page of code that a JIT replaces by mapping a new page at the same address no
++longer keeps running its old code, and a signal that arrives in generated code
++while another thread patches it no longer crashes the runtime. Code that a JIT
++makes writable only around each patch no longer keeps running in its old form:
++a block built while the protection change was still pending was taken for
++read-only code
++([stress modes](docs/JIT_LIFECYCLE.md#code-that-keeps-changing-under-load)).
+ Updating this patch requires rebuilding the prepared SDK, client and CLI together;
+ `isolate` checks the reviewed patch digest.
+
+diff --git a/client/README.md b/client/README.md
+index bb7268d..f3eb9e8 100644
+--- a/client/README.md
++++ b/client/README.md
+@@ -12,27 +12,63 @@ single-file `drmeter -o REPORT` interface is not used.
+ Each application basic block adds its instruction count to thread-local state.
+ For ordinary instruction counting, the client can charge every block inline,
+ including dynamically linked executables, shared libraries and generated code.
+-This path requires client-owned raw TLS slots and runs with the live clock,
+-latency model, cache probe and count-location profiling disabled. It also
+-supports `-rep_bytes`. With `-latency_bound` or its `-memory_operand_bytes`
++This path requires client-owned raw TLS slots and runs with the latency model,
++cache probe and count-location profiling disabled. It also supports `-rep_bytes`
++and `-live_work_v1`. With `-latency_bound` or its `-memory_operand_bytes`
+ extension, a callback charges each block, even when the live clock is off.
+ The inline entry preserves application flags, including values a signal handler
+-may inspect. Each memory write records its replay checkpoint with flag-neutral
+-moves. Scratch registers spill to client-owned TLS slots.
++may inspect. Its scratch registers spill to client-owned TLS slots.
+ A restore-state handler recovers them if the runtime translates a thread inside
+-one of these sequences. It also returns a stored entry charge when a relocated
++the entry. Each memory write records its replay checkpoint as one packed word in
++another slot: the write's address, its length and its block suffix, stored as
++two immediates with no scratch register. A block entry stores zero there.
++Callbacks settle the word into the checkpoint state before they read or replace
++it. A write that does not fit the word (a suffix above 4095 instructions) takes
++the callback instead. It also returns a stored entry charge when a relocated
+ thread will enter the same block again. The layout depends only on the block, so
+ no translations are stored. A retry's first-block checks move from block entry
+-to the replay, REP, signal and snapshot callbacks.
+-
+-With `-live_work_v1`, the ordinary counter can update that state directly in the
+-original executable text containing a fixed-address, statically linked program's
+-entry point. Between live work publications this avoids a callback on each hot
+-block. It saves and restores its scratch registers
+-and arithmetic flags even when a signal handler is the only code that reads them.
+-The checked callback handles publication boundaries, replay and additions near
+-overflow. In live runs, dynamically linked executables, shared libraries and
+-generated code use callbacks throughout.
++to the replay, REP, signal and snapshot callbacks. The entry sequence for each
++block size and the write checkpoint are encoded once per process and inserted
++as raw copies, with only a write's packed word patched. The
++runtime otherwise re-encodes every inserted instruction of each new block, which
++dominated block building for interpreters and generated code.
++
++With `-live_work_v1`, the inline entry counts down to the thread's next
++publication boundary instead of adding to the instruction count: the countdown
++is the only counter it updates. Callbacks add the distance the countdown has
++moved to the instruction count before they read it, so they always see the full
++count. The entry reads the countdown's sign from its top byte with one MOVZX,
++so it still never reads or writes the application's flags. A
++negative countdown takes the checked callback, which handles the publication
++boundary, replay and additions near overflow and charges the block. All blocks
++reach it through one routine, generated once per process. An entry stores its
++count and first address in the thread's state and jumps there through a pointer
++in that state, with its resume address in RCX. Nothing in the entry depends on
++where it is placed, so the whole entry is encoded once per block size and copied
++with only the block's address patched; building a block encodes no context
++switch. The routine moves to a stack the thread owns, saves the flags and the
++general registers a C function may change, clears the flags and calls the
++callback. It saves no vector or x87 state: the callback and everything it can
++reach are compiled to use the general registers only, and
++`tests/test_boundary_callback.py` reads the built client to check that. The
++runtime defers asynchronous signals and translation while a thread is in the
++routine or the callback, as it does inside a clean call. The prepared runtime
++finds the block from the first address the entry stores and unlinks it for a
++deferred signal, so the signal is delivered when the thread leaves the block.
++Publication therefore
++happens at the same block entries as on the callback path. Replay, REP
++and new threads reset the countdown so the next entry takes the callback, and the
++callback recomputes it. The prefix saves the pre-entry countdown before choosing the
++callback or inline charge, and the callback marks an entry it has charged. If
++relocation will re-enter an unfinished entry, the restore-state handler takes
++that entry's charge back and re-arms a pending REP retry. Work
++already published for earlier blocks remains visible.
++
++Without raw TLS, or with the cache probe, the ordinary counter can instead
++update that state directly in the original executable text containing a
++fixed-address, statically linked program's entry point. It saves and restores
++its scratch registers and arithmetic flags even when a signal handler is the
++only code that reads them, and other code uses callbacks.
+
+ REP MOVS/STOS byte demand is read at the REP instruction after earlier register
+ updates, with one clean call per REP entry. Conditional REP forms are separately
+diff --git a/client/cpuid_emulation.h b/client/cpuid_emulation.h
+index 0c5b158..b24fd34 100644
+--- a/client/cpuid_emulation.h
++++ b/client/cpuid_emulation.h
+@@ -74,8 +74,9 @@ static void durante_cpuid_emulate(int is_xgetbv) {
+     durante_cpuid_invalid(ctx);
+ }
+
+-/* Register with drmgr_register_bb_app2app_event(). Translation (state
+- * recreation) passes produce the same list. */
++/* Run before the block's analysis and instrumentation, as a drmgr app2app
++ * event would be. Translation (state recreation) passes produce the same
++ * list. */
+ static dr_emit_flags_t durante_cpuid_app2app(void *drcontext, void *tag,
+                                              instrlist_t *bb, bool for_trace,
+                                              bool translating) {
+diff --git a/client/durante.c b/client/durante.c
+index 9addb26..718460c 100644
+--- a/client/durante.c
++++ b/client/durante.c
+@@ -70,10 +70,20 @@ typedef struct {
+       unsupported_rep_entries;
+   uint64_t rep_movs_bytes, rep_stos_bytes, rep_movs_entries, rep_stos_entries;
+   uint64_t published_instructions, published_movs, published_stos;
+-  uint64_t fast_until; /* Exclusive pre-charge threshold; zero forces the callback. */
+-  /* Flat inline accounting (no live clock): the value of instructions before
+-   * the most recent block entry, and its value just after a RETRY rollback. */
++  /* Flat live entries charge a block by counting live_room down from
++   * fast_until - instructions - 1, and store nothing else. instructions lags
++   * until settle_live_count() adds the distance live_room has moved since
++   * room_settled. A negative value takes the boundary callback. It may run low
++   * after replay or relocation, which only adds a callback; the callback
++   * recomputes it. entry_room is live_room before the current entry, or
++   * ENTRY_ROOM_CHARGED once the callback has charged that entry. */
++  int64_t live_room, entry_room;
++  /* The value of instructions before the most recent block entry (set by flat
++   * entries without a live clock, and by the live boundary callback), and its
++   * value just after a RETRY rollback. */
+   uint64_t entry_base, restart_base;
++  uint64_t fast_until; /* Exclusive pre-charge threshold; zero forces the callback. */
++  int64_t room_settled;
+   byte *raw_tls_base; /* This thread's runtime segment base, for state restoration. */
+   bool pending_stdin_read, received_stdin;
+   bool rep_error;
+@@ -103,6 +113,15 @@ typedef struct {
+   bool child_exit_seen, child_policy_exit;
+   uint64_t memory_operand_bytes;
+   uint32_t write_suffix_bytes, write_operand_bytes;
++  /* The arguments a live entry passes to the shared boundary routine. Kept
++   * after the fields the entries access with 8-bit displacements. */
++  int32_t boundary_count;
++  app_pc boundary_pc;
++  byte *boundary_routine;
++  /* The boundary routine's private stack (its top is 16-byte aligned), and
++   * the two registers it keeps here while that stack is in use. */
++  byte *boundary_stack, *boundary_stack_top;
++  reg_t boundary_rsp;
+ } thread_data_t;
+ static int tls_index;
+ /* In ordinary static code the generated accounting runs at every block and
+@@ -110,10 +129,11 @@ static int tls_index;
+ static bool raw_tls_enabled;
+ static reg_id_t raw_tls_register;
+ static uint raw_tls_offset;
+-/* Client-owned raw TLS slots: the accounting pointer and two scratch spills.
+- * Private spill slots let restore_state() recognize exactly this client's
+- * sequences; the runtime's shared spill slots are also used by its mangling. */
+-enum { RAW_TLS_STATE, RAW_TLS_SPILL_RCX, RAW_TLS_SPILL_R11, RAW_TLS_SLOTS };
++/* Client-owned raw TLS slots: the accounting pointer, two scratch spills and
++ * the flat write checkpoint. Private spill slots let restore_state() recognize
++ * exactly this client's sequences; the runtime's shared spill slots are also
++ * used by its mangling. */
++enum { RAW_TLS_STATE, RAW_TLS_SPILL_RCX, RAW_TLS_SPILL_R11, RAW_TLS_WRITE, RAW_TLS_SLOTS };
+ /* Without a live clock nothing is published between syscalls. Every block and
+  * store then uses flag-free inline accounting, including shared libraries and
+  * generated code. Restart validation moves from block entry to the callbacks
+@@ -145,6 +165,7 @@ typedef struct {
+ _Static_assert(sizeof(live_work_t) == 48 && __atomic_always_lock_free(8, 0),
+                "live work requires lock-free aligned 64-bit counters");
+ static live_work_t *live_work;
++static bool live_work_require_eligible;
+ static int app_exit_code;
+ static size_t file_bytes;
+ #ifdef DURANTE_TEST_COUNT_LOCATIONS
+@@ -246,12 +267,17 @@ static bool cache_probe_enabled(void) {
+ #endif
+ }
+
+-static inline void invalidate_live_work(void) {
++/* The live boundary routine saves only the general registers and the flags
++ * around its callback, so everything that callback can execute is compiled
++ * without vector or x87 instructions. */
++#define SCALAR __attribute__((target("general-regs-only")))
++
++SCALAR static inline void invalidate_live_work(void) {
+   if (live_work)
+     __atomic_store_n(&live_work->invalid, 1, __ATOMIC_RELEASE);
+ }
+
+-static inline void counter_error(bool *flag) {
++SCALAR static inline void counter_error(bool *flag) {
+   *flag = true;
+   invalidate_live_work();
+ }
+@@ -282,7 +308,7 @@ static void open_live_work(const char *path) {
+ /* Use process-shared atomics rather than inherited process totals. Only the
+  * thread owning a TLS baseline adds a delta. There is no snapshot merging at
+  * fork/exec and a failed exec can publish the same baseline again for free. */
+-static void add_live_delta(uint64_t *counter, uint64_t delta, uint64_t overflow_bit) {
++SCALAR static void add_live_delta(uint64_t *counter, uint64_t delta, uint64_t overflow_bit) {
+   if (!delta)
+     return;
+   uint64_t old = __atomic_load_n(counter, __ATOMIC_RELAXED);
+@@ -300,12 +326,61 @@ static void add_live_delta(uint64_t *counter, uint64_t delta, uint64_t overflow_
+
+ enum { LIVE_WORK_BATCH = 4096 };
+
+-static bool invalid_thread_work(const thread_data_t *d) {
+-  return d->signals || d->rep_error || d->replay_error || d->cpuid_error ||
+-         d->counter_overflows || d->unsupported_rep_entries;
++/* A flat live entry reads the countdown's sign from its top byte, which must
++ * be zero for every non-negative value. A capped countdown only adds a
++ * callback, which recomputes it. */
++#define LIVE_ROOM_MAX ((INT64_C(1) << 56) - 1)
++
++#define ENTRY_ROOM_CHARGED INT64_MIN
++
++/* Add what flat live entries have charged since the count was last settled.
++ * Every fetch of a thread's state settles it (thread_state()), as does the
++ * only code that sets live_room, so callbacks always see the full count. */
++SCALAR static void settle_live_count(thread_data_t *d) {
++  if (d->live_room == d->room_settled)
++    return;
++  uint64_t charged = (uint64_t)d->room_settled - (uint64_t)d->live_room;
++  bool rose = d->live_room > d->room_settled; /* Entries only count down. */
++  d->room_settled = d->live_room;
++  if (rose || charged > UINT64_MAX - d->instructions) {
++    /* Sticky invalidity, as for a callback charge that would wrap. */
++    d->counter_overflows = 1;
++    invalidate_live_work();
++    if (rose)
++      return;
++  }
++  d->instructions += charged;
++}
++
++SCALAR static void set_fast_until(thread_data_t *d, uint64_t until) {
++  settle_live_count(d);
++  d->fast_until = until;
++  if (until <= d->instructions)
++    d->live_room = -1;
++  else
++    d->live_room = until - d->instructions - 1 > (uint64_t)LIVE_ROOM_MAX
++                       ? LIVE_ROOM_MAX
++                       : (int64_t)(until - d->instructions - 1);
++  d->room_settled = d->live_room;
++}
++
++/* A thread's state with its live count settled. */
++static thread_data_t *thread_state(void *ctx) {
++  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  if (d)
++    settle_live_count(d);
++  return d;
++}
++
++/* Signals and CMPS/SCAS entries do not make a thread's counts unusable: the
++ * terminal record accepts both and carries the same counts. The budget unit has
++ * no CMPS/SCAS bytes, so such an entry charges its one instruction here too. */
++SCALAR static bool invalid_thread_work(const thread_data_t *d) {
++  return d->rep_error || d->replay_error || d->cpuid_error || d->counter_overflows;
+ }
+
+-static void publish_live_work(thread_data_t *d, bool flush) {
++SCALAR static void publish_live_work(thread_data_t *d, bool flush) {
++  settle_live_count(d);
+   if (invalid_thread_work(d) || d->instructions < d->published_instructions ||
+       d->rep_movs_bytes < d->published_movs || d->rep_stos_bytes < d->published_stos) {
+     invalidate_live_work();
+@@ -510,7 +585,7 @@ static bool add_thread(thread_data_t *d) {
+ }
+
+ static void snapshot_event(const char *kind, void *ctx, bool is_exec) {
+-  thread_data_t *d = ctx ? drmgr_get_tls_field(ctx, tls_index) : NULL;
++  thread_data_t *d = ctx ? thread_state(ctx) : NULL;
+   if (d) {
+     settle_restart(d);
+     check_flat_counter(d);
+@@ -634,6 +709,70 @@ static void set_raw_accounting_state(thread_data_t *d) {
+   }
+ }
+
++/* Flat inline code keeps the write checkpoint as one word in RAW_TLS_WRITE,
++ * stored with immediates and no scratch register: the write's address, its
++ * length and its block suffix. A block entry stores zero. Callbacks settle
++ * the word into the checkpoint fields before they read or replace them, and
++ * leave WRITE_WORD_SETTLED while the fields are current. A packed word has a
++ * nonzero length, so it equals neither marker. */
++enum { WRITE_WORD_PC_BITS = 48, WRITE_WORD_LENGTH_BITS = 4, WRITE_WORD_SETTLED = 1 };
++#define WRITE_WORD_MAX_SUFFIX \
++  ((UINT64_C(1) << (64 - WRITE_WORD_PC_BITS - WRITE_WORD_LENGTH_BITS)) - 1)
++
++static bool pack_write_checkpoint(app_pc pc, app_pc next_pc, int suffix, uint64_t *word) {
++  uint64_t address = (uint64_t)(ptr_uint_t)pc, kept = suffix > 0 ? (uint64_t)suffix : 0;
++  if (!pc || next_pc <= pc || next_pc - pc >= 1 << WRITE_WORD_LENGTH_BITS ||
++      address >> WRITE_WORD_PC_BITS || kept > WRITE_WORD_MAX_SUFFIX)
++    return false;
++  *word = address | (uint64_t)(next_pc - pc) << WRITE_WORD_PC_BITS |
++          kept << (WRITE_WORD_PC_BITS + WRITE_WORD_LENGTH_BITS);
++  return true;
++}
++
++SCALAR static inline uint64_t *write_word(thread_data_t *d) {
++  return flat_inline && d->raw_tls_base
++             ? (uint64_t *)(d->raw_tls_base + raw_tls_offset) + RAW_TLS_WRITE
++             : NULL;
++}
++
++static void settle_write_checkpoint(thread_data_t *d) {
++  uint64_t *word = write_word(d);
++  if (!word || *word == WRITE_WORD_SETTLED)
++    return;
++  uint64_t packed = *word;
++  *word = WRITE_WORD_SETTLED;
++  if (packed >> WRITE_WORD_PC_BITS == 0) {
++    d->write_pc = NULL; /* A block was entered after the last checkpoint. */
++    return;
++  }
++  app_pc pc = (app_pc)(ptr_uint_t)(packed & ((UINT64_C(1) << WRITE_WORD_PC_BITS) - 1));
++  d->write_pc = pc;
++  d->write_next_pc = pc + (packed >> WRITE_WORD_PC_BITS & ((1 << WRITE_WORD_LENGTH_BITS) - 1));
++  d->write_suffix = packed >> (WRITE_WORD_PC_BITS + WRITE_WORD_LENGTH_BITS);
++  d->write_rep = false;
++}
++
++/* Discard the checkpoint, including one inline code stored but no callback
++ * has settled. */
++SCALAR static void clear_write_checkpoint(thread_data_t *d) {
++  uint64_t *word = write_word(d);
++  if (word)
++    *word = WRITE_WORD_SETTLED;
++  d->write_pc = NULL;
++}
++
++enum { BOUNDARY_STACK_BYTES = 16 * 1024 };
++static void set_boundary_state(void *ctx, thread_data_t *d);
++
++static void free_thread_state(void *ctx, thread_data_t *d) {
++  /* The runtime must stop reading boundary_pc before it is freed. */
++  dr_durante_set_return_tag(ctx, NULL);
++  drmgr_set_tls_field(ctx, tls_index, NULL);
++  if (d->boundary_stack)
++    dr_thread_free(ctx, d->boundary_stack, BOUNDARY_STACK_BYTES);
++  dr_thread_free(ctx, d, sizeof(*d));
++}
++
+ static void thread_init(void *ctx) {
+   thread_data_t *d = dr_thread_alloc(ctx, sizeof(*d));
+   if (!d)
+@@ -647,6 +786,8 @@ static void thread_init(void *ctx) {
+   if (!drmgr_set_tls_field(ctx, tls_index, d))
+     fail("TLS init failed");
+   set_raw_accounting_state(d);
++  set_boundary_state(ctx, d);
++  set_fast_until(d, 0);
+   process_id_t process = dr_get_process_id();
+   if (process != owner_pid) {
+     /* DR models CLONE_VM/vfork before exec as a separate drcontext sharing the
+@@ -663,13 +804,17 @@ static void thread_init(void *ctx) {
+   dr_mutex_unlock(state_lock);
+ }
+ static void thread_exit(void *ctx) {
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
+-  /* Asynchronous thread termination can interrupt an arbitrary charged BB.
+-   * Only an explicit exit/exec checkpoint can attest to that final prefix. */
+-  if (live_work && d &&
+-      (d->instructions != d->published_instructions ||
+-       d->rep_movs_bytes != d->published_movs || d->rep_stos_bytes != d->published_stos))
+-    invalidate_live_work();
++  thread_data_t *d = thread_state(ctx);
++  /* A thread stopped by another thread's exit_group can be anywhere in a
++   * charged BB. Its terminal record counts that final prefix as it stands, so
++   * publish the same remainder; the live total then matches the record. */
++  if (live_work && d) {
++    if (!d->child_pid)
++      publish_live_work(d, true);
++    else if (d->instructions != d->published_instructions ||
++             d->rep_movs_bytes != d->published_movs || d->rep_stos_bytes != d->published_stos)
++      invalidate_live_work();
++  }
+   if (memory_operand_bytes_enabled && d && !d->child_pid &&
+       d->pending_syscall != SYS_exit && d->pending_syscall != SYS_exit_group)
+     d->latency_error = true; /* Another thread may have stopped this one mid-block. */
+@@ -678,8 +823,7 @@ static void thread_exit(void *ctx) {
+      * refers to the child's descriptor table, so NEVER close that number in the
+      * parent. Exec/_exit checkpoints close it in child context before the
+      * transition. */
+-    drmgr_set_tls_field(ctx, tls_index, NULL);
+-    dr_thread_free(ctx, d, sizeof(*d));
++    free_thread_state(ctx, d);
+     return;
+   }
+   dr_mutex_lock(state_lock);
+@@ -690,8 +834,7 @@ static void thread_exit(void *ctx) {
+   ++threads_ended;
+   dr_mutex_unlock(state_lock);
+   if (d) {
+-    drmgr_set_tls_field(ctx, tls_index, NULL);
+-    dr_thread_free(ctx, d, sizeof(*d));
++    free_thread_state(ctx, d);
+   }
+ }
+
+@@ -779,11 +922,12 @@ static uint32_t suffix_memory_bytes(instr_t *start) {
+  */
+ static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
+   void *drcontext = dr_get_current_drcontext();
+-  thread_data_t *data = drmgr_get_tls_field(drcontext, tls_index);
++  thread_data_t *data = thread_state(drcontext);
+   if (data == NULL)
+     fail("REP observation without thread state");
+   settle_restart(data);
+-  data->fast_until = 0;
++  settle_write_checkpoint(data);
++  set_fast_until(data, 0);
+   uint64_t repeats = 0;
+   if (bytes != 0) {
+     dr_mcontext_t mc = {0};
+@@ -822,7 +966,8 @@ static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
+   if (resumed)
+     return;
+   if (bytes == 0) {
+-    invalidate_live_work();
++    if (live_work_require_eligible)
++      invalidate_live_work();
+     if (data->unsupported_rep_entries == UINT64_MAX)
+       counter_error(&data->rep_error);
+     else
+@@ -861,7 +1006,7 @@ static void observe_rep(app_pc pc, int opcode, int bytes, int count_reg) {
+ static void cpu_policy_exit(void) {
+   invalidate_live_work();
+   void *ctx = dr_get_current_drcontext();
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d)
+     fail("CPU policy exit without valid thread state");
+   if (d->child_pid) {
+@@ -903,11 +1048,11 @@ static inline thread_data_t *accounting_thread_data(void) {
+   if (probe_l1d)
+     return probe_thread_data;
+ #endif
+-  return drmgr_get_tls_field(dr_get_current_drcontext(), tls_index);
++  return thread_state(dr_get_current_drcontext());
+ }
+
+-static thread_data_t *charge_block(int instructions, app_pc first_pc) {
+-  thread_data_t *data = accounting_thread_data();
++SCALAR static thread_data_t *charge_block_state(thread_data_t *data, int instructions,
++                                                app_pc first_pc) {
+   if (data == NULL || instructions <= 0)
+     fail("instruction count without valid thread state");
+   if (data->restart_pc) {
+@@ -920,7 +1065,7 @@ static thread_data_t *charge_block(int instructions, app_pc first_pc) {
+       data->restart_pc = NULL;
+     }
+   }
+-  data->write_pc = NULL;
++  clear_write_checkpoint(data);
+   if (live_work)
+     publish_live_work(data, false);
+   if (UINT64_MAX - data->instructions < (uint64_t)instructions) {
+@@ -936,6 +1081,10 @@ static thread_data_t *charge_block(int instructions, app_pc first_pc) {
+   return data;
+ }
+
++static thread_data_t *charge_block(int instructions, app_pc first_pc) {
++  return charge_block_state(accounting_thread_data(), instructions, first_pc);
++}
++
+ static void count_block(int instructions, app_pc first_pc) {
+   charge_block(instructions, first_pc);
+ }
+@@ -944,19 +1093,30 @@ static void count_block(int instructions, app_pc first_pc) {
+  * and charges its count. REP can introduce a publishable byte delta, and replay
+  * can roll back instructions or require a restart. Both callbacks disarm the
+  * window. A syscall flush publishes early and can only move the boundary later. */
+-static void charge_boundary(int count, app_pc first_pc) {
+-  thread_data_t *d = charge_block(count, first_pc);
++SCALAR static void charge_boundary_state(thread_data_t *d, int count, app_pc first_pc) {
++  if (d)
++    settle_live_count(d);
++  uint64_t base = d ? d->instructions : 0;
++  d = charge_block_state(d, count, first_pc);
+   if (!d)
+     return;
+-  d->fast_until = 0;
++  /* A flat live entry leaves its charge to this callback. Keep the count it
++   * started from, so that relocation can undo exactly this charge. */
++  d->entry_base = base;
++  d->entry_room = ENTRY_ROOM_CHARGED;
++  set_fast_until(d, 0);
+   if (d->restart_pc || d->instructions > UINT64_MAX - INT32_MAX - LIVE_WORK_BATCH)
+     return;
+   /* A permanently invalid thread can no longer publish. Other threads sharing
+    * its page still publish their own deltas. Reserve room for the largest BB. */
+   if (!live_work || invalid_thread_work(d))
+-    d->fast_until = UINT64_MAX - INT32_MAX;
++    set_fast_until(d, UINT64_MAX - INT32_MAX);
+   else if (d->published_instructions <= d->instructions)
+-    d->fast_until = d->published_instructions + LIVE_WORK_BATCH;
++    set_fast_until(d, d->published_instructions + LIVE_WORK_BATCH);
++}
++
++static void charge_boundary(int count, app_pc first_pc) {
++  charge_boundary_state(accounting_thread_data(), count, first_pc);
+ }
+
+ static opnd_t raw_slot(uint slot) {
+@@ -972,14 +1132,23 @@ static opnd_t state_field(size_t offset) {
+  * scratch registers are restored before the first application instruction.
+  * Both guard paths precede the charge store and the final RCX restore, so
+  * restore_state() can recognize partial entries by those two instructions. */
+-static void insert_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int count) {
++enum { FLAT_PREFIX = 1, FLAT_BODY = 2, FLAT_SUFFIX = 4, FLAT_ALL = 7 };
++
++/* With live, the prefix leaves ECX zero unless live_room is negative, which
++ * the caller branches on, and the body counts live_room down instead of
++ * adding to instructions. */
++static void emit_flat_parts(void *ctx, instrlist_t *bb, instr_t *where, int count, int parts,
++                            bool live) {
+   opnd_t value = opnd_create_reg(DR_REG_RCX), state = opnd_create_reg(DR_REG_R11);
+   opnd_t low_reg = opnd_create_reg(DR_REG_ECX);
+-  instr_t *wrapped = INSTR_CREATE_label(ctx), *checked = INSTR_CREATE_label(ctx);
+-#define INSERT(i) instrlist_meta_preinsert(bb, where, (i))
++#define INSERT(i) \
++  (where ? instrlist_meta_preinsert(bb, where, (i)) : instrlist_meta_append(bb, (i)))
++  if (parts & FLAT_PREFIX) {
+   INSERT(INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_SPILL_RCX), value));
+   INSERT(INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_SPILL_R11), state));
+   INSERT(INSTR_CREATE_mov_ld(ctx, state, raw_slot(RAW_TLS_STATE)));
++  if (!live) {
++  instr_t *wrapped = INSTR_CREATE_label(ctx), *checked = INSTR_CREATE_label(ctx);
+   /* A block adds at most INT_MAX. On x86-64 its most significant byte
+    * can increase by at most one, and goes from nonzero to zero only on wrap.
+    * Check the completed entry before replacing its base. This keeps the new
+@@ -995,18 +1164,300 @@ static void insert_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int c
+   INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, counter_overflows)),
+                              OPND_CREATE_INT32(1)));
+   INSERT(checked);
+-  INSERT(INSTR_CREATE_mov_ld(ctx, value, state_field(offsetof(thread_data_t, instructions))));
+-  INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, entry_base)), value));
+-  INSERT(INSTR_CREATE_lea(ctx, value,
+-                          opnd_create_base_disp(DR_REG_RCX, DR_REG_NULL, 0, count, OPSZ_lea)));
+-  INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, instructions)), value));
+-  INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, write_pc)),
+-                             OPND_CREATE_INT32(0)));
++  } else {
++    /* Either the boundary callback or the inline body charges this entry.
++     * Save the countdown before taking either branch so relocation can undo
++     * the charge even immediately after returning from the callback. The
++     * callback and settle_live_count() check the count for overflow. */
++    INSERT(INSTR_CREATE_mov_ld(ctx, value, state_field(offsetof(thread_data_t, live_room))));
++    INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, entry_room)), value));
++    /* live_room is below 2^56 in magnitude, so its top byte is zero exactly
++     * when it is non-negative and 0xff when it is negative. */
++    INSERT(INSTR_CREATE_movzx(ctx, low_reg,
++                              OPND_CREATE_MEM8(DR_REG_R11, offsetof(thread_data_t, live_room) + 7)));
++  }
++  }
++  if (parts & FLAT_BODY) {
++  if (live) {
++    /* The countdown is the only counter a live entry updates. */
++    INSERT(INSTR_CREATE_mov_ld(ctx, value, state_field(offsetof(thread_data_t, live_room))));
++    INSERT(INSTR_CREATE_lea(ctx, value,
++                            opnd_create_base_disp(DR_REG_RCX, DR_REG_NULL, 0, -count, OPSZ_lea)));
++    INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, live_room)), value));
++  } else {
++    INSERT(INSTR_CREATE_mov_ld(ctx, value, state_field(offsetof(thread_data_t, instructions))));
++    INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, entry_base)), value));
++    INSERT(INSTR_CREATE_lea(ctx, value,
++                            opnd_create_base_disp(DR_REG_RCX, DR_REG_NULL, 0, count, OPSZ_lea)));
++    INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, instructions)), value));
++  }
++  INSERT(INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_WRITE), OPND_CREATE_INT32(0)));
++  }
++  if (parts & FLAT_SUFFIX) {
+   INSERT(INSTR_CREATE_mov_ld(ctx, state, raw_slot(RAW_TLS_SPILL_R11)));
+   INSERT(INSTR_CREATE_mov_ld(ctx, value, raw_slot(RAW_TLS_SPILL_RCX)));
++  }
++#undef INSERT
++}
++
++static void emit_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int count) {
++  emit_flat_parts(ctx, bb, where, count, FLAT_ALL, false);
++}
++
++/* The runtime re-encodes every meta instruction of each new block, which
++ * dominates block building for interpreters and generated code. These
++ * sequences depend only on the block size or on a write's immediates, so they
++ * are encoded once and inserted as one raw copy. A valid opcode and an empty
++ * operand list keep the runtime from decoding the bundle; restore_state()
++ * decodes the code cache itself. */
++enum { FLAT_ENTRY_CACHE = 1024, SEQUENCE_BYTES = 192 };
++typedef struct {
++  uint length;
++  byte bytes[SEQUENCE_BYTES];
++} encoded_sequence_t;
++static encoded_sequence_t *flat_entries[FLAT_ENTRY_CACHE + 1];
++
++static uint encode_sequence(void *ctx, instrlist_t *ilist, byte *buf) {
++  byte *end = instrlist_encode(ctx, ilist, buf, true);
++  if (!end || end - buf > SEQUENCE_BYTES)
++    fail("cannot pre-encode instrumentation");
++  return (uint)(end - buf);
++}
++
++static void insert_bundle(void *ctx, instrlist_t *bb, instr_t *where, const byte *bytes,
++                          uint length) {
++  instr_t *bundle = instr_build_bits(ctx, OP_mov_st, length);
++  instr_set_raw_bytes(bundle, (byte *)bytes, length);
++  /* No operands: mangling's RIP-relative scan must not decode the bundle,
++   * which would cut its raw bits down to the first instruction. */
++  instr_set_operands_valid(bundle, true);
++  instrlist_meta_preinsert(bb, where, bundle);
++}
++
++/* A pre-encoded sequence whose 32-bit immediates are patched per use. Each
++ * listed instruction is a store whose immediate is its last field. */
++enum { TEMPLATE_IMMEDIATES = 5 };
++typedef struct {
++  encoded_sequence_t code;
++  uint immediates, immediate[TEMPLATE_IMMEDIATES];
++} patched_template_t;
++
++static patched_template_t *publish_template(void *ctx, patched_template_t **slot,
++                                            instrlist_t *ilist, instr_t *const *imm,
++                                            uint immediates, const char *failure) {
++  if (immediates > TEMPLATE_IMMEDIATES)
++    fail(failure);
++  patched_template_t *fresh = dr_global_alloc(sizeof(*fresh));
++  fresh->code.length = encode_sequence(ctx, ilist, fresh->code.bytes);
++  fresh->immediates = immediates;
++  uint offset = 0, index = 0;
++  for (instr_t *in = instrlist_first(ilist); in; in = instr_get_next(in)) {
++    offset += instr_length(ctx, in);
++    if (index < immediates && in == imm[index])
++      fresh->immediate[index++] = offset - 4;
++  }
++  instrlist_clear_and_destroy(ctx, ilist);
++  if (index != immediates || offset != fresh->code.length)
++    fail(failure);
++  patched_template_t *t = NULL;
++  if (__atomic_compare_exchange_n(slot, &t, fresh, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
++    return fresh;
++  dr_global_free(fresh, sizeof(*fresh));
++  return t;
++}
++
++static void insert_patched(void *ctx, instrlist_t *bb, instr_t *where,
++                           const patched_template_t *t, const uint32_t *value, uint values) {
++  if (values != t->immediates)
++    fail("patched template does not match its immediates");
++  byte code[SEQUENCE_BYTES];
++  memcpy(code, t->code.bytes, t->code.length);
++  for (uint i = 0; i < values; ++i)
++    memcpy(code + t->immediate[i], &value[i], sizeof(value[i]));
++  insert_bundle(ctx, bb, where, code, t->code.length);
++}
++
++static encoded_sequence_t *cached_flat_parts(void *ctx, encoded_sequence_t **slot, int count,
++                                             int parts, bool live) {
++  encoded_sequence_t *entry = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
++  if (entry)
++    return entry;
++  encoded_sequence_t *fresh = dr_global_alloc(sizeof(*fresh));
++  instrlist_t *ilist = instrlist_create(ctx);
++  emit_flat_parts(ctx, ilist, NULL, count, parts, live);
++  fresh->length = encode_sequence(ctx, ilist, fresh->bytes);
++  instrlist_clear_and_destroy(ctx, ilist);
++  if (__atomic_compare_exchange_n(slot, &entry, fresh, false, __ATOMIC_ACQ_REL,
++                                  __ATOMIC_ACQUIRE))
++    return fresh;
++  dr_global_free(fresh, sizeof(*fresh));
++  return entry;
++}
++
++static void insert_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int count) {
++  if (count <= 0 || count > FLAT_ENTRY_CACHE) {
++    emit_flat_charge(ctx, bb, where, count);
++    return;
++  }
++  encoded_sequence_t *entry = cached_flat_parts(ctx, &flat_entries[count], count, FLAT_ALL,
++                                                false);
++  insert_bundle(ctx, bb, where, entry->bytes, entry->length);
++}
++
++/* The runtime encodes every inserted instruction when it builds a block, so
++ * live entries share one routine that makes the boundary callback. An entry
++ * stores the arguments through R11 and the address to resume at in RCX, and
++ * jumps through the thread's boundary_routine.
++ *
++ * The routine is this client's own context switch, not a runtime clean call.
++ * The callback reads and writes only this thread's accounting state, so the
++ * switch keeps what the C calling convention lets it change and nothing more:
++ * the flags and the nine caller-saved general registers. charge_boundary_state()
++ * and everything it calls are compiled for the general registers only (SCALAR),
++ * so vector and x87 state is never touched and needs no save. The application's
++ * stack may be invalid or hold a red zone, so the callback runs on a private
++ * per-thread stack, with the flags cleared as a C function expects (direction
++ * and alignment-check included).
++ *
++ * The routine is client memory outside the code cache: like a callback, the
++ * runtime defers asynchronous signals that arrive there and does not translate
++ * a thread stopped there. */
++static byte *boundary_routine;
++
++static void emit_boundary_routine(void *ctx, instrlist_t *ilist) {
++  static const reg_id_t saved[] = {DR_REG_RAX, DR_REG_RCX, DR_REG_RDX, DR_REG_RSI, DR_REG_RDI,
++                                   DR_REG_R8,  DR_REG_R9,  DR_REG_R10, DR_REG_R11};
++  enum { SAVED = sizeof(saved) / sizeof(saved[0]) };
++  /* With the flags that is ten pushes from a 16-byte aligned top, which leaves
++   * the stack aligned at the call. */
++  _Static_assert((SAVED + 1) % 2 == 0, "the boundary callback needs an aligned stack");
++#define APPEND(i) instrlist_meta_append(ilist, (i))
++#define FIELD(field) OPND_CREATE_MEMPTR(DR_REG_R11, offsetof(thread_data_t, field))
++  APPEND(INSTR_CREATE_mov_st(ctx, FIELD(boundary_rsp), opnd_create_reg(DR_REG_RSP)));
++  APPEND(INSTR_CREATE_mov_ld(ctx, opnd_create_reg(DR_REG_RSP), FIELD(boundary_stack_top)));
++  APPEND(INSTR_CREATE_pushf(ctx));
++  APPEND(INSTR_CREATE_push_imm(ctx, OPND_CREATE_INT8(0)));
++  APPEND(INSTR_CREATE_popf(ctx));
++  for (int i = 0; i < SAVED; ++i)
++    APPEND(INSTR_CREATE_push(ctx, opnd_create_reg(saved[i])));
++  APPEND(XINST_CREATE_move(ctx, opnd_create_reg(DR_REG_RDI), opnd_create_reg(DR_REG_R11)));
++  APPEND(INSTR_CREATE_mov_ld(ctx, opnd_create_reg(DR_REG_ESI),
++                             OPND_CREATE_MEM32(DR_REG_R11, offsetof(thread_data_t, boundary_count))));
++  APPEND(INSTR_CREATE_mov_ld(ctx, opnd_create_reg(DR_REG_RDX), FIELD(boundary_pc)));
++  APPEND(INSTR_CREATE_mov_imm(ctx, opnd_create_reg(DR_REG_RAX),
++                              OPND_CREATE_INTPTR((ptr_int_t)(void *)charge_boundary_state)));
++  APPEND(INSTR_CREATE_call_ind(ctx, opnd_create_reg(DR_REG_RAX)));
++  for (int i = SAVED - 1; i >= 0; --i)
++    APPEND(INSTR_CREATE_pop(ctx, opnd_create_reg(saved[i])));
++  APPEND(INSTR_CREATE_popf(ctx));
++  APPEND(INSTR_CREATE_mov_ld(ctx, opnd_create_reg(DR_REG_RSP), FIELD(boundary_rsp)));
++  APPEND(INSTR_CREATE_jmp_ind(ctx, opnd_create_reg(DR_REG_RCX)));
++#undef FIELD
++#undef APPEND
++}
++
++static byte *live_boundary_routine(void *ctx) {
++  byte *routine = __atomic_load_n(&boundary_routine, __ATOMIC_ACQUIRE);
++  if (routine)
++    return routine;
++  size_t size = dr_page_size();
++  byte *fresh = dr_nonheap_alloc(size, DR_MEMPROT_READ | DR_MEMPROT_WRITE);
++  if (!fresh)
++    fail("cannot allocate the live boundary routine");
++  instrlist_t *ilist = instrlist_create(ctx);
++  emit_boundary_routine(ctx, ilist);
++  byte *end = instrlist_encode_to_copy(ctx, ilist, fresh, fresh, fresh + size, true);
++  instrlist_clear_and_destroy(ctx, ilist);
++  if (!end || !dr_memory_protect(fresh, size, DR_MEMPROT_READ | DR_MEMPROT_EXEC))
++    fail("cannot generate the live boundary routine");
++  if (__atomic_compare_exchange_n(&boundary_routine, &routine, fresh, false, __ATOMIC_ACQ_REL,
++                                  __ATOMIC_ACQUIRE))
++    return fresh;
++  dr_nonheap_free(fresh, size);
++  return routine;
++}
++
++/* Give a thread what its live entries need to reach the boundary callback. */
++static void set_boundary_state(void *ctx, thread_data_t *d) {
++  if (!flat_inline || !live_work)
++    return;
++  d->boundary_routine = live_boundary_routine(ctx);
++  if (!d->boundary_stack) {
++    d->boundary_stack = dr_thread_alloc(ctx, BOUNDARY_STACK_BYTES);
++    if (!d->boundary_stack)
++      fail("cannot allocate the live boundary stack");
++  }
++  d->boundary_stack_top =
++      (byte *)(((ptr_uint_t)d->boundary_stack + BOUNDARY_STACK_BYTES) & ~(ptr_uint_t)15);
++  /* The entry stores its block's first address, which is the block's tag, in
++   * boundary_pc before it jumps to the routine. A signal that arrives in the
++   * routine or the callback then unlinks that block, so it is delivered when the
++   * thread leaves the block rather than when it next leaves the code cache. */
++  dr_durante_set_return_tag(ctx, &d->boundary_pc);
++}
++
++/* Live clock: the flag-free entry also counts live_room down and takes the
++ * existing boundary callback when it is negative, so publication happens at
++ * the same block entries as on the callback path. The prefix checkpoints
++ * the count while the scratch registers are spilled. Relocation can roll
++ * either path back until the suffix restores RCX. The slow path passes this
++ * block's arguments to the boundary routine, which resumes at the suffix.
++ * Every branch is relative to the entry itself or goes through the thread's
++ * state, so the entry can be copied to any address. address receives the two
++ * stores of the block's first address. */
++enum { ENTRY_PC_LOW, ENTRY_PC_HIGH, ENTRY_IMMEDIATES };
++
++static void emit_flat_live_entry(void *ctx, instrlist_t *bb, instr_t *where, int count,
++                                 app_pc first_pc, instr_t **address) {
++#define INSERT(i) \
++  (where ? instrlist_meta_preinsert(bb, where, (i)) : instrlist_meta_append(bb, (i)))
++  instr_t *fast = INSTR_CREATE_label(ctx), *resume = INSTR_CREATE_label(ctx);
++  emit_flat_parts(ctx, bb, where, 1, FLAT_PREFIX, true);
++  INSERT(INSTR_CREATE_jecxz(ctx, opnd_create_instr(fast)));
++  INSERT(INSTR_CREATE_mov_st(ctx,
++                             OPND_CREATE_MEM32(DR_REG_R11, offsetof(thread_data_t, boundary_count)),
++                             OPND_CREATE_INT32(count)));
++  for (int i = 0; i < ENTRY_IMMEDIATES; ++i) {
++    instr_t *half = INSTR_CREATE_mov_st(
++        ctx, OPND_CREATE_MEM32(DR_REG_R11, (int)offsetof(thread_data_t, boundary_pc) + 4 * i),
++        OPND_CREATE_INT32((int)(uint32_t)((ptr_uint_t)first_pc >> (32 * i))));
++    INSERT(half);
++    if (address)
++      address[i] = half;
++  }
++  INSERT(INSTR_CREATE_lea(ctx, opnd_create_reg(DR_REG_RCX),
++                          opnd_create_mem_instr(resume, 0, OPSZ_lea)));
++  INSERT(INSTR_CREATE_jmp_ind(
++      ctx, OPND_CREATE_MEMPTR(DR_REG_R11, offsetof(thread_data_t, boundary_routine))));
++  INSERT(fast);
++  emit_flat_parts(ctx, bb, where, count, FLAT_BODY, true);
++  INSERT(resume);
++  emit_flat_parts(ctx, bb, where, 1, FLAT_SUFFIX, true);
+ #undef INSERT
+ }
+
++/* One encoded entry per block size, with the block's first address patched. */
++static patched_template_t *flat_live_entries[FLAT_ENTRY_CACHE + 1];
++
++static void insert_flat_live_charge(void *ctx, instrlist_t *bb, instr_t *where, int count,
++                                    app_pc first_pc) {
++  if (count <= 0 || count > FLAT_ENTRY_CACHE) {
++    emit_flat_live_entry(ctx, bb, where, count, first_pc, NULL);
++    return;
++  }
++  const patched_template_t *t = __atomic_load_n(&flat_live_entries[count], __ATOMIC_ACQUIRE);
++  if (!t) {
++    instrlist_t *ilist = instrlist_create(ctx);
++    instr_t *address[ENTRY_IMMEDIATES];
++    emit_flat_live_entry(ctx, ilist, NULL, count, NULL, address);
++    t = publish_template(ctx, &flat_live_entries[count], ilist, address, ENTRY_IMMEDIATES,
++                         "cannot lay out the live entry");
++  }
++  const uint32_t value[ENTRY_IMMEDIATES] = {(uint32_t)(ptr_uint_t)first_pc,
++                                            (uint32_t)((ptr_uint_t)first_pc >> 32)};
++  insert_patched(ctx, bb, where, t, value, ENTRY_IMMEDIATES);
++}
++
+ static bool is_raw_slot(opnd_t opnd, uint slot) {
+   int offset = (int)(raw_tls_offset + slot * sizeof(void *));
+   if (!opnd_is_far_memory_reference(opnd) || opnd_get_segment(opnd) != raw_tls_register)
+@@ -1024,8 +1475,9 @@ static bool is_reg(opnd_t opnd, reg_id_t reg) {
+ /* The runtime can translate a thread stopped inside this client's inline
+  * sequences (synchronization, relocation). Recover rcx/r11 from the private
+  * spill slots. If a relocated thread will re-enter a flat block whose charge
+- * has already been stored, return the counter to its pre-entry value: the
+- * re-entry charges the block again. Restoration is idempotent. */
++ * has already been made, take that charge back: the re-entry charges the
++ * block again. Restoration is idempotent, and a query (!restore_memory)
++ * changes nothing. */
+ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state_info_t *info) {
+   if (!raw_tls_enabled || !info || !info->raw_mcontext || !info->mcontext ||
+       !info->fragment_info.cache_start_pc)
+@@ -1034,7 +1486,7 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+   if (!d || !d->raw_tls_base)
+     return true;
+   byte *pc = info->fragment_info.cache_start_pc, *stop = info->raw_mcontext->pc;
+-  bool spilled_rcx = false, spilled_r11 = false, charged = false;
++  bool spilled_rcx = false, spilled_r11 = false, checkpointed = false, live_entry = false;
+   instr_t ins;
+   instr_init(drcontext, &ins);
+   for (uint n = 0; pc != NULL && pc < stop && n < 4096; ++n) {
+@@ -1052,13 +1504,16 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+       else if (flat_inline && spilled_rcx && spilled_r11 && is_reg(src, DR_REG_RCX) &&
+                opnd_is_base_disp(dst) && opnd_get_base(dst) == DR_REG_R11 &&
+                opnd_get_index(dst) == DR_REG_NULL &&
+-               opnd_get_disp(dst) == (int)offsetof(thread_data_t, instructions))
+-        charged = true;
++               (opnd_get_disp(dst) == (int)offsetof(thread_data_t, entry_base) ||
++                opnd_get_disp(dst) == (int)offsetof(thread_data_t, entry_room))) {
++        checkpointed = true;
++        live_entry = opnd_get_disp(dst) == (int)offsetof(thread_data_t, entry_room);
++      }
+     } else if (op == OP_mov_ld && instr_num_dsts(&ins) == 1 && instr_num_srcs(&ins) == 1) {
+       opnd_t dst = instr_get_dst(&ins, 0), src = instr_get_src(&ins, 0);
+       if (is_raw_slot(src, RAW_TLS_SPILL_RCX) && is_reg(dst, DR_REG_RCX)) {
+         spilled_rcx = false;
+-        charged = false; /* The entry sequence is complete. */
++        checkpointed = false; /* The entry sequence is complete. */
+       } else if (is_raw_slot(src, RAW_TLS_SPILL_R11) && is_reg(dst, DR_REG_R11)) {
+         spilled_r11 = false;
+       }
+@@ -1071,8 +1526,33 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+     info->mcontext->xcx = slots[RAW_TLS_SPILL_RCX];
+   if (spilled_r11)
+     info->mcontext->r11 = slots[RAW_TLS_SPILL_R11];
+-  if (charged && restore_memory)
++  if (!checkpointed || !restore_memory)
++    return true;
++  if (!live_entry) {
++    if (d->instructions != d->entry_base)
++      d->instructions = d->entry_base;
++    return true;
++  }
++  /* A live entry is charged by its inline body, which moves live_room away
++   * from the saved entry_room, or by the boundary callback, which marks the
++   * entry and keeps the count it started from. */
++  settle_live_count(d);
++  if (d->entry_room == ENTRY_ROOM_CHARGED) {
++    if (d->instructions == d->entry_base)
++      return true;
+     d->instructions = d->entry_base;
++  } else if (d->entry_room >= 0 && d->live_room != d->entry_room) {
++    d->instructions -= (uint64_t)d->entry_room - (uint64_t)d->live_room;
++  } else {
++    return true; /* Not charged yet. */
++  }
++  d->entry_room = -1;
++  /* The boundary callback may have admitted a pending REP retry before
++   * relocation. Its first resumed block will enter again. Keep already
++   * published prior work and re-evaluate the boundary for this entry. */
++  if (d->restart_pc && d->restart_rep && d->instructions == d->restart_base)
++    d->restart_entered = false;
++  set_fast_until(d, 0);
+   return true;
+ }
+
+@@ -1166,6 +1646,7 @@ static thread_data_t *before_write(app_pc pc, app_pc next_pc, int suffix) {
+   thread_data_t *data = accounting_thread_data();
+   if (data == NULL)
+     fail("write checkpoint without thread state");
++  clear_write_checkpoint(data);
+   record_write_checkpoint(data, pc, next_pc, suffix);
+   return data;
+ }
+@@ -1182,8 +1663,87 @@ static void before_write_memory(app_pc pc, app_pc next_pc, int suffix,
+  * directly with flag-neutral moves. The scratch register is always restored
+  * before the application instruction, even when normal liveness treats it
+  * as dead: a synchronous signal handler may read every saved register. */
+-static void insert_write_checkpoint(void *ctx, instrlist_t *bb, instr_t *where,
++/* Raw-TLS write checkpoint: a fixed layout whose five 32-bit immediates are
++ * patched per write. Both pointers always use two 32-bit stores. */
++enum { CHECKPOINT_PC_LO, CHECKPOINT_PC_HI, CHECKPOINT_NEXT_LO, CHECKPOINT_NEXT_HI,
++       CHECKPOINT_SUFFIX, CHECKPOINT_IMMEDIATES };
++_Static_assert((int)CHECKPOINT_IMMEDIATES <= (int)TEMPLATE_IMMEDIATES, "checkpoint immediates");
++static patched_template_t *checkpoint_template;
++
++static const patched_template_t *write_checkpoint_template(void *ctx) {
++  patched_template_t *t = __atomic_load_n(&checkpoint_template, __ATOMIC_ACQUIRE);
++  if (t)
++    return t;
++  const reg_id_t data = DR_REG_R11;
++  instrlist_t *ilist = instrlist_create(ctx);
++  instr_t *imm[CHECKPOINT_IMMEDIATES];
++  instrlist_meta_append(ilist, INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_SPILL_R11),
++                                                    opnd_create_reg(data)));
++  instrlist_meta_append(ilist, INSTR_CREATE_mov_ld(ctx, opnd_create_reg(data),
++                                                    raw_slot(RAW_TLS_STATE)));
++  static const size_t fields[CHECKPOINT_IMMEDIATES] = {
++      offsetof(thread_data_t, write_pc), offsetof(thread_data_t, write_pc) + 4,
++      offsetof(thread_data_t, write_next_pc), offsetof(thread_data_t, write_next_pc) + 4,
++      offsetof(thread_data_t, write_suffix)};
++  for (int i = 0; i < CHECKPOINT_IMMEDIATES; ++i) {
++    opnd_t dst = i == CHECKPOINT_SUFFIX ? OPND_CREATE_MEM64(data, (int)fields[i])
++                                        : OPND_CREATE_MEM32(data, (int)fields[i]);
++    imm[i] = INSTR_CREATE_mov_st(ctx, dst, OPND_CREATE_INT32(0x7fffffff));
++    instrlist_meta_append(ilist, imm[i]);
++  }
++  instrlist_meta_append(ilist, INSTR_CREATE_mov_st(ctx, OPND_CREATE_MEM8(data,
++                                                    offsetof(thread_data_t, write_rep)),
++                                                    OPND_CREATE_INT8(0)));
++  instrlist_meta_append(ilist, INSTR_CREATE_mov_ld(ctx, opnd_create_reg(data),
++                                                    raw_slot(RAW_TLS_SPILL_R11)));
++  return publish_template(ctx, &checkpoint_template, ilist, imm, CHECKPOINT_IMMEDIATES,
++                          "cannot lay out the write checkpoint");
++}
++
++/* Flat write checkpoint: the two halves of the packed word, stored straight
++ * to the raw TLS slot. It needs no scratch register, so restore_state() has
++ * nothing to recover inside it. */
++enum { PACKED_LOW, PACKED_HIGH, PACKED_IMMEDIATES };
++static patched_template_t *packed_checkpoint_template;
++
++static const patched_template_t *packed_write_template(void *ctx) {
++  patched_template_t *t = __atomic_load_n(&packed_checkpoint_template, __ATOMIC_ACQUIRE);
++  if (t)
++    return t;
++  instrlist_t *ilist = instrlist_create(ctx);
++  instr_t *imm[PACKED_IMMEDIATES];
++  for (int i = 0; i < PACKED_IMMEDIATES; ++i) {
++    opnd_t half = raw_slot(RAW_TLS_WRITE);
++    opnd_set_disp(&half, opnd_get_disp(half) + 4 * i);
++    opnd_set_size(&half, OPSZ_4);
++    imm[i] = INSTR_CREATE_mov_st(ctx, half, OPND_CREATE_INT32(0x7fffffff));
++    instrlist_meta_append(ilist, imm[i]);
++  }
++  return publish_template(ctx, &packed_checkpoint_template, ilist, imm, PACKED_IMMEDIATES,
++                          "cannot lay out the packed write checkpoint");
++}
++
++/* Returns false when this write needs the callback instead: flat code only
++ * stores checkpoints that fit the packed word. */
++static bool insert_write_checkpoint(void *ctx, instrlist_t *bb, instr_t *where,
+                                     app_pc pc, app_pc next_pc, int suffix) {
++  if (flat_inline) {
++    uint64_t word;
++    if (!pack_write_checkpoint(pc, next_pc, suffix, &word))
++      return false;
++    const uint32_t value[PACKED_IMMEDIATES] = {(uint32_t)word, (uint32_t)(word >> 32)};
++    insert_patched(ctx, bb, where, packed_write_template(ctx), value, PACKED_IMMEDIATES);
++    return true;
++  }
++  if (raw_tls_enabled) {
++    const uint32_t value[CHECKPOINT_IMMEDIATES] = {
++        (uint32_t)(ptr_uint_t)pc, (uint32_t)((ptr_uint_t)pc >> 32),
++        (uint32_t)(ptr_uint_t)next_pc, (uint32_t)((ptr_uint_t)next_pc >> 32),
++        (uint32_t)suffix};
++    insert_patched(ctx, bb, where, write_checkpoint_template(ctx), value,
++                   CHECKPOINT_IMMEDIATES);
++    return true;
++  }
+   const reg_id_t data = DR_REG_R11;
+   if (raw_tls_enabled)
+     instrlist_meta_preinsert(bb, where, INSTR_CREATE_mov_st(ctx, raw_slot(RAW_TLS_SPILL_R11),
+@@ -1207,6 +1767,7 @@ static void insert_write_checkpoint(void *ctx, instrlist_t *bb, instr_t *where,
+                                                             raw_slot(RAW_TLS_SPILL_R11)));
+   else
+     dr_restore_reg(ctx, bb, where, data, SPILL_SLOT_1);
++  return true;
+ }
+
+ static void code_replay(void *ctx, int reason, app_pc source_pc,
+@@ -1215,7 +1776,7 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
+   if (probe_l1d && reason != DR_DURANTE_REPLAY_ENTRY)
+     probe_partial_block = true;
+ #endif
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d) {
+     invalidate_live_work();
+     __atomic_store_n(&replay_without_tls, 1, __ATOMIC_RELAXED);
+@@ -1223,7 +1784,8 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
+   }
+   check_flat_counter(d);
+   settle_restart(d);
+-  d->fast_until = 0;
++  settle_write_checkpoint(d);
++  set_fast_until(d, 0);
+   if (reason == DR_DURANTE_REPLAY_ENTRY) {
+     /* Cache validation ran before client entry instrumentation. Nothing was
+      * charged; a pending retry still belongs to the same logical instruction. */
+@@ -1290,14 +1852,14 @@ static void code_replay(void *ctx, int reason, app_pc source_pc,
+
+ static void kernel_xfer(void *ctx, const dr_kernel_xfer_info_t *info) {
+   (void)info;
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d)
+     return;
+   settle_restart(d);
+   /* Signal handlers can call the same code at the same PC with another BB
+    * suffix. PC equality cannot authenticate an interrupted TLS checkpoint.
+    * An unrelated earlier signal does not make later JIT work invalid. */
+-  d->write_pc = NULL;
++  clear_write_checkpoint(d);
+   if (d->restart_pc) {
+     counter_error(&d->replay_error);
+     d->restart_pc = NULL;
+@@ -1330,7 +1892,7 @@ static void cpu_feature_violation(int feature) {
+     cpu_policy_exit();
+   }
+   void *ctx = dr_get_current_drcontext();
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d || (feature != CPU_POLICY_AVX && feature != CPU_POLICY_SIMD))
+     fail("CPU policy observation without valid thread state");
+   /* route_event keeps a shared-VM/vfork child's report out of its parent's
+@@ -1346,7 +1908,7 @@ static void cpu_feature_violation(int feature) {
+ /* The profile has no defined value for this request. Charge the instruction
+  * as usual but make the whole measurement unusable. */
+ static void cpuid_request_invalid(void *ctx) {
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d)
+     fail("CPUID profile observation without valid thread state");
+   counter_error(&d->cpuid_error);
+@@ -1370,7 +1932,7 @@ static bool select_inline_block(void *ctx, instrlist_t *bb, bool translating,
+     return true;
+   if (translating)
+     return false;
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d)
+     return false;
+   /* Static programs commonly enter their main loop after parsing input. Keep
+@@ -1386,11 +1948,9 @@ static bool select_inline_block(void *ctx, instrlist_t *bb, bool translating,
+
+ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+                                         instrlist_t *bb, instr_t *where,
+-                                        bool for_trace, bool translating,
++                                        bool first_in_block, bool translating,
+                                         void *user_data) {
+   (void)tag;
+-  (void)for_trace;
+-  bool first_in_block = drmgr_is_first_instr(drcontext, where);
+   dr_emit_flags_t flags = DR_EMIT_DEFAULT;
+ #ifdef DURANTE_TEST_COUNT_LOCATIONS
+   (void)translating;
+@@ -1429,6 +1989,9 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+                            OPND_CREATE_INT32(count),
+                            OPND_CREATE_INTPTR(first ? instr_get_app_pc(first) : NULL),
+                            OPND_CREATE_INT32((int)(uint32_t)(packed >> 32)));
++    else if (flat_inline && live_work)
++      insert_flat_live_charge(drcontext, bb, where, count,
++                              first ? instr_get_app_pc(first) : NULL);
+     else if (flat_inline)
+       insert_flat_charge(drcontext, bb, where, count);
+     else if (inline_block) {
+@@ -1469,8 +2032,8 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+                            OPND_CREATE_INT32(suffix),
+                            OPND_CREATE_INT32((int)suffix_memory_bytes(where)),
+                            OPND_CREATE_INT32((int)instruction_memory_bytes(where)));
+-    } else if (!latency_bound_enabled && inline_write) {
+-      insert_write_checkpoint(drcontext, bb, where, pc, next_pc, suffix);
++    } else if (!latency_bound_enabled && inline_write &&
++               insert_write_checkpoint(drcontext, bb, where, pc, next_pc, suffix)) {
+       /* Flat layouts depend only on the block, so retranslation reproduces them. */
+       if (!cache_probe_enabled() && !flat_inline)
+         flags = DR_EMIT_STORE_TRANSLATIONS;
+@@ -1517,6 +2080,39 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+   return flags;
+ }
+
++/* drmgr.h hides DR's basic-block event so that drmgr can order the phases of
++ * several users.  This client is drmgr's only basic-block user: it links no
++ * other extension.  One DR event therefore runs drmgr's phases in drmgr's
++ * order: the CPUID rewrite (app2app), then the analysis of the rewritten
++ * block, then the insertion at each instruction, with the auto-predication
++ * drmgr applies, and the first instruction taken when insertion starts.  This
++ * avoids drmgr's per-block work: copying its callback lists under a lock,
++ * allocating the analysis result, and calling through it per phase and
++ * instruction.  drmgr's final pass marks application branches to instruction
++ * targets as meta; the client inserts no such branch, so it is not needed.
++ * Every other event stays with drmgr. */
++#undef dr_register_bb_event
++#undef dr_unregister_bb_event
++static bool cpuid_rewrite;
++
++static dr_emit_flags_t durante_bb_event(void *drcontext, void *tag, instrlist_t *bb,
++                                        bool for_trace, bool translating) {
++  dr_emit_flags_t flags = DR_EMIT_DEFAULT;
++  if (cpuid_rewrite)
++    flags |= durante_cpuid_app2app(drcontext, tag, bb, for_trace, translating);
++  void *user_data = NULL;
++  flags |= analyze_block(drcontext, tag, bb, for_trace, translating, &user_data);
++  instr_t *first = instrlist_first(bb), *next;
++  for (instr_t *where = first; where != NULL; where = next) {
++    next = instr_get_next(where);
++    instrlist_set_auto_predicate(bb, instr_get_predicate(where));
++    flags |= instrument_block(drcontext, tag, bb, where, where == first, translating,
++                              user_data);
++    instrlist_set_auto_predicate(bb, DR_PRED_NONE);
++  }
++  return flags;
++}
++
+ static bool lifecycle_syscall(int number) {
+   return x32_syscall(number) ||
+          number == SYS_fork || number == SYS_vfork || number == SYS_clone ||
+@@ -1541,7 +2137,7 @@ static bool pre_syscall(void *ctx, int number) {
+   if (static_text_end && !__atomic_load_n(&static_text_revoked, __ATOMIC_ACQUIRE) &&
+       (x32_syscall(number) || changes_static_text(ctx, number)))
+     __atomic_store_n(&static_text_revoked, true, __ATOMIC_RELEASE);
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d)
+     fail("syscall without TLS");
+   if (live_work && !lifecycle_syscall(number)) {
+@@ -1620,8 +2216,9 @@ static bool pre_syscall(void *ctx, int number) {
+   d->pending_exec = exec;
+   dr_mutex_lock(state_lock);
+   if (live_work) {
+-    if ((exec || number == SYS_exit_group) && !d->child_pid &&
+-        threads_started != threads_ended + 1)
++    /* At exit_group the runtime still runs each other thread's exit event,
++     * which publishes that thread's remainder. Exec keeps the stricter rule. */
++    if (exec && !d->child_pid && threads_started != threads_ended + 1)
+       invalidate_live_work();
+     publish_live_work(d, true);
+   }
+@@ -1651,7 +2248,7 @@ static void post_syscall(void *ctx, int number) {
+   bool ordinary = live_work && !lifecycle_syscall(number);
+   if (ordinary && !static_input_syscall(number))
+     return;
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d)
+     fail("post syscall without TLS");
+   ptr_int_t result = (ptr_int_t)dr_syscall_get_result(ctx);
+@@ -1683,15 +2280,16 @@ static void post_syscall(void *ctx, int number) {
+ }
+ static dr_signal_action_t signal_event(void *ctx, dr_siginfo_t *info) {
+   (void)info;
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  if (live_work_require_eligible)
++    invalidate_live_work();
++  thread_data_t *d = thread_state(ctx);
+   if (!d || d->signals == UINT64_MAX)
+     fail("signal accounting overflow");
+-  invalidate_live_work();
+   ++d->signals;
+   return DR_SIGNAL_DELIVER;
+ }
+ static void fork_init(void *ctx) {
+-  thread_data_t *inherited = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *inherited = thread_state(ctx);
+   if (inherited && (inherited->pending_clone_flags & CLONE_FILES_FLAG))
+     fail("shared-descriptor process clones are unsupported");
+   process_id_t parent = owner_pid;
+@@ -1714,11 +2312,16 @@ static void fork_init(void *ctx) {
+   accounting_error = app_exit_seen = report_written = false;
+   __atomic_store_n(&replay_without_tls, 0, __ATOMIC_RELAXED);
+   app_exit_code = 0;
+-  thread_data_t *d = drmgr_get_tls_field(ctx, tls_index);
++  thread_data_t *d = thread_state(ctx);
+   if (!d)
+     fail("fork without surviving TLS");
++  byte *stack = d->boundary_stack; /* The child inherits the thread's allocations. */
+   memset(d, 0, sizeof(*d));
++  d->boundary_stack = stack;
+   set_raw_accounting_state(d);
++  clear_write_checkpoint(d); /* The slot still holds the parent's word. */
++  set_boundary_state(ctx, d);
++  set_fast_until(d, 0);
+   open_stream("fork", parent, previous);
+ }
+ static void pre_detach(void) {
+@@ -1744,9 +2347,7 @@ static void process_exit(void) {
+   profile_dump();
+   drmgr_unregister_module_unload_event(profile_module_unload);
+ #endif
+-  drmgr_unregister_bb_instrumentation_event(analyze_block);
+-  if (durante_cpuid_active != DURANTE_CPUID_NONE)
+-    drmgr_unregister_bb_app2app_event(durante_cpuid_app2app);
++  dr_unregister_bb_event(durante_bb_event);
+   drmgr_unregister_thread_init_event(thread_init);
+   drmgr_unregister_thread_exit_event(thread_exit);
+   drmgr_unregister_pre_syscall_event(pre_syscall);
+@@ -1769,6 +2370,20 @@ static void process_exit(void) {
+ #endif
+   drmgr_exit();
+   dr_mutex_destroy(state_lock);
++  for (int i = 0; i <= FLAT_ENTRY_CACHE; ++i) {
++    if (flat_entries[i])
++      dr_global_free(flat_entries[i], sizeof(*flat_entries[i]));
++  }
++  for (int i = 0; i <= FLAT_ENTRY_CACHE; ++i) {
++    if (flat_live_entries[i])
++      dr_global_free(flat_live_entries[i], sizeof(*flat_live_entries[i]));
++  }
++  if (checkpoint_template)
++    dr_global_free(checkpoint_template, sizeof(*checkpoint_template));
++  if (packed_checkpoint_template)
++    dr_global_free(packed_checkpoint_template, sizeof(*packed_checkpoint_template));
++  if (boundary_routine)
++    dr_nonheap_free(boundary_routine, dr_page_size());
+   if (live_work)
+     dr_unmap_file(live_work, sizeof(*live_work));
+   if (cpu_policy_exit_pc)
+@@ -1786,7 +2401,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+   if (argc < 3 || strcmp(argv[1], "-outdir"))
+     fail("usage: -c libdurante.so -outdir NEW_PRIVATE_DIRECTORY [-rep_bytes] "
+          "[-disallow_cpu_feature avx|simd] [-cpuid_profile x86-64-v1|x86-64-v2] "
+-         "[-latency_bound [-memory_operand_bytes]] [-live_work_v1 OWNER_FILE] -- program");
++         "[-latency_bound [-memory_operand_bytes]] "
++         "[-live_work_v1 OWNER_FILE [-live_work_require_eligible]] -- program");
+   if (strlen(argv[2]) >= sizeof(outdir) || argv[2][0] != '/')
+     fail("report directory must be absolute");
+   memcpy(outdir, argv[2], strlen(argv[2]) + 1);
+@@ -1801,6 +2417,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+ #endif
+     } else if (strcmp(argv[i], "-live_work_v1") == 0 && !live_path && i + 1 < argc) {
+       live_path = argv[++i];
++    } else if (strcmp(argv[i], "-live_work_require_eligible") == 0 && !live_work_require_eligible) {
++      live_work_require_eligible = true;
+     } else if (strcmp(argv[i], "-latency_bound") == 0 && !latency_bound_enabled) {
+       latency_bound_enabled = true;
+     } else if (strcmp(argv[i], "-memory_operand_bytes") == 0 && !memory_operand_bytes_enabled) {
+@@ -1824,6 +2442,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+   }
+   if (memory_operand_bytes_enabled && !latency_bound_enabled)
+     fail("memory operand bytes require -latency_bound");
++  if (live_work_require_eligible && !live_path)
++    fail("-live_work_require_eligible requires -live_work_v1");
+   if (live_path) {
+     if (!rep_bytes_enabled)
+       fail("live work requires -rep_bytes");
+@@ -1865,25 +2485,23 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+ #ifdef DURANTE_TEST_COUNT_LOCATIONS
+   const bool flat_candidate = false; /* The location profile needs entry callbacks. */
+ #else
+-  const bool flat_candidate = !live_work && !latency_bound_enabled && !cache_probe_enabled();
++  const bool flat_candidate = !latency_bound_enabled && !cache_probe_enabled();
+ #endif
+   raw_tls_enabled = (static_text_end != 0 || flat_candidate) &&
+                     dr_raw_tls_calloc(&raw_tls_register, &raw_tls_offset, RAW_TLS_SLOTS, 0);
+   flat_inline = flat_candidate && raw_tls_enabled;
+   tls_index = drmgr_register_tls_field();
++  cpuid_rewrite = cpuid_profile != DURANTE_CPUID_NONE;
+   if (!state_lock || tls_index < 0 ||
+-      (cpuid_profile != DURANTE_CPUID_NONE &&
+-       !drmgr_register_bb_app2app_event(durante_cpuid_app2app, NULL)) ||
+       !drmgr_register_thread_init_event(thread_init) ||
+       !drmgr_register_thread_exit_event(thread_exit) ||
+-      !drmgr_register_bb_instrumentation_event(analyze_block, instrument_block,
+-                                               NULL) ||
+       !drmgr_register_pre_syscall_event(pre_syscall) ||
+       !drmgr_register_post_syscall_event(post_syscall) ||
+       !drmgr_register_signal_event(signal_event) ||
+       !drmgr_register_kernel_xfer_event(kernel_xfer) ||
+       (raw_tls_enabled && !drmgr_register_restore_state_ex_event(restore_state)))
+     fail("event registration failed");
++  dr_register_bb_event(durante_bb_event);
+   dr_register_durante_code_replay_event(code_replay);
+   open_stream("initial", 0, "");
+   dr_register_filter_syscall_event(filter_syscall);
+diff --git a/client/durante_runtime.h b/client/durante_runtime.h
+index abf2d99..e8349f1 100644
+--- a/client/durante_runtime.h
++++ b/client/durante_runtime.h
+@@ -10,7 +10,7 @@
+ extern "C" {
+ #endif
+
+-#define DR_DURANTE_RUNTIME_ABI_VERSION 1U
++#define DR_DURANTE_RUNTIME_ABI_VERSION 2U
+ #define DR_DURANTE_REPLAY_RETRY 1
+ #define DR_DURANTE_REPLAY_AFTER_WRITE 2
+ #define DR_DURANTE_REPLAY_ENTRY 3
+@@ -53,6 +53,19 @@ DR_API
+ bool
+ dr_unregister_durante_code_replay_event(dr_durante_code_replay_cb_t callback);
+
++/* While this thread runs client code that its instrumentation entered from the
++ * code cache other than through a clean call, *slot must hold the tag (first
++ * application address) of the block that code returns to.  A delayable signal
++ * that interrupts it then unlinks that block, as one in a clean callee does, so
++ * the thread reaches dispatch and the signal's delivery at the block's next exit
++ * instead of its next exit from the cache.  The core reads *slot in its signal
++ * handler: keep the slot in memory owned by this thread and pass NULL before
++ * freeing it.
++ */
++DR_API
++void
++dr_durante_set_return_tag(void *drcontext, app_pc const *slot);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/docs/ONLINE_WORK_BUDGET.md b/docs/ONLINE_WORK_BUDGET.md
+index d9bcc9b..a130224 100644
+--- a/docs/ONLINE_WORK_BUDGET.md
++++ b/docs/ONLINE_WORK_BUDGET.md
+@@ -55,10 +55,24 @@ only the outstanding delta. A failed exec therefore continues against the
+ same baseline. Publication at the next block entry leaves the current block
+ available for replay correction. The client batches each component up to a
+ 4096-unit publication threshold. Before each application syscall it flushes
+-eligible pending work, including when a thread is about to wait, exit or exec. Signals, unsupported REP entries and accounting errors invalidate
+-live eligibility. Missing or inconsistent progress leaves the external deadline
+-active. A budgeted natural completion requires a matching eligible terminal
+-report.
++eligible pending work, including when a thread is about to wait, exit or exec.
++A thread that another thread's `exit_group` stops publishes its remainder from
++its exit event, so the total includes the final block prefix that its terminal
++record also counts. Signals and CMPS/SCAS entries keep the page usable, as they
++keep the terminal record valid: a CMPS/SCAS entry charges its one instruction
++and no bytes, because the unit has no CMPS/SCAS bytes.
++
++An owner whose weighted time policy rejects signals and unsupported REP entries
++can add the client option `-live_work_require_eligible` to `-live_work_v1`.
++The first observed signal or CMPS/SCAS entry in any participating thread or
++process sets the shared invalidity word. The owner must then use its external
++deadline. The option affects only the live page. A naturally completed role
++still reports its counters and quality fields for terminal evaluation. A budget
++decision made before such an event covers only the observed execution prefix.
++
++Accounting errors, a replay that cannot be settled, and exec while other
++threads still run also invalidate live eligibility. Missing or inconsistent progress leaves the external deadline
++active. A budgeted natural completion requires a matching terminal report.
+
+ Components may be read at slightly different instants. Their sum provides a
+ lower bound at the last sampled instant. Publication batching, the owner poll
+diff --git a/toolkit/patches/dynamorio-code-replay.patch b/toolkit/patches/dynamorio-code-replay.patch
+index 9b1d967..a362224 100644
+--- a/toolkit/patches/dynamorio-code-replay.patch
++++ b/toolkit/patches/dynamorio-code-replay.patch
+@@ -5,6 +5,12 @@ fault retry, completed sandbox write, and pre-instrumentation sandbox entry.
+ The fault path restores application registers before dispatch instead of leaking
+ code-cache scratch values.  Generic restore-state queries remain informational.
+
++Client code entered from the cache without a clean call can name the block it
++returns to, so a signal there is delivered as promptly as in a clean callee.
++
++Leave a clean callee's signal alone while DR flushes for it: the flush
++completion callback and fragment deletion events run with DR's locks held.
++
+ --- a/core/arch/x86/mangle.c
+ +++ b/core/arch/x86/mangle.c
+ @@ -3111,9 +3111,35 @@
+@@ -373,3 +379,139 @@ diff --git a/core/arch/clean_call_opt_shared.c b/core/arch/clean_call_opt_shared
+          /* 3. search if callee was analyzed before */
+          ci = callee_info_table_lookup(callee);
+          /* 4. this callee is not seen before */
++--- a/core/globals.h
+++++ b/core/globals.h
++@@ -817,6 +817,10 @@ struct _dcontext_t {
++      * as that.
++      */
++     sbyte signals_pending; /* != 0: pending; < 0: currently handling one */
+++    /* Where client code entered from the cache without a clean call keeps the
+++     * tag of the block it returns to (dr_durante_set_return_tag()), or NULL.
+++     */
+++    app_pc const *client_return_tag;
++ #endif
++ 
++     /************* end of offset-crucial fields *********************/
++--- a/core/lib/dr_durante_runtime.h
+++++ b/core/lib/dr_durante_runtime.h
++@@ -10,7 +10,7 @@
++ extern "C" {
++ #endif
++ 
++-#define DR_DURANTE_RUNTIME_ABI_VERSION 1U
+++#define DR_DURANTE_RUNTIME_ABI_VERSION 2U
++ #define DR_DURANTE_REPLAY_RETRY 1
++ #define DR_DURANTE_REPLAY_AFTER_WRITE 2
++ #define DR_DURANTE_REPLAY_ENTRY 3
++@@ -53,6 +53,19 @@ DR_API
++ bool
++ dr_unregister_durante_code_replay_event(dr_durante_code_replay_cb_t callback);
++ 
+++/* While this thread runs client code that its instrumentation entered from the
+++ * code cache other than through a clean call, *slot must hold the tag (first
+++ * application address) of the block that code returns to.  A delayable signal
+++ * that interrupts it then unlinks that block, as one in a clean callee does, so
+++ * the thread reaches dispatch and the signal's delivery at the block's next exit
+++ * instead of its next exit from the cache.  The core reads *slot in its signal
+++ * handler: keep the slot in memory owned by this thread and pass NULL before
+++ * freeing it.
+++ */
+++DR_API
+++void
+++dr_durante_set_return_tag(void *drcontext, app_pc const *slot);
+++
++ #ifdef __cplusplus
++ }
++ #endif
++--- a/core/lib/instrument.c
+++++ b/core/lib/instrument.c
++@@ -1354,6 +1354,17 @@ dr_unregister_durante_code_replay_event(dr_durante_code_replay_cb_t callback)
++     return remove_callback(&durante_code_replay_callbacks, (void (*)(void))callback, true);
++ }
++ 
+++void
+++dr_durante_set_return_tag(void *drcontext, app_pc const *slot)
+++{
+++    dcontext_t *dcontext = (dcontext_t *)drcontext;
+++    CLIENT_ASSERT(dcontext != NULL && dcontext != GLOBAL_DCONTEXT,
+++                  "dr_durante_set_return_tag: invalid drcontext");
+++#ifdef UNIX
+++    dcontext->client_return_tag = slot;
+++#endif
+++}
+++
++ void
++ instrument_durante_code_replay(dcontext_t *dcontext, int reason, app_pc source_pc,
++                                 app_pc target_pc)
++--- a/core/unix/signal.c
+++++ b/core/unix/signal.c
++@@ -4942,28 +4942,37 @@ static void
++ unlink_fragment_of_clean_call(dcontext_t *dcontext, thread_sig_info_t *info, byte *pc,
++                               byte *xsp)
++ {
++-    cache_pc call_pc;
+++    cache_pc call_pc = NULL;
++     fragment_t wrapper;
++-    fragment_t *f;
++-    /* Only a clean callee runs on the dstack while control is still in the cache.
++-     * DR code may hold the locks the lookup and unlinking need, and so may a thread
+++    fragment_t *f = NULL;
+++    /* DR code may hold the locks the lookup and unlinking need, and so may a thread
++      * that is linking: their signals keep waiting for d_r_dispatch.
++      */
++     if ((dcontext->whereami != DR_WHERE_FCACHE &&
++          dcontext->whereami != DR_WHERE_CLEAN_CALLEE) ||
++-        info->interrupted != NULL || !is_on_dstack(dcontext, xsp) ||
++-        is_in_dynamo_dll(pc) || is_couldbelinking(dcontext))
++-        return;
++-    /* An inline context switch leaves a stale value or zero here: only take the
++-     * return address of a call to the save routine.
++-     */
++-    call_pc = get_priv_mcontext_from_dstack(dcontext)->pc;
++-    if (!is_clean_call_save_return(dcontext, call_pc))
+++        info->interrupted != NULL || is_in_dynamo_dll(pc) || is_couldbelinking(dcontext))
++         return;
++-    /* PR 213040: we can't unlink coarse. */
++-    if (get_fcache_coarse_info(call_pc) != NULL)
++-        return;
++-    f = fragment_pclookup(dcontext, call_pc, &wrapper);
+++    if (is_on_dstack(dcontext, xsp)) {
+++        /* Only a clean callee runs on the dstack while control is still in the
+++         * cache.  An inline context switch leaves a stale value or zero here: only
+++         * take the return address of a call to the save routine.
+++         */
+++        call_pc = get_priv_mcontext_from_dstack(dcontext)->pc;
+++        if (!is_clean_call_save_return(dcontext, call_pc))
+++            return;
+++        /* PR 213040: we can't unlink coarse. */
+++        if (get_fcache_coarse_info(call_pc) != NULL)
+++            return;
+++        f = fragment_pclookup(dcontext, call_pc, &wrapper);
+++    } else if (dcontext->client_return_tag != NULL &&
+++               *dcontext->client_return_tag != NULL) {
+++        /* Other client code entered from the cache names the block it returns to
+++         * through dr_durante_set_return_tag().
+++         */
+++        f = fragment_lookup(dcontext, *dcontext->client_return_tag);
+++        if (f != NULL)
+++            call_pc = FCACHE_ENTRY_PC(f);
+++    }
++     if (f == NULL || TESTANY(FRAG_COARSE_GRAIN, f->flags))
++         return;
++     LOG(THREAD, LOG_ASYNCH, 2, "\tsignal in clean callee: delaying until exit F%d\n",
++--- a/core/unix/signal.c
+++++ b/core/unix/signal.c
++@@ -4974,7 +4997,12 @@ unlink_fragment_of_clean_call(dcontext_t *dcontext, thread_sig_info_t *info, byt
++      */
++     if ((dcontext->whereami != DR_WHERE_FCACHE &&
++          dcontext->whereami != DR_WHERE_CLEAN_CALLEE) ||
++-        info->interrupted != NULL || is_in_dynamo_dll(pc) || is_couldbelinking(dcontext))
+++        info->interrupted != NULL || is_in_dynamo_dll(pc) || is_couldbelinking(dcontext) ||
+++        /* A callee that asked DR to flush is called back with DR's locks held:
+++         * the flush completion callback and fragment deletion events.
+++         */
+++        is_self_flushing() || is_self_allsynch_flushing() ||
+++        self_owns_recursive_lock(&change_linking_lock))
++         return;
++     if (is_on_dstack(dcontext, xsp)) {
++         /* Only a clean callee runs on the dstack while control is still in the
+diff --git a/toolkit/patches/dynamorio-vfork-lifetime.patch b/toolkit/patches/dynamorio-vfork-lifetime.patch
+index 49decb9..1d5448e 100644
+--- a/toolkit/patches/dynamorio-vfork-lifetime.patch
++++ b/toolkit/patches/dynamorio-vfork-lifetime.patch
+@@ -11,6 +11,47 @@ Upstream PR: https://github.com/DynamoRIO/dynamorio/pull/7321
+ Backport thread synchronization signal-stack correction from upstream commit
+ 985af57d7c3d73e7a1100d98e412584968588258.
+ Upstream PR: https://github.com/DynamoRIO/dynamorio/pull/7749
++Bound delivery of a signal that interrupts a clean callee: the out-of-line clean
++call save records the clean call's code cache address, and the signal handler
++unlinks that fragment.
++Translate a fault in a flushed fragment from the fragment as it was built: a
++write to its region can make the region self-modifying, and rebuilding against
++that sandboxes the block, so the translation failed and the fault was delivered
++with a zero pc (JVM safepoint polls, BUG-006).
++Clear the stale area pointer when the executable-area lookup repeated after the
++lock upgrade fails: an area that was never executed from is removed without the
++flush synch, and the stale pointer crashed the runtime when one thread changed
++the protection of code that others were about to execute.
++Decode a sandboxed block from a snapshot of its code, encode it from that
++snapshot, and store the snapshot as the copy its entry check compares with: a
++copy taken from the app code after decoding could already hold a newer patch,
++so a block of a JIT page patched in place kept running the old code.
++Set the protection of the runtime's generated code without querying it first:
++every flush changed it four times, and each query read /proc/self/maps.
++Keep the fragment that a signal unlinks: the handler took the flush-synch
++entry points, which free the thread's flushed fragments while the thread is
++still inside one, and the pointer kept for re-linking outlived a flush that
++freed the fragment.
++Do not queue a standard signal that is already pending into the last block of
++the pending-signal heap: growing that heap in the signal handler acquires locks
++that the interrupted runtime code may hold.
++Hold the thread's linking lock while a sandboxed block that wrote to itself is
++deleted: the thread is not at a linking point then, and a flusher could be
++unlinking the same fragment and allocating from the thread's heap.
++Flush the fragments of code that a fixed mmap replaces: such a mapping was
++treated as a protection change, so the old code kept running.
++Reserve 6 pages for the runtime's generated code: with -coarse_units on a host
++with AVX-512 it no longer fits in 5.
++Sandbox code while another thread changes its protection to writable: a block
++built from it before the system call took the page for read-only, so writes of a
++JIT that keeps its code W^X went unnoticed and the old code kept running.
++Fixes from a review of these changes: recreate a flushed trace without its
++regions also with a client; keep clearing signals_pending after a delivery;
++report no pc for part of a clean call's context; forget the interrupted
++fragment when the thread deletes it; raise the self-write deletion event after
++releasing the linking lock; keep reclaiming execve'd non-vfork clone children
++(i#1010); drop a pending signal only when the heap is full, without returning
++-EINTR.
+
+ --- a/core/dynamo.c
+ +++ b/core/dynamo.c
+@@ -1182,3 +1223,1547 @@ index efc1bbb1cd..ad839efb02 100644
+  void
+  signal_prepare_clone_child(void *clone_record);
+  void
++--- a/core/arch/emit_utils_shared.c
+++++ b/core/arch/emit_utils_shared.c
++@@ -5844,6 +5844,22 @@ emit_clean_call_save(dcontext_t *dcontext, byte *pc, generated_code_t *code)
++     /* save all registers */
++     insert_push_all_registers(dcontext, NULL, &ilist, NULL, (uint)PAGE_SIZE,
++                               OPND_CREATE_INT32(0), REG_NULL);
+++#    ifdef UNIX
+++    /* Our return address, below the context we just saved, is the clean call's
+++     * address in the code cache.  Copy it to the context's pc slot, which is
+++     * otherwise unused, for a signal that interrupts the callee (see
+++     * record_pending_signal()).  Neither instruction changes a register or the
+++     * flags, and the arguments the caller sets up next may read any register.
+++     */
+++    APP(&ilist,
+++        INSTR_CREATE_push(dcontext,
+++                          OPND_CREATE_MEMPTR(DR_REG_XSP,
+++                                             -(int)(get_clean_call_temp_stack_size() +
+++                                                    XSP_SZ /* return addr */))));
+++    APP(&ilist,
+++        INSTR_CREATE_pop(dcontext,
+++                         OPND_CREATE_MEMPTR(DR_REG_XSP, offsetof(priv_mcontext_t, pc))));
+++#    endif
++ #elif defined(AARCH64)
++     /* save all registers */
++     insert_push_all_registers(dcontext, NULL, &ilist, NULL, (uint)PAGE_SIZE,
++@@ -5938,6 +5954,13 @@ emit_clean_call_restore(dcontext_t *dcontext, byte *pc, generated_code_t *code)
++         INSTR_CREATE_lea(
++             dcontext, opnd_create_reg(DR_REG_XSP),
++             opnd_create_base_disp(DR_REG_XSP, DR_REG_NULL, 0, (int)XSP_SZ, OPSZ_lea)));
+++#    ifdef UNIX
+++    /* The callee has returned: clear the address emit_clean_call_save() recorded. */
+++    APP(&ilist,
+++        XINST_CREATE_store(dcontext,
+++                           OPND_CREATE_MEMPTR(DR_REG_XSP, offsetof(priv_mcontext_t, pc)),
+++                           OPND_CREATE_INT32(0)));
+++#    endif
++     /* restore all registers */
++     insert_pop_all_registers(dcontext, NULL, &ilist, NULL, (uint)PAGE_SIZE);
++     /* return back */
++--- a/core/lib/instrument.c
+++++ b/core/lib/instrument.c
++@@ -6565,7 +6565,13 @@ dr_get_mcontext_priv(dcontext_t *dcontext, dr_mcontext_t *dmc, priv_mcontext_t *
++     /* XXX: should we set the pc field?
++      * If we do we'll have to adopt a different solution for i#1685 in our Windows
++      * hooks where today we use the pc slot for temp storage.
+++     * The out-of-line clean call save records a code cache address there for the
+++     * signal handler: do not report it.
++      */
+++    if (mc != NULL)
+++        mc->pc = NULL;
+++    else if (TESTALL(DR_MC_ALL, dmc->flags) && dmc->size == sizeof(dr_mcontext_t))
+++        dmc->pc = NULL;
++ 
++     return true;
++ }
++--- a/core/unix/signal.c
+++++ b/core/unix/signal.c
++@@ -4912,6 +4912,68 @@ find_next_fragment_from_gencode(dcontext_t *dcontext, sigcontext_t *sc)
++     return f;
++ }
++ 
+++/* Returns whether pc follows a direct call to the out-of-line clean call save
+++ * routine, which is how emit_clean_call_save() records the clean call's address.
+++ */
+++static bool
+++is_clean_call_save_return(dcontext_t *dcontext, cache_pc pc)
+++{
+++#ifdef X86
+++    byte call[5];
+++    if (pc == NULL || !in_fcache(pc) ||
+++        !d_r_safe_read(pc - sizeof(call), sizeof(call), call))
+++        return false;
+++    return call[0] == RAW_OPCODE_call &&
+++        pc + *(int *)&call[1] == get_clean_call_save(dcontext _IF_X64(GENCODE_X64));
+++#else
+++    return false;
+++#endif
+++}
+++
+++/* A signal that interrupts a clean callee, or code the callee calls, waits for
+++ * the thread's next exit from the code cache, and a loop of linked fragments may
+++ * never take one.  The out-of-line clean call save recorded the clean call's code
+++ * cache address in the pc slot of the context it saved: unlink that fragment, as
+++ * for a signal that arrives in the cache, so the thread exits to d_r_dispatch at
+++ * the fragment's next exit.  Inline context switches record nothing, so their
+++ * callees keep the old behavior.
+++ */
+++static void
+++unlink_fragment_of_clean_call(dcontext_t *dcontext, thread_sig_info_t *info, byte *pc,
+++                              byte *xsp)
+++{
+++    cache_pc call_pc;
+++    fragment_t wrapper;
+++    fragment_t *f;
+++    /* Only a clean callee runs on the dstack while control is still in the cache.
+++     * DR code may hold the locks the lookup and unlinking need, and so may a thread
+++     * that is linking: their signals keep waiting for d_r_dispatch.
+++     */
+++    if ((dcontext->whereami != DR_WHERE_FCACHE &&
+++         dcontext->whereami != DR_WHERE_CLEAN_CALLEE) ||
+++        info->interrupted != NULL || !is_on_dstack(dcontext, xsp) ||
+++        is_in_dynamo_dll(pc) || is_couldbelinking(dcontext))
+++        return;
+++    /* An inline context switch leaves a stale value or zero here: only take the
+++     * return address of a call to the save routine.
+++     */
+++    call_pc = get_priv_mcontext_from_dstack(dcontext)->pc;
+++    if (!is_clean_call_save_return(dcontext, call_pc))
+++        return;
+++    /* PR 213040: we can't unlink coarse. */
+++    if (get_fcache_coarse_info(call_pc) != NULL)
+++        return;
+++    f = fragment_pclookup(dcontext, call_pc, &wrapper);
+++    if (f == NULL || TESTANY(FRAG_COARSE_GRAIN, f->flags))
+++        return;
+++    LOG(THREAD, LOG_ASYNCH, 2, "\tsignal in clean callee: delaying until exit F%d\n",
+++        f->id);
+++    if (unlink_fragment_for_signal(dcontext, f, call_pc)) {
+++        info->interrupted = f;
+++        info->interrupted_pc = call_pc;
+++    }
+++}
+++
++ static void
++ record_pending_signal(dcontext_t *dcontext, int sig, kernel_ucontext_t *ucxt,
++                       sigframe_rt_t *frame, bool forged, byte *access_address)
++@@ -5214,6 +5276,7 @@ record_pending_signal(dcontext_t *dcontext, int sig, kernel_ucontext_t *ucxt,
++             abort_on_DR_fault(dcontext, pc, NULL, sig, frame,
++                               (sig == SIGSEGV) ? "SEGV" : "other", " unknown");
++         }
+++        unlink_fragment_of_clean_call(dcontext, info, pc, xsp);
++     }
++ 
++     LOG(THREAD, LOG_ASYNCH, 3, "\taction is not SIG_IGN\n");
++--- a/core/arch/interp.c
+++++ b/core/arch/interp.c
++@@ -5356,6 +5356,13 @@ recreate_fragment_ilist(dcontext_t *dcontext, byte *pc,
++         }
++     }
++ 
+++    /* A write to the region of a flushed fragment can since have made the
+++     * region self-modifying.  Rebuilding f against the region's current state
+++     * would then sandbox it, and so also not share it: the result would not
+++     * match the code f holds, and a fault in f could not be translated.  Rebuild
+++     * f as it was built instead, without consulting its region again.
+++     */
+++    bool check_vm_area = !TESTANY(FRAG_WAS_DELETED, f->flags);
++     /* Recreate in same mode as original fragment */
++     DEBUG_DECLARE(bool ok =)
++     dr_set_isa_mode(dcontext, FRAG_ISA_MODE(f->flags), &old_mode);
++@@ -5365,7 +5372,7 @@ recreate_fragment_ilist(dcontext_t *dcontext, byte *pc,
++         /* easy case: just a bb */
++         ilist = recreate_bb_ilist(dcontext, (byte *)f->tag, (byte *)f->tag,
++                                   NULL /*default stop*/, 0 /*no pre flags*/, &flags, NULL,
++-                                  true /*check vm area*/, mangle, NULL, call_client,
+++                                  check_vm_area, mangle, NULL, call_client,
++                                   false /*not for_trace*/);
++         ASSERT(ilist != NULL);
++         if (ilist == NULL) /* a race */
++@@ -5399,10 +5406,11 @@ recreate_fragment_ilist(dcontext_t *dcontext, byte *pc,
++         for (i = 0; i < t->num_bbs; i++) {
++             void *vmlist = NULL;
++             apc = (byte *)t->bbs[i].tag;
++-            bb = recreate_bb_ilist(
++-                dcontext, apc, apc, NULL /*default stop*/, 0 /*no pre flags*/, &flags,
++-                &md.final_exit_flags, true /*check vm area*/, !mangle_at_end,
++-                (mangle_at_end ? &vmlist : NULL), call_client, true /*for_trace*/);
+++            bb = recreate_bb_ilist(dcontext, apc, apc, NULL /*default stop*/,
+++                                   0 /*no pre flags*/, &flags, &md.final_exit_flags,
+++                                   check_vm_area, !mangle_at_end,
+++                                   (mangle_at_end && check_vm_area ? &vmlist : NULL),
+++                                   call_client, true /*for_trace*/);
++             ASSERT(bb != NULL);
++             if (bb == NULL) {
++                 instrlist_clear_and_destroy(dcontext, ilist);
++--- a/core/vmareas.c
+++++ b/core/vmareas.c
++@@ -7497,6 +7497,12 @@ check_thread_vm_area(dcontext_t *dcontext, app_pc pc, app_pc tag, void **vmlist,
++                 d_r_write_lock(&executable_areas->lock);
++                 own_execareas_writelock = true;
++                 ok = lookup_addr(executable_areas, pc, &area);
+++                /* The area can have been removed while we did not hold the lock.
+++                 * A failed lookup leaves our pointer from the first lookup in
+++                 * place: clear it, as below we take a non-NULL area as found.
+++                 */
+++                if (!ok)
+++                    area = NULL;
++             }
++             if (ok && TEST(VM_DELAY_READONLY, area->vm_flags))
++                 handle_delay_readonly(dcontext, pc, area);
++@@ -7519,6 +7525,14 @@ check_thread_vm_area(dcontext_t *dcontext, app_pc pc, app_pc tag, void **vmlist,
++             d_r_write_lock(&executable_areas->lock);
++             own_execareas_writelock = true;
++             ok = lookup_addr(executable_areas, pc, &area);
+++            /* An area that was never executed from is removed without the flush
+++             * synch (flush_fragments_in_region_start()), so it can be gone now
+++             * even though we are couldbelinking.  A failed lookup leaves our
+++             * pointer from the first lookup in place: clear it, as below we take
+++             * a non-NULL area as found and would skip adding the region.
+++             */
+++            if (!ok)
+++                area = NULL;
++         }
++         if (ok) {
++             if (vmlist != NULL && !TEST(VM_EXECUTED_FROM, area->vm_flags)) {
++--- a/core/arch/arch_exports.h
+++++ b/core/arch/arch_exports.h
++@@ -1499,6 +1499,8 @@ recreate_fragment_ilist(dcontext_t *dcontext, byte *pc,
++ 
++ app_pc
++ find_app_bb_end(dcontext_t *dcontext, byte *start_pc, uint flags);
+++const byte *
+++bb_build_selfmod_snapshot(dcontext_t *dcontext, app_pc tag, size_t *size);
++ bool
++ app_bb_overlaps(dcontext_t *dcontext, byte *start_pc, uint flags, byte *region_start,
++                 byte *region_end, overlap_info_t *info_res);
++--- a/core/arch/interp.c
+++++ b/core/arch/interp.c
++@@ -223,6 +223,20 @@ typedef struct {
++     instr_t *instr;                    /* the current instr */
++     int eflags;
++     app_pc pretend_pc; /* selfmod only: decode from separate pc */
+++#ifdef X86
+++    /* A sandboxed block that is built for the cache is decoded from a copy of its
+++     * app code, starting at start_pc, which also becomes the copy that the
+++     * block's entry check compares the app code with (see
+++     * bb_decode_selfmod_snapshot()).  NULL if not used.
+++     */
+++    byte *selfmod_snapshot;
+++    uint selfmod_snapshot_capacity; /* bytes of app code selfmod_snapshot can hold */
+++    uint selfmod_snapshot_len;      /* bytes of app code read into selfmod_snapshot */
+++    /* The snapshot could not be taken: the rest of the block was decoded from the
+++     * app code, and the copy is read from the app code when the block is emitted.
+++     */
+++    bool selfmod_snapshot_failed;
+++#endif
++ #ifdef ARM
++     dr_pred_type_t svc_pred; /* predicate for conditional svc */
++ #endif
++@@ -2700,6 +2714,203 @@ client_check_syscall(instrlist_t *ilist, instr_t *inst, bool *found_syscall,
++     return true;
++ }
++ 
+++#ifdef X86
+++/* The app code of a sandboxed block can change at any time, including between
+++ * our decoding the block and our copying the code into the fragment for the
+++ * block's entry check.  A copy taken after such a change matches the new code,
+++ * so the check keeps passing while the block runs the old code.  We therefore
+++ * decode a sandboxed block from a snapshot of its code, read before each
+++ * instruction is decoded, and later store that snapshot as the copy (see
+++ * bb_build_selfmod_snapshot()).  The check then compares the app code with
+++ * exactly the code that the block was built from.  Encoding the block copies the
+++ * raw bits of its instructions, so once the block is mangled we point them into
+++ * the snapshot as well (see bb_encode_from_selfmod_snapshot()).
+++ */
+++
+++/* Zeroes after the code read into the snapshot, so that decoding past it stays
+++ * in our buffer: a zero byte is no prefix, and as a ModRM byte it ends the
+++ * instruction.
+++ */
+++#    define SELFMOD_SNAPSHOT_SLACK (2 * MAX_INSTR_LENGTH)
+++
+++static void
+++bb_start_selfmod_snapshot(build_bb_t *bb)
+++{
+++    /* The ilist clone kept for trace building would outlive the snapshot that its
+++     * raw bits point into.
+++     */
+++    if (!bb->for_cache || bb->pretend_pc != NULL || bb->unmangled_ilist != NULL)
+++        return;
+++    if (bb->selfmod_snapshot == NULL) {
+++        /* Room for as many instructions as a block normally has.  Beyond that, we
+++         * decode from the app code (see bb_decode_selfmod_snapshot()).
+++         */
+++        bb->selfmod_snapshot_capacity =
+++            (DYNAMO_OPTION(max_bb_instrs) + 1) * MAX_INSTR_LENGTH;
+++        bb->selfmod_snapshot = (byte *)heap_alloc(
+++            GLOBAL_DCONTEXT,
+++            bb->selfmod_snapshot_capacity + SELFMOD_SNAPSHOT_SLACK HEAPACCT(ACCT_OTHER));
+++    }
+++    bb->selfmod_snapshot_len = 0;
+++    bb->selfmod_snapshot_failed = false;
+++}
+++
+++static void
+++bb_free_selfmod_snapshot(build_bb_t *bb)
+++{
+++    if (bb->selfmod_snapshot == NULL)
+++        return;
+++    heap_free(GLOBAL_DCONTEXT, bb->selfmod_snapshot,
+++              bb->selfmod_snapshot_capacity +
+++                  SELFMOD_SNAPSHOT_SLACK HEAPACCT(ACCT_OTHER));
+++    bb->selfmod_snapshot = NULL;
+++}
+++
+++/* Reads the app code up to start_pc + len into the snapshot.  Returns whether all
+++ * of it could be read.
+++ */
+++static bool
+++bb_extend_selfmod_snapshot(build_bb_t *bb, uint len)
+++{
+++    bool ok = true;
+++    ASSERT(len <= bb->selfmod_snapshot_capacity);
+++    if (len > bb->selfmod_snapshot_len) {
+++        size_t got = 0;
+++        ok = safe_read_ex(bb->start_pc + bb->selfmod_snapshot_len,
+++                          len - bb->selfmod_snapshot_len,
+++                          bb->selfmod_snapshot + bb->selfmod_snapshot_len, &got);
+++        bb->selfmod_snapshot_len += (uint)got;
+++    }
+++    memset(bb->selfmod_snapshot + bb->selfmod_snapshot_len, 0, SELFMOD_SNAPSHOT_SLACK);
+++    return ok;
+++}
+++
+++/* Decodes the instruction at bb->cur_pc from the snapshot, which is read first.
+++ * Returns the pc after the instruction, or NULL, as decode() does.
+++ */
+++static byte *
+++bb_decode_selfmod_snapshot(dcontext_t *dcontext, build_bb_t *bb)
+++{
+++    uint offs = (uint)(bb->cur_pc - bb->start_pc);
+++    uint want = offs + MAX_INSTR_LENGTH;
+++    /* We read ahead only on the page the instruction starts on: the next page can
+++     * be unreadable without the instruction extending onto it.
+++     */
+++    uint on_page = (uint)((app_pc)PAGE_START(bb->cur_pc) + PAGE_SIZE - bb->cur_pc);
+++    byte *copy_pc, *next;
+++    ASSERT(!bb->selfmod_snapshot_failed && offs <= bb->selfmod_snapshot_len);
+++    if (want > bb->selfmod_snapshot_capacity ||
+++        !bb_extend_selfmod_snapshot(bb, offs + MIN(MAX_INSTR_LENGTH, on_page)))
+++        goto decode_app_code;
+++    copy_pc = bb->selfmod_snapshot + offs;
+++    next = decode_from_copy(dcontext, copy_pc, bb->cur_pc, bb->instr);
+++    if ((next == NULL || next > bb->selfmod_snapshot + bb->selfmod_snapshot_len) &&
+++        bb->selfmod_snapshot_len < want) {
+++        /* The instruction can continue on the next page. */
+++        instr_reset(dcontext, bb->instr);
+++        if (!bb_extend_selfmod_snapshot(bb, want))
+++            goto decode_app_code;
+++        next = decode_from_copy(dcontext, copy_pc, bb->cur_pc, bb->instr);
+++    }
+++    if (next != NULL && next > bb->selfmod_snapshot + bb->selfmod_snapshot_len) {
+++        /* Longer than any valid instruction. */
+++        instr_reset(dcontext, bb->instr);
+++        goto decode_app_code;
+++    }
+++    if (next == NULL)
+++        return NULL;
+++    /* Leave the raw bits at the app pc, as decode() does: building and mangling the
+++     * block take them for the instruction's app address.  This also drops the
+++     * rip-relative position, so that pc-relative targets come from the operands,
+++     * which are resolved against the app pc.  bb_encode_from_selfmod_snapshot()
+++     * points the raw bits at the snapshot once the block is mangled.
+++     */
+++    instr_set_raw_bits(bb->instr, bb->cur_pc, (uint)(next - copy_pc));
+++    return bb->cur_pc + (next - copy_pc);
+++
+++decode_app_code:
+++    /* The code could not be read (the app unmapped it, or the instruction extends
+++     * onto an unreadable page), or the block is unusually long.  We decode the rest
+++     * of the block from the app code as without a snapshot, which also delivers a
+++     * fault on it to the app, and emitting copies the app code.
+++     */
+++    bb->selfmod_snapshot_failed = true;
+++    return decode(dcontext, bb->cur_pc, bb->instr);
+++}
+++
+++/* Points the raw bits of the block's app instructions at the snapshot, so that
+++ * encoding copies the code that we decoded rather than the app code as it is when
+++ * the block is emitted.  An instruction with a pc-relative operand is encoded from
+++ * its operands instead, as re-relativizing raw bits takes their address for the
+++ * instruction's app pc.  Call once the block is mangled: mangling takes the raw
+++ * bits for the app address.
+++ */
+++static void
+++bb_encode_from_selfmod_snapshot(build_bb_t *bb)
+++{
+++    instr_t *in;
+++    if (bb->selfmod_snapshot == NULL || bb->selfmod_snapshot_failed ||
+++        !TESTANY(FRAG_SELFMOD_SANDBOXED, bb->flags))
+++        return;
+++    for (in = instrlist_first(bb->ilist); in != NULL; in = instr_get_next(in)) {
+++        byte *bits = instr_get_raw_bits(in);
+++        if (!instr_raw_bits_valid(in) || TESTANY(INSTR_RAW_BITS_ALLOCATED, in->flags) ||
+++            bits < bb->start_pc || bits + in->length > bb->end_pc)
+++            continue;
+++        if (instr_operands_valid(in) && instr_get_rel_data_or_instr_target(in, NULL))
+++            instr_set_raw_bits_valid(in, false);
+++        else
+++            in->bytes = bb->selfmod_snapshot + (bits - bb->start_pc);
+++    }
+++}
+++#endif /* X86 */
+++
+++/* Returns the pc after the app instruction at pc, read from the snapshot if the
+++ * block is decoded from one.
+++ */
+++static app_pc
+++bb_decode_next_app_pc(dcontext_t *dcontext, build_bb_t *bb, app_pc pc)
+++{
+++#ifdef X86
+++    if (bb->selfmod_snapshot != NULL && !bb->selfmod_snapshot_failed &&
+++        pc >= bb->start_pc && pc < bb->start_pc + bb->selfmod_snapshot_len) {
+++        byte *copy_pc = bb->selfmod_snapshot + (pc - bb->start_pc);
+++        byte *next = decode_next_pc(dcontext, copy_pc);
+++        if (next != NULL && next <= bb->selfmod_snapshot + bb->selfmod_snapshot_len)
+++            return pc + (next - copy_pc);
+++    }
+++#endif
+++    return decode_next_pc(dcontext, pc);
+++}
+++
+++/* Returns the copy of its app code that the sandboxed block being built for tag
+++ * was decoded from, and the copy's size in *size.  Returns NULL if the block was
+++ * decoded from the app code itself.
+++ */
+++const byte *
+++bb_build_selfmod_snapshot(dcontext_t *dcontext, app_pc tag, size_t *size)
+++{
+++#ifdef X86
+++    build_bb_t *bb;
+++    if (dcontext == GLOBAL_DCONTEXT || dcontext->bb_build_info == NULL)
+++        return NULL;
+++    bb = (build_bb_t *)dcontext->bb_build_info;
+++    if (bb->start_pc != tag || bb->selfmod_snapshot == NULL ||
+++        bb->selfmod_snapshot_failed || !TESTANY(FRAG_SELFMOD_SANDBOXED, bb->flags))
+++        return NULL;
+++    if (bb->end_pc <= bb->start_pc ||
+++        bb->end_pc - bb->start_pc > bb->selfmod_snapshot_len) {
+++        /* We decode every instruction of the block from the snapshot. */
+++        ASSERT_NOT_REACHED();
+++        return NULL;
+++    }
+++    *size = bb->end_pc - bb->start_pc;
+++    return bb->selfmod_snapshot;
+++#else
+++    return NULL;
+++#endif
+++}
+++
++ /* Pass bb to client, and afterward check for criteria we require and rescan for
++  * eflags and other flags that might have changed.
++  * Returns true normally; returns false to indicate "go native".
++@@ -3084,7 +3295,7 @@ client_process_bb(dcontext_t *dcontext, build_bb_t *bb)
++          * the length of the translation target
++          */
++         if (!adjusted_cur_pc) {
++-            bb->cur_pc = decode_next_pc(dcontext, xl8);
+++            bb->cur_pc = bb_decode_next_app_pc(dcontext, bb, xl8);
++             LOG(THREAD, LOG_INTERP, 3, "setting cur_pc (for fall-through) to " PFX "\n",
++                 bb->cur_pc);
++         }
++@@ -3358,6 +3569,7 @@ build_bb_ilist(dcontext_t *dcontext, build_bb_t *bb)
++     if (TEST(FRAG_SELFMOD_SANDBOXED, bb->flags)) {
++         bb->full_decode = true;
++         bb->follow_direct = false;
+++        IF_X86(bb_start_selfmod_snapshot(bb));
++     }
++     if (TEST(FRAG_HAS_TRANSLATION_INFO, bb->flags)) {
++         bb->full_decode = true;
++@@ -3395,8 +3607,14 @@ build_bb_ilist(dcontext_t *dcontext, build_bb_t *bb)
++             bb->instr_start = bb->cur_pc;
++             if (bb->full_decode) {
++                 /* only going through this do loop once! */
++-                bb->cur_pc = IF_AARCH64_ELSE(decode_with_ldstex,
++-                                             decode)(dcontext, bb->cur_pc, bb->instr);
+++#ifdef X86
+++                if (bb->selfmod_snapshot != NULL && !bb->selfmod_snapshot_failed &&
+++                    TESTANY(FRAG_SELFMOD_SANDBOXED, bb->flags))
+++                    bb->cur_pc = bb_decode_selfmod_snapshot(dcontext, bb);
+++                else
+++#endif
+++                    bb->cur_pc = IF_AARCH64_ELSE(decode_with_ldstex,
+++                                                 decode)(dcontext, bb->cur_pc, bb->instr);
++                 if (bb->record_translation)
++                     instr_set_translation(bb->instr, bb->instr_start);
++             } else {
++@@ -3458,6 +3676,7 @@ build_bb_ilist(dcontext_t *dcontext, build_bb_t *bb)
++                     ASSERT(is_first_instr);
++                     bb->full_decode = true;
++                     bb->follow_direct = false;
+++                    IF_X86(bb_start_selfmod_snapshot(bb));
++                     bb->cur_pc = bb->instr_start;
++                     instr_reset(dcontext, bb->instr);
++                     continue;
++@@ -4404,6 +4623,7 @@ build_bb_ilist(dcontext_t *dcontext, build_bb_t *bb)
++         build_bb_ilist(dcontext, bb);
++         return;
++     }
+++    IF_X86(bb_encode_from_selfmod_snapshot(bb));
++ }
++ 
++ /* Call when about to throw exception or other drastic action in the
++@@ -4431,6 +4651,7 @@ bb_build_abort(dcontext_t *dcontext, bool clean_vmarea, bool unlock)
++              */
++             check_thread_vm_area_abort(dcontext, &bb->vmlist, bb->flags);
++         } /* else we were presumably called from vmarea so caller does cleanup */
+++        IF_X86(bb_free_selfmod_snapshot(bb));
++         if (unlock) {
++             /* Assumption: bb building lock is held iff bb->for_cache,
++              * and on a nested app bb build where !bb->for_cache we do keep the
++@@ -5092,6 +5313,8 @@ exit_interp_build_bb(dcontext_t *dcontext, build_bb_t *bb)
++ 
++     /* free the instrlist_t elements */
++     instrlist_clear_and_destroy(dcontext, bb->ilist);
+++    /* After the instrs, whose raw bits can point into it. */
+++    IF_X86(bb_free_selfmod_snapshot(bb));
++ }
++ 
++ /* Interprets the application's instructions until the end of a basic
++@@ -5139,6 +5362,7 @@ build_basic_block_fragment(dcontext_t *dcontext, app_pc start, uint initial_flag
++             LOG(THREAD, LOG_INTERP, 2, "replacing built bb with native_exec bb\n");
++             instrlist_clear_and_destroy(dcontext, bb.ilist);
++             vm_area_destroy_list(dcontext, bb.vmlist);
+++            IF_X86(bb_free_selfmod_snapshot(&bb));
++             dcontext->bb_build_info = NULL;
++             init_interp_build_bb(dcontext, &bb, start, initial_flags, for_trace,
++                                  unmangled_ilist);
++--- a/core/emit.c
+++++ b/core/emit.c
++@@ -386,6 +386,8 @@ emit_fragment_common(dcontext_t *dcontext, app_pc tag, instrlist_t *ilist, uint
++     uint len;
++     uint offset = 0;
++     uint copy_sz = 0;
+++    /* The app code a sandboxed block was decoded from, if not the app code itself. */
+++    const byte *selfmod_snapshot = NULL;
++     uint extra_jmp_padding_body = 0;
++     uint extra_jmp_padding_stubs = 0;
++     uint last_pad_offset = 0;
++@@ -554,7 +556,12 @@ emit_fragment_common(dcontext_t *dcontext, app_pc tag, instrlist_t *ilist, uint
++          * the original full range can only result in a false positive selfmod
++          * event, which is a performance issue only.
++          */
++-        end_bb_pc = find_app_bb_end(dcontext, tag, flags);
+++        size_t snapshot_size;
+++        selfmod_snapshot = bb_build_selfmod_snapshot(dcontext, tag, &snapshot_size);
+++        if (selfmod_snapshot != NULL)
+++            end_bb_pc = tag + snapshot_size;
+++        else
+++            end_bb_pc = find_app_bb_end(dcontext, tag, flags);
++         ASSERT(end_bb_pc > tag);
++         ASSERT_TRUNCATE(copy_sz, uint, (ptr_uint_t)(end_bb_pc - tag) + sizeof(uint));
++         copy_sz = (uint)(end_bb_pc - tag) + sizeof(uint);
++@@ -714,7 +721,8 @@ emit_fragment_common(dcontext_t *dcontext, app_pc tag, instrlist_t *ilist, uint
++                (PAD_FRAGMENT_JMPS(flags) &&
++                 !INTERNAL_OPTION(pad_jmps_return_excess_padding)));
++         /* size is stored at the end, but included in copy_sz */
++-        memcpy(vmcode_get_writable_addr(copy_pc), tag, copy_sz - sizeof(uint));
+++        memcpy(vmcode_get_writable_addr(copy_pc),
+++               selfmod_snapshot != NULL ? selfmod_snapshot : tag, copy_sz - sizeof(uint));
++         *((uint *)vmcode_get_writable_addr(copy_pc + copy_sz - sizeof(uint))) = copy_sz;
++         /* count copy as part of fragment */
++         pc = copy_pc + copy_sz;
++--- a/core/arch/arch.c
+++++ b/core/arch/arch.c
++@@ -1525,8 +1525,21 @@ protect_generated_code(generated_code_t *code_in, bool writable)
++             code->writable = writable;
++         }
++         STATS_INC(gencode_prot_changes);
++-        change_protection(vmcode_get_writable_addr(genstart),
++-                          code->commit_end_pc - genstart, writable);
+++#ifdef UNIX
+++        /* We know the protection of our own generated code, so we do not use
+++         * change_protection(): it first queries the current protection, which on
+++         * Linux reads /proc/self/maps.  Each flush gets here four times, via
+++         * unlink_special_ibl_xfer() and link_special_ibl_xfer().  With
+++         * -satisfy_w_xor_x the change is to the separate writable view instead.
+++         */
+++        if (!DYNAMO_OPTION(satisfy_w_xor_x)) {
+++            set_protection(genstart, code->commit_end_pc - genstart,
+++                           MEMPROT_READ | MEMPROT_EXEC |
+++                               (writable ? MEMPROT_WRITE : 0));
+++        } else
+++#endif
+++            change_protection(vmcode_get_writable_addr(genstart),
+++                              code->commit_end_pc - genstart, writable);
++         if (writable) {
++             ASSERT(!code->writable);
++             code->writable = writable;
++--- a/core/fragment.c
+++++ b/core/fragment.c
++@@ -5234,25 +5234,32 @@ fragment_self_write(dcontext_t *dcontext)
++         dcontext->last_fragment->tag,
++         EXIT_CTI_PC(dcontext->last_fragment, dcontext->last_exit));
++     STATS_INC(num_self_writes);
+++#ifdef PROGRAM_SHEPHERDING
+++    /* we can't call fragment_delete if vm_area_t deletes it by flushing */
+++    if (!TEST(FRAG_WAS_DELETED, dcontext->last_fragment->flags) &&
+++        vm_area_fragment_self_write(dcontext, dcontext->last_fragment->tag))
+++        return;
+++#endif
+++    /* We are nolinking, so a flusher takes us to be at a safe point and can be
+++     * unlinking our fragments right now, this one included, which also allocates
+++     * from our heap.  It holds our linking lock while it does: we hold it while we
+++     * check for that and delete.
+++     */
+++    per_thread_t *pt = (per_thread_t *)dcontext->fragment_field;
+++    d_r_mutex_lock(&pt->linking_lock);
++     if (TEST(FRAG_WAS_DELETED, dcontext->last_fragment->flags)) {
++         /* Case 8177: case 3559 unionized fragment_t.in_xlate, so we cannot delete a
++          * fragment that has already been unlinked in the first stage of a flush.
++          * The flush queue check, which comes after this (b/c we want to be
++          * nolinking), will delete.
++          */
++-        ASSERT(((per_thread_t *)dcontext->fragment_field)->flush_queue_nonempty);
+++        ASSERT(pt->flush_queue_nonempty);
++         STATS_INC(num_self_writes_after_flushes);
++     } else {
++-#ifdef PROGRAM_SHEPHERDING
++-        /* we can't call fragment_delete if vm_area_t deletes it by flushing */
++-        if (!vm_area_fragment_self_write(dcontext, dcontext->last_fragment->tag)) {
++-#endif
++-            fragment_delete(dcontext, dcontext->last_fragment, FRAGDEL_ALL);
++-            STATS_INC(num_fragments_deleted_selfmod);
++-#ifdef PROGRAM_SHEPHERDING
++-        }
++-#endif
+++        fragment_delete(dcontext, dcontext->last_fragment, FRAGDEL_ALL);
+++        STATS_INC(num_fragments_deleted_selfmod);
++     }
+++    d_r_mutex_unlock(&pt->linking_lock);
++ }
++ 
++ /* coarse_grain says to use just the min_pc and max_pc of f.
++@@ -5421,6 +5428,10 @@ check_flush_queue(dcontext_t *dcontext, fragment_t *was_I_flushed)
++     per_thread_t *pt = (per_thread_t *)dcontext->fragment_field;
++     bool not_flushed = true;
++     ASSERT_OWN_MUTEX(true, &pt->linking_lock);
+++#ifdef UNIX
+++    /* We are about to free flushed fragments, or to give up our claim on them. */
+++    signal_forget_flushed_fragment(dcontext);
+++#endif
++     /* first check private queue and act on pending deletions */
++     if (pt->flush_queue_nonempty) {
++         bool local_prot = local_heap_protected(dcontext);
++@@ -5757,6 +5768,33 @@ enter_nolinking(dcontext_t *dcontext, fragment_t *was_I_flushed, bool cache_tran
++     return not_flushed;
++ }
++ 
+++/* For a thread that changes the links of a fragment it has not left, such as
+++ * from a signal handler that interrupted the code cache.  A flusher holds this
+++ * lock while it unlinks our fragments, so holding it keeps the two apart.
+++ * Such a thread must not use enter_couldbelinking() and enter_nolinking()
+++ * instead: those are synch points for flushing, which delete the fragments on
+++ * the thread's flush queue and release its references to pending shared
+++ * deletions, and the thread may be about to resume one of those fragments.
+++ */
+++void
+++acquire_linking_lock_in_fragment(dcontext_t *dcontext)
+++{
+++    per_thread_t *pt = (per_thread_t *)dcontext->fragment_field;
+++    if (RUNNING_WITHOUT_CODE_CACHE() /*case 7966: has no pt*/ || pt == NULL)
+++        return;
+++    d_r_mutex_lock(&pt->linking_lock);
+++    ASSERT(!pt->could_be_linking);
+++}
+++
+++void
+++release_linking_lock_in_fragment(dcontext_t *dcontext)
+++{
+++    per_thread_t *pt = (per_thread_t *)dcontext->fragment_field;
+++    if (RUNNING_WITHOUT_CODE_CACHE() /*case 7966: has no pt*/ || pt == NULL)
+++        return;
+++    d_r_mutex_unlock(&pt->linking_lock);
+++}
+++
++ /* Returns false iff was_I_flushed ends up being deleted */
++ bool
++ enter_couldbelinking(dcontext_t *dcontext, fragment_t *was_I_flushed,
++--- a/core/fragment.h
+++++ b/core/fragment.h
++@@ -1029,6 +1029,12 @@ enter_nolinking(dcontext_t *dcontext, fragment_t *watch, bool temporary);
++ bool
++ enter_couldbelinking(dcontext_t *dcontext, fragment_t *watch, bool temporary);
++ 
+++void
+++acquire_linking_lock_in_fragment(dcontext_t *dcontext);
+++
+++void
+++release_linking_lock_in_fragment(dcontext_t *dcontext);
+++
++ void
++ enter_threadexit(dcontext_t *dcontext);
++ 
++--- a/core/unix/os.c
+++++ b/core/unix/os.c
++@@ -7291,6 +7291,24 @@ pre_system_call(dcontext_t *dcontext)
++                 break;
++             }
++         }
+++        /* A fixed mapping replaces whatever is mapped there, as an unmap followed by
+++         * a map would.  For code we have fragments of, those must go: flush them
+++         * now, as for an unmap, and once more after the system call, for fragments
+++         * that another thread builds from the old code in between.  We leave a
+++         * library's segments alone: they are mapped over its initial mapping before
+++         * any of its code runs.
+++         */
+++        dcontext->sys_param4 = 0;
+++        if (addr != NULL && TEST(MAP_FIXED, flags) && !image &&
+++            executable_vm_area_overlap((app_pc)addr, (app_pc)addr + len,
+++                                       false /*no lock*/)) {
+++            LOG(THREAD, LOG_SYSCALLS, 2, "\tfixed mmap over code " PFX "-" PFX "\n", addr,
+++                (app_pc)addr + len);
+++            flush_fragments_and_remove_region(dcontext, (app_pc)addr, len,
+++                                              false /* don't own initexit_lock */,
+++                                              false /* keep futures */);
+++            dcontext->sys_param4 = 1;
+++        }
++         /* post_system_call does the work */
++         dcontext->sys_param0 = (reg_t)addr;
++         dcontext->sys_param1 = len;
++@@ -8951,6 +8969,15 @@ post_system_call(dcontext_t *dcontext)
++             prot = (uint)dcontext->sys_param2;
++             flags = (uint)dcontext->sys_param3;
++             DEBUG_DECLARE(map_type = IF_X64_ELSE("mmap2", "mmap");)
+++            if (dcontext->sys_param4 != 0 &&
+++                executable_vm_area_overlap(base, base + size, false /*no lock*/)) {
+++                /* See pre_system_call(): another thread ran the old code between
+++                 * our flush and the system call, and built fragments from it.
+++                 */
+++                flush_fragments_and_remove_region(dcontext, base, size,
+++                                                  false /* don't own initexit_lock */,
+++                                                  false /* keep futures */);
+++            }
++ #if defined(LINUX) && !defined(X64) && !defined(ARM)
++         }
++ #endif
++--- a/core/unix/os_exports.h
+++++ b/core/unix/os_exports.h
++@@ -481,6 +481,8 @@ typedef struct _kernel_sigset_t {
++ 
++ void
++ receive_pending_signal(dcontext_t *dcontext);
+++void
+++signal_forget_flushed_fragment(dcontext_t *dcontext);
++ bool
++ is_signal_restorer_code(byte *pc, size_t *len);
++ bool
++--- a/core/unix/signal.c
+++++ b/core/unix/signal.c
++@@ -4559,8 +4559,14 @@ unlink_fragment_for_signal(dcontext_t *dcontext, fragment_t *f,
++      */
++     bool changed = false;
++     bool waslinking = is_couldbelinking(dcontext);
+++    /* The thread resumes f without passing d_r_dispatch, so we must not go through
+++     * enter_couldbelinking() and enter_nolinking() here: they act on the thread's
+++     * flush queue, which can delete f, or release the thread's reference to f if f
+++     * is a shared fragment that is pending deletion, and the thread would then
+++     * resume freed code.
+++     */
++     if (!waslinking)
++-        enter_couldbelinking(dcontext, NULL, false);
+++        acquire_linking_lock_in_fragment(dcontext);
++     /* may not be linked if trace_relink or something */
++     if (TEST(FRAG_COARSE_GRAIN, f->flags)) {
++         /* XXX PR 213040: we don't support unlinking coarse, so we try
++@@ -4599,13 +4605,31 @@ unlink_fragment_for_signal(dcontext_t *dcontext, fragment_t *f,
++             changed = true;
++     }
++     if (!waslinking)
++-        enter_nolinking(dcontext, NULL, false);
+++        release_linking_lock_in_fragment(dcontext);
++     return changed;
++ }
++ 
+++/* A fragment that we unlinked for a signal can be flushed before we re-link it.
+++ * It is not entered again, so there is nothing to restore, and it can be freed
+++ * once this thread acts on its flush queue: the thread drops its pointer first.
+++ */
+++void
+++signal_forget_flushed_fragment(dcontext_t *dcontext)
+++{
+++    thread_sig_info_t *info = (thread_sig_info_t *)dcontext->signal_field;
+++    if (info != NULL && info->interrupted != NULL &&
+++        TEST(FRAG_WAS_DELETED, info->interrupted->flags)) {
+++        LOG(THREAD, LOG_ASYNCH, 3, "\tinterrupted F%d was flushed: not re-linking\n",
+++            info->interrupted->id);
+++        info->interrupted = NULL;
+++        info->interrupted_pc = NULL;
+++    }
+++}
+++
++ static void
++ relink_interrupted_fragment(dcontext_t *dcontext, thread_sig_info_t *info)
++ {
+++    signal_forget_flushed_fragment(dcontext);
++     if (info->interrupted == NULL)
++         return;
++     /* i#2066: if we were building a trace, it may already be re-linked */
++@@ -5397,7 +5421,21 @@ record_pending_signal(dcontext_t *dcontext, int sig, kernel_ucontext_t *ucxt,
++         /* Happened in DR, do not translate context.  Record for later processing
++          * at a safe point with a clean app state.
++          */
++-        if (!blocked || sig >= OFFS_RT || (blocked && info->sigpending[sig] == NULL)) {
+++        /* Queueing a signal when the pending-signal heap's first unit is full
+++         * allocates a new unit, which is unsafe here: it acquires locks that the
+++         * code we interrupted may hold.  When only one block is left we do not
+++         * queue a standard signal that is already pending, which the kernel does
+++         * not queue again either, and keep the block for a signal that is not.
+++         */
+++        bool keep_last_block =
+++            sig < OFFS_RT && info->sigpending[sig] != NULL &&
+++            info->num_pending + 1 >= (int)DYNAMO_OPTION(max_pending_signals);
+++        if (keep_last_block) {
+++            STATS_INC(num_signals_dropped);
+++            SYSLOG_INTERNAL_WARNING_ONCE("dropping already-pending standard signal");
+++        }
+++        if (!keep_last_block &&
+++            (!blocked || sig >= OFFS_RT || (blocked && info->sigpending[sig] == NULL))) {
++             /* only have 1 pending for blocked non-rt signals */
++ 
++             /* to avoid accumulating signals if we're slow in presence of
++--- a/core/vmareas.c
+++++ b/core/vmareas.c
++@@ -1032,7 +1032,12 @@ add_vm_area(vm_area_vector_t *v, app_pc start, app_pc end, uint vm_flags, uint f
++ #endif
++             /* disallow any other vm_flag differences */
++             DODEBUG({
++-                flagignore = VM_UNMOD_IMAGE | VM_WAS_FUTURE | VM_ONCE_ONLY | VM_WRITABLE;
+++                /* A thread can execute from a mapping before the thread that made
+++                 * it has added it here, so that the area being added is already
+++                 * there and marked as executed from.
+++                 */
+++                flagignore = VM_UNMOD_IMAGE | VM_WAS_FUTURE | VM_ONCE_ONLY | VM_WRITABLE |
+++                    VM_EXECUTED_FROM;
++             });
++ #ifdef PROGRAM_SHEPHERDING
++             DODEBUG({ flagignore = flagignore | VM_PATTERN_REVERIFY; });
++--- a/core/arch/arch.c
+++++ b/core/arch/arch.c
++@@ -266,9 +266,9 @@ move_to_start_of_cache_line(dr_isa_mode_t isa_mode, byte *pc)
++ /* The real size of generated code we need varies by cache line size and
++  * options like inlining of ibl code.  We also generate different routines
++  * for thread-private and thread-shared.  So, we dynamically extend the size
++- * as we generate.  Currently our max is under 5 pages.
+++ * as we generate.  Currently our max is under 6 pages.
++  */
++-#define GENCODE_RESERVE_SIZE (5 * PAGE_SIZE)
+++#define GENCODE_RESERVE_SIZE (6 * PAGE_SIZE)
++ 
++ #define GENCODE_COMMIT_SIZE \
++     ((size_t)(ALIGN_FORWARD(sizeof(generated_code_t), PAGE_SIZE) + PAGE_SIZE))
++--- a/core/unix/os.c
+++++ b/core/unix/os.c
++@@ -7449,9 +7449,13 @@ pre_system_call(dcontext_t *dcontext)
++         new_memprot = osprot_to_memprot(prot) |
++             /* mprotect won't change meta flags */
++             (old_memprot & MEMPROT_META_FLAGS);
+++        /* Paired with app_memory_protection_change_done() in post_system_call(). */
+++        app_memory_protection_change_start(dcontext, addr, len, old_memprot, new_memprot);
++         res = app_memory_protection_change(dcontext, addr, len, new_memprot, &new_memprot,
++                                            NULL, false /*!image*/);
++         if (res != DO_APP_MEM_PROT_CHANGE) {
+++            app_memory_protection_change_done(dcontext, addr, len, new_memprot,
+++                                              false /*!success*/);
++             if (res == FAIL_APP_MEM_PROT_CHANGE) {
++                 ASSERT_NOT_IMPLEMENTED(false); /* return code? */
++             } else {
++@@ -9054,6 +9058,8 @@ post_system_call(dcontext_t *dcontext)
++         base = (app_pc)dcontext->sys_param0;
++         size = dcontext->sys_param1;
++         prot = dcontext->sys_param2;
+++        app_memory_protection_change_done(dcontext, base, size, osprot_to_memprot(prot),
+++                                          success);
++ #ifdef VMX86_SERVER
++         /* PR 475111: workaround for PR 107872 */
++         if (os_in_vmkernel_userworld() && result == -EBUSY && prot == PROT_NONE) {
++--- a/core/vmareas.c
+++++ b/core/vmareas.c
++@@ -279,6 +279,12 @@ static vm_area_vector_t *pretend_writable_areas;
++ /* used for DYNAMO_OPTION(patch_proof_list) areas to watch */
++ vm_area_vector_t *patch_proof_areas;
++ 
+++/* Code ranges whose protection a thread is changing, from before the system call
+++ * until after it (see app_memory_protection_change_start()).  The data of each
+++ * entry is the new MEMPROT_ protection.  Protected by the executable_areas lock.
+++ */
+++static vm_area_vector_t *pending_protection_changes;
+++
++ /* used for DYNAMO_OPTION(emulate_IAT_writes), though in future may be
++  * expanded, so not just ifdef WINDOWS or ifdef PROGRAM_SHEPHERDING
++  */
++@@ -1630,6 +1636,9 @@ vm_areas_init()
++                           pretend_writable_areas);
++     VMVECTOR_ALLOC_VECTOR(patch_proof_areas, GLOBAL_DCONTEXT, VECTOR_SHARED,
++                           patch_proof_areas);
+++    VMVECTOR_ALLOC_VECTOR(pending_protection_changes, GLOBAL_DCONTEXT,
+++                          VECTOR_SHARED | VECTOR_NO_LOCK | VECTOR_NEVER_MERGE,
+++                          innermost_lock);
++     VMVECTOR_ALLOC_VECTOR(emulate_write_areas, GLOBAL_DCONTEXT, VECTOR_SHARED,
++                           emulate_write_areas);
++     VMVECTOR_ALLOC_VECTOR(IAT_areas, GLOBAL_DCONTEXT, VECTOR_SHARED, IAT_areas);
++@@ -1805,6 +1814,8 @@ vm_areas_exit()
++     pretend_writable_areas = NULL;
++     vmvector_delete_vector(GLOBAL_DCONTEXT, patch_proof_areas);
++     patch_proof_areas = NULL;
+++    vmvector_delete_vector(GLOBAL_DCONTEXT, pending_protection_changes);
+++    pending_protection_changes = NULL;
++     vmvector_delete_vector(GLOBAL_DCONTEXT, emulate_write_areas);
++     emulate_write_areas = NULL;
++ 
++@@ -6954,9 +6965,37 @@ app_memory_protection_change_internal(dcontext_t *dcontext, bool update_areas,
++                 }
++                 /* FIXME : see note at top of function about bug 2833 */
++                 ASSERT(!TEST(MEMPROT_WRITE, prot)); /* sanity check */
++-                add_executable_vm_area(base, base + size, image ? VM_UNMOD_IMAGE : 0,
++-                                       frag_flags_pfx,
++-                                       false /*no lock*/ _IF_DEBUG(comment));
+++                /* add_executable_vm_area() must take the lock itself for a
+++                 * coarse-grain area, which is for a module's code: it checks the
+++                 * IAT and persisted caches, and the hotp lock ranks before ours.
+++                 */
+++                bool hold_lock = !TEST(FRAG_COARSE_GRAIN, frag_flags_pfx);
+++                bool add = true;
+++                if (hold_lock) {
+++                    d_r_write_lock(&executable_areas->lock);
+++                    /* We checked for executable areas without the lock, before
+++                     * deciding to add these.  Another thread can have executed the
+++                     * code since and added an area for it, with the old or the
+++                     * pending protection (see app_memory_protection_change_start()).
+++                     * We leave that in place, and the rest of the region is added
+++                     * when it is executed.
+++                     */
+++                    if (executable_vm_area_overlap(base, base + size,
+++                                                   true /*have writelock*/)) {
+++                        LOG(GLOBAL, LOG_VMAREAS, 2,
+++                            "\tnot adding " PFX "-" PFX
+++                            ": another thread added an area in it\n",
+++                            base, base + size);
+++                        add = false;
+++                    }
+++                }
+++                if (add) {
+++                    add_executable_vm_area(base, base + size,
+++                                           image ? VM_UNMOD_IMAGE : 0, frag_flags_pfx,
+++                                           hold_lock _IF_DEBUG(comment));
+++                }
+++                if (hold_lock)
+++                    d_r_write_unlock(&executable_areas->lock);
++             }
++ #ifdef WINDOWS
++             if (free_iat) {
++@@ -7120,6 +7159,171 @@ app_memory_protection_change_internal(dcontext_t *dcontext, bool update_areas,
++     return DO_APP_MEM_PROT_CHANGE; /* let syscall go through */
++ }
++ 
+++/* Returns whether a protection change is pending for code in [start, end), and in
+++ * *to_writable whether one makes it writable.  Caller must hold the
+++ * executable_areas lock.
+++ */
+++static bool
+++pending_protection_change(app_pc start, app_pc end, bool *to_writable /* OUT */)
+++{
+++    vmvector_iterator_t vmvi;
+++    bool found = false;
+++    *to_writable = false;
+++    if (vmvector_empty(pending_protection_changes))
+++        return false;
+++    vmvector_iterator_start(pending_protection_changes, &vmvi);
+++    while (vmvector_iterator_hasnext(&vmvi)) {
+++        app_pc entry_start, entry_end;
+++        uint prot =
+++            (uint)(ptr_uint_t)vmvector_iterator_next(&vmvi, &entry_start, &entry_end);
+++        if (entry_start < end && start < entry_end) {
+++            found = true;
+++            if (TESTANY(MEMPROT_WRITE, prot))
+++                *to_writable = true;
+++        }
+++    }
+++    vmvector_iterator_stop(&vmvi);
+++    return found;
+++}
+++
+++/* Narrows [*start, *end), which contains pc, so that it lies either within one
+++ * pending protection change or outside all of them, and returns whether pc is in
+++ * one that makes the code writable.  A memory region can span pages with
+++ * different pending changes, or with none.  Caller must hold the executable_areas
+++ * lock.
+++ */
+++static bool
+++clip_to_pending_protection_change(app_pc pc, app_pc *start /* IN/OUT */,
+++                                  app_pc *end /* IN/OUT */)
+++{
+++    vmvector_iterator_t vmvi;
+++    bool to_writable = false;
+++    if (vmvector_empty(pending_protection_changes))
+++        return false;
+++    vmvector_iterator_start(pending_protection_changes, &vmvi);
+++    while (vmvector_iterator_hasnext(&vmvi)) {
+++        app_pc entry_start, entry_end;
+++        uint prot =
+++            (uint)(ptr_uint_t)vmvector_iterator_next(&vmvi, &entry_start, &entry_end);
+++        if (entry_end <= *start || entry_start >= *end)
+++            continue;
+++        if (pc >= entry_start && pc < entry_end) {
+++            *start = MAX(*start, entry_start);
+++            *end = MIN(*end, entry_end);
+++            if (TESTANY(MEMPROT_WRITE, prot))
+++                to_writable = true;
+++        } else if (entry_end <= pc)
+++            *start = MAX(*start, entry_end);
+++        else
+++            *end = MIN(*end, entry_start);
+++    }
+++    vmvector_iterator_stop(&vmvi);
+++    return to_writable;
+++}
+++
+++#ifdef DEBUG
+++/* Checks that we do not build a block from code that we take for read-only while
+++ * its page is writable.
+++ */
+++static void
+++check_code_not_writable(app_pc pc, uint frag_flags)
+++{
+++    uint prot;
+++    bool to_writable;
+++    bool own_lock = self_owns_write_lock(&executable_areas->lock);
+++    if (!own_lock)
+++        d_r_read_lock(&executable_areas->lock);
+++    /* While a protection change is pending, the protection can be either the old or
+++     * the new one (see app_memory_protection_change_start()).  Starting and
+++     * finishing a change takes this lock, so we look for one before reading the
+++     * protection.
+++     */
+++    if (!pending_protection_change(pc, pc + 1, &to_writable) &&
+++        get_memory_info(pc, NULL, NULL, &prot)) {
+++        ASSERT(!TESTANY(MEMPROT_WRITE, prot) ||
+++               TESTANY(FRAG_SELFMOD_SANDBOXED, frag_flags) ||
+++               !INTERNAL_OPTION(hw_cache_consistency));
+++    }
+++    if (!own_lock)
+++        d_r_read_unlock(&executable_areas->lock);
+++}
+++#endif
+++
+++/* Making executable code writable removes its executable areas before the system
+++ * call that changes the protection, so that no fragment of the old code survives
+++ * the change.  Another thread that executes the code in between adds the areas
+++ * back, and the protection it reads can still be the old, read-only one: the
+++ * region then becomes writable without our knowing, and its fragments are never
+++ * flushed when it is written.  Making it read-only ourselves is no remedy, as the
+++ * pending change can undo that.  So until app_memory_protection_change_done(), we
+++ * record the range, and check_thread_vm_area() sandboxes any area added in it.
+++ * We also record changes that make code read-only: the region can be added with
+++ * its new protection before the change takes effect, and check_thread_vm_area()
+++ * must not take the old writable protection for an inconsistency.
+++ * Call before app_memory_protection_change().
+++ */
+++void
+++app_memory_protection_change_start(dcontext_t *dcontext, app_pc base, size_t size,
+++                                   uint old_prot, uint prot /* MEMPROT_ */)
+++{
+++    app_pc end = (app_pc)ALIGN_FORWARD(base + size, PAGE_SIZE);
+++    if (!INTERNAL_OPTION(hw_cache_consistency) || end <= base)
+++        return;
+++    /* old_prot is the protection we know of, which is read-only where we made
+++     * writable code read-only ourselves (VM_MADE_READONLY).  The app takes that
+++     * code for writable, and removing its area to apply the change restores the
+++     * write permission until the system call: such a change is from writable too.
+++     */
+++    if (!TESTANY(MEMPROT_WRITE, old_prot | prot) &&
+++        is_executable_area_writable_overlap(base, end) == NULL)
+++        return;
+++    /* The region need not have an executable area now: one can be added from the
+++     * old protection while the change is pending.  Most changes are to data, so
+++     * we avoid the write lock for those.
+++     */
+++    if (!TESTANY(MEMPROT_EXEC, old_prot | prot) &&
+++        !executable_vm_area_overlap(base, end, false /*no lock*/))
+++        return;
+++    LOG(THREAD, LOG_VMAREAS, 2, "code region " PFX "-" PFX " is changing to %s\n", base,
+++        end, memprot_string(prot));
+++    d_r_write_lock(&executable_areas->lock);
+++    vmvector_add(pending_protection_changes, base, end, (void *)(ptr_uint_t)prot);
+++    d_r_write_unlock(&executable_areas->lock);
+++}
+++
+++/* Call once the protection change started by app_memory_protection_change_start()
+++ * has completed or failed.  An area that another thread added in the meantime is
+++ * sandboxed, which is also correct for the new protection, unless the region is
+++ * no longer executable: we then remove the area, as before the change.
+++ */
+++void
+++app_memory_protection_change_done(dcontext_t *dcontext, app_pc base, size_t size,
+++                                  uint prot /* platform independent MEMPROT_ */,
+++                                  bool success)
+++{
+++    app_pc end = (app_pc)ALIGN_FORWARD(base + size, PAGE_SIZE);
+++    bool remove_areas;
+++    if (end <= base || vmvector_empty(pending_protection_changes))
+++        return;
+++    d_r_write_lock(&executable_areas->lock);
+++    if (!vmvector_overlap(pending_protection_changes, base, end)) {
+++        d_r_write_unlock(&executable_areas->lock);
+++        return;
+++    }
+++    vmvector_remove(pending_protection_changes, base, end);
+++    remove_areas = success && !TESTANY(MEMPROT_EXEC, prot) &&
+++        executable_vm_area_overlap(base, end, true /*have writelock*/);
+++    d_r_write_unlock(&executable_areas->lock);
+++    if (remove_areas) {
+++        LOG(THREAD, LOG_VMAREAS, 2,
+++            "removing executable region " PFX "-" PFX " added during its change to %s\n",
+++            base, end, memprot_string(prot));
+++        flush_fragments_and_remove_region(dcontext, base, end - base,
+++                                          false /* don't own initexit_lock */,
+++                                          false /* keep futures */);
+++    }
+++}
+++
++ uint
++ app_memory_protection_change(dcontext_t *dcontext, app_pc base, size_t size,
++                              uint prot,         /* platform independent MEMPROT_ */
++@@ -8105,7 +8309,30 @@ check_thread_vm_area(dcontext_t *dcontext, app_pc pc, app_pc tag, void **vmlist,
++ #endif
++         } else {
++             /* need to add the region */
++-            if (TEST(MEMPROT_WRITE, prot)) {
+++            /* A thread is making this region writable (see
+++             * app_memory_protection_change_start()): the protection we read can be
+++             * the old one, and page protection we set now can be undone.
+++             */
+++            app_pc area_start = base_pc, area_end = base_pc + size;
+++            bool becoming_writable =
+++                clip_to_pending_protection_change(pc, &area_start, &area_end);
+++            base_pc = area_start;
+++            size = area_end - area_start;
+++            if (becoming_writable) {
+++                LOG(GLOBAL, LOG_VMAREAS, 2,
+++                    "\tNew executable region " PFX "-" PFX " is becoming writable\n",
+++                    base_pc, base_pc + size);
+++                frag_flags |= SANDBOX_FLAG();
+++            } else {
+++                /* The protection we read before taking the lock can predate a change
+++                 * that has completed since: read it again now that a change cannot
+++                 * start or finish (both take this lock).
+++                 */
+++                uint cur_prot;
+++                if (get_memory_info(pc, NULL, NULL, &cur_prot))
+++                    prot |= (cur_prot & MEMPROT_WRITE);
+++            }
+++            if (TEST(MEMPROT_WRITE, prot) || becoming_writable) {
++                 vm_flags |= VM_WRITABLE;
++                 STATS_INC(num_writable_code_regions);
++                 /* Now that new area bounds are finalized, see if it should be
++@@ -8334,11 +8561,7 @@ check_thread_vm_area(dcontext_t *dcontext, app_pc pc, app_pc tag, void **vmlist,
++      * Investigation is needed.  For now we avoid them in default debug runs.
++      */
++     DOCHECK(IF_MACOS64_ELSE(3, IF_AARCH64_ELSE(3, IF_RISCV64_ELSE(3, 1))), {
++-        uint prot2;
++-        ok = get_memory_info(pc, NULL, NULL, &prot2);
++-        ASSERT(!ok || !TEST(MEMPROT_WRITE, prot2) ||
++-               TEST(FRAG_SELFMOD_SANDBOXED, *flags) ||
++-               !INTERNAL_OPTION(hw_cache_consistency));
+++        check_code_not_writable(pc, *flags);
++         ASSERT(is_readable_without_exception_try(pc, 1));
++     });
++ 
++@@ -9491,6 +9714,8 @@ vm_area_unlink_fragments(dcontext_t *dcontext, app_pc start, app_pc end,
++     for (i = data->areas.length - 1; i >= 0; i--) {
++         /* look for overlap */
++         if (start < data->areas.buf[i].end && end > data->areas.buf[i].start) {
+++            DEBUG_DECLARE(bool already_marked =
+++                              TESTANY(VM_DELETE_ME, data->areas.buf[i].vm_flags);)
++             LOG(thread_log, LOG_FRAGMENT | LOG_VMAREAS, 2,
++                 "\tmarking region " PFX ".." PFX
++                 " for deletion & unlinking all its frags\n",
++@@ -9514,9 +9739,16 @@ vm_area_unlink_fragments(dcontext_t *dcontext, app_pc start, app_pc end,
++             }
++             /* i#942: We can't flush a fragment list with multiple also entries
++              * from the same fragment on it, or our iteration gets derailed.
+++             * A thread-private area that an earlier flush marked, and that its
+++             * thread has not yet freed in vm_area_flush_fragments(), also holds
+++             * the fragments that flush moved onto it below.  Those can start
+++             * outside the area, but they are unlinked and have no also entries,
+++             * so this walk does not change the list.
++              */
++-            DOCHECK(CHKLVL_DEFAULT,
++-                    { vm_area_check_clean_fraglist(&data->areas.buf[i]); });
+++            DOCHECK(CHKLVL_DEFAULT, {
+++                if (!already_marked)
+++                    vm_area_check_clean_fraglist(&data->areas.buf[i]);
+++            });
++             ASSERT(!TEST(FRAG_COARSE_GRAIN, data->areas.buf[i].frag_flags));
++             for (entry = data->areas.buf[i].custom.frags; entry != NULL; entry = next) {
++                 fragment_t *f = FRAG_FRAG(entry);
++@@ -11137,6 +11369,22 @@ vm_area_selfmod_check_clear_exec_count(dcontext_t *dcontext, fragment_t *f)
++                                     false /* keep futures */, true /* exec invalid */,
++                                     false /* don't force synchall */
++                                     _IF_DGCDIAG(NULL));
+++    if (convert_s2ro) {
+++        bool to_writable;
+++        /* A thread that is making the region writable may not have changed the
+++         * protection yet (see app_memory_protection_change_start()): the page would
+++         * become writable again after we make it read-only, while we take it for
+++         * read-only.  We keep it sandboxed, which is right for the new protection.
+++         * flush_* grabbed executable_areas lock for us, which a change also takes
+++         * to start and finish.
+++         */
+++        if (pending_protection_change(start, end, &to_writable) && to_writable) {
+++            LOG(THREAD, LOG_VMAREAS, 2,
+++                "\tnot converting " PFX "-" PFX " to ro: becoming writable\n", start,
+++                end);
+++            convert_s2ro = false;
+++        }
+++    }
++     if (convert_s2ro) {
++         DODEBUG(ro2s->s2ro_xfers++;);
++         /* flush_* grabbed executable_areas lock for us */
++--- a/core/vmareas.h
+++++ b/core/vmareas.h
++@@ -625,6 +625,15 @@ bool
++ app_memory_pre_alloc(dcontext_t *dcontext, byte *base, size_t size, uint prot, bool hint,
++                      bool update_areas, bool image);
++ 
+++void
+++app_memory_protection_change_start(dcontext_t *dcontext, app_pc base, size_t size,
+++                                   uint old_prot, uint prot /* MEMPROT_ */);
+++
+++void
+++app_memory_protection_change_done(dcontext_t *dcontext, app_pc base, size_t size,
+++                                  uint prot /* platform independent MEMPROT_ */,
+++                                  bool success);
+++
++ uint
++ app_memory_protection_change(dcontext_t *dcontext, app_pc base, size_t size,
++                              uint prot,         /* platform independent MEMPROT_ */
++--- a/core/arch/interp.c
+++++ b/core/arch/interp.c
++@@ -7178,9 +7178,11 @@ mangle_trace(dcontext_t *dcontext, instrlist_t *ilist, monitor_data_t *md)
++ 
++         /* Clients should not add new source code regions, which would mess us up
++          * here, as well as mess up our cache consistency (both page prot and
++-         * selfmod).
+++         * selfmod).  A flushed trace is recreated without consulting its regions
+++         * (see recreate_fragment_ilist()), so its blocks have no region list to
+++         * check: the check was made when the trace was built.
++          */
++-        if (md->pass_to_client &&
+++        if (md->pass_to_client && md->blk_info[blk].vmlist != NULL &&
++             (!vm_list_overlaps(dcontext, md->blk_info[blk].vmlist, xl8, xl8 + 1) &&
++              !(instr_is_ubr(inst) && opnd_is_pc(instr_get_target(inst)) &&
++                xl8 == opnd_get_pc(instr_get_target(inst))))
++--- a/core/dynamo.c
+++++ b/core/dynamo.c
++@@ -2169,6 +2169,7 @@ add_thread(IF_WINDOWS_ELSE_NP(HANDLE hthread, process_id_t pid), thread_id_t tid
++ #else
++     tr->pid = pid;
++     tr->execve = false;
+++    tr->vfork_child = false;
++ #endif
++     tr->id = tid;
++     ASSERT(tid != INVALID_THREAD_ID); /* ensure os never assigns invalid id to a thread */
++--- a/core/fragment.c
+++++ b/core/fragment.c
++@@ -2968,6 +2968,11 @@ fragment_delete(dcontext_t *dcontext, fragment_t *f, uint actions)
++ {
++     bool acquired_shared_vm_lock = false;
++     bool acquired_fragdel_lock = false;
+++#ifdef UNIX
+++    /* The signal handler may hold f to re-link it when the signal is delivered. */
+++    if (dcontext != GLOBAL_DCONTEXT)
+++        signal_forget_deleted_fragment(dcontext, f);
+++#endif
++     LOG(THREAD, LOG_FRAGMENT, 3,
++         "fragment_delete: *" PFX " F%d(" PFX ")." PFX " %s 0x%x\n", f, f->id, f->tag,
++         f->start_pc, TEST(FRAG_IS_TRACE, f->flags) ? "trace" : "bb", actions);
++@@ -3059,7 +3064,7 @@ fragment_delete(dcontext_t *dcontext, fragment_t *f, uint actions)
++      * hashtable_fragment_reset().  If we add any further conditions on when it should
++      * be invoked we should keep the two calls in synch.
++      */
++-    if (dr_fragment_deleted_hook_exists() &&
+++    if (dr_fragment_deleted_hook_exists() && !TEST(FRAGDEL_NO_CLIENT_EVENT, actions) &&
++         (!TEST(FRAGDEL_NO_HEAP, actions) || !TEST(FRAGDEL_NO_FCACHE, actions)))
++         instrument_fragment_deleted(dcontext, f->tag, f->flags);
++ #ifdef UNIX
++@@ -5243,9 +5248,13 @@ fragment_self_write(dcontext_t *dcontext)
++     /* We are nolinking, so a flusher takes us to be at a safe point and can be
++      * unlinking our fragments right now, this one included, which also allocates
++      * from our heap.  It holds our linking lock while it does: we hold it while we
++-     * check for that and delete.
+++     * check for that and delete.  The client's deletion event can call routines
+++     * that take that lock (dr_app_pc_from_cache_pc(), for example), so we invoke
+++     * it after releasing the lock.  It gets only the tag and flags.
++      */
++     per_thread_t *pt = (per_thread_t *)dcontext->fragment_field;
+++    app_pc deleted_tag = NULL;
+++    uint deleted_flags = 0;
++     d_r_mutex_lock(&pt->linking_lock);
++     if (TEST(FRAG_WAS_DELETED, dcontext->last_fragment->flags)) {
++         /* Case 8177: case 3559 unionized fragment_t.in_xlate, so we cannot delete a
++@@ -5256,10 +5265,14 @@ fragment_self_write(dcontext_t *dcontext)
++         ASSERT(pt->flush_queue_nonempty);
++         STATS_INC(num_self_writes_after_flushes);
++     } else {
++-        fragment_delete(dcontext, dcontext->last_fragment, FRAGDEL_ALL);
+++        deleted_tag = dcontext->last_fragment->tag;
+++        deleted_flags = dcontext->last_fragment->flags;
+++        fragment_delete(dcontext, dcontext->last_fragment, FRAGDEL_NO_CLIENT_EVENT);
++         STATS_INC(num_fragments_deleted_selfmod);
++     }
++     d_r_mutex_unlock(&pt->linking_lock);
+++    if (deleted_tag != NULL && dr_fragment_deleted_hook_exists())
+++        instrument_fragment_deleted(dcontext, deleted_tag, deleted_flags);
++ }
++ 
++ /* coarse_grain says to use just the min_pc and max_pc of f.
++--- a/core/fragment.h
+++++ b/core/fragment.h
++@@ -684,6 +684,8 @@ enum {
++     FRAGDEL_NO_VMAREA = 0x040,
++ 
++     FRAGDEL_NEED_CHLINK_LOCK = 0x080,
+++    /* The caller invokes the client's fragment deletion event itself. */
+++    FRAGDEL_NO_CLIENT_EVENT = 0x100,
++ };
++ void
++ fragment_delete(dcontext_t *dcontext, fragment_t *f, uint actions);
++--- a/core/globals.h
+++++ b/core/globals.h
++@@ -281,6 +281,7 @@ typedef struct _thread_record_t {
++ #else
++     process_id_t pid; /* thread group id */
++     bool execve;      /* exiting due to execve (i#237/PR 498284) */
+++    bool vfork_child; /* created with CLONE_VFORK: its parent reclaims it */
++ #endif
++     uint num;                  /* creation ordinal */
++     bool under_dynamo_control; /* used for deciding whether to intercept events */
++--- a/core/lib/instrument.c
+++++ b/core/lib/instrument.c
++@@ -6619,11 +6619,13 @@ dr_get_mcontext_priv(dcontext_t *dcontext, dr_mcontext_t *dmc, priv_mcontext_t *
++      * If we do we'll have to adopt a different solution for i#1685 in our Windows
++      * hooks where today we use the pc slot for temp storage.
++      * The out-of-line clean call save records a code cache address there for the
++-     * signal handler: do not report it.
+++     * signal handler: do not report it, also not to a request for part of the
+++     * context or from a client built with a smaller dr_mcontext_t.
++      */
++     if (mc != NULL)
++         mc->pc = NULL;
++-    else if (TESTALL(DR_MC_ALL, dmc->flags) && dmc->size == sizeof(dr_mcontext_t))
+++    else if (TESTANY(DR_MC_CONTROL, dmc->flags) &&
+++             dmc->size > offsetof(dr_mcontext_t, pc))
++         dmc->pc = NULL;
++ 
++     return true;
++--- a/core/unix/os.c
+++++ b/core/unix/os.c
++@@ -2642,6 +2642,16 @@ os_thread_init_finalize(dcontext_t *dcontext, void *os_data)
++      * thread_initexit_lock (i#2779).
++      */
++     signal_thread_inherit(dcontext, os_data);
+++#ifdef LINUX
+++    /* The parent reclaims a vfork child when its vfork returns (see
+++     * cleanup_after_vfork_execve()).  On Mac the vfork result is a pid, which
+++     * finds no thread, so its vfork children are swept like other clones.
+++     */
+++    if (os_data != NULL) {
+++        dcontext->thread_record->vfork_child =
+++            TESTANY(CLONE_VFORK, get_clone_record_flags(os_data));
+++    }
+++#endif
++ }
++ 
++ void
++@@ -6425,6 +6435,33 @@ handle_execve_post(dcontext_t *dcontext)
++     }
++ }
++ 
+++/* i#1010: Reclaims children that called execve but were not created with
+++ * CLONE_VFORK, before the numbers of their private fds are reused.  No parent
+++ * waits for them, and we cannot tell when their execve has reached the kernel:
+++ * one still in handle_execve() is reclaimed too, as it always was.  A vfork
+++ * child is reclaimed only by its parent (cleanup_after_vfork_execve()).
+++ */
+++static void
+++cleanup_after_clone_execve(dcontext_t *dcontext)
+++{
+++    thread_record_t **threads;
+++    int num_threads, i;
+++    if (num_execve_threads == 0)
+++        return;
+++    d_r_mutex_lock(&thread_initexit_lock);
+++    get_list_of_threads_ex(&threads, &num_threads, true /*include execve*/);
+++    for (i = 0; i < num_threads; i++) {
+++        if (threads[i]->execve && !threads[i]->vfork_child) {
+++            LOG(THREAD, LOG_SYSCALLS, 2, "cleaning up earlier clone thread " TIDFMT "\n",
+++                threads[i]->id);
+++            dynamo_other_thread_exit(threads[i]);
+++        }
+++    }
+++    d_r_mutex_unlock(&thread_initexit_lock);
+++    global_heap_free(threads,
+++                     num_threads * sizeof(thread_record_t *) HEAPACCT(ACCT_THREAD_MGT));
+++}
+++
++ /* Reclaim only the child whose CLONE_VFORK syscall has returned to this
++  * parent.  Linux releases that parent only after the child has relinquished
++  * the shared address space through execve or exit.  An execve marker alone is
++@@ -7066,6 +7103,13 @@ handle_clone_pre(dcontext_t *dcontext)
++         LOG(THREAD, LOG_SYSCALLS, 1, "\tWARNING: CLONE_VM not set!\n");
++     }
++ 
+++    /* i#1010: If we have private fds open (usually logfiles), we should
+++     * clean those up before they get reused by a new thread.
+++     * XXX: Ideally we'd do this in fd_table_add(), but we can't acquire
+++     * thread_initexit_lock there.
+++     */
+++    cleanup_after_clone_execve(dcontext);
+++
++     /* For thread creation clone syscalls a clone_record_t structure
++      * containing the pc after the app's syscall instr and other data
++      * (see i#27) is placed at the bottom of the dstack (which is allocated
++@@ -7551,6 +7595,7 @@ pre_system_call(dcontext_t *dcontext)
++         uint flags = CLONE_VFORK | CLONE_VM | SIGCHLD;
++         LOG(THREAD, LOG_SYSCALLS, 2, "syscall: vfork\n");
++         handle_clone(dcontext, flags);
+++        cleanup_after_clone_execve(dcontext);
++ 
++         /* save for post_system_call, treated as if SYS_clone */
++         dcontext->sys_param0 = (reg_t)flags;
++--- a/core/unix/os_exports.h
+++++ b/core/unix/os_exports.h
++@@ -483,6 +483,8 @@ void
++ receive_pending_signal(dcontext_t *dcontext);
++ void
++ signal_forget_flushed_fragment(dcontext_t *dcontext);
+++void
+++signal_forget_deleted_fragment(dcontext_t *dcontext, fragment_t *f);
++ bool
++ is_signal_restorer_code(byte *pc, size_t *len);
++ bool
++@@ -535,6 +537,9 @@ create_clone_record(dcontext_t *dcontext, reg_t *app_thread_xsp,
++ create_clone_record(dcontext_t *dcontext, reg_t *app_thread_xsp);
++ #endif
++ 
+++uint64
+++get_clone_record_flags(void *record);
+++
++ #ifdef MACOS
++ void *
++ get_clone_record_thread_arg(void *record);
++--- a/core/unix/signal.c
+++++ b/core/unix/signal.c
++@@ -1035,6 +1035,13 @@ get_clone_record_app_xsp(void *record)
++     return ((clone_record_t *)record)->app_thread_xsp;
++ }
++ 
+++uint64
+++get_clone_record_flags(void *record)
+++{
+++    ASSERT(record != NULL);
+++    return ((clone_record_t *)record)->clone_flags;
+++}
+++
++ #ifdef MACOS
++ void *
++ get_clone_record_thread_arg(void *record)
++@@ -4626,6 +4633,22 @@ signal_forget_flushed_fragment(dcontext_t *dcontext)
++     }
++ }
++ 
+++/* The thread itself can also delete the fragment we unlinked for a signal,
+++ * without a flush: a sandboxed block that wrote to its own code, for example
+++ * (fragment_self_write()).  Called from fragment_delete().
+++ */
+++void
+++signal_forget_deleted_fragment(dcontext_t *dcontext, fragment_t *f)
+++{
+++    thread_sig_info_t *info = (thread_sig_info_t *)dcontext->signal_field;
+++    if (info != NULL && info->interrupted == f) {
+++        LOG(THREAD, LOG_ASYNCH, 3, "\tinterrupted F%d is deleted: not re-linking\n",
+++            f->id);
+++        info->interrupted = NULL;
+++        info->interrupted_pc = NULL;
+++    }
+++}
+++
++ static void
++ relink_interrupted_fragment(dcontext_t *dcontext, thread_sig_info_t *info)
++ {
++@@ -5023,6 +5051,7 @@ record_pending_signal(dcontext_t *dcontext, int sig, kernel_ucontext_t *ucxt,
++     bool handled = false;
++     bool reroute = false;
++     bool at_auto_restart_syscall = false;
+++    byte *pre_restart_xip = NULL;
++     int syslen = 0;
++     reg_t orig_retval_reg = sc->SC_RETURN_REG;
++     sigpending_t *pend;
++@@ -5241,6 +5270,7 @@ record_pending_signal(dcontext_t *dcontext, int sig, kernel_ucontext_t *ucxt,
++                     "\n",
++                     pc, pc + syslen);
++                 at_auto_restart_syscall = true;
+++                pre_restart_xip = (byte *)sc->SC_XIP;
++                 sc->SC_XIP += syslen;
++                 sc->SC_RETURN_REG = -EINTR;
++                 pc = (byte *)sc->SC_XIP;
++@@ -5278,6 +5308,7 @@ record_pending_signal(dcontext_t *dcontext, int sig, kernel_ucontext_t *ucxt,
++          * existing sysenter restart mechanism.
++          */
++         at_auto_restart_syscall = true;
+++        pre_restart_xip = (byte *)sc->SC_XIP;
++         sc->SC_XIP = (reg_t)vsyscall_sysenter_return_pc;
++         sc->SC_RETURN_REG = -EINTR;
++         pc = (byte *)sc->SC_XIP;
++@@ -5427,12 +5458,21 @@ record_pending_signal(dcontext_t *dcontext, int sig, kernel_ucontext_t *ucxt,
++          * queue a standard signal that is already pending, which the kernel does
++          * not queue again either, and keep the block for a signal that is not.
++          */
++-        bool keep_last_block =
++-            sig < OFFS_RT && info->sigpending[sig] != NULL &&
++-            info->num_pending + 1 >= (int)DYNAMO_OPTION(max_pending_signals);
+++        int capacity = (int)DYNAMO_OPTION(max_pending_signals) *
+++            /* receive_pending_signal() adds a second unit near the limit. */
+++            (info->multiple_pending_units ? 2 : 1);
+++        bool keep_last_block = sig < OFFS_RT && info->sigpending[sig] != NULL &&
+++            info->num_pending + 1 >= capacity;
++         if (keep_last_block) {
++             STATS_INC(num_signals_dropped);
++             SYSLOG_INTERNAL_WARNING_ONCE("dropping already-pending standard signal");
+++            if (at_auto_restart_syscall) {
+++                /* No handler runs for this signal: let the kernel restart the
+++                 * interrupted syscall instead of returning -EINTR to the app.
+++                 */
+++                sc->SC_XIP = (reg_t)pre_restart_xip;
+++                sc->SC_RETURN_REG = orig_retval_reg;
+++            }
++         }
++         if (!keep_last_block &&
++             (!blocked || sig >= OFFS_RT || (blocked && info->sigpending[sig] == NULL))) {
++@@ -7612,9 +7652,9 @@ receive_pending_signal(dcontext_t *dcontext)
++         }
++     }
++     /* Only one signal can be delivered ignoring the back-in-dispatch blocked set. */
++-    for (int i = 1; i <= MAX_SIGNUM; i++) {
++-        if (info->sigpending[i] != NULL && info->sigpending[i]->unblocked_at_receipt)
++-            info->sigpending[i]->unblocked_at_receipt = false;
+++    for (sig = 1; sig <= MAX_SIGNUM; sig++) {
+++        if (info->sigpending[sig] != NULL && info->sigpending[sig]->unblocked_at_receipt)
+++            info->sigpending[sig]->unblocked_at_receipt = false;
++     }
++     /* barrier to prevent compiler from moving the below write above the loop */
++     __asm__ __volatile__("" : : : "memory");

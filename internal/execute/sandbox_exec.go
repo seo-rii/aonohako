@@ -614,7 +614,7 @@ func executeSandboxCommandWithStreams(ctx context.Context, ws Workspace, command
 		if err != nil {
 			return execResult{Status: model.RunStatusInitFail, Reason: "durante runtime options: " + err.Error()}
 		}
-		finalCommand = streams.workMeasurement.WrapWithWorkClock(finalCommand, clockPath)
+		finalCommand = streams.workMeasurement.WrapWithWorkClock(finalCommand, clockPath, req.WorkMeasurementClock)
 	}
 	helperReq := sandbox.ExecRequest{
 		Command:                  finalCommand,
