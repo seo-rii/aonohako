@@ -68,6 +68,7 @@ func newRemoteRunner(cfg config.Config) Runner {
 }
 
 func (r *remoteRunner) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) model.RunResponse {
+	req = automaticJudgeRequest(req, r.workMeasurement, r.runtimeTuning, r.runtimeTuningProfiles)
 	if req != nil && req.Pipeline != nil {
 		// Pipeline logs and diagnostics may contain private resources or artifacts.
 		// Enforce the secrecy boundary again at the control plane even when the
@@ -186,6 +187,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
+	if ordinaryMeasurementRequest(forward) {
+		httpReq.Header.Set(NativeJudgeHeader, "v1")
+	}
 	if req.Pipeline != nil {
 		httpReq.Header.Set(model.PipelineV1WorkerHeader, model.PipelineV1WorkerProtocol)
 		if observationBudget > 0 {

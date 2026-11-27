@@ -14,6 +14,10 @@ func ApplyJudgeWorkLimits(req *model.RunRequest, execution config.ExecutionConfi
 		return err
 	}
 	if !req.WorkMeasurementJudge {
+		admitted := automaticJudgeRequest(req, execution.WorkMeasurement, execution.RuntimeTuning, execution.RuntimeTuningProfiles)
+		if admitted != req {
+			*req = *admitted
+		}
 		return nil
 	}
 	tuning, err := resolveRuntimeTuning(req, execution.RuntimeTuning, execution.RuntimeTuningProfiles)

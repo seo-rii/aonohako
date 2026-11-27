@@ -1,6 +1,6 @@
 # Work-based judging (virtual milliseconds)
 
-Status: **operator-gated, opt-in per request.** Default images and requests do
+Status: **operator-gated, native by default.** Default images and requests do
 not enable it. This is the first path that turns a Durante diagnostic
 observation into an actual `Accepted` / `Wrong Answer` / `Time Limit Exceeded`
 verdict instead of always returning `Container Initialization Failed`. It exists
@@ -13,8 +13,8 @@ Everything in [Durante integration](durante.md) still holds: counts are
 `application_mutable`, the contract stays `diagnostic_only`, and nothing here
 changes the raw-CPU, memory or integrity properties of the meter. Judge mode is
 a verdict *policy* layered on the existing envelope and time conversion. It is
-enabled only for families and runtimes the operator has qualified, and only when
-a request asks for it. It does not touch ordinary requests.
+enabled only for families and runtimes the operator has qualified. A request can
+ask for it explicitly, or the operator can select registered batch cases automatically.
 
 ## Restricting a dedicated judge to qualified cases
 
@@ -52,9 +52,34 @@ The organizer supplies the expected output. The registry does not key on the
 submission's ELF hash, so qualification should exercise independent solutions,
 including wrong answers and solutions that cross the clock limit. Explicit
 judge requests outside the configured scope are rejected. Ordinary requests
-retain their native verdict, and an absent registry preserves the existing
+retain their native verdict by default, and an absent registry preserves the existing
 operator opt-in behavior. Register only cases actually qualified for that
 specific model and deadline.
+
+### Automatically judge registered batch submissions
+
+Set `AONOHAKO_DURANTE_JUDGE_AUTO=on` with `AONOHAKO_DURANTE_JUDGE_MODE=on`
+and a validated `AONOHAKO_DURANTE_JUDGE_CASES` registry to apply the scope
+to ordinary requests on `/execute`. Submit the usual problem ID, contestant
+ELF, input, expected stdout and nominal limits. A match runs once with the
+operator's raw resource envelope and the registered deciding clock. The
+response carries the same `work_measurement_judgment` and clock receipt as
+an explicit judge request. A clock failure follows the explicit judgment
+rules; it never silently reruns the submission under another clock.
+
+Unregistered inputs, other deadlines, URL-backed artifacts, `ignore_tle`
+and other ineligible requests follow the native path. Explicit measurement,
+shadow and peer requests retain their existing modes. If automatic observation
+is also enabled, it applies to eligible native submissions. The default for
+`AONOHAKO_DURANTE_JUDGE_AUTO` is off.
+
+Enable automatic selection at the public control plane. Its worker needs the
+matching judge configuration and case registry to verify a forwarded decision.
+The worker needs automatic selection only when it also serves direct ordinary
+requests. Upgrade forwarding control planes before enabling automatic selection
+on a shared worker. Current controllers mark native forwards. An embedded
+worker with trusted runner ingress preserves their selected route even when
+its own registry differs.
 
 ## Automatic observations alongside native grading
 

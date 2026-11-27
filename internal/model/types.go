@@ -333,6 +333,9 @@ type SidecarError struct {
 }
 
 type RunRequest struct {
+	// SkipAutoJudge preserves a native admission decision through payload URL
+	// resolution and queueing. Remote runners convey it in an HTTP header.
+	SkipAutoJudge           bool                      `json:"-"`
 	WorkMeasurement         bool                      `json:"work_measurement,omitempty"`
 	WorkMeasurementLimits   *durante.ResourceLimits   `json:"work_measurement_limits,omitempty"`
 	WorkMeasurementClock    *durante.WorkClockRequest `json:"work_measurement_clock,omitempty"`

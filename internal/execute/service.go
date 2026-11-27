@@ -196,6 +196,7 @@ func (s *Service) Run(ctx context.Context, req *model.RunRequest, hooks Hooks) m
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	req = automaticJudgeRequest(req, s.workMeasurement, s.runtimeTuning, s.runtimeTuningProfiles)
 	if err := validateJudgeCaseMode(req, s.workMeasurement); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
