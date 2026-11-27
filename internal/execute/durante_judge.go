@@ -66,19 +66,23 @@ func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg dura
 		NominalTimeMs:       int64(req.Limits.TimeMs),
 		RawCPUTimeNs:        judgeRawCPUTimeNs(response),
 	})
-	// The worker and remote verifier both check strict crossing and the
-	// operator binding before a budget stop can decide a verdict.
-	if exec.State == "budget_exceeded" {
+	// Both the worker and the verifier bind the clock receipt to their own
+	// model before attributing a budget stop or an unavailable terminal clock.
+	if exec.State == "budget_exceeded" || exec.TerminationSource == terminalClockUnavailable {
 		plan := effectiveWorkClock(req, cfg, optionalRuntimeTuning(tuning))
 		report := response.WorkMeasurement
 		if plan != nil && plan.TimePolicy != nil && report != nil && report.DispatchProfile == plan.TimePolicy.DispatchProfile &&
 			(report.DispatchProfile != durante.DispatchGLIBC241 || report.HostLibc == "2.41") &&
 			withinRawMeasurementLimits(response, exec.RawLimits) && validateRemoteWorkClock(req, response, plan) == nil {
-			result.Verdict = durante.JudgeTimeLimitExceeded
-			result.Reason = "Durante work clock exceeded the nominal time limit"
-			if estimate := exec.TimeEstimate; estimate != nil {
-				result.EstimateNs = &estimate.Nanoseconds
-				result.EstimateMs = &estimate.Milliseconds
+			if exec.TerminationSource == terminalClockUnavailable {
+				result.Verdict, result.Reason = durante.JudgeUnavailable, "Durante work clock unavailable at target exit"
+			} else {
+				result.Verdict = durante.JudgeTimeLimitExceeded
+				result.Reason = "Durante work clock exceeded the nominal time limit"
+				if estimate := exec.TimeEstimate; estimate != nil {
+					result.EstimateNs = &estimate.Nanoseconds
+					result.EstimateMs = &estimate.Milliseconds
+				}
 			}
 		}
 	}

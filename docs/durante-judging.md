@@ -300,7 +300,11 @@ communication request can select the role clocks below.
 
 The HTTP harness grades a real compiled C++ program through embedded and
 forwarded execution using test-only coefficients. It checks normal completion,
-a busy loop, a sleeping process and a mismatched downstream model.
+a busy loop, a sleeping process and a mismatched downstream model. On v12
+it also uses the same finite workload with a handled signal or a REP CMPS
+instruction to verify a raw crossing and an unavailable model-weighted clock.
+A weighted crossing already observed before the signal or instruction still
+describes a valid execution prefix.
 Both the work clock and peer-clock HTTP verifiers enable the v1 latency bound by
 default. Run them again with `--no-latency-bound` to exercise the ordinary
 instruction and REP clock. Each verifier checks the selected mode in completed
@@ -422,7 +426,8 @@ the output comparison and time estimate.
 | `complete` | matches | unavailable | **Runtime Error** |
 | `budget_exceeded` | — | validated clock crossing | **Time Limit Exceeded** |
 | `resource_exhausted` | — | — | **Container Initialization Failed**, unscored |
-| `incomplete` / `failed` / `cancelled` | — | — | **Runtime Error** |
+| `incomplete`, clean exit with an unavailable weighted clock | — | unavailable | **Container Initialization Failed**, unscored |
+| Other `incomplete`, `failed` or `cancelled` | — | — | **Runtime Error** |
 
 - **Wrong Answer** uses the existing output oracle (stdout or the single file
   output), before any time comparison. A nonzero exit on an output match is a
@@ -442,7 +447,12 @@ the output comparison and time estimate.
   source identifies the resource to review. Shadow comparisons record this
   case as unavailable. A virtual TLE requires a validated work-clock crossing
   or an eligible, over-budget terminal estimate.
-- **`incomplete` / `failed` / `cancelled` → Runtime Error.** Launch failure,
+- **Weighted clock unavailable on clean exit.** A program can handle a signal or
+  finish after CMPS/SCAS with exit code zero. When the worker cannot reconcile
+  its weighted clock with the terminal counts, it reports an unscored
+  initialization failure with termination source `durante_work_clock_final_unavailable`. If the program continues running, its independent
+  resource watchdogs still apply.
+- **Other incomplete, failed or cancelled executions.** Launch failure,
   client/collection failure, a forced stop, or cancellation cannot yield a
   trusted count, so the verdict is a (retryable) `Runtime Error`, never AC/TLE.
 
@@ -450,7 +460,8 @@ The response carries `work_measurement_judgment` with the chosen verdict, the
 reason, the virtual-millisecond estimate, the integrity decision, and the raw
 diagnostic execution block. Unlike the pure diagnostic envelope, judge mode sets
 `status` to the real verdict (`Accepted`, `Wrong Answer`, `Time Limit Exceeded`
-or `Runtime Error`) for judged runs. A raw resource stop carries an unscored initialization failure.
+or `Runtime Error`) for judged runs. A raw resource stop or an unavailable
+weighted clock on clean exit carries an unscored initialization failure.
 
 ## Counter integrity (threat model is a flag)
 
