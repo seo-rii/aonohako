@@ -239,7 +239,9 @@ def evaluate(root, payload=None):
             results = [s['models'][model] for s in subset]
             votes = Counter(b['outcome'] for r in results for b in r['boundaries'])
             worst = [max(map(abs, r['errors_ppm'])) for r in results]
+            stable_results = [s['models'][model] for s in subset if s['stable']]
             g['models'][model] = dict(within_20pct=sum(r['within_20pct'] for r in results),
+                stable_within_20pct=sum(r['within_20pct'] for r in stable_results),
                 median_case_max_abs_error_ppm=round(median(worst)), worst_abs_error_ppm=max(worst),
                 boundaries={k: votes[k] for k in ('agree', 'false_tle', 'false_pass', 'mixed_native')})
         groups[group] = g

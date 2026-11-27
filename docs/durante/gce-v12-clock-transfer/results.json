@@ -6,6 +6,7 @@
       "models": {
         "v7_split_gce": {
           "within_20pct": 3,
+          "stable_within_20pct": 3,
           "median_case_max_abs_error_ppm": 289822,
           "worst_abs_error_ppm": 506617,
           "boundaries": {
@@ -17,6 +18,7 @@
         },
         "v11_latency_memory": {
           "within_20pct": 4,
+          "stable_within_20pct": 3,
           "median_case_max_abs_error_ppm": 110353,
           "worst_abs_error_ppm": 710558,
           "boundaries": {
@@ -28,6 +30,7 @@
         },
         "v11_split": {
           "within_20pct": 5,
+          "stable_within_20pct": 3,
           "median_case_max_abs_error_ppm": 54278,
           "worst_abs_error_ppm": 215177,
           "boundaries": {
@@ -39,6 +42,7 @@
         },
         "v11_wide_live": {
           "within_20pct": 0,
+          "stable_within_20pct": 0,
           "median_case_max_abs_error_ppm": 299158,
           "worst_abs_error_ppm": 488832,
           "boundaries": {
@@ -56,6 +60,7 @@
       "models": {
         "v7_split_gce": {
           "within_20pct": 0,
+          "stable_within_20pct": 0,
           "median_case_max_abs_error_ppm": 446670,
           "worst_abs_error_ppm": 889563,
           "boundaries": {
@@ -67,6 +72,7 @@
         },
         "v11_latency_memory": {
           "within_20pct": 1,
+          "stable_within_20pct": 1,
           "median_case_max_abs_error_ppm": 3584666,
           "worst_abs_error_ppm": 12487788,
           "boundaries": {
@@ -78,6 +84,7 @@
         },
         "v11_split": {
           "within_20pct": 0,
+          "stable_within_20pct": 0,
           "median_case_max_abs_error_ppm": 529878,
           "worst_abs_error_ppm": 950443,
           "boundaries": {
@@ -89,6 +96,7 @@
         },
         "v11_wide_live": {
           "within_20pct": 3,
+          "stable_within_20pct": 0,
           "median_case_max_abs_error_ppm": 418607,
           "worst_abs_error_ppm": 894022,
           "boundaries": {
@@ -106,6 +114,7 @@
       "models": {
         "v7_split_gce": {
           "within_20pct": 0,
+          "stable_within_20pct": 0,
           "median_case_max_abs_error_ppm": 785900,
           "worst_abs_error_ppm": 927754,
           "boundaries": {
@@ -117,6 +126,7 @@
         },
         "v11_latency_memory": {
           "within_20pct": 0,
+          "stable_within_20pct": 0,
           "median_case_max_abs_error_ppm": 32072199,
           "worst_abs_error_ppm": 36849722,
           "boundaries": {
@@ -128,6 +138,7 @@
         },
         "v11_split": {
           "within_20pct": 0,
+          "stable_within_20pct": 0,
           "median_case_max_abs_error_ppm": 1122110,
           "worst_abs_error_ppm": 1290678,
           "boundaries": {
@@ -139,6 +150,7 @@
         },
         "v11_wide_live": {
           "within_20pct": 0,
+          "stable_within_20pct": 0,
           "median_case_max_abs_error_ppm": 713780,
           "worst_abs_error_ppm": 849907,
           "boundaries": {
