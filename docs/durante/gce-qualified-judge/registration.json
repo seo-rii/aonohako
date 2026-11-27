@@ -1,0 +1,100 @@
+{
+  "archive_sha256": "43418db3906af41666c1d4674e9b64ceebb3c72cbc3cc493e4e52af6a89ddc00",
+  "corpus": {
+    "inversions": {
+      "elf_sha256": {
+        "fast": "95ce143d7b5dc7b5e5d91b595e31206988b0368241907ba6f5897cfe88b0fa87",
+        "reference": "b0fbcc81f109bedf09ff5a8f0365b7682ff0d9832dc343d4a6488cede3165f72",
+        "slow": "fac24fff5f68c64372be7d6a1664c39cdda5003d2b9ace6d7f02c852afd13e09",
+        "wrong": "811ca8cdfddbfe7ad2778f9673053af17acadd874bbb23b119345545f20cee2a"
+      },
+      "stdin_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+      "stdout_sha256": "9a08f500e43abd4e90eaa34b24882c6a692f9d5ec4f57fc4cbd5f21d9962d2aa"
+    },
+    "range_min": {
+      "elf_sha256": {
+        "fast": "e2a610213d9b6d5fee9be7063f0381fba062ddec34de8a7dfc8a7b0c023eaeb7",
+        "reference": "63edc29bbe32ad880c4facf18d561da46a4e68b3cf4551b41a9071ef5821dcc1",
+        "slow": "e1b7b9fcd3b13771f39fe3ba138cbaee035c27c85bd0bdd5a4ce8d610cbd3cd0",
+        "wrong": "5b1c01eba099bde1bfd76fdda53af1147044b86be600cc0f223f56a1d23d1287"
+      },
+      "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+      "stdout_sha256": "c0aacbfad86fc5173e51d8af11c1052b841a6268e82341df9d1e6fbaa24ccca4"
+    },
+    "shortest_paths": {
+      "elf_sha256": {
+        "fast": "102fd8cf4ba07043d07e644d2c79f8a06ffdd2bcbb191f1bad75c0b13f92a57b",
+        "reference": "3329d2981760ac275e2ffd17ed4ddc22b409fb6046b7bd05703510602597a091",
+        "slow": "5a74732188a6ef89c1463f15b6a97dcb07582f5aa4c710573814e0b2c7268fc1",
+        "wrong": "b1b80635cba7f533b1772871706b7993c07c68dc83dd4d50281574f69e63c1fe"
+      },
+      "stdin_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+      "stdout_sha256": "59c0af841dc79f04e14f03779fece88d8ec15672a36fa1bdbed5388d4b6f465d"
+    }
+  },
+  "payload": {
+    "corpus/inversions-fast": "95ce143d7b5dc7b5e5d91b595e31206988b0368241907ba6f5897cfe88b0fa87",
+    "corpus/inversions-reference": "b0fbcc81f109bedf09ff5a8f0365b7682ff0d9832dc343d4a6488cede3165f72",
+    "corpus/inversions-slow": "fac24fff5f68c64372be7d6a1664c39cdda5003d2b9ace6d7f02c852afd13e09",
+    "corpus/inversions-wrong": "811ca8cdfddbfe7ad2778f9673053af17acadd874bbb23b119345545f20cee2a",
+    "corpus/inversions.stdin": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+    "corpus/inversions.stdout": "9a08f500e43abd4e90eaa34b24882c6a692f9d5ec4f57fc4cbd5f21d9962d2aa",
+    "corpus/manifest.json": "f67c7471a551bbd3617c1e49a6d0a7cade3e5593e3376d401a663ead46e9c63d",
+    "corpus/range_min-fast": "e2a610213d9b6d5fee9be7063f0381fba062ddec34de8a7dfc8a7b0c023eaeb7",
+    "corpus/range_min-reference": "63edc29bbe32ad880c4facf18d561da46a4e68b3cf4551b41a9071ef5821dcc1",
+    "corpus/range_min-slow": "e1b7b9fcd3b13771f39fe3ba138cbaee035c27c85bd0bdd5a4ce8d610cbd3cd0",
+    "corpus/range_min-wrong": "5b1c01eba099bde1bfd76fdda53af1147044b86be600cc0f223f56a1d23d1287",
+    "corpus/range_min.stdin": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+    "corpus/range_min.stdout": "c0aacbfad86fc5173e51d8af11c1052b841a6268e82341df9d1e6fbaa24ccca4",
+    "corpus/shortest_paths-fast": "102fd8cf4ba07043d07e644d2c79f8a06ffdd2bcbb191f1bad75c0b13f92a57b",
+    "corpus/shortest_paths-reference": "3329d2981760ac275e2ffd17ed4ddc22b409fb6046b7bd05703510602597a091",
+    "corpus/shortest_paths-slow": "5a74732188a6ef89c1463f15b6a97dcb07582f5aa4c710573814e0b2c7268fc1",
+    "corpus/shortest_paths-wrong": "b1b80635cba7f533b1772871706b7993c07c68dc83dd4d50281574f69e63c1fe",
+    "corpus/shortest_paths.stdin": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+    "corpus/shortest_paths.stdout": "59c0af841dc79f04e14f03779fece88d8ec15672a36fa1bdbed5388d4b6f465d",
+    "guest.py": "a5cd6da9b6986561dd0424bd038521d2913c6a668f932478c0947731691045b9",
+    "guest.sh": "3aa64575960cd8196541f8834642ce84f16a63759208d7d6f681a43223e960e0",
+    "plan.json": "87cd31962aa5b851df087e926835263c2014b8338c0891b5105e7fbcfd10ded5",
+    "runtime.squashfs": "170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+    "scripts/verify_durante_native_boundaries.py": "0c8d3fd2d83eaad08f18afa313db1fd74b7a93621266e6636b653d5127efa623",
+    "scripts/verify_durante_observation.py": "a70482a22947ce2db01892d185c560ef8c29d717f06ae8180ee0b2d57f4f6ccb",
+    "v12_guest.py": "b76d125703cdf94433e561622f2c86a12d7149bb3c2de924315b8b6616e89c53"
+  },
+  "plan": {
+    "cgo_enabled": false,
+    "compiler": "g++ (Debian 12.2.0-14+deb12u1) 12.2.0",
+    "go_build_flags": [
+      "-tags",
+      "durante_v12",
+      "-trimpath",
+      "-buildvcs=false"
+    ],
+    "go_version": "go version go1.26.11 linux/amd64",
+    "installed_files": {
+      "DynamoRIO-LICENSE.txt": "a08c2517cd5113855fca6afb32809dfe7d14adc98af7ce92f3b3199023ab645a",
+      "LICENSE": "11eac69fd9d6761dc41879298d5a6ad81cb8726a8dffafd79986ba4cca8d7d07",
+      "UPSTREAM.json": "edbde896bbfac655c253530d456dbf0ea332b88b48c33284404d6eae7029ef57",
+      "dynamorio/.durante-runtime.json": "adb27bebcc760ece7ae0cd18f5a779e56dad3beeb86aee17f78682be5d4030a7",
+      "dynamorio/bin64/drrun": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+      "dynamorio/ext/lib64/debug/libdrmgr.so": "0011d0732cebbefcded9afdbe2094e799d6aae80017eca5aab3401bd31f79500",
+      "dynamorio/ext/lib64/release/libdrmgr.so": "372cc1f1f95ffa29a1f11de4be14f99de5938bbcae11294a38d0a7932069429a",
+      "dynamorio/lib32/debug/libdynamorio.so": "f12fb2006a9c3c5ae74ce2a6edf58f3b2404835b24fc41fbb46a2475d6639bb8",
+      "dynamorio/lib32/release/libdynamorio.so": "08c166e09ea8c97d579e8f6a1bc5ebf5bf39cbd937eb357fe0797066ec1afa63",
+      "dynamorio/lib64/debug/libdrpreload.so": "0cf77ae7149ed7bcfc7d2105fccf34ff9077c06566dde2475f31532a5b41b98f",
+      "dynamorio/lib64/debug/libdynamorio.so": "45e13a209ac3c03a0adfa722fb4c23ddedd91061b636d6a0d409066c364407f1",
+      "dynamorio/lib64/release/libdrpreload.so": "fd220281583ecc7de1395d63a82338f265b46fda1af8acfbeeabdf33c88e6113",
+      "dynamorio/lib64/release/libdynamorio.so": "f2478395d33e2d8e4a6fb4158fd826777cca37ee02e94924757696b08d7fb06f",
+      "lib/libdurante.so": "27051cef2450f484c08d79023607e39a6e75a8d7c22b077e028379e3b51d921c",
+      "reference": "17afd16b9922fa0c0ac2a98913dee0ed4336b84f5a7bd01804278b537a862802",
+      "server": "990c60741226efe1e2a1b57bef16f4fc56c3f811b877f5565fb6244efac70e57"
+    },
+    "manifest_sha256": "f67c7471a551bbd3617c1e49a6d0a7cade3e5593e3376d401a663ead46e9c63d",
+    "reference_sha256": "17afd16b9922fa0c0ac2a98913dee0ed4336b84f5a7bd01804278b537a862802",
+    "runtime_image": "sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+    "runtime_sha256": "170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+    "schema": 1,
+    "server_commit": "840f8f77312d03327376d5c437c40de13ed4867c",
+    "server_sha256": "990c60741226efe1e2a1b57bef16f4fc56c3f811b877f5565fb6244efac70e57"
+  },
+  "schema": 1
+}
