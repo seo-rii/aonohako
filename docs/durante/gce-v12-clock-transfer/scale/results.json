@@ -1042,5 +1042,22 @@
     "max_counter_ratio": "124/127",
     "lower_bound_ppm": 144430,
     "ceil_lower_bound_ppm_floor": 144430
+  },
+  "retrospective_bounds": {
+    "instructions_movs_stos": {
+      "scrivener_multiplier": "139068037507/156810905382",
+      "wall_multiplier": "33804409274/78405452691",
+      "median_continuous_minimax": "5031322112699457/19619545180990505",
+      "median_ceil_lower_bound_ppm_floor": 256444,
+      "observed_range_ceil_lower_bound_ppm_floor": 231458
+    },
+    "latency_operand_bytes": {
+      "slow": "scrivener/interwoven_pages",
+      "fast": "wall/phase_envelopes",
+      "native_ratio": "181155/155101",
+      "max_counter_ratio": "1673174874/3582885337",
+      "lower_bound_ppm": 428747,
+      "ceil_lower_bound_ppm_floor": 428747
+    }
   }
 }

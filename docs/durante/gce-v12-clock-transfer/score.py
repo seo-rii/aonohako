@@ -150,16 +150,16 @@ def classify(native, predictions, limit_ms):
     return dict(limit_ms=limit_ms, native_over=n, predicted_over=p, outcome=outcome)
 
 
-def pair_bound(rows, ids):
+def pair_bound(rows, ids, mode='live', fields=('instructions', 'movs_bytes', 'stos_bytes')):
     best = None
     best_error = Fraction(0)
     for slow in ids:
         for fast in ids:
             native_ratio = Fraction(min(rows[slow]['native']), max(rows[fast]['native']))
             ratios = []
-            for field in ('instructions', 'movs_bytes', 'stos_bytes'):
-                upper = max(r[field] for r in rows[slow]['live'])
-                lower = min(r[field] for r in rows[fast]['live'])
+            for field in fields:
+                upper = max(r[field] for r in rows[slow][mode])
+                lower = min(r[field] for r in rows[fast][mode])
                 if upper and not lower:
                     break
                 if lower:
@@ -178,6 +178,43 @@ def pair_bound(rows, ids):
                                 max_counter_ratio=str(counter_ratio), lower_bound_ppm=ppm(error),
                                 ceil_lower_bound_ppm_floor=math.floor(rounded_bound * MILLION))
     return best
+
+
+def scale_live_bound(rows):
+    # These three archived readings certify a lower bound regardless of the weights.
+    money = rows['money/terraced_bids']
+    scrivener = rows['scrivener/interwoven_pages']
+    wall = rows['wall/phase_envelopes']
+    m, s, w = money['live'][0], scrivener['live'][0], wall['live'][1]
+
+    def det(a, b):
+        return a['instructions'] * b['stos_bytes'] - a['stos_bytes'] * b['instructions']
+
+    p = Fraction(det(m, w), det(s, w))
+    q = Fraction(det(s, m), det(s, w))
+    require(p > 0 and q > 0 and all(m[k] == p * s[k] + q * w[k]
+            for k in ('instructions', 'movs_bytes', 'stos_bytes')), 'live witness identity')
+
+    def error_bound(money_ns, scrivener_ns, wall_ns, rounding_slack):
+        weighted_ns = p * scrivener_ns + q * wall_ns
+        return (weighted_ns - money_ns - rounding_slack) / (weighted_ns + money_ns)
+
+    ym, ys, yw = (median(r['native']) for r in (money, scrivener, wall))
+    e = error_bound(ym, ys, yw, 0)
+    # Interpolate estimates at the two lower faces of the minimax interval.
+    instruction_weight = (1 - e) * (ys * w['stos_bytes'] - yw * s['stos_bytes']) / det(s, w)
+    stos_weight = (1 - e) * (s['instructions'] * yw - w['instructions'] * ys) / det(s, w)
+    require(min(instruction_weight, stos_weight) >= 0, 'negative witness weight')
+    worst = max(abs((instruction_weight * r['instructions'] + stos_weight * r['stos_bytes'])
+                    / median(case['native']) - 1) for case in rows.values() for r in case['live'])
+    require(worst == e, 'median lower bound not attained across the panel')
+    # Each ceil changes a prediction by less than 1 ns. Allow p+q ns on the two RHS terms.
+    conservative = error_bound(max(money['native']), min(scrivener['native']),
+                               min(wall['native']), p + q)
+    return dict(scrivener_multiplier=str(p), wall_multiplier=str(q),
+                median_continuous_minimax=str(e),
+                median_ceil_lower_bound_ppm_floor=math.floor(error_bound(ym, ys, yw, p + q) * MILLION),
+                observed_range_ceil_lower_bound_ppm_floor=math.floor(conservative * MILLION))
 
 
 def evaluate(root, payload=None):
@@ -246,8 +283,13 @@ def evaluate(root, payload=None):
                 boundaries={k: votes[k] for k in ('agree', 'false_tle', 'false_pass', 'mixed_native')})
         groups[group] = g
     holdout = 'scale_holdout' if 'scale_holdout' in groups else 'contest_holdout'
-    witness = pair_bound(rows, [k for k, v in cases.items() if v['group'] == holdout])
-    return dict(groups=groups, cases=scores, **{holdout.split('_')[0] + '_pair_bound': witness})
+    ids = [k for k, v in cases.items() if v['group'] == holdout]
+    result = dict(groups=groups, cases=scores, **{holdout.split('_')[0] + '_pair_bound': pair_bound(rows, ids)})
+    if holdout == 'scale_holdout':
+        result['retrospective_bounds'] = dict(
+            instructions_movs_stos=scale_live_bound(rows),
+            latency_operand_bytes=pair_bound(rows, ids, 'counters', ('cycles_x16', 'memory_operand_bytes')))
+    return result
 
 
 if __name__ == '__main__':
