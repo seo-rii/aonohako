@@ -81,6 +81,9 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 	if req == nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: "nil request"}
 	}
+	if err := validateJudgeCaseMode(req, r.workMeasurement); err != nil {
+		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
+	}
 	if err := runvalidation.ValidateDisallowedCPUFeatures(req); err != nil {
 		return model.RunResponse{Status: model.RunStatusInitFail, Reason: err.Error()}
 	}
@@ -141,6 +144,7 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 		// A current worker checks the model binding against its own configuration.
 		copy := *forward
 		copy.JudgeClockBinding = clock.ModelBinding()
+		copy.JudgeCaseRequired = r.workMeasurement.JudgeCases != nil
 		forward = &copy
 	}
 	if err := runvalidation.ValidateRemoteRequestSize(forward); err != nil {

@@ -339,6 +339,7 @@ type RunRequest struct {
 	WorkMeasurementTime     bool                      `json:"work_measurement_time,omitempty"`
 	WorkMeasurementJudge    bool                      `json:"work_measurement_judge,omitempty"`
 	JudgeClockBinding       string                    `json:"work_measurement_judge_clock_binding,omitempty"`
+	JudgeCaseRequired       bool                      `json:"work_measurement_judge_case_required,omitempty"`
 	WorkMeasurementShadow   bool                      `json:"work_measurement_shadow,omitempty"`
 	WorkMeasurementPeerTime *PeerTimeRequest          `json:"work_measurement_peer_time,omitempty"`
 	Lang                    string                    `json:"lang"`
