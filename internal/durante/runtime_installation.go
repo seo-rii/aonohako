@@ -15,10 +15,23 @@ import (
 const runtimeSourceCommit = "6847bb210bea0ca11d1bf47704383d6a075da490"
 const runtimeSourceSHA256 = "e2b7d3f1917ff64e644b81efd96a610a3c622f4857c75593fef5d5e581c231f6"
 
-// Updated with the reviewed runtime patch. This is installation consistency,
+// Updated with the reviewed runtime patches. This is installation consistency,
 // not a signature or attestation against an adversarial image administrator.
-const runtimePatchSHA256 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
-const runtimeCodeReplayPatchSHA256 = "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b"
+// Profiles v5 through v11 share the first runtime patch; v7 through v11 also
+// share its code-replay patch. v12 carries the runtime fixes in Durante #96.
+// Each engine_vNN.go selects the pair its worker installs.
+const runtimePatchSHA256V7 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
+const runtimeCodeReplayPatchSHA256V7 = "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b"
+const runtimePatchSHA256V12 = "8b82ea0b82b3bfdfa3cf92a5fb46e4a9cc457fc4e52747412adfbcbf18b70251"
+const runtimeCodeReplayPatchSHA256V12 = "aad0137aadca8a0932ca22f67ea95260880eb6bb93a229fd540c01241dc80d9d"
+
+// RuntimePatchSHA256 and RuntimeCodeReplayPatchSHA256 are the runtime patch
+// digests this worker's installation records.
+const (
+	RuntimePatchSHA256           = runtimePatchSHA256
+	RuntimeCodeReplayPatchSHA256 = runtimeCodeReplayPatchSHA256
+)
+
 const archivedV5V6CodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32a100bf48788c"
 const releaseCore = "lib64/release/libdynamorio.so"
@@ -34,6 +47,8 @@ const (
 	sourceCommitV10  = "191858a02666c1406b871e4974b9072b2c91bb34"
 	engineProfileV11 = "dynamorio-11.3-durante-v11-vm32m"
 	sourceCommitV11  = "74d9188f9fd86c75f079277e6e5278b379a0a1d7"
+	engineProfileV12 = "dynamorio-11.3-durante-v12-vm32m"
+	sourceCommitV12  = "66fbf09e065893376e2720af04f9930883161dfa"
 )
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
@@ -83,7 +98,8 @@ func (i *InstallationIdentity) UnmarshalJSON(data []byte) error {
 }
 
 func (r *Report) ValidInstallationIdentity() bool {
-	return r != nil && r.EngineProfile == EngineProfile && r.Installation.validForSource(SourceCommit, runtimeCodeReplayPatchSHA256)
+	return r != nil && r.EngineProfile == EngineProfile &&
+		r.Installation.validForSource(SourceCommit, runtimePatchSHA256, runtimeCodeReplayPatchSHA256)
 }
 
 // ValidShadowInstallationIdentity checks archived observations against the
@@ -92,30 +108,45 @@ func (r *Report) ValidShadowInstallationIdentity() bool {
 	if r == nil {
 		return false
 	}
-	switch r.EngineProfile {
-	case engineProfileV9:
-		return r.Installation.validForSource(sourceCommitV9, runtimeCodeReplayPatchSHA256)
-	case engineProfileV11:
-		return r.Installation.validForSource(sourceCommitV11, runtimeCodeReplayPatchSHA256)
-	case engineProfileV10:
-		return r.Installation.validForSource(sourceCommitV10, runtimeCodeReplayPatchSHA256)
-	case engineProfileV8:
-		return r.Installation.validForSource(sourceCommitV8, runtimeCodeReplayPatchSHA256)
-	case engineProfileV7:
-		return r.Installation.validForSource(sourceCommitV7, runtimeCodeReplayPatchSHA256)
-	case "dynamorio-11.3-durante-v6-vm32m":
-		return r.Installation.validForSource("238193f90f5896b300563180e7939088ac8c346c", archivedV5V6CodeReplayPatchSHA256)
-	case "dynamorio-11.3-durante-v5-vm32m":
-		// The first worker with shadow support used the same runtime patches
-		// as v6 and a client that did not emit latency bounds.
-		return r.LatencyBound == nil && r.Installation.validForSource("4016b33fc69b93d36a13efbd00953213b8f6317f", archivedV5V6CodeReplayPatchSHA256)
-	default:
+	commit, patch, replay, ok := profileInstallation(r.EngineProfile)
+	if !ok {
 		return false
+	}
+	// The first worker with shadow support used the same runtime patches as
+	// v6 and a client that did not emit latency bounds.
+	if r.EngineProfile == "dynamorio-11.3-durante-v5-vm32m" && r.LatencyBound != nil {
+		return false
+	}
+	return r.Installation.validForSource(commit, patch, replay)
+}
+
+// profileInstallation returns the Durante source and runtime patch pair that
+// the worker emitting an engine profile installed.
+func profileInstallation(profile string) (commit, patch, replay string, ok bool) {
+	switch profile {
+	case engineProfileV12:
+		return sourceCommitV12, runtimePatchSHA256V12, runtimeCodeReplayPatchSHA256V12, true
+	case engineProfileV11:
+		return sourceCommitV11, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+	case engineProfileV10:
+		return sourceCommitV10, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+	case engineProfileV9:
+		return sourceCommitV9, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+	case engineProfileV8:
+		return sourceCommitV8, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+	case engineProfileV7:
+		return sourceCommitV7, runtimePatchSHA256V7, runtimeCodeReplayPatchSHA256V7, true
+	case "dynamorio-11.3-durante-v6-vm32m":
+		return "238193f90f5896b300563180e7939088ac8c346c", runtimePatchSHA256V7, archivedV5V6CodeReplayPatchSHA256, true
+	case "dynamorio-11.3-durante-v5-vm32m":
+		return "4016b33fc69b93d36a13efbd00953213b8f6317f", runtimePatchSHA256V7, archivedV5V6CodeReplayPatchSHA256, true
+	default:
+		return "", "", "", false
 	}
 }
 
-func (i *InstallationIdentity) validForSource(commit, replayPatch string) bool {
-	if i == nil || !i.Unchanged || i.SourceCommit != commit || i.RuntimeSourceCommit != runtimeSourceCommit || i.RuntimePatchSHA256 != runtimePatchSHA256 || i.RuntimeCodeReplayPatchSHA256 != replayPatch {
+func (i *InstallationIdentity) validForSource(commit, patch, replayPatch string) bool {
+	if i == nil || !i.Unchanged || i.SourceCommit != commit || i.RuntimeSourceCommit != runtimeSourceCommit || i.RuntimePatchSHA256 != patch || i.RuntimeCodeReplayPatchSHA256 != replayPatch {
 		return false
 	}
 	for _, digest := range []string{i.LauncherSHA256, i.ClientSHA256, i.CoreSHA256} {

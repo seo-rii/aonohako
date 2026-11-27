@@ -115,6 +115,7 @@ func TestClientSourceMustMatchWorker(t *testing.T) {
 		{"v9 package", []string{sourceCommitV9}, EngineProfile == engineProfileV9},
 		{"v10 package", []string{sourceCommitV10}, EngineProfile == engineProfileV10},
 		{"v11 package", []string{sourceCommitV11}, EngineProfile == engineProfileV11},
+		{"v12 package", []string{sourceCommitV12}, EngineProfile == engineProfileV12},
 		{"unknown source", []string{strings.Repeat("a", 40)}, false},
 		{"empty marker", []string{""}, false},
 		{"trailing newline", []string{SourceCommit + "\n"}, false},
@@ -260,13 +261,13 @@ func TestArchivedShadowInstallationUsesItsOriginalReplayPatch(t *testing.T) {
 		{"dynamorio-11.3-durante-v5-vm32m", "4016b33fc69b93d36a13efbd00953213b8f6317f"},
 	} {
 		i := InstallationIdentity{SourceCommit: historical.source, RuntimeSourceCommit: runtimeSourceCommit,
-			RuntimePatchSHA256: runtimePatchSHA256, RuntimeCodeReplayPatchSHA256: archivedV5V6CodeReplayPatchSHA256,
+			RuntimePatchSHA256: runtimePatchSHA256V7, RuntimeCodeReplayPatchSHA256: archivedV5V6CodeReplayPatchSHA256,
 			LauncherSHA256: strings.Repeat("a", 64), ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
 		r := Report{EngineProfile: historical.profile, Installation: &i}
 		if !r.ValidShadowInstallationIdentity() || r.ValidInstallationIdentity() {
 			t.Fatalf("%s archive identity mismatch", historical.profile)
 		}
-		i.RuntimeCodeReplayPatchSHA256 = runtimeCodeReplayPatchSHA256
+		i.RuntimeCodeReplayPatchSHA256 = runtimeCodeReplayPatchSHA256V7
 		if r.ValidShadowInstallationIdentity() {
 			t.Fatalf("%s accepted a replay patch from a later engine", historical.profile)
 		}
@@ -277,8 +278,10 @@ func TestShadowRecordsPreserveProfileSourcePair(t *testing.T) {
 	identity := InstallationIdentity{RuntimeSourceCommit: runtimeSourceCommit, RuntimePatchSHA256: runtimePatchSHA256,
 		RuntimeCodeReplayPatchSHA256: runtimeCodeReplayPatchSHA256, LauncherSHA256: strings.Repeat("a", 64),
 		ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
-	profiles := map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8, engineProfileV9: sourceCommitV9, engineProfileV10: sourceCommitV10, engineProfileV11: sourceCommitV11}
+	profiles := map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8, engineProfileV9: sourceCommitV9, engineProfileV10: sourceCommitV10, engineProfileV11: sourceCommitV11, engineProfileV12: sourceCommitV12}
 	for profile, expected := range profiles {
+		// Each profile is checked against the runtime its worker installed.
+		_, identity.RuntimePatchSHA256, identity.RuntimeCodeReplayPatchSHA256, _ = profileInstallation(profile)
 		for _, source := range profiles {
 			identity.SourceCommit = source
 			r := Report{EngineProfile: profile, Installation: &identity}
@@ -413,21 +416,33 @@ func TestInstallationIdentityReadsLegacyWithoutQualifyingCurrentRuntime(t *testi
 
 func TestRuntimeInstallationPinsMatchVendoredSource(t *testing.T) {
 	vendor := filepath.Join("..", "..", "third_party")
-	for dir, commit := range map[string]string{"durante": sourceCommitV7, "durante-v8": sourceCommitV8, "durante-v9": sourceCommitV9, "durante-v10": sourceCommitV10, "durante-v11": sourceCommitV11} {
+	for dir, profile := range map[string]string{"durante": engineProfileV7, "durante-v8": engineProfileV8, "durante-v9": engineProfileV9, "durante-v10": engineProfileV10, "durante-v11": engineProfileV11, "durante-v12": engineProfileV12} {
 		data, err := os.ReadFile(filepath.Join(vendor, dir, "UPSTREAM.json"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		var manifest struct {
-			Commit string `json:"commit"`
+			Commit string            `json:"commit"`
+			Files  map[string]string `json:"files"`
 		}
+		commit, patch, replay, _ := profileInstallation(profile)
 		if err := json.Unmarshal(data, &manifest); err != nil || manifest.Commit != commit {
 			t.Fatalf("%s installation source pin differs from vendor manifest", dir)
 		}
+		// verify_durante_vendor.py checks every materialized file against
+		// these digests, so they are the runtime patches the profile installs.
+		if manifest.Files["toolkit/patches/dynamorio-vfork-lifetime.patch"] != patch ||
+			manifest.Files["toolkit/patches/dynamorio-code-replay.patch"] != replay {
+			t.Fatalf("%s runtime patch pins differ from vendor manifest", dir)
+		}
 	}
+	if _, patch, replay, _ := profileInstallation(EngineProfile); patch != runtimePatchSHA256 || replay != runtimeCodeReplayPatchSHA256 {
+		t.Fatal("worker runtime pins differ from its engine profile")
+	}
+	// The base source is the v7 installation.
 	for name, want := range map[string]string{
-		"dynamorio-vfork-lifetime.patch": runtimePatchSHA256,
-		"dynamorio-code-replay.patch":    runtimeCodeReplayPatchSHA256,
+		"dynamorio-vfork-lifetime.patch": runtimePatchSHA256V7,
+		"dynamorio-code-replay.patch":    runtimeCodeReplayPatchSHA256V7,
 	} {
 		data, err := os.ReadFile(filepath.Join(vendor, "durante", "toolkit", "patches", name))
 		if err != nil {

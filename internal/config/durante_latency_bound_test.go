@@ -29,7 +29,7 @@ func TestLoadDuranteLatencyBound(t *testing.T) {
 
 func TestLoadDuranteMemoryOperandBytes(t *testing.T) {
 	configureDuranteResourceLoadTest(t)
-	v11 := durante.EngineProfile == "dynamorio-11.3-durante-v11-vm32m"
+	v11 := durante.EngineProfile == "dynamorio-11.3-durante-v11-vm32m" || durante.EngineProfile == "dynamorio-11.3-durante-v12-vm32m"
 	for _, tc := range []struct {
 		memory, latency        string
 		wantEnabled, wantError bool
