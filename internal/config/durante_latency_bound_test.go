@@ -29,14 +29,14 @@ func TestLoadDuranteLatencyBound(t *testing.T) {
 
 func TestLoadDuranteMemoryOperandBytes(t *testing.T) {
 	configureDuranteResourceLoadTest(t)
-	v11 := durante.EngineProfile == "dynamorio-11.3-durante-v11-vm32m"
+	supportsMemory := durante.EngineProfile == "dynamorio-11.3-durante-v11-vm32m" || durante.EngineProfile == "dynamorio-11.3-durante-v12-vm32m"
 	for _, tc := range []struct {
 		memory, latency        string
 		wantEnabled, wantError bool
 	}{
 		{"", "", false, false}, {"off", "v1", false, false},
 		{"v1", "", false, true}, {"v2", "v1", false, true},
-		{"v1", "v1", v11, !v11},
+		{"v1", "v1", supportsMemory, !supportsMemory},
 	} {
 		t.Setenv("AONOHAKO_DURANTE_MEMORY_OPERAND_BYTES", tc.memory)
 		t.Setenv("AONOHAKO_DURANTE_LATENCY_BOUND", tc.latency)

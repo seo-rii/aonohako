@@ -1,0 +1,31 @@
+{
+  "repository": "https://github.com/seo-rii/durante",
+  "commit": "b43685c76b94a365886031359b032899b009cd1b",
+  "files": {
+    "LICENSE": "11eac69fd9d6761dc41879298d5a6ad81cb8726a8dffafd79986ba4cca8d7d07",
+    "README.md": "f29b8269123d5cb78ae4179bc05440e1525849ebdad431d846496e80c6b89608",
+    "client/.gitignore": "3daaedab6c734d94f59f49c386d73036235def367aa9e28bcc032f414cc79ff9",
+    "client/CMakeLists.txt": "be7cd5bc0fa7e726170d4383d78bdbd59c1be2aa7da3b545a5262dadcae6fcaf",
+    "client/README.md": "d13bfedc03bc1150464ca1477d448052c0cd894997d41e59243f0cf686b70326",
+    "client/cpu_policy.h": "b53e1987b92ab82aa303723fbda68d26aaf6b826172ab0e4b9be6e4c337bd363",
+    "client/cpuid_emulation.h": "d51034590c5aba01a32ff09043cd531b31cd4a155a5bd2abb332fd8248baaa56",
+    "client/cpuid_profile.h": "75cda24c23e45ea450b2d47265928335fc0780cc09ceebeddd13a20136edc216",
+    "client/durante.c": "a2809d91a33776c0fecc012c3c4e9f0321d641bb33cba9bf5cb73aee5989e361",
+    "client/durante_runtime.h": "04e568a34321c8a378b7c0bcc90fc6da0308a8999e243cd2ad9f0bac1a45d9f2",
+    "client/latency_bound.h": "51ea8177b786753196b24e80de74141af62df27395258cc94ab95b6eba4cfed5",
+    "docs/CPUID_PROFILE.md": "841abc28b4a3b889bab2c1e259e9efae3123759332ac65828e5f9260d294b242",
+    "docs/CPU_FEATURE_POLICY.md": "b6276cfb807c973f2caa46aa7f8666a492fb417ead58e3d93945b3fbc40551e3",
+    "docs/LATENCY_BOUND.md": "ba419a222923e0699df5f7967132f9fe61c3b88e7a7c7338f2b41b54da019b69",
+    "docs/ONLINE_WORK_BUDGET.md": "a488459e4e7dc99af0571f483a8acdf4965a8637830c93d4f6404e9a752ddbf5",
+    "docs/PROTOCOL.md": "6f9f9d5262f35201807d1ef2c74daf300add3124619d3c3eff1aa7089eda950b",
+    "tests/protocol_vectors.json": "6a6a783609841ac5f3c4b82ecda67107ea4132563a818bd248765da43aef7ec9",
+    "toolkit/.gitignore": "31085c6019d1701b65db0f964f5b16915ef8ac9235c549ec4cada702331814dc",
+    "toolkit/build_runtime.py": "ebec47f78d54f1e0f11df9d0ae37368d44f0f496b0c9d8776d8e9b1ace144e6b",
+    "toolkit/fetch_sdk.py": "f92f9c9f3a0500b2b38af631cf7483d6476387f97412bef36b02e983f98be430",
+    "toolkit/patches/LICENSE.DynamoRIO": "b359f10e0e5e6f4f8a68b0ad49a2a14904ebc753a26ad8ea2b96a7b16985d73b",
+    "toolkit/patches/dynamorio-code-replay.patch": "aad0137aadca8a0932ca22f67ea95260880eb6bb93a229fd540c01241dc80d9d",
+    "toolkit/patches/dynamorio-vfork-lifetime.patch": "8b82ea0b82b3bfdfa3cf92a5fb46e4a9cc457fc4e52747412adfbcbf18b70251",
+    "toolkit/sdk.lock.json": "476f0dd4a0b28db93d4eb4f9206d5765d2cb53313b179513339947fbddacdd66"
+  },
+  "scope": "Pinned source for native Linux x86-64 CPU feature restrictions, fixed CPUID profiles and opt-in diagnostic measurement; SDK fetched separately with its pinned SHA-256."
+}

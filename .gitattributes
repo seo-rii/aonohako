@@ -1,3 +1,6 @@
 # The repository is stored with LF; every checkout gets LF so the shell and
 # interpreter helper scripts run correctly inside the Linux runtime images.
 * text=auto eol=lf
+
+# Nested upstream patch context contains literal single-space lines.
+third_party/durante-v12/changes.patch whitespace=-blank-at-eol
