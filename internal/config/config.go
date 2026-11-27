@@ -720,6 +720,13 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_JUDGE_CASES: %w", err)
 		}
 	}
+	workMeasurement.AutoJudge, err = parseBoolEnv("AONOHAKO_DURANTE_JUDGE_AUTO", os.Getenv("AONOHAKO_DURANTE_JUDGE_AUTO"), false)
+	if err != nil {
+		return Config{}, err
+	}
+	if workMeasurement.AutoJudge && (!workMeasurement.Judge.VerdictsAllowed || workMeasurement.JudgeCases == nil) {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_JUDGE_AUTO requires judge mode on and validated AONOHAKO_DURANTE_JUDGE_CASES")
+	}
 	execution := ExecutionConfig{
 		WorkMeasurement: workMeasurement,
 		Platform:        runtimePlatform,

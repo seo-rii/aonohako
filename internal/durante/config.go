@@ -41,6 +41,8 @@ type Config struct {
 	Judge JudgePolicy
 	// JudgeCases optionally restricts live judging to exact registered cases.
 	JudgeCases *JudgeCases
+	// AutoJudge applies a matching deciding case to ordinary batch requests.
+	AutoJudge bool
 }
 
 func ParseConfig(familiesValue, drrun, client, dispatch string) (Config, error) {

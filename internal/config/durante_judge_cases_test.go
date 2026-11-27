@@ -13,6 +13,7 @@ func TestLoadDuranteJudgeCases(t *testing.T) {
 	const env = "AONOHAKO_DURANTE_JUDGE_CASES"
 	const stdin = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	configureDuranteModelsLoadTest(t)
+	t.Setenv("AONOHAKO_DURANTE_JUDGE_AUTO", "")
 	t.Setenv(env, "")
 	if err := os.Unsetenv(env); err != nil {
 		t.Fatal(err)
@@ -42,6 +43,12 @@ func TestLoadDuranteJudgeCases(t *testing.T) {
 	if err != nil || cfg.Execution.WorkMeasurement.JudgeCases != nil {
 		t.Fatalf("unset case scope should preserve legacy configuration: %v", err)
 	}
+	t.Run("auto requires scope", func(t *testing.T) {
+		t.Setenv("AONOHAKO_DURANTE_JUDGE_AUTO", "on")
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AONOHAKO_DURANTE_JUDGE_AUTO") {
+			t.Fatalf("enabled without a case scope: %v", err)
+		}
+	})
 	policy, _, err := cfg.Execution.WorkMeasurement.TimePolicyForOptions("CPP20", opts)
 	if err != nil {
 		t.Fatal(err)
@@ -49,11 +56,22 @@ func TestLoadDuranteJudgeCases(t *testing.T) {
 	binding := (durante.WorkClockRequest{TimePolicy: &policy}).ModelBinding()
 	raw := `{"schema":1,"cases":[{"problem_id":"contest-1/a","source_language":"CPP20","stdin_sha256":"` + stdin + `","time_ms":50,"model_binding":"` + binding + `"}]}`
 	t.Setenv(env, raw)
+	t.Run("auto requires deciding mode", func(t *testing.T) {
+		t.Setenv("AONOHAKO_DURANTE_JUDGE_AUTO", "on")
+		cfg, err := Load()
+		if err != nil || !cfg.Execution.WorkMeasurement.AutoJudge {
+			t.Fatalf("could not enable scoped automatic judgment: %v", err)
+		}
+		t.Setenv("AONOHAKO_DURANTE_JUDGE_MODE", "shadow")
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AONOHAKO_DURANTE_JUDGE_AUTO") {
+			t.Fatalf("automatic judgment allowed in shadow mode: %v", err)
+		}
+	})
 	for _, mode := range []string{"on", "shadow"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("AONOHAKO_DURANTE_JUDGE_MODE", mode)
 			cfg, err := Load()
-			if err != nil || !cfg.Execution.WorkMeasurement.JudgeCases.Allows("contest-1/a", "CPP20", stdin, 50, binding) {
+			if err != nil || cfg.Execution.WorkMeasurement.AutoJudge || !cfg.Execution.WorkMeasurement.JudgeCases.Allows("contest-1/a", "CPP20", stdin, 50, binding) {
 				t.Fatalf("case was not admitted with %s: %v", mode, err)
 			}
 		})

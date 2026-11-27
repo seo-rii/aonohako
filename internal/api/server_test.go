@@ -320,6 +320,9 @@ func TestExecuteResolvesPayloadURLsBeforeRunner(t *testing.T) {
 				if req.Binaries[0].DataURL != "" {
 					t.Fatalf("resolved binary data_url was retained: %q", req.Binaries[0].DataURL)
 				}
+				if !req.SkipAutoJudge || req.WorkMeasurementJudge {
+					t.Fatal("URL materialization lost the pre-admission native route")
+				}
 				if req.SPJ == nil || req.SPJ.Binary == nil {
 					t.Fatalf("spj was not preserved: %+v", req.SPJ)
 				}

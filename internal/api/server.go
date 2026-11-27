@@ -601,10 +601,15 @@ func (s *Server) executeHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "unsupported_capability", "pipeline-v1 is not supported by this execution transport")
 		return
 	}
+	req.SkipAutoJudge = s.cfg.TrustedRunnerIngress && s.cfg.Execution.Platform.ExecutionTransport == platform.ExecutionTransportEmbedded &&
+		r.Header.Get(execute.NativeJudgeHeader) == "v1"
 	if err := execute.ApplyJudgeWorkLimits(&req, s.cfg.Execution); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	// Preserve this decision even if URL resolution below materializes inputs
+	// or binaries into the same inline bytes as a registered case.
+	req.SkipAutoJudge = true
 	if err := runvalidation.Validate(&req); err != nil {
 		writeJSONErrorMessage(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return

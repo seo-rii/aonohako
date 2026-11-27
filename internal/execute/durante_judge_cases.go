@@ -8,11 +8,37 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"aonohako/internal/config"
 	"aonohako/internal/durante"
 	"aonohako/internal/model"
 	"aonohako/internal/profiles"
 	"aonohako/internal/runvalidation"
 )
+
+// NativeJudgeHeader tells the worker that its upstream already chose native
+// judging. It leaves explicit diagnostic requests and native shadowing intact.
+const NativeJudgeHeader = "X-Aonohako-Native-Judge"
+
+// Preserve the ordinary request unless the explicit scoped path admits a copy
+// using this deployment's raw watchdogs and effective runtime options.
+func automaticJudgeRequest(req *model.RunRequest, cfg durante.Config, defaults config.RuntimeTuningConfig, named map[string]config.RuntimeTuningConfig) *model.RunRequest {
+	if !cfg.AutoJudge || cfg.JudgeCases == nil || !cfg.Judge.VerdictsAllowed || !ordinaryMeasurementRequest(req) ||
+		req.SkipAutoJudge || req.IgnoreTLE || req.ProblemID == "" {
+		return req
+	}
+	tuning, err := resolveRuntimeTuning(req, defaults, named)
+	if err != nil {
+		return req
+	}
+	candidate := *req
+	candidate.WorkMeasurement, candidate.WorkMeasurementTime, candidate.WorkMeasurementJudge = true, true, true
+	candidate.JudgeCaseRequired = true
+	admitted, err := resolveJudgeWorkLimits(&candidate, cfg, tuning)
+	if err != nil {
+		return req
+	}
+	return admitted
+}
 
 func validateJudgeCaseMode(req *model.RunRequest, cfg durante.Config) error {
 	if req.JudgeCaseRequired && (cfg.JudgeCases == nil || !req.WorkMeasurementJudge || req.WorkMeasurementShadow) {
