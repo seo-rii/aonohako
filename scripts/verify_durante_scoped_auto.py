@@ -36,9 +36,10 @@ def run(args):
     plan = load(root / "plan.json")
     frozen = load(args.frozen)
     qualified = load(args.qualified)
-    scope = qualified.get("judge_cases", qualified)
-    if "judge_cases" in qualified:
-        require(qualified["frozen_sha256"] == digest(args.frozen), "result came from a different calibration")
+    scope = qualified["judge_cases"]
+    require(qualified["frozen_sha256"] == digest(args.frozen) and
+            qualified["qualified_contest_cases"] == len(scope["cases"]),
+            "qualification result differs from the frozen calibration or its released scope")
     require(registered["plan"] == plan and digest(root / "plan.json") == frozen["plan_sha256"]
             and digest(root / "corpus/manifest.json") == plan["manifest_sha256"] == frozen["manifest_sha256"]
             and digest(root / "runtime.squashfs") == plan["runtime_sha256"] == frozen["runtime_sha256"],

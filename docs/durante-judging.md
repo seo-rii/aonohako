@@ -40,7 +40,7 @@ illustrative model digest with the binding from your calibration receipt).
 }
 ```
 
-Obtain the binding from `execution.clock.model_binding` in a trusted clock
+Obtain the binding from `work_measurement_execution.clock.model_binding` in a trusted clock
 receipt for the deployment's schema-2 model and effective runtime options.
 The deployment validates every entry at startup. Supply 1–256 distinct cases
 within 64 KiB. The raw resource policy must grant more CPU and wall time than
