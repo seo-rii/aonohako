@@ -1,0 +1,503 @@
+{
+  "schema": 1,
+  "authority": "diagnostic_only",
+  "aonohako_commit": "0a64275ddf939d89717274d94a3b5eb357716466",
+  "durante_commit": "b43685c76b94a365886031359b032899b009cd1b",
+  "cases_sha256": "be93de779e95f66b1127c2ab08a77c296f07d7bbf706ccec03706f3b6fc25317",
+  "groups": {
+    "scale_holdout": 6
+  },
+  "sources_sha256": {
+    "aonohako": {
+      "docs/durante/gce-v12-clock-transfer/plan.json": "5a7485523b4b907dc1e18990312eb748ac9658f97f3bfcd12bd5021c0be0c827",
+      "docs/durante/gce-v12-clock-transfer/cases.json": "090adc4eb9b56a80887ffe75ef608ccfeaac9d4a5cb14a15048f2ba0193ef000",
+      "docs/durante/gce-v12-clock-transfer/receipts.jsonl.gz": "616bb8442b71f1437933e4bbfd5f87fa90996ce43056d203a96f6afdb0ef03a9"
+    },
+    "durante": {
+      "experiments/contest_scale/plan.json": "40f8f8093ce8e3f365ced484525ac3dfbc5046fe0e717dca70f617e35708098e",
+      "experiments/contest_scale/variants.py": "d9b3dd59f4fc2685da880f92504a22fe53d291e39c4792702766fde3308f68df",
+      "experiments/contest_accuracy/wall.cpp": "a00651e889a07a0634b51068c1992026d4b297a0d1c2898411ac980a81d616e7",
+      "experiments/contest_warm/scrivener.cpp": "41642c667a6be331e6003c7c5bf752ffe3d2fa2c7bb2604a164c4829923176da",
+      "experiments/contest_accuracy/money.cpp": "892d2912f1bad9cdef3c49756ffa2bbfe6a0e0847fa56ce99dbafe7657008b9a"
+    }
+  },
+  "primary_model": "v7_split_gce",
+  "models": {
+    "v7_split_gce": {
+      "kind": "live",
+      "field": "frozen_external_rounds.split-gce.policy",
+      "weights_ns": {
+        "instructions": "41931141/200000000",
+        "movs_bytes": "3074717/200000000",
+        "stos_bytes": "5687197/250000000"
+      }
+    },
+    "v11_latency_memory": {
+      "kind": "counters",
+      "field": "models.cpp20_train_only.latency_memory.weights_ns",
+      "weights_ns": {
+        "cycles_x16": "487136003224778667993257137886440231724460011145236705560886705124000/25101905128725813306394866699319144848698923740306171229691994626199203",
+        "memory_operand_bytes": "39348045374006158597826450670474644171765713848006688256332520795364000/25101905128725813306394866699319144848698923740306171229691994626199203"
+      }
+    },
+    "v11_split": {
+      "kind": "live",
+      "field": "models.cpp20_train_only.instruction_movs_stos.weights_ns",
+      "weights_ns": {
+        "instructions": "95633317467381144678337970515148139745945867664488000/383874947239330729548061365718852662568127281838390067",
+        "movs_bytes": "106995566354242282912516310350996812416658714139328077952625/4293568604548570230043605275946790928053724081930364830875648",
+        "stos_bytes": "0"
+      }
+    },
+    "v11_wide_live": {
+      "kind": "live",
+      "method": "weighted-work-nanoseconds-v1",
+      "fit": "Nonnegative no-intercept least squares minimizing equal-case squared relative error over all 21 historical v11 native medians and componentwise metered medians. Round to nearest numerator with ties to even, at least one. All 21 historical inputs are training repeats for this model. Evaluate transfer independently on the 12 contest holdouts.",
+      "training_cases": [
+        "branch/1",
+        "branch/2",
+        "branch/4",
+        "branch_scan/1",
+        "branch_scan/2",
+        "cycle_walk/1",
+        "cycle_walk/2",
+        "integer/1",
+        "integer/2",
+        "integer/4",
+        "mod_inverse/1",
+        "mod_inverse/2",
+        "rep_copy/1",
+        "rep_copy/2",
+        "rep_copy/4",
+        "rep_fill/1",
+        "rep_fill/2",
+        "rep_fill/4",
+        "sort/1",
+        "sort/2",
+        "sort/4"
+      ],
+      "independent_group": "contest_holdout",
+      "ns_denominator": 1000000000,
+      "numerators": {
+        "instructions": 201189411,
+        "rep_bytes": 16016113
+      },
+      "weights_ns": {
+        "instructions": "201189411/1000000000",
+        "rep_bytes": "16016113/1000000000"
+      }
+    },
+    "short_contest_live": {
+      "kind": "live",
+      "method": "weighted-work-nanoseconds-v1",
+      "fit": "Use only the 12 first-guest short contest inputs. For case i, r_i is the mean of the two exact unrounded v11_wide_live predictions divided by its seven-run native median. Multiply both coefficients by sum(r_i)/sum(r_i^2), then round to the nearest 1e-9 with ties to even and a positive minimum numerator of one.",
+      "training_cases": [
+        "money/dense_scrambled",
+        "money/mostly_dominated",
+        "money/narrow_windows",
+        "plane/scattered_services",
+        "plane/simultaneous",
+        "plane/tight_transfers",
+        "rice/duplicate_clusters",
+        "rice/scattered_gaps",
+        "rice/wide_coordinates",
+        "wall/crossed_intervals",
+        "wall/nested_ranges",
+        "wall/scattered_points"
+      ],
+      "independent_group": "scale_holdout",
+      "factor": "19557103338228310812724848828858408093745501454791736176464040138444356063789535132503469524000000000000/32015093832026262617043151648485413977399034502451807713156365830963522830881221507827996967051187028607",
+      "ns_denominator": 1000000000,
+      "numerators": {
+        "instructions": 122900846,
+        "rep_bytes": 9783784
+      },
+      "weights_ns": {
+        "instructions": "61450423/500000000",
+        "rep_bytes": "1222973/125000000"
+      }
+    }
+  },
+  "native_reference": "Median of seven unnormalized native Aonohako cpu_time_ns receipts, excluding warmup. Retain cpu_accounting.selected_source, wait4 user/system and process-clock evidence.",
+  "prediction": "Ceil the exact dot product in ns for each metered repetition. Freeze all coefficients.",
+  "accuracy": "A case passes at 20 percent only if both predictions lie within the inclusive band.",
+  "deadlines": "Floor 80 percent and ceil 120 percent of the native median to whole milliseconds. Strictly greater than the limit is a timeout. Compare against all seven native votes, report unanimous false passes, unanimous false timeouts and mixed native decisions.",
+  "stability": "Retain every repetition, component deltas, native minimum, median, maximum, and native (maximum minus minimum) divided by median. Describe the subset with a native median of at least 20 ms and spread at most 10 percent. Retain all cases for primary scoring.",
+  "lower_bound": "Among ordered scale holdout pairs, take R = min(native slow) / max(native fast). For instructions, MOVS bytes and STOS bytes on live samples, take C = max over features of max(slow) / min(fast). Ignore 0/0, skip a pair with positive/zero. Report the largest positive (R-C)/(R+C) as a retrospective lower bound on worst relative error of a nonnegative homogeneous split clock, without selecting a model.",
+  "schedule_seed": "aonohako-v12-clock-transfer-scale-1",
+  "schedule": [
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "warmup",
+      "rep": 0
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "native",
+      "rep": 1
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "live",
+      "rep": 1
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "native",
+      "rep": 2
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "counters",
+      "rep": 1
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "native",
+      "rep": 3
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "native",
+      "rep": 4
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "native",
+      "rep": 5
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "counters",
+      "rep": 2
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "native",
+      "rep": 6
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "live",
+      "rep": 2
+    },
+    {
+      "case_id": "scrivener/bookmarked_chapters",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "wall/scatter_repairs",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "wall/phase_envelopes",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "money/warehouse_lots",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "money/terraced_bids",
+      "kind": "native",
+      "rep": 7
+    },
+    {
+      "case_id": "scrivener/interwoven_pages",
+      "kind": "native",
+      "rep": 7
+    }
+  ],
+  "source_panel_commit": "9a2104d062554789e0c4519672cbcd1442f30956",
+  "capture_stdout_bytes": 1048576,
+  "capture_reason": "Retain the entire expected stdout for hashing; the largest Scrivener answer is 960000 bytes. The worker uses the same capture budget for all six inputs and modes.",
+  "additional_comparison": "Compare short_contest_live to v11_wide_live and the unchanged primary v7 clock on all six longer inputs. The short-guest times prompted this second experiment. Its coefficients and schedule precede all second-guest results.",
+  "scale_transfer_programs": {
+    "seen_in_short_fit": [
+      "wall",
+      "money"
+    ],
+    "unseen_in_short_fit": [
+      "scrivener"
+    ]
+  }
+}

@@ -67,8 +67,14 @@ def load_samples(root, plan, cases, files, payload):
             arm = 'native' if kind == 'warmup' else kind
             key = (case_id, arm)
             if key not in request_hashes:
-                request_hashes[key] = (hashlib.sha256(guest.make_body(c, arm, payload)).hexdigest()
-                                       if payload is not None else r['request_sha256'])
+                if payload is None:
+                    request_hashes[key] = r['request_sha256']
+                else:
+                    body = guest.make_body(c, arm, payload)
+                    if 'capture_stdout_bytes' in plan:
+                        from scale.guest import with_capture
+                        body = with_capture(body)
+                    request_hashes[key] = hashlib.sha256(body).hexdigest()
             require(re.fullmatch(r'[a-f0-9]{64}', r['request_sha256']) and
                     r['request_sha256'] == request_hashes[key] and r['service_port'] == guest.PORTS[arm],
                     f'HTTP request differs at {seq}')
@@ -163,8 +169,14 @@ def pair_bound(rows, ids):
                 error = (native_ratio - counter_ratio) / (native_ratio + counter_ratio)
                 if error > best_error:
                     best_error = error
+                    # Ceil can add less than one nanosecond to the slow prediction.
+                    slow_ns = min(rows[slow]['native'])
+                    fast_ns = max(rows[fast]['native'])
+                    rounded_bound = max(Fraction(0), (slow_ns - counter_ratio * fast_ns - 1) /
+                                        (slow_ns + counter_ratio * fast_ns))
                     best = dict(slow=slow, fast=fast, native_ratio=str(native_ratio),
-                                max_counter_ratio=str(counter_ratio), lower_bound_ppm=ppm(error))
+                                max_counter_ratio=str(counter_ratio), lower_bound_ppm=ppm(error),
+                                ceil_lower_bound_ppm_floor=math.floor(rounded_bound * MILLION))
     return best
 
 
@@ -179,7 +191,11 @@ def evaluate(root, payload=None):
         digest, name = line.split('  ', 1)
         files[name.removeprefix('./')] = digest
     for path in ('plan.json', 'cases.json', 'guest.py', 'guest.sh'):
-        require(files[path] == hashlib.sha256((root / path).read_bytes()).hexdigest(), f'changed frozen {path}')
+        local = root / path if (root / path).is_file() else HERE / path
+        require(files[path] == hashlib.sha256(local.read_bytes()).hexdigest(), f'changed frozen {path}')
+    if 'capture_stdout_bytes' in plan:
+        require(files['base_guest.py'] == hashlib.sha256((HERE / 'guest.py').read_bytes()).hexdigest()
+                and plan['capture_stdout_bytes'] == 1 << 20, 'scale guest or capture contract differs')
     for c in cases.values():
         for role in ('binary', 'stdin', 'stdout'):
             require(files[c[role + '_path']] == c[role + '_sha256'], 'case differs from payload')
@@ -227,8 +243,9 @@ def evaluate(root, payload=None):
                 median_case_max_abs_error_ppm=round(median(worst)), worst_abs_error_ppm=max(worst),
                 boundaries={k: votes[k] for k in ('agree', 'false_tle', 'false_pass', 'mixed_native')})
         groups[group] = g
-    return dict(groups=groups, cases=scores,
-                contest_pair_bound=pair_bound(rows, [k for k, v in cases.items() if v['group'] == 'contest_holdout']))
+    holdout = 'scale_holdout' if 'scale_holdout' in groups else 'contest_holdout'
+    witness = pair_bound(rows, [k for k, v in cases.items() if v['group'] == holdout])
+    return dict(groups=groups, cases=scores, **{holdout.split('_')[0] + '_pair_bound': witness})
 
 
 if __name__ == '__main__':
@@ -243,4 +260,4 @@ if __name__ == '__main__':
         path.write_text(json.dumps(result, indent=2) + '\n')
     else:
         require(json.loads(path.read_text()) == result, 'results differ from the raw receipts')
-        print('Verified all 396 scheduled executions and frozen model comparisons.')
+        print('Verified every scheduled execution and frozen model comparison.')

@@ -4646,6 +4646,7 @@
     "fast": "rice/scattered_gaps",
     "native_ratio": "6957/5309",
     "max_counter_ratio": "47738499/45457478",
-    "lower_bound_ppm": 110242
+    "lower_bound_ppm": 110242,
+    "ceil_lower_bound_ppm_floor": 110242
   }
 }
