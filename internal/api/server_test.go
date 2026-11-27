@@ -26,6 +26,7 @@ import (
 
 	"aonohako/internal/compile"
 	"aonohako/internal/config"
+	"aonohako/internal/durante"
 	"aonohako/internal/execute"
 	"aonohako/internal/model"
 	"aonohako/internal/platform"
@@ -694,6 +695,33 @@ func TestExecuteAdmitsWorkMeasurementShadow(t *testing.T) {
 	s.Handler().ServeHTTP(result, httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader(body)))
 	if result.Code != http.StatusOK || !strings.Contains(result.Body.String(), `"status":"Accepted"`) {
 		t.Fatalf("shadow /execute response = %d %s", result.Code, result.Body.String())
+	}
+}
+
+func TestExecuteRejectsUnqualifiedClockBeforePayloadFetch(t *testing.T) {
+	cfg := configForTest(t)
+	var err error
+	cfg.Execution.WorkMeasurement.JudgeCases, err = durante.ParseJudgeCases(fmt.Sprintf(
+		`{"schema":1,"cases":[{"problem_id":"p","source_language":"CPP20","stdin_sha256":"%x","time_ms":50,"model_binding":"work-clock-v1:sha256:%x"}]}`,
+		sha256.Sum256(nil), sha256.Sum256([]byte("model"))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewWithServices(cfg, compile.New(), executeRunnerStub{run: func(context.Context, *model.RunRequest, execute.Hooks) model.RunResponse {
+		t.Fatal("unqualified request reached the runner")
+		return model.RunResponse{}
+	}})
+	for _, tc := range []struct{ options, reason string }{
+		{`"work_measurement":true,"work_measurement_judge":true,"work_measurement_time":true,"work_measurement_limits":{"cpu_time_ms":500,"wall_time_ms":1000,"memory_mb":256},"expected_stdout_url":"invalid-url"`, "inline stdin"},
+		{`"work_measurement":true,"work_measurement_peer_time":{"version":2}`, "deciding peer clocks"},
+		{`"work_measurement_judge_case_required":true`, "judge_case_required"},
+	} {
+		body := `{"lang":"CPP20","problem_id":"p","binaries":[{"name":"Main","data_b64":"YQ=="}],"limits":{"time_ms":50,"memory_mb":64},` + tc.options + `}`
+		result := httptest.NewRecorder()
+		s.Handler().ServeHTTP(result, httptest.NewRequest(http.MethodPost, "/execute", strings.NewReader(body)))
+		if result.Code != http.StatusBadRequest || !strings.Contains(result.Body.String(), tc.reason) {
+			t.Errorf("status %d, response %s, want scope rejection containing %q", result.Code, result.Body.String(), tc.reason)
+		}
 	}
 }
 

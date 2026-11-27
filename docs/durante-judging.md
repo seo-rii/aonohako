@@ -16,6 +16,46 @@ a verdict *policy* layered on the existing envelope and time conversion. It is
 enabled only for families and runtimes the operator has qualified, and only when
 a request asks for it. It does not touch ordinary requests.
 
+## Restricting a dedicated judge to qualified cases
+
+Set `AONOHAKO_DURANTE_JUDGE_CASES` on both the control plane and worker to
+restrict explicit Durante judging to a finite list of tested deadlines.
+Each entry binds the organizer's problem ID, exact stdin bytes, source
+language, requested CPU time limit in milliseconds and effective work-clock
+model. For example, an entry for empty stdin has this shape (replace the
+illustrative model digest with the binding from your calibration receipt).
+
+```json
+{
+  "schema": 1,
+  "cases": [
+    {
+      "problem_id": "contest/final/a",
+      "source_language": "CPP20",
+      "stdin_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "time_ms": 250,
+      "model_binding": "work-clock-v1:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ]
+}
+```
+
+Obtain the binding from `execution.clock.model_binding` in a trusted clock
+receipt for the deployment's schema-2 model and effective runtime options.
+The deployment validates every entry at startup. Supply 1–256 distinct cases
+within 64 KiB. The raw resource policy must grant more CPU and wall time than
+each registered deadline. Give both watchdogs enough headroom for instrumentation.
+
+This scope supports standalone CPP20 batch requests with one inline static
+x86-64 executable, inline input and an ordinary expected stdout comparison.
+The organizer supplies the expected output. The registry does not key on the
+submission's ELF hash, so qualification should exercise independent solutions,
+including wrong answers and solutions that cross the clock limit. Explicit
+judge requests outside the configured scope are rejected. Ordinary requests
+retain their native verdict, and an absent registry preserves the existing
+operator opt-in behavior. Register only cases actually qualified for that
+specific model and deadline.
+
 ## Automatic observations alongside native grading
 
 Set `AONOHAKO_DURANTE_OBSERVE=on` to collect work for supported submissions

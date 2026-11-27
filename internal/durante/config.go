@@ -39,6 +39,8 @@ type Config struct {
 	// Judge turns qualified diagnostic observations into actual verdicts. It is
 	// disabled unless explicitly configured; see docs/durante-judging.md.
 	Judge JudgePolicy
+	// JudgeCases optionally restricts live judging to exact registered cases.
+	JudgeCases *JudgeCases
 }
 
 func ParseConfig(familiesValue, drrun, client, dispatch string) (Config, error) {

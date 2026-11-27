@@ -711,6 +711,15 @@ func Load() (Config, error) {
 	if err := workMeasurement.Judge.Validate(workMeasurement); err != nil {
 		return Config{}, fmt.Errorf("durante judge configuration: %w", err)
 	}
+	if raw, present := os.LookupEnv("AONOHAKO_DURANTE_JUDGE_CASES"); present {
+		workMeasurement.JudgeCases, err = durante.ParseJudgeCases(raw)
+		if err == nil {
+			err = workMeasurement.ValidateJudgeCases()
+		}
+		if err != nil {
+			return Config{}, fmt.Errorf("AONOHAKO_DURANTE_JUDGE_CASES: %w", err)
+		}
+	}
 	execution := ExecutionConfig{
 		WorkMeasurement: workMeasurement,
 		Platform:        runtimePlatform,

@@ -10,6 +10,9 @@ import (
 
 // ApplyJudgeWorkLimits applies the deployment policy before HTTP queue admission.
 func ApplyJudgeWorkLimits(req *model.RunRequest, execution config.ExecutionConfig) error {
+	if err := validateJudgeCaseMode(req, execution.WorkMeasurement); err != nil {
+		return err
+	}
 	if !req.WorkMeasurementJudge {
 		return nil
 	}
@@ -40,14 +43,26 @@ func candidateJudgeWorkLimits(req *model.RunRequest, cfg durante.Config) (*model
 }
 
 func resolveJudgeWorkLimits(req *model.RunRequest, cfg durante.Config, tuning config.RuntimeTuningConfig) (*model.RunRequest, error) {
-	if !req.WorkMeasurementJudge || !req.WorkMeasurementTime || !req.WorkMeasurement || req.WorkMeasurementShadow || req.WorkMeasurementClock != nil {
+	if !req.WorkMeasurementJudge {
+		return req, nil
+	}
+	if !req.WorkMeasurementTime || !req.WorkMeasurement || req.WorkMeasurementShadow || req.WorkMeasurementClock != nil {
+		if cfg.JudgeCases != nil {
+			return nil, fmt.Errorf("judge case policy requires ordinary work_measurement_judge with work_measurement and work_measurement_time")
+		}
 		return req, nil
 	}
 	candidate, err := candidateJudgeWorkLimits(req, cfg)
 	if err != nil {
 		return nil, err
 	}
-	if effectiveWorkClock(candidate, cfg, tuning) == nil {
+	clock := effectiveWorkClock(candidate, cfg, tuning)
+	if cfg.JudgeCases != nil {
+		if err := validateJudgeCase(candidate, cfg.JudgeCases, clock); err != nil {
+			return nil, err
+		}
+	}
+	if clock == nil {
 		if req.WorkMeasurementLimits == nil {
 			return nil, fmt.Errorf("work_measurement_limits is required unless a deciding online Durante clock is bound to the operator's raw envelope")
 		}
