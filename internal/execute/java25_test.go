@@ -20,11 +20,6 @@ func TestJava25CommandUsesDedicatedRuntimeAndJavaResourceLimits(t *testing.T) {
 		tuning := config.DefaultRuntimeTuningConfig()
 		tuning.JavaStackSizeKB = 8192
 		legacy := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java", req, tuning)
-		for i, arg := range legacy {
-			if arg == "-XX:-UseCompressedClassPointers" {
-				legacy[i] = "-XX:CompressedClassSpaceSize=64m"
-			}
-		}
 		args := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java25", req, tuning)
 		if len(args) == 0 || args[0] != filepath.Join(profiles.Java25Home, "bin", "java") {
 			t.Fatalf("Java 25 command = %v", args)
@@ -37,8 +32,12 @@ func TestJava25CommandUsesDedicatedRuntimeAndJavaResourceLimits(t *testing.T) {
 				t.Errorf("Java 25 command missing %s: %v", flag, args)
 			}
 		}
-		if containsArg(args, "-XX:-UseCompressedClassPointers") {
-			t.Fatalf("Java 25 disables compressed class pointers and emits CDS startup warnings: %v", args)
+		for name, command := range map[string][]string{"Java": legacy, "Java 25": args} {
+			// Disabling compressed class pointers turns off the default CDS
+			// archive, and JDK 25 then also warns on stdout.
+			if containsArg(command, "-XX:-UseCompressedClassPointers") {
+				t.Fatalf("%s disables compressed class pointers: %v", name, command)
+			}
 		}
 	}
 }
