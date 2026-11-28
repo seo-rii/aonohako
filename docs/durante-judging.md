@@ -93,6 +93,13 @@ controller built for the matching engine. Run this from the repository root.
 python3 -B docs/durante/gce-qualified-judge/controller_env.py --engine v13
 ```
 
+The v13 controller export includes the original range-minimum input at 183 ms
+and shortest-paths input at 65 ms. It routes the original 203 ms inversion
+case to native judging after four correct implementations received false
+timeouts on two CPU-pinned boots. Regenerate earlier controller settings to
+pick up the smaller case list. The sealed worker retains its historical
+schema-1 settings. [203 ms inversion trials](durante/gce-original-inversion-boundary/README.md)
+
 Use `--engine v12` for the v12 worker. The helper leaves automatic judging off.
 Enable it on the updated controller and forward to the matching sealed worker
 with its original schema-1 settings, automatic judging off and ingress
@@ -110,7 +117,7 @@ worker with trusted runner ingress preserves their selected route even when
 its own registry differs.
 
 The mixed-version HTTP test routes ordinary requests from the new controller
-to the worker used in the pinned GCE pilot. All three registered cases
+to the worker used in the original pinned GCE pilot. Its three then-registered cases
 produced AC for the fast solution, WA for the incorrect solution and an
 in-flight Durante TLE for the slow solution. Six default or unregistered
 requests used native judging, and a worker without the scope refused the

@@ -25,10 +25,16 @@ def controller_environment(engine):
     registry = json.loads(environment[REGISTRY])
     if registry["schema"] != 1 or not registry["cases"]:
         raise ValueError("expected the sealed worker's schema-1 registry")
+    cases = registry["cases"]
+    if engine == "v13":
+        # Additional correct implementations of the original 203 ms inversion
+        # case timed out on both CPU-pinned boots. Only export the two remaining
+        # qualified pilot cases for ordinary routing on this worker.
+        cases = [case for case in cases if case["problem_id"] in ("range_min", "shortest_paths")]
     limits = {name: NOMINAL[name] for name in ("memory_mb", "wall_time_ms")}
     environment[REGISTRY] = json.dumps({
         "schema": 2,
-        "cases": [{**case, **limits} for case in registry["cases"]],
+        "cases": [{**case, **limits} for case in cases],
     })
     return environment
 

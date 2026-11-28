@@ -2,7 +2,7 @@
 
 ## Transfer results
 
-Across two CPU-pinned Milan guests all six registered gates passed. The v13 environment covers range minimum at 183 ms, shortest paths at 65 ms, and inversion counting at 203 ms, for the three exact original inputs. The exported clock binding is `work-clock-v1:sha256:45bbdab9d7b82b05a27bc55cae38ab7811e6699542f792634f374e2036aecb69`. [Replayed results](results.json) · [Guest identities, evidence hashes and cleanup](evidence/infrastructure.json)
+Across two CPU-pinned Milan guests all six registered gates passed. The archived worker environment covers range minimum at 183 ms, shortest paths at 65 ms, and inversion counting at 203 ms, for the three exact original inputs. The exported clock binding is `work-clock-v1:sha256:45bbdab9d7b82b05a27bc55cae38ab7811e6699542f792634f374e2036aecb69`. [Replayed results](results.json) · [Guest identities, evidence hashes and cleanup](evidence/infrastructure.json)
 
 | Observation | v12 | v13 |
 |---|---:|---:|
@@ -55,7 +55,7 @@ python3 -B "$study/verify.py" --operator-env
 
 A separate offline container ran the sealed v13 binary as two HTTP servers, an auto-enabled controller and its worker. Twelve ordinary requests covered AC, WA and an in-flight TLE for every registered problem, plus native execution on an unregistered problem ID. To repeat it, mount the extracted image at `/opt/durante`, provide executable tmpfs at `/work` and `/tmp`, and run `smoke_auto.py --payload PATH --output NEW.json` on the authenticated payload from `prepare.py`. [Automatic routing receipts](evidence/automatic-routing.json.gz)
 
-For current automatic judging, use the sealed v13 binary as the worker with its schema-1 environment and automatic routing off. Build the controller with the v13 tag and export its schema-2 configuration with `python3 -B docs/durante/gce-qualified-judge/controller_env.py --engine v13`. Enable `AONOHAKO_DURANTE_JUDGE_AUTO=on` on that controller. It also matches the measured nominal 768 MiB memory and 60,000 ms wall limits. [Controller setup](../../durante-judging.md)
+For current automatic judging, use the sealed v13 binary as the worker with its schema-1 environment and automatic routing off. Build the controller with the v13 tag and export its schema-2 configuration with `python3 -B docs/durante/gce-qualified-judge/controller_env.py --engine v13`. Enable `AONOHAKO_DURANTE_JUDGE_AUTO=on` on that controller. It also matches the measured nominal 768 MiB memory and 60,000 ms wall limits. The current controller export selects range minimum and shortest paths. Additional correct inversion implementations produced repeatable false timeouts at 203 ms, so regenerate earlier controller settings to route that case natively. [Controller setup](../../durante-judging.md) · [Original-input boundary measurements](../gce-original-inversion-boundary/README.md)
 
 ### Building and selecting the measured image
 
