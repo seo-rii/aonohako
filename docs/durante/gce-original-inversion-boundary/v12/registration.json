@@ -1,0 +1,44 @@
+{
+  "archive_sha256": "4d859339ac2bc19e3d0cca6ed690c15afd2bdf087d7659ed053ea2bb55dd1d5d",
+  "expected_rows": {
+    "clock": 35
+  },
+  "payload": {
+    "fixed_guest.py": "843d48344b30f38d46d850a46200b3b6eff930e3ee4d20773ea65fe50e10ea67",
+    "guest.py": "68d17706ff74798d88885c26f84d4681f21766e7bd285d7d690622a884e20549",
+    "guest.sh": "11f731705680b24673a86aeb803bf0826fbd3a33b04958addd66084816584511",
+    "installation.json": "094d331ce7e4e81c699534aa77b0fadcbd139fb51747e007f38611b7df3b136f",
+    "inversion_guest.py": "3f7bd1c4266d2a2378b9f81fdaa0e59c5622c52020492a13e76dd85aa0b5491f",
+    "pilot/corpus/inversions-fast": "95ce143d7b5dc7b5e5d91b595e31206988b0368241907ba6f5897cfe88b0fa87",
+    "pilot/corpus/inversions-hybrid1024": "759e3ba6eda52e53787398a210a047a71aa993aeea79a597396c58854f8b8bf6",
+    "pilot/corpus/inversions-slow": "fac24fff5f68c64372be7d6a1664c39cdda5003d2b9ace6d7f02c852afd13e09",
+    "pilot/corpus/inversions-sqrt1024": "b851aceebe60652996f530383f4d75a5f0daaf08b7501faa7d296f0052b86f15",
+    "pilot/corpus/inversions-wrong": "811ca8cdfddbfe7ad2778f9673053af17acadd874bbb23b119345545f20cee2a",
+    "pilot/guest.py": "a5cd6da9b6986561dd0424bd038521d2913c6a668f932478c0947731691045b9",
+    "pilot/guest.sh": "3aa64575960cd8196541f8834642ce84f16a63759208d7d6f681a43223e960e0",
+    "pilot/scripts/verify_durante_native_boundaries.py": "0c8d3fd2d83eaad08f18afa313db1fd74b7a93621266e6636b653d5127efa623",
+    "pilot/scripts/verify_durante_observation.py": "a70482a22947ce2db01892d185c560ef8c29d717f06ae8180ee0b2d57f4f6ccb",
+    "pilot/v12_guest.py": "b76d125703cdf94433e561622f2c86a12d7149bb3c2de924315b8b6616e89c53",
+    "plan.json": "c9750e166de82cd469058994670ba72678c75684236d61c9746fbc6fb0cb2c7d",
+    "plan.py": "209c6d28513af13cf7decafc1b71baa513911321260f165118d6e1ae5e3a6327",
+    "primary-thresholds.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+    "runtime.squashfs": "170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c"
+  },
+  "requests": {
+    "original-fast/contest/native": "c1271d23ca66ab9d03e52ab58cebceae1ccf8cb89c3edbbd47594e3aeccaff6a",
+    "original-fast/contest/shared": "0235419d2b1c4af7bfdab344c8e09fb69cd931e4dc30b275d67fc523f865ca35",
+    "original-hybrid1024/ample/native": "2d09006ea84b9020c343c446e1de07df1d19e4f1961402eeb1cfcd54a8fb30c7",
+    "original-hybrid1024/ample/shared": "554ab8fc327b69289a6463960909a2cee0c59250e767da568e6ae5bbc601b3a3",
+    "original-hybrid1024/contest/native": "9facde05227947e0c84c01cfa455ee981b68e6db4d6322c32fd67ba30b2fa27a",
+    "original-hybrid1024/contest/shared": "d6a7f98010dd6acdd30d0ccb35021f7a6f8377feb060db5893a05870ee2cf0b8",
+    "original-slow/contest/native": "db54ed465ff8b5e47c165a43896199c2bda89e66bce7fdce4886b7a1db2c7ef7",
+    "original-slow/contest/shared": "4dee90997d5bc28dd6edba74d5ff156e99e3a66b42059ea085aaf6cf40a222c6",
+    "original-sqrt1024/ample/native": "3bd1d22155d484d83e5ec9a62653811bc2059d013ea21adb0e6d4c75d79e7eb5",
+    "original-sqrt1024/ample/shared": "252e57a388b523fa2958acf58b6a267f920416eb0f0170c04d906898772b705b",
+    "original-sqrt1024/contest/native": "686bc5fffee1d3910ecf54d8361354e834b02f3eb50bc999e285e76afce8ba58",
+    "original-sqrt1024/contest/shared": "9c01d952e2db25add4585895fd415c1963b8c9a540a7519e299bed8a9da28b76",
+    "original-wrong/contest/native": "6c4c81587f96274b8d9a86954c015bccdd51e2b3b9dbd339d8ea75396db1025c",
+    "original-wrong/contest/shared": "36df7c7e185dc9b6f88999ba585f9f2e32b5ed2d3743dc4e1c0534e587a9eb67"
+  },
+  "schema": 1
+}

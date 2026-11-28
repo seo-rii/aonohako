@@ -1,0 +1,76 @@
+{
+  "baseline_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+  "cases": {
+    "original-fast": {
+      "binary": "pilot/corpus/inversions-fast",
+      "binary_sha256": "95ce143d7b5dc7b5e5d91b595e31206988b0368241907ba6f5897cfe88b0fa87",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "fast",
+      "solver_stdout": "603431314\n",
+      "split": "original",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-hybrid1024": {
+      "binary": "pilot/corpus/inversions-hybrid1024",
+      "binary_sha256": "759e3ba6eda52e53787398a210a047a71aa993aeea79a597396c58854f8b8bf6",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "hybrid1024",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-slow": {
+      "binary": "pilot/corpus/inversions-slow",
+      "binary_sha256": "fac24fff5f68c64372be7d6a1664c39cdda5003d2b9ace6d7f02c852afd13e09",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "slow",
+      "solver_stdout": "603431314\n",
+      "split": "original",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-sqrt1024": {
+      "binary": "pilot/corpus/inversions-sqrt1024",
+      "binary_sha256": "b851aceebe60652996f530383f4d75a5f0daaf08b7501faa7d296f0052b86f15",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "sqrt1024",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-wrong": {
+      "binary": "pilot/corpus/inversions-wrong",
+      "binary_sha256": "811ca8cdfddbfe7ad2778f9673053af17acadd874bbb23b119345545f20cee2a",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "wrong",
+      "solver_stdout": "603726024\n",
+      "split": "original",
+      "stdin": "256 3072 4096 658417\n"
+    }
+  },
+  "decision": "All native and metered controls must reproduce fast AC, wrong WA and live slow TLE, and both ample variants must return their exact AC answer. A unanimous false pass or false timeout on the same variant at 203 ms on both fresh boots disqualifies the original inversion input from v12 automatic clock routing.",
+  "image": "sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+  "original_input_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+  "schema": 1
+}

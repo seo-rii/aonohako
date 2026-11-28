@@ -15,8 +15,6 @@ class QualifiedControllerEnvironmentTest(unittest.TestCase):
                 self.assertEqual(registry["schema"], 2)
                 cases = registry["cases"]
                 expected = [("range_min", 183, 768, 60000), ("shortest_paths", 65, 768, 60000)]
-                if engine == "v12":
-                    expected.insert(0, ("inversions", 203, 768, 60000))
                 self.assertEqual(
                     sorted((c["problem_id"], c["time_ms"], c["memory_mb"], c["wall_time_ms"]) for c in cases),
                     expected,

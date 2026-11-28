@@ -93,12 +93,14 @@ controller built for the matching engine. Run this from the repository root.
 python3 -B docs/durante/gce-qualified-judge/controller_env.py --engine v13
 ```
 
-The v13 controller export includes the original range-minimum input at 183 ms
-and shortest-paths input at 65 ms. It routes the original 203 ms inversion
-case to native judging after four correct implementations received false
-timeouts on two CPU-pinned boots. Regenerate earlier controller settings to
-pick up the smaller case list. The sealed worker retains its historical
-schema-1 settings. [203 ms inversion trials](durante/gce-original-inversion-boundary/README.md)
+The v12 and v13 controller exports include the original range-minimum input at 183 ms
+and shortest-paths input at 65 ms. Both route the original 203 ms inversion
+case to native judging. Four correct implementations received false timeouts
+on v13, and both selected for the v12 check also received false timeouts.
+Each engine reproduced its result on two independent CPU-pinned boots.
+Regenerate earlier controller settings to pick up the smaller case list.
+Each sealed worker retains its historical schema-1 settings.
+[v13 trials](durante/gce-original-inversion-boundary/README.md) · [v12 trials](durante/gce-original-inversion-boundary/v12/README.md)
 
 Use `--engine v12` for the v12 worker. The helper leaves automatic judging off.
 Enable it on the updated controller and forward to the matching sealed worker
