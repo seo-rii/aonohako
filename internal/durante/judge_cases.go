@@ -17,12 +17,13 @@ const (
 
 type judgeCaseKey struct {
 	problemID, language, stdinSHA256 string
-	timeMS                           int
+	timeMS, wallTimeMS, memoryMB     int
 }
 
 // JudgeCases binds each registered case and deadline to exactly one model.
 // It is immutable after parsing and can be shared across executor snapshots.
 type JudgeCases struct {
+	schema   int
 	bindings map[judgeCaseKey]string
 }
 
@@ -35,17 +36,21 @@ func ParseJudgeCases(raw string) (*JudgeCases, error) {
 	if err := decodeTimeModelFields([]byte(raw), "judge cases", map[string]any{"schema": &schema, "cases": &cases}); err != nil {
 		return nil, err
 	}
-	if schema != 1 || len(cases) == 0 || len(cases) > maxJudgeCases {
-		return nil, fmt.Errorf("judge cases requires schema 1 and 1..%d cases", maxJudgeCases)
+	if (schema != 1 && schema != 2) || len(cases) == 0 || len(cases) > maxJudgeCases {
+		return nil, fmt.Errorf("judge cases requires schema 1 or 2 and 1..%d cases", maxJudgeCases)
 	}
-	registry := &JudgeCases{bindings: make(map[judgeCaseKey]string, len(cases))}
+	registry := &JudgeCases{schema: schema, bindings: make(map[judgeCaseKey]string, len(cases))}
 	for i, entry := range cases {
 		var key judgeCaseKey
 		var binding string
-		if err := decodeTimeModelFields(entry, "judge case", map[string]any{
+		fields := map[string]any{
 			"problem_id": &key.problemID, "source_language": &key.language, "stdin_sha256": &key.stdinSHA256,
 			"time_ms": &key.timeMS, "model_binding": &binding,
-		}); err != nil {
+		}
+		if schema == 2 {
+			fields["wall_time_ms"], fields["memory_mb"] = &key.wallTimeMS, &key.memoryMB
+		}
+		if err := decodeTimeModelFields(entry, "judge case", fields); err != nil {
 			return nil, fmt.Errorf("case %d: %w", i, err)
 		}
 		if key.problemID == "" || runtimepolicy.ValidateProblemID(key.problemID) != nil {
@@ -53,6 +58,9 @@ func ParseJudgeCases(raw string) (*JudgeCases, error) {
 		}
 		if key.language != "CPP20" || key.timeMS <= 0 {
 			return nil, fmt.Errorf("case %d requires source_language CPP20 and positive time_ms", i)
+		}
+		if schema == 2 && (key.wallTimeMS < 0 || key.wallTimeMS > MaxResourceTimeMs || key.memoryMB <= 0 || key.memoryMB > MaxResourceMemoryMB) {
+			return nil, fmt.Errorf("case %d requires wall_time_ms in 0..%d and memory_mb in 1..%d", i, MaxResourceTimeMs, MaxResourceMemoryMB)
 		}
 		if !runtimeidentity.ValidImageDigest("sha256:" + key.stdinSHA256) {
 			return nil, fmt.Errorf("case %d requires lowercase hex stdin_sha256", i)
@@ -69,12 +77,20 @@ func ParseJudgeCases(raw string) (*JudgeCases, error) {
 	return registry, nil
 }
 
+// BindsNominalLimits reports whether a registry binds all three request limits
+// replaced by the raw measurement envelope. Automatic routing requires this.
+func (r *JudgeCases) BindsNominalLimits() bool { return r != nil && r.schema == 2 }
+
 // Allows requires the same operator model used to qualify the exact input.
-func (r *JudgeCases) Allows(problemID, sourceLanguage, stdinSHA256 string, timeMS int, modelBinding string) bool {
+// Schema 1 retains its original explicit-judge lookup by CPU deadline.
+func (r *JudgeCases) Allows(problemID, sourceLanguage, stdinSHA256 string, timeMS, wallTimeMS, memoryMB int, modelBinding string) bool {
 	if r == nil {
 		return false
 	}
-	binding, ok := r.bindings[judgeCaseKey{problemID, sourceLanguage, stdinSHA256, timeMS}]
+	if !r.BindsNominalLimits() {
+		wallTimeMS, memoryMB = 0, 0
+	}
+	binding, ok := r.bindings[judgeCaseKey{problemID, sourceLanguage, stdinSHA256, timeMS, wallTimeMS, memoryMB}]
 	return ok && binding == modelBinding
 }
 
@@ -101,6 +117,9 @@ func (c Config) ValidateJudgeCases() error {
 	for key, binding := range c.JudgeCases.bindings {
 		if !liveBindings[binding] {
 			return fmt.Errorf("judge case for %q at %d ms has no matching live CPP20 model_binding in this deployment", key.problemID, key.timeMS)
+		}
+		if key.memoryMB > limits.MemoryMB || key.wallTimeMS > limits.WallTimeMs {
+			return fmt.Errorf("judge case for %q exceeds the raw memory or wall limit", key.problemID)
 		}
 		if key.timeMS >= limits.CPUTimeMs || key.timeMS >= limits.WallTimeMs {
 			return fmt.Errorf("judge case for %q at %d ms requires larger raw CPU and wall limits", key.problemID, key.timeMS)

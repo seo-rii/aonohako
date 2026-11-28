@@ -21,19 +21,21 @@ ask for it explicitly, or the operator can select registered batch cases automat
 Set `AONOHAKO_DURANTE_JUDGE_CASES` on both the control plane and worker to
 restrict explicit Durante judging to a finite list of tested deadlines.
 Each entry binds the organizer's problem ID, exact stdin bytes, source
-language, requested CPU time limit in milliseconds and effective work-clock
-model. For example, an entry for empty stdin has this shape (replace the
+language, nominal CPU and wall deadlines, nominal memory limit and effective
+work-clock model. For example, an entry for empty stdin has this shape (replace the
 illustrative model digest with the binding from your calibration receipt).
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
   "cases": [
     {
       "problem_id": "contest/final/a",
       "source_language": "CPP20",
       "stdin_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "time_ms": 250,
+      "wall_time_ms": 1000,
+      "memory_mb": 256,
       "model_binding": "work-clock-v1:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
   ]
@@ -44,7 +46,12 @@ Obtain the binding from `work_measurement_execution.clock.model_binding` in a tr
 receipt for the deployment's schema-2 model and effective runtime options.
 The deployment validates every entry at startup. Supply 1–256 distinct cases
 within 64 KiB. The raw resource policy must grant more CPU and wall time than
-each registered deadline. Give both watchdogs enough headroom for instrumentation.
+each registered CPU deadline and cover the registered wall and memory limits.
+Set `wall_time_ms` to the value used in the qualified request. Zero matches a
+request using the default wall guard. The raw envelope includes instrumented
+memory and replaces these three limits during measurement. A matching entry
+alone does not establish how much RSS belongs to the uninstrumented program.
+Submission output and workspace limits still apply.
 
 This scope supports standalone CPP20 batch requests with one inline static
 x86-64 executable, inline input and an ordinary expected stdout comparison.
@@ -59,7 +66,7 @@ specific model and deadline.
 ### Automatically judge registered batch submissions
 
 Set `AONOHAKO_DURANTE_JUDGE_AUTO=on` with `AONOHAKO_DURANTE_JUDGE_MODE=on`
-and a validated `AONOHAKO_DURANTE_JUDGE_CASES` registry to apply the scope
+and a validated schema-2 `AONOHAKO_DURANTE_JUDGE_CASES` registry to apply the scope
 to ordinary requests on `/execute`. Submit the usual problem ID, contestant
 ELF, input, expected stdout and nominal limits. A match runs once with the
 operator's raw resource envelope and the registered deciding clock. The
@@ -67,11 +74,32 @@ response carries the same `work_measurement_judgment` and clock receipt as
 an explicit judge request. A clock failure follows the explicit judgment
 rules; it never silently reruns the submission under another clock.
 
-Unregistered inputs, other deadlines, URL-backed artifacts, `ignore_tle`
+Unregistered inputs, other nominal CPU, wall or memory limits, URL-backed artifacts, `ignore_tle`
 and other ineligible requests follow the native path. Explicit measurement,
 shadow and peer requests retain their existing modes. If automatic observation
 is also enabled, it applies to eligible native submissions. The default for
 `AONOHAKO_DURANTE_JUDGE_AUTO` is off.
+
+Schema 1 remains available for explicitly requested judging. It records only
+the nominal CPU deadline. The updated controller requires schema 2 when
+automatic judging is enabled and reports a configuration error at startup if
+given schema 1. Preserve the original model binding when adding the wall and
+memory limits from the qualification measurements.
+
+For the frozen GCE v12/v13 pilots, generate the settings for an updated
+controller built for the matching engine. Run this from the repository root.
+
+```sh
+python3 -B docs/durante/gce-qualified-judge/controller_env.py --engine v13
+```
+
+Use `--engine v12` for the v12 worker. The helper leaves automatic judging off.
+Enable it on the updated controller and forward to the matching sealed worker
+with its original schema-1 settings, automatic judging off and ingress
+restricted to that controller. The sealed server's automatic path predates
+nominal memory and wall checks. Public requests routed directly through that
+path could select Durante for unqualified limits. An updated worker configured
+with schema 2 also checks the forwarded limits.
 
 Enable automatic selection at the public control plane. Its worker needs the
 matching judge configuration and case registry to verify a forwarded decision.

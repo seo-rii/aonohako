@@ -14,7 +14,7 @@ func TestJudgeCasesRequireExactKeyAndModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !registry.Allows("contest-1/a", "CPP20", judgeCaseInput, 50, judgeCaseBinding) || !registry.Allows("contest-1/a", "CPP20", judgeCaseInput, 51, judgeCaseBinding) {
+	if !registry.Allows("contest-1/a", "CPP20", judgeCaseInput, 50, 0, 64, judgeCaseBinding) || !registry.Allows("contest-1/a", "CPP20", judgeCaseInput, 51, 200, 32, judgeCaseBinding) {
 		t.Fatal("registered case and deadlines did not match")
 	}
 	for _, tc := range []struct {
@@ -27,7 +27,7 @@ func TestJudgeCasesRequireExactKeyAndModel(t *testing.T) {
 		{"contest-1/a", "CPP20", judgeCaseInput, "", 50},
 		{"contest-1/a", "CPP20", judgeCaseInput, judgeCaseBinding, 49},
 	} {
-		if registry.Allows(tc.problemID, tc.language, tc.stdin, tc.deadline, tc.binding) {
+		if registry.Allows(tc.problemID, tc.language, tc.stdin, tc.deadline, 100, 64, tc.binding) {
 			t.Errorf("matched unregistered case %+v", tc)
 		}
 	}
@@ -43,7 +43,7 @@ func TestJudgeCasesRejectMalformedOrAmbiguousScope(t *testing.T) {
 		"oversized input":      valid + strings.Repeat(" ", maxJudgeCasesBytes),
 		"oversized list":       wrap(strings.Repeat("{},", maxJudgeCases) + "{}"),
 		"empty list":           wrap(""),
-		"unsupported schema":   strings.Replace(valid, `"schema":1`, `"schema":2`, 1),
+		"unsupported schema":   strings.Replace(valid, `"schema":1`, `"schema":3`, 1),
 		"duplicate root field": strings.Replace(valid, `"schema":1`, `"schema":1,"schema":1`, 1),
 		"unknown root field":   strings.Replace(valid, `"schema":1`, `"schema":1,"extra":true`, 1),
 		"trailing data":        valid + "{}",
@@ -68,5 +68,32 @@ func TestJudgeCasesRejectMalformedOrAmbiguousScope(t *testing.T) {
 				t.Fatalf("invalid registry accepted: %+v %v", got, err)
 			}
 		})
+	}
+}
+
+func TestJudgeCasesMatchNominalLimits(t *testing.T) {
+	entry := strings.Replace(judgeCaseEntry, `"time_ms":50`, `"time_ms":50,"wall_time_ms":200,"memory_mb":64`, 1)
+	other := strings.Replace(entry, `"wall_time_ms":200`, `"wall_time_ms":0`, 1)
+	reg, err := ParseJudgeCases(`{"schema":2,"cases":[` + entry + "," + other + "]}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reg.BindsNominalLimits() || !reg.Allows("contest-1/a", "CPP20", judgeCaseInput, 50, 200, 64, judgeCaseBinding) ||
+		!reg.Allows("contest-1/a", "CPP20", judgeCaseInput, 50, 0, 64, judgeCaseBinding) ||
+		reg.Allows("contest-1/a", "CPP20", judgeCaseInput, 50, 201, 64, judgeCaseBinding) ||
+		reg.Allows("contest-1/a", "CPP20", judgeCaseInput, 50, 200, 63, judgeCaseBinding) {
+		t.Fatal("case lookup did not distinguish nominal resource limits")
+	}
+	for _, invalid := range []string{
+		judgeCaseEntry, strings.Replace(entry, `"memory_mb":64,`, "", 1),
+		strings.Replace(entry, `"memory_mb":64`, `"memory_mb":0`, 1),
+		strings.Replace(entry, `"wall_time_ms":200`, `"wall_time_ms":-1`, 1),
+		strings.Replace(entry, `"wall_time_ms":200`, `"wall_time_ms":null`, 1),
+		strings.Replace(entry, `"wall_time_ms":200`, `"wall_time_ms":600001`, 1),
+		strings.Replace(entry, `"memory_mb":64`, `"memory_mb":4097`, 1),
+	} {
+		if _, err := ParseJudgeCases(`{"schema":2,"cases":[` + invalid + "]}"); err == nil {
+			t.Fatalf("accepted missing or invalid nominal limits: %s", invalid)
+		}
 	}
 }

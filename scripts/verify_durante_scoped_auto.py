@@ -80,6 +80,8 @@ def run(args):
         if route == "unregistered":
             request["problem_id"] += "-outside-pilot"
             require(request["problem_id"] not in released, "unregistered control collides with scope")
+        elif route in ("wall_time_ms", "memory_mb"):
+            request["limits"][route] -= 1
         require(not any(k.startswith("work_measurement") for k in request), "client supplied a measurement option")
         result, stdout = post(url, "/execute", request, timeout=pilot.HARD["wall_time_ms"] / 1000 + 30)
         status = result["status"]
@@ -97,7 +99,7 @@ def run(args):
         else:
             require(status == "Accepted", f"{route}: unexpected native verdict {status}")
             pilot.validate(result, "native", request, stdout.encode(), expected, frozen)
-        trials.append({"problem": request["problem_id"], "role": role, "route": route,
+        trials.append({"problem": request["problem_id"], "role": role, "route": route, "limits": request["limits"],
                        "receipt": result, "stdout": stdout})
         print(f"{request['problem_id']}/{role} {route}: {status} ({result.get('verdict_source')})", flush=True)
 
@@ -107,7 +109,13 @@ def run(args):
     require(registry == frozen["time_models"] and options == frozen["runtime_options_id"]
             and pilot.model_binding(frozen["policy"], options) == frozen["model_binding"], "model descriptor drift")
     scoped = {**env, "AONOHAKO_DURANTE_JUDGE_CASES": json.dumps(scope)}
-    auto = {**scoped, "AONOHAKO_DURANTE_JUDGE_AUTO": "on"}
+    # The sealed worker predates schema 2. The new controller independently
+    # checks every nominal limit replaced by that worker's raw envelope.
+    controller_scope = {"schema": 2, "cases": [
+        {**entry, "wall_time_ms": pilot.NOMINAL["wall_time_ms"], "memory_mb": pilot.NOMINAL["memory_mb"]}
+        for entry in scope["cases"]]}
+    auto = {**scoped, "AONOHAKO_DURANTE_JUDGE_CASES": json.dumps(controller_scope),
+            "AONOHAKO_DURANTE_JUDGE_AUTO": "on"}
     worker_args = argparse.Namespace(server=str(worker), runtime_image=image)
     controller_args = argparse.Namespace(server=str(args.controller.resolve()), runtime_image=image)
     with ExitStack() as services:
@@ -118,7 +126,8 @@ def run(args):
             submit(default, problem, "fast", "default")
             for role in ("fast", "wrong", "slow"):
                 submit(enabled, problem, role, "automatic")
-            submit(enabled, problem, "fast", "unregistered")
+            for route in ("unregistered", "wall_time_ms", "memory_mb"):
+                submit(enabled, problem, "fast", route)
     with ExitStack() as services:
         target = services.enter_context(server(worker_args, 18211, False, operator_env=env, umask=0o022))
         enabled = services.enter_context(server(controller_args, 18213, False, target, operator_env=auto))

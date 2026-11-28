@@ -39,8 +39,8 @@ func scopedJudgeFixture(t *testing.T) (*model.RunRequest, config.Config) {
 		t.Fatal("missing fixture clock")
 	}
 	measurement.JudgeCases, err = durante.ParseJudgeCases(fmt.Sprintf(
-		`{"schema":1,"cases":[{"problem_id":%q,"source_language":"CPP20","stdin_sha256":"%x","time_ms":%d,"model_binding":%q}]}`,
-		req.ProblemID, sha256.Sum256([]byte(req.Stdin)), req.Limits.TimeMs, clock.ModelBinding()))
+		`{"schema":2,"cases":[{"problem_id":%q,"source_language":"CPP20","stdin_sha256":"%x","time_ms":%d,"wall_time_ms":%d,"memory_mb":%d,"model_binding":%q}]}`,
+		req.ProblemID, sha256.Sum256([]byte(req.Stdin)), req.Limits.TimeMs, req.Limits.WallTimeMs, req.Limits.MemoryMB, clock.ModelBinding()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +68,8 @@ func TestScopedJudgeAdmission(t *testing.T) {
 		{"problem", func(r *model.RunRequest) { r.ProblemID += "2" }},
 		{"stdin bytes", func(r *model.RunRequest) { r.Stdin = strings.TrimSpace(r.Stdin) }},
 		{"time", func(r *model.RunRequest) { r.Limits.TimeMs++ }},
+		{"nominal memory", func(r *model.RunRequest) { r.Limits.MemoryMB-- }},
+		{"nominal wall", func(r *model.RunRequest) { r.Limits.WallTimeMs++ }},
 		{"language", func(r *model.RunRequest) { r.Lang = "CPP17" }},
 		{"entry mode", func(r *model.RunRequest) { r.EntryMode = "state" }},
 		{"spj", func(r *model.RunRequest) { r.SPJ = &model.SPJSpec{} }},

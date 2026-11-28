@@ -724,8 +724,8 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if workMeasurement.AutoJudge && (!workMeasurement.Judge.VerdictsAllowed || workMeasurement.JudgeCases == nil) {
-		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_JUDGE_AUTO requires judge mode on and validated AONOHAKO_DURANTE_JUDGE_CASES")
+	if workMeasurement.AutoJudge && (!workMeasurement.Judge.VerdictsAllowed || !workMeasurement.JudgeCases.BindsNominalLimits()) {
+		return Config{}, fmt.Errorf("AONOHAKO_DURANTE_JUDGE_AUTO requires judge mode on and AONOHAKO_DURANTE_JUDGE_CASES schema 2 with qualified wall_time_ms and memory_mb")
 	}
 	execution := ExecutionConfig{
 		WorkMeasurement: workMeasurement,
