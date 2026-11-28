@@ -1,0 +1,204 @@
+{
+  "baseline_binding": "work-clock-v1:sha256:45bbdab9d7b82b05a27bc55cae38ab7811e6699542f792634f374e2036aecb69",
+  "build": {
+    "flags": [
+      "-std=c++20",
+      "-O2",
+      "-static",
+      "-s",
+      "-march=x86-64-v2",
+      "-Wl,--build-id=none"
+    ],
+    "generator_sha256": "c5e679f444f03ebc629d0d903be911ecaf7ddd05423a0db93dc14de1dcbbfd3b",
+    "source_sha256": "d2f4087f7aa1b5bfb65c3014499d841aa681108d4b9485a01dab0ecf09c8cf79",
+    "variants": {
+      "hybrid1024": "-DINSERTION_CUTOFF=1024",
+      "hybrid128": "-DINSERTION_CUTOFF=128",
+      "hybrid16": "-DINSERTION_CUTOFF=16",
+      "hybrid512": "-DINSERTION_CUTOFF=512",
+      "sqrt1024": "-DBLOCK_SIZE=1024",
+      "sqrt128": "-DBLOCK_SIZE=128",
+      "sqrt2048": "-DBLOCK_SIZE=2048",
+      "sqrt32": "-DBLOCK_SIZE=32",
+      "sqrt512": "-DBLOCK_SIZE=512"
+    }
+  },
+  "cases": {
+    "original-fast": {
+      "binary": "pilot/corpus/inversions-fast",
+      "binary_sha256": "95ce143d7b5dc7b5e5d91b595e31206988b0368241907ba6f5897cfe88b0fa87",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "fast",
+      "solver_stdout": "603431314\n",
+      "split": "original",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-hybrid1024": {
+      "binary": "pilot/corpus/inversions-hybrid1024",
+      "binary_sha256": "759e3ba6eda52e53787398a210a047a71aa993aeea79a597396c58854f8b8bf6",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "hybrid1024",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-hybrid128": {
+      "binary": "pilot/corpus/inversions-hybrid128",
+      "binary_sha256": "ce38f3d110ae41d5dbc9dbaf90a32668bc7ce3f5e3f03842dc5be67c5b5283df",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "hybrid128",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-hybrid16": {
+      "binary": "pilot/corpus/inversions-hybrid16",
+      "binary_sha256": "faef4bb4229849721d7954a6d790a7cc05af976e5d4dd4aad944b7d627fa6a47",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "hybrid16",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-hybrid512": {
+      "binary": "pilot/corpus/inversions-hybrid512",
+      "binary_sha256": "ea643969466aa67e61d880bc608a63e1a651a5ea649acaabb97a7c6705ea5623",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "hybrid512",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-slow": {
+      "binary": "pilot/corpus/inversions-slow",
+      "binary_sha256": "fac24fff5f68c64372be7d6a1664c39cdda5003d2b9ace6d7f02c852afd13e09",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "slow",
+      "solver_stdout": "603431314\n",
+      "split": "original",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-sqrt1024": {
+      "binary": "pilot/corpus/inversions-sqrt1024",
+      "binary_sha256": "b851aceebe60652996f530383f4d75a5f0daaf08b7501faa7d296f0052b86f15",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "sqrt1024",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-sqrt128": {
+      "binary": "pilot/corpus/inversions-sqrt128",
+      "binary_sha256": "d72b0c1b4955cc37fd1f521860fc5d588b96d6da2fab9e5a13021a58165e64ff",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "sqrt128",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-sqrt2048": {
+      "binary": "pilot/corpus/inversions-sqrt2048",
+      "binary_sha256": "f609f1f66d81951375397f76db9b9eb3c956b2bcd6a951f40a9a02a77285b76c",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "sqrt2048",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-sqrt32": {
+      "binary": "pilot/corpus/inversions-sqrt32",
+      "binary_sha256": "41a10a0b21884c4e0ac51efc9749bad0cac7b3cd91d64725f2796d048691399d",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "sqrt32",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-sqrt512": {
+      "binary": "pilot/corpus/inversions-sqrt512",
+      "binary_sha256": "ac0172cd34b008b8a8cc94f7180eb9f08d98608fc7729b2ab3f8669985cba160",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "sqrt512",
+      "solver_stdout": "603431314\n",
+      "split": "variant",
+      "stdin": "256 3072 4096 658417\n"
+    },
+    "original-wrong": {
+      "binary": "pilot/corpus/inversions-wrong",
+      "binary_sha256": "811ca8cdfddbfe7ad2778f9673053af17acadd874bbb23b119345545f20cee2a",
+      "expected_stdout": "603431314\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 203
+      },
+      "problem": "inversions",
+      "role": "wrong",
+      "solver_stdout": "603726024\n",
+      "split": "original",
+      "stdin": "256 3072 4096 658417\n"
+    }
+  },
+  "decision": {
+    "controls": "Both boots must reproduce the original fast AC, wrong WA and slow in-flight TLE at 203 ms. Every scheduled ample run must complete with its independently expected output and verdict.",
+    "counterexample": "For a registered variant at 203 ms on each boot, require all three native trials to agree and both deciding-clock trials to agree. One false pass or false timeout in the same direction for the same variant on both fresh boots disqualifies automatic clock routing of the original case, provided controls pass. A mixed cell is inconclusive.",
+    "no_expansion": "Agreement on this panel supplies no new inputs, languages or limits for release.",
+    "scope": "Existing inversions v13 model on the original C++20 input at 203 ms, 768 MiB and 60000 ms wall."
+  },
+  "image": "sha256:5ebf65c242036f85ea8873926aa9e8721fa22cd8d0d3394dd32309e09354a3d2",
+  "original_input_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+  "schema": 1
+}
