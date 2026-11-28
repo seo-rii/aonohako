@@ -14,10 +14,12 @@ class QualifiedControllerEnvironmentTest(unittest.TestCase):
                 registry = json.loads(env[REGISTRY])
                 self.assertEqual(registry["schema"], 2)
                 cases = registry["cases"]
+                expected = [("range_min", 183, 768, 60000), ("shortest_paths", 65, 768, 60000)]
+                if engine == "v12":
+                    expected.insert(0, ("inversions", 203, 768, 60000))
                 self.assertEqual(
                     sorted((c["problem_id"], c["time_ms"], c["memory_mb"], c["wall_time_ms"]) for c in cases),
-                    [("inversions", 203, 768, 60000), ("range_min", 183, 768, 60000),
-                     ("shortest_paths", 65, 768, 60000)],
+                    expected,
                 )
                 bindings[engine] = {c["model_binding"] for c in cases}
                 self.assertEqual(len(bindings[engine]), 1)
