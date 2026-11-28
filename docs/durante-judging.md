@@ -699,6 +699,10 @@ cohort and model for each comparison. The summary includes problem IDs, counts a
 used for CPU comparisons. Source code, submission IDs, program output and free-form reasons are
 unnecessary.
 
+A local CPU-pinned study archived 108 public HTTP responses for longest common
+subsequence, maximum subarray and weighted path independent set. Its replay compares
+72 paired verdicts and clock estimates with this summary. [Contest shadow receipts](durante/local-v13-contest-shadows/README.md)
+
 For archived v5 time comparisons, set the optional row field `stdin_source` to
 `"inline"` only when the original request confirms inline stdin (including
 empty input). Use `"url"` for URL inputs and omit the field when the source is
