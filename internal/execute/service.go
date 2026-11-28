@@ -141,11 +141,12 @@ type Service struct {
 }
 
 type sandboxRunResult struct {
-	workClockProgress   *durante.WorkClockProgress
-	response            model.RunResponse
-	judgeOut            []byte
-	stdoutOut           []byte
-	stdoutLimitExceeded bool
+	measurementSetupFailed bool
+	workClockProgress      *durante.WorkClockProgress
+	response               model.RunResponse
+	judgeOut               []byte
+	stdoutOut              []byte
+	stdoutLimitExceeded    bool
 }
 
 func New() *Service {
@@ -467,7 +468,10 @@ func (s *Service) runProgram(ctx context.Context, req *model.RunRequest, stdin i
 
 	meter, err := s.prepareContestantDurante(ctx, ws, req)
 	if err != nil {
-		return sandboxRunResult{response: model.RunResponse{Status: model.RunStatusInitFail, Reason: "durante preparation failed: " + err.Error()}}
+		return sandboxRunResult{
+			measurementSetupFailed: true,
+			response:               model.RunResponse{Status: model.RunStatusInitFail, Reason: "durante preparation failed: " + err.Error()},
+		}
 	}
 	res := runCommandWithSandbox(ctx, ws, cmdArgs, req, stdin, stdinMaxBytes, hooks, capturedOutputLimit, tuning, s.cgroupParentDir, s.cpuNormalizer, meter)
 	if clocks != nil {

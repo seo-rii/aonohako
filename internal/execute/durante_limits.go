@@ -27,6 +27,11 @@ func (s *Service) runWorkMeasurementWithStdin(ctx context.Context, req *model.Ru
 	rawService.cpuNormalizer = timing.CPUNormalizer{}
 	rawService.shortCaseSampling = false
 	run := rawService.runOneWithStdin(ctx, &rawReq, stdin, stdinMaxBytes, hooks, tuning, true, captureRawStdout)
+	// The session failed to initialize before target launch. There is no
+	// execution to finalize, estimate or judge.
+	if req.WorkMeasurementJudge && run.measurementSetupFailed {
+		return run
+	}
 	run.response = finishWorkMeasurementDiagnostic(ctx, req, run.response)
 	if rawReq.WorkMeasurementClock != nil {
 		run.response = finishWorkClock(req, rawReq.WorkMeasurementClock, run.response, run.workClockProgress)
