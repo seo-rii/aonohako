@@ -730,8 +730,19 @@ within ±20% (inclusive), or more than 20% above it. The comparison uses the
 recorded native nanoseconds after any validated normalization and the recomputed
 shadow estimate. It includes completed native AC runs even when the shadow
 exceeded the nominal deadline. Their total equals `native_ac_shadow_ac +
-native_ac_shadow_tle`. Native CPU stops can truncate the program and contribute
-only to the verdict counts. A zero total gives no timing accuracy rate.
+native_ac_shadow_tle`. A zero total gives no timing accuracy rate.
+
+For a verified native CPU timeout, `native_tle_time_bound` reports what the
+strictly crossed limit establishes about the same execution. An estimate at
+or below 80% of the nominal CPU limit was more than 20% below the CPU time
+charged on that native attempt. For example, at a 6 ms limit, a 4.8 ms shadow
+estimate counts as `under_by_more_than_20_percent`. A larger estimate counts
+as `inconclusive`. The bound uses the nominal limit on the native judge's
+clock, including any validated normalization. A timeout with short-case
+sampling counts separately as `sampled` because an earlier attempt can have
+finished within the limit. The three counts sum to `native_tle_shadow_ac +
+native_tle_shadow_tle`. Full completion time and variability between attempts
+remain unknown for a stopped run.
 
 A native AC needs a normal exit, the same output comparison as the shadow
 and positive measured CPU nanoseconds within the limit. A native TLE needs

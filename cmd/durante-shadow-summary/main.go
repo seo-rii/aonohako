@@ -57,9 +57,18 @@ func (a *completedTimeAccuracy) add(native, estimated uint64) {
 	}
 }
 
+// A CPU stop can censor completion time. Its strictly crossed deadline still
+// provides a lower bound for this execution in the native judge's clock.
+type nativeTLETimeBound struct {
+	UnderByMoreThan20Percent int `json:"under_by_more_than_20_percent"`
+	Inconclusive             int `json:"inconclusive"`
+	Sampled                  int `json:"sampled"`
+}
+
 type cpuCohort struct {
 	cpuCohortIdentity
 	CompletedTimeAccuracy completedTimeAccuracy `json:"completed_native_time_accuracy"`
+	NativeTLETimeBound    nativeTLETimeBound    `json:"native_tle_time_bound"`
 	NativeACShadowAC      int                   `json:"native_ac_shadow_ac"`
 	NativeACShadowTLE     int                   `json:"native_ac_shadow_tle"`
 	NativeTLEShadowAC     int                   `json:"native_tle_shadow_ac"`
@@ -147,8 +156,22 @@ func (c *counts) add(primary model.RunResponse, stdinSource string) error {
 		row = &cpuCohort{cpuCohortIdentity: cohort}
 		c.CPUComparison.Cohorts[key] = row
 	}
+	execution := inner.WorkMeasurementExecution
+	estimate := uint64(execution.TimeEstimate.Nanoseconds)
 	if primary.Status == model.RunStatusAccepted {
-		row.CompletedTimeAccuracy.add(primary.CPUTimeNs, uint64(inner.WorkMeasurementExecution.TimeEstimate.Nanoseconds))
+		row.CompletedTimeAccuracy.add(primary.CPUTimeNs, estimate)
+	} else {
+		// nativeCPUExclusion verified that native nanoseconds exceed this
+		// whole-ms limit, so its smaller 80% threshold fits in uint64.
+		switch {
+		case primary.CPUTimeSampling != nil:
+			// A short-case repeat may time out after an accepted attempt.
+			row.NativeTLETimeBound.Sampled++
+		case estimate <= uint64(execution.NominalLimits.TimeMs)*800_000:
+			row.NativeTLETimeBound.UnderByMoreThan20Percent++
+		default:
+			row.NativeTLETimeBound.Inconclusive++
+		}
 	}
 	switch {
 	case primary.Status == model.RunStatusAccepted && inner.Status == model.RunStatusAccepted:
