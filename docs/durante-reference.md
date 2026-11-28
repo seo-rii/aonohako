@@ -300,6 +300,18 @@ Do not copy a failed receipt's candidate into operator configuration. Fix the
 measurement/model problem and evaluate a new complete collection; do not remove
 held-out cases or relax thresholds after seeing their errors.
 
+For each case, `fit` and `validate` also report `observed_deadline_disagreement`
+when all completed native controls and all valid predictions give opposite
+decisions over a range of supported whole-millisecond CPU limits. Both
+`min_time_ms` and `max_time_ms` are inclusive. For example, if the slowest
+prediction is 40.0 ms and the fastest native run is 42.1 ms, limits of 40, 41
+and 42 ms all give a simulated `false_accept`. A `false_timeout` means every
+prediction exceeds the limit and every native control finishes within it.
+The field is omitted for overlapping rounded ranges, an empty legal interval,
+or an unavailable prediction. This diagnostic selects candidate limits for a
+live comparison. A measured percentage error and the release gates retain
+their existing definitions.
+
 An exported policy applies only to its explicit `SOURCE@sha256:...` runtime,
 default dispatch and recorded cohort. A different image, engine, source variant
 or materially different target population needs new qualification. Reproducible

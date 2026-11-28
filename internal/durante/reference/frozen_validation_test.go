@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -80,6 +81,40 @@ func TestValidateFrozenKeepsCoefficientsAndUsesEveryHeldOutRepetition(t *testing
 	if err != nil || result.Passed || result.CandidatePolicy != nil || result.Cases[0].EstimatedNs != 48_000_002 ||
 		len(result.Failures) != 1 || !strings.Contains(result.Failures[0], "repetition 2: held-out error") {
 		t.Fatalf("changed policy or lost failing repetition: %+v, %v", result, err)
+	}
+}
+
+func TestValidateFrozenObservedDeadlineDisagreement(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		native [6]uint64
+		counts [3]uint64 // the frozen policy charges two ns per instruction
+		want   *DeadlineDisagreement
+	}{
+		{"false accept at one limit", [6]uint64{40_000_001, 42_000_000, 41_000_000, 43_000_000, 43_000_000, 42_000_000},
+			[3]uint64{18_000_000, 20_000_000, 19_000_000}, &DeadlineDisagreement{"false_accept", 40, 40}},
+		{"false timeout", [6]uint64{38_000_000, 39_000_000, 40_000_000, 39_000_000, 38_000_000, 39_000_000},
+			[3]uint64{23_000_000, 20_500_001, 23_000_000}, &DeadlineDisagreement{"false_timeout", 40, 41}},
+		{"touching rounded ranges", [6]uint64{40_000_001, 43_000_000, 42_000_000, 42_000_000, 43_000_000, 42_000_000},
+			[3]uint64{19_000_000, 20_000_001, 19_000_000}, nil},
+		{"clamp to supported limits", [6]uint64{40_000_000, 40_000_000, 40_000_000, 40_000_000, 40_000_000, 40_000_000},
+			[3]uint64{1_000_000_000_000, 1_000_000_000_000, 1_000_000_000_000}, &DeadlineDisagreement{"false_timeout", 40, 600_000}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data, corpus, policy := frozenFixture(t)
+			for i := range data.Samples {
+				data.Samples[i].NativeBefore = syntheticNativeResponse(tc.native[2*i])
+				data.Samples[i].NativeAfter = syntheticNativeResponse(tc.native[2*i+1])
+				data.Samples[i].Metered.WorkMeasurement = syntheticReport(tc.counts[i], 0)
+			}
+			result, err := ValidateFrozen(data, corpus, policy)
+			if err != nil || len(result.Cases) != 1 {
+				t.Fatalf("missing case: %v, %v", result, err)
+			}
+			if got := result.Cases[0].ObservedDeadlineDisagreement; !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("observed interval = %+v, want %+v", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -160,6 +195,9 @@ func TestValidateFrozenRejectsUnstableControlsAndNumericOverflow(t *testing.T) {
 	if err != nil || result.Passed || !strings.Contains(strings.Join(result.Failures, "\n"), "exceeds int64 nanoseconds") ||
 		!strings.Contains(strings.Join(result.Failures, "\n"), "instruction spread") {
 		t.Fatalf("lost overflow or instability: %+v, %v", result, err)
+	}
+	if row := result.Cases[0]; row.ObservedDeadlineDisagreement != nil || row.EstimatedNs != 40_000_000 {
+		t.Fatalf("partial predictions must retain the first successful estimate and omit the interval: %+v", row)
 	}
 }
 
