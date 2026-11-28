@@ -42,6 +42,8 @@ func TestAutomaticJudgeSelection(t *testing.T) {
 		{"different problem", func(r *model.RunRequest, _ *durante.Config) { r.ProblemID += "-2" }},
 		{"different stdin", func(r *model.RunRequest, _ *durante.Config) { r.Stdin += "\n" }},
 		{"different deadline", func(r *model.RunRequest, _ *durante.Config) { r.Limits.TimeMs++ }},
+		{"smaller nominal memory", func(r *model.RunRequest, _ *durante.Config) { r.Limits.MemoryMB = 1 }},
+		{"shorter nominal wall", func(r *model.RunRequest, _ *durante.Config) { r.Limits.WallTimeMs = 1 }},
 		{"larger nominal memory", func(r *model.RunRequest, c *durante.Config) {
 			r.Limits.MemoryMB = c.ResourcePolicy.MaxLimits.MemoryMB + 1
 		}},
@@ -102,6 +104,11 @@ func TestAutomaticJudgeRemoteRouting(t *testing.T) {
 				if err := ApplyJudgeWorkLimits(&wire, worker); err != nil {
 					t.Fatal(err)
 				}
+				wire.Limits.MemoryMB--
+				if err := ApplyJudgeWorkLimits(&wire, worker); err == nil {
+					t.Fatal("worker accepted limits outside the forwarded case")
+				}
+				wire.Limits.MemoryMB++
 				wire.Stdin += "\n"
 				if err := ApplyJudgeWorkLimits(&wire, worker); err == nil {
 					t.Fatal("worker accepted input outside the forwarded case")

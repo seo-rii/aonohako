@@ -22,7 +22,7 @@ const NativeJudgeHeader = "X-Aonohako-Native-Judge"
 // Preserve the ordinary request unless the explicit scoped path admits a copy
 // using this deployment's raw watchdogs and effective runtime options.
 func automaticJudgeRequest(req *model.RunRequest, cfg durante.Config, defaults config.RuntimeTuningConfig, named map[string]config.RuntimeTuningConfig) *model.RunRequest {
-	if !cfg.AutoJudge || cfg.JudgeCases == nil || !cfg.Judge.VerdictsAllowed || !ordinaryMeasurementRequest(req) ||
+	if !cfg.AutoJudge || !cfg.JudgeCases.BindsNominalLimits() || !cfg.Judge.VerdictsAllowed || !ordinaryMeasurementRequest(req) ||
 		req.SkipAutoJudge || req.IgnoreTLE || req.ProblemID == "" {
 		return req
 	}
@@ -65,8 +65,8 @@ func validateJudgeCase(req *model.RunRequest, cases *durante.JudgeCases, clock *
 	}
 	binding := clock.ModelBinding()
 	digest := sha256.Sum256([]byte(req.Stdin))
-	if !cases.Allows(req.ProblemID, profile.SourceLang, hex.EncodeToString(digest[:]), req.Limits.TimeMs, binding) {
-		return fmt.Errorf("no judge case matches the problem, language, stdin, nominal time and effective clock model")
+	if !cases.Allows(req.ProblemID, profile.SourceLang, hex.EncodeToString(digest[:]), req.Limits.TimeMs, req.Limits.WallTimeMs, req.Limits.MemoryMB, binding) {
+		return fmt.Errorf("no judge case matches the problem, language, stdin, nominal limits and effective clock model")
 	}
 	if req.JudgeClockBinding != "" && req.JudgeClockBinding != binding {
 		return fmt.Errorf("work_measurement_judge_clock_binding does not match the effective judge model")

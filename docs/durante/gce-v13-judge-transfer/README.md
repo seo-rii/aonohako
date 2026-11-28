@@ -55,6 +55,8 @@ python3 -B "$study/verify.py" --operator-env
 
 A separate offline container ran the sealed v13 binary as two HTTP servers, an auto-enabled controller and its worker. Twelve ordinary requests covered AC, WA and an in-flight TLE for every registered problem, plus native execution on an unregistered problem ID. To repeat it, mount the extracted image at `/opt/durante`, provide executable tmpfs at `/work` and `/tmp`, and run `smoke_auto.py --payload PATH --output NEW.json` on the authenticated payload from `prepare.py`. [Automatic routing receipts](evidence/automatic-routing.json.gz)
 
+For current automatic judging, use the sealed v13 binary as the worker with its schema-1 environment and automatic routing off. Build the controller with the v13 tag and export its schema-2 configuration with `python3 -B docs/durante/gce-qualified-judge/controller_env.py --engine v13`. Enable `AONOHAKO_DURANTE_JUDGE_AUTO=on` on that controller. It also matches the measured nominal 768 MiB memory and 60,000 ms wall limits. [Controller setup](../../durante-judging.md)
+
 ### Building and selecting the measured image
 
 The builder used Debian Bookworm, GCC 12.2.0 and CMake 3.25.1. Aonohako built both the server and the reference tool with Go 1.26.11, CGO disabled and the v13 build tag. The read-only SquashFS includes the client, the corrected core, the launcher and both Go executables. [Packaging commit](https://github.com/seo-rii/aonohako/commit/b7f7ab7e3dbbba6226735fc4179f2708be4088df) · [Compiler and installed-file hashes](evidence/builder.json)

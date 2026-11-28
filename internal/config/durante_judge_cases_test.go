@@ -54,8 +54,21 @@ func TestLoadDuranteJudgeCases(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := (durante.WorkClockRequest{TimePolicy: &policy}).ModelBinding()
-	raw := `{"schema":1,"cases":[{"problem_id":"contest-1/a","source_language":"CPP20","stdin_sha256":"` + stdin + `","time_ms":50,"model_binding":"` + binding + `"}]}`
+	legacy := `{"schema":1,"cases":[{"problem_id":"contest-1/a","source_language":"CPP20","stdin_sha256":"` + stdin + `","time_ms":50,"model_binding":"` + binding + `"}]}`
+	raw := strings.Replace(strings.Replace(legacy, `"schema":1`, `"schema":2`, 1), `"time_ms":50`, `"time_ms":50,"wall_time_ms":75,"memory_mb":128`, 1)
 	t.Setenv(env, raw)
+	t.Run("legacy registry explicit only", func(t *testing.T) {
+		t.Setenv(env, legacy)
+		loaded, err := Load()
+		if err != nil || loaded.Execution.WorkMeasurement.JudgeCases.BindsNominalLimits() ||
+			!loaded.Execution.WorkMeasurement.JudgeCases.Allows("contest-1/a", "CPP20", stdin, 50, 75, 128, binding) {
+			t.Fatalf("explicit schema 1 compatibility: %v", err)
+		}
+		t.Setenv("AONOHAKO_DURANTE_JUDGE_AUTO", "on")
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "schema 2") {
+			t.Fatalf("schema 1 did not require migration for automatic judging: %v", err)
+		}
+	})
 	t.Run("auto requires deciding mode", func(t *testing.T) {
 		t.Setenv("AONOHAKO_DURANTE_JUDGE_AUTO", "on")
 		cfg, err := Load()
@@ -71,7 +84,7 @@ func TestLoadDuranteJudgeCases(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("AONOHAKO_DURANTE_JUDGE_MODE", mode)
 			cfg, err := Load()
-			if err != nil || cfg.Execution.WorkMeasurement.AutoJudge || !cfg.Execution.WorkMeasurement.JudgeCases.Allows("contest-1/a", "CPP20", stdin, 50, binding) {
+			if err != nil || cfg.Execution.WorkMeasurement.AutoJudge || !cfg.Execution.WorkMeasurement.JudgeCases.Allows("contest-1/a", "CPP20", stdin, 50, 75, 128, binding) {
 				t.Fatalf("case was not admitted with %s: %v", mode, err)
 			}
 		})
@@ -87,8 +100,12 @@ func TestLoadDuranteJudgeCases(t *testing.T) {
 			t.Setenv("AONOHAKO_DURANTE_JUDGE_INTEGRITY", "plausibility")
 			t.Setenv("AONOHAKO_DURANTE_JUDGE_INTEGRITY_RATIO", "60")
 		},
-		"stale binding":        func(t *testing.T) { t.Setenv(env, strings.Replace(raw, binding, "work-clock-v1:sha256:"+stdin, 1)) },
-		"other runtime":        func(t *testing.T) { t.Setenv("AONOHAKO_DURANTE_RUNTIME_IMAGE", "sha256:"+strings.Repeat("b", 64)) },
+		"stale binding":               func(t *testing.T) { t.Setenv(env, strings.Replace(raw, binding, "work-clock-v1:sha256:"+stdin, 1)) },
+		"other runtime":               func(t *testing.T) { t.Setenv("AONOHAKO_DURANTE_RUNTIME_IMAGE", "sha256:"+strings.Repeat("b", 64)) },
+		"memory exceeds raw envelope": func(t *testing.T) { t.Setenv(env, strings.Replace(raw, `"memory_mb":128`, `"memory_mb":4096`, 1)) },
+		"wall exceeds raw envelope": func(t *testing.T) {
+			t.Setenv(env, strings.Replace(raw, `"wall_time_ms":75`, `"wall_time_ms":600000`, 1))
+		},
 		"no watchdog headroom": func(t *testing.T) { t.Setenv(env, strings.Replace(raw, ":50", ":4000", 1)) },
 		"legacy registry": func(t *testing.T) {
 			m := registry.Clone()
