@@ -322,6 +322,94 @@ func TestCompletedNativeTimeAccuracyFractionalTolerance(t *testing.T) {
 	}
 }
 
+func TestNativeTLETimeBound(t *testing.T) {
+	const ac, tle = model.RunStatusAccepted, model.RunStatusTLE
+	// These two CPU samples cross the same 1 ms limit, with very different
+	// overshoots. Only the strictly crossed deadline enters the bound.
+	var row counts
+	for _, item := range []struct {
+		status            string
+		native, estimated uint64
+		sampled           bool
+	}{
+		{tle, 1_000_001, 800_000, false},
+		{tle, 9_000_000, 800_001, false},
+		{tle, 1_000_001, 1_000_001, false},
+		{tle, 1_000_001, 1, true},
+		{ac, 900_000, 500_000, false},
+	} {
+		r := cpuTimedResponse(t, item.status, item.native, item.estimated)
+		if item.sampled {
+			r.CPUTimeSampling = &model.CPUTimeSampling{Method: "short-case-median-v1", Samples: []model.CPUTimeSample{
+				{Status: ac, CPUTimeNs: 900_000, CPUTimeMs: 1},
+				{Status: tle, CPUTimeNs: item.native, CPUTimeMs: 2},
+			}}
+		}
+		if err := row.add(r, "inline"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(row.CPUComparison.Cohorts) != 1 || len(row.CPUComparison.Excluded) != 0 {
+		t.Fatal(row.CPUComparison)
+	}
+	for _, c := range row.CPUComparison.Cohorts {
+		want := nativeTLETimeBound{UnderByMoreThan20Percent: 1, Inconclusive: 2, Sampled: 1}
+		if c.NativeTLETimeBound != want || c.CompletedTimeAccuracy.UnderByMoreThan20Percent != 1 ||
+			c.NativeTLEShadowAC != 3 || c.NativeTLEShadowTLE != 1 {
+			t.Fatal(c)
+		}
+	}
+}
+
+func TestNativeTLEBoundAtLargestCrossedLimit(t *testing.T) {
+	maxNative := ^uint64(0)
+	limit := int(ceilMillis(maxNative) - 1)
+	if int64(limit) != ceilMillis(maxNative)-1 {
+		t.Skip("this architecture has smaller time limits")
+	}
+	r := cpuTimedResponse(t, model.RunStatusTLE, maxNative, 800_000)
+	inner := r.WorkMeasurementShadow.Response
+	inner.WorkMeasurementExecution.NominalLimits.TimeMs = limit
+	inner.WorkMeasurementJudgment.NominalTimeMs = int64(limit)
+	var row counts
+	if err := row.add(r, "inline"); err != nil {
+		t.Fatal(err)
+	}
+	if len(row.CPUComparison.Cohorts) != 1 {
+		t.Fatal(row.CPUComparison)
+	}
+	for _, c := range row.CPUComparison.Cohorts {
+		if c.NativeTLETimeBound.UnderByMoreThan20Percent != 1 {
+			t.Fatal(c.NativeTLETimeBound)
+		}
+	}
+}
+
+func TestNativeTLETimeBoundUsesValidatedNormalizedCPU(t *testing.T) {
+	r := cpuTimedResponse(t, model.RunStatusTLE, 1_200_000, 800_000)
+	raw, rawMs := uint64(600_000), int64(1)
+	r.RawCPUTimeNs, r.RawCPUTimeMs = &raw, &rawMs
+	r.CPUTimeNormalization = &model.CPUTimeNormalization{Method: timing.CPUNormalizationMethod,
+		ReferenceTimeNs: 2, ObservedTimeNs: 1, ScalePPM: 2_000_000}
+	var row counts
+	if err := row.add(r, "inline"); err != nil {
+		t.Fatal(err)
+	}
+	// The second record's raw time fails to reproduce its normalized time.
+	raw++
+	if err := row.add(r, "inline"); err != nil {
+		t.Fatal(err)
+	}
+	if len(row.CPUComparison.Cohorts) != 1 || row.CPUComparison.Excluded["unverified_native_normalization"] != 1 {
+		t.Fatal(row.CPUComparison)
+	}
+	for _, c := range row.CPUComparison.Cohorts {
+		if c.NativeTLETimeBound != (nativeTLETimeBound{UnderByMoreThan20Percent: 1}) {
+			t.Fatal(c)
+		}
+	}
+}
+
 func TestCPUComparisonNativeEvidence(t *testing.T) {
 	ac, tle := model.RunStatusAccepted, model.RunStatusTLE
 	for _, f := range []struct {
