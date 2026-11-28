@@ -528,10 +528,15 @@ the output comparison and time estimate.
 | `complete` | mismatch | (not evaluated) | **Wrong Answer** |
 | `complete` | matches | unavailable | **Runtime Error** |
 | `budget_exceeded` | — | validated clock crossing | **Time Limit Exceeded** |
+| Durante session preparation fails before launch | — | — | **Container Initialization Failed**, unscored, without a judgment receipt |
 | `resource_exhausted` | — | — | **Container Initialization Failed**, unscored |
 | `incomplete`, clean exit with an unavailable weighted clock | — | unavailable | **Container Initialization Failed**, unscored |
 | Other `incomplete`, `failed` or `cancelled` | — | — | **Runtime Error** |
 
+- **Worker setup failure.** A missing Durante launcher, client or patched runtime
+  returns the worker's preparation error. An updated controller also withholds
+  a legacy worker's generic failed runtime verdict when it carries no meter
+  report, exit status, CPU sample or termination source.
 - **Wrong Answer** uses the existing output oracle (stdout or the single file
   output), before any time comparison. A nonzero exit on an output match is a
   runtime error at the ordinary layer and produces `Runtime Error` here too.

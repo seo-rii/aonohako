@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,13 +71,13 @@ func TestAutomaticJudgeSelection(t *testing.T) {
 
 func TestAutomaticJudgeDirect(t *testing.T) {
 	req, cfg := autoJudgeFixture(t)
-	// No meter is installed in this fixture. Its unavailable judgment proves
-	// selection through Service.Run without depending on a host installation.
+	t.Setenv("AONOHAKO_WORK_ROOT", t.TempDir())
 	cfg.Execution.WorkMeasurement.Drrun = t.TempDir() + "/absent-drrun"
 	got := NewWithConfig(cfg).Run(context.Background(), req, Hooks{})
-	if got.WorkMeasurementJudgment == nil || got.WorkMeasurementJudgment.Verdict != model.RunStatusRE || got.VerdictSource != "durante_judge" ||
-		got.WorkMeasurementObservation != nil || req.WorkMeasurementJudge {
-		t.Fatalf("direct auto-judge execution did not return its clock failure: %+v", got)
+	if got.Status != model.RunStatusInitFail || !strings.Contains(got.Reason, "durante preparation failed") ||
+		got.WorkMeasurementJudgment != nil || got.WorkMeasurementExecution != nil || got.WorkMeasurement != nil ||
+		got.Score != nil || got.WorkMeasurementObservation != nil || req.WorkMeasurementJudge {
+		t.Fatalf("absent launcher should be an unscored worker failure: %+v", got)
 	}
 }
 

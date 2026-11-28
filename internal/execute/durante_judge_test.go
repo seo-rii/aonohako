@@ -344,3 +344,35 @@ func TestRemoteWorkJudgmentUsesIndependentRawLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoteJudgeRequiresEvidenceForRuntimeError(t *testing.T) {
+	cfg, req := judgeMeasurementConfig(), judgeRequest()
+	exit := 7
+	for _, tc := range []struct {
+		name string
+		raw  model.RunResponse
+		want string
+	}{
+		// A sealed worker wrapped a pre-session error as a generic failed RE.
+		{"legacy unstarted", model.RunResponse{Status: model.RunStatusInitFail}, model.RunStatusInitFail},
+		// The sandbox may also classify a completed nonzero exit as InitFail.
+		{"observed sandbox init", model.RunResponse{Status: model.RunStatusInitFail, ExitCode: &exit, VerdictSource: "sandbox_init", WorkMeasurement: completeEnvelopeReport().WithoutTotals("child exited")}, model.RunStatusRE},
+		{"target exit", model.RunResponse{Status: model.RunStatusRE, ExitCode: &exit, VerdictSource: "exit_code"}, model.RunStatusRE},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := finishWorkMeasurementDiagnostic(context.Background(), req, tc.raw)
+			resp = finishWorkMeasurementTime(req, resp, cfg)
+			worker := finishWorkMeasurementJudge(req, resp, cfg)
+			if worker.Status != model.RunStatusRE || worker.WorkMeasurementExecution.State != "failed" {
+				t.Fatal("missing worker failed-envelope fixture")
+			}
+			got := exchangeTimeMeasurementResult(t, req, worker, cfg)
+			if got.Status != tc.want || got.Score != nil {
+				t.Fatalf("remote reply: %+v", got)
+			}
+			if tc.want == model.RunStatusInitFail && !strings.Contains(got.Reason, "without evidence of contestant execution") {
+				t.Fatalf("legacy verdict rejected for unexpected reason: %s", got.Reason)
+			}
+		})
+	}
+}

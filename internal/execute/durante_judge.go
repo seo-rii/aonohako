@@ -152,6 +152,14 @@ func validateRemoteWorkMeasurementJudge(req *model.RunRequest, response model.Ru
 	if j == nil {
 		return fmt.Errorf("invalid remote result: missing work measurement judgment")
 	}
+	// Older workers converted a pre-session initialization failure into a
+	// failed RE envelope. Only propagate a contestant RE with evidence that
+	// the target ran or the worker identified a termination source.
+	if status == model.RunStatusRE && expected.State == "failed" && expected.TerminationSource == "" &&
+		response.WorkMeasurement == nil && response.ExitCode == nil && response.CPUAccounting == nil &&
+		response.CPUTimeNs == 0 && response.CPUTimeMs == 0 && response.ProcessCPUTimeMs == 0 {
+		return fmt.Errorf("remote judge returned a runtime error without evidence of contestant execution")
+	}
 	if !judgmentsEqual(j, expected) {
 		return fmt.Errorf("invalid remote result: work measurement judgment mismatch")
 	}
