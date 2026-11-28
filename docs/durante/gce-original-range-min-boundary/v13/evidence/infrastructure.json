@@ -1,0 +1,74 @@
+{
+  "primary": {
+    "archive_sha256": "e6751b95abbbcfc6a310d52f427b4f0ca98d087a6772f0bff0dd477caa1723ac",
+    "boot_sha256": "76d7df5e0d945869140c970d086a3a45813457cb729ac41f7be076dadb5b7d11",
+    "cleanup_http": {
+      "boot_disk": 404,
+      "instance": 404
+    },
+    "cpu_platform": "AMD Milan",
+    "created_at": "2026-11-27T21:59:23.548-08:00",
+    "disk_auto_delete": true,
+    "disk_id_sha256": "ed91b973ff7bbb93d4565253444238311e24897d2a21e43ac711d535598a2722",
+    "external_ip": false,
+    "files": {
+      "clock/exec-trace.txt": "d4e12c983e0ba15af4eaa200909c4f85b3a8e04a278fd568ded0c654fa64a8a4",
+      "clock/platform.json": "6b711d120fae12cff41223130d7a5ff60344c299a9a3eb32fa04a2dabd0941b3",
+      "clock/shared/registry.json": "70d8ea61183345ec545870c34e6907889403a79f5d0dea88974486a2ae3da088",
+      "clock/shared/runtime-options-request.json": "658cc021f0800192bbe3a80e87493b4a006b812bf3e7b8f8a9c79c2b8fe2756f",
+      "clock/thresholds.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "clock/trials.jsonl": "e8793d9d7ce3ec1d65e941aa765ef53f0df63940fc3521a03873693d70b8bb70"
+    },
+    "groups": {
+      "clock": 105
+    },
+    "guest_exit": 0,
+    "image": "debian-12-bookworm-v20261117",
+    "instance_id_sha256": "ef0180457733a78dce4ef68e939fcf6b1243b1a40e6167f696706e26833b5934",
+    "machine_type": "n2d-standard-4",
+    "raw_archive_bytes": 26430,
+    "raw_archive_sha256": "42b2ae7af59b2df8da8f4ddc0cd57b68b449758aa6ee2d32222ed89221a3a66c",
+    "registration_commit": "b7a05b55be8259d8519d47eb3ede4c7913584134",
+    "service_account": false,
+    "temporary_key_removed": true,
+    "threads_per_core": 1,
+    "trial_count": 105,
+    "zone": "asia-northeast3-a"
+  },
+  "repeat": {
+    "archive_sha256": "e6751b95abbbcfc6a310d52f427b4f0ca98d087a6772f0bff0dd477caa1723ac",
+    "boot_sha256": "c39b415cef557149774b5dd8525a3e20da9d50e966abe43dfecc3d469847ef1c",
+    "cleanup_http": {
+      "boot_disk": 404,
+      "instance": 404
+    },
+    "cpu_platform": "AMD Milan",
+    "created_at": "2026-11-27T22:02:57.559-08:00",
+    "disk_auto_delete": true,
+    "disk_id_sha256": "51b1497d199d33ae8ab4ace11200659e62bf8cc16d242ccf17f10c0045bd6bd0",
+    "external_ip": false,
+    "files": {
+      "clock/exec-trace.txt": "fe87a95a343d57baf6e2b1046ca637fb5c0ffea509b9b14195798e81f80d6f3c",
+      "clock/platform.json": "1d11d6cae73bc0063cf0c317ee616e30b1b9b61906cc099aabe3c9c1aac4e2f5",
+      "clock/shared/registry.json": "70d8ea61183345ec545870c34e6907889403a79f5d0dea88974486a2ae3da088",
+      "clock/shared/runtime-options-request.json": "658cc021f0800192bbe3a80e87493b4a006b812bf3e7b8f8a9c79c2b8fe2756f",
+      "clock/thresholds.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "clock/trials.jsonl": "71cb0958eb832bc071a06e68f3a60ffb44a8c37edf4f97ec82dc301db34544eb"
+    },
+    "groups": {
+      "clock": 105
+    },
+    "guest_exit": 0,
+    "image": "debian-12-bookworm-v20261117",
+    "instance_id_sha256": "57cc554c21fa4f34f62623fa734a027fe0fa9ffaf381de4e7f40d2c2b370b2f0",
+    "machine_type": "n2d-standard-4",
+    "raw_archive_bytes": 26591,
+    "raw_archive_sha256": "3532f8ad7e05afb2acd1829cd631a5b536edd4092a70d26d1193ff56a4e3ecc2",
+    "registration_commit": "b7a05b55be8259d8519d47eb3ede4c7913584134",
+    "service_account": false,
+    "temporary_key_removed": true,
+    "threads_per_core": 1,
+    "trial_count": 105,
+    "zone": "asia-northeast3-a"
+  }
+}
