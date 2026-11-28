@@ -375,7 +375,7 @@ communication request can select the role clocks below.
 
 The HTTP harness grades a real compiled C++ program through embedded and
 forwarded execution using test-only coefficients. It checks normal completion,
-a busy loop, a sleeping process and a mismatched downstream model. On v12
+a busy loop, a sleeping process and a mismatched downstream model. On v12 and v13
 it also uses the same finite workload with a handled signal or a REP CMPS
 instruction to verify a raw crossing and an unavailable model-weighted clock.
 A weighted crossing already observed before the signal or instruction still

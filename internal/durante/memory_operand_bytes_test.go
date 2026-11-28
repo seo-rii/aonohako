@@ -18,9 +18,11 @@ func TestMemoryOperandBytesReceipt(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &report); err != nil || !report.ValidMemoryOperandBytes() || report.MemoryOperandBytes == nil || *report.MemoryOperandBytes != (MemoryOperandBytes{Version: 1}) {
 		t.Fatalf("measured zero: %+v %v", report, err)
 	}
-	wireV12 := strings.Replace(raw, engineProfileV11, engineProfileV12, 1)
-	if err := json.Unmarshal([]byte(wireV12), &report); err != nil || !report.ValidMemoryOperandBytes() {
-		t.Fatalf("v12 memory receipt: %+v %v", report, err)
+	for _, profile := range []string{engineProfileV12, engineProfileV13} {
+		wire := strings.Replace(raw, engineProfileV11, profile, 1)
+		if err := json.Unmarshal([]byte(wire), &report); err != nil || !report.ValidMemoryOperandBytes() {
+			t.Fatalf("%s memory receipt: %+v %v", profile, report, err)
+		}
 	}
 	if stopped := report.WithoutTotals("stopped"); stopped.MemoryOperandBytes != nil || !stopped.ValidUnavailableResult() {
 		t.Fatal("unavailable report retained memory operand bytes")

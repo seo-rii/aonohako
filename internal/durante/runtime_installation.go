@@ -20,6 +20,7 @@ const runtimeSourceSHA256 = "e2b7d3f1917ff64e644b81efd96a610a3c622f4857c75593fef
 const legacyRuntimePatchSHA256 = "59fc79b5055a0c42b463703768891f0a10199ef1135d43028826c8c3894bab7c"
 const legacyRuntimeCodeReplayPatchSHA256 = "391cd6f5e35dcbda372cab5dd98fa40a5b2a41effda52ecfce9afa945acb249b"
 const v12RuntimePatchSHA256 = "8b82ea0b82b3bfdfa3cf92a5fb46e4a9cc457fc4e52747412adfbcbf18b70251"
+const v13RuntimePatchSHA256 = "bc899631e407d25e36bccdee29cf9a8451f479ea925a0f5d3d59781f9cf0e159"
 const v12RuntimeCodeReplayPatchSHA256 = "aad0137aadca8a0932ca22f67ea95260880eb6bb93a229fd540c01241dc80d9d"
 const archivedV5V6CodeReplayPatchSHA256 = "aad9b561fb89e09d52d7a765124226659b8dbd8b886da61bc73d15fde28b5b72"
 const stockReleaseSHA256 = "9181f594aeeed921f44d572aebf429069f5f1e33a01f95b4ae32a100bf48788c"
@@ -38,6 +39,8 @@ const (
 	sourceCommitV11  = "74d9188f9fd86c75f079277e6e5278b379a0a1d7"
 	engineProfileV12 = "dynamorio-11.3-durante-v12-vm32m"
 	sourceCommitV12  = "b43685c76b94a365886031359b032899b009cd1b"
+	engineProfileV13 = "dynamorio-11.3-durante-v13-vm32m"
+	sourceCommitV13  = "6b4d74f248235f8f616aa5b8e151ca0db5a029de"
 )
 
 // InstallationIdentity is reproducibility metadata from the trusted runner.
@@ -97,6 +100,8 @@ func (r *Report) ValidShadowInstallationIdentity() bool {
 		return false
 	}
 	switch r.EngineProfile {
+	case engineProfileV13:
+		return r.Installation.validForSource(sourceCommitV13, v13RuntimePatchSHA256, v12RuntimeCodeReplayPatchSHA256)
 	case engineProfileV12:
 		return r.Installation.validForSource(sourceCommitV12, v12RuntimePatchSHA256, v12RuntimeCodeReplayPatchSHA256)
 	case engineProfileV11:
