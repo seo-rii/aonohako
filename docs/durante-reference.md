@@ -414,9 +414,19 @@ python3 /scripts/verify_durante_native_boundaries.py \
 
 For each workload and scale, the low CPU limit is 80% of its native median
 rounded down to whole milliseconds (at least 1 ms). The high limit is 120%
-rounded up. A median too short to bracket at whole-millisecond resolution
-is recorded as an exclusion. Both judges receive the same compiled artifact, input, expected
-stdout and nominal limits. At each limit the tool obtains one actual Durante
+rounded up. The tool also calculates the inclusive `observed_deadline_disagreement`
+interval from all completed native controls and frozen predictions. When that
+interval exists it tests the floor midpoint of the part within the watchdog
+headroom. For example, native controls of 50 ms and frozen predictions of 45 ms
+select limits of 40, 60 and 47 ms. The first two limits can agree even when the
+clocks give opposite verdicts at 47 ms. A midpoint matching the low or high
+limit shares that row and its verdict counts. The interval on the row records
+the predicted direction. The comparison records the actual HTTP verdicts.
+
+An unavailable estimate, a median too short to bracket, or a target beyond the
+watchdog headroom is recorded as an exclusion. The tool still executes the
+remaining valid targets. Both judges receive the same compiled artifact, input,
+expected stdout and nominal limits. At each limit the tool obtains one actual Durante
 verdict and three ordinary native verdicts. A native timeout must come from
 the CPU limit. A Durante timeout requires evidence of exhausted weighted
 work under the bound model. A raw watchdog stop cannot count as an agreement.

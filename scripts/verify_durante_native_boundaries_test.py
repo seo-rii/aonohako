@@ -44,6 +44,56 @@ class NativeBoundaryTests(unittest.TestCase):
                 boundaries.thresholds([ns] * 6)
         self.assertEqual(boundaries.thresholds([1_000_001] * 6), (1, 2))
 
+    def test_live_targets_use_all_observations_and_keep_integer_ties(self):
+        # All low/high verdicts agree for this case, but 47 ms separates the clocks.
+        policy = {"instruction_ns_numerator": 1, "rep_byte_ns_numerator": 2, "ns_denominator": 3}
+        native_ns = [50_000_000] * 5 + [51_000_000]
+        reports = [{"instructions": 120_000_000, "rep_bytes": n} for n in (0, 4_000_000, 7_500_000)]
+        rows, exclusions = boundaries.plan_limits(native_ns, reports, policy, 100)
+        self.assertFalse(exclusions)
+        self.assertEqual([r["nominal_ms"] for r in rows], [40, 60, 47])
+        self.assertEqual(rows[2]["observed_deadline_disagreement"],
+                         {"direction": "false_accept", "min_time_ms": 45, "max_time_ms": 49})
+        reports[2]["instructions"] += 1
+        rows, _ = boundaries.plan_limits(native_ns, reports, policy, 100)
+        self.assertEqual(rows[2]["observed_deadline_disagreement"]["min_time_ms"], 46)
+        reports[2]["instructions"] += 15_000_000
+        rows, _ = boundaries.plan_limits(native_ns, reports, policy, 100)
+        self.assertEqual(rows, [{"boundary": "low", "nominal_ms": 40}, {"boundary": "high", "nominal_ms": 60}])
+
+    def test_split_weights_and_coincident_live_targets(self):
+        policy = {"method": boundaries.SPLIT, "instruction_ns_numerator": 1, "movs_byte_ns_numerator": 2,
+                  "stos_byte_ns_numerator": 5, "ns_denominator": 1}
+        for expected_direction, (instructions, movs, stos), label, limit in (
+                ("false_accept", (21_000_000, 0, 2_000_000), "low", 40),
+                ("false_timeout", (45_000_000, 3_000_000, 4_000_000), "high", 60)):
+            with self.subTest(label=label):
+                report = {"instructions": instructions, "rep_bytes": movs + stos,
+                          "rep_breakdown": {"movs_bytes": movs, "stos_bytes": stos}}
+                rows, exclusions = boundaries.plan_limits([50_000_000] * 6, [report] * 3, policy, 100)
+                self.assertFalse(exclusions)
+                self.assertEqual(len(rows), 2)
+                (selected,) = [r for r in rows if "observed_deadline_disagreement" in r]
+                self.assertEqual((selected["boundary"], selected["nominal_ms"]), (label, limit))
+                self.assertEqual(selected["observed_deadline_disagreement"]["direction"], expected_direction)
+
+    def test_watchdog_headroom_and_unrepresentable_estimate(self):
+        policy = {"instruction_ns_numerator": 1, "rep_byte_ns_numerator": 1, "ns_denominator": 1}
+        native_ns = [50_000_000] * 6
+        reports = [{"instructions": 150_000_000, "rep_bytes": 0}] * 3
+        rows, excluded = boundaries.plan_limits(native_ns, reports, policy, 60)
+        self.assertFalse(excluded)
+        self.assertEqual(rows[-1], {"boundary": "observed_disagreement", "nominal_ms": 55,
+                                    "observed_deadline_disagreement": {
+                                        "direction": "false_timeout", "min_time_ms": 50, "max_time_ms": 149}})
+        rows, excluded = boundaries.plan_limits(native_ns, reports, policy, 49)
+        self.assertEqual(rows, [{"boundary": "low", "nominal_ms": 40}])
+        self.assertEqual([r["boundary"] for r in excluded], ["high", "observed_disagreement"])
+        reports[1] = {"instructions": 2**63, "rep_bytes": 0}
+        rows, excluded = boundaries.plan_limits(native_ns, reports, policy, 60)
+        self.assertEqual([r["nominal_ms"] for r in rows], [40, 60])
+        self.assertIn("exceeds int64", excluded[0]["error"])
+
     def test_native_cpu_cutoff_is_strict(self):
         boundaries.check_native(native(AC, "stdout", 40_000_000), 40)
         for source in ("cpu_time", "cpu_time_final", "cpu_time_cgroup", "cpu_time_cgroup_final"):

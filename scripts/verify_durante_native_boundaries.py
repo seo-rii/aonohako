@@ -46,6 +46,57 @@ def thresholds(controls_ns):
     return low, high
 
 
+def weighted_ns(policy, instructions, rep_bytes, breakdown):
+    total = instructions * policy["instruction_ns_numerator"]
+    if policy.get("method") == SPLIT:
+        total += (breakdown["movs_bytes"] * policy["movs_byte_ns_numerator"] +
+                  breakdown["stos_bytes"] * policy["stos_byte_ns_numerator"])
+    else:
+        total += rep_bytes * policy["rep_byte_ns_numerator"]
+    denominator = policy["ns_denominator"]
+    return (total + denominator - 1) // denominator
+
+
+def plan_limits(native_ns, reports, policy, max_nominal):
+    # One row per actual request limit, even when two selection rules coincide.
+    limits, exclusions = {}, []
+    try:
+        low, high = thresholds(native_ns)
+    except RuntimeError as error:
+        exclusions.append({"boundary": "native_bracket", "error": str(error)})
+    else:
+        for label, limit in (("low", low), ("high", high)):
+            item = {"boundary": label, "nominal_ms": limit}
+            if limit <= max_nominal:
+                limits[limit] = item
+            else:
+                exclusions.append({**item, "error": "watchdog limits leave insufficient headroom"})
+
+    # Frozen v1/v2 collection binaries can predate the optional interval in
+    # evaluation.json. Use their validated observations and exact clock weights.
+    predicted = [weighted_ns(policy, r["instructions"], r["rep_bytes"], r.get("rep_breakdown")) for r in reports]
+    if max(predicted) > 2**63 - 1:
+        exclusions.append({"boundary": "observed_disagreement", "error": "frozen estimate exceeds int64 nanoseconds"})
+    else:
+        # A time equal to the limit finishes within budget. The upper end is strict.
+        native_ms = [(n + 999_999) // 1_000_000 for n in native_ns]
+        predicted_ms = [(n + 999_999) // 1_000_000 for n in predicted]
+        for direction, faster, slower in (("false_accept", predicted_ms, native_ms),
+                                          ("false_timeout", native_ms, predicted_ms)):
+            first, last = max(1, max(faster)), min(600_000, min(slower) - 1)
+            if first > last:
+                continue
+            gap = {"direction": direction, "min_time_ms": first, "max_time_ms": last}
+            if first > max_nominal:
+                exclusions.append({"boundary": "observed_disagreement", "observed_deadline_disagreement": gap,
+                                   "error": "watchdog limits leave insufficient headroom"})
+            else:
+                middle = (first + min(last, max_nominal)) // 2
+                row = limits.setdefault(middle, {"boundary": "observed_disagreement", "nominal_ms": middle})
+                row["observed_deadline_disagreement"] = gap
+    return list(limits.values()), exclusions
+
+
 def model_binding(policy, runtime_options_id, determinism=""):
     # Go omits optional empty fields and HTML-escapes strings in encoding/json.
     effective = {k: policy[k] for k in POLICY_FIELDS if policy.get(k)}
@@ -135,14 +186,10 @@ def check_clock(response, req, policy, options_id, dataset, installation):
     require(type(overflow) is int and 0 <= overflow <= 7 and
             all(type(v) is int and 0 <= v < 2**64 and (not (overflow & (1 << i)) or v == 2**64 - 1)
                 for i, v in enumerate(counts)), "invalid work-clock progress")
-    combined = policy.get("rep_byte_ns_numerator")
-    weights = [policy["instruction_ns_numerator"], combined or policy["movs_byte_ns_numerator"],
-               combined or policy["stos_byte_ns_numerator"]]
     # A saturated counter with an overflow flag proves a lower bound of 2**64.
-    total = sum((2**64 if overflow & (1 << i) else count) * weights[i] for i, count in enumerate(counts))
-    denominator = policy["ns_denominator"]
-    crossed = total > clock["budget"] * denominator
-    elapsed_ns = (total + denominator - 1) // denominator
+    instructions, movs, stos = (2**64 if overflow & (1 << i) else count for i, count in enumerate(counts))
+    elapsed_ns = weighted_ns(policy, instructions, movs + stos, {"movs_bytes": movs, "stos_bytes": stos})
+    crossed = elapsed_ns > clock["budget"]
     eligibility = execution["time_estimate_eligibility"]
     if status == AC:
         require(cause == "stdout" and execution["state"] == "complete" and response.get("score") == 1 and
@@ -286,22 +333,20 @@ def experiment(args, summary):
                 scale = case["scale"]
                 group = samples[ident, scale]
                 ns = [s[phase]["cpu_time_ns"] for s in group for phase in ("native_before", "native_after")]
-                try:
-                    bounds = thresholds(ns)
-                    require(bounds[1] < min(hard["cpu_time_ms"], hard["wall_time_ms"]) and
-                            bounds[1] <= native_limits["wall_time_ms"], "watchdog limits leave insufficient headroom")
-                except RuntimeError as error:
-                    summary["exclusions"].append({"workload_id": ident, "scale": scale, "native_controls_ns": ns,
-                                                  "error": str(error)})
+                max_nominal = min(hard["cpu_time_ms"] - 1, hard["wall_time_ms"] - 1, native_limits["wall_time_ms"])
+                targets, excluded = plan_limits(ns, [s["metered"]["work_measurement"] for s in group], policy, max_nominal)
+                for item in excluded:
+                    summary["exclusions"].append({"workload_id": ident, "scale": scale, "native_controls_ns": ns, **item})
+                if excluded:
                     checkpoint(args.output, summary)
-                    continue
-                for label, nominal in zip(("low", "high"), bounds):
+                for target in targets:
+                    label, nominal = target["boundary"], target["nominal_ms"]
                     limits = {**native_limits, "time_ms": nominal}
                     plain = {"lang": "CPP20", "binaries": binaries, "stdin": case["input"], "expected_stdout": case["expected_stdout"],
                              "limits": limits, "emit_logs": False}
                     measured = {**plain, "work_measurement": True, "work_measurement_judge": True, "work_measurement_time": True,
                                 "work_measurement_limits": hard}
-                    row = {"workload_id": ident, "scale": scale, "boundary": label, "nominal_ms": nominal,
+                    row = {"workload_id": ident, "scale": scale, **target,
                            "native_controls_ns": ns, "binary_sha256": binary_sha, "native": []}
                     summary["cases"].append(row)
                     prefix = f"{ident}-{scale}-{label}"
