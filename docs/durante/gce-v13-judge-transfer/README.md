@@ -45,7 +45,7 @@ Two independent, SMT-disabled N2D Milan boots execute target processes on CPU 1.
 The raw CPU and wall watchdogs remain 120 and 170 seconds. Report median raw target CPU on completed executions separately from the virtual time used for a verdict. The latency-enabled diagnostic has its own model and timing context. These tests cover cooperative static CPP20 programs with integrity mode off. Cases outside the original three are diagnostics and cannot enter the operator environment.
 ### Replay
 
-Run these commands from the Aonohako repository root. The first replays all 756 main requests, eight deterministic controls, 24 latency diagnostics and both cleanup receipts. The second also verifies the three original v12 release entries and prints the v13 environment only if every gate passes. Automatic routing additionally requires the operator to set `AONOHAKO_DURANTE_JUDGE_AUTO=on` on the compatible control plane.
+Run these commands from the Aonohako repository root. The first replays all 756 main requests, eight deterministic controls, 24 latency diagnostics and both cleanup receipts. The second compares the replay with the published results, verifies the three original v12 release entries and checks all twelve ordinary HTTP receipts against the candidate environment. It prints the v13 environment only if those checks pass. Automatic routing additionally requires the operator to set `AONOHAKO_DURANTE_JUDGE_AUTO=on` on the compatible control plane.
 
 ```sh
 study=docs/durante/gce-v13-judge-transfer
