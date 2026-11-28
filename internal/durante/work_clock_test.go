@@ -22,7 +22,7 @@ func TestSessionLiveWorkClockOptions(t *testing.T) {
 	}{
 		{"no live clock", "", nil, false},
 		{"raw work units", path, raw, false},
-		{"model weighted", path, weighted, EngineProfile == engineProfileV12},
+		{"model weighted", path, weighted, EngineProfile == engineProfileV12 || EngineProfile == engineProfileV13},
 		{"no live file", "", weighted, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -168,7 +168,7 @@ def main():
                 run(url, "f", "Accepted", "complete", hard)
                 run(url, "w", "Container Initialization Failed", "resource_exhausted",
                     {**hard, "cpu_time_ms": 1000, "wall_time_ms": 1000})
-                if report["engine_profile"] == "dynamorio-11.3-durante-v12-vm32m":
+                if report["engine_profile"] in ("dynamorio-11.3-durante-v12-vm32m", "dynamorio-11.3-durante-v13-vm32m"):
                     for mode, quality_field in (("s", "signals_observed"), ("c", "unsupported_rep_entries")):
                         check_eligibility(url, mode, quality_field)
                 for omitted in (True, False):

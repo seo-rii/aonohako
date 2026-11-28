@@ -3,4 +3,4 @@
 * text=auto eol=lf
 
 # Nested upstream patch context contains literal single-space lines.
-third_party/durante-v12/changes.patch whitespace=-blank-at-eol
+third_party/durante-v1[23]/changes.patch whitespace=-blank-at-eol

@@ -116,6 +116,7 @@ func TestClientSourceMustMatchWorker(t *testing.T) {
 		{"v10 package", []string{sourceCommitV10}, EngineProfile == engineProfileV10},
 		{"v11 package", []string{sourceCommitV11}, EngineProfile == engineProfileV11},
 		{"v12 package", []string{sourceCommitV12}, EngineProfile == engineProfileV12},
+		{"v13 package", []string{sourceCommitV13}, EngineProfile == engineProfileV13},
 		{"unknown source", []string{strings.Repeat("a", 40)}, false},
 		{"empty marker", []string{""}, false},
 		{"trailing newline", []string{SourceCommit + "\n"}, false},
@@ -277,16 +278,22 @@ func TestArchivedShadowInstallationUsesItsOriginalReplayPatch(t *testing.T) {
 func TestShadowRecordsPreserveProfileSourcePair(t *testing.T) {
 	identity := InstallationIdentity{RuntimeSourceCommit: runtimeSourceCommit, LauncherSHA256: strings.Repeat("a", 64),
 		ClientSHA256: strings.Repeat("b", 64), CoreSHA256: strings.Repeat("c", 64), Unchanged: true}
-	profiles := map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8, engineProfileV9: sourceCommitV9, engineProfileV10: sourceCommitV10, engineProfileV11: sourceCommitV11, engineProfileV12: sourceCommitV12}
+	profiles := map[string]string{engineProfileV7: sourceCommitV7, engineProfileV8: sourceCommitV8, engineProfileV9: sourceCommitV9, engineProfileV10: sourceCommitV10, engineProfileV11: sourceCommitV11, engineProfileV12: sourceCommitV12, engineProfileV13: sourceCommitV13}
 	for profile, expected := range profiles {
 		r := Report{EngineProfile: profile, Installation: &identity}
+		expectedPatch, expectedReplay := legacyRuntimePatchSHA256, legacyRuntimeCodeReplayPatchSHA256
+		switch profile {
+		case engineProfileV12:
+			expectedPatch, expectedReplay = v12RuntimePatchSHA256, v12RuntimeCodeReplayPatchSHA256
+		case engineProfileV13:
+			expectedPatch, expectedReplay = v13RuntimePatchSHA256, v12RuntimeCodeReplayPatchSHA256
+		}
 		for _, source := range profiles {
 			identity.SourceCommit = source
-			for _, patch := range []string{legacyRuntimePatchSHA256, v12RuntimePatchSHA256} {
+			for _, patch := range []string{legacyRuntimePatchSHA256, v12RuntimePatchSHA256, v13RuntimePatchSHA256} {
 				for _, replay := range []string{legacyRuntimeCodeReplayPatchSHA256, v12RuntimeCodeReplayPatchSHA256} {
 					identity.RuntimePatchSHA256, identity.RuntimeCodeReplayPatchSHA256 = patch, replay
-					v12 := profile == engineProfileV12
-					matches := source == expected && (patch == v12RuntimePatchSHA256) == v12 && (replay == v12RuntimeCodeReplayPatchSHA256) == v12
+					matches := source == expected && patch == expectedPatch && replay == expectedReplay
 					if r.ValidShadowInstallationIdentity() != matches || r.ValidInstallationIdentity() != (matches && profile == EngineProfile) {
 						t.Errorf("wrong acceptance for %s with source %s, vfork %s, replay %s", profile, source, patch, replay)
 					}
@@ -419,7 +426,7 @@ func TestInstallationIdentityReadsLegacyWithoutQualifyingCurrentRuntime(t *testi
 
 func TestRuntimeInstallationPinsMatchVendoredSource(t *testing.T) {
 	vendor := filepath.Join("..", "..", "third_party")
-	for dir, commit := range map[string]string{"durante": sourceCommitV7, "durante-v8": sourceCommitV8, "durante-v9": sourceCommitV9, "durante-v10": sourceCommitV10, "durante-v11": sourceCommitV11, "durante-v12": sourceCommitV12} {
+	for dir, commit := range map[string]string{"durante": sourceCommitV7, "durante-v8": sourceCommitV8, "durante-v9": sourceCommitV9, "durante-v10": sourceCommitV10, "durante-v11": sourceCommitV11, "durante-v12": sourceCommitV12, "durante-v13": sourceCommitV13} {
 		data, err := os.ReadFile(filepath.Join(vendor, dir, "UPSTREAM.json"))
 		if err != nil {
 			t.Fatal(err)
@@ -432,8 +439,11 @@ func TestRuntimeInstallationPinsMatchVendoredSource(t *testing.T) {
 			t.Fatalf("%s installation source pin differs from vendor manifest", dir)
 		}
 		patch, replay := legacyRuntimePatchSHA256, legacyRuntimeCodeReplayPatchSHA256
-		if commit == sourceCommitV12 {
+		switch commit {
+		case sourceCommitV12:
 			patch, replay = v12RuntimePatchSHA256, v12RuntimeCodeReplayPatchSHA256
+		case sourceCommitV13:
+			patch, replay = v13RuntimePatchSHA256, v12RuntimeCodeReplayPatchSHA256
 		}
 		if manifest.Files["toolkit/patches/dynamorio-vfork-lifetime.patch"] != patch ||
 			manifest.Files["toolkit/patches/dynamorio-code-replay.patch"] != replay {

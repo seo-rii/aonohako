@@ -1,0 +1,616 @@
+diff --git a/client/durante.c b/client/durante.c
+index 718460c..17131e1 100644
+--- a/client/durante.c
++++ b/client/durante.c
+@@ -66,17 +66,27 @@ static uint32_t DURANTE_TEST_BLOCK_LATENCY_BOUND(void *drcontext, void *tag, ins
+ #define MAX_EVENTS 4096
+ 
+ typedef struct {
+-  uint64_t instructions, counter_overflows, signals, rep_bytes, rep_entries,
+-      unsupported_rep_entries;
++  uint64_t instructions, counter_overflows;
++  /* Optional static latency bound (latency_bound.h), in 1/16 cycles. The
++   * current block's charge is kept so a replay can return its unexecuted
++   * share; an unanalyzable block or underflow is sticky invalidity. Flat
++   * entries reach these fields with 8-bit displacements.
++   * latency_entry_base is the counter before the most recent flat entry's
++   * charge, which relocation restores and the next entry checks for a wrap
++   * (as entry_base does for instructions). */
++  uint64_t latency_bound_x16, latency_entry_base;
++  uint32_t block_instructions, block_bound_x16;
++  uint64_t unsupported_rep_entries;
+   uint64_t rep_movs_bytes, rep_stos_bytes, rep_movs_entries, rep_stos_entries;
+   uint64_t published_instructions, published_movs, published_stos;
+   /* Flat live entries charge a block by counting live_room down from
+-   * fast_until - instructions - 1, and store nothing else. instructions lags
+-   * until settle_live_count() adds the distance live_room has moved since
+-   * room_settled. A negative value takes the boundary callback. It may run low
+-   * after replay or relocation, which only adds a callback; the callback
+-   * recomputes it. entry_room is live_room before the current entry, or
+-   * ENTRY_ROOM_CHARGED once the callback has charged that entry. */
++   * fast_until - instructions - 1, and store no other count than the
++   * optional latency bound. instructions lags until settle_live_count() adds
++   * the distance live_room has moved since room_settled. A negative value
++   * takes the boundary callback. It may run low after replay or relocation,
++   * which only adds a callback; the callback recomputes it. entry_room is
++   * live_room before the current entry, or ENTRY_ROOM_CHARGED once the
++   * callback has charged that entry. */
+   int64_t live_room, entry_room;
+   /* The value of instructions before the most recent block entry (set by flat
+    * entries without a live clock, and by the live boundary callback), and its
+@@ -90,11 +100,7 @@ typedef struct {
+   bool replay_error;
+   /* A CPUID-profile request outside the fixed table (sticky invalidity). */
+   bool cpuid_error;
+-  /* Optional static latency bound (latency_bound.h), in 1/16 cycles. The
+-   * current block's charge is kept so a replay can return its unexecuted
+-   * share; an unanalyzable block or underflow is sticky invalidity. */
+-  uint64_t latency_bound_x16;
+-  uint32_t block_instructions, block_bound_x16;
++  uint64_t signals, rep_bytes, rep_entries;
+   uint32_t write_block_instructions, write_block_bound_x16;
+   bool latency_error;
+   app_pc write_pc, write_next_pc, restart_pc;
+@@ -123,6 +129,10 @@ typedef struct {
+   byte *boundary_stack, *boundary_stack_top;
+   reg_t boundary_rsp;
+ } thread_data_t;
++/* Flat and live entries address these fields with 8-bit displacements. */
++_Static_assert(offsetof(thread_data_t, entry_base) + 8 <= 128 &&
++                   offsetof(thread_data_t, block_bound_x16) + 4 <= 128,
++               "entry fields need 8-bit displacements");
+ static int tls_index;
+ /* In ordinary static code the generated accounting runs at every block and
+  * store. Mirror the drmgr-owned pointer for a single segment-relative load. */
+@@ -431,7 +441,8 @@ static void settle_restart(thread_data_t *d) {
+ /* Settle the last flat charge before aggregation or replay. Later block
+  * entries latch earlier wraps before overwriting entry_base. */
+ static void check_flat_counter(thread_data_t *d) {
+-  if (flat_inline && d->instructions < d->entry_base) {
++  if (flat_inline && (d->instructions < d->entry_base ||
++                      (latency_bound_enabled && d->latency_bound_x16 < d->latency_entry_base))) {
+     d->counter_overflows = 1;
+     invalidate_live_work();
+   }
+@@ -750,6 +761,10 @@ static void settle_write_checkpoint(thread_data_t *d) {
+   d->write_next_pc = pc + (packed >> WRITE_WORD_PC_BITS & ((1 << WRITE_WORD_LENGTH_BITS) - 1));
+   d->write_suffix = packed >> (WRITE_WORD_PC_BITS + WRITE_WORD_LENGTH_BITS);
+   d->write_rep = false;
++  /* An entry zeroes the word before it replaces the block fields, so a packed
++   * word belongs to the block they describe, as at before_write(). */
++  d->write_block_instructions = d->block_instructions;
++  d->write_block_bound_x16 = d->block_bound_x16;
+ }
+ 
+ /* Discard the checkpoint, including one inline code stored but no callback
+@@ -805,6 +820,19 @@ static void thread_init(void *ctx) {
+ }
+ static void thread_exit(void *ctx) {
+   thread_data_t *d = thread_state(ctx);
++  /* In a forked child the runtime runs this event, before fork_init(), for
++   * each parent thread that did not survive the fork, on a copy of its state.
++   * Those counts belong to the parent thread, which still publishes and
++   * aggregates them: publishing the copy would count its remainder twice, and
++   * a replay it had pending would invalidate the page. fork_init() resets the
++   * totals, so the copy is only freed. Only such a context belongs to another
++   * process while owner_pid is not yet this one: a shared-VM child's own
++   * context, or a child's state exiting in the parent, fails one condition. */
++  if (d && dr_get_process_id() != owner_pid &&
++      dr_get_process_id_from_drcontext(ctx) != dr_get_process_id()) {
++    free_thread_state(ctx, d);
++    return;
++  }
+   /* A thread stopped by another thread's exit_group can be anywhere in a
+    * charged BB. Its terminal record counts that final prefix as it stands, so
+    * publish the same remainder; the live total then matches the record. */
+@@ -1204,13 +1232,74 @@ static void emit_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int cou
+   emit_flat_parts(ctx, bb, where, count, FLAT_ALL, false);
+ }
+ 
++/* With -latency_bound a flat entry also charges the block's bound, as
++ * count_block_latency() does, after its count and after the write word is
++ * cleared, with R11 holding the state and RCX free. It records the block's
++ * count and bound for a replay of one of its writes, and saves the bound's
++ * prior value in latency_entry_base, which restore_state() recognizes. A
++ * bound above INT32_MAX (an unanalyzable block) charges nothing here; the
++ * caller adds the error callback. Like the count's, a wrap is latched by the
++ * next entry or by check_flat_counter(): a block adds at most INT32_MAX. imm
++ * receives the two uses of the bound. */
++enum { LATENCY_ADD, LATENCY_BLOCK_BOUND, LATENCY_IMMEDIATES };
++
++static void emit_flat_latency(void *ctx, instrlist_t *bb, instr_t *where, int count,
++                              uint32_t bound, instr_t **imm) {
++  opnd_t value = opnd_create_reg(DR_REG_RCX), low_reg = opnd_create_reg(DR_REG_ECX);
++#define INSERT(i) \
++  (where ? instrlist_meta_preinsert(bb, where, (i)) : instrlist_meta_append(bb, (i)))
++  instr_t *wrapped = INSTR_CREATE_label(ctx), *checked = INSTR_CREATE_label(ctx);
++  INSERT(INSTR_CREATE_movzx(ctx, low_reg,
++                            OPND_CREATE_MEM8(DR_REG_R11,
++                                             offsetof(thread_data_t, latency_entry_base) + 7)));
++  INSERT(INSTR_CREATE_jecxz(ctx, opnd_create_instr(checked)));
++  INSERT(INSTR_CREATE_movzx(ctx, low_reg,
++                            OPND_CREATE_MEM8(DR_REG_R11,
++                                             offsetof(thread_data_t, latency_bound_x16) + 7)));
++  INSERT(INSTR_CREATE_jecxz(ctx, opnd_create_instr(wrapped)));
++  INSERT(INSTR_CREATE_jmp_short(ctx, opnd_create_instr(checked)));
++  INSERT(wrapped);
++  INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, counter_overflows)),
++                             OPND_CREATE_INT32(1)));
++  INSERT(checked);
++  if (bound <= INT32_MAX) {
++    INSERT(INSTR_CREATE_mov_ld(ctx, value, state_field(offsetof(thread_data_t, latency_bound_x16))));
++    INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, latency_entry_base)),
++                               value));
++    instr_t *add = INSTR_CREATE_lea(
++        ctx, value, opnd_create_base_disp(DR_REG_RCX, DR_REG_NULL, 0, (int)bound, OPSZ_lea));
++    INSERT(add);
++    if (imm)
++      imm[LATENCY_ADD] = add;
++    INSERT(INSTR_CREATE_mov_st(ctx, state_field(offsetof(thread_data_t, latency_bound_x16)),
++                               value));
++  }
++  INSERT(INSTR_CREATE_mov_st(ctx,
++                             OPND_CREATE_MEM32(DR_REG_R11, offsetof(thread_data_t, block_instructions)),
++                             OPND_CREATE_INT32(count)));
++  instr_t *block_bound = INSTR_CREATE_mov_st(
++      ctx, OPND_CREATE_MEM32(DR_REG_R11, offsetof(thread_data_t, block_bound_x16)),
++      OPND_CREATE_INT32((int)bound));
++  INSERT(block_bound);
++  if (imm)
++    imm[LATENCY_BLOCK_BOUND] = block_bound;
++#undef INSERT
++}
++
++static void emit_flat_latency_entry(void *ctx, instrlist_t *bb, instr_t *where, int count,
++                                    uint32_t bound, instr_t **imm) {
++  emit_flat_parts(ctx, bb, where, count, FLAT_PREFIX | FLAT_BODY, false);
++  emit_flat_latency(ctx, bb, where, count, bound, imm);
++  emit_flat_parts(ctx, bb, where, count, FLAT_SUFFIX, false);
++}
++
+ /* The runtime re-encodes every meta instruction of each new block, which
+  * dominates block building for interpreters and generated code. These
+  * sequences depend only on the block size or on a write's immediates, so they
+  * are encoded once and inserted as one raw copy. A valid opcode and an empty
+  * operand list keep the runtime from decoding the bundle; restore_state()
+  * decodes the code cache itself. */
+-enum { FLAT_ENTRY_CACHE = 1024, SEQUENCE_BYTES = 192 };
++enum { FLAT_ENTRY_CACHE = 1024, SEQUENCE_BYTES = 256 };
+ typedef struct {
+   uint length;
+   byte bytes[SEQUENCE_BYTES];
+@@ -1304,6 +1393,43 @@ static void insert_flat_charge(void *ctx, instrlist_t *bb, instr_t *where, int c
+   insert_bundle(ctx, bb, where, entry->bytes, entry->length);
+ }
+ 
++/* After an unanalyzable block's flat entry, as count_block_latency() does
++ * for a bound it cannot charge. */
++static void unanalyzable_block_entry(void) {
++  thread_data_t *d = thread_state(dr_get_current_drcontext());
++  if (!d)
++    fail("latency bound without valid thread state");
++  counter_error(&d->latency_error);
++}
++
++static void insert_unanalyzable_call(void *ctx, instrlist_t *bb, instr_t *where) {
++  dr_insert_clean_call(ctx, bb, where, (void *)unanalyzable_block_entry, false, 0);
++}
++
++/* One encoded latency entry per block size, with the bound patched. The
++ * placeholder keeps the bound's displacement 32 bits wide. */
++static patched_template_t *flat_latency_entries[FLAT_ENTRY_CACHE + 1];
++
++static void insert_flat_latency_charge(void *ctx, instrlist_t *bb, instr_t *where, int count,
++                                       uint32_t bound) {
++  if (count <= 0 || count > FLAT_ENTRY_CACHE || bound > INT32_MAX) {
++    emit_flat_latency_entry(ctx, bb, where, count, bound, NULL);
++    if (bound > INT32_MAX)
++      insert_unanalyzable_call(ctx, bb, where);
++    return;
++  }
++  const patched_template_t *t = __atomic_load_n(&flat_latency_entries[count], __ATOMIC_ACQUIRE);
++  if (!t) {
++    instrlist_t *ilist = instrlist_create(ctx);
++    instr_t *imm[LATENCY_IMMEDIATES];
++    emit_flat_latency_entry(ctx, ilist, NULL, count, INT32_MAX, imm);
++    t = publish_template(ctx, &flat_latency_entries[count], ilist, imm, LATENCY_IMMEDIATES,
++                         "cannot lay out the latency entry");
++  }
++  const uint32_t value[LATENCY_IMMEDIATES] = {bound, bound};
++  insert_patched(ctx, bb, where, t, value, LATENCY_IMMEDIATES);
++}
++
+ /* The runtime encodes every inserted instruction when it builds a block, so
+  * live entries share one routine that makes the boundary callback. An entry
+  * stores the arguments through R11 and the address to resume at in RCX, and
+@@ -1403,12 +1529,18 @@ static void set_boundary_state(void *ctx, thread_data_t *d) {
+  * either path back until the suffix restores RCX. The slow path passes this
+  * block's arguments to the boundary routine, which resumes at the suffix.
+  * Every branch is relative to the entry itself or goes through the thread's
+- * state, so the entry can be copied to any address. address receives the two
+- * stores of the block's first address. */
++ * state, so the entry can be copied to any address. imm receives the two
++ * stores of the block's first address. With the latency bound, both paths
++ * charge it at the resume point, after the count and after the write word
++ * is cleared (by the body or by the callback); imm then also receives the
++ * bound's two uses, at ENTRY_IMMEDIATES + LATENCY_ADD and
++ * ENTRY_IMMEDIATES + LATENCY_BLOCK_BOUND. */
+ enum { ENTRY_PC_LOW, ENTRY_PC_HIGH, ENTRY_IMMEDIATES };
++_Static_assert(ENTRY_IMMEDIATES + LATENCY_IMMEDIATES <= TEMPLATE_IMMEDIATES,
++               "live latency entry immediates");
+ 
+-static void emit_flat_live_entry(void *ctx, instrlist_t *bb, instr_t *where, int count,
+-                                 app_pc first_pc, instr_t **address) {
++static void emit_live_entry(void *ctx, instrlist_t *bb, instr_t *where, int count,
++                            app_pc first_pc, bool latency, uint32_t bound, instr_t **imm) {
+ #define INSERT(i) \
+   (where ? instrlist_meta_preinsert(bb, where, (i)) : instrlist_meta_append(bb, (i)))
+   instr_t *fast = INSTR_CREATE_label(ctx), *resume = INSTR_CREATE_label(ctx);
+@@ -1422,8 +1554,8 @@ static void emit_flat_live_entry(void *ctx, instrlist_t *bb, instr_t *where, int
+         ctx, OPND_CREATE_MEM32(DR_REG_R11, (int)offsetof(thread_data_t, boundary_pc) + 4 * i),
+         OPND_CREATE_INT32((int)(uint32_t)((ptr_uint_t)first_pc >> (32 * i))));
+     INSERT(half);
+-    if (address)
+-      address[i] = half;
++    if (imm)
++      imm[i] = half;
+   }
+   INSERT(INSTR_CREATE_lea(ctx, opnd_create_reg(DR_REG_RCX),
+                           opnd_create_mem_instr(resume, 0, OPSZ_lea)));
+@@ -1432,30 +1564,42 @@ static void emit_flat_live_entry(void *ctx, instrlist_t *bb, instr_t *where, int
+   INSERT(fast);
+   emit_flat_parts(ctx, bb, where, count, FLAT_BODY, true);
+   INSERT(resume);
++  if (latency)
++    emit_flat_latency(ctx, bb, where, count, bound, imm ? imm + ENTRY_IMMEDIATES : NULL);
+   emit_flat_parts(ctx, bb, where, 1, FLAT_SUFFIX, true);
+ #undef INSERT
+ }
+ 
+-/* One encoded entry per block size, with the block's first address patched. */
++/* One encoded entry per block size, with the block's first address (and the
++ * bound) patched. */
+ static patched_template_t *flat_live_entries[FLAT_ENTRY_CACHE + 1];
+-
+-static void insert_flat_live_charge(void *ctx, instrlist_t *bb, instr_t *where, int count,
+-                                    app_pc first_pc) {
+-  if (count <= 0 || count > FLAT_ENTRY_CACHE) {
+-    emit_flat_live_entry(ctx, bb, where, count, first_pc, NULL);
++static patched_template_t *flat_live_latency_entries[FLAT_ENTRY_CACHE + 1];
++
++static void insert_live_entry(void *ctx, instrlist_t *bb, instr_t *where, int count,
++                              app_pc first_pc, bool latency, uint32_t bound) {
++  if (count <= 0 || count > FLAT_ENTRY_CACHE || (latency && bound > INT32_MAX)) {
++    emit_live_entry(ctx, bb, where, count, first_pc, latency, bound, NULL);
++    if (latency && bound > INT32_MAX)
++      insert_unanalyzable_call(ctx, bb, where);
+     return;
+   }
+-  const patched_template_t *t = __atomic_load_n(&flat_live_entries[count], __ATOMIC_ACQUIRE);
++  patched_template_t **slot = latency ? &flat_live_latency_entries[count] : &flat_live_entries[count];
++  const uint immediates = ENTRY_IMMEDIATES + (latency ? LATENCY_IMMEDIATES : 0);
++  const patched_template_t *t = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
+   if (!t) {
+     instrlist_t *ilist = instrlist_create(ctx);
+-    instr_t *address[ENTRY_IMMEDIATES];
+-    emit_flat_live_entry(ctx, ilist, NULL, count, NULL, address);
+-    t = publish_template(ctx, &flat_live_entries[count], ilist, address, ENTRY_IMMEDIATES,
+-                         "cannot lay out the live entry");
++    instr_t *imm[ENTRY_IMMEDIATES + LATENCY_IMMEDIATES];
++    emit_live_entry(ctx, ilist, NULL, count, NULL, latency, INT32_MAX, imm);
++    t = publish_template(ctx, slot, ilist, imm, immediates, "cannot lay out the live entry");
+   }
+-  const uint32_t value[ENTRY_IMMEDIATES] = {(uint32_t)(ptr_uint_t)first_pc,
+-                                            (uint32_t)((ptr_uint_t)first_pc >> 32)};
+-  insert_patched(ctx, bb, where, t, value, ENTRY_IMMEDIATES);
++  const uint32_t value[ENTRY_IMMEDIATES + LATENCY_IMMEDIATES] = {
++      (uint32_t)(ptr_uint_t)first_pc, (uint32_t)((ptr_uint_t)first_pc >> 32), bound, bound};
++  insert_patched(ctx, bb, where, t, value, immediates);
++}
++
++static void insert_flat_live_charge(void *ctx, instrlist_t *bb, instr_t *where, int count,
++                                    app_pc first_pc) {
++  insert_live_entry(ctx, bb, where, count, first_pc, false, 0);
+ }
+ 
+ static bool is_raw_slot(opnd_t opnd, uint slot) {
+@@ -1487,6 +1631,7 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+     return true;
+   byte *pc = info->fragment_info.cache_start_pc, *stop = info->raw_mcontext->pc;
+   bool spilled_rcx = false, spilled_r11 = false, checkpointed = false, live_entry = false;
++  bool latency_checkpointed = false;
+   instr_t ins;
+   instr_init(drcontext, &ins);
+   for (uint n = 0; pc != NULL && pc < stop && n < 4096; ++n) {
+@@ -1508,12 +1653,18 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+                 opnd_get_disp(dst) == (int)offsetof(thread_data_t, entry_room))) {
+         checkpointed = true;
+         live_entry = opnd_get_disp(dst) == (int)offsetof(thread_data_t, entry_room);
++      } else if (flat_inline && checkpointed && is_reg(src, DR_REG_RCX) &&
++                 opnd_is_base_disp(dst) && opnd_get_base(dst) == DR_REG_R11 &&
++                 opnd_get_index(dst) == DR_REG_NULL &&
++                 opnd_get_disp(dst) == (int)offsetof(thread_data_t, latency_entry_base)) {
++        /* The entry's latency charge follows its count's checkpoint. */
++        latency_checkpointed = true;
+       }
+     } else if (op == OP_mov_ld && instr_num_dsts(&ins) == 1 && instr_num_srcs(&ins) == 1) {
+       opnd_t dst = instr_get_dst(&ins, 0), src = instr_get_src(&ins, 0);
+       if (is_raw_slot(src, RAW_TLS_SPILL_RCX) && is_reg(dst, DR_REG_RCX)) {
+         spilled_rcx = false;
+-        checkpointed = false; /* The entry sequence is complete. */
++        checkpointed = latency_checkpointed = false; /* The entry sequence is complete. */
+       } else if (is_raw_slot(src, RAW_TLS_SPILL_R11) && is_reg(dst, DR_REG_R11)) {
+         spilled_r11 = false;
+       }
+@@ -1528,6 +1679,9 @@ static bool restore_state(void *drcontext, bool restore_memory, dr_restore_state
+     info->mcontext->r11 = slots[RAW_TLS_SPILL_R11];
+   if (!checkpointed || !restore_memory)
+     return true;
++  /* The latency charge is undone with the count's: re-entry charges both. */
++  if (latency_checkpointed)
++    d->latency_bound_x16 = d->latency_entry_base;
+   if (!live_entry) {
+     if (d->instructions != d->entry_base)
+       d->instructions = d->entry_base;
+@@ -1984,6 +2138,11 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+                            OPND_CREATE_INTPTR(first ? instr_get_app_pc(first) : NULL),
+                            OPND_CREATE_INT32((int)(uint32_t)(packed >> 32)),
+                            OPND_CREATE_INT32((int)suffix_memory_bytes(where)));
++    else if (latency_bound_enabled && flat_inline && live_work)
++      insert_live_entry(drcontext, bb, where, count, first ? instr_get_app_pc(first) : NULL, true,
++                        (uint32_t)(packed >> 32));
++    else if (latency_bound_enabled && flat_inline)
++      insert_flat_latency_charge(drcontext, bb, where, count, (uint32_t)(packed >> 32));
+     else if (latency_bound_enabled)
+       dr_insert_clean_call(drcontext, bb, where, (void *)count_block_latency, false, 3,
+                            OPND_CREATE_INT32(count),
+@@ -2032,8 +2191,9 @@ static dr_emit_flags_t instrument_block(void *drcontext, void *tag,
+                            OPND_CREATE_INT32(suffix),
+                            OPND_CREATE_INT32((int)suffix_memory_bytes(where)),
+                            OPND_CREATE_INT32((int)instruction_memory_bytes(where)));
+-    } else if (!latency_bound_enabled && inline_write &&
++    } else if ((!latency_bound_enabled || flat_inline) && inline_write &&
+                insert_write_checkpoint(drcontext, bb, where, pc, next_pc, suffix)) {
++      /* A flat checkpoint takes its block's bound when it is settled. */
+       /* Flat layouts depend only on the block, so retranslation reproduces them. */
+       if (!cache_probe_enabled() && !flat_inline)
+         flags = DR_EMIT_STORE_TRANSLATIONS;
+@@ -2377,6 +2537,10 @@ static void process_exit(void) {
+   for (int i = 0; i <= FLAT_ENTRY_CACHE; ++i) {
+     if (flat_live_entries[i])
+       dr_global_free(flat_live_entries[i], sizeof(*flat_live_entries[i]));
++    if (flat_latency_entries[i])
++      dr_global_free(flat_latency_entries[i], sizeof(*flat_latency_entries[i]));
++    if (flat_live_latency_entries[i])
++      dr_global_free(flat_live_latency_entries[i], sizeof(*flat_live_latency_entries[i]));
+   }
+   if (checkpoint_template)
+     dr_global_free(checkpoint_template, sizeof(*checkpoint_template));
+@@ -2485,7 +2649,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
+ #ifdef DURANTE_TEST_COUNT_LOCATIONS
+   const bool flat_candidate = false; /* The location profile needs entry callbacks. */
+ #else
+-  const bool flat_candidate = !latency_bound_enabled && !cache_probe_enabled();
++  /* Operand bytes keep their entry and write callbacks. */
++  const bool flat_candidate = !memory_operand_bytes_enabled && !cache_probe_enabled();
+ #endif
+   raw_tls_enabled = (static_text_end != 0 || flat_candidate) &&
+                     dr_raw_tls_calloc(&raw_tls_register, &raw_tls_offset, RAW_TLS_SLOTS, 0);
+diff --git a/docs/LATENCY_BOUND.md b/docs/LATENCY_BOUND.md
+index d9378b0..29884fd 100644
+--- a/docs/LATENCY_BOUND.md
++++ b/docs/LATENCY_BOUND.md
+@@ -43,6 +43,24 @@ proportion: `floor(bound * returned_instructions / block_instructions)`. Every
+ block therefore keeps at least its issue cost, so a valid terminal always has
+ `latency_bound_x16 >= 4 * instructions`; the collectors reject anything less.
+ 
++## Charging
++
++The bound is charged by the same flag-free inline block entry as the
++instruction count, with or without the live clock (`--work-budget`). After
++the count, the entry adds the block's constant, records the block's count and
++bound for a replay of one of its writes, and keeps the counter's previous
++value. A thread that the runtime relocates in the middle of an entry gets both
++charges back, and re-entering the block charges them once. As for
++instructions, the next entry latches a wrap of the 64-bit counter, and the
++wrap makes the measurement unavailable. An unanalyzable block still takes a
++callback that sets its error.
++
++`--memory-operand-bytes` keeps the block-entry and write callbacks for every
++counter, so it costs far more than the bound alone. (The 0.86% marginal cost
++in the Rust comparison below was measured when the bound used those callbacks
++too.) The inline entries and the callbacks count the same instructions and
++bound; the equality checks under Evidence compare them.
++
+ ## Records and aggregate
+ 
+ With the option, every `start` adds `latency_bound_version: 1`, and every `end`
+@@ -62,7 +80,12 @@ at the top level, on every process and on every selected image segment. The CLI
+ report adds `latency_bound_version: 1` when the bound was requested; a complete
+ measurement without the object (or with it when it was not requested) is
+ reported as unavailable (`client latency bound does not match the request`).
+-Combined instruction and REP counters are unchanged by the option.
++The option does not change how instructions and REP bytes are counted. A
++program that reads `/proc/self/maps` still runs a little longer with it: that
++file also lists the runtime's own mappings, and the larger instrumented blocks
++take a few more code-cache units. A Rust program (whose start-up parses the
++file to find the main thread's stack) counted 659,893 instructions without the
++option and 672,643 with it, each the same in every run without ASLR.
+ 
+ ## Memory operand bytes
+ 
+@@ -116,6 +139,22 @@ and no bound without the flag. The code-replay fixtures from
+ `tests/jit_replay.S` must stay valid with unchanged instruction counts and a
+ bound of at least the issue cost.
+ 
++The harness then compares the inline entries with the callbacks that
++`--memory-operand-bytes` keeps. This covers one iteration count of each
++kernel, the replay fixtures, the operand fixture and the ordinary, exec and
++failed-exec REP lifecycle fixtures from `tests/rep_breakdown.S`. Each run is
++repeated with the live clock. Every counted field must be identical: validity,
++instructions, bound, REP counters, signals and every process and image row.
++With `--engine-debug` the same comparison also runs on the debug core.
++`--reference-client` adds a client built from another revision, for example
++one whose bound always used callbacks. Every fixture must then match it too,
++including the fork and vfork fixtures, which observe SIGCHLD, and a fault
++handler that reads registers its block's entry spilled.
++`tests/live_work_client.py --latency-bound` repeats the live page checks with
++the bound, including a signal at each point of the boundary routine with
++`--gdb`. `tests/jit_stress.py --latency-bound`, optionally with
++`--work-budget`, runs the generated-code stress with it, in every mode.
++
+ In the exploratory work-feature study (`experiments/time_features`, a separate
+ change), a prototype that omitted `lea` address dependencies predicted 9 of 18 single-cost kernels within 20%
+ under leave-one-out fitting (median error 25%, against 82% for instructions
+diff --git a/docs/ONLINE_WORK_BUDGET.md b/docs/ONLINE_WORK_BUDGET.md
+index a130224..bab5413 100644
+--- a/docs/ONLINE_WORK_BUDGET.md
++++ b/docs/ONLINE_WORK_BUDGET.md
+@@ -50,8 +50,10 @@ aligned little-endian uint64 words in this order.
+ 
+ All instrumented images, processes and threads in the role contribute to that
+ one file. Each thread advances its private published baseline; shared counters
+-use atomic additions. A child starts fresh, and an exec checkpoint publishes
+-only the outstanding delta. A failed exec therefore continues against the
++use atomic additions. A child starts fresh: the copies of its parent's other
++threads that a fork leaves behind publish nothing, since those threads keep
++running and publish in the parent. An exec checkpoint publishes only the
++outstanding delta. A failed exec therefore continues against the
+ same baseline. Publication at the next block entry leaves the current block
+ available for replay correction. The client batches each component up to a
+ 4096-unit publication threshold. Before each application syscall it flushes
+diff --git a/toolkit/patches/dynamorio-vfork-lifetime.patch b/toolkit/patches/dynamorio-vfork-lifetime.patch
+index 1d5448e..241c178 100644
+--- a/toolkit/patches/dynamorio-vfork-lifetime.patch
++++ b/toolkit/patches/dynamorio-vfork-lifetime.patch
+@@ -52,6 +52,11 @@ fragment when the thread deletes it; raise the self-write deletion event after
+ releasing the linking lock; keep reclaiming execve'd non-vfork clone children
+ (i#1010); drop a pending signal only when the heap is full, without returning
+ -EINTR.
++Deliver SIGSEGV as the kernel does when a signal frame cannot be written to
++the stack: a SIGSEGV becomes fatal and another signal becomes SIGSEGV. A
++fault delivered from the code cache freed a pending-signal entry that did
++not exist (a crash on a stack overflow with a SIGSEGV handler), and a
++SIGSEGV whose handler shared the full stack was forged again forever.
+ 
+ --- a/core/dynamo.c
+ +++ b/core/dynamo.c
+@@ -2767,3 +2772,118 @@ index efc1bbb1cd..ad839efb02 100644
+      }
+      /* barrier to prevent compiler from moving the below write above the loop */
+      __asm__ __volatile__("" : : : "memory");
++--- a/core/unix/signal.c
+++++ b/core/unix/signal.c
++@@ -3966,10 +3966,12 @@
++  * Also touches up fpstate pointer
++  * dcontext can be NULL (which is why we take in info) in which case no check
++  * versus executable memory is performed (we assume this is a native frame).
+++ * If the frame cannot be written to sp and unwritable is non-NULL, sets
+++ * *unwritable and returns without delivering SIGSEGV, which the caller must do.
++  */
++ static void
++ copy_frame_to_stack(dcontext_t *dcontext, thread_sig_info_t *info, int sig,
++-                    sigframe_rt_t *frame, byte *sp, bool from_pending)
+++                    sigframe_rt_t *frame, byte *sp, bool from_pending, bool *unwritable)
++ {
++     bool rtframe = IS_RT_FOR_APP(info, sig);
++     uint frame_size = get_app_frame_size(info, sig);
++@@ -4018,6 +4020,10 @@
++             },
++             /* except */ { stack_unwritable = true; });
++     }
+++    if (stack_unwritable && unwritable != NULL) {
+++        *unwritable = true;
+++        return;
+++    }
++     if (stack_unwritable) {
++         /* Override the no-nested check in record_pending_signal(): it's ok b/c
++          * receive_pending_signal() calls to here at a consistent point,
++@@ -4025,9 +4031,20 @@
++          */
++         info->nested_pending_ok = true;
++         /* Just throw away this signal and deliver SIGSEGV instead with the
++-         * same sigcontext, like the kernel does.
+++         * same sigcontext, like the kernel does.  Only a pending signal has an
+++         * entry to free: a fault delivered from the cache was never queued.
++          */
++-        free_pending_signal(info, sig);
+++        if (from_pending)
+++            free_pending_signal(info, sig);
+++        if (sig == SIGSEGV) {
+++            /* When the kernel cannot deliver SIGSEGV itself it makes the signal
+++             * fatal: it resets the handler and unblocks it (force_sigsegv()).
+++             * Otherwise the SIGSEGV forged below would fail the same way again.
+++             */
+++            if (info->sighand->action[SIGSEGV] != NULL)
+++                info->sighand->action[SIGSEGV]->handler = (handler_t)SIG_DFL;
+++            kernel_sigdelset(&info->app_sigblocked, SIGSEGV);
+++        }
++         os_forge_exception(0, UNREADABLE_MEMORY_EXECUTION_EXCEPTION);
++         ASSERT_NOT_REACHED();
++     }
++@@ -6433,7 +6450,35 @@
++         terminate_sigsuspend(dcontext, info, uc);
++ 
++     /* copy frame to appropriate stack and convert to non-rt if necessary */
++-    copy_frame_to_stack(dcontext, info, sig, our_frame, (void *)xsp, false /*!pending*/);
+++    bool unwritable = false;
+++    copy_frame_to_stack(dcontext, info, sig, our_frame, (void *)xsp, false /*!pending*/,
+++                        &unwritable);
+++    if (unwritable) {
+++        /* Like the kernel's force_sigsegv(): a SIGSEGV whose frame cannot be
+++         * written is fatal, and another signal becomes a SIGSEGV, which is
+++         * unblocked and takes the default action if ignored.  We are still in
+++         * our own handler, where a forged signal would count as nested.
+++         */
+++        kernel_sigaction_t *segv = info->sighand->action[SIGSEGV];
+++        LOG(THREAD, LOG_ASYNCH, 2, "\tcannot write the frame for signal %d at " PFX "\n",
+++            sig, xsp);
+++        if (segv != NULL && (sig == SIGSEGV || segv->handler == (handler_t)SIG_IGN))
+++            segv->handler = (handler_t)SIG_DFL;
+++        kernel_sigdelset(&info->app_sigblocked, SIGSEGV);
+++        memset(&our_frame->info, 0, sizeof(our_frame->info));
+++        our_frame->info.si_signo = SIGSEGV;
+++        our_frame->info.si_code = SI_KERNEL;
+++#ifdef X86_32
+++        our_frame->sig = SIGSEGV;
+++#endif
+++        if (segv != NULL && segv->handler != (handler_t)SIG_DFL) {
+++            return execute_handler_from_cache(dcontext, SIGSEGV, our_frame, sc_orig, f,
+++                                              NULL);
+++        }
+++        if (execute_default_from_cache(dcontext, SIGSEGV, our_frame, sc_orig, false))
+++            *get_sigcontext_from_rt_frame(our_frame) = *sc_orig;
+++        return false;
+++    }
++     LOG(THREAD, LOG_ASYNCH, 3, "\tcopied frame from " PFX " to " PFX "\n", our_frame,
++         xsp);
++     sigcontext_t *app_sc = get_sigcontext_from_app_frame(info, sig, (void *)xsp);
++@@ -6675,7 +6720,7 @@
++      * chance to make changes, copy the frame to the appropriate stack
++      * location and convert to non-rt if necessary
++      */
++-    copy_frame_to_stack(dcontext, info, sig, frame, xsp, true /*pending*/);
+++    copy_frame_to_stack(dcontext, info, sig, frame, xsp, true /*pending*/, NULL);
++     /* now point at the app's frame */
++     sc = get_sigcontext_from_app_frame(info, sig, (void *)xsp);
++ 
++@@ -7042,7 +7087,7 @@
++     /* We cannot reuse the current signal frame, therefore we create a copy. */
++     byte *new_xsp = get_sigstack_frame_ptr(dcontext, info, sig, our_frame);
++     copy_frame_to_stack(dcontext, info, sig, our_frame, (void *)new_xsp,
++-                        false /*!pending*/);
+++                        false /*!pending*/, NULL);
++     DOLOG(2, LOG_ASYNCH, {
++         LOG(THREAD, LOG_ASYNCH, 3, "Pre-signal blocked signals, stored in our frame:\n");
++         dump_sigset(dcontext, (kernel_sigset_t *)&our_frame->uc.uc_sigmask);
++@@ -8873,7 +8918,8 @@
++      * and that we're not clobbering any app data beyond TOS.
++      */
++     xsp = get_sigstack_frame_ptr(dcontext, info, SUSPEND_SIGNAL, frame);
++-    copy_frame_to_stack(dcontext, info, SUSPEND_SIGNAL, frame, xsp, false /*!pending*/);
+++    copy_frame_to_stack(dcontext, info, SUSPEND_SIGNAL, frame, xsp, false /*!pending*/,
+++                        NULL);
++ 
++ #ifdef HAVE_SIGALTSTACK
++     /* Make sure the frame's sigstack reflects the app stack.

@@ -327,7 +327,7 @@ func (r *Report) ValidLatencyBound() bool {
 }
 
 func supportsMemoryOperandBytes(profile string) bool {
-	return profile == engineProfileV11 || profile == engineProfileV12
+	return profile == engineProfileV11 || profile == engineProfileV12 || profile == engineProfileV13
 }
 
 // ValidMemoryOperandBytes checks the counter's requirements for a published worker report.

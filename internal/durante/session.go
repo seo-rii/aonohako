@@ -146,7 +146,7 @@ func (s *Session) WrapWithWorkClock(command []string, clockPath string, plan *Wo
 		args = append(args, "-live_work_v1", clockPath)
 		// A weighted cutoff must stop trusting the prefix on the same events
 		// that disqualify a terminal time estimate.
-		if EngineProfile == engineProfileV12 && plan != nil && plan.TimePolicy != nil {
+		if (EngineProfile == engineProfileV12 || EngineProfile == engineProfileV13) && plan != nil && plan.TimePolicy != nil {
 			args = append(args, "-live_work_require_eligible")
 		}
 	}
