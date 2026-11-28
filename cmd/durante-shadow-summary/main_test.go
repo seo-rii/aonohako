@@ -281,6 +281,47 @@ func TestCPUComparisonAtNativeAndVirtualBoundaries(t *testing.T) {
 	}
 }
 
+func TestCompletedNativeTimeAccuracy(t *testing.T) {
+	var row counts
+	// Every native AC and shadow AC below has the same rounded duration, yet
+	// the underlying nanoseconds span both boundaries.
+	for _, ns := range []uint64{399_999, 400_000, 500_000, 600_000, 600_001} {
+		if err := row.add(cpuTimedResponse(t, model.RunStatusAccepted, 500_000, ns), "inline"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, r := range []model.RunResponse{
+		cpuTimedResponse(t, model.RunStatusAccepted, 1_000_000, 1_200_001), // completed shadow TLE
+		cpuTimedResponse(t, model.RunStatusTLE, 1_000_001, 400_000),        // interrupted native run
+	} {
+		if err := row.add(r, "inline"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := completedTimeAccuracy{UnderByMoreThan20Percent: 1, Within20Percent: 3, OverByMoreThan20Percent: 2}
+	if len(row.CPUComparison.Cohorts) != 1 {
+		t.Fatal(row.CPUComparison)
+	}
+	for _, cohort := range row.CPUComparison.Cohorts {
+		if cohort.CompletedTimeAccuracy != want || cohort.NativeTLEShadowAC != 1 || cohort.NativeACShadowTLE != 1 {
+			t.Fatal(cohort)
+		}
+	}
+}
+
+func TestCompletedNativeTimeAccuracyFractionalTolerance(t *testing.T) {
+	var accuracy completedTimeAccuracy
+	for _, estimate := range []uint64{8, 9, 13, 14} {
+		accuracy.add(11, estimate)
+	}
+	accuracy.add(^uint64(0), 1)
+	accuracy.add(1, ^uint64(0))
+	want := completedTimeAccuracy{UnderByMoreThan20Percent: 2, Within20Percent: 2, OverByMoreThan20Percent: 2}
+	if accuracy != want {
+		t.Fatal(accuracy)
+	}
+}
+
 func TestCPUComparisonNativeEvidence(t *testing.T) {
 	ac, tle := model.RunStatusAccepted, model.RunStatusTLE
 	for _, f := range []struct {
@@ -426,6 +467,25 @@ func TestCPUComparisonRecomputesArchivedCoefficientsAndCalibration(t *testing.T)
 				t.Fatal(row.CPUComparison)
 			}
 		})
+	}
+}
+
+func TestCompletedNativeTimeAccuracyUsesNormalizedTime(t *testing.T) {
+	r := cpuTimedResponse(t, model.RunStatusAccepted, 800_000, 960_000)
+	raw, rawMillis := uint64(400_000), int64(1)
+	r.RawCPUTimeNs, r.RawCPUTimeMs = &raw, &rawMillis
+	r.CPUTimeNormalization = &model.CPUTimeNormalization{Method: timing.CPUNormalizationMethod, ReferenceTimeNs: 2, ObservedTimeNs: 1, ScalePPM: 2_000_000}
+	var row counts
+	if err := row.add(r, "inline"); err != nil {
+		t.Fatal(err)
+	}
+	if len(row.CPUComparison.Cohorts) != 1 {
+		t.Fatal(row.CPUComparison)
+	}
+	for _, cohort := range row.CPUComparison.Cohorts {
+		if cohort.CompletedTimeAccuracy != (completedTimeAccuracy{Within20Percent: 1}) {
+			t.Fatal(cohort)
+		}
 	}
 }
 

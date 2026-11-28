@@ -724,6 +724,15 @@ cohort reports four counts. Divide `native_ac_shadow_tle` by
 `native_tle_shadow_ac` by `native_tle_shadow_ac + native_tle_shadow_tle` for
 the false-AC rate. A zero denominator means the rate is unavailable.
 
+Each cohort also reports `completed_native_time_accuracy`. Its three counts
+show whether the shadow estimate was more than 20% below the native CPU time,
+within ±20% (inclusive), or more than 20% above it. The comparison uses the
+recorded native nanoseconds after any validated normalization and the recomputed
+shadow estimate. It includes completed native AC runs even when the shadow
+exceeded the nominal deadline. Their total equals `native_ac_shadow_ac +
+native_ac_shadow_tle`. Native CPU stops can truncate the program and contribute
+only to the verdict counts. A zero total gives no timing accuracy rate.
+
 A native AC needs a normal exit, the same output comparison as the shadow
 and positive measured CPU nanoseconds within the limit. A native TLE needs
 a measured CPU stop and a reading strictly over the limit. A native output AC
