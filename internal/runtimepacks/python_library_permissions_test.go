@@ -55,40 +55,117 @@ func TestDockerBuildEnablesPythonLibraryIsolationForMatchingRuntimes(t *testing.
 }
 
 func TestRuntimeDockerfilePermissionIsolatesPythonLibraries(t *testing.T) {
-	path := filepath.Join("..", "..", "docker", "runtime.Dockerfile")
-	data, err := os.ReadFile(path)
+	root := filepath.Join("..", "..")
+	data, err := os.ReadFile(filepath.Join(root, "docker", "runtime.Dockerfile"))
 	if err != nil {
-		t.Fatalf("ReadFile(%q): %v", path, err)
+		t.Fatal(err)
 	}
 	body := string(data)
-	packageContextCopy := strings.Index(body, "COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/")
-	trustedHookCopy := strings.Index(body, "COPY --chmod=0644 python/sitecustomize.py /usr/local/lib/aonohako/python/sitecustomize.py")
-	if packageContextCopy == -1 || trustedHookCopy == -1 || trustedHookCopy < packageContextCopy {
-		t.Fatalf("runtime.Dockerfile must copy the fixed trusted sitecustomize after the custom Python package context")
+
+	beforeRuntime, runtime, found := strings.Cut(body, "\nFROM runtime-toolchain AS runtime\n")
+	if !found {
+		t.Fatal("runtime.Dockerfile missing final runtime stage")
 	}
+	_, toolchain, found := strings.Cut(beforeRuntime, "\nFROM runtime-foundation AS runtime-toolchain\n")
+	if !found {
+		t.Fatal("runtime.Dockerfile missing toolchain stage")
+	}
+
+	mount := "source=scripts/isolate_python_libraries.sh,target=/tmp/aonohako-isolate-python-libraries.sh,ro"
+	helper := "bash /tmp/aonohako-isolate-python-libraries.sh "
+	isolationArgs := ` "${PYTHON_EXTERNAL_LIBRARY_GID}" "${PYTHON_LIBRARY_ISOLATION}" "${PYPY_LIBRARY_ISOLATION}"`
+	assertOrderedDockerRunMarkers(t, toolchain, helper+"initial"+isolationArgs,
+		mount,
+		"python3 -m pip install",
+		"/usr/local/go/bin/go mod download",
+		"env -u INSTALL_SCRIPT",
+		"/usr/local/cargo/bin/cargo vendor",
+		"npm install --global",
+		helper+"initial"+isolationArgs,
+	)
+
+	packageContextCopy := strings.Index(runtime, "COPY --from=aonohako-python-packages / /usr/local/lib/aonohako/python/")
+	trustedHookCopy := strings.Index(runtime, "COPY --chmod=0644 python/sitecustomize.py /usr/local/lib/aonohako/python/sitecustomize.py")
+	reconcile := helper + "reconcile" + isolationArgs
+	if packageContextCopy == -1 || trustedHookCopy <= packageContextCopy || strings.Index(runtime, reconcile) <= trustedHookCopy {
+		t.Fatal("runtime.Dockerfile must copy custom Python packages, overlay the trusted hook, then harden permissions")
+	}
+	assertOrderedDockerRunMarkers(t, runtime, reconcile,
+		mount,
+		`for tool in ${SANDBOX_TOOLS}`,
+		reconcile,
+		`if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" || "${PYPY_LIBRARY_ISOLATION}" == "true" ]]`,
+		"path=/usr/local/lib/aonohako/python",
+		`chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}"`,
+		`find "${path}" -type d -exec chmod 0750`,
+		`find "${path}" -type f -perm /0111 -exec chmod 0750`,
+		`find "${path}" -type f ! -perm /0111 -exec chmod 0640`,
+		"for path in /usr/lib/python*/dist-packages/pip",
+		`chmod -R go-rwx "${path}"`,
+	)
+
 	for _, marker := range []string{
 		"ARG PYTHON_LIBRARY_ISOLATION=false",
 		"ARG PYPY_LIBRARY_ISOLATION=false",
 		"ARG PYTHON_EXTERNAL_LIBRARY_GID=65530",
-		`if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" ]]`,
-		`if [[ "${PYPY_LIBRARY_ISOLATION}" == "true" ]]`,
-		`if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" || "${PYPY_LIBRARY_ISOLATION}" == "true" ]]`,
+	} {
+		if !strings.Contains(toolchain, marker) {
+			t.Errorf("runtime toolchain is missing Python permission arg %q", marker)
+		}
+	}
+	for _, marker := range []string{
+		"AONOHAKO_PYTHON_LIBRARY_ISOLATION=${PYTHON_LIBRARY_ISOLATION}",
+		"AONOHAKO_PYPY_LIBRARY_ISOLATION=${PYPY_LIBRARY_ISOLATION}",
+		"AONOHAKO_PYTHON_EXTERNAL_LIBRARY_GID=${PYTHON_EXTERNAL_LIBRARY_GID}",
+	} {
+		if !strings.Contains(runtime, marker) {
+			t.Errorf("runtime.Dockerfile missing Python permission marker %q", marker)
+		}
+	}
+
+	data, err = os.ReadFile(filepath.Join(root, "scripts", "isolate_python_libraries.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{
+		`if [[ "${python_isolation}" == "true" ]]`,
+		`if [[ "${pypy_isolation}" == "true" ]]`,
 		"/usr/lib/python*/dist-packages",
+		"/usr/local/lib/python*/dist-packages",
+		"/usr/lib/python*/site-packages",
 		"/usr/local/lib/python*/site-packages",
 		"/usr/lib/pypy*/dist-packages",
 		"/usr/local/lib/pypy*/dist-packages",
 		"/usr/lib/pypy*/site-packages",
 		"/usr/local/lib/pypy*/site-packages",
 		"/usr/share/python-wheels",
-		"/usr/local/lib/aonohako/python",
-		`chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}"`,
-		`find "${path}" -type d -exec chmod 0750`,
-		`find "${path}" -type f ! -perm /0111 -exec chmod 0640`,
-		"AONOHAKO_PYTHON_LIBRARY_ISOLATION=${PYTHON_LIBRARY_ISOLATION}",
-		"AONOHAKO_PYPY_LIBRARY_ISOLATION=${PYPY_LIBRARY_ISOLATION}",
+		`chown -R "0:${gid}"`,
+		`! -uid 0 -o ! -gid "${gid}" \) -exec chown -h "0:${gid}"`,
+		"-type d ! -perm 0750 -exec chmod 0750",
+		"-type f -perm /0111 ! -perm 0750 -exec chmod 0750",
+		"-type f ! -perm /0111 ! -perm 0640 -exec chmod 0640",
 	} {
-		if !strings.Contains(body, marker) {
-			t.Fatalf("runtime.Dockerfile missing Python permission marker %q", marker)
+		if !strings.Contains(string(data), marker) {
+			t.Errorf("Python isolation helper missing %q", marker)
 		}
 	}
+}
+
+func assertOrderedDockerRunMarkers(t *testing.T, stage, command string, markers ...string) {
+	t.Helper()
+
+	for _, instruction := range strings.Split(strings.ReplaceAll(stage, "\\\n", ""), "\n") {
+		if !strings.HasPrefix(instruction, "RUN ") || !strings.Contains(instruction, command) {
+			continue
+		}
+		for _, marker := range markers {
+			_, remaining, found := strings.Cut(instruction, marker)
+			if !found {
+				t.Fatalf("Dockerfile RUN for %q is missing %q in the expected order", command, marker)
+			}
+			instruction = remaining
+		}
+		return
+	}
+	t.Fatalf("Dockerfile is missing a RUN instruction for %q", command)
 }
