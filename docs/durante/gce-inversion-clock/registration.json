@@ -1,0 +1,30 @@
+{
+  "archive_sha256": "1a640d0de453bb45de2dfc02006e8e3b8ef254c24ed3b90fa190d244d70b3aea",
+  "expected_rows": {
+    "clock": 331,
+    "memory": 20
+  },
+  "payload": {
+    "guest.py": "3f7bd1c4266d2a2378b9f81fdaa0e59c5622c52020492a13e76dd85aa0b5491f",
+    "guest.sh": "a4903021dfe80e0cb08ab385060d022bada9ff7f69300d0dcc11e04e4e2d93f2",
+    "installation.json": "1a115c2038eba80146946c3d63233ef79c58fd9aa874aaa6ee5ae52e0ede55db",
+    "memory-table": "3f947056dd48a8230d6fda7ad825591bc722337234cadd96acfc2906b2a752a6",
+    "memory_probe.py": "4eb68fcf82acc5ce6a5dd8f963cddd3c0aa2a0caba72558e5688d4506ab27840",
+    "pilot/corpus/inversions-bottom_up": "e6fafd48f818d2ea67ccb4f80a701a28c15e317391b83c462a67f857d6336658",
+    "pilot/corpus/inversions-fast": "95ce143d7b5dc7b5e5d91b595e31206988b0368241907ba6f5897cfe88b0fa87",
+    "pilot/corpus/inversions-reference": "b0fbcc81f109bedf09ff5a8f0365b7682ff0d9832dc343d4a6488cede3165f72",
+    "pilot/corpus/inversions-reverse_bit": "e555df168256e052772a98afd2d91955e05196e6f039d5aadd4baf5193fedf83",
+    "pilot/corpus/inversions-slow": "fac24fff5f68c64372be7d6a1664c39cdda5003d2b9ace6d7f02c852afd13e09",
+    "pilot/corpus/inversions-wrong": "811ca8cdfddbfe7ad2778f9673053af17acadd874bbb23b119345545f20cee2a",
+    "pilot/guest.py": "a5cd6da9b6986561dd0424bd038521d2913c6a668f932478c0947731691045b9",
+    "pilot/guest.sh": "3aa64575960cd8196541f8834642ce84f16a63759208d7d6f681a43223e960e0",
+    "pilot/scripts/verify_durante_native_boundaries.py": "0c8d3fd2d83eaad08f18afa313db1fd74b7a93621266e6636b653d5127efa623",
+    "pilot/scripts/verify_durante_observation.py": "a70482a22947ce2db01892d185c560ef8c29d717f06ae8180ee0b2d57f4f6ccb",
+    "pilot/v12_guest.py": "b76d125703cdf94433e561622f2c86a12d7149bb3c2de924315b8b6616e89c53",
+    "plan.json": "c597068e568fb6b5ab39ff33e0082a7b9b30cd87c020a5a3b8995b3a3df09a6e",
+    "plan.py": "209c6d28513af13cf7decafc1b71baa513911321260f165118d6e1ae5e3a6327",
+    "runtime.squashfs": "5ebf65c242036f85ea8873926aa9e8721fa22cd8d0d3394dd32309e09354a3d2",
+    "table.cpp": "8e7989974bf55a7167787643cbd860fef2a61b06a385f69af212eb26b0ee56f0"
+  },
+  "schema": 1
+}
