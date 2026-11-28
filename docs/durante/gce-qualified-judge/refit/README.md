@@ -40,6 +40,11 @@ Run the following from the repository root to regenerate the report and
 the environment for the verified worker. Automatic routing additionally
 requires an updated v12 controller configured from
 `python3 -B docs/durante/gce-qualified-judge/controller_env.py --engine v12`.
+The current controller export selects range minimum and shortest paths.
+The original 203 ms inversion case routes natively after two correct programs
+received repeatable false timeouts on v12. Regenerate earlier controller settings.
+[Original-input v12 trials](../../gce-original-inversion-boundary/v12/README.md)
+
 Set `AONOHAKO_DURANTE_JUDGE_AUTO=on` on that controller. Keep automatic
 routing off on the sealed schema-1 worker. [Controller setup](../../../durante-judging.md)
 The default deployment uses native grading.
