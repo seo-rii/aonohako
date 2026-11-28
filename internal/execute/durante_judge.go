@@ -10,20 +10,20 @@ import (
 )
 
 // judgeVerdictStatus maps the durante verdict enum to a public run status.
-func judgeVerdictStatus(v durante.JudgeVerdict) (string, bool) {
+func judgeVerdictStatus(v durante.JudgeVerdict) string {
 	switch v {
 	case durante.JudgeAccepted:
-		return model.RunStatusAccepted, true
+		return model.RunStatusAccepted
 	case durante.JudgeWrongAnswer:
-		return model.RunStatusWA, false
+		return model.RunStatusWA
 	case durante.JudgeTimeLimitExceeded:
-		return model.RunStatusTLE, false
+		return model.RunStatusTLE
 	case durante.JudgeUnavailable:
-		return model.RunStatusInitFail, false
+		return model.RunStatusInitFail
 	case durante.JudgeRuntimeError:
-		return model.RunStatusRE, false
+		return model.RunStatusRE
 	default:
-		return model.RunStatusRE, false
+		return model.RunStatusRE
 	}
 }
 
@@ -41,22 +41,20 @@ func judgeRawCPUTimeNs(response model.RunResponse) *uint64 {
 	return nil
 }
 
-// computeJudgment derives the verdict from a finalized response. It returns the
-// judgment, its run status, whether that status is Accepted, and whether judge
-// mode applies at all (requested, judged family, envelope execution present).
-// It reads only already-decided inputs and never mutates the response.
-func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg durante.Config, tuning ...config.RuntimeTuningConfig) (*model.WorkMeasurementJudgment, string, bool, bool) {
+// computeJudgment derives the work verdict from an eligible finalized envelope.
+// A scoped judge also checks whether the measured peak permits a decision.
+func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg durante.Config, tuning ...config.RuntimeTuningConfig) *model.WorkMeasurementJudgment {
 	if !req.WorkMeasurementJudge {
-		return nil, "", false, false
+		return nil
 	}
 	family, ok := durante.FamilyForLanguage(req.Lang)
 	if !ok || !cfg.Judge.JudgesFamily(family) {
-		return nil, "", false, false
+		return nil
 	}
 	exec := response.WorkMeasurementExecution
 	if exec == nil {
 		// No envelope execution was produced (pre-execution admission failure).
-		return nil, "", false, false
+		return nil
 	}
 	result := cfg.Judge.Decide(durante.JudgeInputs{
 		State:               exec.State,
@@ -86,10 +84,9 @@ func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg dura
 			}
 		}
 	}
-	status, accepted := judgeVerdictStatus(result.Verdict)
-	judgment := &model.WorkMeasurementJudgment{
+	return &model.WorkMeasurementJudgment{
 		Authority:         durante.Authority,
-		Verdict:           status,
+		Verdict:           judgeVerdictStatus(result.Verdict),
 		Reason:            result.Reason,
 		State:             exec.State,
 		NominalTimeMs:     int64(req.Limits.TimeMs),
@@ -99,7 +96,34 @@ func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg dura
 		IntegrityFlagged:  result.IntegrityFlagged,
 		TerminationSource: exec.TerminationSource,
 	}
-	return judgment, status, accepted, true
+}
+
+// A larger raw envelope measures the target and the instrumentor together.
+// An observed overage cannot decide the contestant's native memory verdict.
+func scopedMemoryJudgment(req *model.RunRequest, cfg durante.Config, response model.RunResponse, judgment *model.WorkMeasurementJudgment) *model.WorkMeasurementJudgment {
+	// Every admitted scoped decision has a clock receipt. Shadow comparisons
+	// run without that clock and keep their diagnostic interpretation.
+	if cfg.JudgeCases == nil || response.WorkMeasurementExecution.Clock == nil {
+		return judgment
+	}
+	switch judgment.Verdict {
+	case model.RunStatusAccepted, model.RunStatusWA, model.RunStatusTLE, model.RunStatusRE:
+		var reason string
+		switch {
+		case response.MemoryKB <= 0:
+			reason = "Durante peak RSS is unavailable for the nominal memory limit"
+		case response.MemoryKB > int64(req.Limits.MemoryMB)*1024:
+			reason = "Durante peak RSS exceeds the nominal memory limit and native memory usage is unknown"
+		default:
+			return judgment
+		}
+		withheld := *judgment
+		withheld.Verdict = model.RunStatusInitFail
+		withheld.Reason = reason
+		return &withheld
+	default:
+		return judgment
+	}
 }
 
 // finishWorkMeasurementJudge converts the finalized diagnostic envelope and time
@@ -109,15 +133,19 @@ func computeJudgment(req *model.RunRequest, response model.RunResponse, cfg dura
 // that did not ask for judge mode, or that the operator policy does not judge,
 // are returned unchanged (still the diagnostic InitFail response).
 func finishWorkMeasurementJudge(req *model.RunRequest, response model.RunResponse, cfg durante.Config, tuning ...config.RuntimeTuningConfig) model.RunResponse {
-	judgment, status, accepted, applicable := computeJudgment(req, response, cfg, tuning...)
-	if !applicable {
+	judgment := computeJudgment(req, response, cfg, tuning...)
+	if judgment == nil {
 		return response
 	}
+	return applyWorkMeasurementJudgment(response, scopedMemoryJudgment(req, cfg, response, judgment))
+}
+
+func applyWorkMeasurementJudgment(response model.RunResponse, judgment *model.WorkMeasurementJudgment) model.RunResponse {
 	response.WorkMeasurementJudgment = judgment
-	response.Status = status
+	response.Status = judgment.Verdict
 	response.VerdictSource = "durante_judge"
 	response.Reason = judgment.Reason
-	if accepted {
+	if judgment.Verdict == model.RunStatusAccepted {
 		score := 1.0
 		response.Score = &score
 	} else {
@@ -139,8 +167,8 @@ func validateRemoteWorkMeasurementJudge(req *model.RunRequest, response model.Ru
 		}
 		return nil
 	}
-	expected, status, accepted, applicable := computeJudgment(req, response, cfg, tuning...)
-	if !applicable {
+	expected := computeJudgment(req, response, cfg, tuning...)
+	if expected == nil {
 		// Judge was requested but this control plane cannot judge it (no envelope
 		// execution, or family/policy mismatch). A judgment would be unverifiable.
 		if j != nil || response.WorkMeasurementExecution != nil || response.WorkMeasurement != nil ||
@@ -155,18 +183,28 @@ func validateRemoteWorkMeasurementJudge(req *model.RunRequest, response model.Ru
 	// Older workers converted a pre-session initialization failure into a
 	// failed RE envelope. Only propagate a contestant RE with evidence that
 	// the target ran or the worker identified a termination source.
-	if status == model.RunStatusRE && expected.State == "failed" && expected.TerminationSource == "" &&
+	if expected.Verdict == model.RunStatusRE && expected.State == "failed" && expected.TerminationSource == "" &&
 		response.WorkMeasurement == nil && response.ExitCode == nil && response.CPUAccounting == nil &&
 		response.CPUTimeNs == 0 && response.CPUTimeMs == 0 && response.ProcessCPUTimeMs == 0 {
 		return fmt.Errorf("remote judge returned a runtime error without evidence of contestant execution")
 	}
+	// A sealed worker can return the original work verdict. Validate that
+	// verdict in full before applying the controller's memory policy. A worker
+	// that already withheld the verdict must supply the exact local reason.
+	if j.Verdict == model.RunStatusInitFail {
+		guarded := scopedMemoryJudgment(req, cfg, response, expected)
+		if guarded != expected && response.Reason != guarded.Reason {
+			return fmt.Errorf("invalid remote result: scoped memory verdict reason mismatch")
+		}
+		expected = guarded
+	}
 	if !judgmentsEqual(j, expected) {
 		return fmt.Errorf("invalid remote result: work measurement judgment mismatch")
 	}
-	if response.Status != status || response.VerdictSource != "durante_judge" {
+	if response.Status != expected.Verdict || response.VerdictSource != "durante_judge" {
 		return fmt.Errorf("invalid remote result: work measurement judge verdict mismatch")
 	}
-	if accepted {
+	if expected.Verdict == model.RunStatusAccepted {
 		if response.Score == nil || *response.Score != 1.0 {
 			return fmt.Errorf("invalid remote result: accepted judge verdict without a score")
 		}

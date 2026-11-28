@@ -575,6 +575,11 @@ func (r *remoteRunner) run(ctx context.Context, req *model.RunRequest, hooks Hoo
 				policy.ResourcePolicy = nil
 			}
 			remoteResult.WorkMeasurementObservation = remoteObservation(req, remoteResult, policy, wire.Observation)
+			if judgment := remoteResult.WorkMeasurementJudgment; judgment != nil {
+				if guarded := scopedMemoryJudgment(checked, r.workMeasurement, remoteResult, judgment); guarded != judgment {
+					return applyWorkMeasurementJudgment(remoteResult, guarded)
+				}
+			}
 			return remoteResult
 		}
 	}

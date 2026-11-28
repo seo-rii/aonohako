@@ -1,0 +1,13 @@
+{
+  "phase": "repeat",
+  "boot_sha256": "e1647efa9893e4f05539f5bc1d16083c74c50a5b5b93dceece7828be8b411f22",
+  "affinity": [
+    1
+  ],
+  "image": "sha256:5ebf65c242036f85ea8873926aa9e8721fa22cd8d0d3394dd32309e09354a3d2",
+  "binary_sha256": "3f947056dd48a8230d6fda7ad825591bc722337234cadd96acfc2906b2a752a6",
+  "server_sha256": "214c0b900499017297649a8ec4a3d8d5d6ce5cd1c6b32b1de89882e506ae7d3c",
+  "steal_ticks_before": 0,
+  "trial_count": 20,
+  "steal_ticks_after": 0
+}
