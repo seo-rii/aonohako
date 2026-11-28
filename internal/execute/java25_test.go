@@ -15,30 +15,27 @@ import (
 )
 
 func TestJava25CommandUsesDedicatedRuntimeAndJavaResourceLimits(t *testing.T) {
-	for _, memoryMB := range []int{64, 512, 2048} {
+	for _, memoryMB := range []int{32, 64, 512, 2048} {
 		req := &model.RunRequest{Limits: model.Limits{MemoryMB: memoryMB}}
 		tuning := config.DefaultRuntimeTuningConfig()
 		tuning.JavaStackSizeKB = 8192
 		legacy := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java", req, tuning)
-		for i, arg := range legacy {
-			if arg == "-XX:-UseCompressedClassPointers" {
-				legacy[i] = "-XX:CompressedClassSpaceSize=64m"
-			}
+		if !containsArg(legacy, "-XX:-UseCompressedClassPointers") || containsArg(legacy, "-XX:CompressedClassSpaceSize=64m") {
+			t.Fatalf("default Java 21 command changed its memory profile: %v", legacy)
 		}
 		args := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java25", req, tuning)
+		tuning.Java21CDS = true
+		shared := buildCommandWithRuntimeTuning("/tmp/Main.jar", "java", req, tuning)
 		if len(args) == 0 || args[0] != filepath.Join(profiles.Java25Home, "bin", "java") {
 			t.Fatalf("Java 25 command = %v", args)
 		}
-		if !reflect.DeepEqual(args[1:], legacy[1:]) {
-			t.Fatalf("Java 25 resource flags differ from Java: %v versus %v", args, legacy)
+		if !reflect.DeepEqual(args[1:], shared[1:]) || containsArg(shared, "-XX:-UseCompressedClassPointers") {
+			t.Fatalf("Java 21 CDS flags differ from Java 25: %v versus %v", shared, args)
 		}
 		for _, flag := range []string{"-Xss8192k", "-XX:+UseSerialGC", "-XX:CompressedClassSpaceSize=64m", "-DONLINE_JUDGE=1", "-jar"} {
 			if !containsArg(args, flag) {
 				t.Errorf("Java 25 command missing %s: %v", flag, args)
 			}
-		}
-		if containsArg(args, "-XX:-UseCompressedClassPointers") {
-			t.Fatalf("Java 25 disables compressed class pointers and emits CDS startup warnings: %v", args)
 		}
 	}
 }

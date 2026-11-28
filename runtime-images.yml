@@ -377,8 +377,10 @@ languages:
           javac --release 11 -encoding UTF-8 Main.java
           printf '%s\n' 'Manifest-Version: 1.0' 'Main-Class: Main' '' > MANIFEST.MF
           jar cfm Main.jar MANIFEST.MF Main.class
-          output="$(java -XX:ReservedCodeCacheSize=64m -XX:-UseCompressedClassPointers -Xmx128m -Xss16384k -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -XX:+UseSerialGC -DONLINE_JUDGE=1 -jar Main.jar)"
-          test "${output}" = 'ok'
+          for class_space in '-XX:-UseCompressedClassPointers' '-XX:CompressedClassSpaceSize=64m'; do
+            output="$(java -XX:ReservedCodeCacheSize=64m "${class_space}" -Xmx128m -Xss16384k -XX:MaxDirectMemorySize=16m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -XX:+UseSerialGC -DONLINE_JUDGE=1 -jar Main.jar)"
+            test "${output}" = 'ok'
+          done
 
   java25:
     install:

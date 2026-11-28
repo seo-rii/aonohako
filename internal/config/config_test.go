@@ -473,7 +473,7 @@ func TestLoadRuntimeTuningProfiles(t *testing.T) {
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_URL", "https://runner.internal")
 	t.Setenv("AONOHAKO_REMOTE_RUNNER_AUTH", "none")
 	t.Setenv("AONOHAKO_JVM_HEAP_PERCENT", "40")
-	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{"low-memory":{"jvm_heap_percent":35,"java_stack_size_kb":8192,"deno_old_space_percent":40,"node_old_space_percent":45,"node_max_semi_space_mb":2},"default-like":{}}`)
+	t.Setenv("AONOHAKO_RUNTIME_TUNING_PROFILES", `{"low-memory":{"jvm_heap_percent":35,"java_stack_size_kb":8192,"deno_old_space_percent":40,"node_old_space_percent":45,"node_max_semi_space_mb":2},"java-fast":{"java21_cds":1},"default-like":{}}`)
 
 	cfg, err := Load()
 	if err != nil {
@@ -492,6 +492,9 @@ func TestLoadRuntimeTuningProfiles(t *testing.T) {
 	inherited, ok := cfg.Execution.RuntimeTuningProfiles["default-like"]
 	if !ok {
 		t.Fatalf("missing default-like profile")
+	}
+	if cfg.Execution.RuntimeTuning.Java21CDS || inherited.Java21CDS || !cfg.Execution.RuntimeTuningProfiles["java-fast"].Java21CDS {
+		t.Fatal("Java 21 CDS should only be enabled on the selected profile")
 	}
 	if inherited.JVMHeapPercent != 40 {
 		t.Fatalf("empty profile should inherit global tuning, got %+v", inherited)
@@ -610,6 +613,7 @@ func TestLoadRejectsUnsafeRuntimeTuningProfiles(t *testing.T) {
 	}{
 		{name: "invalid json", raw: `[]`, want: "AONOHAKO_RUNTIME_TUNING_PROFILES"},
 		{name: "empty", raw: `{}`, want: "at least one profile"},
+		{name: "invalid java21 CDS", raw: `{"java-fast":{"java21_cds":2}}`, want: "java21_cds"},
 		{name: "invalid profile name", raw: `{"bad name":{"jvm_heap_percent":35}}`, want: "profile \"bad name\""},
 		{name: "unsupported key", raw: `{"low":{"argv":1}}`, want: "unsupported key"},
 		{name: "out of range", raw: `{"low":{"node_old_space_percent":90}}`, want: "node_old_space_percent"},

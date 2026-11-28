@@ -85,6 +85,7 @@ type CgroupConfig struct {
 type RuntimeTuningConfig struct {
 	JVMHeapPercent             int
 	JavaStackSizeKB            int
+	Java21CDS                  bool
 	GoMemoryReserveMB          int
 	GoGOGC                     int
 	ErlangSchedulers           int
@@ -483,6 +484,8 @@ func Load() (Config, error) {
 				switch key {
 				case "jvm_heap_percent":
 					profileTuning.JVMHeapPercent, err = parseBoundedIntEnv(envName, rawValue, profileTuning.JVMHeapPercent, minJVMHeapPercent, maxJVMHeapPercent)
+				case "java21_cds":
+					profileTuning.Java21CDS, err = parseBoolEnv(envName, rawValue, profileTuning.Java21CDS)
 				case "java_stack_size_kb":
 					profileTuning.JavaStackSizeKB, err = parseBoundedIntEnv(envName, rawValue, profileTuning.JavaStackSizeKB, minJavaStackSizeKB, maxJavaStackSizeKB)
 				case "go_memory_reserve_mb":

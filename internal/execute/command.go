@@ -365,12 +365,13 @@ func buildCommandWithRuntimeTuning(primaryPath, lang string, req *model.RunReque
 		directMB := jvmDirectMemoryMB(req.Limits.MemoryMB)
 		metaspaceMB := jvmMetaspaceMB(req.Limits.MemoryMB)
 		java := "java"
-		classSpace := "-XX:-UseCompressedClassPointers"
+		// Java 21's shared archive raises resident memory near judge limits.
+		// Keep its existing footprint unless the selected profile enables CDS.
+		classSpace := "-XX:CompressedClassSpaceSize=64m"
 		if lang == "java25" {
 			java = filepath.Join(profiles.Java25Home, "bin", "java")
-			// JDK 25's CDS archive expects compressed class pointers. Bound
-			// their space instead of disabling them and warning on stdout.
-			classSpace = "-XX:CompressedClassSpaceSize=64m"
+		} else if !tuning.Java21CDS {
+			classSpace = "-XX:-UseCompressedClassPointers"
 		}
 		return []string{
 			java,

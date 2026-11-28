@@ -897,6 +897,9 @@ flags through requests:
   profiles as a JSON object. Each profile inherits the global tuning values and
   may override the same bounded numeric keys with snake_case names, for example
   `{"low-memory":{"jvm_heap_percent":35,"node_old_space_percent":45},"java-deep":{"java_stack_size_kb":32768}}`.
+  A named profile can also set `"java21_cds":1` to enable class data sharing on
+  the Java 21 launcher. It defaults to `0`. The shared archive reduces startup
+  work and can increase peak RSS enough to change memory-limit verdicts.
   `/compile` and `/execute` may select one with `runtime_profile` only when
   `AONOHAKO_ALLOW_REQUEST_RUNTIME_PROFILE=true`; policy-disabled, unknown, or
   syntactically invalid profile names are rejected.
@@ -907,9 +910,8 @@ flags through requests:
   pools should receive the same runtime profile config as the control plane
   when forwarded requests include policy-selected profiles.
 
-Invalid values fail startup. These settings only tune memory-related runtime
-caps; they do not expose network, filesystem, process, or arbitrary flag
-controls to submissions.
+Invalid values fail startup. These settings tune runtime resource usage and
+keep network, filesystem, process and arbitrary JVM flags under runner control.
 
 For non-Cloud-Run control-plane deployments that should still execute safely,
 use this baseline:
