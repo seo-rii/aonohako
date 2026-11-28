@@ -71,14 +71,20 @@ RUN if [[ -n "${APT_PACKAGES}" ]]; then \
     fi && \
     rm -rf /var/lib/apt/lists/*
 
-RUN if [[ -n "${PIP_PACKAGES}" ]]; then \
-      python3 -m pip install --break-system-packages --no-cache-dir ${PIP_PACKAGES}; \
-    fi
-
 COPY --from=go-toolchain /usr/local/go /usr/local/go
 
+ARG PYTHON_LIBRARY_ISOLATION=false
+ARG PYPY_LIBRARY_ISOLATION=false
+ARG PYTHON_EXTERNAL_LIBRARY_GID=65530
+
+# Set Python package permissions in the layer that installs the large wheels.
 RUN --mount=type=bind,source=go-modules,target=/tmp/aonohako-go-modules,ro \
-    if [[ "${GO_MODULE_ISOLATION}" == "true" ]]; then \
+    --mount=type=bind,source=rust-crates,target=/tmp/aonohako-rust-crates,ro \
+    --mount=type=bind,source=scripts/isolate_python_libraries.sh,target=/tmp/aonohako-isolate-python-libraries.sh,ro \
+    if [[ -n "${PIP_PACKAGES}" ]]; then \
+      python3 -m pip install --break-system-packages --no-cache-dir ${PIP_PACKAGES}; \
+    fi && \
+    if [[ "${GO_MODULE_ISOLATION}" == "true" ]]; then ( \
       install -d -m 0755 /usr/local/lib/aonohako/go-modcache /tmp/aonohako-go-build-cache && \
       cd /tmp/aonohako-go-modules && \
       env GOCACHE=/tmp/aonohako-go-build-cache \
@@ -90,15 +96,13 @@ RUN --mount=type=bind,source=go-modules,target=/tmp/aonohako-go-modules,ro \
         GOMODCACHE=/usr/local/lib/aonohako/go-modcache \
         GOENV=off GOTELEMETRY=off GOTOOLCHAIN=local \
         /usr/local/go/bin/go test -mod=readonly ./... && \
-      rm -rf /tmp/aonohako-go-build-cache; \
-    fi
-
-RUN if [[ -n "${INSTALL_SCRIPT}" ]]; then \
+      rm -rf /tmp/aonohako-go-build-cache \
+      ); \
+    fi && \
+    if [[ -n "${INSTALL_SCRIPT}" ]]; then \
       env -u INSTALL_SCRIPT /bin/bash -euo pipefail -c "${INSTALL_SCRIPT}"; \
-    fi
-
-RUN --mount=type=bind,source=rust-crates,target=/tmp/aonohako-rust-crates,ro \
-    if [[ "${RUST_CRATE_ISOLATION}" == "true" ]]; then \
+    fi && \
+    if [[ "${RUST_CRATE_ISOLATION}" == "true" ]]; then ( \
       install -d -m 0755 /usr/local/lib/aonohako/rust/vendor \
         /tmp/aonohako-cargo-home /tmp/aonohako-cargo-target && \
       cd /tmp/aonohako-rust-crates && \
@@ -116,12 +120,13 @@ RUN --mount=type=bind,source=rust-crates,target=/tmp/aonohako-rust-crates,ro \
           --config 'source.crates-io.replace-with="aonohako-vendored-sources"' \
           --config 'source.aonohako-vendored-sources.directory="/usr/local/lib/aonohako/rust/vendor"' \
           test --manifest-path Cargo.toml && \
-      rm -rf /tmp/aonohako-cargo-home /tmp/aonohako-cargo-target; \
-    fi
-
-RUN if [[ -n "${NPM_PACKAGES}" ]]; then \
+      rm -rf /tmp/aonohako-cargo-home /tmp/aonohako-cargo-target \
+      ); \
+    fi && \
+    if [[ -n "${NPM_PACKAGES}" ]]; then \
       env NPM_CONFIG_PREFIX=/usr/local npm install --global ${NPM_PACKAGES}; \
-    fi
+    fi && \
+    bash /tmp/aonohako-isolate-python-libraries.sh initial "${PYTHON_EXTERNAL_LIBRARY_GID}" "${PYTHON_LIBRARY_ISOLATION}" "${PYPY_LIBRARY_ISOLATION}"
 
 FROM runtime-toolchain AS runtime
 
@@ -193,7 +198,8 @@ RUN if [[ ",${LANGUAGES}," == *",smlnj,"* ]]; then \
     rm -f /usr/local/lib/aonohako/smlnj_runner.sml \
       /tmp/aonohako-smlnj-export.stdout /tmp/aonohako-smlnj-export.stderr
 
-RUN chmod 0755 /usr/local/lib/aonohako && \
+RUN --mount=type=bind,source=scripts/isolate_python_libraries.sh,target=/tmp/aonohako-isolate-python-libraries.sh,ro \
+    chmod 0755 /usr/local/lib/aonohako && \
     rm -f /usr/local/lib/aonohako/python/.empty && \
     chmod 0644 /usr/local/lib/aonohako/brainfuck.py /usr/local/lib/aonohako/whitespace.py /usr/local/lib/aonohako/befunge.py /usr/local/lib/aonohako/malbolge.py /usr/local/lib/aonohako/unlambda.py /usr/local/lib/aonohako/shakespeare_run.py && \
     find /usr/local/lib/aonohako/python -type d -exec chmod 0755 {} + && \
@@ -240,24 +246,7 @@ RUN chmod 0755 /usr/local/lib/aonohako && \
     else \
       rm -rf /usr/local/lib/aonohako/go-modcache; \
     fi && \
-    if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" ]]; then \
-      for path in /usr/lib/python*/dist-packages /usr/local/lib/python*/dist-packages /usr/lib/python*/site-packages /usr/local/lib/python*/site-packages /usr/share/python-wheels; do \
-        if [[ ! -e "${path}" ]]; then continue; fi; \
-        chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}" "${path}"; \
-        find "${path}" -type d -exec chmod 0750 {} +; \
-        find "${path}" -type f -perm /0111 -exec chmod 0750 {} +; \
-        find "${path}" -type f ! -perm /0111 -exec chmod 0640 {} +; \
-      done; \
-    fi && \
-    if [[ "${PYPY_LIBRARY_ISOLATION}" == "true" ]]; then \
-      for path in /usr/lib/pypy*/dist-packages /usr/local/lib/pypy*/dist-packages /usr/lib/pypy*/site-packages /usr/local/lib/pypy*/site-packages; do \
-        if [[ ! -e "${path}" ]]; then continue; fi; \
-        chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}" "${path}"; \
-        find "${path}" -type d -exec chmod 0750 {} +; \
-        find "${path}" -type f -perm /0111 -exec chmod 0750 {} +; \
-        find "${path}" -type f ! -perm /0111 -exec chmod 0640 {} +; \
-      done; \
-    fi && \
+    bash /tmp/aonohako-isolate-python-libraries.sh reconcile "${PYTHON_EXTERNAL_LIBRARY_GID}" "${PYTHON_LIBRARY_ISOLATION}" "${PYPY_LIBRARY_ISOLATION}" && \
     if [[ "${PYTHON_LIBRARY_ISOLATION}" == "true" || "${PYPY_LIBRARY_ISOLATION}" == "true" ]]; then \
       path=/usr/local/lib/aonohako/python; \
       chown -R "0:${PYTHON_EXTERNAL_LIBRARY_GID}" "${path}"; \
