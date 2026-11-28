@@ -1,0 +1,42 @@
+{
+  "prospective-c-bottom_up": {
+    "high_ms": 67,
+    "low_ms": 44,
+    "native_median_ns": 55744000
+  },
+  "prospective-c-fast": {
+    "high_ms": 24,
+    "low_ms": 15,
+    "native_median_ns": 19852000
+  },
+  "prospective-c-reverse_bit": {
+    "high_ms": 19,
+    "low_ms": 12,
+    "native_median_ns": 15313000
+  },
+  "prospective-c-wrong": {
+    "high_ms": 19,
+    "low_ms": 12,
+    "native_median_ns": 15519000
+  },
+  "prospective-d-bottom_up": {
+    "high_ms": 140,
+    "low_ms": 93,
+    "native_median_ns": 116419000
+  },
+  "prospective-d-fast": {
+    "high_ms": 56,
+    "low_ms": 37,
+    "native_median_ns": 46564000
+  },
+  "prospective-d-reverse_bit": {
+    "high_ms": 47,
+    "low_ms": 31,
+    "native_median_ns": 39132000
+  },
+  "prospective-d-wrong": {
+    "high_ms": 46,
+    "low_ms": 30,
+    "native_median_ns": 37756000
+  }
+}
