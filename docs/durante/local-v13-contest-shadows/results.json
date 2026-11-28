@@ -1,0 +1,242 @@
+{
+  "lcs-layout": {
+    "cells": {
+      "tall-column/1": {
+        "native_tle_shadow_tle": 3
+      },
+      "tall-column/2": {
+        "native_tle_shadow_ac": 3
+      },
+      "tall-row/1": {
+        "native_tle_shadow_tle": 3
+      },
+      "tall-row/2": {
+        "native_tle_shadow_ac": 3
+      },
+      "wide-column/1": {
+        "native_tle_shadow_tle": 3
+      },
+      "wide-column/2": {
+        "native_tle_shadow_ac": 3
+      },
+      "wide-row/1": {
+        "native_tle_shadow_tle": 3
+      },
+      "wide-row/2": {
+        "native_ac_shadow_ac": 1,
+        "native_tle_shadow_ac": 2
+      }
+    },
+    "completed_native_time_accuracy": {
+      "under_by_more_than_20_percent": 1
+    },
+    "controls_ns": {
+      "tall": {
+        "after": [
+          5250000,
+          6224000,
+          6569000
+        ],
+        "before": [
+          5319000,
+          5606000,
+          5082000
+        ]
+      },
+      "wide": {
+        "after": [
+          6110000,
+          6674000,
+          6905000
+        ],
+        "before": [
+          5909000,
+          6366000,
+          6465000
+        ]
+      }
+    },
+    "decisions": {
+      "native_ac_shadow_ac": 1,
+      "native_tle_shadow_ac": 11,
+      "native_tle_shadow_tle": 12
+    },
+    "limits_ms": {
+      "tall": {
+        "1": 6,
+        "2": 11
+      },
+      "wide": {
+        "1": 7,
+        "2": 13
+      }
+    },
+    "native_tle_time_bound": {
+      "inconclusive": 12,
+      "under_by_more_than_20_percent": 11
+    },
+    "requests": 36
+  },
+  "maxsub-floor": {
+    "cells": {
+      "long-divide/1": {
+        "native_tle_shadow_tle": 3
+      },
+      "long-divide/2": {
+        "native_tle_shadow_tle": 3
+      },
+      "long-prefix/1": {
+        "native_ac_shadow_tle": 3
+      },
+      "long-prefix/2": {
+        "native_ac_shadow_ac": 3
+      },
+      "short-divide/1": {
+        "native_tle_shadow_ac": 3
+      },
+      "short-divide/2": {
+        "native_ac_shadow_ac": 3
+      },
+      "short-prefix/1": {
+        "native_ac_shadow_ac": 2,
+        "native_tle_shadow_ac": 1
+      },
+      "short-prefix/2": {
+        "native_ac_shadow_ac": 3
+      }
+    },
+    "completed_native_time_accuracy": {
+      "over_by_more_than_20_percent": 4,
+      "under_by_more_than_20_percent": 8,
+      "within_20_percent": 2
+    },
+    "controls_ns": {
+      "long": {
+        "after": [
+          16287000,
+          17460000,
+          15932000
+        ],
+        "before": [
+          16084000,
+          16392000,
+          16036000
+        ]
+      },
+      "short": {
+        "after": [
+          1846000,
+          1988000,
+          1725000
+        ],
+        "before": [
+          1604000,
+          1706000,
+          1825000
+        ]
+      }
+    },
+    "decisions": {
+      "native_ac_shadow_ac": 11,
+      "native_ac_shadow_tle": 3,
+      "native_tle_shadow_ac": 4,
+      "native_tle_shadow_tle": 6
+    },
+    "limits_ms": {
+      "long": {
+        "1": 17,
+        "2": 33
+      },
+      "short": {
+        "1": 2,
+        "2": 4
+      }
+    },
+    "native_tle_time_bound": {
+      "inconclusive": 9,
+      "under_by_more_than_20_percent": 1
+    },
+    "requests": 36
+  },
+  "path-mwis": {
+    "cells": {
+      "long-delta/1": {
+        "native_ac_shadow_tle": 2,
+        "native_tle_shadow_tle": 1
+      },
+      "long-delta/2": {
+        "native_ac_shadow_ac": 3
+      },
+      "long-table/1": {
+        "native_tle_shadow_tle": 3
+      },
+      "long-table/2": {
+        "native_ac_shadow_ac": 3
+      },
+      "short-delta/1": {
+        "native_ac_shadow_ac": 3
+      },
+      "short-delta/2": {
+        "native_ac_shadow_ac": 3
+      },
+      "short-table/1": {
+        "native_tle_shadow_ac": 3
+      },
+      "short-table/2": {
+        "native_ac_shadow_ac": 3
+      }
+    },
+    "completed_native_time_accuracy": {
+      "over_by_more_than_20_percent": 1,
+      "under_by_more_than_20_percent": 12,
+      "within_20_percent": 4
+    },
+    "controls_ns": {
+      "long": {
+        "after": [
+          16168000,
+          16047000,
+          14539000
+        ],
+        "before": [
+          15607000,
+          16054000,
+          16084000
+        ]
+      },
+      "short": {
+        "after": [
+          3715000,
+          3470000,
+          3010000
+        ],
+        "before": [
+          3704000,
+          3642000,
+          3853000
+        ]
+      }
+    },
+    "decisions": {
+      "native_ac_shadow_ac": 15,
+      "native_ac_shadow_tle": 2,
+      "native_tle_shadow_ac": 3,
+      "native_tle_shadow_tle": 4
+    },
+    "limits_ms": {
+      "long": {
+        "1": 17,
+        "2": 33
+      },
+      "short": {
+        "1": 4,
+        "2": 8
+      }
+    },
+    "native_tle_time_bound": {
+      "inconclusive": 4,
+      "under_by_more_than_20_percent": 3
+    },
+    "requests": 36
+  }
+}
