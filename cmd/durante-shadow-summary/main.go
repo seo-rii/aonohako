@@ -37,12 +37,33 @@ type cpuCohortIdentity struct {
 	NativeReferenceNs         uint64                        `json:"native_reference_ns,omitempty"`
 }
 
+// Only completed native AC executions provide an uncensored reference time.
+type completedTimeAccuracy struct {
+	UnderByMoreThan20Percent int `json:"under_by_more_than_20_percent"`
+	Within20Percent          int `json:"within_20_percent"`
+	OverByMoreThan20Percent  int `json:"over_by_more_than_20_percent"`
+}
+
+func (a *completedTimeAccuracy) add(native, estimated uint64) {
+	// Integer nanoseconds let us compare the absolute error to floor(native/5)
+	// without rounding either time to milliseconds or multiplying by 100.
+	switch {
+	case estimated < native && native-estimated > native/5:
+		a.UnderByMoreThan20Percent++
+	case estimated > native && estimated-native > native/5:
+		a.OverByMoreThan20Percent++
+	default:
+		a.Within20Percent++
+	}
+}
+
 type cpuCohort struct {
 	cpuCohortIdentity
-	NativeACShadowAC   int `json:"native_ac_shadow_ac"`
-	NativeACShadowTLE  int `json:"native_ac_shadow_tle"`
-	NativeTLEShadowAC  int `json:"native_tle_shadow_ac"`
-	NativeTLEShadowTLE int `json:"native_tle_shadow_tle"`
+	CompletedTimeAccuracy completedTimeAccuracy `json:"completed_native_time_accuracy"`
+	NativeACShadowAC      int                   `json:"native_ac_shadow_ac"`
+	NativeACShadowTLE     int                   `json:"native_ac_shadow_tle"`
+	NativeTLEShadowAC     int                   `json:"native_tle_shadow_ac"`
+	NativeTLEShadowTLE    int                   `json:"native_tle_shadow_tle"`
 }
 
 type cpuComparisons struct {
@@ -125,6 +146,9 @@ func (c *counts) add(primary model.RunResponse, stdinSource string) error {
 	if row == nil {
 		row = &cpuCohort{cpuCohortIdentity: cohort}
 		c.CPUComparison.Cohorts[key] = row
+	}
+	if primary.Status == model.RunStatusAccepted {
+		row.CompletedTimeAccuracy.add(primary.CPUTimeNs, uint64(inner.WorkMeasurementExecution.TimeEstimate.Nanoseconds))
 	}
 	switch {
 	case primary.Status == model.RunStatusAccepted && inner.Status == model.RunStatusAccepted:
