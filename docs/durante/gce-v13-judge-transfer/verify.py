@@ -275,7 +275,7 @@ def verify(evidence, registration):
     return result,clocks["v13"]
 
 
-def operator_environment(result, clock):
+def candidate_environment(result, clock):
     gates=result["gates"]
     require(result["eligible"] is True and set(gates)==RELEASE_GATES and all(value is True for value in gates.values()),
             "v13 release criteria failed")
@@ -296,11 +296,76 @@ def operator_environment(result, clock):
     return original
 
 
+# Hashes of the registered fast requests re-encoded by smoke_auto.py with
+# "unregistered/" prefixed to the problem ID. The frozen payload contains the ELFs.
+UNREGISTERED_REQUESTS = {
+    "range_min": "6a36ad90a2202572753eaf167704b34bb7d5a15bfa537cc1cd0bbe48f53cb28a",
+    "shortest_paths": "29d22c88c0539fbb0354b0d6b0ac71258c63368a770ec5abb2be1b91125d8f5a",
+    "inversions": "0ebc6eefbe85f5deaf813fe2876451e3961131b2e31eb280f99e758aa178c351",
+}
+
+
+def check_automatic_routing(document, evidence, registration, clock, env):
+    plan = registration["plan"]
+    worker = plan["arms"]["v13"]
+    require(type(document["schema"]) is int and document["schema"] == 1 and
+            document["image"] == worker["image"] and document["model_binding"] == clock["model_binding"] and
+            document["worker_sha256"] == worker["files"]["server"] and
+            document["env_sha256"] == digest(json.dumps(env, sort_keys=True).encode()),
+            "automatic routing used a different worker, clock or environment")
+    # Check each completed output against the independent native controls,
+    # including the precise wrong answer produced by each registered ELF.
+    native_rows = (json.loads(line) for line in READ(evidence / "primary/v12", "trials.jsonl").splitlines())
+    outputs = {r["cell"]: r["stdout"] for r in native_rows if r["kind"] == "native" and r["cell"].endswith("-contest")}
+    expected = {(problem, role) for problem in TIMES for role in (*V13.EXPECTED, "unregistered")}
+    seen = set()
+    for trial in document["trials"]:
+        problem, role = key = (trial["problem"], trial["role"])
+        require(key in expected and key not in seen, "unexpected or duplicate automatic routing trial")
+        seen.add(key)
+        native = role == "unregistered"
+        solver = "fast" if native else role
+        cell = f"{problem}-{solver}-contest"
+        request = UNREGISTERED_REQUESTS[problem] if native else plan["request_hashes"]["v12/native/" + cell]
+        receipt = trial["receipt"]
+        require(trial["request_sha256"] == request and receipt["status"] == V13.EXPECTED[solver],
+                "automatic routing request or verdict differs from the registered case")
+        if solver != "slow":
+            require(trial["stdout"] == outputs[cell], "automatic routing output differs from the native control")
+        oracle = digest(outputs[problem + "-fast-contest"].encode())
+        row = {"receipt": receipt, "stdout_sha256": digest(trial["stdout"].encode()), "limit_ms": TIMES[problem]}
+        check_measured_cpu(receipt)
+        if native:
+            V13.check_native(row, oracle)
+        else:
+            if role == "slow":
+                require(receipt["work_measurement_execution"]["termination_source"] == "durante_work_clock",
+                        "automatic routing did not stop the running submission")
+            V13.check_judge(row, clock, {"installed_files": worker["files"]}, oracle)
+            require(receipt["work_measurement"]["installation"]["source_commit"] == worker["upstream"],
+                    "automatic routing used a different engine source")
+    require(seen == expected, "incomplete automatic routing receipts")
+
+
+def operator_environment(result, clock, evidence, registration):
+    # The replay contains tuples for counter triples; compare their JSON representation.
+    published = read(HERE / "results.json")
+    require(json.dumps(result, sort_keys=True, allow_nan=False) == json.dumps(published, sort_keys=True, allow_nan=False),
+            "published transfer results differ from the replay")
+    env = candidate_environment(result, clock)
+    document = json.loads(READ(evidence, "automatic-routing.json"))
+    check_automatic_routing(document, evidence, registration, clock, env)
+    return env
+
+
 if __name__ == "__main__":
     cli=argparse.ArgumentParser(description=__doc__)
     cli.add_argument("--evidence",type=Path,default=HERE/"evidence")
     cli.add_argument("--registration",type=Path,default=HERE/"registration.json")
     cli.add_argument("--operator-env",action="store_true")
     args=cli.parse_args()
-    result,clock=verify(args.evidence,read(args.registration))
-    print(json.dumps(operator_environment(result,clock) if args.operator_env else result,indent=2,sort_keys=True,allow_nan=False))
+    registration = read(args.registration)
+    result,clock=verify(args.evidence,registration)
+    if args.operator_env:
+        result = operator_environment(result, clock, args.evidence, registration)
+    print(json.dumps(result,indent=2,sort_keys=True,allow_nan=False))

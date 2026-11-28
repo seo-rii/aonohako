@@ -7,13 +7,13 @@ from pathlib import Path
 import sys
 
 from protocol import digest, read, require
-from verify import HERE, operator_environment, verify
+from verify import HERE, candidate_environment, check_automatic_routing, verify
 
 
 def run(payload, output):
     registration = read(HERE / "registration.json")
     result, clock = verify(HERE / "evidence", registration)
-    env = operator_environment(result, clock)
+    env = candidate_environment(result, clock)
     scope = json.loads(env["AONOHAKO_DURANTE_JUDGE_CASES"])["cases"]
     plan = registration["plan"]["arms"]["v13"]
     image = env["AONOHAKO_DURANTE_RUNTIME_IMAGE"]
@@ -66,9 +66,11 @@ def run(payload, output):
                 trials.append(dict(problem=problem, role=role, request_sha256=digest(json.dumps(req).encode()),
                                    receipt=receipt, stdout=stdout))
 
+    document = dict(schema=1, image=image, model_binding=plan["binding"], worker_sha256=plan["files"]["server"],
+                    env_sha256=digest(json.dumps(env, sort_keys=True).encode()), trials=trials)
+    check_automatic_routing(document, HERE/"evidence", registration, clock, env)
     with output.open("x") as dest:
-        json.dump(dict(schema=1, image=image, model_binding=plan["binding"], worker_sha256=plan["files"]["server"],
-                       env_sha256=digest(json.dumps(env, sort_keys=True).encode()), trials=trials), dest, indent=2)
+        json.dump(document, dest, indent=2)
         dest.write("\n")
     print(f"{len(trials)} ordinary HTTP requests passed")
 

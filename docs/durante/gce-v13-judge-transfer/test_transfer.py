@@ -1,6 +1,8 @@
 from copy import deepcopy
+import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 import verify as transfer
 from protocol import (ORIGINAL_BINDING, ORIGINAL_IMAGE, TIMES, clock_for, digest, panel, read, schedule)
@@ -66,10 +68,8 @@ class TransferTest(unittest.TestCase):
 
     def test_release_requires_all_gates_and_strips_diagnostics(self):
         with self.assertRaisesRegex(ValueError,"criteria failed"):
-            transfer.operator_environment({"eligible":False,"gates":{"count":False}}, {})
+            transfer.candidate_environment({"eligible":False,"gates":{"count":False}}, {})
         c=clock_for("v13",transfer.CANDIDATE_IMAGE,self.cells,self.frozen,transfer.V13.model_binding)
-        from unittest.mock import patch
-        import json
         baseline={"AONOHAKO_DURANTE_JUDGE_CASES":json.dumps({"schema":1,"cases":[
             {"problem_id":p,"source_language":"CPP20","time_ms":ms,
              "stdin_sha256":digest(self.cells[p+"-fast-contest"]["stdin"].encode()),"model_binding":ORIGINAL_BINDING}
@@ -79,11 +79,11 @@ class TransferTest(unittest.TestCase):
         for malformed in ({}, {"unknown":True}, {**good["gates"],"unknown":True},
                           {**good["gates"],"ample_held_out_answers":1}):
             with self.subTest(gates=malformed), self.assertRaisesRegex(ValueError,"criteria failed"):
-                transfer.operator_environment({**good,"gates":malformed},c)
+                transfer.candidate_environment({**good,"gates":malformed},c)
         with self.assertRaisesRegex(ValueError,"binding differs"):
-            transfer.operator_environment({**good,"bindings":{"v12":ORIGINAL_BINDING,"v13":ORIGINAL_BINDING}},c)
+            transfer.candidate_environment({**good,"bindings":{"v12":ORIGINAL_BINDING,"v13":ORIGINAL_BINDING}},c)
         with patch.object(transfer.subprocess,"check_output",return_value=json.dumps(baseline).encode()):
-            env=transfer.operator_environment(good,c)
+            env=transfer.candidate_environment(good,c)
         cases=json.loads(env["AONOHAKO_DURANTE_JUDGE_CASES"])["cases"]
         self.assertEqual({(r["problem_id"],r["time_ms"],r["model_binding"]) for r in cases},
                          {(p,ms,c["model_binding"]) for p,ms in TIMES.items()})
@@ -94,6 +94,64 @@ class TransferTest(unittest.TestCase):
                                                "runtime_patch_sha256":"different","runtime_code_replay_patch_sha256":"replay"}}}
         with self.assertRaisesRegex(ValueError,"engine source/patches"):
             transfer.check_install(r,p)
+
+
+class AutomaticRoutingTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.evidence = transfer.HERE / "evidence"
+        cls.registration = read(transfer.HERE / "registration.json")
+        cls.result, cls.clock = transfer.verify(cls.evidence, cls.registration)
+        cls.env = transfer.candidate_environment(cls.result, cls.clock)
+        cls.document = json.loads(transfer.READ(cls.evidence, "automatic-routing.json"))
+
+    def replay(self, document):
+        transfer.check_automatic_routing(document, self.evidence, self.registration, self.clock, self.env)
+
+    def test_all_recorded_responses_replay(self):
+        self.replay(self.document)
+
+    def test_export_requires_stored_route_and_matching_published_results(self):
+        with patch.object(transfer, "READ", side_effect=FileNotFoundError):
+            with self.assertRaises(FileNotFoundError):
+                transfer.operator_environment(self.result, self.clock, self.evidence, self.registration)
+        with self.assertRaisesRegex(ValueError, "published transfer results"):
+            transfer.operator_environment({**self.result, "panel_http_requests": 7}, self.clock,
+                                          self.evidence, self.registration)
+
+    def test_environment_identity_and_complete_request_set(self):
+        for field in ("image", "worker_sha256", "model_binding", "env_sha256"):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "worker, clock or environment"):
+                self.replay({**self.document, field: "stale"})
+        trials = list(self.document["trials"])
+        self.assertEqual(trials[-1]["role"], "unregistered")
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            self.replay({**self.document, "trials": trials[:-1]})
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            self.replay({**self.document, "trials": trials[:-1] + [trials[0]]})
+        for role in ("wrong", "unregistered"):
+            document = deepcopy(self.document)
+            row = next(r for r in document["trials"] if r["role"] == role)
+            row["request_sha256"] = trials[0]["request_sha256"]
+            with self.subTest(role=role), self.assertRaisesRegex(ValueError, "routing request"):
+                self.replay(document)
+
+    def test_actual_stdout_and_clock_sources(self):
+        document = deepcopy(self.document)
+        wrong = next(r for r in document["trials"] if r["role"] == "wrong")
+        wrong["stdout"] = "another incorrect answer\n"
+        with self.assertRaisesRegex(ValueError, "output differs from the native control"):
+            self.replay(document)
+        document = deepcopy(self.document)
+        slow = next(r for r in document["trials"] if r["role"] == "slow")
+        slow["receipt"]["work_measurement_execution"]["termination_source"] = "durante_work_clock_final"
+        with self.assertRaisesRegex(ValueError, "did not stop the running submission"):
+            self.replay(document)
+        document = deepcopy(self.document)
+        fallback = next(r for r in document["trials"] if r["role"] == "unregistered")
+        fallback["receipt"] = next(r for r in document["trials"] if r["role"] == "fast")["receipt"]
+        with self.assertRaisesRegex(ValueError, "native CPU or output"):
+            self.replay(document)
 
 
 if __name__ == "__main__":
