@@ -1,0 +1,224 @@
+{
+  "baseline_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+  "build": {
+    "flags": [
+      "-std=c++20",
+      "-O2",
+      "-static",
+      "-s",
+      "-march=x86-64-v2",
+      "-Wl,--build-id=none"
+    ],
+    "generator_sha256": "c5e679f444f03ebc629d0d903be911ecaf7ddd05423a0db93dc14de1dcbbfd3b",
+    "source_sha256": "44709d53e48d9e15773b3b139697b58de7b03e267c41927dfeea7141d5fb9b6b",
+    "variants": {
+      "cached16": [
+        "-DBLOCK_SIZE=16",
+        "-DCACHED_EDGES=1"
+      ],
+      "cached4": [
+        "-DBLOCK_SIZE=4",
+        "-DCACHED_EDGES=1"
+      ],
+      "cached64": [
+        "-DBLOCK_SIZE=64",
+        "-DCACHED_EDGES=1"
+      ],
+      "edges1024": [
+        "-DBLOCK_SIZE=1024",
+        "-DCACHED_EDGES=0"
+      ],
+      "edges128": [
+        "-DBLOCK_SIZE=128",
+        "-DCACHED_EDGES=0"
+      ],
+      "edges16": [
+        "-DBLOCK_SIZE=16",
+        "-DCACHED_EDGES=0"
+      ],
+      "edges256": [
+        "-DBLOCK_SIZE=256",
+        "-DCACHED_EDGES=0"
+      ],
+      "edges512": [
+        "-DBLOCK_SIZE=512",
+        "-DCACHED_EDGES=0"
+      ],
+      "edges64": [
+        "-DBLOCK_SIZE=64",
+        "-DCACHED_EDGES=0"
+      ]
+    }
+  },
+  "cases": {
+    "cached16": {
+      "binary": "pilot/corpus/range_min-cached16",
+      "binary_sha256": "22932a9b4b165ac4103d0579e26366f52d1aa1d6b15b08a5e691673498bb5f3a",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "cached16",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "cached4": {
+      "binary": "pilot/corpus/range_min-cached4",
+      "binary_sha256": "7383f41cf34319671d0ac8d0738404559a54d31c26b8229b40a69e15e5dbd3b8",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "cached4",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "cached64": {
+      "binary": "pilot/corpus/range_min-cached64",
+      "binary_sha256": "9a0c96ef8b7dd9fc548fbfcd0192ec611a10b8094f9250cfab7a58a58058a81e",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "cached64",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "edges1024": {
+      "binary": "pilot/corpus/range_min-edges1024",
+      "binary_sha256": "4333779bf672db85cd4381d06d09e60f31d8949c89c6a592d4113998d49eb4c7",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "edges1024",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "edges128": {
+      "binary": "pilot/corpus/range_min-edges128",
+      "binary_sha256": "3471d3cb51daf283374b17e6c2d819f6cf72a625fa4e3186c4d6451b47144b51",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "edges128",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "edges16": {
+      "binary": "pilot/corpus/range_min-edges16",
+      "binary_sha256": "2e134716f15696ff80c2dd96a15aad6d91b6a46a40db02ad0cc3b5b20dd6cf91",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "edges16",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "edges256": {
+      "binary": "pilot/corpus/range_min-edges256",
+      "binary_sha256": "55cb6daf4ef35334f30584bcb3148103f48f1cc7f047ef75c6e552942c0f570b",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "edges256",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "edges512": {
+      "binary": "pilot/corpus/range_min-edges512",
+      "binary_sha256": "a38587c1583475c223f9371eb1224f1ce645e710046d22369c106cd493b7d20d",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "edges512",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "edges64": {
+      "binary": "pilot/corpus/range_min-edges64",
+      "binary_sha256": "1569ddff582e9f3dd39b400793fc140b14f74fc43920265c00a609d7720f9f2f",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "ample": 30000,
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "edges64",
+      "solver_stdout": "368028705\n",
+      "split": "variant",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "fast": {
+      "binary": "pilot/corpus/range_min-fast",
+      "binary_sha256": "e2a610213d9b6d5fee9be7063f0381fba062ddec34de8a7dfc8a7b0c023eaeb7",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "fast",
+      "solver_stdout": "368028705\n",
+      "split": "original",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "slow": {
+      "binary": "pilot/corpus/range_min-slow",
+      "binary_sha256": "e1b7b9fcd3b13771f39fe3ba138cbaee035c27c85bd0bdd5a4ce8d610cbd3cd0",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "slow",
+      "solver_stdout": "368028705\n",
+      "split": "original",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    },
+    "wrong": {
+      "binary": "pilot/corpus/range_min-wrong",
+      "binary_sha256": "5b1c01eba099bde1bfd76fdda53af1147044b86be600cc0f223f56a1d23d1287",
+      "expected_stdout": "368028705\n",
+      "limits": {
+        "contest": 183
+      },
+      "problem": "range_min",
+      "role": "wrong",
+      "solver_stdout": "368481556\n",
+      "split": "original",
+      "stdin": "65536 480000 256 4096 1878167739\n"
+    }
+  },
+  "decision": "On both fresh boots require the original fast AC, wrong WA and slow in-flight TLE, and exact AC on every variant's ample runs. Opposite unanimous native and metered decisions on the same variant on both boots disqualify this exact engine/input scope. Mixed cells are inconclusive. Agreement does not expand the scope.",
+  "image": "sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+  "original_input_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+  "schema": 1
+}
