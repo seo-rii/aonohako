@@ -1,0 +1,193 @@
+{
+  "engines": {
+    "v12": {
+      "comparisons": {
+        "held_out_input": {
+          "compatible": false,
+          "completion_limit_ms": 30000,
+          "lower": {
+            "binary_sha256": "102fd8cf4ba07043d07e644d2c79f8a06ffdd2bcbb191f1bad75c0b13f92a57b",
+            "cell": "shortest_paths-b-fast-low",
+            "complete_request_sha256": [
+              "5fcfa87bf0ac691f1030a0043e473329c83270f4d7685ff2266cca8d359580d7"
+            ],
+            "constraint": "lower_exclusive",
+            "full_work": [
+              137456731,
+              137456731,
+              137456731,
+              137456731
+            ],
+            "input_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+            "limit_ms": 30,
+            "native_repetitions": 6,
+            "native_request_sha256": [
+              "5d6157ed8e5d156eb18ce9ddb6eeebb53c36d9bc68693ff7b7f9a69599143f01"
+            ],
+            "native_verdict": "Time Limit Exceeded",
+            "ns_per_work": {
+              "denominator": 137456731,
+              "numerator": 30000000
+            }
+          },
+          "lower_cell": "shortest_paths-b-fast-low",
+          "upper_cell": "block8-contest"
+        },
+        "same_input": {
+          "compatible": false,
+          "completion_limit_ms": 20,
+          "lower": {
+            "binary_sha256": "3329d2981760ac275e2ffd17ed4ddc22b409fb6046b7bd05703510602597a091",
+            "cell": "shortest_paths-reference-low",
+            "complete_request_sha256": [
+              "19845a6a7d10c8ec2b5ac2e74d2069746fc100dee643458ca9d64fa09858b8de"
+            ],
+            "constraint": "lower_exclusive",
+            "full_work": [
+              63315373,
+              63315399,
+              63315399,
+              63315373
+            ],
+            "input_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+            "limit_ms": 12,
+            "native_repetitions": 6,
+            "native_request_sha256": [
+              "d67c24dbcfacf047de7d4123b0c7c475f0c6d4661c3e36fd43cc62f82c096d48"
+            ],
+            "native_verdict": "Time Limit Exceeded",
+            "ns_per_work": {
+              "denominator": 21105133,
+              "numerator": 4000000
+            }
+          },
+          "lower_cell": "shortest_paths-reference-low",
+          "upper_cell": "block8-contest"
+        }
+      },
+      "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+      "upper": {
+        "binary_sha256": "5f0c09a7480bef14d8d157e2617b8cb2bb7d8b640aed781fcdd100fa18106f9c",
+        "cell": "block8-contest",
+        "complete_request_sha256": [
+          "4b0785bdade2ba2612970bf05d46895f96ec7867a33d4996c511ed0e14ddb36c"
+        ],
+        "constraint": "upper_inclusive",
+        "full_work": [
+          414483622,
+          414483622,
+          414483622,
+          414483622
+        ],
+        "input_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+        "limit_ms": 65,
+        "native_repetitions": 6,
+        "native_request_sha256": [
+          "3df7e4f53a4243036bf2d255e07ed1043424be87dac71cc1b888ccfff196b22d"
+        ],
+        "native_verdict": "Accepted",
+        "ns_per_work": {
+          "denominator": 207241811,
+          "numerator": 32500000
+        }
+      }
+    },
+    "v13": {
+      "comparisons": {
+        "held_out_input": {
+          "compatible": false,
+          "completion_limit_ms": 30000,
+          "lower": {
+            "binary_sha256": "102fd8cf4ba07043d07e644d2c79f8a06ffdd2bcbb191f1bad75c0b13f92a57b",
+            "cell": "shortest_paths-b-fast-low",
+            "complete_request_sha256": [
+              "4f8cde8a016291675bcc82b95e136f264f008dd1eb0de59c478b04c401baa8f5"
+            ],
+            "constraint": "lower_exclusive",
+            "full_work": [
+              137456731,
+              137456705,
+              137456731,
+              137456731
+            ],
+            "input_sha256": "60635f76cf9a2c5c11819cb48224b5e6a435c09044e0127599eb6e0b76b0c2cf",
+            "limit_ms": 30,
+            "native_repetitions": 6,
+            "native_request_sha256": [
+              "5d6157ed8e5d156eb18ce9ddb6eeebb53c36d9bc68693ff7b7f9a69599143f01"
+            ],
+            "native_verdict": "Time Limit Exceeded",
+            "ns_per_work": {
+              "denominator": 137456731,
+              "numerator": 30000000
+            }
+          },
+          "lower_cell": "shortest_paths-b-fast-low",
+          "upper_cell": "block8-contest"
+        },
+        "same_input": {
+          "compatible": false,
+          "completion_limit_ms": 20,
+          "lower": {
+            "binary_sha256": "3329d2981760ac275e2ffd17ed4ddc22b409fb6046b7bd05703510602597a091",
+            "cell": "shortest_paths-reference-low",
+            "complete_request_sha256": [
+              "6a9c14e1dd3321c5f4ed2f9cc26f6eeeb630ac162b9d37f3500e870d9bd40cad"
+            ],
+            "constraint": "lower_exclusive",
+            "full_work": [
+              63315399,
+              63315373,
+              63315399,
+              63315399
+            ],
+            "input_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+            "limit_ms": 12,
+            "native_repetitions": 6,
+            "native_request_sha256": [
+              "d67c24dbcfacf047de7d4123b0c7c475f0c6d4661c3e36fd43cc62f82c096d48"
+            ],
+            "native_verdict": "Time Limit Exceeded",
+            "ns_per_work": {
+              "denominator": 21105133,
+              "numerator": 4000000
+            }
+          },
+          "lower_cell": "shortest_paths-reference-low",
+          "upper_cell": "block8-contest"
+        }
+      },
+      "model_binding": "work-clock-v1:sha256:45bbdab9d7b82b05a27bc55cae38ab7811e6699542f792634f374e2036aecb69",
+      "upper": {
+        "binary_sha256": "5f0c09a7480bef14d8d157e2617b8cb2bb7d8b640aed781fcdd100fa18106f9c",
+        "cell": "block8-contest",
+        "complete_request_sha256": [
+          "5ff3db6fdde2adbded372fa0c504231a1dae98ddd6e6de45624cc59ca10a2542"
+        ],
+        "constraint": "upper_inclusive",
+        "full_work": [
+          414483622,
+          414483622,
+          414483622,
+          414483622
+        ],
+        "input_sha256": "6e9dbe24b653a8fb261668e8675e6dea82187a510c5c94f4014482e94fb8f708",
+        "limit_ms": 65,
+        "native_repetitions": 6,
+        "native_request_sha256": [
+          "3df7e4f53a4243036bf2d255e07ed1043424be87dac71cc1b888ccfff196b22d"
+        ],
+        "native_verdict": "Accepted",
+        "ns_per_work": {
+          "denominator": 207241811,
+          "numerator": 32500000
+        }
+      }
+    }
+  },
+  "schema": 1,
+  "sources": {
+    "gce-shortest-paths-boundary": "14ffbd39e58719d859260d1d38e8531d0f219471dcff4f53e2bcd390f8e14eb6",
+    "gce-v13-judge-transfer": "a859f51ea83b5e417161b92755d06235b2841d6ded267203517f35d98fb2071b"
+  }
+}
