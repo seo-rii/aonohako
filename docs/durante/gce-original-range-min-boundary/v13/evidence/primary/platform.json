@@ -1,0 +1,178 @@
+{
+  "affinity": [
+    1
+  ],
+  "boot_sha256": "76d7df5e0d945869140c970d086a3a45813457cb729ac41f7be076dadb5b7d11",
+  "clocks": {
+    "shared": {
+      "judge_cases": {
+        "cases": [
+          {
+            "model_binding": "work-clock-v1:sha256:45bbdab9d7b82b05a27bc55cae38ab7811e6699542f792634f374e2036aecb69",
+            "problem_id": "range_min",
+            "source_language": "CPP20",
+            "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+            "time_ms": 183
+          },
+          {
+            "model_binding": "work-clock-v1:sha256:45bbdab9d7b82b05a27bc55cae38ab7811e6699542f792634f374e2036aecb69",
+            "problem_id": "range_min",
+            "source_language": "CPP20",
+            "stdin_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+            "time_ms": 30000
+          }
+        ],
+        "schema": 1
+      },
+      "model_binding": "work-clock-v1:sha256:45bbdab9d7b82b05a27bc55cae38ab7811e6699542f792634f374e2036aecb69",
+      "policy": {
+        "cpuid_profile": "x86-64-v2",
+        "dispatch_profile": "default",
+        "engine_profile": "dynamorio-11.3-durante-v13-vm32m",
+        "family": "cpp",
+        "instruction_ns_numerator": 1139371945900000,
+        "method": "weighted-work-nanoseconds-v1",
+        "model_id": "pinned-judge-absolute-work",
+        "model_version": 1,
+        "ns_denominator": 4752214584908649,
+        "reference_id": "three-reference-absolute-time-ls",
+        "rep_byte_ns_numerator": 1139371945900000,
+        "runtime_id": "CPP20@sha256:5ebf65c242036f85ea8873926aa9e8721fa22cd8d0d3394dd32309e09354a3d2"
+      },
+      "runtime_options_id": "runtime-options-v1:sha256:862b2a16bdcf34da22e94e26d3e5473bfc9ef103b7d8f72ece0c5fc4cc70436d",
+      "time_models": {
+        "models": [
+          {
+            "coefficients": {
+              "instruction_ns_numerator": 1139371945900000,
+              "ns_denominator": 4752214584908649,
+              "rep_byte_ns_numerator": 1139371945900000
+            },
+            "method": "weighted-work-nanoseconds-v1",
+            "model_id": "pinned-judge-absolute-work",
+            "model_version": 1,
+            "reference_id": "three-reference-absolute-time-ls"
+          }
+        ],
+        "profiles": [
+          {
+            "cpuid_profile": "x86-64-v2",
+            "dispatch_profile": "default",
+            "engine_profile": "dynamorio-11.3-durante-v13-vm32m",
+            "family": "cpp",
+            "model_id": "pinned-judge-absolute-work",
+            "model_version": 1,
+            "qualification_id": "local-boundary-experiment",
+            "runtime_image": "sha256:5ebf65c242036f85ea8873926aa9e8721fa22cd8d0d3394dd32309e09354a3d2",
+            "runtime_options": {
+              "argv": [
+                "/__aonohako_program__"
+              ],
+              "env": [
+                "BLIS_NUM_THREADS=1",
+                "CARGO_HOME=/usr/local/cargo",
+                "COMPlus_EnableDiagnostics=0",
+                "DOTNET_CLI_HOME=/__aonohako_workspace__/.dotnet-home",
+                "DOTNET_CLI_TELEMETRY_OPTOUT=1",
+                "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1",
+                "DOTNET_EnableDiagnostics=0",
+                "DOTNET_GENERATE_ASPNET_CERTIFICATE=false",
+                "DOTNET_NOLOGO=1",
+                "DOTNET_PROCESSOR_COUNT=1",
+                "DOTNET_ROOT=/opt/dotnet",
+                "DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
+                "GOCACHE=/__aonohako_workspace__/.gocache",
+                "GOENV=off",
+                "GOMAXPROCS=1",
+                "GOMODCACHE=/__aonohako_workspace__/.gomodcache",
+                "GOPATH=/__aonohako_workspace__/.gopath",
+                "GOTELEMETRY=off",
+                "GOTOOLCHAIN=local",
+                "HEX_HOME=/__aonohako_workspace__/.hex",
+                "HOME=/__aonohako_workspace__/.home",
+                "HTTPS_PROXY=",
+                "HTTP_PROXY=",
+                "IMG_OUT_DIR=/__aonohako_workspace__/__img__",
+                "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/__aonohako_workspace__/.tmp",
+                "JULIA_DEPOT_PATH=/__aonohako_workspace__/.julia",
+                "JULIA_NUM_THREADS=1",
+                "JULIA_PROBE_LIBSTDCXX=0",
+                "KONAN_DATA_DIR=/__aonohako_workspace__/.konan",
+                "KONAN_USER_HOME=/__aonohako_workspace__/.konan-home",
+                "LANG=C.UTF-8",
+                "LC_ALL=C.UTF-8",
+                "MIX_HOME=/__aonohako_workspace__/.mix",
+                "MKL_NUM_THREADS=1",
+                "MPLCONFIGDIR=/__aonohako_workspace__/.mpl",
+                "MSBuildEnableWorkloadResolver=false",
+                "NO_PROXY=*",
+                "NUGET_HTTP_CACHE_PATH=/__aonohako_workspace__/.nuget-http-cache",
+                "NUGET_PACKAGES=/__aonohako_workspace__/.nuget",
+                "NUGET_PLUGINS_CACHE_PATH=/__aonohako_workspace__/.nuget-plugins-cache",
+                "NUGET_SCRATCH=/__aonohako_workspace__/.nuget-scratch",
+                "NUMEXPR_NUM_THREADS=1",
+                "OMP_NUM_THREADS=1",
+                "ONLINE_JUDGE=1",
+                "OPENBLAS_NUM_THREADS=1",
+                "PATH=/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
+                "PIP_CACHE_DIR=/__aonohako_workspace__/.pip-cache",
+                "PYTHONDONTWRITEBYTECODE=1",
+                "PYTHONPATH=/usr/local/lib/aonohako/python",
+                "RUSTUP_HOME=/usr/local/rustup",
+                "R_DEFAULT_PACKAGES=NULL",
+                "R_DOC_DIR=/usr/share/R/doc",
+                "R_HOME=/usr/lib/R",
+                "R_INCLUDE_DIR=/usr/share/R/include",
+                "R_SHARE_DIR=/usr/share/R/share",
+                "TEMP=/__aonohako_workspace__/.tmp",
+                "TEMPDIR=/__aonohako_workspace__/.tmp",
+                "TF_NUM_INTEROP_THREADS=1",
+                "TF_NUM_INTRAOP_THREADS=1",
+                "TMP=/__aonohako_workspace__/.tmp",
+                "TMPDIR=/__aonohako_workspace__/.tmp",
+                "VECLIB_MAXIMUM_THREADS=1",
+                "XDG_CACHE_HOME=/__aonohako_workspace__/.cache",
+                "XLA_FLAGS=--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1",
+                "http_proxy=",
+                "https_proxy=",
+                "no_proxy=*"
+              ],
+              "memory_mb": 1024,
+              "version": 1
+            },
+            "source_language": "CPP20"
+          }
+        ],
+        "schema": 2
+      }
+    }
+  },
+  "cpuset": "1",
+  "files": {
+    "DynamoRIO-LICENSE.txt": "a08c2517cd5113855fca6afb32809dfe7d14adc98af7ce92f3b3199023ab645a",
+    "LICENSE": "11eac69fd9d6761dc41879298d5a6ad81cb8726a8dffafd79986ba4cca8d7d07",
+    "UPSTREAM.json": "2254e2db54f71ca6e31492b1effb497c944383f0dee717db3c2a6f320477b55b",
+    "dynamorio/.durante-runtime.json": "da8ed212cbc485d30886397d4710f29c6f639eef2e5592f8b297a7b61c19a025",
+    "dynamorio/bin64/drrun": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+    "dynamorio/ext/lib64/debug/libdrmgr.so": "0011d0732cebbefcded9afdbe2094e799d6aae80017eca5aab3401bd31f79500",
+    "dynamorio/ext/lib64/release/libdrmgr.so": "372cc1f1f95ffa29a1f11de4be14f99de5938bbcae11294a38d0a7932069429a",
+    "dynamorio/lib32/debug/libdynamorio.so": "f12fb2006a9c3c5ae74ce2a6edf58f3b2404835b24fc41fbb46a2475d6639bb8",
+    "dynamorio/lib32/release/libdynamorio.so": "08c166e09ea8c97d579e8f6a1bc5ebf5bf39cbd937eb357fe0797066ec1afa63",
+    "dynamorio/lib64/debug/libdrpreload.so": "0cf77ae7149ed7bcfc7d2105fccf34ff9077c06566dde2475f31532a5b41b98f",
+    "dynamorio/lib64/debug/libdynamorio.so": "4fdf28cffef6e08151002cedd037e5022a7936c42da293ee6976ca042a5f9d7a",
+    "dynamorio/lib64/release/libdrpreload.so": "fd220281583ecc7de1395d63a82338f265b46fda1af8acfbeeabdf33c88e6113",
+    "dynamorio/lib64/release/libdynamorio.so": "621b4ac63d0b2641574e42dba1cbd0bf71f4ec102d22fe1a2cc5305405ff6b0f",
+    "lib/libdurante.so": "a7098cd6b5fa0da85ca1ef5659a1a0af61191e3aefcad8b09b18ab6ad8933c99",
+    "reference": "08b53f97be394693c2444ce6f9c9ded17e1291747e67ac7f9540e4d475f1310a",
+    "server": "214c0b900499017297649a8ec4a3d8d5d6ce5cd1c6b32b1de89882e506ae7d3c"
+  },
+  "image": "sha256:5ebf65c242036f85ea8873926aa9e8721fa22cd8d0d3394dd32309e09354a3d2",
+  "phase": "primary",
+  "plan_sha256": "a8eb83e5ab72ad561cea95a0e2bb5a521415c906d4fa9e47f028516e30f1c9c5",
+  "schema": 1,
+  "siblings": "1",
+  "steal_ticks_after": 0,
+  "steal_ticks_before": 0,
+  "thresholds_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+  "trials": 105
+}

@@ -1,0 +1,410 @@
+{
+  "clock_binding": "work-clock-v1:sha256:45bbdab9d7b82b05a27bc55cae38ab7811e6699542f792634f374e2036aecb69",
+  "controls_passed": true,
+  "disqualified": true,
+  "engine": "v13",
+  "guests": {
+    "primary": {
+      "panel": {
+        "cached16": {
+          "ample_estimated_median_ns": 100766505.5,
+          "ample_native_median_ns": 48040000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 109.755
+        },
+        "cached4": {
+          "ample_estimated_median_ns": 382089753.0,
+          "ample_native_median_ns": 162521000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout",
+          "signed_error_pct": 135.102
+        },
+        "cached64": {
+          "ample_estimated_median_ns": 30435969.0,
+          "ample_native_median_ns": 18994000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 60.24
+        },
+        "edges1024": {
+          "ample_estimated_median_ns": 665221612.0,
+          "ample_native_median_ns": 281289000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Time Limit Exceeded": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 136.49
+        },
+        "edges128": {
+          "ample_estimated_median_ns": 108917469.0,
+          "ample_native_median_ns": 57042000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 90.943
+        },
+        "edges16": {
+          "ample_estimated_median_ns": 113668355.0,
+          "ample_native_median_ns": 57485000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 97.736
+        },
+        "edges256": {
+          "ample_estimated_median_ns": 191448738.5,
+          "ample_native_median_ns": 90288000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout",
+          "signed_error_pct": 112.042
+        },
+        "edges512": {
+          "ample_estimated_median_ns": 359418539.0,
+          "ample_native_median_ns": 157778000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout",
+          "signed_error_pct": 127.8
+        },
+        "edges64": {
+          "ample_estimated_median_ns": 76462676.0,
+          "ample_native_median_ns": 42579000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 79.578
+        },
+        "fast": {
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement"
+        },
+        "slow": {
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Time Limit Exceeded": 3
+          },
+          "outcome": "agreement"
+        },
+        "wrong": {
+          "clock": {
+            "Wrong Answer": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Wrong Answer": 3
+          },
+          "outcome": "agreement"
+        }
+      }
+    },
+    "repeat": {
+      "panel": {
+        "cached16": {
+          "ample_estimated_median_ns": 100766505.5,
+          "ample_native_median_ns": 48461000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 107.933
+        },
+        "cached4": {
+          "ample_estimated_median_ns": 382089756.0,
+          "ample_native_median_ns": 161911000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout",
+          "signed_error_pct": 135.988
+        },
+        "cached64": {
+          "ample_estimated_median_ns": 30435972.0,
+          "ample_native_median_ns": 19082000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 59.501
+        },
+        "edges1024": {
+          "ample_estimated_median_ns": 665221609.0,
+          "ample_native_median_ns": 279893000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Time Limit Exceeded": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 137.67
+        },
+        "edges128": {
+          "ample_estimated_median_ns": 108917469.0,
+          "ample_native_median_ns": 56501000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 92.771
+        },
+        "edges16": {
+          "ample_estimated_median_ns": 113668352.0,
+          "ample_native_median_ns": 57275000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 98.461
+        },
+        "edges256": {
+          "ample_estimated_median_ns": 191448738.5,
+          "ample_native_median_ns": 90103000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout",
+          "signed_error_pct": 112.478
+        },
+        "edges512": {
+          "ample_estimated_median_ns": 359418539.0,
+          "ample_native_median_ns": 158242000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout",
+          "signed_error_pct": 127.132
+        },
+        "edges64": {
+          "ample_estimated_median_ns": 76462679.0,
+          "ample_native_median_ns": 42686000,
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement",
+          "signed_error_pct": 79.128
+        },
+        "fast": {
+          "clock": {
+            "Accepted": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement"
+        },
+        "slow": {
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "clock_termination": {
+            "durante_work_clock": 2
+          },
+          "native": {
+            "Time Limit Exceeded": 3
+          },
+          "outcome": "agreement"
+        },
+        "wrong": {
+          "clock": {
+            "Wrong Answer": 2
+          },
+          "clock_termination": {
+            "stdout": 2
+          },
+          "native": {
+            "Wrong Answer": 3
+          },
+          "outcome": "agreement"
+        }
+      }
+    }
+  },
+  "original_input_sha256": "0da71f042e18ff05286260e1d5ae9c7eb0712c4ce496f512a8d63602af3ebe2a",
+  "repeated_opposition": [
+    {
+      "case": "cached4",
+      "direction": "false_timeout"
+    },
+    {
+      "case": "edges256",
+      "direction": "false_timeout"
+    },
+    {
+      "case": "edges512",
+      "direction": "false_timeout"
+    }
+  ],
+  "requests_per_boot": 105,
+  "uniform_rescaling": {
+    "individual_sample_ranges": {
+      "inversions/hybrid1024": {
+        "estimated_ns": [
+          544288590,
+          544288590
+        ],
+        "native_ns": [
+          141088000,
+          142381000
+        ]
+      },
+      "range_min/cached64": {
+        "estimated_ns": [
+          30435969,
+          30435975
+        ],
+        "native_ns": [
+          18707000,
+          19748000
+        ]
+      }
+    },
+    "multiplier_intervals": {
+      "inversions/hybrid1024": [
+        0.20737234267578528,
+        0.3139092076135566
+      ],
+      "range_min/cached64": [
+        0.4917075927418129,
+        0.7786050774332173
+      ]
+    },
+    "overlap": false,
+    "relative_tolerance": 0.2
+  }
+}
