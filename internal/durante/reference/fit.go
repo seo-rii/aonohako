@@ -199,12 +199,19 @@ func evaluateReference(dataset Dataset, options FitOptions, external *Validation
 	}
 	for index, item := range cases {
 		row := &evaluation.Cases[index]
+		nativeMin, nativeMax := item.samples[0].NativeBefore.CPUTimeMs, item.samples[0].NativeBefore.CPUTimeMs
+		predictedMin, predictedMax := int64(math.MaxInt64), int64(0)
+		estimates := 0
 		for repetition, sample := range item.samples {
 			estimate, err := policy.Estimate(runtimeID, *sample.Metered.WorkMeasurement)
 			if err != nil {
 				evaluation.Failures = append(evaluation.Failures, fmt.Sprintf("%s scale %d repetition %d: final policy: %v", item.workload.ID, item.fixture.Scale, repetition+1, err))
 				continue
 			}
+			nativeMin = min(nativeMin, sample.NativeBefore.CPUTimeMs, sample.NativeAfter.CPUTimeMs)
+			nativeMax = max(nativeMax, sample.NativeBefore.CPUTimeMs, sample.NativeAfter.CPUTimeMs)
+			predictedMin = min(predictedMin, estimate.Milliseconds)
+			predictedMax = max(predictedMax, estimate.Milliseconds)
 			predicted := uint64(estimate.Nanoseconds)
 			var absolute uint64
 			if predicted >= item.median {
@@ -214,7 +221,7 @@ func evaluateReference(dataset Dataset, options FitOptions, external *Validation
 			}
 			// Keep a real repetition, not a fabricated median counter vector.
 			// The displayed prediction and error refer to the same worst sample.
-			if repetition == 0 || absolute > row.AbsoluteErrorNs {
+			if estimates == 0 || absolute > row.AbsoluteErrorNs {
 				row.EstimatedNs = estimate.Nanoseconds
 				row.AbsoluteErrorNs = absolute
 				row.AbsoluteErrorPPM = referencePPM(absolute, item.median)
@@ -227,10 +234,34 @@ func evaluateReference(dataset Dataset, options FitOptions, external *Validation
 				}
 				evaluation.Failures = append(evaluation.Failures, fmt.Sprintf("%s scale %d repetition %d: %s error exceeds max_error_ppm", item.workload.ID, item.fixture.Scale, repetition+1, splitLabel))
 			}
+			estimates++
+		}
+		if estimates == len(item.samples) {
+			row.ObservedDeadlineDisagreement = deadlineDisagreement(nativeMin, nativeMax, predictedMin, predictedMax)
 		}
 	}
 	evaluation.Passed = len(evaluation.Failures) == 0
 	return evaluation, nil
+}
+
+// Times here already use the judge's ceiling to whole milliseconds. A time
+// equal to the limit passes, so the slower side must exceed the upper endpoint.
+func deadlineDisagreement(nativeMin, nativeMax, predictedMin, predictedMax int64) *DeadlineDisagreement {
+	var gap DeadlineDisagreement
+	switch {
+	case predictedMax < nativeMin:
+		gap = DeadlineDisagreement{"false_accept", predictedMax, nativeMin - 1}
+	case nativeMax < predictedMin:
+		gap = DeadlineDisagreement{"false_timeout", nativeMax, predictedMin - 1}
+	default:
+		return nil
+	}
+	gap.MinTimeMs = max(1, gap.MinTimeMs)
+	gap.MaxTimeMs = min(runvalidation.MaxTimeMs, gap.MaxTimeMs)
+	if gap.MinTimeMs > gap.MaxTimeMs {
+		return nil
+	}
+	return &gap
 }
 
 func referenceCases(dataset Dataset, corpus []Workload, contract durante.TimePolicy) ([]*referenceCase, error) {

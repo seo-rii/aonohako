@@ -87,6 +87,14 @@ type FitOptions struct {
 	MaxErrorPPM        uint64 `json:"max_error_ppm"`
 }
 
+// DeadlineDisagreement identifies inclusive request limits where every observed
+// native time and every metered estimate give opposite CPU-time decisions.
+type DeadlineDisagreement struct {
+	Direction string `json:"direction"`
+	MinTimeMs int64  `json:"min_time_ms"`
+	MaxTimeMs int64  `json:"max_time_ms"`
+}
+
 // CaseEvaluation uses all 2*N native observations; its median rounds an even
 // pair upward to whole nanoseconds. Prediction/error fields describe the worst
 // absolute-error metered repetition, and every repetition is gated.
@@ -103,7 +111,8 @@ type CaseEvaluation struct {
 	AbsoluteErrorPPM     uint64 `json:"absolute_error_ppm"`
 	Underestimated       bool   `json:"underestimated"`
 	// A zero spread is observed when all latency bounds in the case agree.
-	LatencyBoundSpreadPPM *uint64 `json:"latency_bound_spread_ppm,omitempty"`
+	LatencyBoundSpreadPPM        *uint64               `json:"latency_bound_spread_ppm,omitempty"`
+	ObservedDeadlineDisagreement *DeadlineDisagreement `json:"observed_deadline_disagreement,omitempty"`
 }
 
 type Evaluation struct {
