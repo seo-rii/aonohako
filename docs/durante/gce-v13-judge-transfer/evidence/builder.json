@@ -1,0 +1,56 @@
+{
+  "aonohako_packaging_commit": "b7f7ab7e3dbbba6226735fc4179f2708be4088df",
+  "cleanup_http": {
+    "boot_disk": 404,
+    "instance": 404
+  },
+  "image_bytes": 18403328,
+  "installed_sha256": {
+    "DynamoRIO-LICENSE.txt": "a08c2517cd5113855fca6afb32809dfe7d14adc98af7ce92f3b3199023ab645a",
+    "LICENSE": "11eac69fd9d6761dc41879298d5a6ad81cb8726a8dffafd79986ba4cca8d7d07",
+    "UPSTREAM.json": "2254e2db54f71ca6e31492b1effb497c944383f0dee717db3c2a6f320477b55b",
+    "dynamorio/.durante-runtime.json": "da8ed212cbc485d30886397d4710f29c6f639eef2e5592f8b297a7b61c19a025",
+    "dynamorio/bin64/drrun": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+    "dynamorio/ext/lib64/debug/libdrmgr.so": "0011d0732cebbefcded9afdbe2094e799d6aae80017eca5aab3401bd31f79500",
+    "dynamorio/ext/lib64/release/libdrmgr.so": "372cc1f1f95ffa29a1f11de4be14f99de5938bbcae11294a38d0a7932069429a",
+    "dynamorio/lib32/debug/libdynamorio.so": "f12fb2006a9c3c5ae74ce2a6edf58f3b2404835b24fc41fbb46a2475d6639bb8",
+    "dynamorio/lib32/release/libdynamorio.so": "08c166e09ea8c97d579e8f6a1bc5ebf5bf39cbd937eb357fe0797066ec1afa63",
+    "dynamorio/lib64/debug/libdrpreload.so": "0cf77ae7149ed7bcfc7d2105fccf34ff9077c06566dde2475f31532a5b41b98f",
+    "dynamorio/lib64/debug/libdynamorio.so": "4fdf28cffef6e08151002cedd037e5022a7936c42da293ee6976ca042a5f9d7a",
+    "dynamorio/lib64/release/libdrpreload.so": "fd220281583ecc7de1395d63a82338f265b46fda1af8acfbeeabdf33c88e6113",
+    "dynamorio/lib64/release/libdynamorio.so": "621b4ac63d0b2641574e42dba1cbd0bf71f4ec102d22fe1a2cc5305405ff6b0f",
+    "lib/libdurante.so": "a7098cd6b5fa0da85ca1ef5659a1a0af61191e3aefcad8b09b18ab6ad8933c99",
+    "reference": "08b53f97be394693c2444ce6f9c9ded17e1291747e67ac7f9540e4d475f1310a",
+    "server": "214c0b900499017297649a8ec4a3d8d5d6ce5cd1c6b32b1de89882e506ae7d3c"
+  },
+  "runtime_build": {
+    "client_sha256": "a7098cd6b5fa0da85ca1ef5659a1a0af61191e3aefcad8b09b18ab6ad8933c99",
+    "cmake": "cmake version 3.25.1",
+    "commit": "6b4d74f248235f8f616aa5b8e151ca0db5a029de",
+    "engine_patch_sha256": "bc899631e407d25e36bccdee29cf9a8451f479ea925a0f5d3d59781f9cf0e159",
+    "files": 16,
+    "gcc": "gcc (Debian 12.2.0-14+deb12u1) 12.2.0",
+    "kernel": "6.1.0-56-cloud-amd64",
+    "manifest_sha256": "2254e2db54f71ca6e31492b1effb497c944383f0dee717db3c2a6f320477b55b",
+    "permissions_verified": true,
+    "reference_sha256": "08b53f97be394693c2444ce6f9c9ded17e1291747e67ac7f9540e4d475f1310a",
+    "runtime_manifest_sha256": "da8ed212cbc485d30886397d4710f29c6f639eef2e5592f8b297a7b61c19a025",
+    "sdk_source": "6847bb210bea0ca11d1bf47704383d6a075da490",
+    "server_sha256": "214c0b900499017297649a8ec4a3d8d5d6ce5cd1c6b32b1de89882e506ae7d3c",
+    "squashfs_sha256": "5ebf65c242036f85ea8873926aa9e8721fa22cd8d0d3394dd32309e09354a3d2"
+  },
+  "schema": 1,
+  "static_go": {
+    "CGO_ENABLED": "0",
+    "flags": [
+      "-tags",
+      "durante_v13",
+      "-trimpath",
+      "-buildvcs=false"
+    ],
+    "reference_sha256": "08b53f97be394693c2444ce6f9c9ded17e1291747e67ac7f9540e4d475f1310a",
+    "server_sha256": "214c0b900499017297649a8ec4a3d8d5d6ce5cd1c6b32b1de89882e506ae7d3c",
+    "toolchain": "go1.26.11 linux/amd64"
+  },
+  "temporary_key_removed": true
+}

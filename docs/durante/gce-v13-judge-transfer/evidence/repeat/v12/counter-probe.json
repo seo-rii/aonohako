@@ -1,0 +1,319 @@
+{
+  "rows": [
+    {
+      "execs": [
+        {
+          "cpu": 1,
+          "path": "/opt/durante/server",
+          "pid": 3175
+        },
+        {
+          "cpu": 1,
+          "path": "/opt/durante/dynamorio/bin64/drrun",
+          "pid": 3175
+        },
+        {
+          "cpu": 1,
+          "path": "/opt/durante/dynamorio/bin64/../lib64/release/libdynamorio.so",
+          "pid": 3175
+        }
+      ],
+      "receipt": {
+        "cpu_accounting": {
+          "process_clock_baseline_ns": 4986549,
+          "process_clock_peak_ns": 10015552,
+          "rusage_baseline_ns": 4982000,
+          "selected_source": "wait_rusage",
+          "wait_system_ns": 11270000,
+          "wait_target_ns": 10044000,
+          "wait_user_ns": 3756000
+        },
+        "cpu_time_ms": 11,
+        "cpu_time_ns": 10044000,
+        "exit_code": 0,
+        "memory_kb": 2528,
+        "process_cpu_time_ms": 15,
+        "reason": "output matches and estimated work time is within the limit",
+        "score": 1,
+        "status": "Accepted",
+        "time_ms": 11,
+        "verdict_source": "durante_judge",
+        "wall_time_ms": 11,
+        "work_measurement": {
+          "authority": "diagnostic_only",
+          "client_version": 1,
+          "complete": true,
+          "cpuid_profile": "x86-64-v2",
+          "dispatch_profile": "default",
+          "engine_profile": "dynamorio-11.3-durante-v12-vm32m",
+          "family": "cpp",
+          "images": 1,
+          "installation": {
+            "client_sha256": "27051cef2450f484c08d79023607e39a6e75a8d7c22b077e028379e3b51d921c",
+            "launcher_sha256": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+            "release_core_sha256": "f2478395d33e2d8e4a6fb4158fd826777cca37ee02e94924757696b08d7fb06f",
+            "runtime_code_replay_patch_sha256": "aad0137aadca8a0932ca22f67ea95260880eb6bb93a229fd540c01241dc80d9d",
+            "runtime_patch_sha256": "8b82ea0b82b3bfdfa3cf92a5fb46e4a9cc457fc4e52747412adfbcbf18b70251",
+            "runtime_source_commit": "6847bb210bea0ca11d1bf47704383d6a075da490",
+            "source_commit": "b43685c76b94a365886031359b032899b009cd1b",
+            "unchanged_before_after": true
+          },
+          "instructions": 60018,
+          "integrity_verified": false,
+          "measurement_contract": {
+            "backend": "dynamorio",
+            "counter_integrity": "application_mutable",
+            "cpu_time_conversion": null,
+            "instruction_semantics": "basic_block_entry",
+            "simd_weighting": "one_per_instruction",
+            "trusted_verdict_eligible": false,
+            "version": 1
+          },
+          "metric": "bb_entry_app_instructions",
+          "processes": 1,
+          "quality": "uninterrupted",
+          "rep_breakdown": {
+            "movs_bytes": 4096,
+            "movs_entries": 1,
+            "stos_bytes": 4096,
+            "stos_entries": 1,
+            "version": 1
+          },
+          "rep_bytes": 8192,
+          "rep_bytes_enabled": true,
+          "rep_entries": 2,
+          "rep_telemetry_status": "movs_stos_only",
+          "schema": 1,
+          "scope": "process_tree_user_code",
+          "signals_observed": 0,
+          "target_libc_attested": false,
+          "unsupported_rep_entries": 0
+        },
+        "work_measurement_execution": {
+          "authority": "diagnostic_only",
+          "clock": {
+            "budget": 30000000000,
+            "metric": "model_weighted_nanoseconds_v1",
+            "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+            "progress": {
+              "instructions": 60018,
+              "movs_bytes": 4096,
+              "stos_bytes": 4096
+            },
+            "state": "observed",
+            "version": 1
+          },
+          "nominal_limits": {
+            "memory_mb": 768,
+            "output_bytes": 8388608,
+            "time_ms": 30000,
+            "wall_time_ms": 60000
+          },
+          "nominal_time_exceeded": false,
+          "output_matches": true,
+          "raw_limits": {
+            "cpu_time_ms": 120000,
+            "memory_mb": 1024,
+            "wall_time_ms": 170000
+          },
+          "state": "complete",
+          "termination_source": "stdout",
+          "time_estimate": {
+            "authority": "diagnostic_only",
+            "cpuid_profile": "x86-64-v2",
+            "dispatch_profile": "default",
+            "engine_profile": "dynamorio-11.3-durante-v12-vm32m",
+            "family": "cpp",
+            "instruction_ns_numerator": 1139371945900000,
+            "method": "weighted-work-nanoseconds-v1",
+            "milliseconds": 1,
+            "model_id": "pinned-judge-absolute-work",
+            "model_version": 1,
+            "nanoseconds": 16354,
+            "ns_denominator": 4752214584908649,
+            "reference_id": "three-reference-absolute-time-ls",
+            "rep_byte_ns_numerator": 1139371945900000,
+            "runtime_id": "CPP20@sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+            "runtime_options_id": "runtime-options-v1:sha256:862b2a16bdcf34da22e94e26d3e5473bfc9ef103b7d8f72ece0c5fc4cc70436d"
+          },
+          "time_estimate_eligibility": {
+            "eligible": true,
+            "reason_codes": [],
+            "version": 1
+          }
+        },
+        "work_measurement_judgment": {
+          "authority": "diagnostic_only",
+          "estimated_time_ms": 1,
+          "estimated_time_ns": 16354,
+          "integrity_mode": "off",
+          "nominal_time_ms": 30000,
+          "reason": "output matches and estimated work time is within the limit",
+          "state": "complete",
+          "termination_source": "stdout",
+          "verdict": "Accepted"
+        }
+      },
+      "request_sha256": "64d1f1ccb6cfd32318068580521ee358bb8b42daaa73652a881267b44b22efd3",
+      "stdout": "ok\n"
+    },
+    {
+      "execs": [
+        {
+          "cpu": 1,
+          "path": "/opt/durante/server",
+          "pid": 3180
+        },
+        {
+          "cpu": 1,
+          "path": "/opt/durante/dynamorio/bin64/drrun",
+          "pid": 3180
+        },
+        {
+          "cpu": 1,
+          "path": "/opt/durante/dynamorio/bin64/../lib64/release/libdynamorio.so",
+          "pid": 3180
+        }
+      ],
+      "receipt": {
+        "cpu_accounting": {
+          "process_clock_baseline_ns": 5090561,
+          "process_clock_peak_ns": 0,
+          "rusage_baseline_ns": 5034000,
+          "selected_source": "wait_rusage",
+          "wait_system_ns": 7341000,
+          "wait_target_ns": 9648000,
+          "wait_user_ns": 7341000
+        },
+        "cpu_time_ms": 10,
+        "cpu_time_ns": 9648000,
+        "exit_code": 0,
+        "memory_kb": 0,
+        "process_cpu_time_ms": 14,
+        "reason": "output matches and estimated work time is within the limit",
+        "score": 1,
+        "status": "Accepted",
+        "time_ms": 9,
+        "verdict_source": "durante_judge",
+        "wall_time_ms": 9,
+        "work_measurement": {
+          "authority": "diagnostic_only",
+          "client_version": 1,
+          "complete": true,
+          "cpuid_profile": "x86-64-v2",
+          "dispatch_profile": "default",
+          "engine_profile": "dynamorio-11.3-durante-v12-vm32m",
+          "family": "cpp",
+          "images": 1,
+          "installation": {
+            "client_sha256": "27051cef2450f484c08d79023607e39a6e75a8d7c22b077e028379e3b51d921c",
+            "launcher_sha256": "0d059cb874edc7cfea3036c65dc975c1b0504464182980036a062df7d9bc206b",
+            "release_core_sha256": "f2478395d33e2d8e4a6fb4158fd826777cca37ee02e94924757696b08d7fb06f",
+            "runtime_code_replay_patch_sha256": "aad0137aadca8a0932ca22f67ea95260880eb6bb93a229fd540c01241dc80d9d",
+            "runtime_patch_sha256": "8b82ea0b82b3bfdfa3cf92a5fb46e4a9cc457fc4e52747412adfbcbf18b70251",
+            "runtime_source_commit": "6847bb210bea0ca11d1bf47704383d6a075da490",
+            "source_commit": "b43685c76b94a365886031359b032899b009cd1b",
+            "unchanged_before_after": true
+          },
+          "instructions": 60018,
+          "integrity_verified": false,
+          "measurement_contract": {
+            "backend": "dynamorio",
+            "counter_integrity": "application_mutable",
+            "cpu_time_conversion": null,
+            "instruction_semantics": "basic_block_entry",
+            "simd_weighting": "one_per_instruction",
+            "trusted_verdict_eligible": false,
+            "version": 1
+          },
+          "metric": "bb_entry_app_instructions",
+          "processes": 1,
+          "quality": "uninterrupted",
+          "rep_breakdown": {
+            "movs_bytes": 4096,
+            "movs_entries": 1,
+            "stos_bytes": 4096,
+            "stos_entries": 1,
+            "version": 1
+          },
+          "rep_bytes": 8192,
+          "rep_bytes_enabled": true,
+          "rep_entries": 2,
+          "rep_telemetry_status": "movs_stos_only",
+          "schema": 1,
+          "scope": "process_tree_user_code",
+          "signals_observed": 0,
+          "target_libc_attested": false,
+          "unsupported_rep_entries": 0
+        },
+        "work_measurement_execution": {
+          "authority": "diagnostic_only",
+          "clock": {
+            "budget": 30000000000,
+            "metric": "model_weighted_nanoseconds_v1",
+            "model_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+            "progress": {
+              "instructions": 60018,
+              "movs_bytes": 4096,
+              "stos_bytes": 4096
+            },
+            "state": "observed",
+            "version": 1
+          },
+          "nominal_limits": {
+            "memory_mb": 768,
+            "output_bytes": 8388608,
+            "time_ms": 30000,
+            "wall_time_ms": 60000
+          },
+          "nominal_time_exceeded": false,
+          "output_matches": true,
+          "raw_limits": {
+            "cpu_time_ms": 120000,
+            "memory_mb": 1024,
+            "wall_time_ms": 170000
+          },
+          "state": "complete",
+          "termination_source": "stdout",
+          "time_estimate": {
+            "authority": "diagnostic_only",
+            "cpuid_profile": "x86-64-v2",
+            "dispatch_profile": "default",
+            "engine_profile": "dynamorio-11.3-durante-v12-vm32m",
+            "family": "cpp",
+            "instruction_ns_numerator": 1139371945900000,
+            "method": "weighted-work-nanoseconds-v1",
+            "milliseconds": 1,
+            "model_id": "pinned-judge-absolute-work",
+            "model_version": 1,
+            "nanoseconds": 16354,
+            "ns_denominator": 4752214584908649,
+            "reference_id": "three-reference-absolute-time-ls",
+            "rep_byte_ns_numerator": 1139371945900000,
+            "runtime_id": "CPP20@sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+            "runtime_options_id": "runtime-options-v1:sha256:862b2a16bdcf34da22e94e26d3e5473bfc9ef103b7d8f72ece0c5fc4cc70436d"
+          },
+          "time_estimate_eligibility": {
+            "eligible": true,
+            "reason_codes": [],
+            "version": 1
+          }
+        },
+        "work_measurement_judgment": {
+          "authority": "diagnostic_only",
+          "estimated_time_ms": 1,
+          "estimated_time_ns": 16354,
+          "integrity_mode": "off",
+          "nominal_time_ms": 30000,
+          "reason": "output matches and estimated work time is within the limit",
+          "state": "complete",
+          "termination_source": "stdout",
+          "verdict": "Accepted"
+        }
+      },
+      "request_sha256": "64d1f1ccb6cfd32318068580521ee358bb8b42daaa73652a881267b44b22efd3",
+      "stdout": "ok\n"
+    }
+  ],
+  "trace": "# trial 0\n            Main-3175    [001] .....    87.064307: sched_process_exec: filename=/opt/durante/server pid=3175 old_pid=3175\n            Main-3175    [001] .....    87.070238: sched_process_exec: filename=/opt/durante/dynamorio/bin64/drrun pid=3175 old_pid=3175\n            Main-3175    [001] .....    87.071461: sched_process_exec: filename=/opt/durante/dynamorio/bin64/../lib64/release/libdynamorio.so pid=3175 old_pid=3175\n# trial 1\n            Main-3180    [001] .....    87.124739: sched_process_exec: filename=/opt/durante/server pid=3180 old_pid=3180\n            Main-3180    [001] .....    87.135602: sched_process_exec: filename=/opt/durante/dynamorio/bin64/drrun pid=3180 old_pid=3180\n            Main-3180    [001] .....    87.136883: sched_process_exec: filename=/opt/durante/dynamorio/bin64/../lib64/release/libdynamorio.so pid=3180 old_pid=3180\n"
+}
