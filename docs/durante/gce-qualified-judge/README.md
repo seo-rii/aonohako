@@ -137,17 +137,11 @@ from each problem's single reference raised mean absolute error on the
 six primary-boot solvers from 21.20% to 24.81%, and across both boots from
 20.52% to 24.15%. [Scalar timing analysis](scalar_bounds.json)
 
-For cooperative practice judging, use only `judge_cases` from the verified
-results. Its three entries bind a problem ID, CPP20, the exact stdin digest,
-the tested contest deadline and the model binding. The organizer supplies
-the expected output. The calibrated registry used on the study guests also
-contains the 1 ms and reference-bracket controls. General timing accuracy
-across other inputs, deadlines, languages and contestant programs remains
-unqualified. Run `python3 -B docs/durante/gce-qualified-judge/operator_env.py`
-to replay the evidence and emit the scoped operator environment for the
-exact GCE worker runtime. Applying that environment is an explicit deployment
-step. Cloud Run continues to use its existing configuration and deployments
-use their existing defaults. [Qualified contest registry](results.json)
+The original pilot admitted three exact C++20 case bindings. The sealed worker exporter
+still reproduces those entries for historical studies. Subsequent tests found
+repeatable false timeouts on other correct implementations of every input.
+The current controller exporter returns an explicit empty registry for both engine
+versions. [Current controller settings and follow-up measurements](../../durante-judging.md)
 
 ## Machine, freeze and independent replay
 

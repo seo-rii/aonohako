@@ -44,8 +44,10 @@ illustrative model digest with the binding from your calibration receipt).
 
 Obtain the binding from `work_measurement_execution.clock.model_binding` in a trusted clock
 receipt for the deployment's schema-2 model and effective runtime options.
-The deployment validates every entry at startup. Supply 1–256 distinct cases
-within 64 KiB. The raw resource policy must grant more CPU and wall time than
+The deployment validates every entry at startup. Schema 2 accepts up to 256 distinct cases
+within 64 KiB. An explicit `{"schema":2,"cases":[]}` keeps the controller
+running with zero eligible cases. Omitting the registry has different
+semantics for explicit judge requests. Schema 1 requires at least one case. The raw resource policy must grant more CPU and wall time than
 each registered CPU deadline and cover the registered wall and memory limits.
 Set `wall_time_ms` to the value used in the qualified request. Zero matches a
 request using the default wall guard. The raw envelope includes instrumented
@@ -108,14 +110,16 @@ controller built for the matching engine. Run this from the repository root.
 python3 -B docs/durante/gce-qualified-judge/controller_env.py --engine v13
 ```
 
-The v12 and v13 controller exports include the original range-minimum input at 183 ms
-and shortest-paths input at 65 ms. Both route the original 203 ms inversion
-case to native judging. Four correct implementations received false timeouts
-on v13, and both selected for the v12 check also received false timeouts.
-Each engine reproduced its result on two independent CPU-pinned boots.
-Regenerate earlier controller settings to pick up the smaller case list.
-Each sealed worker retains its historical schema-1 settings.
-[v13 trials](durante/gce-original-inversion-boundary/README.md) · [v12 trials](durante/gce-original-inversion-boundary/v12/README.md)
+The v12 and v13 controller exports now contain zero eligible cases. Correct
+C++20 submissions for each former pilot input repeatedly passed native judging
+and timed out under the live clock. Rebuild the controller with empty-registry
+support and apply a freshly generated environment to retire old entries.
+Earlier controllers reject an empty registry at startup. Each sealed worker
+keeps its historical schema-1 settings behind the controller.
+[Range minimum](durante/gce-original-range-min-boundary/README.md) ·
+[Shortest paths](durante/gce-shortest-paths-boundary/README.md) ·
+[Inversions](durante/gce-original-inversion-boundary/README.md) ·
+[Mixed-version HTTP verification](durante/gce-qualified-judge/withdrawal/README.md)
 
 Use `--engine v12` for the v12 worker. The helper leaves automatic judging off.
 Enable it on the updated controller and forward to the matching sealed worker
