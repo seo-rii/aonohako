@@ -376,3 +376,116 @@ func TestRemoteJudgeRequiresEvidenceForRuntimeError(t *testing.T) {
 		})
 	}
 }
+
+func TestScopedJudgeNominalMemory(t *testing.T) {
+	req, config := scopedJudgeFixture(t)
+	if err := ApplyJudgeWorkLimits(req, config.Execution); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Execution.WorkMeasurement
+	legacyCfg := cfg
+	legacyCfg.JudgeCases = nil // previous worker computed just the work verdict
+	plan := effectiveWorkClock(req, cfg, config.Execution.RuntimeTuning)
+	limit := int64(req.Limits.MemoryMB) * 1024
+	zero, seven := 0, 7
+	for _, tc := range []struct {
+		name, status, source, want string
+		exit                       *int
+		count                      uint64
+		memoryKB                   int64
+		withheld                   bool
+	}{
+		{"at limit", model.RunStatusAccepted, "stdout", model.RunStatusAccepted, &zero, 1234, limit, false},
+		{"no sample", model.RunStatusAccepted, "stdout", model.RunStatusAccepted, &zero, 1234, 0, true},
+		{"accepted", model.RunStatusAccepted, "stdout", model.RunStatusAccepted, &zero, 1234, limit + 1, true},
+		{"wrong answer", model.RunStatusWA, "stdout", model.RunStatusWA, &zero, 1234, limit + 1, true},
+		{"final clock", model.RunStatusAccepted, "stdout", model.RunStatusTLE, &zero, plan.Budget + 1, limit + 1, true},
+		{"live clock", model.RunStatusTLE, "durante_work_clock", model.RunStatusTLE, nil, plan.Budget + 1, limit + 1, true},
+		{"raw watchdog", model.RunStatusMLE, "memory_rss", model.RunStatusInitFail, nil, 1234, int64(req.WorkMeasurementLimits.MemoryMB)*1024 + 1, false},
+		{"nonzero exit below limit", model.RunStatusRE, "exit_code", model.RunStatusRE, &seven, 1234, limit, false},
+		{"nonzero exit above limit", model.RunStatusRE, "exit_code", model.RunStatusRE, &seven, 1234, limit + 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			report := completeEnvelopeReport()
+			report.CPUIDProfile = cfg.CPUIDProfile
+			report.Instructions = &tc.count
+			report.REPBreakdown = &durante.REPBreakdown{Version: 1}
+			response := finishWorkMeasurementDiagnostic(context.Background(), req, model.RunResponse{
+				Status: tc.status, VerdictSource: tc.source, ExitCode: tc.exit,
+				MemoryKB: tc.memoryKB, WorkMeasurement: report,
+			})
+			response = finishWorkClock(req, plan, response, &durante.WorkClockProgress{Instructions: tc.count})
+			response = finishWorkMeasurementTime(req, response, cfg)
+			legacy := finishWorkMeasurementJudge(req, response, legacyCfg)
+			if legacy.Status != tc.want {
+				t.Fatalf("initial work verdict %s, want %s: %s", legacy.Status, tc.want, legacy.Reason)
+			}
+			current := finishWorkMeasurementJudge(req, response, cfg)
+			want := tc.want
+			if tc.withheld {
+				want = model.RunStatusInitFail
+			}
+			for _, got := range []model.RunResponse{current, exchangeTimeMeasurementResult(t, req, current, cfg), exchangeTimeMeasurementResult(t, req, legacy, cfg)} {
+				j := got.WorkMeasurementJudgment
+				if got.Status != want || (got.Score != nil) != (want == model.RunStatusAccepted) ||
+					j == nil || j.Verdict != want || got.MemoryKB != tc.memoryKB || got.WorkMeasurementExecution == nil ||
+					j.State != response.WorkMeasurementExecution.State || j.TerminationSource != response.WorkMeasurementExecution.TerminationSource ||
+					strings.Contains(j.Reason, "peak RSS") != tc.withheld ||
+					(tc.memoryKB == 0 && !strings.Contains(j.Reason, "RSS is unavailable")) {
+					t.Fatalf("status %q, reason %q, judgment %+v, peak %d", got.Status, got.Reason, j, got.MemoryKB)
+				}
+			}
+			if tc.name == "accepted" {
+				mismatched := current
+				mismatched.Reason = "incorrect public explanation"
+				if got := exchangeTimeMeasurementResult(t, req, mismatched, cfg); got.WorkMeasurementJudgment != nil ||
+					got.Status != model.RunStatusInitFail || !strings.Contains(got.Reason, "memory verdict reason mismatch") {
+					t.Fatalf("inconsistent public scoped memory reason: %+v", got)
+				}
+				// The compatibility path must verify the old worker's result before
+				// retaining its evidence in the public unscored response.
+				invalid := legacy
+				invalid.Score = nil
+				if got := exchangeTimeMeasurementResult(t, req, invalid, cfg); got.WorkMeasurementJudgment != nil || !strings.Contains(got.Reason, "without a score") {
+					t.Fatalf("accepted inconsistent legacy score: %+v", got)
+				}
+				invalid = legacy
+				badReport := *invalid.WorkMeasurement
+				badInstallation := *badReport.Installation
+				badInstallation.Unchanged = false
+				badReport.Installation = &badInstallation
+				invalid.WorkMeasurement = &badReport
+				if got := exchangeTimeMeasurementResult(t, req, invalid, cfg); got.WorkMeasurementJudgment != nil || got.Status != model.RunStatusInitFail {
+					t.Fatalf("accepted inconsistent installation: %+v", got)
+				}
+				invalid = legacy
+				invalid.MemoryKB = int64(req.WorkMeasurementLimits.MemoryMB)*1024 + 1
+				if got := exchangeTimeMeasurementResult(t, req, invalid, cfg); got.WorkMeasurementJudgment != nil || !strings.Contains(got.Reason, "raw limit") {
+					t.Fatalf("accepted completed result above its raw envelope: %+v", got)
+				}
+			}
+		})
+	}
+}
+
+func TestScopedExplicitRawMemoryObservation(t *testing.T) {
+	req, config := scopedJudgeFixture(t)
+	if err := ApplyJudgeWorkLimits(req, config.Execution); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Execution.WorkMeasurement
+	req.WorkMeasurementJudge, req.WorkMeasurementTime = false, false
+	req.WorkMeasurementClock = &durante.WorkClockRequest{Version: 1, Budget: 10000}
+	report := completeEnvelopeReport()
+	report.CPUIDProfile = cfg.CPUIDProfile
+	report.REPBreakdown = &durante.REPBreakdown{Version: 1}
+	response := timeMeasurementDiagnostic(req, model.RunStatusAccepted, report)
+	response.MemoryKB = int64(req.Limits.MemoryMB)*1024 + 1
+	response = finishWorkClock(req, req.WorkMeasurementClock, response, &durante.WorkClockProgress{Instructions: *report.Instructions})
+	response = finishWorkMeasurementJudge(req, response, cfg)
+	got := exchangeTimeMeasurementResult(t, req, response, cfg)
+	if got.WorkMeasurementJudgment != nil || got.Score != nil || got.Status != model.RunStatusInitFail || got.MemoryKB != response.MemoryKB ||
+		got.WorkMeasurementExecution == nil || got.WorkMeasurementExecution.State != "complete" || !got.WorkMeasurement.Complete {
+		t.Fatalf("raw observation above nominal: %+v", got)
+	}
+}

@@ -51,7 +51,22 @@ Set `wall_time_ms` to the value used in the qualified request. Zero matches a
 request using the default wall guard. The raw envelope includes instrumented
 memory and replaces these three limits during measurement. A matching entry
 alone does not establish how much RSS belongs to the uninstrumented program.
-Submission output and workspace limits still apply.
+When the selected metered peak (`memory_kb`) exceeds the registered
+`memory_mb × 1024`, a scoped deciding judge withholds the competitive verdict,
+including an otherwise valid AC, WA, virtual TLE or contestant runtime error.
+A missing or zero peak also leaves the verdict unavailable.
+It returns `Container Initialization Failed` without a score and retains the
+clock, output check when available, peak RSS and termination source. An updated
+controller checks the original receipt and score from a sealed worker before
+withholding its verdict. The service performs one execution. An observed
+nonzero exit within the nominal limit can still return a runtime error. A raw
+watchdog stop retains its original cause.
+
+The instrumented peak includes the runtime and the target. A native run can
+fit its limit while the combined peak exceeds it. Sampling can also miss a
+brief peak. Even a positive value at or below the limit cannot certify native
+memory usage. Independent memory qualification remains necessary. Submission
+output and workspace limits still apply. [Paired native and Durante GCE measurements](durante/gce-v13-memory-boundary/README.md)
 
 This scope supports standalone CPP20 batch requests with one inline static
 x86-64 executable, inline input and an ordinary expected stdout comparison.
@@ -569,7 +584,9 @@ reason, the virtual-millisecond estimate, the integrity decision, and the raw
 diagnostic execution block. Unlike the pure diagnostic envelope, judge mode sets
 `status` to the real verdict (`Accepted`, `Wrong Answer`, `Time Limit Exceeded`
 or `Runtime Error`) for judged runs. A raw resource stop or an unavailable
-weighted clock on clean exit carries an unscored initialization failure.
+weighted clock on clean exit carries an unscored initialization failure. A
+scoped deciding judge also requires a positive metered peak at or below
+the registered nominal memory limit before assigning a competitive verdict.
 
 ## Counter integrity (threat model is a flag)
 
