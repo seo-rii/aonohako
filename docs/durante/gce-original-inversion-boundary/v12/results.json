@@ -1,0 +1,130 @@
+{
+  "clock_binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+  "controls_passed": true,
+  "disqualified": true,
+  "guests": {
+    "primary": {
+      "controls": true,
+      "cpu_steal_ticks": 0,
+      "panel": {
+        "original-fast": {
+          "clock": {
+            "Accepted": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement"
+        },
+        "original-hybrid1024": {
+          "ample_estimated_median_ns": 544288590.0,
+          "ample_native_median_ns": 142150000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout"
+        },
+        "original-slow": {
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "native": {
+            "Time Limit Exceeded": 3
+          },
+          "outcome": "agreement"
+        },
+        "original-sqrt1024": {
+          "ample_estimated_median_ns": 395685455.0,
+          "ample_native_median_ns": 155828000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout"
+        },
+        "original-wrong": {
+          "clock": {
+            "Wrong Answer": 2
+          },
+          "native": {
+            "Wrong Answer": 3
+          },
+          "outcome": "agreement"
+        }
+      }
+    },
+    "repeat": {
+      "controls": true,
+      "cpu_steal_ticks": 0,
+      "panel": {
+        "original-fast": {
+          "clock": {
+            "Accepted": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "agreement"
+        },
+        "original-hybrid1024": {
+          "ample_estimated_median_ns": 544288590.0,
+          "ample_native_median_ns": 142394000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout"
+        },
+        "original-slow": {
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "native": {
+            "Time Limit Exceeded": 3
+          },
+          "outcome": "agreement"
+        },
+        "original-sqrt1024": {
+          "ample_estimated_median_ns": 395685455.0,
+          "ample_native_median_ns": 155875000,
+          "clock": {
+            "Time Limit Exceeded": 2
+          },
+          "native": {
+            "Accepted": 3
+          },
+          "outcome": "false_timeout"
+        },
+        "original-wrong": {
+          "clock": {
+            "Wrong Answer": 2
+          },
+          "native": {
+            "Wrong Answer": 3
+          },
+          "outcome": "agreement"
+        }
+      }
+    }
+  },
+  "original_input_sha256": "c5cf74a7d28c9e1610bacf9a6d6ca35fabbc9507bb9bf9161b3a6a672fc1d1e2",
+  "repeated_opposition": [
+    {
+      "case": "original-hybrid1024",
+      "direction": "false_timeout"
+    },
+    {
+      "case": "original-sqrt1024",
+      "direction": "false_timeout"
+    }
+  ],
+  "requests_per_boot": 35,
+  "schema": 1
+}
