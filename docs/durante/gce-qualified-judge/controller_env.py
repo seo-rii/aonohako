@@ -5,15 +5,12 @@ from pathlib import Path
 import subprocess
 import sys
 
-from verify import NOMINAL
-
 HERE = Path(__file__).resolve().parent
 REGISTRY = "AONOHAKO_DURANTE_JUDGE_CASES"
 
 
 def controller_environment(engine):
-    # Each exporter replays the pilot and checks the recorded nominal limits
-    # against NOMINAL before it releases the worker's three case bindings.
+    # Replay the sealed worker configuration before exporting its matching controller settings.
     if engine == "v12":
         exporter = [HERE / "operator_env.py"]
     elif engine == "v13":
@@ -25,15 +22,9 @@ def controller_environment(engine):
     registry = json.loads(environment[REGISTRY])
     if registry["schema"] != 1 or not registry["cases"]:
         raise ValueError("expected the sealed worker's schema-1 registry")
-    # Both workers timed out on correct implementations of the original 203 ms
-    # inversion case on two CPU-pinned boots. The sealed registries still carry
-    # that historical entry for reproducing the worker studies.
-    cases = [case for case in registry["cases"] if case["problem_id"] in ("range_min", "shortest_paths")]
-    limits = {name: NOMINAL[name] for name in ("memory_mb", "wall_time_ms")}
-    environment[REGISTRY] = json.dumps({
-        "schema": 2,
-        "cases": [{**case, **limits} for case in cases],
-    })
+    # Every historical pilot case has a repeated native/clock disagreement.
+    # Keep an explicit scope: omitting this key would unrestrict explicit judging.
+    environment[REGISTRY] = json.dumps({"schema": 2, "cases": []})
     return environment
 
 

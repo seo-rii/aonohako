@@ -1,0 +1,11 @@
+# Public routing after the pilot withdrawal
+
+For both v12 and v13, the current public controller used the generated empty schema-2 scope with automatic judging enabled. Its private worker ran the original sealed binary and schema-1 operator settings with all three historical entries. Each controller received 18 ordinary requests and 18 otherwise identical requests explicitly opting into the deciding clock. The latter requests carried neither a caller-imposed scope restriction nor a clock binding.
+
+All 36 ordinary responses across both engines contained native CPU accounting. The panel includes the original AC, WA and TLE controls for all three problems plus all nine implementations exhibiting repeated false timeouts in the three published boundary studies. All 36 explicit requests returned HTTP 400 with the specific case-mismatch error before any competitive verdict. These local checks exercise routing. The CPU-pinned GCE trials establish the timing disagreements.
+
+From this directory, run `python3 -B smoke.py v12 --verify v12.json.gz` and `python3 -B smoke.py v13 --verify v13.json.gz`. Each replay invokes the current controller environment generator, verifies the original worker's settings and precise failure reason and checks each normal result's native wait accounting and output. Add `--binaries DIR` to reconstruct both HTTP request digests. Populate that directory with the named ELFs in the original inversion, range-minimum and shortest-paths study payloads.
+
+The two controller binaries use Go 1.26.11 at [the empty-registry implementation](https://github.com/seo-rii/aonohako/commit/3ae4b7f58daaa32d41244b31732e86f5a070c7bb). Build each with `CGO_ENABLED=0 go build -trimpath -buildvcs=false -tags durante_ENGINE -o controller ./cmd/server`, substituting `v12` or `v13` for `ENGINE`.
+
+For a new collection on Linux, mount the registered sealed worker installation at `/opt/durante`, provide executable `/tmp` and `/work` with 256 MiB each, and run the matching controller from a network-isolated container with loopback available. Use `--output NEW.json.gz --controller PATH --worker-env SEALED_ENV.json --binaries DIR` in place of `--verify`. The collector starts the private worker and public controller on loopback ports 18381 and 18382 and verifies both executable identities.
