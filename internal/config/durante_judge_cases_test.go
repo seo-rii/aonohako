@@ -57,6 +57,18 @@ func TestLoadDuranteJudgeCases(t *testing.T) {
 	legacy := `{"schema":1,"cases":[{"problem_id":"contest-1/a","source_language":"CPP20","stdin_sha256":"` + stdin + `","time_ms":50,"model_binding":"` + binding + `"}]}`
 	raw := strings.Replace(strings.Replace(legacy, `"schema":1`, `"schema":2`, 1), `"time_ms":50`, `"time_ms":50,"wall_time_ms":75,"memory_mb":128`, 1)
 	t.Setenv(env, raw)
+	t.Run("empty schema 2 admits no ordinary or explicit case", func(t *testing.T) {
+		t.Setenv(env, `{"schema":2,"cases":[]}`)
+		t.Setenv("AONOHAKO_DURANTE_JUDGE_AUTO", "on")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := cfg.Execution.WorkMeasurement
+		if !m.AutoJudge || !m.JudgeCases.BindsNominalLimits() || m.JudgeCases.Allows("contest-1/a", "CPP20", stdin, 50, 75, 128, binding) {
+			t.Fatal("an empty automatic registry must retain its scope and admit no submissions")
+		}
+	})
 	t.Run("legacy registry explicit only", func(t *testing.T) {
 		t.Setenv(env, legacy)
 		loaded, err := Load()

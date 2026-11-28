@@ -36,8 +36,11 @@ func ParseJudgeCases(raw string) (*JudgeCases, error) {
 	if err := decodeTimeModelFields([]byte(raw), "judge cases", map[string]any{"schema": &schema, "cases": &cases}); err != nil {
 		return nil, err
 	}
-	if (schema != 1 && schema != 2) || len(cases) == 0 || len(cases) > maxJudgeCases {
-		return nil, fmt.Errorf("judge cases requires schema 1 or 2 and 1..%d cases", maxJudgeCases)
+	if schema != 1 && schema != 2 {
+		return nil, fmt.Errorf("judge cases requires schema 1 or 2")
+	}
+	if len(cases) > maxJudgeCases || (schema == 1 && len(cases) == 0) {
+		return nil, fmt.Errorf("judge cases allows up to %d cases and schema 1 requires a nonempty list", maxJudgeCases)
 	}
 	registry := &JudgeCases{schema: schema, bindings: make(map[judgeCaseKey]string, len(cases))}
 	for i, entry := range cases {
