@@ -1,0 +1,16 @@
+{
+  "affinity": [
+    1
+  ],
+  "arm": "v12",
+  "binding": "work-clock-v1:sha256:c1d4c0c8dcb2e106efd69ccbac0ea56f2ff4efe4f79ddb108454f5f4bcc676b0",
+  "boot_sha256": "0f5912623bfaaeea595c455ae331294caa23cffeca26ad52325a08a657c94253",
+  "cpuset": "1",
+  "engine": "dynamorio-11.3-durante-v12-vm32m",
+  "image": "sha256:170190aab6b32aac533ee8d34a6f0a348b06158a0f88ec337457bdf68d66044c",
+  "phase": "repeat",
+  "plan_sha256": "31453395e4d36d40792af16867ae139dcb24f4c9131b472b606614308bd7f1be",
+  "siblings": "1",
+  "steal_ticks_after": 0,
+  "steal_ticks_before": 0
+}
